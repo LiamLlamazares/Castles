@@ -1,0 +1,16 @@
+.board {
+    position: relative;
+    width: 800px; /* adjust as needed */
+    height: 800px; /* adjust as needed */
+    margin: auto; /* center the board */
+  }
+  
+  .hexagon {
+    position: absolute;
+    width: 100px; /* Adjust the size as needed */
+    height: 100px; /* This should be the same as the width for a perfect hexagon */
+    background-color: #ddd;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+  
+  
