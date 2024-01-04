@@ -1,0 +1,8 @@
+/* Hexagon.css */
+
+.hexagon {
+    fill: #ddd; /* Fill color for the hexagon */
+    stroke: #aaa; /* Border color for the hexagon */
+    stroke-width: 4; /* Border width for the hexagon */
+    
+  }

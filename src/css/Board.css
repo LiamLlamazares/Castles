@@ -5,12 +5,11 @@
     margin: auto; /* center the board */
   }
   
-  .hexagon {
+/* Here we define a style for a hexagon defined through the coordinates of its corners */
+.hexagon {
     position: absolute;
-    width: 100px; /* Adjust the size as needed */
-    height: 100px; /* This should be the same as the width for a perfect hexagon */
-    background-color: #ddd;
+    width: 100px; /* adjust as needed */
+    height: 100px; /* adjust as needed */
+    background-color: #779556;
     clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   }
-  
-  

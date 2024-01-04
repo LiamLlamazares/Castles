@@ -1,52 +1,65 @@
 import React from 'react';
-import '../css/Board.css';
-// Assuming you have these functions properly defined in your HexUtils.js
+import '../css/Board.css'; // Make sure the path to your CSS file is correct
+import '../css/Hexagons.css';
 import {
   Hex,
-  hex_to_pixel,
   Layout,
   Point,
-  layout_flat
+  layout_flat,
+  layout_pointy,
+  polygon_corners
 } from '../HexUtils'; // Adjust the path to HexUtils.js as necessary
-// Define the hexagon size and origin for layout
-const hexSize = { x: 100, y: 100 };
-const origin = { x: hexSize.x * 0.5, y: hexSize.y * 0.5 };
 
+// Define the hexagon size and center the origin on the screen
+const hexSize = { x: 40, y: 40 };
+const hexnumber = 9;
+const hexRadius = hexSize.x / Math.sqrt(3) * 2; // Calculate the hex radius based on the width
+const centerHexOrigin = {
+  x: (window.innerWidth - hexRadius) / 2,
+  y: (window.innerHeight - hexRadius / 2) / 2
+};
 
+// Adjust the origin based on the number of hexagons
+const originOffset = {
+  x: centerHexOrigin.x - (hexnumber - 1) * hexSize.x * 3/4,
+  y: centerHexOrigin.y
+};
 
 const Board = () => {
-  // Create the layout object for the hex grid
-  const layout = Layout(layout_flat, hexSize, origin);
+  // Use the adjusted origin for the layout
+  const layout = Layout(layout_pointy, hexSize, originOffset);
 
   const renderHexagons = () => {
     const hexagons = [];
-    // Define the range for your grid here
-    for (let q = -3; q <= 3; q++) {
-      for (let r = -3; r <= 3; r++) {
-        const hex = Hex(q, r, -q - r);
-        const pixel = hex_to_pixel(layout, hex);
+    const N = hexnumber -1;
+    for (let q = -N; q <= N; q++) {
+        let r1 = Math.max(-N,-q-N)
+        let r2 = Math.min(N,-q+N)
+      for (let r = r1; r <= r2; r++) {
+        const s = -q - r;
+        const hex = Hex(q, r, s);
+        const corners = polygon_corners(layout, hex).map(p => `${p.x},${p.y}`).join(' ');
+
         hexagons.push(
-          <div
-            className="hexagon"
-            key={`${q}-${r}`}
-            style={{
-              left: `${pixel.x}px`,
-              top: `${pixel.y}px`,
-              width: `${hexSize.x}px`,
-              height: `${hexSize.y}px`,
-              // Add additional styles as needed
-            }}
+          <polygon
+            key={`${q}-${r}-${s}`}
+            points={corners}
+            className= "hexagon"
           />
         );
+        
       }
     }
     return hexagons;
   };
+  
 
   return (
-    <div className="board">
-      {renderHexagons()}
-    </div>
+<svg className="board" height="100%" width="100%">
+  {renderHexagons()}
+</svg>
+
+
   );
 };
 
