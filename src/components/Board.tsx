@@ -1,21 +1,16 @@
 import React from 'react';
 import '../css/Board.css'; // Make sure the path to your CSS file is correct
-import {
-  Hex,
-  Layout,
-  Point,
-  hex_to_pixel,
-  layout_flat,
-  layout_pointy,
-  polygon_corners
-} from '../HexUtils'; // Adjust the path to HexUtils.js as necessary
+import '../HexUtils'; // Adjust the path to HexUtils.js as necessary
+import {Layout, Point, Hex, } from '../HexUtils'; // adjust the path as needed from '../HexUtils'; // Adjust the path to HexUtils.js as necessary
 
+
+// Now you can use the layout instance in your board.tsx file
 // Define the hexagon size and center the origin on the screen
 const hexnumber = 9;
 // Gets the size of the window and divides it by the number of hexagons
 // to get the size of each hexagon
 const size = Math.min(window.innerWidth, window.innerHeight) / (4*hexnumber);
-const hexSize = Point(size, size);
+const hexSize = new Point(size, size);
 const centerHexOrigin = {
   x: window.innerWidth  / 2+100,
   y: window.innerHeight  / 2
@@ -28,7 +23,7 @@ const originOffset = {
 
 const Board = () => {
   // Use the adjusted origin for the layout
-  const layout = Layout(layout_pointy, hexSize, originOffset);
+  const layout = new Layout(Layout.pointy, hexSize, originOffset);
 
   const renderHexagons = () => {
     const hexagons = [];
@@ -38,8 +33,8 @@ const Board = () => {
         let r2 = Math.min(N,-q+N)
       for (let r = r1; r <= r2; r++) {
         const s = -q - r;
-        const hex = Hex(q, r, s);
-        const corners = polygon_corners(layout, hex).map(p => `${p.x},${p.y}`).join(' ');
+        const hex = new Hex(q, r, s);
+        const corners = layout.polygonCorners(hex).map(p => `${p.x},${p.y}`).join(' ');
 
         // Add the hexagon to the list of hexagons alternating between white and black
            hexagons.push(
@@ -48,7 +43,7 @@ const Board = () => {
             points={corners}
             // Creates a river marked by blue hexagons using the y coord of the origin
             //The river separates both sides of the board
-            className={hex_to_pixel(layout, hex).y === originOffset.y ? 'hexagon-blue' : 'hexagon'}
+            className={layout.hexToPixel(hex).y === originOffset.y ? 'hexagon-blue' : 'hexagon'}
           />
         );
         
