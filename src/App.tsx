@@ -1,11 +1,8 @@
-import React from 'react';
-import './App.css';
-import Board from './components/Board';
-
+import GameBoard from './components/Game';
 function App() {
   return (
     <div className="App">
-      <Board />
+      <GameBoard />
     </div>
   );
 }
