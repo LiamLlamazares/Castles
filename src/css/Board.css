@@ -1,15 +1,27 @@
 .board {
     position: relative;
-    width: 800px; /* adjust as needed */
-    height: 800px; /* adjust as needed */
-    margin: auto; /* center the board */
+    width: 100vw; /* Use viewport width for full width */
+    height: 100vh; /* Use viewport height for full height */
+    margin: 20px; /* Remove margin to fit the board to the edges */
   }
   
+  
 /* Here we define a style for a hexagon defined through the coordinates of its corners */
-.hexagon {
-    position: absolute;
-    width: 100px; /* adjust as needed */
-    height: 100px; /* adjust as needed */
-    background-color: #779556;
-    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  }
+  /* We add white and black hexagon subtypes */
+    .hexagon {
+        fill: #ddd; /* Fill color for the hexagon */
+        stroke: #aaa; /* Border color for the hexagon */
+        stroke-width: 4; /* Border width for the hexagon */
+    }
+    .hexagon-black {
+        fill: rgb(252, 10, 111);
+        stroke: #aaa; /* Border color for the hexagon */
+        stroke-width: 4; /* Border width for the hexagon */
+    }
+    .hexagon-blue {
+        fill: blue;
+        stroke: #aaa; /* Border color for the hexagon */
+        stroke-width: 4; /* Border width for the hexagon */
+    }
+    /* To define a white hexagon you can now use the html code 
+    <polygon class="hexagon white" points="..."/> */

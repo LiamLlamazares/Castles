@@ -1,24 +1,25 @@
 import React from 'react';
 import '../css/Board.css'; // Make sure the path to your CSS file is correct
-import '../css/Hexagons.css';
 import {
   Hex,
   Layout,
   Point,
+  hex_to_pixel,
   layout_flat,
   layout_pointy,
   polygon_corners
 } from '../HexUtils'; // Adjust the path to HexUtils.js as necessary
 
 // Define the hexagon size and center the origin on the screen
-const hexSize = { x: 40, y: 40 };
 const hexnumber = 9;
-const hexRadius = hexSize.x / Math.sqrt(3) * 2; // Calculate the hex radius based on the width
+// Gets the size of the window and divides it by the number of hexagons
+// to get the size of each hexagon
+const size = Math.min(window.innerWidth, window.innerHeight) / (4*hexnumber);
+const hexSize = Point(size, size);
 const centerHexOrigin = {
-  x: (window.innerWidth - hexRadius) / 2,
-  y: (window.innerHeight - hexRadius / 2) / 2
+  x: window.innerWidth  / 2+100,
+  y: window.innerHeight  / 2
 };
-
 // Adjust the origin based on the number of hexagons
 const originOffset = {
   x: centerHexOrigin.x - (hexnumber - 1) * hexSize.x * 3/4,
@@ -40,18 +41,31 @@ const Board = () => {
         const hex = Hex(q, r, s);
         const corners = polygon_corners(layout, hex).map(p => `${p.x},${p.y}`).join(' ');
 
-        hexagons.push(
+        // Add the hexagon to the list of hexagons alternating between white and black
+           hexagons.push(
           <polygon
             key={`${q}-${r}-${s}`}
             points={corners}
-            className= "hexagon"
+            // Creates a river marked by blue hexagons using the y coord of the origin
+            //The river separates both sides of the board
+            className={hex_to_pixel(layout, hex).y === originOffset.y ? 'hexagon-blue' : 'hexagon'}
           />
         );
         
       }
     }
+  // The hexagons form a hexagonal grid. We now sort them first by the y coordinate of their first element
+  // and then by the x coordinate of their first element. This makes it easier to access them
+  // later when we want to assign colors to them.
+ 
+    
+
+  
+  
     return hexagons;
   };
+
+
   
 
   return (
