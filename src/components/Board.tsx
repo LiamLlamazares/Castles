@@ -26,36 +26,53 @@ const Board = () => {
   const layout = new Layout(Layout.pointy, hexSize, originOffset);
 
   const renderHexagons = () => {
-    const hexagons = [];
+    const hexList = [];
     const N = hexnumber -1;
     for (let q = -N; q <= N; q++) {
-        let r1 = Math.max(-N,-q-N)
-        let r2 = Math.min(N,-q+N)
+      let r1 = Math.max(-N,-q-N)
+      let r2 = Math.min(N,-q+N)
       for (let r = r1; r <= r2; r++) {
         const s = -q - r;
         const hex = new Hex(q, r, s);
-        const corners = layout.polygonCorners(hex).map(p => `${p.x},${p.y}`).join(' ');
-
-        // Add the hexagon to the list of hexagons alternating between white and black
-           hexagons.push(
-          <polygon
-            key={`${q}-${r}-${s}`}
-            points={corners}
-            // Creates a river marked by blue hexagons using the y coord of the origin
-            //The river separates both sides of the board
-            className={layout.hexToPixel(hex).y === originOffset.y ? 'hexagon-blue' : 'hexagon'}
-          />
-        );
-        
+        hexList.push(hex);
       }
     }
-  // The hexagons form a hexagonal grid. We now sort them first by the y coordinate of their first element
-  // and then by the x coordinate of their first element. This makes it easier to access them
-  // later when we want to assign colors to them.
- 
-    
-
   
+    // Sort the hexagons first
+    hexList.sort((a, b) => {
+      let aCenter = layout.hexToPixel(a);
+      let bCenter = layout.hexToPixel(b);
+  
+      // Compare y-coordinates first
+      if (aCenter.y < bCenter.y) {
+        return -1;
+      } else if (aCenter.y > bCenter.y) {
+        return 1;
+      }
+  
+      // If y-coordinates are equal, compare x-coordinates
+      if (aCenter.x < bCenter.x) {
+        return -1;
+      } else if (aCenter.x > bCenter.x) {
+        return 1;
+      }
+  
+      // If both x and y coordinates are equal
+      return 0;
+    });
+  
+    // Then convert them to SVG polygons
+    const hexagons = hexList.map(hex => {
+      const corners = layout.polygonCorners(hex).map(p => `${p.x},${p.y}`).join(' ');
+      
+      return (
+        <polygon
+          key={`${hex.q}-${hex.r}-${hex.s}`}
+          points={corners}
+          className={layout.hexToPixel(hex).y === originOffset.y ? 'hexagon-blue' : 'hexagon'}
+        />
+      );
+    });
   
     return hexagons;
   };
