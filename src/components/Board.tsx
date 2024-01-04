@@ -3,7 +3,7 @@ import '../css/Board.css'; // Make sure the path to your CSS file is correct
 import {Layout, Point, Hex} from '../HexUtils'; // adjust the path as needed
 
 // Define the hexagon size and center the origin on the screen
-const hexnumber = 9;
+const hexnumber = 10;
 const size = Math.min(window.innerWidth, window.innerHeight) / (4*hexnumber);
 const hexSize = new Point(size, size);
 const centerHexOrigin = {
@@ -52,9 +52,19 @@ const Board = () => {
 
     const hexagons = hexList.map(hex => {
       const corners = layout.polygonCorners(hex).map(p => `${p.x},${p.y}`).join(' ');
-      const colorClass = ['hexagon-dark', 'hexagon-mid', 'hexagon-light'][(hex.color_index % 3 + 3) % 3]; // Determine the color of the hexagon
+      let colorClass = ['hexagon-dark', 'hexagon-mid', 'hexagon-light'][(hex.color_index % 3 + 3) % 3]; // Determine the color of the hexagon
       const center = layout.hexToPixel(hex);
 
+      //Colors the river
+      if (center.y === originOffset.y) {
+        colorClass = 'hexagon-river'; // Set the color to blue if the hexagon is at the center
+      }
+        // Colors the castles
+        if ((hex.q === 0 && Math.abs(hex.r) === N && Math.abs(hex.s) === N) || 
+        (hex.r === 0 && Math.abs(hex.q) === N && Math.abs(hex.s) === N) || 
+        (hex.s === 0 && Math.abs(hex.q) === N && Math.abs(hex.r) === N)) {
+      colorClass = 'hexagon-castles'; // Set the color to purple if the hexagon is at a corner
+    }
       return (
         <g key={`${hex.q}-${hex.r}-${hex.s}`}>
           <polygon
@@ -62,6 +72,7 @@ const Board = () => {
             className={colorClass}
           />
           <text x={center.x} y={center.y} textAnchor="middle" fill="white" fontSize="10">
+           {/* Shows hex coordinates if uncommented */}
             {/* {`${hex.q},${hex.r},${hex.s},${(hex.color_index % 3 + 3) % 3}`} */}
           </text>
         </g>

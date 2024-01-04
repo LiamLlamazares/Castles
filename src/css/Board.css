@@ -28,5 +28,24 @@
       stroke: #aaa; /* Border color for the hexagon */
       stroke-width: 4; /* Border width for the hexagon */
   }
-    /* To define a white hexagon you can now use the html code 
-    <polygon class="hexagon white" points="..."/> */
+  .hexagon-river {
+    fill: RGB(56,175,205); /* Fill color for the hexagon */
+    stroke: #aaa; /* Border color for the hexagon */
+    stroke-width: 4; /* Border width for the hexagon */
+}
+
+.hexagon-castles {
+  fill: purple; /* Fill color for the hexagon */
+  stroke: #aaa; /* Border color for the hexagon */
+  stroke-width: 4; /* Border width for the hexagon */
+}
+
+
+.hexagon, .hexagon-dark, .hexagon-mid, .hexagon-light, .hexagon-river, .hexagon-castles {
+  transition: fill 1s ease; /* Add a transition effect to the fill color */
+  
+}
+
+.hexagon:hover, .hexagon-dark:hover, .hexagon-mid:hover, .hexagon-light:hover, .hexagon-river:hover, .hexagon-castles:hover {
+  fill: #ff0000; /* Change the fill color on hover */
+}
