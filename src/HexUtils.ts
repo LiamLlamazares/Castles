@@ -8,7 +8,9 @@ export class Point {
     constructor(public q: number, public r: number, public s: number, public color_index: number = 0) {
       if (Math.round(q + r + s) !== 0) throw new Error("q + r + s must be 0");
     }
-  
+    public equals(other: Hex): boolean {
+        return this.q === other.q && this.r === other.r && this.s === other.s;
+      }
     public add(b: Hex): Hex {
       return new Hex(this.q + b.q, this.r + b.r, this.s + b.s);
     }
