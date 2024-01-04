@@ -262,4 +262,50 @@ export class Point {
       }
       return corners;
     }
+    public sortHexList(hexList: Hex[]): void {
+        hexList.sort((a, b) => {
+          let aCenter = this.hexToPixel(a);
+          let bCenter = this.hexToPixel(b);
+          if (aCenter.y < bCenter.y) {
+            return -1;
+          } else if (aCenter.y > bCenter.y) {
+            return 1;
+          }
+          if (aCenter.x < bCenter.x) {
+            return -1;
+          } else if (aCenter.x > bCenter.x) {
+            return 1;
+          }
+          return 0;
+        });
+      }
+
   }
+
+// My functions
+export const generateHexagons = (N: number) => {
+    const hexList: Hex[] = [];
+    for (let q = -N; q <= N; q++) {
+      let r1 = Math.max(-N,-q-N)
+      let r2 = Math.min(N,-q+N)
+      let color_index = q >= 1 ? -q : q; // Set color_index to q+1 when q >= 1
+      for (let r = r1; r <= r2; r++) {
+        const s = -q - r;
+        const hex = new Hex(q, r, s);
+        hex.color_index = color_index; // Add color_index as a property
+        hexList.push(hex);
+        color_index = color_index + 1;
+      }
+    }
+    return hexList;
+  };
+
+  export const isRiver = (center: Point, origin: Point): boolean => {
+    return center.y === origin.y; // Return true if the hexagon is at the center
+  };
+  
+  export const isCastle = (hex: Hex, N: number): boolean => {
+    return (hex.q === 0 && Math.abs(hex.r) === N && Math.abs(hex.s) === N) || 
+           (hex.r === 0 && Math.abs(hex.q) === N && Math.abs(hex.s) === N) || 
+           (hex.s === 0 && Math.abs(hex.q) === N && Math.abs(hex.r) === N); // Return true if the hexagon is at a corner
+  };
