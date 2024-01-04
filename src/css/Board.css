@@ -14,17 +14,17 @@
         stroke-width: 4; /* Border width for the hexagon */
     }
     .hexagon-dark {
-        fill: blue;
+        fill: rgb(210,140,69);
         stroke: #aaa; /* Border color for the hexagon */
         stroke-width: 4; /* Border width for the hexagon */
     }
     .hexagon-mid {
-        fill: green;
+        fill: rgb(233,173,112);
         stroke: #aaa; /* Border color for the hexagon */
         stroke-width: 4; /* Border width for the hexagon */
     }
     .hexagon-light {
-      fill: red; /* Fill color for the hexagon */
+      fill: rgb(255,207,159); /* Fill color for the hexagon */
       stroke: #aaa; /* Border color for the hexagon */
       stroke-width: 4; /* Border width for the hexagon */
   }

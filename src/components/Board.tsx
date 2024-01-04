@@ -3,7 +3,7 @@ import '../css/Board.css'; // Make sure the path to your CSS file is correct
 import {Layout, Point, Hex} from '../HexUtils'; // adjust the path as needed
 
 // Define the hexagon size and center the origin on the screen
-const hexnumber = 5;
+const hexnumber = 9;
 const size = Math.min(window.innerWidth, window.innerHeight) / (4*hexnumber);
 const hexSize = new Point(size, size);
 const centerHexOrigin = {
@@ -26,11 +26,11 @@ const Board = () => {
       let r2 = Math.min(N,-q+N)
       let color_index = q >= 1 ? -q : q; // Set color_index to q+1 when q >= 1
       for (let r = r1; r <= r2; r++) {
-         color_index = color_index + 1;
         const s = -q - r;
         const hex = new Hex(q, r, s);
         hex.color_index = color_index; // Add color_index as a property
         hexList.push(hex);
+        color_index = color_index + 1;
       }
     }
 
@@ -52,7 +52,7 @@ const Board = () => {
 
     const hexagons = hexList.map(hex => {
       const corners = layout.polygonCorners(hex).map(p => `${p.x},${p.y}`).join(' ');
-      const colorClass = ['hexagon-dark', 'hexagon-mid', 'hexagon-light'][hex.color_index % 3]; // Determine the color of the hexagon
+      const colorClass = ['hexagon-dark', 'hexagon-mid', 'hexagon-light'][(hex.color_index % 3 + 3) % 3]; // Determine the color of the hexagon
       const center = layout.hexToPixel(hex);
 
       return (
@@ -62,7 +62,7 @@ const Board = () => {
             className={colorClass}
           />
           <text x={center.x} y={center.y} textAnchor="middle" fill="white" fontSize="10">
-            {`${hex.q},${hex.r},${hex.s}`}
+            {/* {`${hex.q},${hex.r},${hex.s},${(hex.color_index % 3 + 3) % 3}`} */}
           </text>
         </g>
       );
