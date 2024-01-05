@@ -1,60 +1,43 @@
-import  { Component } from 'react';
-import { Piece} from '../Classes/Piece';
+import { Component } from 'react';
+import { Piece } from '../Classes/Piece';
 import { RenderHex } from '../Classes/RenderHex';
 import "../css/Board.css";
 import swordsmanImage from "../Assets/Images/fantasy/Swordsman.svg";
 import archerImage from "../Assets/Images/fantasy/Archer.svg";
-
-
 import { PieceType } from '../Constants';
 import { startingBoard } from '../ConstantImports';
+import { NSquaresc } from '../Constants';
 
 class GameBoard extends Component {
   state = {
     hexagons: Array<RenderHex>(),
     pieces: Array<Piece>(),
-    draggingPiece: null as Piece | null,
+    selectedPiece: null as Piece | null,
   };
 
-  handleMouseDown = (e: React.MouseEvent, piece: Piece) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const offsetY = e.clientY - rect.top;
-    this.setState({ draggingPiece: piece, dragOffset: { x: offsetX, y: offsetY } });
-  };
-  handleMouseMove = (e: React.MouseEvent) => {
-    const { draggingPiece } = this.state;
-
-    if (draggingPiece) {
-      const newPosition = { x: e.clientX, y: e.clientY };
-      draggingPiece.position = newPosition;
-      this.setState({ draggingPiece });
-    }
+  handlePieceClick = (piece: Piece) => {
+    this.setState({ selectedPiece: piece });
   };
 
-  handleMouseUp = (e: React.MouseEvent) => {
-    const { draggingPiece, hexagons } = this.state;
+handleHexClick = (hex: RenderHex) => {
+  const { selectedPiece, hexagons } = this.state;
 
-    if (draggingPiece) {
-      const closestHex = hexagons.reduce((closest, hex) => {
-        const distance = this.getDistance(draggingPiece.position, hex.center);
-        if (distance < closest.distance) {
-          return { hex, distance };
-        }
-        return closest;
-      }, { hex: hexagons[0], distance: this.getDistance(draggingPiece.position, hexagons[0].center) }).hex;
+  if (selectedPiece) {
+    const updatedHexagons = hexagons.map(h => {
+      if (h.piece === selectedPiece) {
+        // Remove the piece from its old hexagon
+        return { ...h, piece: undefined };
+      } else if (h === hex) {
+        // Add the piece to the new hexagon
+        return { ...h, piece: selectedPiece };
+      } else {
+        return h;
+      }
+    });
 
-      draggingPiece.position = closestHex.center;
-
-      this.setState({ draggingPiece: null });
-    }
-  };
-
-  getDistance = (point1: { x: number; y: number }, point2: { x: number; y: number }) => {
-    const dx = point1.x - point2.x;
-    const dy = point1.y - point2.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
+    this.setState({ selectedPiece: null, hexagons: updatedHexagons });
+  }
+};
 
   componentDidMount() {
     const board = startingBoard;
@@ -75,26 +58,30 @@ class GameBoard extends Component {
 
   render() {
     return (
-      <svg className="board" height="100%" width="100%" onMouseMove={this.handleMouseMove}>
+      <svg className="board" height="100%" width="100%">
         {/* Render all hexagons */}
         {this.state.hexagons.map((hex: RenderHex) => (
-          <polygon key={hex.key} points={hex.corners} className={hex.colorClass} />
+          <polygon 
+            key={hex.key} 
+            points={hex.corners} 
+            className={hex.colorClass} 
+            onClick={() => this.handleHexClick(hex)}
+          />
         ))}
 
         {/* Render all pieces */}
         {this.state.hexagons.map((hex: RenderHex) => {
           if (hex.piece) {
             return (
-              <image
-                key={hex.key}
-                href={this.getImageByPieceType(hex.piece.type)}
-                x={this.state.draggingPiece === hex.piece ? this.state.draggingPiece.position.x -35 : hex.center.x - 15}
-                y={this.state.draggingPiece === hex.piece ? this.state.draggingPiece.position.y -35 : hex.center.y - 15}
-                height="30"
-                width="30"
-                onMouseDown={(e) => hex.piece && this.handleMouseDown(e, hex.piece)}
-                onMouseUp={this.handleMouseUp}
-              />
+<image
+  key={hex.key}
+  href={this.getImageByPieceType(hex.piece.type)}
+  x={hex.center.x - 150/NSquaresc}
+  y={hex.center.y - 150/NSquaresc}
+  height={275 / NSquaresc}
+  width={275 / NSquaresc}
+  onClick={() => hex.piece && this.handlePieceClick(hex.piece)}
+/>
             );
           }
           return null;
