@@ -65,7 +65,12 @@ class GameBoard extends Component {
   }
 
   getImageByPieceType = (type: PieceType) => {
-    return type === PieceType.Swordsman ? swordsmanImage : archerImage;
+    const pieceImages = {
+      [PieceType.Swordsman]: swordsmanImage,
+      [PieceType.Archer]: archerImage,
+    };
+
+    return pieceImages[type];
   };
 
   render() {
