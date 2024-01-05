@@ -1,15 +1,17 @@
 // Generated code -- CC0 -- No Rights Reserved -- http://www.redblobgames.com/grids/hexagons/
-
 export class Point {
     constructor(public x: number, public y: number) {}
   }
-  
+  // Hexes contain cube coordinates as well as color
   export class Hex {
     constructor(public q: number, public r: number, public s: number, public color_index: number = 0) {
       if (Math.round(q + r + s) !== 0) throw new Error("q + r + s must be 0");
     }
     public equals(other: Hex): boolean {
         return this.q === other.q && this.r === other.r && this.s === other.s;
+      }
+      public getKey(){
+        return `${this.q},${this.r},${this.s}`;
       }
     public add(b: Hex): Hex {
       return new Hex(this.q + b.q, this.r + b.r, this.s + b.s);

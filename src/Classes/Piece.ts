@@ -1,19 +1,21 @@
 
   //Defines the piece class which has a hex, color, and type
-  import { Hex } from './Hex';
-  export class Piece {
-    constructor(public hex: Hex, public color: string, public type: string) {}
+  import { Hex, Point, Layout } from './Hex';
+  import { startingBoard } from '../Constants';
+//List of all types of pieces
+export type PieceType = "Swordsman" | "Archer" | ""
+// | "Knight" | "Eagle" | "Giant" | "Assassin" | "Dracon" | "Monarch";
 
-    //Returns the legal moves for a piece
-    public getLegalMoves(): Hex[] {
-        let legalMoves: Hex[] = [];
-        let directions: Hex[] = Hex.directions;
-        for (let i = 0; i < directions.length; i++) {
-            let neighbor: Hex = this.hex.neighbor(i);
-            if (neighbor.q >= -3 && neighbor.q <= 3 && neighbor.r >= -3 && neighbor.r <= 3 && neighbor.s >= -3 && neighbor.s <= 3) {
-                legalMoves.push(neighbor);
-            }
-        }
-        return legalMoves;
+ 
+export class Piece {
+    constructor(
+        public hex: Hex, 
+        public color: string, 
+        public type: PieceType, 
+        public position: Point //This is necessary so that the piece can be rendered
+    ) {}
+
+    public getHex(): Hex {
+        return this.hex;
     }
 }

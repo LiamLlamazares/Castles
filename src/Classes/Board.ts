@@ -1,5 +1,7 @@
 import { Hex, Layout, generateHexagons, Point, isRiver, isCastle } from './Hex'; // adjust the path as needed
 import { Piece } from './Piece'; // adjust the path as needed
+//imports constants
+import { NSquaresc, HEX_SIZE_FACTORc, X_OFFSETc, layoutTypec } from '../Constants';
 
 
 export class Board {
@@ -11,13 +13,13 @@ export class Board {
   public HEX_SIZE_FACTOR;
   public X_OFFSET;
   
-  constructor(pieces: Piece[], NSquares: number, HEX_SIZE_FACTOR: number =4, X_OFFSET: number =100) {
+  constructor(pieces: Piece[], NSquares: number = NSquaresc, HEX_SIZE_FACTOR: number =HEX_SIZE_FACTORc, X_OFFSET: number = X_OFFSETc, layoutType: string = layoutTypec) {
     this.pieces = pieces;
     this.NSquares = NSquares;
     this.hexes = generateHexagons(this.NSquares);
     this.HEX_SIZE_FACTOR = HEX_SIZE_FACTOR;
     this.X_OFFSET = X_OFFSET;
-    this.layoutType = "flat";
+    this.layoutType = layoutType;
     this.layout = this.getLayout();
   }
 
@@ -51,7 +53,12 @@ export class Board {
     const centers = hexList.map((hex) => this.layout.hexToPixel(hex));
     return centers;
   }
+  
+  getHexCenter(hex: Hex): Point {
+    return this.layout.hexToPixel(hex);
+  }
 
+  //Creates a list of hexagons that can be rendered of the form {key, corners, colorClass, center}
   renderHexagons = () => {
     const hexList = generateHexagons(this.NSquares);
     this.layout.sortHexList(hexList);
@@ -73,12 +80,19 @@ export class Board {
       } else if (hexisaCastle) {
         colorClass = "hexagon-castles";
       }
+      const piece = this.pieces.find(
+        (piece) => piece.hex.q === hex.q && piece.hex.r === hex.r && piece.hex.s === hex.s
+      );
 
       return {
         key: `${hex.q}-${hex.r}-${hex.s}`,
         corners,
         colorClass,
         center,
+        piece,
+        q: hex.q,
+        r: hex.r,
+        s: hex.s,
       };
     });
 
