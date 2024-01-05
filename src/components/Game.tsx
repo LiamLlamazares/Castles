@@ -3,6 +3,7 @@ import { Piece } from '../Classes/Piece';
 import { RenderHex } from '../Classes/RenderHex';
 import "../css/Board.css";
 import swordsmanImage from "../Assets/Images/fantasy/Swordsman.svg";
+import dragonImage from "../Assets/Images/fantasy/dragon.png";
 import archerImage from "../Assets/Images/fantasy/Archer.svg";
 import { PieceType } from '../Constants';
 import { startingBoard } from '../ConstantImports';
@@ -16,7 +17,25 @@ class GameBoard extends Component {
   };
 
   handlePieceClick = (piece: Piece) => {
-    this.setState({ selectedPiece: piece });
+    const { selectedPiece, hexagons } = this.state;
+  
+    if (selectedPiece) {
+      const updatedHexagons = hexagons.map(h => {
+        if (h.piece === selectedPiece) {
+          // Remove the piece from its old hexagon
+          return { ...h, piece: undefined };
+        } else if (h.piece === piece) {
+          // Add the piece to the new hexagon and capture any existing piece
+          return { ...h, piece: selectedPiece };
+        } else {
+          return h;
+        }
+      });
+  
+      this.setState({ selectedPiece: null, hexagons: updatedHexagons });
+    } else {
+      this.setState({ selectedPiece: piece });
+    }
   };
 
 handleHexClick = (hex: RenderHex) => {
@@ -51,6 +70,13 @@ handleHexClick = (hex: RenderHex) => {
     const pieceImages = {
       [PieceType.Swordsman]: swordsmanImage,
       [PieceType.Archer]: archerImage,
+      [PieceType.Knight]: swordsmanImage,
+      [PieceType.Eagle]: swordsmanImage,
+      [PieceType.Giant]: swordsmanImage,
+      [PieceType.Assassin]: swordsmanImage,
+      [PieceType.Dragon]: dragonImage,
+      [PieceType.Monarch]: swordsmanImage,
+
     };
 
     return pieceImages[type];
