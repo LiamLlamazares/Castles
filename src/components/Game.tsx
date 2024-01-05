@@ -6,7 +6,8 @@ import swordsmanImage from "../Assets/Images/fantasy/Swordsman.svg";
 import archerImage from "../Assets/Images/fantasy/Archer.svg";
 
 
-import { startingBoard } from '../Constants';
+import { PieceType } from '../Constants';
+import { startingBoard } from '../ConstantImports';
 
 class GameBoard extends Component {
   state = {
@@ -16,9 +17,11 @@ class GameBoard extends Component {
   };
 
   handleMouseDown = (e: React.MouseEvent, piece: Piece) => {
-    this.setState({ draggingPiece: piece });
+    const rect = e.currentTarget.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    this.setState({ draggingPiece: piece, dragOffset: { x: offsetX, y: offsetY } });
   };
-
   handleMouseMove = (e: React.MouseEvent) => {
     const { draggingPiece } = this.state;
 
@@ -61,32 +64,35 @@ class GameBoard extends Component {
     });
   }
 
-  getImageByPieceType = (type: string) => {
-    return type === "Swordsman" ? swordsmanImage : archerImage;
+  getImageByPieceType = (type: PieceType) => {
+    return type === PieceType.Swordsman ? swordsmanImage : archerImage;
   };
 
   render() {
     return (
       <svg className="board" height="100%" width="100%" onMouseMove={this.handleMouseMove}>
+        {/* Render all hexagons */}
+        {this.state.hexagons.map((hex: RenderHex) => (
+          <polygon key={hex.key} points={hex.corners} className={hex.colorClass} />
+        ))}
+
+        {/* Render all pieces */}
         {this.state.hexagons.map((hex: RenderHex) => {
-          return (
-            <g key={hex.key}>
-              <polygon points={hex.corners} className={hex.colorClass} />
-              {hex.piece && (
-                <>
-                  <image
-                    href={this.getImageByPieceType(hex.piece.type)}
-                    x={this.state.draggingPiece === hex.piece ? this.state.draggingPiece.position.x - 35 : hex.center.x - 15}
-                    y={this.state.draggingPiece === hex.piece ? this.state.draggingPiece.position.y - 35 : hex.center.y - 15}
-                    height="30"
-                    width="30"
-                    onMouseDown={(e) => hex.piece && this.handleMouseDown(e, hex.piece)}
-                    onMouseUp={this.handleMouseUp}
-                  />
-                </>
-              )}
-            </g>
-          );
+          if (hex.piece) {
+            return (
+              <image
+                key={hex.key}
+                href={this.getImageByPieceType(hex.piece.type)}
+                x={this.state.draggingPiece === hex.piece ? this.state.draggingPiece.position.x -35 : hex.center.x - 15}
+                y={this.state.draggingPiece === hex.piece ? this.state.draggingPiece.position.y -35 : hex.center.y - 15}
+                height="30"
+                width="30"
+                onMouseDown={(e) => hex.piece && this.handleMouseDown(e, hex.piece)}
+                onMouseUp={this.handleMouseUp}
+              />
+            );
+          }
+          return null;
         })}
       </svg>
     );
