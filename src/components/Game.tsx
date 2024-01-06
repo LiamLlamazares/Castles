@@ -1,6 +1,7 @@
 import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
 import { RenderHex } from '../Classes/RenderHex';
+import { Hex } from '../Classes/Hex';
 import "../css/Board.css";
 import swordsmanImage from "../Assets/Images/fantasy/Swordsman.svg";
 import dragonImage from "../Assets/Images/fantasy/dragon.png";
@@ -8,53 +9,63 @@ import archerImage from "../Assets/Images/fantasy/Archer.svg";
 import { PieceType } from '../Constants';
 import { startingBoard } from '../ConstantImports';
 import { NSquaresc } from '../Constants';
+import { Move } from '../Classes/Move';
 
 class GameBoard extends Component {
   state = {
     hexagons: Array<RenderHex>(),
     pieces: Array<Piece>(),
-    selectedPiece: null as Piece | null,
+    movingPiece: null as Piece | null,
+    legalMoves: Array<Move>(),
   };
 
-  handlePieceClick = (piece: Piece) => {
-    const { selectedPiece, hexagons } = this.state;
+  handlePieceClick = (pieceClicked: Piece) => {
+    //Obtain the selected piece and the hexagons from the game state
+    const { movingPiece, hexagons } = this.state;
   
-    if (selectedPiece) {
+    if (movingPiece) {
+      //Updates hexagons by making them contain the right piece once a piece is clicked
       const updatedHexagons = hexagons.map(h => {
-        if (h.piece === selectedPiece) {
-          // Remove the piece from its old hexagon
+        if (h.piece === movingPiece && h.piece != pieceClicked) {//Removes the selectedpiece if it doesn't click itself
           return { ...h, piece: undefined };
-        } else if (h.piece === piece) {
-          // Add the piece to the new hexagon and capture any existing piece
-          return { ...h, piece: selectedPiece };
+        } else if (h.piece === pieceClicked) {// Capture the pieceClicked if not the selected piece
+          return { ...h, piece: movingPiece };
         } else {
           return h;
         }
       });
-  
-      this.setState({ selectedPiece: null, hexagons: updatedHexagons });
+      //Move is completed, so there is no selected piece, hexagons are updated with the new pieceClicked and legal moves are reset
+      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] });
     } else {
-      this.setState({ selectedPiece: piece });
+      //Select the pieceClicked if there is no selected piece and update the legal moves
+      const legalMoves = pieceClicked.legalmoves(startingBoard);
+      this.setState({ movingPiece: pieceClicked, legalMoves });
     }
   };
 
 handleHexClick = (hex: RenderHex) => {
-  const { selectedPiece, hexagons } = this.state;
+  const { movingPiece, hexagons } = this.state;
 
-  if (selectedPiece) {
+  if (movingPiece) {
     const updatedHexagons = hexagons.map(h => {
-      if (h.piece === selectedPiece) {
+      if (h.piece === movingPiece) {
         // Remove the piece from its old hexagon
         return { ...h, piece: undefined };
+        
       } else if (h === hex) {
         // Add the piece to the new hexagon
-        return { ...h, piece: selectedPiece };
+        return { ...h, piece: movingPiece };
       } else {
         return h;
       }
     });
 
-    this.setState({ selectedPiece: null, hexagons: updatedHexagons });
+    this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] });
+    //We also need to update the piece's position
+    console.log("Hi the moving pieces hex was " + movingPiece.hex.q + " " + movingPiece.hex.r);
+    console.log("The piece moved to " + hex.q + " " + hex.r);
+    console.log("The legal moves should be " + [movingPiece.hex.q + 1, movingPiece.hex.r - 1, movingPiece.hex.s] + " " + [movingPiece.hex.q, movingPiece.hex.s - 1, movingPiece.hex.r + 1] + " " + [movingPiece.hex.q - 1, movingPiece.hex.r, movingPiece.hex.s + 1]);
+    movingPiece.hex = new Hex(hex.q, hex.r, hex.s);
   }
 };
 
@@ -83,6 +94,7 @@ handleHexClick = (hex: RenderHex) => {
   };
 
   render() {
+    console.log(this.state.legalMoves);
     return (
       <svg className="board" height="100%" width="100%">
         {/* Render all hexagons */}
@@ -94,6 +106,27 @@ handleHexClick = (hex: RenderHex) => {
             onClick={() => this.handleHexClick(hex)}
           />
         ))}
+      {/* Render dots for legal moves */}
+      {this.state.hexagons.map((hex: RenderHex) => {
+         
+        // Check if the hexagon is a legal move
+        //console.log(this.state.legalMoves);
+        const isLegalMove = this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r);
+        if (isLegalMove) {
+          return (
+            <circle 
+              key={hex.key}
+              cx={hex.center.x} 
+              cy={hex.center.y} 
+              r={10} 
+              fill="red" 
+              onClick={() => this.handleHexClick(hex)}
+            />
+          );
+        }
+        return null;
+      })}
+
 
         {/* Render all pieces */}
         {this.state.hexagons.map((hex: RenderHex) => {

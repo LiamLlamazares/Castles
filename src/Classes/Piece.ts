@@ -18,7 +18,6 @@ import {Move} from '../Classes/Move';
         throw new Error("Invalid arguments for Piece constructor");
       }
     }
-
     public swordsmanMoves(board: Board): Move[] {
       let moves = [];
       let hex = this.hex;
@@ -29,7 +28,7 @@ import {Move} from '../Classes/Move';
      
         moves.push(new Move(hex, newHex));
       
-      newHex = new Hex(q , s-1, r +1);
+      newHex = new Hex(q , r-1, s +1);
      
         moves.push(new Move(hex, newHex));
       
@@ -49,9 +48,9 @@ import {Move} from '../Classes/Move';
           for (let ds = -1; ds <= 1; ds++) {
             if (dq + dr + ds == 0) {
               let newHex = new Hex(q + dq, r + dr, s + ds);
-              if (board.hexes.includes(newHex)) {
+              
                 moves.push(new Move(hex, newHex));
-              }
+              
             }
           }
         }
@@ -74,12 +73,10 @@ import {Move} from '../Classes/Move';
       for (let direction of knightDirections) {
         for (let k = -board.NSquares; k <= board.NSquares; k++) {
           let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
-          if (board.hexes.includes(newHex)) {
+          
             moves.push(new Move(hex, newHex));
-          } else {
-            // If the new hex is not on the board, there's no point in checking further in this direction
-            break;
-          }
+          
+          
         }
       }
     
@@ -105,19 +102,31 @@ import {Move} from '../Classes/Move';
       for (let direction of dragonDirections) {
         for (let k of [-1, 1]) {
           let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
-          if (board.hexes.includes(newHex)) {
+          
             moves.push(new Move(hex, newHex));
-          } else {
-            // If the new hex is not on the board, there's no point in checking further in this direction
-            break;
-          }
+          
         }
       }
     
       return moves;
     }
     public legalmoves(board: Board): Move[] {
-      return this.swordsmanMoves(board);
+      let moves: Move[] = []; // Initialize the 'moves' variable with an empty array
+      switch (this.type) {
+        case PieceType.Swordsman:
+          moves = this.swordsmanMoves(board);
+          break;
+        case PieceType.Archer:
+          moves = this.archerMoves(board);
+          break;
+        case PieceType.Knight:
+          moves = this.knightMoves(board);
+          break;
+        case PieceType.Dragon:
+          moves = this.dragonMoves(board);
+          break;
+      }
+      return moves;
     }
 
 
