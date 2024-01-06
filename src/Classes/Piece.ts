@@ -11,14 +11,13 @@ import {Move} from '../Classes/Move';
     constructor(
       public hex: Hex,
       public color: string,
-      public type: PieceType,
-      public position: Point //This is necessary so that the piece can be rendered
+      public type: PieceType
     ) {
-      if (!hex || !color || !type || !position) {
+      if (!hex || !color || !type ) {
         throw new Error("Invalid arguments for Piece constructor");
       }
     }
-    public swordsmanMoves(board: Board): Move[] {
+    public swordsmanMoves(): Move[] {
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -37,7 +36,7 @@ import {Move} from '../Classes/Move';
         moves.push(new Move(hex, newHex));
       return moves;
     }
-    public archerMoves(board: Board): Move[] {//archers move the same to any hex in a radius of 1
+    public archerMoves(): Move[] {//archers move the same to any hex in a radius of 1
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -57,7 +56,7 @@ import {Move} from '../Classes/Move';
       }
       return moves;
     }
-    public knightMoves(board: Board): Move[] {
+    public knightMoves(): Move[] {
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -82,7 +81,7 @@ import {Move} from '../Classes/Move';
     
       return moves;
     }
-    public dragonMoves(board: Board): Move[] {//Dragons move like the knight in chess, orthogonally two and then 1 diagonally
+    public dragonMoves(): Move[] {//Dragons move like the knight in chess, orthogonally two and then 1 diagonally
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -110,20 +109,20 @@ import {Move} from '../Classes/Move';
     
       return moves;
     }
-    public legalmoves(board: Board): Move[] {
+    public legalmoves(): Move[] {
       let moves: Move[] = []; // Initialize the 'moves' variable with an empty array
       switch (this.type) {
         case PieceType.Swordsman:
-          moves = this.swordsmanMoves(board);
+          moves = this.swordsmanMoves();
           break;
         case PieceType.Archer:
-          moves = this.archerMoves(board);
+          moves = this.archerMoves();
           break;
         case PieceType.Knight:
-          moves = this.knightMoves(board);
+          moves = this.knightMoves();
           break;
         case PieceType.Dragon:
-          moves = this.dragonMoves(board);
+          moves = this.dragonMoves();
           break;
       }
       return moves;
@@ -139,9 +138,7 @@ import {Move} from '../Classes/Move';
       return this.hex;
     }
 
-    public setPosition(position: Point): void {
-      this.position = position;
-    }
+
 
     public setHex(newHex: Hex): void {
       this.hex = newHex;
@@ -159,19 +156,8 @@ import {Move} from '../Classes/Move';
       return this.type;
     }
 
-    public getPosition(): Point {
-      return this.position;
-    }
   }
 
   const board = new Board([]);
-
-  export const startingBoard = new Board(
-    [
-      new Piece(new Hex(0, 0, 0), "red", PieceType.Swordsman, board.getHexCenter(new Hex(0, 0, 0))),
-      new Piece(new Hex(1, 0, -1), "red", PieceType.Archer, board.getHexCenter(new Hex(1, 0, -1))),
-    ],
-    NSquaresc
-  );
 
   export{}

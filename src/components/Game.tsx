@@ -6,6 +6,10 @@ import "../css/Board.css";
 import swordsmanImage from "../Assets/Images/fantasy/Swordsman.svg";
 import dragonImage from "../Assets/Images/fantasy/dragon.png";
 import archerImage from "../Assets/Images/fantasy/Archer.svg";
+import giantImage from "../Assets/Images/fantasy/Giant.svg";
+import assassinImage from "../Assets/Images/fantasy/Assassin.svg";
+import monarchImage from "../Assets/Images/fantasy/Monarch.svg";
+import trebuchetImage from "../Assets/Images/fantasy/bN.svg";
 import { PieceType } from '../Constants';
 import { startingBoard } from '../ConstantImports';
 import { NSquaresc } from '../Constants';
@@ -17,6 +21,7 @@ class GameBoard extends Component {
     pieces: Array<Piece>(),
     movingPiece: null as Piece | null,
     legalMoves: Array<Move>(),
+    showCoordinates: false,
   };
 
   handlePieceClick = (pieceClicked: Piece) => {
@@ -38,7 +43,7 @@ class GameBoard extends Component {
       this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] });
     } else {
       //Select the pieceClicked if there is no selected piece and update the legal moves
-      const legalMoves = pieceClicked.legalmoves(startingBoard);
+      const legalMoves = pieceClicked.legalmoves();
       this.setState({ movingPiece: pieceClicked, legalMoves });
     }
   };
@@ -83,10 +88,11 @@ handleHexClick = (hex: RenderHex) => {
       [PieceType.Archer]: archerImage,
       [PieceType.Knight]: swordsmanImage,
       [PieceType.Eagle]: swordsmanImage,
-      [PieceType.Giant]: swordsmanImage,
-      [PieceType.Assassin]: swordsmanImage,
+      [PieceType.Giant]: giantImage,
+      [PieceType.Assassin]: assassinImage,
       [PieceType.Dragon]: dragonImage,
-      [PieceType.Monarch]: swordsmanImage,
+      [PieceType.Monarch]: monarchImage,
+      [PieceType.Trebuchet]: trebuchetImage,
 
     };
 
@@ -96,15 +102,30 @@ handleHexClick = (hex: RenderHex) => {
   render() {
     console.log(this.state.legalMoves);
     return (
+      <>
+      <button onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
+        Toggle Coordinates
+      </button>
       <svg className="board" height="100%" width="100%">
         {/* Render all hexagons */}
         {this.state.hexagons.map((hex: RenderHex) => (
-          <polygon 
-            key={hex.key} 
-            points={hex.corners} 
-            className={hex.colorClass} 
-            onClick={() => this.handleHexClick(hex)}
-          />
+          <g key={hex.key}>
+            <polygon 
+              points={hex.corners} 
+              className={hex.colorClass} 
+              onClick={() => this.handleHexClick(hex)}
+            />
+            {this.state.showCoordinates && (
+              <text 
+                x={hex.center.x} 
+                y={hex.center.y+5} 
+                textAnchor="middle" 
+                style={{ fontSize: '15px', color: 'black' }}
+              >
+                {`${hex.q},${hex.r}, ${hex.s}`}
+              </text>
+            )}
+          </g>
         ))}
       {/* Render dots for legal moves */}
       {this.state.hexagons.map((hex: RenderHex) => {
@@ -146,6 +167,7 @@ handleHexClick = (hex: RenderHex) => {
           return null;
         })}
       </svg>
+      </>
     );
   }
 }

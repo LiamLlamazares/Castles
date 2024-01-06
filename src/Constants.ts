@@ -12,6 +12,7 @@ export enum PieceType {
     Assassin = "Assassin",
     Dragon = "Dragon",
     Monarch = "Monarch",
+    Trebuchet = "Trebuchet",
     
 
   }
