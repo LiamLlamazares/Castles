@@ -54,3 +54,9 @@
   position: relative;
   z-index: 2;
 }
+
+.legal {
+  fill: #00ff00;
+  stroke: #aaa;
+  stroke-width: 4;
+}

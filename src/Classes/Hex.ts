@@ -282,6 +282,10 @@ export class Point {
         });
       }
 
+      public getKey(hex: Hex): string {
+        return `${hex.q},${hex.r},${hex.s}`;
+      }
+
   }
 
 // My functions

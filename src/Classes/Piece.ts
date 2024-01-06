@@ -1,4 +1,5 @@
 import { Board } from '../Classes/Board';
+import {Move} from '../Classes/Move';
 
   //Defines the piece class which has a hex, color, and type
   import { Hex, Point, Layout } from './Hex';
@@ -17,6 +18,113 @@ import { Board } from '../Classes/Board';
         throw new Error("Invalid arguments for Piece constructor");
       }
     }
+
+    public swordsmanMoves(board: Board): Move[] {
+      let moves = [];
+      let hex = this.hex;
+      let q = hex.q;
+      let r = hex.r;
+      let s = hex.s;
+      let newHex = new Hex(q+1, r - 1, s);
+     
+        moves.push(new Move(hex, newHex));
+      
+      newHex = new Hex(q , s-1, r +1);
+     
+        moves.push(new Move(hex, newHex));
+      
+      newHex = new Hex(q - 1, r, s+1);
+      
+        moves.push(new Move(hex, newHex));
+      return moves;
+    }
+    public archerMoves(board: Board): Move[] {//archers move the same to any hex in a radius of 1
+      let moves = [];
+      let hex = this.hex;
+      let q = hex.q;
+      let r = hex.r;
+      let s = hex.s;
+      for (let dq = -1; dq <= 1; dq++) {
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let ds = -1; ds <= 1; ds++) {
+            if (dq + dr + ds == 0) {
+              let newHex = new Hex(q + dq, r + dr, s + ds);
+              if (board.hexes.includes(newHex)) {
+                moves.push(new Move(hex, newHex));
+              }
+            }
+          }
+        }
+      }
+      return moves;
+    }
+    public knightMoves(board: Board): Move[] {
+      let moves = [];
+      let hex = this.hex;
+      let q = hex.q;
+      let r = hex.r;
+      let s = hex.s;
+    
+      // Define the 2 possible knight move directions
+      let knightDirections = [
+        { dq: -1, dr: -1, ds: 2 },
+        { dq: 1, dr: -2, ds: 1 }
+      ];
+    
+      for (let direction of knightDirections) {
+        for (let k = -board.NSquares; k <= board.NSquares; k++) {
+          let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
+          if (board.hexes.includes(newHex)) {
+            moves.push(new Move(hex, newHex));
+          } else {
+            // If the new hex is not on the board, there's no point in checking further in this direction
+            break;
+          }
+        }
+      }
+    
+      return moves;
+    }
+    public dragonMoves(board: Board): Move[] {//Dragons move like the knight in chess, orthogonally two and then 1 diagonally
+      let moves = [];
+      let hex = this.hex;
+      let q = hex.q;
+      let r = hex.r;
+      let s = hex.s;
+    
+      // Define the 2 possible knight move directions
+      let dragonDirections = [
+        { dq: -1, dr: -2, ds: 3 },
+        { dq: 1, dr: -3, ds: 2 },
+        { dq: 2, dr: -3, ds: 1 },
+        { dq: 3, dr: -2, ds: -1 },
+        { dq: 3, dr: -1, ds: -2 },
+        { dq: 2, dr: 1, ds: -3 }
+      ];
+    
+      for (let direction of dragonDirections) {
+        for (let k of [-1, 1]) {
+          let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
+          if (board.hexes.includes(newHex)) {
+            moves.push(new Move(hex, newHex));
+          } else {
+            // If the new hex is not on the board, there's no point in checking further in this direction
+            break;
+          }
+        }
+      }
+    
+      return moves;
+    }
+    public legalmoves(board: Board): Move[] {
+      return this.swordsmanMoves(board);
+    }
+
+
+      
+
+
+
 
     public getHex(): Hex {
       return this.hex;
