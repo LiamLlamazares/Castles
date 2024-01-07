@@ -2,27 +2,19 @@ import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
 import { RenderHex } from '../Classes/RenderHex';
 import { Hex } from '../Classes/Hex';
-import "../css/Board.css";
-import { PieceType, imagePaths } from '../Constants';
+import { PieceType, imagePaths, NSquaresc } from '../Constants';
 import { startingBoard } from '../ConstantImports';
-import { NSquaresc } from '../Constants';
 import { Move } from '../Classes/Move';
+import "../css/Board.css";
 
+const swordsmanImage = require(imagePaths[PieceType.Swordsman].white);
+const dragonImage = require(imagePaths[PieceType.Dragon].white);
+const archerImage = require(imagePaths[PieceType.Archer].white);
+const giantImage = require(imagePaths[PieceType.Giant].white);
+const assassinImage = require(imagePaths[PieceType.Assassin].white);
+const monarchImage = require(imagePaths[PieceType.Monarch].white);
+const trebuchetImage = require(imagePaths[PieceType.Trebuchet].white);
 
-// const IMAGE_FOLDER = 'fantasy';
-// import swordsmanImageW from '../Assets/Images/'+IMAGE_FOLDER+'/SwordsmanW2.svg';
-// import dragonImageW from '../Assets/Images/fantasy/dragonW.png';
-// import dragonImageB from '../Assets/Images/fantasy/DragonW.svg';
-// import archerImageW from '../Assets/Images/fantasy/ArcherW2.svg';
-// import archerImageB from '../Assets/Images/fantasy/ArcherW2.svg';
-// import giantImageW from '../Assets/Images/fantasy/GiantW.svg';
-// import giantImageB from '../Assets/Images/fantasy/GiantW.svg';
-// import assassinImageW from '../Assets/Images/fantasy/AssassinW2.svg';
-// import assassinImageB from '../Assets/Images/fantasy/AssassinW2.svg';
-// import monarchImageW from '../Assets/Images/fantasy/MonarchW2.svg';
-// import monarchImageB from '../Assets/Images/fantasy/MonarchW2.svg';
-// import trebuchetImageW from '../Assets/Images/fantasy/bN.svg';
-// import trebuchetImageB from '../Assets/Images/fantasy/bN.svg';
 
 class GameBoard extends Component {
   state = {
@@ -32,6 +24,7 @@ class GameBoard extends Component {
     legalMoves: Array<Move>(),
     showCoordinates: false,
   };
+
   handlePieceClick = (pieceClicked: Piece) => {
     //Obtain the selected piece and the hexagons from the game state
     const { movingPiece, hexagons } = this.state;
@@ -39,7 +32,7 @@ class GameBoard extends Component {
     if (movingPiece) {
       //Updates hexagons by making them contain the right piece once a piece is clicked
       const updatedHexagons = hexagons.map(h => {
-        if (h.piece === movingPiece && h.piece !== pieceClicked) {//Removes the selectedpiece if it doesn't click itself
+        if (h.piece === movingPiece && h.piece != pieceClicked) {//Removes the selectedpiece if it doesn't click itself
           return { ...h, piece: undefined };
         } else if (h.piece === pieceClicked) {// Capture the pieceClicked if not the selected piece
           return { ...h, piece: movingPiece };
@@ -90,8 +83,21 @@ handleHexClick = (hex: RenderHex) => {
     });
   }
 
-  getImageByPieceType = (type: PieceType, color: string) => {
-    return imagePaths[type][color === 'W' ? 'white' : 'black'];
+  getImageByPieceType = (type: PieceType) => {
+    const pieceImages = {
+      [PieceType.Swordsman]: swordsmanImage,
+      [PieceType.Archer]: archerImage,
+      [PieceType.Knight]: swordsmanImage,
+      [PieceType.Eagle]: swordsmanImage,
+      [PieceType.Giant]: giantImage,
+      [PieceType.Assassin]: assassinImage,
+      [PieceType.Dragon]: dragonImage,
+      [PieceType.Monarch]: monarchImage,
+      [PieceType.Trebuchet]: trebuchetImage,
+
+    };
+
+    return pieceImages[type];
   };
 
   render() {
@@ -148,10 +154,9 @@ handleHexClick = (hex: RenderHex) => {
         {this.state.hexagons.map((hex: RenderHex) => {
           if (hex.piece) {
             return (
-              console.log(this.getImageByPieceType(hex.piece.type, hex.piece.color)),
 <image
   key={hex.key}
-  href={this.getImageByPieceType(hex.piece.type, hex.piece.color)}
+  href={this.getImageByPieceType(hex.piece.type)}
   x={hex.center.x - 150/NSquaresc}
   y={hex.center.y - 150/NSquaresc}
   height={275 / NSquaresc}
