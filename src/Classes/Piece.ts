@@ -1,4 +1,5 @@
 import { Board } from '../Classes/Board';
+import { RenderHex } from '../Classes/RenderHex';
 import {Move} from '../Classes/Move';
 
   //Defines the piece class which has a hex, color, and type
@@ -17,7 +18,7 @@ import {Move} from '../Classes/Move';
         throw new Error("Invalid arguments for Piece constructor");
       }
     }
-    public swordsmanMoves(): Move[] {
+    public swordsmanMoves(blockedhexes: Hex[]): Move[] {
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -34,9 +35,10 @@ import {Move} from '../Classes/Move';
       newHex = new Hex(q - 1, r, s+1);
       
         moves.push(new Move(hex, newHex));
+        moves = moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move.end)));
       return moves;
     }
-    public archerMoves(): Move[] {//archers move the same to any hex in a radius of 1
+    public archerMoves(blockedhexes: Hex[]): Move[] {//archers move the same to any hex in a radius of 1
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -54,9 +56,10 @@ import {Move} from '../Classes/Move';
           }
         }
       }
+      moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move.end)));
       return moves;
     }
-    public knightMoves(): Move[] {
+    public knightMoves(blockedhexes: Hex[]): Move[] {
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -81,7 +84,7 @@ import {Move} from '../Classes/Move';
     
       return moves;
     }
-    public dragonMoves(): Move[] {//Dragons move like the knight in chess, orthogonally two and then 1 diagonally
+    public dragonMoves(blockedhexes: Hex[]): Move[] {//Dragons move like the knight in chess, orthogonally two and then 1 diagonally
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -109,7 +112,7 @@ import {Move} from '../Classes/Move';
     
       return moves;
     }
-    public assassinsMoves(): Move[] {//Assassins move like the queen in chess
+    public assassinsMoves(blockedhexes: Hex[]): Move[] {//Assassins move like the queen in chess
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -134,7 +137,7 @@ import {Move} from '../Classes/Move';
       }
       return moves;
     }
-    public giantMoves(): Move[] {//Giants move like the rook in chess
+    public giantMoves(blockedhexes: Hex[]): Move[] {//Giants move like the rook in chess
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
@@ -157,26 +160,26 @@ import {Move} from '../Classes/Move';
       return moves;
     }
 
-    public legalmoves(): Move[] {
+    public legalmoves(blockedhexes: Hex[]): Move[] {
       let moves: Move[] = []; // Initialize the 'moves' variable with an empty array
       switch (this.type) {
         case PieceType.Swordsman:
-          moves = this.swordsmanMoves();
+          moves = this.swordsmanMoves(blockedhexes);
           break;
         case PieceType.Archer:
-          moves = this.archerMoves();
+          moves = this.archerMoves(blockedhexes);
           break;
         case PieceType.Knight:
-          moves = this.knightMoves();
+          moves = this.knightMoves(blockedhexes);
           break;
         case PieceType.Giant:
-          moves = this.giantMoves();
+          moves = this.giantMoves(blockedhexes);
           break;
         case PieceType.Dragon:
-          moves = this.dragonMoves();
+          moves = this.dragonMoves(blockedhexes);
           break;
         case PieceType.Assassin:
-          moves = this.assassinsMoves();
+          moves = this.assassinsMoves(blockedhexes);
           break;
       }
       return moves;

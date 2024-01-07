@@ -60,7 +60,9 @@ class GameBoard extends Component {
       this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] }, this.updateOccupiedHexes);
     } else {
       //Select the pieceClicked if there is no selected piece and update the legal moves
-      const legalMoves = pieceClicked.legalmoves();
+      //For some reason, can't use hex to render hex
+      const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes].map(hex => new Hex(hex.q,hex.r,hex.s));
+      const legalMoves = pieceClicked.legalmoves(blockedHexes);
       this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
     }
   };
