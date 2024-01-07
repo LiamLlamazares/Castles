@@ -65,23 +65,38 @@ import {Move} from '../Classes/Move';
       let q = hex.q;
       let r = hex.r;
       let s = hex.s;
-    
+
       // Define the 2 possible knight move directions
       let knightDirections = [
         { dq: -1, dr: -1, ds: 2 },
-        { dq: 1, dr: -2, ds: 1 }
+        { dq: 1, dr: -2, ds: 1 },
+        {dq:2,dr:-1,ds:-1},
       ];
-    
+
       for (let direction of knightDirections) {
-        for (let k = -board.NSquares; k <= board.NSquares; k++) {
+        // Check moves in the positive direction
+        for (let k = 1; k <= board.NSquares; k++) {
           let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
-          
+           
+          if (!blockedhexes.some((hex) => hex.equals(newHex))) {
             moves.push(new Move(hex, newHex));
-          
-          
+          } else {
+            break;
+          }
+        }
+      
+        // Check moves in the negative direction
+        for (let k = -1; k >= -board.NSquares; k--) {
+          let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
+           
+          if (!blockedhexes.some((hex) => hex.equals(newHex))) {
+            moves.push(new Move(hex, newHex));
+          } else {
+            break;
+          }
         }
       }
-    
+      
       return moves;
     }
     public dragonMoves(blockedhexes: Hex[]): Move[] {//Dragons move like the knight in chess, orthogonally two and then 1 diagonally
@@ -123,18 +138,34 @@ import {Move} from '../Classes/Move';
         { dq: 1, dr: -2, ds: 1 },
         { dq: 1, dr: -1, ds: 0 },
         { dq: 2, dr: -1, ds: -1 },
-        { dq: 2, dr: 0, ds: -2 },
+        { dq: 1, dr: 0, ds: -1 },
         { dq: 1, dr: 1, ds: -2 }
       ];
 
       for (let direction of assassinDirections) {
-        for (let k = -2 * NSquaresc; k <= 2 * NSquaresc; k++) {
+        // Check moves in the positive direction
+        for (let k = 1; k <= 2 * NSquaresc; k++) {
           let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
           
+          if (!blockedhexes.some((hex) => hex.equals(newHex))) {
             moves.push(new Move(hex, newHex));
+          } else {
+            break;
+          }
+        }
+    
+        // Check moves in the negative direction
+        for (let k = -1; k >= -2 * NSquaresc; k--) {
+          let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
           
+          if (!blockedhexes.some((hex) => hex.equals(newHex))) {
+            moves.push(new Move(hex, newHex));
+          } else {
+            break;
+          }
         }
       }
+    
       return moves;
     }
     public giantMoves(blockedhexes: Hex[]): Move[] {//Giants move like the rook in chess
@@ -150,11 +181,26 @@ import {Move} from '../Classes/Move';
       ];
 
       for (let direction of giantDirections) {
-        for (let k = -2 * NSquaresc; k <= 2 * NSquaresc; k++) {
+        // Check moves in the positive direction
+        for (let k = 1; k <= 2 * NSquaresc; k++) {
           let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
           
+          if (!blockedhexes.some((hex) => hex.equals(newHex))) {
             moves.push(new Move(hex, newHex));
+          } else {
+            break;
+          }
+        }
+    
+        // Check moves in the negative direction
+        for (let k = -1; k >= -2 * NSquaresc; k--) {
+          let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
           
+          if (!blockedhexes.some((hex) => hex.equals(newHex))) {
+            moves.push(new Move(hex, newHex));
+          } else {
+            break;
+          }
         }
       }
       return moves;

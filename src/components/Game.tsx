@@ -38,6 +38,7 @@ class GameBoard extends Component {
     legalMoves: Array<Move>(),
     occupiedHexes: Array<RenderHex>(),
     riverHexes: Array<RenderHex>(),
+    castles: Array<RenderHex>(),
     showCoordinates: false,
   };
 
@@ -60,8 +61,9 @@ class GameBoard extends Component {
       this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] }, this.updateOccupiedHexes);
     } else {
       //Select the pieceClicked if there is no selected piece and update the legal moves
+      //Takes brackets off of array with spread operator ...
       //For some reason, can't use hex to render hex
-      const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes].map(hex => new Hex(hex.q,hex.r,hex.s));
+      const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
       const legalMoves = pieceClicked.legalmoves(blockedHexes);
       this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
     }
@@ -71,6 +73,8 @@ handleHexClick = (hex: RenderHex) => {
   const { movingPiece, hexagons } = this.state;
 
   if (movingPiece) {
+    if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){
+    //Check if the hexagon is a legal move
     const updatedHexagons = hexagons.map(h => {
       if (h.piece === movingPiece) {
         // Remove the piece from its old hexagon
@@ -82,8 +86,8 @@ handleHexClick = (hex: RenderHex) => {
       } else {
         return h;
       }
-    });
-
+    }
+    );
     this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] }, this.updateOccupiedHexes);
     //We also need to update the piece's position
     console.log("Hi the moving pieces hex was " + movingPiece.hex.q + " " + movingPiece.hex.r);
@@ -93,6 +97,8 @@ handleHexClick = (hex: RenderHex) => {
     console.log("The river hexes are " + this.state.riverHexes);
     movingPiece.hex = new Hex(hex.q, hex.r, hex.s);
   }
+} else { this.setState({ movingPiece: null, legalMoves: [] });}
+
 };
 
 //Needed to calculate piece movement
@@ -110,7 +116,8 @@ componentDidMount() {
     pieces: board.pieces,
   }, () => {
     const riverHexes = this.state.hexagons.filter(hex => hex.colorClass === 'hexagon-river'); // replace 'river' with the correct class for river hexes
-    this.setState({ riverHexes }, this.updateOccupiedHexes);
+    const castles = this.state.hexagons.filter(hex => hex.colorClass === 'hexagon-castles'); // replace 'river' with the correct class for river hexes
+    this.setState({ riverHexes,castles }, this.updateOccupiedHexes);
   });
 }
 

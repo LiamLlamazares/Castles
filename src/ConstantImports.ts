@@ -10,6 +10,7 @@ export const startingBoard = new Board(
       new Piece(new Hex(0, 0, 0), "w", PieceType.Swordsman),
       new Piece(new Hex(1, 0, -1), "w", PieceType.Swordsman),
       new Piece(new Hex(2, 0, -2), "w", PieceType.Dragon),
+      new Piece(new Hex(6, 1, -7), "w", PieceType.Knight),
       // Add more pieces here...
       // Trebuchets
      // new Piece(new Hex(3, 0, -3), "red", PieceType.Trebuchet, new Board([]).getHexCenter(new Hex(3, 0, -3))),
