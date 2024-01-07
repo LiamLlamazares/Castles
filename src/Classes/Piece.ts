@@ -3,7 +3,7 @@ import {Move} from '../Classes/Move';
 
   //Defines the piece class which has a hex, color, and type
   import { Hex} from './Hex';
-  import { PieceType, Color } from '../Constants';
+  import { PieceType, Color, NSquaresc } from '../Constants';
 
 
 
@@ -109,6 +109,54 @@ import {Move} from '../Classes/Move';
     
       return moves;
     }
+    public assassinsMoves(): Move[] {//Assassins move like the queen in chess
+      let moves = [];
+      let hex = this.hex;
+      let q = hex.q;
+      let r = hex.r;
+      let s = hex.s;
+      let assassinDirections = [
+        { dq: 0, dr: -1, ds: 1 },
+        { dq: 1, dr: -2, ds: 1 },
+        { dq: 1, dr: -1, ds: 0 },
+        { dq: 2, dr: -1, ds: -1 },
+        { dq: 2, dr: 0, ds: -2 },
+        { dq: 1, dr: 1, ds: -2 }
+      ];
+
+      for (let direction of assassinDirections) {
+        for (let k = -2 * NSquaresc; k <= 2 * NSquaresc; k++) {
+          let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
+          
+            moves.push(new Move(hex, newHex));
+          
+        }
+      }
+      return moves;
+    }
+    public giantMoves(): Move[] {//Giants move like the rook in chess
+      let moves = [];
+      let hex = this.hex;
+      let q = hex.q;
+      let r = hex.r;
+      let s = hex.s;
+      let giantDirections = [
+        { dq: 0, dr: -1, ds: 1 },
+        { dq: 1, dr: -1, ds: 0 },
+        { dq: 2, dr: 0, ds: -2 },
+      ];
+
+      for (let direction of giantDirections) {
+        for (let k = -2 * NSquaresc; k <= 2 * NSquaresc; k++) {
+          let newHex = new Hex(q + k * direction.dq, r + k * direction.dr, s + k * direction.ds);
+          
+            moves.push(new Move(hex, newHex));
+          
+        }
+      }
+      return moves;
+    }
+
     public legalmoves(): Move[] {
       let moves: Move[] = []; // Initialize the 'moves' variable with an empty array
       switch (this.type) {
@@ -121,8 +169,14 @@ import {Move} from '../Classes/Move';
         case PieceType.Knight:
           moves = this.knightMoves();
           break;
+        case PieceType.Giant:
+          moves = this.giantMoves();
+          break;
         case PieceType.Dragon:
           moves = this.dragonMoves();
+          break;
+        case PieceType.Assassin:
+          moves = this.assassinsMoves();
           break;
       }
       return moves;
