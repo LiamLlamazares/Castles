@@ -43,45 +43,43 @@ class GameBoard extends Component {
   };
 
   handlePieceClick = (pieceClicked: Piece) => {
-    //Obtain the selected piece and the hexagons from the game state
     const { movingPiece, hexagons } = this.state;
   
     if (movingPiece) {
-      //Updates hexagons by making them contain the right piece once a piece is clicked
-      const updatedHexagons = hexagons.map(h => {
-        if (h.piece === movingPiece && h.piece !== pieceClicked) {//Removes the selectedpiece if it doesn't click itself
+      const updatedHexagons = hexagons.map(h => {//updates piece on hexagon
+        if (h.piece === movingPiece && h.piece !== pieceClicked) {
           return { ...h, piece: undefined };
-        } else if (h.piece === pieceClicked) {// Capture the pieceClicked if not the selected piece
+        } else if (h.piece === pieceClicked) {
           return { ...h, piece: movingPiece };
         } else {
           return h;
         }
       });
-      //Move is completed, so there is no selected piece, hexagons are updated with the new pieceClicked and legal moves are reset
-      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] }, this.updateOccupiedHexes);
+  
+      // Update the movingPiece's position
+      movingPiece.hex = pieceClicked.hex;
+  
+      // Update the legal moves to be empty
+      const legalMoves :RenderHex[] = [];
+  
+      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves }, this.updateOccupiedHexes);
     } else {
-      //Select the pieceClicked if there is no selected piece and update the legal moves
-      //Takes brackets off of array with spread operator ...
-      //For some reason, can't use hex to render hex
       const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
       const legalMoves = pieceClicked.legalmoves(blockedHexes);
       this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
     }
   };
-
 handleHexClick = (hex: RenderHex) => {
   const { movingPiece, hexagons } = this.state;
 
   if (movingPiece) {
-    if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){
     //Check if the hexagon is a legal move
+    if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){
     const updatedHexagons = hexagons.map(h => {
-      if (h.piece === movingPiece) {
-        // Remove the piece from its old hexagon
+      if (h.piece === movingPiece) {        // Remove the piece from its old hexagon
         return { ...h, piece: undefined };
         
-      } else if (h === hex) {
-        // Add the piece to the new hexagon
+      } else if (h === hex) {// Add the piece to the new hexagon
         return { ...h, piece: movingPiece };
       } else {
         return h;

@@ -47,7 +47,7 @@ import {Move} from '../Classes/Move';
       for (let dq = -1; dq <= 1; dq++) {
         for (let dr = -1; dr <= 1; dr++) {
           for (let ds = -1; ds <= 1; ds++) {
-            if (dq + dr + ds === 0) {
+            if (dq + dr + ds === 0 && (dq !== 0 || dr !== 0 || ds !== 0)) {
               let newHex = new Hex(q + dq, r + dr, s + ds);
               
                 moves.push(new Move(hex, newHex));
@@ -56,7 +56,7 @@ import {Move} from '../Classes/Move';
           }
         }
       }
-      moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move.end)));
+      moves= moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move.end)));
       return moves;
     }
     public knightMoves(blockedhexes: Hex[]): Move[] {
@@ -177,7 +177,7 @@ import {Move} from '../Classes/Move';
       let giantDirections = [
         { dq: 0, dr: -1, ds: 1 },
         { dq: 1, dr: -1, ds: 0 },
-        { dq: 2, dr: 0, ds: -2 },
+        { dq: 1, dr: 0, ds: -1 },
       ];
 
       for (let direction of giantDirections) {
@@ -205,6 +205,9 @@ import {Move} from '../Classes/Move';
       }
       return moves;
     }
+    public monarchMoves(blockedhexes: Hex[]): Move[] {//Moves the same as archer
+      return this.archerMoves(blockedhexes);
+    }
 
     public legalmoves(blockedhexes: Hex[]): Move[] {
       let moves: Move[] = []; // Initialize the 'moves' variable with an empty array
@@ -227,7 +230,11 @@ import {Move} from '../Classes/Move';
         case PieceType.Assassin:
           moves = this.assassinsMoves(blockedhexes);
           break;
+        case PieceType.Monarch:
+          moves = this.monarchMoves(blockedhexes);
+          break;
       }
+
       return moves;
     }
 
