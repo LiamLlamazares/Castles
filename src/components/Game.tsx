@@ -2,18 +2,32 @@ import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
 import { RenderHex } from '../Classes/RenderHex';
 import { Hex } from '../Classes/Hex';
-import { PieceType, imagePaths, NSquaresc } from '../Constants';
+import { PieceType, NSquaresc } from '../Constants';
 import { startingBoard } from '../ConstantImports';
 import { Move } from '../Classes/Move';
 import "../css/Board.css";
 
-const swordsmanImage = require(imagePaths[PieceType.Swordsman].white);
-const dragonImage = require(imagePaths[PieceType.Dragon].white);
-const archerImage = require(imagePaths[PieceType.Archer].white);
-const giantImage = require(imagePaths[PieceType.Giant].white);
-const assassinImage = require(imagePaths[PieceType.Assassin].white);
-const monarchImage = require(imagePaths[PieceType.Monarch].white);
-const trebuchetImage = require(imagePaths[PieceType.Trebuchet].white);
+import wswordsmanImage from '../Assets/Images/fantasyd/wSwordsman.svg';
+import bswordsmanImage from '../Assets/Images/fantasyd/bSwordsman.svg';
+import wdragonImage from '../Assets/Images/fantasyd/wDragon.svg';
+import bdragonImage from '../Assets/Images/fantasyd/bDragon.svg';
+import warcherImage from '../Assets/Images/fantasyd/wArcher.svg';
+import barcherImage from '../Assets/Images/fantasyd/bArcher.svg';
+import wgiantImage from '../Assets/Images/fantasyd/wGiant.svg';
+import bgiantImage from '../Assets/Images/fantasyd/bGiant.svg';
+import wassassinImage from '../Assets/Images/fantasyd/wAssassin.svg';
+import bassassinImage from '../Assets/Images/fantasyd/bAssassin.svg';
+import wmonarchImage from '../Assets/Images/fantasyd/wMonarch.svg';
+import bmonarchImage from '../Assets/Images/fantasyd/bMonarch.svg';
+import wtrebuchetImage from '../Assets/Images/fantasyd/wTrebuchet.svg';
+import btrebuchetImage from '../Assets/Images/fantasyd/bTrebuchet.svg';
+import wknightImage from '../Assets/Images/fantasyd/wKnight.svg';
+import bknightImage from '../Assets/Images/fantasyd/bKnight.svg';
+import weagleImage from '../Assets/Images/fantasyd/wEagle.svg';
+import beagleImage from '../Assets/Images/fantasyd/bEagle.svg';
+
+
+
 
 
 class GameBoard extends Component {
@@ -32,7 +46,7 @@ class GameBoard extends Component {
     if (movingPiece) {
       //Updates hexagons by making them contain the right piece once a piece is clicked
       const updatedHexagons = hexagons.map(h => {
-        if (h.piece === movingPiece && h.piece != pieceClicked) {//Removes the selectedpiece if it doesn't click itself
+        if (h.piece === movingPiece && h.piece !== pieceClicked) {//Removes the selectedpiece if it doesn't click itself
           return { ...h, piece: undefined };
         } else if (h.piece === pieceClicked) {// Capture the pieceClicked if not the selected piece
           return { ...h, piece: movingPiece };
@@ -83,21 +97,19 @@ handleHexClick = (hex: RenderHex) => {
     });
   }
 
-  getImageByPieceType = (type: PieceType) => {
-    const pieceImages = {
-      [PieceType.Swordsman]: swordsmanImage,
-      [PieceType.Archer]: archerImage,
-      [PieceType.Knight]: swordsmanImage,
-      [PieceType.Eagle]: swordsmanImage,
-      [PieceType.Giant]: giantImage,
-      [PieceType.Assassin]: assassinImage,
-      [PieceType.Dragon]: dragonImage,
-      [PieceType.Monarch]: monarchImage,
-      [PieceType.Trebuchet]: trebuchetImage,
-
+  getImageByPieceType = (type: PieceType, color: string) => {
+    const images: { [key in PieceType]: string } = {
+      'Swordsman': color === 'w' ? wswordsmanImage : bswordsmanImage,
+      'Dragon': color === 'w' ? wdragonImage : bdragonImage,
+      'Archer': color === 'w' ? warcherImage : barcherImage,
+      'Giant': color === 'w' ? wgiantImage : bgiantImage,
+      'Assassin': color === 'w' ? wassassinImage : bassassinImage,
+      'Monarch': color === 'w' ? wmonarchImage : bmonarchImage,
+      'Trebuchet': color === 'w' ? wtrebuchetImage : btrebuchetImage,
+      'Knight': color === 'w' ? wknightImage : bknightImage,
+      'Eagle': color === 'w' ? weagleImage : beagleImage,
     };
-
-    return pieceImages[type];
+    return images[type];
   };
 
   render() {
@@ -123,7 +135,7 @@ handleHexClick = (hex: RenderHex) => {
                 textAnchor="middle" 
                 style={{ fontSize: '15px', color: 'black' }}
               >
-                {`${hex.q},${hex.r}, ${hex.s}`}
+                {`${hex.q}, ${hex.s}`}
               </text>
             )}
           </g>
@@ -156,7 +168,7 @@ handleHexClick = (hex: RenderHex) => {
             return (
 <image
   key={hex.key}
-  href={this.getImageByPieceType(hex.piece.type)}
+  href={this.getImageByPieceType(hex.piece.type, hex.piece.color)}
   x={hex.center.x - 150/NSquaresc}
   y={hex.center.y - 150/NSquaresc}
   height={275 / NSquaresc}

@@ -2,15 +2,15 @@ import { Board } from '../Classes/Board';
 import {Move} from '../Classes/Move';
 
   //Defines the piece class which has a hex, color, and type
-  import { Hex, Point, Layout } from './Hex';
-  import { NSquaresc, PieceType } from '../Constants';
+  import { Hex} from './Hex';
+  import { PieceType, Color } from '../Constants';
 
 
 
   export class Piece {
     constructor(
       public hex: Hex,
-      public color: string,
+      public color: Color,
       public type: PieceType
     ) {
       if (!hex || !color || !type ) {
@@ -45,7 +45,7 @@ import {Move} from '../Classes/Move';
       for (let dq = -1; dq <= 1; dq++) {
         for (let dr = -1; dr <= 1; dr++) {
           for (let ds = -1; ds <= 1; ds++) {
-            if (dq + dr + ds == 0) {
+            if (dq + dr + ds === 0) {
               let newHex = new Hex(q + dq, r + dr, s + ds);
               
                 moves.push(new Move(hex, newHex));
@@ -144,11 +144,11 @@ import {Move} from '../Classes/Move';
       this.hex = newHex;
     }
 
-    public setColor(color: string): void {
+    public setColor(color: Color): void {
       this.color = color;
     }
 
-    public getColor(): string {
+    public getColor(): Color {
       return this.color;
     }
 
