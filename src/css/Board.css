@@ -77,3 +77,14 @@
 .piece {
   cursor: pointer;
 }
+.takeback-button {
+  position: absolute;
+  bottom: 0;
+  left: 100px 100px 500px 100px;
+}
+.coordinates-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 10px;
+}

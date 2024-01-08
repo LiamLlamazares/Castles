@@ -50,6 +50,14 @@ class GameBoard extends Component {
   get currentPlayer(): Color {
     return this.state.turnCounter % 9< 5 ? 'w' : 'b';
   }
+  handleTakeback = () => {
+    if (this.state.history.length > 0) {
+        const previousState: GameBoard | undefined = this.state.history.pop();
+        if (previousState) {
+            this.setState({ current: previousState });
+        }
+    }
+}
 
   handlePieceClick = (pieceClicked: Piece) => {
     const { movingPiece, hexagons} = this.state;
@@ -176,9 +184,10 @@ componentDidMount() {
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
     return (
       <>
-      <button onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
-        Toggle Coordinates
-      </button>
+ <button className='coordinates-button' onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
+          Toggle Coordinates
+        </button>
+        <button className='takeback-button' onClick={this.handleTakeback}>Takeback</button>
       <svg className="board" height="100%" width="100%">
         {/* Render all hexagons */}
         {this.state.hexagons.map((hex: RenderHex) => (
