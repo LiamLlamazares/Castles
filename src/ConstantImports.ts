@@ -24,8 +24,8 @@ export const startingBoard = new Board(
       // Assassin
       new Piece(new Hex(3, 0, -3), "w", PieceType.Assassin),
       // Giants
-      new Piece(new Hex(-3, 0, 3), "w", PieceType.Giant),
-      new Piece(new Hex(-4, 0, 4), "w", PieceType.Giant),
+      new Piece(new Hex(-3, 0, 3), "b", PieceType.Giant),
+      new Piece(new Hex(-4, 0, 4), "b", PieceType.Giant),
       // Monarch
       new Piece(new Hex(-5, 0, 5), "w", PieceType.Monarch),
       // Eagles

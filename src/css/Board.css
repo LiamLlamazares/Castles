@@ -67,6 +67,13 @@
 .legalMoveDot:hover {
   fill: rgba(100, 111, 64, 0.5);
 }
+.legalAttackDot {
+  fill: rgba(255, 0, 0);
+  cursor: pointer;
+}
+.legalAttackDot:hover {
+  fill: rgba(255, 0, 0, 0.5);
+}
 .piece {
   cursor: pointer;
 }

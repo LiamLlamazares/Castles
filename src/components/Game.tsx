@@ -36,6 +36,7 @@ class GameBoard extends Component {
     pieces: Array<Piece>(),
     movingPiece: null as Piece | null,
     legalMoves: Array<Move>(),
+    legalAttacks: Array<Move>(),
     occupiedHexes: Array<RenderHex>(),
     riverHexes: Array<RenderHex>(),
     castles: Array<RenderHex>(),
@@ -46,7 +47,7 @@ class GameBoard extends Component {
     return this.state.turnCounter % 5 < 2 ? 'Movement' : this.state.turnCounter % 5 < 4 ? 'Attack' : 'Castles';
   }
   get currentPlayer(): Color {
-    return this.state.turnCounter % 2 === 0 ? 'w' : 'b';
+    return this.state.turnCounter % 9< 5 ? 'w' : 'b';
   }
 
   handlePieceClick = (pieceClicked: Piece) => {
@@ -89,11 +90,19 @@ class GameBoard extends Component {
         turnCounter = turnCounter - 1;}
 
       this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves, turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
-    } else {//Piece is selected and legal moves are calculated
+    } else if(this.turn_phase === 'Attack') {//Piece is selected and legal Attacks are calculated
+      console.log("Attack! " + pieceClicked.type);
+      const legalAttacks = pieceClicked.legalAttacks(this.state.hexagons);
+      this.setState({ movingPiece: pieceClicked, legalAttacks }, this.updateOccupiedHexes);
+      console.log("The legal attacks are " + legalAttacks);
+    }
+    else if(this.turn_phase === 'Movement' && pieceClicked.color === this.currentPlayer){//Piece is selected and legal moves are calculated
       const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
       const legalMoves = pieceClicked.legalmoves(blockedHexes);
       this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
     }
+
+                                                 //*********END OF PIECE CLICK LOGIC********//
   };
 
                                     //*****MOVEMENT LOGIC**************//
@@ -162,9 +171,7 @@ componentDidMount() {
   };
 
   render() {
-    console.log("The turn counter is " + this.state.turnCounter);
-    console.log("The turn phase is " + this.turn_phase);
-    console.log("It is " + this.currentPlayer + "'s turn");
+    console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
     return (
       <>
       <button onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
@@ -197,6 +204,7 @@ componentDidMount() {
         // Check if the hexagon is a legal move
         //console.log(this.state.legalMoves);
         const isLegalMove = this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r);
+        const isLegalAttack = this.state.legalAttacks.some(attack => attack.end.q === hex.q && attack.end.r === hex.r);
         if (isLegalMove) {
           return (
             <circle 
@@ -205,6 +213,17 @@ componentDidMount() {
               cy={hex.center.y} 
               r={90/NSquaresc} 
               className ="legalMoveDot"
+              onClick={() => this.handleHexClick(hex)}
+            />
+          );
+        }else if(isLegalAttack){
+          return (
+            <circle 
+              key={hex.key}
+              cx={hex.center.x} 
+              cy={hex.center.y} 
+              r={90/NSquaresc} 
+              className ="legalAttackDot"
               onClick={() => this.handleHexClick(hex)}
             />
           );
