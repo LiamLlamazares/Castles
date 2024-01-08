@@ -32,6 +32,7 @@ import beagleImage from '../Assets/Images/fantasyd/bEagle.svg';
 
 class GameBoard extends Component {
   state = {
+    history: [],
     hexagons: Array<RenderHex>(),
     pieces: Array<Piece>(),
     movingPiece: null as Piece | null,
