@@ -107,6 +107,22 @@ export class Point {
       }
       return results;
     }
+    public cube_scale(factor: number): Hex {
+      return new Hex(this.q * factor, this.r * factor, this.s * factor);
+    }
+    public cubeRing(radius: number): Hex[] {
+      let results = [];
+      let cube = this.add(Hex.direction(4).scale(radius));
+    
+      for (let i = 0; i < 6; i++) {
+        for (let j = 0; j < radius; j++) {
+          results.push(cube);
+          cube = cube.neighbor(i);
+        }
+      }
+    
+      return results;
+    }
   }
   
   export class OffsetCoord {
@@ -285,6 +301,7 @@ export class Point {
       public getKey(hex: Hex): string {
         return `${hex.q},${hex.r},${hex.s}`;
       }
+
 
   }
 

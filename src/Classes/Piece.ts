@@ -237,7 +237,58 @@ import {Move} from '../Classes/Move';
 
       return moves;
     }
+                                      //LEGAL ATTACK LOGIC //
+    private isValidAttack(newHex: Hex, board: RenderHex[]): boolean {
+      return board.some(
+        (hex) => 
+          hex.q === newHex.q && 
+          hex.r === newHex.r && 
+          hex.s === newHex.s && 
+          hex.piece !== undefined && 
+          hex.piece.color !== this.color
+      );
+    }
+    public meleeAttacks(board: RenderHex[]): Move[] {
+      let attacks = [];
+      let hex = this.hex;
+      // let q = hex.q;
+      // let r = hex.r;
+      // let s = hex.s;
 
+      // Array of potential moves
+      // let potentialAttacks = [
+      //   new Hex(q+1, r - 1, s),
+      //   new Hex(q+1, r, s-1),
+      //   new Hex(q, r + 1, s-1),
+      //   new Hex(q , r-1, s +1),
+      //   new Hex(q - 1, r+1, s),
+      //   new Hex(q - 1, r, s+1)
+      // ];
+      let potentialAttacks =  hex.cubeRing(1);
+
+      // Loop over each potential move
+      for (let newHex of potentialAttacks) {
+        if (this.isValidAttack(newHex, board)) {
+          attacks.push(new Move(hex, newHex));
+        }
+      }
+
+      return attacks;
+    }
+    public rangedAttacks(board: RenderHex[]): Move[] {
+      let attacks = [];
+      let hex = this.hex;
+      let potentialAttacks =  hex.cubeRing(2);
+
+      // Loop over each potential move
+      for (let newHex of potentialAttacks) {
+        if (this.isValidAttack(newHex, board)) {
+          attacks.push(new Move(hex, newHex));
+        }
+      }
+
+      return attacks;
+    }
 
       
 
