@@ -1,10 +1,9 @@
 import { Board } from '../Classes/Board';
-import { RenderHex } from '../Classes/RenderHex';
 import {Move} from '../Classes/Move';
 
   //Defines the piece class which has a hex, color, and type
   import { Hex} from './Hex';
-  import { PieceType, Color, NSquaresc } from '../Constants';
+  import { PieceType, PieceStrength, Color, NSquaresc } from '../Constants';
 
 
 
@@ -12,11 +11,15 @@ import {Move} from '../Classes/Move';
     constructor(
       public hex: Hex,
       public color: Color,
-      public type: PieceType
+      public type: PieceType,
+      public canMove: boolean = true,
     ) {
       if (!hex || !color || !type ) {
         throw new Error("Invalid arguments for Piece constructor");
       }
+    }
+    getStrength(): number {
+      return PieceStrength[this.type];
     }
     public swordsmanMoves(blockedhexes: Hex[]): Move[] {
       let moves = [];
@@ -238,58 +241,39 @@ import {Move} from '../Classes/Move';
       return moves;
     }
                                       //LEGAL ATTACK LOGIC //
-    private isValidAttack(newHex: Hex, board: RenderHex[]): boolean {
-      return board.some(
-        (hex) => 
-          hex.q === newHex.q && 
-          hex.r === newHex.r && 
-          hex.s === newHex.s && 
-          hex.piece !== undefined && 
-          hex.piece.color !== this.color
-      );
+//Enemy hexes are hexes on board that can be attacked
+    private isValidAttack(newHex: Hex, enemyHexes: Hex[]): boolean {
+      return enemyHexes.some( (hex)=> hex.equals(newHex));
     }
-    public meleeAttacks(board: RenderHex[]): Move[] {
+    public meleeAttacks(enemyHexes: Hex[]): Move[] {
       let attacks = [];
       let hex = this.hex;
-      // let q = hex.q;
-      // let r = hex.r;
-      // let s = hex.s;
-
-      // Array of potential moves
-      // let potentialAttacks = [
-      //   new Hex(q+1, r - 1, s),
-      //   new Hex(q+1, r, s-1),
-      //   new Hex(q, r + 1, s-1),
-      //   new Hex(q , r-1, s +1),
-      //   new Hex(q - 1, r+1, s),
-      //   new Hex(q - 1, r, s+1)
-      // ];
       let potentialAttacks =  hex.cubeRing(1);
 
       // Loop over each potential move
       for (let newHex of potentialAttacks) {
-        if (this.isValidAttack(newHex, board)) {
+        if (this.isValidAttack(newHex, enemyHexes)) {
           attacks.push(new Move(hex, newHex));
         }
       }
 
       return attacks;
     }
-    public rangedAttacks(board: RenderHex[]): Move[] {
+    public rangedAttacks(enemyHexes: Hex[]): Move[] {
       let attacks = [];
       let hex = this.hex;
       let potentialAttacks =  hex.cubeRing(2);
 
       // Loop over each potential move
       for (let newHex of potentialAttacks) {
-        if (this.isValidAttack(newHex, board)) {
+        if (this.isValidAttack(newHex, enemyHexes)) {
           attacks.push(new Move(hex, newHex));
         }
       }
 
       return attacks;
     }
-    public legalAttacks(board: RenderHex[]): Move[] {
+    public legalAttacks(enemyHexes: Hex[]): Move[] {
       let attacks: Move[] = [];
 
       switch (this.type) {
@@ -299,11 +283,11 @@ import {Move} from '../Classes/Move';
         case PieceType.Dragon:
         case PieceType.Assassin:
         case PieceType.Monarch:
-          attacks = this.meleeAttacks(board);
+          attacks = this.meleeAttacks(enemyHexes);
           break;
         case PieceType.Archer:
         case PieceType.Trebuchet:
-          attacks = this.rangedAttacks(board);
+          attacks = this.rangedAttacks(enemyHexes);
           break;
       }
 

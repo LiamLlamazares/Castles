@@ -1,9 +1,8 @@
 import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
-import { RenderHex } from '../Classes/RenderHex';
 import { Hex } from '../Classes/Hex';
 import { PieceType, NSquaresc, turnPhase,Color } from '../Constants';
-import { startingBoard } from '../ConstantImports';
+import { startingBoard, riverHexes,castleHexes,layout, colorClassMap  } from '../ConstantImports';
 import { Move } from '../Classes/Move';
 import "../css/Board.css";
 
@@ -33,23 +32,33 @@ import beagleImage from '../Assets/Images/fantasyd/bEagle.svg';
 class GameBoard extends Component {
   state = {
     history: [],
-    hexagons: Array<RenderHex>(),
-    pieces: Array<Piece>(),
+    pieces: startingBoard.pieces,
     movingPiece: null as Piece | null,
     legalMoves: Array<Move>(),
     legalAttacks: Array<Move>(),
-    occupiedHexes: Array<RenderHex>(),
-    riverHexes: Array<RenderHex>(),
-    castles: Array<RenderHex>(),
     showCoordinates: false,
     turnCounter: 0
   };
+
   get turn_phase(): turnPhase {
     return this.state.turnCounter % 5 < 2 ? 'Movement' : this.state.turnCounter % 5 < 4 ? 'Attack' : 'Castles';
   }
   get currentPlayer(): Color {
     return this.state.turnCounter % 9< 5 ? 'w' : 'b';
   }
+  get hexagons(): Hex[] {
+    return startingBoard.hexes;
+  }
+  get blockedHexes(): Hex[] {
+    return [...riverHexes, ...castleHexes, ...this.occupiedHexes];
+  }
+  get occupiedHexes(): Hex[] {
+return this.state.pieces.map(piece => piece.hex);
+  }
+get enemyHexes(): Hex[] {
+  return this.state.pieces.filter(piece => piece.color !== this.currentPlayer).map(piece => piece.hex);
+}
+
   handleTakeback = () => {
     if (this.state.history.length > 0) {
         const previousState: GameBoard | undefined = this.state.history.pop();
@@ -60,17 +69,15 @@ class GameBoard extends Component {
 }
 
   handlePieceClick = (pieceClicked: Piece) => {
-    const { movingPiece, hexagons} = this.state;
+    const { movingPiece} = this.state;
     let turnCounter = this.state.turnCounter;
     //Movement logic
-          //If it is the movement phase and the piece is the current player's
     if(this.turn_phase === 'Movement' && pieceClicked.color === this.currentPlayer){ 
       if (movingPiece) {//No capturing allowed in movement phase
       }
       else {//Piece is selected and legal moves are calculated
-        const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
-        const legalMoves = pieceClicked.legalmoves(blockedHexes);
-        this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
+        const legalMoves = pieceClicked.legalmoves(this.blockedHexes);
+        this.setState({ movingPiece: pieceClicked, legalMoves });
       }
     
     
@@ -79,90 +86,60 @@ class GameBoard extends Component {
 
     //************ATTACK LOGIC************//
     if (movingPiece && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer 
-    && this.state.legalAttacks.some(attack => attack.end.equals(pieceClicked.hex))) {//Capures piece or snaps back to original position if same piece is clicked
-      const updatedHexagons = hexagons.map(h => {//updates piece on hexagon
-        if (h.piece === movingPiece && h.piece !== pieceClicked) {// If the hexagon is the one we're moving, remove the piece from it
-          return { ...h, piece: undefined };
-        } else if (h.piece === pieceClicked) {// Captures piece
-          return { ...h, piece: movingPiece };
-        } else {// If the hexagon is not the one we're moving, return it unchanged
-          return h;
-        }
-      });
+    && this.state.legalAttacks.some(attack => attack.end.equals(pieceClicked.hex))) {
+      //Capures piece or snaps back to original position if same piece is clicked
+      if (pieceClicked.type === 'Monarch') {
+        alert(`${pieceClicked.color} wins!`);
+        return;
+      }
   
       // Update the movingPiece's position
       movingPiece.hex = pieceClicked.hex;
-  
-      // Update the legal attacks to be empty
-      const legalAttacks :RenderHex[] = [];
+      // Remove the captured piece from the board
+        const pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
+      const legalAttacks :Hex[] = [];
      //If the moveing piece is the clicked piece we don't increment the turn counter
       if(movingPiece === pieceClicked){
         turnCounter = turnCounter - 1;}
 
-      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalAttacks, turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
+      this.setState({ movingPiece: null, legalAttacks, pieces, turnCounter: turnCounter+1 });
     } else if(this.turn_phase === 'Attack') {//Piece is selected and legal Attacks are calculated
       console.log("Attack! " + pieceClicked.type);
-      const legalAttacks = pieceClicked.legalAttacks(this.state.hexagons);
-      this.setState({ movingPiece: pieceClicked, legalAttacks }, this.updateOccupiedHexes);
+      const legalAttacks = pieceClicked.legalAttacks(this.enemyHexes);
+      this.setState({ movingPiece: pieceClicked, legalAttacks });
       console.log("The legal attacks are " + legalAttacks);
     }
     else if(this.turn_phase === 'Movement' && pieceClicked.color === this.currentPlayer){//Piece is selected and legal moves are calculated
-      const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
-      const legalMoves = pieceClicked.legalmoves(blockedHexes);
-      this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
+      const legalMoves = pieceClicked.legalmoves(this.blockedHexes);
+      this.setState({ movingPiece: pieceClicked, legalMoves });
     }
 
                                                  //*********END OF PIECE CLICK LOGIC********//
   };
 
                                     //*****MOVEMENT LOGIC**************//
-handleHexClick = (hex: RenderHex) => {
-  const { movingPiece, hexagons, turnCounter } = this.state;
+handleHexClick = (hex: Hex) => {
+  const { movingPiece, turnCounter } = this.state;
 
   if (movingPiece&& this.turn_phase === 'Movement') {
     if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){//Makes a legal move
-    const updatedHexagons = hexagons.map(h => {
-      if (h.piece === movingPiece) {        // Remove the piece from its old hexagon
-        return { ...h, piece: undefined };
-        
-      } else if (h === hex) {// Add the piece to the new hexagon
-        return { ...h, piece: movingPiece };
-      } else {
-        return h;
-      }
-    }
-    );
-    this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [],turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
-    //We also need to update the piece's position
+    this.setState({ movingPiece: null, legalMoves: [],turnCounter: turnCounter+1 });
     // console.log("Hi the moving pieces hex was " + movingPiece.hex.q + " " + movingPiece.hex.r);
     // console.log("The piece moved to " + hex.q + " " + hex.r);
     // console.log("The legal moves should be " + [movingPiece.hex.q + 1, movingPiece.hex.r - 1, movingPiece.hex.s] + " " + [movingPiece.hex.q, movingPiece.hex.s - 1, movingPiece.hex.r + 1] + " " + [movingPiece.hex.q - 1, movingPiece.hex.r, movingPiece.hex.s + 1]);
     // console.log("The occupied hexes are " + this.state.occupiedHexes);
     // console.log("The river hexes are " + this.state.riverHexes);
-    movingPiece.hex = new Hex(hex.q, hex.r, hex.s);
+    movingPiece.hex = hex;//Update piece position
   }
 } else { this.setState({ movingPiece: null, legalMoves: [] });}//Illegal move, snap back to original position
 
 };
 
-//Needed to calculate piece movement
-updateOccupiedHexes = () => {
-  const occupiedHexes = this.state.hexagons.filter(hex => hex.piece !== undefined);
-  
-
-  this.setState({ occupiedHexes});
-};
-
 componentDidMount() {
-  const board = startingBoard;
-  this.setState({
-    hexagons: board.renderHexagons(),
-    pieces: board.pieces,
-  }, () => {
-    const riverHexes = this.state.hexagons.filter(hex => hex.colorClass === 'hexagon-river'); // replace 'river' with the correct class for river hexes
-    const castles = this.state.hexagons.filter(hex => hex.colorClass === 'hexagon-castles'); // replace 'river' with the correct class for river hexes
-    this.setState({ riverHexes,castles }, this.updateOccupiedHexes);
+  this.hexagons.forEach(hex => {
+    colorClassMap[hex.getKey()] = hex.colorClass(riverHexes, castleHexes);
   });
+  console.log('colorClassMap:', colorClassMap);
 }
 
   getImageByPieceType = (type: PieceType, color: string) => {
@@ -181,6 +158,8 @@ componentDidMount() {
   };
 
   render() {
+    console.log('hexagons:', this.hexagons);
+    console.log('pieces:', this.state.pieces);
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
     return (
       <>
@@ -190,17 +169,17 @@ componentDidMount() {
         <button className='takeback-button' onClick={this.handleTakeback}>Takeback</button>
       <svg className="board" height="100%" width="100%">
         {/* Render all hexagons */}
-        {this.state.hexagons.map((hex: RenderHex) => (
-          <g key={hex.key}>
+        {this.hexagons.map((hex: Hex) => (
+          <g key={hex.getKey()}>
             <polygon 
-              points={hex.corners} 
-              className={hex.colorClass} 
+              points={layout.polygonCornersString(hex) } 
+              className={colorClassMap[hex.getKey()]} 
               onClick={() => this.handleHexClick(hex)}
             />
             {this.state.showCoordinates && (
               <text 
-                x={hex.center.x} 
-                y={hex.center.y+5} 
+                x={layout.hexToPixel(hex).x} 
+                y={layout.hexToPixel(hex).y+5} 
                 textAnchor="middle" 
                 style={{ fontSize: '15px', color: 'black' }}
               >
@@ -210,7 +189,7 @@ componentDidMount() {
           </g>
         ))}
       {/* Render dots for legal moves */}
-      {this.state.hexagons.map((hex: RenderHex) => {
+      {this.hexagons.map((hex: Hex) => {
          
         // Check if the hexagon is a legal move
         //console.log(this.state.legalMoves);
@@ -219,9 +198,9 @@ componentDidMount() {
         if (isLegalMove) {
           return (
             <circle 
-              key={hex.key}
-              cx={hex.center.x} 
-              cy={hex.center.y} 
+              key={hex.getKey()}
+              cx={layout.hexToPixel(hex).x} 
+              cy={layout.hexToPixel(hex).y}  
               r={90/NSquaresc} 
               className ="legalMoveDot"
               onClick={() => this.handleHexClick(hex)}
@@ -230,9 +209,9 @@ componentDidMount() {
         }else if(isLegalAttack){
           return (
             <circle 
-              key={hex.key}
-              cx={hex.center.x} 
-              cy={hex.center.y} 
+              key={hex.getKey()}
+              cx={layout.hexToPixel(hex).x} 
+              cy={layout.hexToPixel(hex).y} 
               r={90/NSquaresc} 
               className ="legalAttackDot"
               onClick={() => this.handleHexClick(hex)}
@@ -244,23 +223,19 @@ componentDidMount() {
 
 
         {/* Render all pieces */}
-        {this.state.hexagons.map((hex: RenderHex) => {
-          if (hex.piece) {
-            return (
-<image
-  key={hex.key}
-  href={this.getImageByPieceType(hex.piece.type, hex.piece.color)}
-  x={hex.center.x - 150/NSquaresc}
-  y={hex.center.y - 150/NSquaresc}
-  height={275 / NSquaresc}
-  width={275 / NSquaresc}
-  className='piece'
-  onClick={() => hex.piece && this.handlePieceClick(hex.piece)}
-/>
-            );
-          }
-          return null;
-        })}
+        {/* We loop over pieces instead of hexagons  */}
+        {this.state.pieces.map((piece: Piece) => (
+          <image
+            key={piece.hex.getKey()}
+            href={this.getImageByPieceType(piece.type, piece.color)}
+            x={layout.hexToPixel(piece.hex).x - 150/NSquaresc}
+            y={layout.hexToPixel(piece.hex).y - 150/NSquaresc}
+            height={275 / NSquaresc}
+            width={275 / NSquaresc}
+            className='piece'
+            onClick={() => this.handlePieceClick(piece)}
+          />
+        ))}
       </svg>
       </>
     );

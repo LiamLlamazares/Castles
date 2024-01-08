@@ -10,6 +10,22 @@ export class Point {
     public equals(other: Hex): boolean {
         return this.q === other.q && this.r === other.r && this.s === other.s;
       }
+
+      
+      public colorClass(riverHexes: Hex[], castleHexes: Hex[]): string {
+        const hexisaRiver = riverHexes.some(riverHex => this.equals(riverHex));
+        const hexisaCastle = castleHexes.some(castleHex => this.equals(castleHex));
+
+        let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
+          ((this.color_index % 3) + 3) % 3
+        ];
+        if (hexisaRiver) {
+          colorClass = "hexagon-river";
+        } else if (hexisaCastle) {
+          colorClass = "hexagon-castle";
+        }
+        return colorClass;
+      }
       public getKey(){
         return `${this.q},${this.r},${this.s}`;
       }
@@ -280,6 +296,10 @@ export class Point {
       }
       return corners;
     }
+    public polygonCornersString(h: Hex): string {
+      var corners: Point[] = this.polygonCorners(h);
+      return corners.map((p) => `${p.x},${p.y}`).join(" ");
+    }
     public sortHexList(hexList: Hex[]): void {
         hexList.sort((a, b) => {
           let aCenter = this.hexToPixel(a);
@@ -323,12 +343,4 @@ export const generateHexagons = (N: number) => {
     return hexList;
   };
 
-  export const isRiver = (center: Point, origin: Point): boolean => {
-    return center.y === origin.y; // Return true if the hexagon is at the center
-  };
-  
-  export const isCastle = (hex: Hex, N: number): boolean => {
-    return (hex.q === 0 && Math.abs(hex.r) === N && Math.abs(hex.s) === N) || 
-           (hex.r === 0 && Math.abs(hex.q) === N && Math.abs(hex.s) === N) || 
-           (hex.s === 0 && Math.abs(hex.q) === N && Math.abs(hex.r) === N); // Return true if the hexagon is at a corner
-  };
+

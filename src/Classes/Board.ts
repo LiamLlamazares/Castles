@@ -1,8 +1,16 @@
-import { Hex, Layout, generateHexagons, Point, isRiver, isCastle } from './Hex'; // adjust the path as needed
+import { Hex, Layout, generateHexagons, Point} from './Hex'; // adjust the path as needed
 import { Piece } from './Piece'; // adjust the path as needed
 //imports constants
 import { NSquaresc, HEX_SIZE_FACTORc, X_OFFSETc, layoutTypec } from '../Constants';
+const isRiver = (center: Point, origin: Point): boolean => {
+  return center.y === origin.y; // Return true if the hexagon is at the center
+};
 
+const isCastle = (hex: Hex, N: number): boolean => {
+  return (hex.q === 0 && Math.abs(hex.r) === N && Math.abs(hex.s) === N) || 
+         (hex.r === 0 && Math.abs(hex.q) === N && Math.abs(hex.s) === N) || 
+         (hex.s === 0 && Math.abs(hex.q) === N && Math.abs(hex.r) === N); // Return true if the hexagon is at a corner
+};
 
 export class Board {
   public pieces: Piece[];
@@ -99,3 +107,4 @@ export class Board {
     return hexagons;
   };
 }
+
