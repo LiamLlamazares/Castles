@@ -3,7 +3,6 @@ import { Piece } from '../Classes/Piece';
 import { Hex } from '../Classes/Hex';
 import { PieceType, NSquaresc, turnPhase,Color } from '../Constants';
 import { startingBoard, riverHexes,castleHexes,layout, colorClassMap  } from '../ConstantImports';
-import { Move } from '../Classes/Move';
 import "../css/Board.css";
 
 import wswordsmanImage from '../Assets/Images/fantasyd/wSwordsman.svg';
@@ -34,8 +33,6 @@ class GameBoard extends Component {
     history: [],
     pieces: startingBoard.pieces,
     movingPiece: null as Piece | null,
-    legalMoves: Array<Move>(),
-    legalAttacks: Array<Move>(),
     showCoordinates: false,
     turnCounter: 0
   };
@@ -58,6 +55,32 @@ return this.state.pieces.map(piece => piece.hex);
 get enemyHexes(): Hex[] {
   return this.state.pieces.filter(piece => piece.color !== this.currentPlayer).map(piece => piece.hex);
 }
+
+get legalMoves(): Hex[] {
+  const { movingPiece } = this.state;
+  if (movingPiece && this.turn_phase === 'Movement') {
+    return movingPiece.legalmoves(this.blockedHexes);
+  }
+  return [];
+}
+get legalAttacks(): Hex[] {
+  const { movingPiece } = this.state;
+  if (movingPiece && this.turn_phase === 'Attack') {
+    return movingPiece.legalAttacks(this.enemyHexes);
+  }
+  return [];
+}
+public hexisLegalMove = (hex: Hex) => {
+  const legalMoves = this.legalMoves;
+  return legalMoves.some(move => move.equals(hex));
+}
+
+public hexisLegalAttack = (hex: Hex) => {
+  const legalAttacks = this.legalAttacks;
+  return legalAttacks.some(attack => attack.equals(hex));
+}
+
+
 
   handleTakeback = () => {
     if (this.state.history.length > 0) {
@@ -86,7 +109,7 @@ get enemyHexes(): Hex[] {
 
     //************ATTACK LOGIC************//
     if (movingPiece && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer 
-    && this.state.legalAttacks.some(attack => attack.end.equals(pieceClicked.hex))) {
+    && this.legalAttacks.some(attack => attack.equals(pieceClicked.hex))) {
       //Capures piece or snaps back to original position if same piece is clicked
       if (pieceClicked.type === 'Monarch') {
         alert(`${pieceClicked.color} wins!`);
@@ -122,7 +145,7 @@ handleHexClick = (hex: Hex) => {
   const { movingPiece, turnCounter } = this.state;
 
   if (movingPiece&& this.turn_phase === 'Movement') {
-    if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){//Makes a legal move
+    if(this.legalMoves.some(move => move.q === hex.q && move.r === hex.r)){//Makes a legal move
     this.setState({ movingPiece: null, legalMoves: [],turnCounter: turnCounter+1 });
     // console.log("Hi the moving pieces hex was " + movingPiece.hex.q + " " + movingPiece.hex.r);
     // console.log("The piece moved to " + hex.q + " " + hex.r);
@@ -192,10 +215,10 @@ componentDidMount() {
       {this.hexagons.map((hex: Hex) => {
          
         // Check if the hexagon is a legal move
-        //console.log(this.state.legalMoves);
-        const isLegalMove = this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r);
-        const isLegalAttack = this.state.legalAttacks.some(attack => attack.end.q === hex.q && attack.end.r === hex.r);
-        if (isLegalMove) {
+        //console.log(this.legalMoves);
+        const isLegalMove = this.legalMoves.some(move => move.q === hex.q && move.r === hex.r);
+        const isLegalAttack = this.legalAttacks.some(attack => attack.q === hex.q && attack.r === hex.r);
+        if (this.hexisLegalMove(hex)) {
           return (
             <circle 
               key={hex.getKey()}
