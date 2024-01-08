@@ -69,7 +69,8 @@ class GameBoard extends Component {
     }
 
     //************ATTACK LOGIC************//
-    if (movingPiece  && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer) {//Capures piece or snaps back to original position if same piece is clicked
+    if (movingPiece && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer 
+    && this.state.legalAttacks.some(attack => attack.end.equals(pieceClicked.hex))) {//Capures piece or snaps back to original position if same piece is clicked
       const updatedHexagons = hexagons.map(h => {//updates piece on hexagon
         if (h.piece === movingPiece && h.piece !== pieceClicked) {// If the hexagon is the one we're moving, remove the piece from it
           return { ...h, piece: undefined };
@@ -83,13 +84,13 @@ class GameBoard extends Component {
       // Update the movingPiece's position
       movingPiece.hex = pieceClicked.hex;
   
-      // Update the legal moves to be empty
-      const legalMoves :RenderHex[] = [];
+      // Update the legal attacks to be empty
+      const legalAttacks :RenderHex[] = [];
      //If the moveing piece is the clicked piece we don't increment the turn counter
       if(movingPiece === pieceClicked){
         turnCounter = turnCounter - 1;}
 
-      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves, turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
+      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalAttacks, turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
     } else if(this.turn_phase === 'Attack') {//Piece is selected and legal Attacks are calculated
       console.log("Attack! " + pieceClicked.type);
       const legalAttacks = pieceClicked.legalAttacks(this.state.hexagons);
