@@ -52,9 +52,23 @@ class GameBoard extends Component {
   handlePieceClick = (pieceClicked: Piece) => {
     const { movingPiece, hexagons} = this.state;
     let turnCounter = this.state.turnCounter;
-  
-    //Capture piece, leaves it be or selects it
-    if (movingPiece) {//Capures piece or snaps back to original position if same piece is clicked
+    //Movement logic
+          //If it is the movement phase and the piece is the current player's
+    if(this.turn_phase === 'Movement' && pieceClicked.color === this.currentPlayer){ 
+      if (movingPiece) {//No capturing allowed in movement phase
+      }
+      else {//Piece is selected and legal moves are calculated
+        const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
+        const legalMoves = pieceClicked.legalmoves(blockedHexes);
+        this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
+      }
+    
+    
+    
+    }
+
+    //************ATTACK LOGIC************//
+    if (movingPiece  && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer) {//Capures piece or snaps back to original position if same piece is clicked
       const updatedHexagons = hexagons.map(h => {//updates piece on hexagon
         if (h.piece === movingPiece && h.piece !== pieceClicked) {// If the hexagon is the one we're moving, remove the piece from it
           return { ...h, piece: undefined };
@@ -81,10 +95,12 @@ class GameBoard extends Component {
       this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
     }
   };
+
+                                    //*****MOVEMENT LOGIC**************//
 handleHexClick = (hex: RenderHex) => {
   const { movingPiece, hexagons, turnCounter } = this.state;
 
-  if (movingPiece) {
+  if (movingPiece&& this.turn_phase === 'Movement') {
     if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){//Makes a legal move
     const updatedHexagons = hexagons.map(h => {
       if (h.piece === movingPiece) {        // Remove the piece from its old hexagon
