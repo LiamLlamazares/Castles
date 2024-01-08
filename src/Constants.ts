@@ -1,5 +1,5 @@
 //Size of board
-export const NSquaresc = 2;
+export const NSquaresc = 8;
 export const HEX_SIZE_FACTORc = 4;
 export const X_OFFSETc = 100;
 export const layoutTypec = "flat";

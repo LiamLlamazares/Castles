@@ -31,5 +31,5 @@ export const startingBoard = new Board(
       // Eagles
       // ... Repeat for the 4 eagles
     ],
-    NSquaresc
+    NSquaresc-1
   );

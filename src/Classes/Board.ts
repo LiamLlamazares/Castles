@@ -13,7 +13,7 @@ export class Board {
   public HEX_SIZE_FACTOR;
   public X_OFFSET;
   
-  constructor(pieces: Piece[], NSquares: number = NSquaresc-1, HEX_SIZE_FACTOR: number =HEX_SIZE_FACTORc, X_OFFSET: number = X_OFFSETc, layoutType: string = layoutTypec) {
+  constructor(pieces: Piece[], NSquares: number = NSquaresc, HEX_SIZE_FACTOR: number =HEX_SIZE_FACTORc, X_OFFSET: number = X_OFFSETc, layoutType: string = layoutTypec) {
     this.pieces = pieces;
     this.NSquares = NSquares;
     this.hexes = generateHexagons(this.NSquares);
