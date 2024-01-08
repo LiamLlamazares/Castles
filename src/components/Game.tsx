@@ -94,11 +94,20 @@ public hexisLegalAttack = (hex: Hex) => {
   handlePieceClick = (pieceClicked: Piece) => {
     const { movingPiece} = this.state;
     let turnCounter = this.state.turnCounter;
+  // Allow to swap the moving piece
+  if (movingPiece && pieceClicked.color === this.currentPlayer) {
+    const newLegalMoves = pieceClicked.legalmoves(this.blockedHexes);
+    this.setState({ movingPiece: pieceClicked, legalMoves: newLegalMoves });
+    return;
+  }
+
+
+
     //Movement logic
     if(this.turn_phase === 'Movement' && pieceClicked.color === this.currentPlayer){ 
       if (movingPiece) {//No capturing allowed in movement phase
       }
-      else {//Piece is selected and legal moves are calculated
+      else {//Piece is selected 
         const legalMoves = pieceClicked.legalmoves(this.blockedHexes);
         this.setState({ movingPiece: pieceClicked, legalMoves });
       }
@@ -116,25 +125,17 @@ public hexisLegalAttack = (hex: Hex) => {
         return;
       }
   
-      // Update the movingPiece's position
+      // Update the Pieces
       movingPiece.hex = pieceClicked.hex;
-      // Remove the captured piece from the board
+      movingPiece.canAttack = false;
         const pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
-      const legalAttacks :Hex[] = [];
-     //If the moveing piece is the clicked piece we don't increment the turn counter
+     //If the moving piece is the clicked piece we don't increment the turn counter
       if(movingPiece === pieceClicked){
-        turnCounter = turnCounter - 1;}
+        turnCounter = turnCounter - 1; movingPiece.canAttack = true;}
 
-      this.setState({ movingPiece: null, legalAttacks, pieces, turnCounter: turnCounter+1 });
-    } else if(this.turn_phase === 'Attack') {//Piece is selected and legal Attacks are calculated
-      console.log("Attack! " + pieceClicked.type);
-      const legalAttacks = pieceClicked.legalAttacks(this.enemyHexes);
-      this.setState({ movingPiece: pieceClicked, legalAttacks });
-      console.log("The legal attacks are " + legalAttacks);
-    }
-    else if(this.turn_phase === 'Movement' && pieceClicked.color === this.currentPlayer){//Piece is selected and legal moves are calculated
-      const legalMoves = pieceClicked.legalmoves(this.blockedHexes);
-      this.setState({ movingPiece: pieceClicked, legalMoves });
+      this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+1 });
+    } else if( (this.turn_phase === 'Attack'|| this.turn_phase === 'Movement' ) && pieceClicked.color == this.currentPlayer) {//Piece is selected 
+      this.setState({ movingPiece: pieceClicked });
     }
 
                                                  //*********END OF PIECE CLICK LOGIC********//
