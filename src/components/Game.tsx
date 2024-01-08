@@ -40,10 +40,11 @@ class GameBoard extends Component {
     riverHexes: Array<RenderHex>(),
     castles: Array<RenderHex>(),
     showCoordinates: false,
+    turnCounter: 0
   };
 
   handlePieceClick = (pieceClicked: Piece) => {
-    const { movingPiece, hexagons } = this.state;
+    const { movingPiece, hexagons, turnCounter } = this.state;
   
     if (movingPiece) {
       const updatedHexagons = hexagons.map(h => {//updates piece on hexagon
@@ -62,19 +63,18 @@ class GameBoard extends Component {
       // Update the legal moves to be empty
       const legalMoves :RenderHex[] = [];
   
-      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves }, this.updateOccupiedHexes);
-    } else {
+      this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves, turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
+    } else {//Piece is selected and legal moves are calculated
       const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
       const legalMoves = pieceClicked.legalmoves(blockedHexes);
       this.setState({ movingPiece: pieceClicked, legalMoves }, this.updateOccupiedHexes);
     }
   };
 handleHexClick = (hex: RenderHex) => {
-  const { movingPiece, hexagons } = this.state;
+  const { movingPiece, hexagons, turnCounter } = this.state;
 
   if (movingPiece) {
-    //Check if the hexagon is a legal move
-    if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){
+    if(this.state.legalMoves.some(move => move.end.q === hex.q && move.end.r === hex.r)){//Makes a legal move
     const updatedHexagons = hexagons.map(h => {
       if (h.piece === movingPiece) {        // Remove the piece from its old hexagon
         return { ...h, piece: undefined };
@@ -86,16 +86,16 @@ handleHexClick = (hex: RenderHex) => {
       }
     }
     );
-    this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [] }, this.updateOccupiedHexes);
+    this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves: [],turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
     //We also need to update the piece's position
-    console.log("Hi the moving pieces hex was " + movingPiece.hex.q + " " + movingPiece.hex.r);
-    console.log("The piece moved to " + hex.q + " " + hex.r);
-    console.log("The legal moves should be " + [movingPiece.hex.q + 1, movingPiece.hex.r - 1, movingPiece.hex.s] + " " + [movingPiece.hex.q, movingPiece.hex.s - 1, movingPiece.hex.r + 1] + " " + [movingPiece.hex.q - 1, movingPiece.hex.r, movingPiece.hex.s + 1]);
-    console.log("The occupied hexes are " + this.state.occupiedHexes);
-    console.log("The river hexes are " + this.state.riverHexes);
+    // console.log("Hi the moving pieces hex was " + movingPiece.hex.q + " " + movingPiece.hex.r);
+    // console.log("The piece moved to " + hex.q + " " + hex.r);
+    // console.log("The legal moves should be " + [movingPiece.hex.q + 1, movingPiece.hex.r - 1, movingPiece.hex.s] + " " + [movingPiece.hex.q, movingPiece.hex.s - 1, movingPiece.hex.r + 1] + " " + [movingPiece.hex.q - 1, movingPiece.hex.r, movingPiece.hex.s + 1]);
+    // console.log("The occupied hexes are " + this.state.occupiedHexes);
+    // console.log("The river hexes are " + this.state.riverHexes);
     movingPiece.hex = new Hex(hex.q, hex.r, hex.s);
   }
-} else { this.setState({ movingPiece: null, legalMoves: [] });}
+} else { this.setState({ movingPiece: null, legalMoves: [] });}//Illegal move, snap back to original position
 
 };
 
@@ -135,7 +135,7 @@ componentDidMount() {
   };
 
   render() {
-    console.log(this.state.legalMoves);
+    console.log("The turn counter is " + this.state.turnCounter);
     return (
       <>
       <button onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
@@ -174,8 +174,8 @@ componentDidMount() {
               key={hex.key}
               cx={hex.center.x} 
               cy={hex.center.y} 
-              r={10} 
-              fill="red" 
+              r={90/NSquaresc} 
+              className ="legalMoveDot"
               onClick={() => this.handleHexClick(hex)}
             />
           );
@@ -195,6 +195,7 @@ componentDidMount() {
   y={hex.center.y - 150/NSquaresc}
   height={275 / NSquaresc}
   width={275 / NSquaresc}
+  className='piece'
   onClick={() => hex.piece && this.handlePieceClick(hex.piece)}
 />
             );

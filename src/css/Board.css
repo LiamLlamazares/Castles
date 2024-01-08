@@ -47,7 +47,7 @@
 }
 
 .hexagon:hover, .hexagon-dark:hover, .hexagon-mid:hover, .hexagon-light:hover, .hexagon-river:hover, .hexagon-castles:hover {
-  fill: #ff0000; /* Change the fill color on hover */
+  fill: gray /* Change the fill color on hover */
 }
 
 .board image {
@@ -59,4 +59,14 @@
   fill: #00ff00;
   stroke: #aaa;
   stroke-width: 4;
+}
+.legalMoveDot {
+  fill: rgba(100, 111, 64);
+  cursor: pointer;
+}
+.legalMoveDot:hover {
+  fill: rgba(100, 111, 64, 0.5);
+}
+.piece {
+  cursor: pointer;
 }
