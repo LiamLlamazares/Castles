@@ -17,6 +17,7 @@ export enum PieceType {
     
 
   }
+export type turnPhase = 'Movement' | 'Attack' | 'Castles';
 export type Color = "w" | "b";
 
 

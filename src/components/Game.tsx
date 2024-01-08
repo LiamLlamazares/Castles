@@ -2,7 +2,7 @@ import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
 import { RenderHex } from '../Classes/RenderHex';
 import { Hex } from '../Classes/Hex';
-import { PieceType, NSquaresc } from '../Constants';
+import { PieceType, NSquaresc, turnPhase,Color } from '../Constants';
 import { startingBoard } from '../ConstantImports';
 import { Move } from '../Classes/Move';
 import "../css/Board.css";
@@ -42,17 +42,25 @@ class GameBoard extends Component {
     showCoordinates: false,
     turnCounter: 0
   };
+  get turn_phase(): turnPhase {
+    return this.state.turnCounter % 5 < 2 ? 'Movement' : this.state.turnCounter % 5 < 4 ? 'Attack' : 'Castles';
+  }
+  get currentPlayer(): Color {
+    return this.state.turnCounter % 2 === 0 ? 'w' : 'b';
+  }
 
   handlePieceClick = (pieceClicked: Piece) => {
-    const { movingPiece, hexagons, turnCounter } = this.state;
+    const { movingPiece, hexagons} = this.state;
+    let turnCounter = this.state.turnCounter;
   
-    if (movingPiece) {
+    //Capture piece, leaves it be or selects it
+    if (movingPiece) {//Capures piece or snaps back to original position if same piece is clicked
       const updatedHexagons = hexagons.map(h => {//updates piece on hexagon
-        if (h.piece === movingPiece && h.piece !== pieceClicked) {
+        if (h.piece === movingPiece && h.piece !== pieceClicked) {// If the hexagon is the one we're moving, remove the piece from it
           return { ...h, piece: undefined };
-        } else if (h.piece === pieceClicked) {
+        } else if (h.piece === pieceClicked) {// Captures piece
           return { ...h, piece: movingPiece };
-        } else {
+        } else {// If the hexagon is not the one we're moving, return it unchanged
           return h;
         }
       });
@@ -62,7 +70,10 @@ class GameBoard extends Component {
   
       // Update the legal moves to be empty
       const legalMoves :RenderHex[] = [];
-  
+     //If the moveing piece is the clicked piece we don't increment the turn counter
+      if(movingPiece === pieceClicked){
+        turnCounter = turnCounter - 1;}
+
       this.setState({ movingPiece: null, hexagons: updatedHexagons, legalMoves, turnCounter: turnCounter+1 }, this.updateOccupiedHexes);
     } else {//Piece is selected and legal moves are calculated
       const blockedHexes= [...this.state.riverHexes, ...this.state.occupiedHexes, ...this.state.castles].map(hex => new Hex(hex.q,hex.r,hex.s));
@@ -136,6 +147,8 @@ componentDidMount() {
 
   render() {
     console.log("The turn counter is " + this.state.turnCounter);
+    console.log("The turn phase is " + this.turn_phase);
+    console.log("It is " + this.currentPlayer + "'s turn");
     return (
       <>
       <button onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
