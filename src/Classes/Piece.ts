@@ -289,6 +289,26 @@ import {Move} from '../Classes/Move';
 
       return attacks;
     }
+    public legalAttacks(board: RenderHex[]): Move[] {
+      let attacks: Move[] = [];
+
+      switch (this.type) {
+        case PieceType.Swordsman:
+        case PieceType.Knight:
+        case PieceType.Giant:
+        case PieceType.Dragon:
+        case PieceType.Assassin:
+        case PieceType.Monarch:
+          attacks = this.meleeAttacks(board);
+          break;
+        case PieceType.Archer:
+        case PieceType.Trebuchet:
+          attacks = this.rangedAttacks(board);
+          break;
+      }
+
+      return attacks;
+    }
 
       
 
