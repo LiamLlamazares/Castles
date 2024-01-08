@@ -96,29 +96,17 @@ public hexisLegalAttack = (hex: Hex) => {
     let turnCounter = this.state.turnCounter;
   // Allow to swap the moving piece
   if (movingPiece && pieceClicked.color === this.currentPlayer) {
-    const newLegalMoves = pieceClicked.legalmoves(this.blockedHexes);
-    this.setState({ movingPiece: pieceClicked, legalMoves: newLegalMoves });
+    this.setState({ movingPiece: pieceClicked});
     return;
   }
-
-
-
-    //Movement logic
-    if(this.turn_phase === 'Movement' && pieceClicked.color === this.currentPlayer){ 
-      if (movingPiece) {//No capturing allowed in movement phase
-      }
-      else {//Piece is selected 
-        const legalMoves = pieceClicked.legalmoves(this.blockedHexes);
-        this.setState({ movingPiece: pieceClicked, legalMoves });
-      }
-    
-    
-    
+                                    //******** PIECE SELECTION LOGIC *******//
+    else if(  ((this.turn_phase === 'Movement' && pieceClicked.canMove) ||(this.turn_phase === 'Attack'  && pieceClicked.color === this.currentPlayer&& pieceClicked.canAttack))  && pieceClicked.color === this.currentPlayer) {//Piece is selected 
+      this.setState({ movingPiece: pieceClicked });
     }
 
-    //************ATTACK LOGIC************//
+                                  //************ATTACK LOGIC************//
     if (movingPiece && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer 
-    && this.legalAttacks.some(attack => attack.equals(pieceClicked.hex))) {
+    && this.legalAttacks.some(attack => attack.equals(pieceClicked.hex)) ) {
       //Capures piece or snaps back to original position if same piece is clicked
       if (pieceClicked.type === 'Monarch') {
         alert(`${pieceClicked.color} wins!`);
@@ -134,28 +122,21 @@ public hexisLegalAttack = (hex: Hex) => {
         turnCounter = turnCounter - 1; movingPiece.canAttack = true;}
 
       this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+1 });
-    } else if( (this.turn_phase === 'Attack'|| this.turn_phase === 'Movement' ) && pieceClicked.color == this.currentPlayer) {//Piece is selected 
-      this.setState({ movingPiece: pieceClicked });
-    }
-
-                                                 //*********END OF PIECE CLICK LOGIC********//
-  };
+    }                                           
+  }; //*********END OF PIECE CLICK LOGIC********//
 
                                     //*****MOVEMENT LOGIC**************//
 handleHexClick = (hex: Hex) => {
   const { movingPiece, turnCounter } = this.state;
 
-  if (movingPiece&& this.turn_phase === 'Movement') {
+  if (movingPiece?.canMove&& this.turn_phase === 'Movement') {
     if(this.legalMoves.some(move => move.q === hex.q && move.r === hex.r)){//Makes a legal move
-    this.setState({ movingPiece: null, legalMoves: [],turnCounter: turnCounter+1 });
-    // console.log("Hi the moving pieces hex was " + movingPiece.hex.q + " " + movingPiece.hex.r);
-    // console.log("The piece moved to " + hex.q + " " + hex.r);
-    // console.log("The legal moves should be " + [movingPiece.hex.q + 1, movingPiece.hex.r - 1, movingPiece.hex.s] + " " + [movingPiece.hex.q, movingPiece.hex.s - 1, movingPiece.hex.r + 1] + " " + [movingPiece.hex.q - 1, movingPiece.hex.r, movingPiece.hex.s + 1]);
-    // console.log("The occupied hexes are " + this.state.occupiedHexes);
-    // console.log("The river hexes are " + this.state.riverHexes);
-    movingPiece.hex = hex;//Update piece position
+    this.setState({ movingPiece: null, turnCounter: turnCounter+1 });
+    movingPiece.hex = hex; //Update piece position
+    movingPiece.canMove = false;
+    
   }
-} else { this.setState({ movingPiece: null, legalMoves: [] });}//Illegal move, snap back to original position
+} else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
 
 };
 
@@ -163,7 +144,6 @@ componentDidMount() {
   this.hexagons.forEach(hex => {
     colorClassMap[hex.getKey()] = hex.colorClass(riverHexes, castleHexes);
   });
-  console.log('colorClassMap:', colorClassMap);
 }
 
   getImageByPieceType = (type: PieceType, color: string) => {
@@ -182,8 +162,7 @@ componentDidMount() {
   };
 
   render() {
-    console.log('hexagons:', this.hexagons);
-    console.log('pieces:', this.state.pieces);
+    //console.log('pieces:', this.state.pieces);
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
     return (
       <>
@@ -215,10 +194,6 @@ componentDidMount() {
       {/* Render dots for legal moves */}
       {this.hexagons.map((hex: Hex) => {
          
-        // Check if the hexagon is a legal move
-        //console.log(this.legalMoves);
-        const isLegalMove = this.legalMoves.some(move => move.q === hex.q && move.r === hex.r);
-        const isLegalAttack = this.legalAttacks.some(attack => attack.q === hex.q && attack.r === hex.r);
         if (this.hexisLegalMove(hex)) {
           return (
             <circle 
@@ -230,7 +205,7 @@ componentDidMount() {
               onClick={() => this.handleHexClick(hex)}
             />
           );
-        }else if(isLegalAttack){
+        }else if(this.hexisLegalAttack(hex)){
           return (
             <circle 
               key={hex.getKey()}
