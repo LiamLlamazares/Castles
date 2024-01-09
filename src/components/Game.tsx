@@ -32,11 +32,11 @@ import beagleImage from '../Assets/Images/Chess/bEagle.svg';
 class GameBoard extends Component {
   state = {
     history: [],
-    pieces: startingBoard.pieces,
+    pieces: startingBoard.pieces as Piece[], // We need to cast the pieces to Piece type because they are initially created as object literals
     movingPiece: null as Piece | null,
     showCoordinates: false,
-    turnCounter: 0,
-    Castles: []//Define castles
+    turnCounter: 0 as number,
+    Castles: [] as Castle[],
 
   };
 
