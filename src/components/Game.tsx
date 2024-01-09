@@ -88,8 +88,9 @@ get controlledCastlesActivePlayer(): Castle[] {
     return piece && piece.color !== castle.color && castle.color !== this.currentPlayer&& this.turn_phase === 'Castles';
   });
 }
-get hexesAdjacentToControlledCastles(): Hex[] {
-  return this.controlledCastlesActivePlayer.map(castle => castle.hex.cubeRing(1)).flat(1);
+get emptyHexesAdjacentToControlledCastles(): Hex[] {
+  const adjacenthexes = this.controlledCastlesActivePlayer.map(castle => castle.hex.cubeRing(1)).flat(1);
+  return adjacenthexes.filter(hex => !this.occupiedHexes.some(occupiedHex => occupiedHex.equals(hex)));
 }
 
 
@@ -103,8 +104,8 @@ public hexisLegalAttack = (hex: Hex) => {
   return legalAttacks.some(attack => attack.equals(hex));
 }
 public hexisAdjacentToControlledCastle = (hex: Hex) => {
-  const hexesAdjacentToControlledCastles = this.hexesAdjacentToControlledCastles;
-  return hexesAdjacentToControlledCastles.some(hex => hex.equals(hex));
+  const hexesAdjacentToControlledCastles = this.emptyHexesAdjacentToControlledCastles;
+  return hexesAdjacentToControlledCastles.some(adjacentHex => hex.equals(adjacentHex));
 }
 // Add this method to your GameBoard component
 handlePass = () => {
@@ -221,11 +222,6 @@ componentDidMount() {
   };
 
   render() {
-    //console.log('pieces:', this.state.pieces);
-    console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
-    //we now log adjacent hexes to controlled castles
-    console.log('Adjacent hexes to controlled castles:', this.hexesAdjacentToControlledCastles);
-    console.log('Controlled castles:', this.controlledCastlesActivePlayer);
     return (
       <>
       <button className='pass-button' onClick={this.handlePass}>Pass</button>
@@ -239,7 +235,7 @@ componentDidMount() {
           <g key={hex.getKey()}>
             <polygon 
               points={layout.polygonCornersString(hex) } 
-              className={`${colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent' : ''}`} 
+              className={`${colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`} 
               onClick={() => this.handleHexClick(hex)}
             />
             {this.state.showCoordinates && (
@@ -301,6 +297,20 @@ componentDidMount() {
       </svg>
       </>
     );
+  }
+  componentDidUpdate() {
+    console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
+    console.log('Adjacent hexes to controlled castles:', this.emptyHexesAdjacentToControlledCastles);
+    console.log('There are the following number of castles', this.state.Castles.length);
+    console.log('the number of castle hexes is', castleHexes.length)
+    console.log('the number of white castle hexes is', whiteCastleHexes.length)
+    console.log('the number of black castle hexes is', blackCastleHexes.length)
+    console.log('the number of enemy castle hexes is', this.enemyCastleHexes.length)
+    console.log('the number of castles is' , this.state.Castles.length)
+    console.log('the starting number of castles is' , startingCastles.length)
+    console.log('Controlled castles:', this.controlledCastlesActivePlayer);
+    console.log('The starting castles are:', startingCastles);
+    console.log('Black castles are:', this.state.Castles.filter((castle: Castle) => castle.color === 'b').map((castle: any) => castle.hex));
   }
 }
 

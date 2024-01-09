@@ -180,10 +180,10 @@ let castles = [];
 for (let hex of whiteCastleHexes) {
   let castle = new Castle(hex, 'w', 0);
   castles.push(castle);
-  for (let hex of blackCastleHexes) {
-    let castle = new Castle(hex, 'b', 0);
-    castles.push(castle);
-  }
+}
+for (let hex of blackCastleHexes) {
+  let castle = new Castle(hex, 'b', 0);
+  castles.push(castle);
 }
 export const startingCastles = castles;
 
