@@ -74,6 +74,14 @@ get legalAttacks(): Hex[] {
   }
   return [];
 }
+get controlledCastles(): Castle[] {
+  return this.state.Castles.filter(castle => {
+    const piece = this.state.pieces.find(piece => piece.hex.equals(castle.hex));
+    return piece && piece.color !== castle.color;
+  });
+}
+
+
 public hexisLegalMove = (hex: Hex) => {
   const legalMoves = this.legalMoves;
   return legalMoves.some(move => move.equals(hex));
