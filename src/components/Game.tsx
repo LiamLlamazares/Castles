@@ -37,6 +37,7 @@ class GameBoard extends Component {
     showCoordinates: false,
     turnCounter: 0 as number,
     Castles:  startingCastles as Castle[],
+    cheatMode: false,
 
   };
 
@@ -44,7 +45,7 @@ class GameBoard extends Component {
     return this.state.turnCounter % 5 < 2 ? 'Movement' : this.state.turnCounter % 5 < 4 ? 'Attack' : 'Castles';
   }
   get currentPlayer(): Color {
-    return this.state.turnCounter % 9< 5 ? 'w' : 'b';
+    return this.state.turnCounter % 10< 5 ? 'w' : 'b';
   }
   get hexagons(): Hex[] {
     return startingBoard.hexes;
@@ -55,8 +56,15 @@ class GameBoard extends Component {
   get occupiedHexes(): Hex[] {
 return this.state.pieces.map(piece => piece.hex);
   }
+get enemyCastleHexes(): Hex[] {
+  return this.state.Castles.filter(castle => castle.color !== this.currentPlayer).map(castle => castle.hex);
+}
+
 get enemyHexes(): Hex[] {
   return this.state.pieces.filter(piece => piece.color !== this.currentPlayer).map(piece => piece.hex);
+}
+get attackableHexes(): Hex[] {
+  return [...this.enemyHexes, ...this.enemyCastleHexes];
 }
 
 get legalMoves(): Hex[] {
@@ -70,15 +78,18 @@ get legalMoves(): Hex[] {
 get legalAttacks(): Hex[] {
   const { movingPiece } = this.state;
   if (movingPiece && this.turn_phase === 'Attack') {
-    return movingPiece.legalAttacks(this.enemyHexes);
+    return movingPiece.legalAttacks(this.attackableHexes);
   }
   return [];
 }
-get controlledCastles(): Castle[] {
+get controlledCastlesActivePlayer(): Castle[] {
   return this.state.Castles.filter(castle => {
     const piece = this.state.pieces.find(piece => piece.hex.equals(castle.hex));
-    return piece && piece.color !== castle.color;
+    return piece && piece.color !== castle.color && castle.color !== this.currentPlayer&& this.turn_phase === 'Castles';
   });
+}
+get hexesAdjacentToControlledCastles(): Hex[] {
+  return this.controlledCastlesActivePlayer.map(castle => castle.hex.cubeRing(1)).flat(1);
 }
 
 
@@ -91,6 +102,10 @@ public hexisLegalAttack = (hex: Hex) => {
   const legalAttacks = this.legalAttacks;
   return legalAttacks.some(attack => attack.equals(hex));
 }
+public hexisAdjacentToControlledCastle = (hex: Hex) => {
+  const hexesAdjacentToControlledCastles = this.hexesAdjacentToControlledCastles;
+  return hexesAdjacentToControlledCastles.some(hex => hex.equals(hex));
+}
 // Add this method to your GameBoard component
 handlePass = () => {
   let turnCounter = this.state.turnCounter;
@@ -98,7 +113,7 @@ handlePass = () => {
 
   // Check if there are any legal attacks for the current player's pieces
   const hasLegalAttacks = this.state.pieces.some(piece => 
-    piece.color === this.currentPlayer && piece.legalAttacks(this.enemyHexes).length > 0
+    piece.color === this.currentPlayer && piece.legalAttacks(this.attackableHexes).length > 0
   );
 
   // If there are no legal attacks, increment the turn counter to reach the castles phase
@@ -160,13 +175,24 @@ handleHexClick = (hex: Hex) => {
   const { movingPiece, turnCounter } = this.state;
                                 //*****MOVEMENT LOGIC TO HEX**************//
   if (movingPiece?.canMove&& this.turn_phase === 'Movement') {
-    if(this.legalMoves.some(move => move.q === hex.q && move.r === hex.r)){//Makes a legal move
+    if(this.legalMoves.some(move => move.equals(hex))){//Makes a legal move
     this.setState({ movingPiece: null, turnCounter: turnCounter+1 });
+    if (turnCounter % 5 === 1 || turnCounter %5 ===2) {//All pieces can move next turn
+      this.state.pieces.forEach(piece => piece.canMove = true);
+    }
     movingPiece.hex = hex; //Update piece position
     movingPiece.canMove = false;
     
   }
-} else if (this.turn_phase === 'Castles') {}
+} else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
+  if(this.legalAttacks.some(attack => attack.equals(hex))){//Makes a legal attack
+    this.setState({ movingPiece: null, turnCounter: turnCounter+1 });
+    movingPiece.hex = hex; //Update piece position
+    movingPiece.canAttack = false;
+  }
+
+
+}
 
 
 else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
@@ -196,12 +222,10 @@ componentDidMount() {
 
   render() {
     //console.log('pieces:', this.state.pieces);
-//Logs the color class of the white castles
-    console.log('white castle color class:', colorClassMap[whiteCastleHexes[0].getKey()]);
-    //Logs the color class of the black castles
-    console.log('black castle color class:', colorClassMap[blackCastleHexes[0].getKey()]);
-
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
+    //we now log adjacent hexes to controlled castles
+    console.log('Adjacent hexes to controlled castles:', this.hexesAdjacentToControlledCastles);
+    console.log('Controlled castles:', this.controlledCastlesActivePlayer);
     return (
       <>
       <button className='pass-button' onClick={this.handlePass}>Pass</button>
@@ -215,7 +239,7 @@ componentDidMount() {
           <g key={hex.getKey()}>
             <polygon 
               points={layout.polygonCornersString(hex) } 
-              className={colorClassMap[hex.getKey()]} 
+              className={`${colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent' : ''}`} 
               onClick={() => this.handleHexClick(hex)}
             />
             {this.state.showCoordinates && (

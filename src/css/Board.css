@@ -49,6 +49,9 @@
   stroke: #aaa; /* Border color for the hexagon */
   stroke-width: 4; /* Border width for the hexagon */
 }
+.hexagon-castle-adjacent {
+  fill: red;
+}
 
 
 .hexagon, .hexagon-dark, .hexagon-mid, .hexagon-light, .hexagon-river, .hexagon-castles {
