@@ -83,14 +83,11 @@ get legalAttacks(): Hex[] {
   }
   return [];
 }
-//Necessary to know if attack phase can be skipped
+//Necessary to know if attack phase can be skipped, looks over every piece to see if it can attack something
 get futureLegalAttacks(): Hex[] {
-  const { movingPiece } = this.state;
-  if (movingPiece && movingPiece.canAttack) {
-    return movingPiece.legalAttacks(this.attackableHexes);
-  }
-  return [];
+  return this.state.pieces.filter(piece => piece.color === this.currentPlayer && piece.canAttack).map(piece => piece.legalAttacks(this.attackableHexes)).flat(1);
 }
+
 //Necessary to display castle information in castles phase
 get controlledCastlesActivePlayer(): Castle[] {
   return this.state.Castles.filter(castle => {
@@ -107,14 +104,14 @@ get futurecontrolledCastlesActivePlayer(): Castle[] {
 }
 
 // Necessary to know by how much to increment turn counter
-getTurnCounterIncrement = () => {
+get turnCounterIncrement(): number {
   // calculate if there are potential attacks
   const hasFutureAttacks = this.futureLegalAttacks.length > 0;
   const hasFutureControlledCastles = this.futurecontrolledCastlesActivePlayer.length > 0;
 
-  if (!hasFutureAttacks && !hasFutureControlledCastles && this.turn_phase === 'Movement') {
+  if (!hasFutureAttacks && !hasFutureControlledCastles && this.state.turnCounter % 5 === 1) {
     return 4;
-  } else if (!hasFutureAttacks && hasFutureControlledCastles && this.turn_phase === 'Movement') {
+  } else if (!hasFutureAttacks && hasFutureControlledCastles && this.state.turnCounter % 5 === 1) {
     return 3;
   } else if(!hasFutureAttacks && !hasFutureControlledCastles && this.state.turnCounter % 5 === 2){
     return 3 ;
@@ -209,11 +206,16 @@ handleKeyDown = (event: KeyboardEvent) => {
       // Update the Pieces
       movingPiece.hex = pieceClicked.hex;
       movingPiece.canAttack = false;
-        const pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
-     //If the moving piece is the clicked piece we don't increment the turn counter
-      
+      const pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
 
-      this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+1 });
+
+      
+//When set state is called an update is scheduled, but not executed immediately.
+// As a result, need to use a callback function to ensure 
+//that the state is updated before the next line of code is executed.
+      this.setState({ movingPiece: null, pieces }, () => {
+        this.setState({ turnCounter: this.state.turnCounter + this.turnCounterIncrement });
+      });
     }                                           
   }; //*********END OF PIECE CLICK LOGIC********//
 
@@ -223,17 +225,18 @@ handleHexClick = (hex: Hex) => {
                                 //*****MOVEMENT LOGIC TO HEX**************//
   if (movingPiece?.canMove&& this.turn_phase === 'Movement') {
     if(this.legalMoves.some(move => move.equals(hex))){//Makes a legal move
-    this.setState({ movingPiece: null, turnCounter: turnCounter+1 });
-    if (turnCounter % 5 === 1) {//All pieces can move next turn
-      this.state.pieces.forEach(piece => piece.canMove = true);
-    }
-    movingPiece.hex = hex; //Update piece position
-    movingPiece.canMove = false;
+      if (turnCounter % 5 === 1) {//All pieces can move next turn
+        this.state.pieces.forEach(piece => piece.canMove = true);
+      }
+      movingPiece.hex = hex; //Update piece position
+      movingPiece.canMove = false;
+    this.setState({ movingPiece: null, turnCounter: turnCounter+this.turnCounterIncrement });
+ 
     
   }
 } else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
   if(this.legalAttacks.some(attack => attack.equals(hex))){//Makes a legal attack
-    this.setState({ movingPiece: null, turnCounter: turnCounter+1 });
+    this.setState({ movingPiece: null, turnCounter: turnCounter+this.turnCounterIncrement });
     movingPiece.hex = hex; //Update piece position
     movingPiece.canAttack = false;
   }
@@ -351,6 +354,8 @@ componentWillUnmount() {
   }
   componentDidUpdate() {
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
+    console.log('The future legal attacks are', this.futureLegalAttacks);
+    console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);
   }
 }
 
