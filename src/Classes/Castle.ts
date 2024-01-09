@@ -1,12 +1,12 @@
 import { Hex } from "./Hex";
 import { Color } from "../Constants";
-export class Castles {
+export class Castle {
   constructor(
     public hex: Hex,
     public color: Color,
     public turns_controlled: number
   ) {}
-  public adjacentCastles(): Hex[] {
+  public adjacentHexes(): Hex[] {
     return this.hex.cubeRing(1);
   }
 }

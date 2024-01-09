@@ -12,16 +12,22 @@ export class Point {
       }
 
       
-      public colorClass(riverHexes: Hex[], castleHexes: Hex[]): string {
+      public colorClass(riverHexes: Hex[], castleHexes: Hex[], whitecastleHexes: Hex[], blackCastleHexes: Hex[]): string {
         const hexisaRiver = riverHexes.some(riverHex => this.equals(riverHex));
         const hexisaCastle = castleHexes.some(castleHex => this.equals(castleHex));
+        const hexisWhiteCastle = whitecastleHexes.some(whitecastleHex => this.equals(whitecastleHex));
+        const hexisBlackCastle = blackCastleHexes.some(blackCastleHex => this.equals(blackCastleHex));
 
         let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
           ((this.color_index % 3) + 3) % 3
         ];
         if (hexisaRiver) {
           colorClass = "hexagon-river";
-        } else if (hexisaCastle) {
+        }  else if (hexisWhiteCastle) {
+          colorClass = "hexagon-white-castle";
+        } else if (hexisBlackCastle) {
+          colorClass = "hexagon-black-castle";
+        }else if (hexisaCastle) {
           colorClass = "hexagon-castle";
         }
         return colorClass;

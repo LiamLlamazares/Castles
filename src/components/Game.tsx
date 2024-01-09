@@ -1,8 +1,9 @@
 import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
+import {Castle} from '../Classes/Castle';
 import { Hex } from '../Classes/Hex';
 import { PieceType, NSquaresc, turnPhase,Color } from '../Constants';
-import { startingBoard, riverHexes,castleHexes,layout, colorClassMap  } from '../ConstantImports';
+import { startingBoard, riverHexes,castleHexes,whiteCastleHexes, blackCastleHexes, layout, colorClassMap  } from '../ConstantImports';
 import "../css/Board.css";
 
 import wswordsmanImage from '../Assets/Images/Chess/wSwordsman.svg';
@@ -34,7 +35,9 @@ class GameBoard extends Component {
     pieces: startingBoard.pieces,
     movingPiece: null as Piece | null,
     showCoordinates: false,
-    turnCounter: 0
+    turnCounter: 0,
+    Castles: []//Define castles
+
   };
 
   get turn_phase(): turnPhase {
@@ -59,7 +62,8 @@ get enemyHexes(): Hex[] {
 get legalMoves(): Hex[] {
   const { movingPiece } = this.state;
   if (movingPiece && this.turn_phase === 'Movement') {
-    return movingPiece.legalmoves(this.blockedHexes);
+    const color = movingPiece.color;
+    return movingPiece.legalmoves(this.blockedHexes, color);
   }
   return [];
 }
@@ -79,7 +83,25 @@ public hexisLegalAttack = (hex: Hex) => {
   const legalAttacks = this.legalAttacks;
   return legalAttacks.some(attack => attack.equals(hex));
 }
+// Add this method to your GameBoard component
+handlePass = () => {
+  let turnCounter = this.state.turnCounter;
+  console.log('Passing. The turn counter is', turnCounter);
 
+  // Check if there are any legal attacks for the current player's pieces
+  const hasLegalAttacks = this.state.pieces.some(piece => 
+    piece.color === this.currentPlayer && piece.legalAttacks(this.enemyHexes).length > 0
+  );
+
+  // If there are no legal attacks, increment the turn counter to reach the castles phase
+  if (!hasLegalAttacks && (turnCounter % 5 === 2 || turnCounter % 5 === 3)) {
+    turnCounter += 2;
+  } else {
+    turnCounter += 1;
+  }
+
+  this.setState({ movingPiece: null, turnCounter });
+};
 
 
   handleTakeback = () => {
@@ -145,7 +167,7 @@ else { this.setState({ movingPiece: null });}//Illegal move, snap back to origin
 
 componentDidMount() {
   this.hexagons.forEach(hex => {
-    colorClassMap[hex.getKey()] = hex.colorClass(riverHexes, castleHexes);
+    colorClassMap[hex.getKey()] = hex.colorClass(riverHexes, castleHexes, whiteCastleHexes, blackCastleHexes);
   });
 }
 
@@ -166,9 +188,15 @@ componentDidMount() {
 
   render() {
     //console.log('pieces:', this.state.pieces);
+//Logs the color class of the white castles
+    console.log('white castle color class:', colorClassMap[whiteCastleHexes[0].getKey()]);
+    //Logs the color class of the black castles
+    console.log('black castle color class:', colorClassMap[blackCastleHexes[0].getKey()]);
+
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
     return (
       <>
+      <button className='pass-button' onClick={this.handlePass}>Pass</button>
  <button className='coordinates-button' onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
           Toggle Coordinates
         </button>
@@ -230,8 +258,8 @@ componentDidMount() {
           <image
             key={piece.hex.getKey()}
             href={this.getImageByPieceType(piece.type, piece.color)}
-            x={layout.hexToPixel(piece.hex).x - 150/NSquaresc}
-            y={layout.hexToPixel(piece.hex).y - 150/NSquaresc}
+            x={layout.hexToPixel(piece.hex).x - 145/NSquaresc}
+            y={layout.hexToPixel(piece.hex).y - 145/NSquaresc}
             height={275 / NSquaresc}
             width={275 / NSquaresc}
             className='piece'

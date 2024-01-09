@@ -14,17 +14,17 @@
         stroke-width: 4; /* Border width for the hexagon */
     }
     .hexagon-dark {
-        fill: rgb(210,140,69);
+        fill: rgb(209,139,71);
         stroke: #aaa; /* Border color for the hexagon */
         stroke-width: 4; /* Border width for the hexagon */
     }
     .hexagon-mid {
-        fill: rgb(233,173,112);
+        fill: rgb(232,171,111);
         stroke: #aaa; /* Border color for the hexagon */
         stroke-width: 4; /* Border width for the hexagon */
     }
     .hexagon-light {
-      fill: rgb(255,207,159); /* Fill color for the hexagon */
+      fill: rgb(255,206,158); /* Fill color for the hexagon */
       stroke: #aaa; /* Border color for the hexagon */
       stroke-width: 4; /* Border width for the hexagon */
   }
@@ -36,6 +36,16 @@
 
 .hexagon-castles {
   fill: purple; /* Fill color for the hexagon */
+  stroke: #aaa; /* Border color for the hexagon */
+  stroke-width: 4; /* Border width for the hexagon */
+}
+.hexagon-white-castle {
+  fill: aquamarine; /* Fill color for the hexagon */;
+  stroke: #aaa; /* Border color for the hexagon */
+  stroke-width: 4; /* Border width for the hexagon */
+}
+.hexagon-black-castle {
+  fill: indigo; /* Fill color for the hexagon */
   stroke: #aaa; /* Border color for the hexagon */
   stroke-width: 4; /* Border width for the hexagon */
 }
@@ -79,12 +89,21 @@
 }
 .takeback-button {
   position: absolute;
-  bottom: 0;
-  left: 100px 100px 500px 100px;
+  top: 90px;
+  right: 10px;
 }
+
 .coordinates-button {
   position: absolute;
-  top: 0;
-  left: 0;
-  margin: 10px;
+  top: 50px; /* Adjust this value as needed */
+  right: 10px;
+}
+
+.pass-button {
+  position: absolute;
+  top: 10px; /* Adjust this value as needed */
+  right: 10px;
+}
+.takeback-button:hover, .coordinates-button:hover, .pass-button:hover {
+  background-color: #45a049; /* Change the background color on hover */
 }

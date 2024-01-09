@@ -21,24 +21,27 @@ import { Board } from '../Classes/Board';
     getStrength(): number {
       return PieceStrength[this.type];
     }
-    public swordsmanMoves(blockedhexes: Hex[]): Hex[] {
+    public swordsmanMoves(blockedhexes: Hex[], color: Color): Hex[] {
       let moves = [];
       let hex = this.hex;
       let q = hex.q;
       let r = hex.r;
       let s = hex.s;
-      let newHex = new Hex(q+1, r - 1, s);
-     
-        moves.push(newHex);
-      
-      newHex = new Hex(q , r-1, s +1);
-     
-        moves.push(newHex);
-      
-      newHex = new Hex(q - 1, r, s+1);
-      
-        moves.push(newHex);
-        moves = moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move)));
+      let offset = color === 'b' ? -1 : 1;
+    
+      let offsets = [
+        { q: offset, r: -offset, s: 0 },
+        { q: 0, r: -offset, s: offset },
+        { q: -offset, r: 0, s: offset }
+      ];
+    
+      for (let offset of offsets) {
+        let newHex = new Hex(q + offset.q, r + offset.r, s + offset.s);
+        if (!blockedhexes.some((blockedHex) => blockedHex.equals(newHex))) {
+          moves.push(newHex);
+        }
+      }
+    
       return moves;
     }
     public archerMoves(blockedhexes: Hex[]): Hex[] {//archers move the same to any hex in a radius of 1
@@ -201,11 +204,11 @@ import { Board } from '../Classes/Board';
       return moves;
     }
 
-    public legalmoves(blockedhexes: Hex[]): Hex[] {
+    public legalmoves(blockedhexes: Hex[], color: Color): Hex[] {
       let moves: Hex[] = []; // Initialize the 'moves' variable with an empty array
       switch (this.type) {
         case PieceType.Swordsman:
-          moves = this.swordsmanMoves(blockedhexes);
+          moves = this.swordsmanMoves(blockedhexes, color);
           break;
         case PieceType.Archer:
         case PieceType.Trebuchet:
