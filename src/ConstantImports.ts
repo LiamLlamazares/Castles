@@ -28,6 +28,10 @@ export const startingBoard = new Board(
       new Piece(new Hex(-4, 0, 4), "b", PieceType.Giant),
       // Monarch
       new Piece(new Hex(-5, 0, 5), "w", PieceType.Monarch),
+      new Piece(new Hex(-6, 0, 6), "b", PieceType.Archer),
+      new Piece(new Hex(-4, 2, 2), "w", PieceType.Archer),
+      new Piece(new Hex(6, 0, -6), "b", PieceType.Eagle),
+      new Piece(new Hex(4, -2, -2), "w", PieceType.Eagle),
       // Eagles
       // ... Repeat for the 4 eagles
     ],

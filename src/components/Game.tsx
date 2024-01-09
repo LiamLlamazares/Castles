@@ -5,24 +5,24 @@ import { PieceType, NSquaresc, turnPhase,Color } from '../Constants';
 import { startingBoard, riverHexes,castleHexes,layout, colorClassMap  } from '../ConstantImports';
 import "../css/Board.css";
 
-import wswordsmanImage from '../Assets/Images/fantasyd/wSwordsman.svg';
-import bswordsmanImage from '../Assets/Images/fantasyd/bSwordsman.svg';
-import wdragonImage from '../Assets/Images/fantasyd/wDragon.svg';
-import bdragonImage from '../Assets/Images/fantasyd/bDragon.svg';
-import warcherImage from '../Assets/Images/fantasyd/wArcher.svg';
-import barcherImage from '../Assets/Images/fantasyd/bArcher.svg';
-import wgiantImage from '../Assets/Images/fantasyd/wGiant.svg';
-import bgiantImage from '../Assets/Images/fantasyd/bGiant.svg';
-import wassassinImage from '../Assets/Images/fantasyd/wAssassin.svg';
-import bassassinImage from '../Assets/Images/fantasyd/bAssassin.svg';
-import wmonarchImage from '../Assets/Images/fantasyd/wMonarch.svg';
-import bmonarchImage from '../Assets/Images/fantasyd/bMonarch.svg';
-import wtrebuchetImage from '../Assets/Images/fantasyd/wTrebuchet.svg';
-import btrebuchetImage from '../Assets/Images/fantasyd/bTrebuchet.svg';
-import wknightImage from '../Assets/Images/fantasyd/wKnight.svg';
-import bknightImage from '../Assets/Images/fantasyd/bKnight.svg';
-import weagleImage from '../Assets/Images/fantasyd/wEagle.svg';
-import beagleImage from '../Assets/Images/fantasyd/bEagle.svg';
+import wswordsmanImage from '../Assets/Images/Chess/wSwordsman.svg';
+import bswordsmanImage from '../Assets/Images/Chess/bSwordsman.svg';
+import wdragonImage from '../Assets/Images/Chess/wDragon.svg';
+import bdragonImage from '../Assets/Images/Chess/bDragon.svg';
+import warcherImage from '../Assets/Images/Chess/wArcher.svg';
+import barcherImage from '../Assets/Images/Chess/bArcher.svg';
+import wgiantImage from '../Assets/Images/Chess/wGiant.svg';
+import bgiantImage from '../Assets/Images/Chess/bGiant.svg';
+import wassassinImage from '../Assets/Images/Chess/wAssassin.svg';
+import bassassinImage from '../Assets/Images/Chess/bAssassin.svg';
+import wmonarchImage from '../Assets/Images/Chess/wMonarch.svg';
+import bmonarchImage from '../Assets/Images/Chess/bMonarch.svg';
+import wtrebuchetImage from '../Assets/Images/Chess/wTrebuchet.svg';
+import btrebuchetImage from '../Assets/Images/Chess/bTrebuchet.svg';
+import wknightImage from '../Assets/Images/Chess/wKnight.svg';
+import bknightImage from '../Assets/Images/Chess/bKnight.svg';
+import weagleImage from '../Assets/Images/Chess/wEagle.svg';
+import beagleImage from '../Assets/Images/Chess/bEagle.svg';
 
 
 
@@ -125,10 +125,10 @@ public hexisLegalAttack = (hex: Hex) => {
     }                                           
   }; //*********END OF PIECE CLICK LOGIC********//
 
-                                    //*****MOVEMENT LOGIC**************//
+                                    
 handleHexClick = (hex: Hex) => {
   const { movingPiece, turnCounter } = this.state;
-
+                                //*****MOVEMENT LOGIC TO HEX**************//
   if (movingPiece?.canMove&& this.turn_phase === 'Movement') {
     if(this.legalMoves.some(move => move.q === hex.q && move.r === hex.r)){//Makes a legal move
     this.setState({ movingPiece: null, turnCounter: turnCounter+1 });
@@ -136,7 +136,10 @@ handleHexClick = (hex: Hex) => {
     movingPiece.canMove = false;
     
   }
-} else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
+} else if (this.turn_phase === 'Castles') {}
+
+
+else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
 
 };
 

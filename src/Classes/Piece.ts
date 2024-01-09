@@ -42,24 +42,9 @@ import { Board } from '../Classes/Board';
       return moves;
     }
     public archerMoves(blockedhexes: Hex[]): Hex[] {//archers move the same to any hex in a radius of 1
-      let moves = [];
       let hex = this.hex;
-      let q = hex.q;
-      let r = hex.r;
-      let s = hex.s;
-      for (let dq = -1; dq <= 1; dq++) {
-        for (let dr = -1; dr <= 1; dr++) {
-          for (let ds = -1; ds <= 1; ds++) {
-            if (dq + dr + ds === 0 && (dq !== 0 || dr !== 0 || ds !== 0)) {
-              let newHex = new Hex(q + dq, r + dr, s + ds);
-              
-                moves.push(newHex);
-              
-            }
-          }
-        }
-      }
-      moves= moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move)));
+      let moves = hex.cubeRing(1);
+      moves = moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move)));
       return moves;
     }
     public knightMoves(blockedhexes: Hex[]): Hex[] {
@@ -102,6 +87,13 @@ import { Board } from '../Classes/Board';
       
       return moves;
     }
+    public eagleMoves(blockedhexes: Hex[]): Hex[] {//The eagle can move to any hex in a radius of 3
+      const hex = this.hex;
+      let moves: Hex[] = []; // Declare the 'moves' variable
+      moves =[... hex.cubeRing(1),...hex.cubeRing(2),...hex.cubeRing(3)];
+      moves = moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move)));
+      return moves;
+    }
     public dragonMoves(blockedhexes: Hex[]): Hex[] {//Dragons move like the knight in chess, orthogonally two and then 1 diagonally
       let moves = [];
       let hex = this.hex;
@@ -128,7 +120,7 @@ import { Board } from '../Classes/Board';
         }
       }
     
-      return moves;
+      return moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move)));
     }
     public assassinsMoves(blockedhexes: Hex[]): Hex[] {//Assassins move like the queen in chess
       let moves = [];
@@ -208,9 +200,6 @@ import { Board } from '../Classes/Board';
       }
       return moves;
     }
-    public monarchMoves(blockedhexes: Hex[]): Hex[] {//Moves the same as archer
-      return this.archerMoves(blockedhexes);
-    }
 
     public legalmoves(blockedhexes: Hex[]): Hex[] {
       let moves: Hex[] = []; // Initialize the 'moves' variable with an empty array
@@ -219,10 +208,15 @@ import { Board } from '../Classes/Board';
           moves = this.swordsmanMoves(blockedhexes);
           break;
         case PieceType.Archer:
+        case PieceType.Trebuchet:
+        case PieceType.Monarch:
           moves = this.archerMoves(blockedhexes);
           break;
         case PieceType.Knight:
           moves = this.knightMoves(blockedhexes);
+          break;
+        case PieceType.Eagle:
+          moves = this.eagleMoves(blockedhexes);
           break;
         case PieceType.Giant:
           moves = this.giantMoves(blockedhexes);
@@ -232,9 +226,6 @@ import { Board } from '../Classes/Board';
           break;
         case PieceType.Assassin:
           moves = this.assassinsMoves(blockedhexes);
-          break;
-        case PieceType.Monarch:
-          moves = this.monarchMoves(blockedhexes);
           break;
       }
 
