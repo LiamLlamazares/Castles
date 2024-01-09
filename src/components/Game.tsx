@@ -3,7 +3,7 @@ import { Piece } from '../Classes/Piece';
 import {Castle} from '../Classes/Castle';
 import { Hex } from '../Classes/Hex';
 import { PieceType, NSquaresc, turnPhase,Color } from '../Constants';
-import { startingBoard, riverHexes,castleHexes,whiteCastleHexes, blackCastleHexes, layout, colorClassMap  } from '../ConstantImports';
+import { startingBoard, riverHexes,castleHexes,whiteCastleHexes, blackCastleHexes, layout, colorClassMap, startingCastles  } from '../ConstantImports';
 import "../css/Board.css";
 
 import wswordsmanImage from '../Assets/Images/Chess/wSwordsman.svg';
@@ -36,7 +36,7 @@ class GameBoard extends Component {
     movingPiece: null as Piece | null,
     showCoordinates: false,
     turnCounter: 0 as number,
-    Castles: [] as Castle[],
+    Castles:  startingCastles as Castle[],
 
   };
 

@@ -1,6 +1,7 @@
 import { Hex, Layout, Point } from "./Classes/Hex";
 import { Piece } from "./Classes/Piece";
 import { Board } from "./Classes/Board";
+import { Castle } from "./Classes/Castle";
 import {
   NSquaresc,
   HEX_SIZE_FACTORc,
@@ -125,7 +126,7 @@ export const layout = new Layout(
   origin
 );
 
-//Calculation of river and castle hexes
+//Calculation of river and castle hexes for rendering
 const isRiver = (center: Point, origin: Point): boolean => {
   return center.y === origin.y; // Return true if the hexagon is at the center
 };
@@ -162,6 +163,8 @@ export const whiteCastleHexes = castleHexes.filter((hex: Hex) =>
 export const blackCastleHexes = castleHexes.filter((hex: Hex) =>
   isBlackCastle(hex, NSquaresc - 1)
 );
+
+
 export const colorClassMap: { [key: string]: string } = {};
 startingBoard.hexes.forEach((hex: Hex) => {
   colorClassMap[hex.getKey()] = hex.colorClass(
@@ -171,3 +174,16 @@ startingBoard.hexes.forEach((hex: Hex) => {
     blackCastleHexes
   );
 });
+
+//Need to create castles to pass to the board
+let castles = []; 
+for (let hex of whiteCastleHexes) {
+  let castle = new Castle(hex, 'w', 0);
+  castles.push(castle);
+  for (let hex of blackCastleHexes) {
+    let castle = new Castle(hex, 'b', 0);
+    castles.push(castle);
+  }
+}
+export const startingCastles = castles;
+
