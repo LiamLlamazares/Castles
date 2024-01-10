@@ -4,7 +4,8 @@ export class Castle {
   constructor(
     public hex: Hex,
     public color: Color,
-    public turns_controlled: number
+    public turns_controlled: number,
+    public used_this_turn: boolean = false
   ) {}
   public adjacentHexes(): Hex[] {
     return this.hex.cubeRing(1);

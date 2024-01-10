@@ -129,8 +129,8 @@ get turnCounterIncrement(): number {
 }
 
 
-get emptyHexesAdjacentToControlledCastles(): Hex[] {
-  const adjacenthexes = this.controlledCastlesActivePlayer.map(castle => castle.hex.cubeRing(1)).flat(1);
+get emptyUnusedHexesAdjacentToControlledCastles(): Hex[] {
+  const adjacenthexes = this.controlledCastlesActivePlayer.filter(castle => !castle.used_this_turn).map(castle => castle.hex.cubeRing(1)).flat(1);
   return adjacenthexes.filter(hex => !this.occupiedHexes.some(occupiedHex => occupiedHex.equals(hex)));
 }
 
@@ -145,7 +145,7 @@ public hexisLegalAttack = (hex: Hex) => {
   return legalAttacks.some(attack => attack.equals(hex));
 }
 public hexisAdjacentToControlledCastle = (hex: Hex) => {
-  const hexesAdjacentToControlledCastles = this.emptyHexesAdjacentToControlledCastles;
+  const hexesAdjacentToControlledCastles = this.emptyUnusedHexesAdjacentToControlledCastles;
   return hexesAdjacentToControlledCastles.some(adjacentHex => hex.equals(adjacentHex));
 }
 // Add this method to your GameBoard component
@@ -245,7 +245,7 @@ handleHexClick = (hex: Hex) => {
 //Captues castle
 else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
   if(this.legalAttacks.some(attack => attack.equals(hex))){//Makes a legal attack
-    this.setState({ movingPiece: null, turnCounter: turnCounter+this.turnCounterIncrement });
+    this.setState({ movingPiece: null});
     movingPiece.hex = hex; //Update piece position
     const pieces = this.state.pieces      
       this.setState({ movingPiece: null, pieces }, () => {
