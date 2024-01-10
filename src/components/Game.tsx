@@ -238,8 +238,9 @@ handleHexClick = (hex: Hex) => {
                                 //*****MOVEMENT LOGIC TO HEX**************//
   if (movingPiece?.canMove&& this.turn_phase === 'Movement') {
     if(this.legalMoves.some(move => move.equals(hex))){//Makes a legal move
-      if (turnCounter % 5 === 1) {//All pieces can move next turn
+      if (turnCounter % 5 === 1) {//All pieces can move next turn, all castles are unused
         this.state.pieces.forEach(piece => piece.canMove = true);
+        this.state.Castles.forEach(castle => castle.used_this_turn = false);
       }
       movingPiece.hex = hex; //Update piece position
       movingPiece.canMove = false;
@@ -261,18 +262,19 @@ else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
 }
   //Adds a swordsman to clicked adjacent hex and increments the turns controlled counter of all castles controlled
   // by the player by 1
-else if (this.hexisAdjacentToControlledCastle(hex)) {
-  console.log('Adding a swordsman to the castle');
-  const castle = this.state.Castles.find(castle => castle.isAdjacent(hex));
-  if (castle) {
-    castle.turns_controlled += 1;
-    castle.used_this_turn = true;
-    const pieces = this.state.pieces;
-    pieces.push(new Piece(hex,this.currentPlayer, PieceType.Swordsman ));
-    console.log('The unused castles are' , this.state.Castles.filter(castle => !castle.used_this_turn));
-    this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+this.turnCounterIncrement });
+  else if (this.hexisAdjacentToControlledCastle(hex)) {
+    const castle = this.state.Castles.find(castle => castle.isAdjacent(hex));
+    if (castle) {
+      const pieces = this.state.pieces;
+      const pieceTypes = Object.values(PieceType);
+      const pieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
+      pieces.push(new Piece(hex, this.currentPlayer, pieceType));
+      castle.turns_controlled += 1;
+      castle.used_this_turn = true;
+      console.log('The unused castles are' , this.state.Castles.filter(castle => !castle.used_this_turn));
+      this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+this.turnCounterIncrement });
+    }
   }
-}
 
 
 
