@@ -1,7 +1,7 @@
 import { Board } from '../Classes/Board';
 
   //Defines the piece class which has a hex, color, and type
-  import { Hex} from './Hex';
+  import { Hex, highGroundHexes} from './Hex';
   import { PieceType, AttackType, PieceStrength, Color, NSquaresc } from '../Constants';
 
 
@@ -260,6 +260,9 @@ import { Board } from '../Classes/Board';
       let attacks = [];
       let hex = this.hex;
       let potentialAttacks =  hex.cubeRing(2);
+      if (highGroundHexes.some((hex)=> hex.equals(this.hex))) {
+        potentialAttacks.push(...hex.cubeRing(3));
+      }
 
       // Loop over each potential move
       for (let newHex of potentialAttacks) {
@@ -273,6 +276,9 @@ import { Board } from '../Classes/Board';
       let attacks = [];
       let hex = this.hex;
       let potentialAttacks =  hex.cubeRing(3);
+      if (highGroundHexes.some((hex)=> hex.equals(this.hex))) {
+        potentialAttacks.push(...hex.cubeRing(4));
+      }
 
       // Loop over each potential move
       for (let newHex of potentialAttacks) {

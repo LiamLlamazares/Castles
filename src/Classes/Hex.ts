@@ -10,17 +10,12 @@ export class Point {
     public equals(other: Hex): boolean {
         return this.q === other.q && this.r === other.r && this.s === other.s;
       }
-
       
       public colorClass(riverHexes: Hex[], castleHexes: Hex[], whitecastleHexes: Hex[], blackCastleHexes: Hex[]): string {
         const hexisaRiver = riverHexes.some(riverHex => this.equals(riverHex));
         const hexisaCastle = castleHexes.some(castleHex => this.equals(castleHex));
         const hexisWhiteCastle = whitecastleHexes.some(whitecastleHex => this.equals(whitecastleHex));
         const hexisBlackCastle = blackCastleHexes.some(blackCastleHex => this.equals(blackCastleHex));
-        
-        const initialHighGroundHexes = [new Hex(0, 1, -1), new Hex(-1, 2, -1), new Hex(0, 2, -2), new Hex(1, 1, -2)];
-        const invertedHighGroundHexes = initialHighGroundHexes.map(hex => new Hex(-hex.q, -hex.r, -hex.s));
-        const highGroundHexes = [...initialHighGroundHexes, ...invertedHighGroundHexes];
         const hexisHighGround = highGroundHexes.some(highGroundHex => this.equals(highGroundHex));
         let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
           ((this.color_index % 3) + 3) % 3
@@ -356,5 +351,7 @@ export const generateHexagons = (N: number) => {
     }
     return hexList;
   };
-
+  const initialHighGroundHexes = [new Hex(0, 1, -1), new Hex(-1, 2, -1), new Hex(0, 2, -2), new Hex(1, 1, -2)];
+  const invertedHighGroundHexes = initialHighGroundHexes.map(hex => new Hex(-hex.q, -hex.r, -hex.s));
+  export const highGroundHexes = [...initialHighGroundHexes, ...invertedHighGroundHexes];
 
