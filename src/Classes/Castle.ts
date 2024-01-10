@@ -9,4 +9,7 @@ export class Castle {
   public adjacentHexes(): Hex[] {
     return this.hex.cubeRing(1);
   }
+  public isAdjacent(hex: Hex): boolean {
+    return this.adjacentHexes().some((castleHex) => castleHex.equals(hex));
+  }
 }

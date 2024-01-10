@@ -120,7 +120,10 @@ get turnCounterIncrement(): number {
     return 2 ;
   }  else if(!hasFutureControlledCastles && this.state.turnCounter % 5 === 3){
     return 2 ;
-  }else {return 1;}
+  } else if (this.turn_phase === 'Castles') {return 1;}
+  
+  else {return 1;}
+
 
 
 }
@@ -238,15 +241,31 @@ handleHexClick = (hex: Hex) => {
  
     
   }
-} else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
+} //*********END OF MOVEMENT LOGIC************//
+//Captues castle
+else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
   if(this.legalAttacks.some(attack => attack.equals(hex))){//Makes a legal attack
     this.setState({ movingPiece: null, turnCounter: turnCounter+this.turnCounterIncrement });
     movingPiece.hex = hex; //Update piece position
-    movingPiece.canAttack = false;
-  }
-
-
+    const pieces = this.state.pieces      
+      this.setState({ movingPiece: null, pieces }, () => {
+        this.setState({ turnCounter: this.state.turnCounter + this.turnCounterIncrement });
+      });
+  } 
 }
+  //Adds a swordsman to clicked adjacent hex and increments the turns controlled counter of all castles controlled
+  // by the player by 1
+else if (this.hexisAdjacentToControlledCastle(hex)) {
+  console.log('Adding a swordsman to the castle');
+  const castle = this.state.Castles.find(castle => castle.isAdjacent(hex));
+  if (castle) {
+    castle.turns_controlled += 1;
+    const pieces = this.state.pieces;
+    pieces.push(new Piece(hex,this.currentPlayer, PieceType.Swordsman ));
+    this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+1 });
+  }
+}
+
 
 
 else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
