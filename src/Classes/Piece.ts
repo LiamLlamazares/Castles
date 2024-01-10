@@ -13,13 +13,17 @@ import { Board } from '../Classes/Board';
       public type: PieceType,
       public canMove: boolean = true,
       public canAttack: boolean = true,
+      public damage: number = 0,
     ) {
       if (!hex || !color || !type ) {
         throw new Error("Invalid arguments for Piece constructor");
       }
     }
-    getStrength(): number {
+    get Strength(): number {
       return PieceStrength[this.type];
+    }
+    get AttackType(): string {
+      return this.type === PieceType.Archer  ? 'ranged' : this.type === PieceType.Trebuchet ? 'longRanged' : 'melee';
     }
     public swordsmanMoves(blockedhexes: Hex[], color: Color): Hex[] {
       let moves = [];
@@ -264,30 +268,29 @@ import { Board } from '../Classes/Board';
           attacks.push(newHex);
         }
       }
+      return attacks;
+    }
+    public longRangedAttacks(enemyHexes: Hex[]): Hex[] {
+      let attacks = [];
+      let hex = this.hex;
+      let potentialAttacks =  hex.cubeRing(3);
 
+      // Loop over each potential move
+      for (let newHex of potentialAttacks) {
+        if (this.isValidAttack(newHex, enemyHexes)) {
+          attacks.push(newHex);
+        }
+      }
       return attacks;
     }
     public legalAttacks(enemyHexes: Hex[]): Hex[] {
-      let attacks: Hex[] = [];
-
-      switch (this.type) {
-        case PieceType.Swordsman:
-        case PieceType.Knight:
-        case PieceType.Eagle:
-        case PieceType.Giant:
-        case PieceType.Dragon:
-        case PieceType.Assassin:
-        case PieceType.Monarch:
-          attacks = this.meleeAttacks(enemyHexes);
-          break;
-        case PieceType.Archer:
-        case PieceType.Trebuchet:
-          attacks = this.rangedAttacks(enemyHexes);
-          break;
-      }
-
-      return attacks;
+if (this.AttackType === 'melee') {
+  return this.meleeAttacks(enemyHexes);
+} else if (this.AttackType === 'ranged') {
+  return this.rangedAttacks(enemyHexes);
     }
+    else {return this.longRangedAttacks(enemyHexes);}
+  }
 
       
 

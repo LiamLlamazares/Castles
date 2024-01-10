@@ -207,19 +207,24 @@ handleKeyDown = (event: KeyboardEvent) => {
 
                                   //************ATTACK LOGIC************//
     if (movingPiece && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer 
-    && this.legalAttacks.some(attack => attack.equals(pieceClicked.hex)) ) {
-      //Capures piece or snaps back to original position if same piece is clicked
-      if (pieceClicked.type === 'Monarch') {
-        alert(`${pieceClicked.color} wins!`);
-        return;
+    && this.legalAttacks.some(attack => attack.equals(pieceClicked.hex)) ) {//Checks if attack is legal, if it is, attack
+      
+     pieceClicked.damage = pieceClicked.damage + movingPiece.Strength;
+     let pieces = this.state.pieces;
+      if (pieceClicked.damage >= pieceClicked.Strength || (pieceClicked.type === 'Monarch' && movingPiece.type === 'Assassin') ){
+        pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
+        if (movingPiece.AttackType === 'melee'){
+          console.log('Melee attack from', movingPiece.hex, 'to', pieceClicked.hex);
+          movingPiece.hex = pieceClicked.hex;
+        } else{}
+      } else{
+        console.log('Ranged attack from', movingPiece.hex, 'to', pieceClicked.hex);
+        pieces = this.state.pieces;
       }
-  
       // Update the Pieces
-      movingPiece.hex = pieceClicked.hex;
       movingPiece.canAttack = false;
-      const pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
 
-
+     
       
 //When set state is called an update is scheduled, but not executed immediately.
 // As a result, need to use a callback function to ensure 
@@ -236,8 +241,10 @@ handleHexClick = (hex: Hex) => {
                                 //*****MOVEMENT LOGIC TO HEX**************//
   if (movingPiece?.canMove&& this.turn_phase === 'Movement') {
     if(this.legalMoves.some(move => move.equals(hex))){//Makes a legal move
-      if (turnCounter % 5 === 1) {//All pieces can move next turn, all castles are unused
+      if (turnCounter % 5 === 1) {//Resets all pieces and castles in movement phase
         this.state.pieces.forEach(piece => piece.canMove = true);
+        this.state.pieces.forEach(piece => piece.canAttack = true);
+        this.state.pieces.forEach(piece => piece.damage = 0);
         this.state.Castles.forEach(castle => castle.used_this_turn = false);
       }
       movingPiece.hex = hex; //Update piece position
