@@ -17,6 +17,12 @@ export enum PieceType {
     
 
   }
+export enum AttackType {
+    Melee = "Melee",
+    Ranged = "Ranged",
+    longRanged = "longRanged",
+  }
+
 export enum PieceStrength {
     Swordsman = 1,
     Archer = 1,

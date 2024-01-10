@@ -2,8 +2,7 @@ import { Board } from '../Classes/Board';
 
   //Defines the piece class which has a hex, color, and type
   import { Hex} from './Hex';
-  import { PieceType, PieceStrength, Color, NSquaresc } from '../Constants';
-
+  import { PieceType, AttackType, PieceStrength, Color, NSquaresc } from '../Constants';
 
 
   export class Piece {
@@ -23,7 +22,7 @@ import { Board } from '../Classes/Board';
       return PieceStrength[this.type];
     }
     get AttackType(): string {
-      return this.type === PieceType.Archer  ? 'ranged' : this.type === PieceType.Trebuchet ? 'longRanged' : 'melee';
+      return this.type === PieceType.Archer  ? AttackType.Ranged : this.type === PieceType.Trebuchet ? AttackType.longRanged : AttackType.Melee;
     }
     public swordsmanMoves(blockedhexes: Hex[], color: Color): Hex[] {
       let moves = [];
@@ -284,9 +283,9 @@ import { Board } from '../Classes/Board';
       return attacks;
     }
     public legalAttacks(enemyHexes: Hex[]): Hex[] {
-if (this.AttackType === 'melee') {
+if (this.AttackType === AttackType.Melee) {
   return this.meleeAttacks(enemyHexes);
-} else if (this.AttackType === 'ranged') {
+} else if (this.AttackType === AttackType.Ranged) {
   return this.rangedAttacks(enemyHexes);
     }
     else {return this.longRangedAttacks(enemyHexes);}

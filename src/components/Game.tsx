@@ -2,7 +2,7 @@ import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
 import {Castle} from '../Classes/Castle';
 import { Hex } from '../Classes/Hex';
-import { PieceType, NSquaresc, turnPhase,Color } from '../Constants';
+import { PieceType, NSquaresc, turnPhase,Color, AttackType } from '../Constants';
 import { startingBoard, riverHexes,castleHexes,whiteCastleHexes, blackCastleHexes, layout, colorClassMap, startingCastles  } from '../ConstantImports';
 import "../css/Board.css";
 
@@ -213,7 +213,7 @@ handleKeyDown = (event: KeyboardEvent) => {
      let pieces = this.state.pieces;
       if (pieceClicked.damage >= pieceClicked.Strength || (pieceClicked.type === 'Monarch' && movingPiece.type === 'Assassin') ){
         pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
-        if (movingPiece.AttackType === 'melee'){
+        if (movingPiece.AttackType === AttackType.Melee){
           console.log('Melee attack from', movingPiece.hex, 'to', pieceClicked.hex);
           movingPiece.hex = pieceClicked.hex;
         } else{}
