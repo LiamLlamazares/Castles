@@ -166,7 +166,7 @@ handlePass = () => {
   this.setState({ movingPiece: null, turnCounter });
 };
 handleKeyDown = (event: KeyboardEvent) => {
-  if (event.code === 'q') {
+  if (event.code === 'KeyQ') {
     this.handlePass();
   }
 }
@@ -185,13 +185,17 @@ handleKeyDown = (event: KeyboardEvent) => {
     const { movingPiece} = this.state;
     let turnCounter = this.state.turnCounter;
   // Allow to swap the moving piece
-  if (movingPiece && pieceClicked.color === this.currentPlayer) {
+  if (movingPiece === pieceClicked) {//Deselecets piece
+    console.log('Deselecting piece');
+    this.setState({ movingPiece: null,  });}
+  else if (movingPiece && pieceClicked.color === this.currentPlayer) {
     this.setState({ movingPiece: pieceClicked});
     return;
   }
                                     //******** PIECE SELECTION LOGIC *******//
     else if(  ((this.turn_phase === 'Movement' && pieceClicked.canMove) ||(this.turn_phase === 'Attack'  && pieceClicked.color === this.currentPlayer&& pieceClicked.canAttack))  && pieceClicked.color === this.currentPlayer) {//Piece is selected 
       this.setState({ movingPiece: pieceClicked });
+
     }
 
                                   //************ATTACK LOGIC************//
@@ -354,8 +358,6 @@ componentWillUnmount() {
   }
   componentDidUpdate() {
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
-    console.log('The future legal attacks are', this.futureLegalAttacks);
-    console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);
   }
 }
 
