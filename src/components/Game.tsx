@@ -38,6 +38,7 @@ class GameBoard extends Component {
     turnCounter: 0 as number,
     Castles:  startingCastles as Castle[],
     cheatMode: false,
+    isBoardRotated: false,
 
   };
 
@@ -154,25 +155,28 @@ public hexisAdjacentToControlledCastle = (hex: Hex) => {
   const hexesAdjacentToControlledCastles = this.emptyUnusedHexesAdjacentToControlledCastles;
   return hexesAdjacentToControlledCastles.some(adjacentHex => hex.equals(adjacentHex));
 }
+handleFlipBoard = () => {
+  this.setState({ isBoardRotated: !this.state.isBoardRotated });
+};
 // Add this method to your GameBoard component
 handlePass = () => {
-  let turnCounter = this.state.turnCounter;
-  console.log('Passing. The turn counter is', turnCounter);
+  // let turnCounter = this.state.turnCounter;
+  // console.log('Passing. The turn counter is', turnCounter);
   
 
-  // Check if there are any legal attacks for the current player's pieces
-  const hasLegalAttacks = this.state.pieces.some(piece => 
-    piece.color === this.currentPlayer && piece.legalAttacks(this.attackableHexes).length > 0
-  );
+  // // Check if there are any legal attacks for the current player's pieces
+  // const hasLegalAttacks = this.state.pieces.some(piece => 
+  //   piece.color === this.currentPlayer && piece.legalAttacks(this.attackableHexes).length > 0
+  // );
 
-  // If there are no legal attacks, increment the turn counter to reach the castles phase
-  if (!hasLegalAttacks && (turnCounter % 5 === 2 || turnCounter % 5 === 3)) {
-    turnCounter += 2;
-  } else {
-    turnCounter += 1;
-  }
+  // // If there are no legal attacks, increment the turn counter to reach the castles phase
+  // if (!hasLegalAttacks && (turnCounter % 5 === 2 || turnCounter % 5 === 3)) {
+  //   turnCounter += 2;
+  // } else {
+  //   turnCounter += 1;
+  // }
 
-  this.setState({ movingPiece: null, turnCounter });
+  this.setState({ movingPiece: null, turnCounter: this.state.turnCounter + this.turnCounterIncrement });
 };
 handleKeyDown = (event: KeyboardEvent) => {
   if (event.code === 'KeyQ') {
@@ -323,6 +327,7 @@ componentWillUnmount() {
         Toggle Coordinates
       </button>
       <button className='takeback-button' onClick={this.handleTakeback}>Takeback</button>
+      <button className='pass-button' onClick={this.handleFlipBoard}>Flip Board</button>
       <svg className="board" height="100%" width="100%">
         <defs>
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
@@ -347,12 +352,12 @@ componentWillUnmount() {
             />
             {this.state.showCoordinates && (
               <text 
-                x={layout.hexToPixel(hex).x} 
-                y={layout.hexToPixel(hex).y+5} 
+                x={layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
+                y={layout.hexToPixelReflected(hex, this.state.isBoardRotated).y+5} 
                 textAnchor="middle" 
                 style={{ fontSize: '15px', color: 'black' }}
               >
-                {`${hex.q}, ${hex.s}`}
+                {`${-hex.q}, ${-hex.s}`}
               </text>
             )}
           </g>
@@ -364,8 +369,8 @@ componentWillUnmount() {
           return (
             <circle 
               key={hex.getKey()}
-              cx={layout.hexToPixel(hex).x} 
-              cy={layout.hexToPixel(hex).y}  
+              cx={layout.hexToPixelReflected(hex,this.state.isBoardRotated).x} 
+              cy={layout.hexToPixelReflected(hex,this.state.isBoardRotated).y}  
               r={90/NSquaresc} 
               className ="legalMoveDot"
               onClick={() => this.handleHexClick(hex)}
@@ -375,8 +380,8 @@ componentWillUnmount() {
           return (
             <circle 
               key={hex.getKey()}
-              cx={layout.hexToPixel(hex).x} 
-              cy={layout.hexToPixel(hex).y} 
+              cx={layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
+              cy={layout.hexToPixelReflected(hex, this.state.isBoardRotated).y} 
               r={90/NSquaresc} 
               className ="legalAttackDot"
               onClick={() => this.handleHexClick(hex)}
@@ -393,8 +398,8 @@ componentWillUnmount() {
           <image
             key={piece.hex.getKey()}
             href={this.getImageByPieceType(piece.type, piece.color)}
-            x={layout.hexToPixel(piece.hex).x - 145/NSquaresc}
-            y={layout.hexToPixel(piece.hex).y - 145/NSquaresc}
+            x={layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).x - 145/NSquaresc}
+            y={layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).y - 145/NSquaresc}
             height={275 / NSquaresc}
             width={275 / NSquaresc}
             className='piece'

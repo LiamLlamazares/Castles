@@ -49,6 +49,9 @@ export class Point {
     public scale(k: number): Hex {
       return new Hex(this.q * k, this.r * k, this.s * k);
     }
+    public reflect(): Hex {
+      return new Hex(-this.q, -this.r, -this.s);
+    }
   
     public rotateLeft(): Hex {
       return new Hex(-this.s, -this.q, -this.r);
@@ -275,6 +278,12 @@ export class Point {
       var y: number = (M.f2 * h.q + M.f3 * h.r) * size.y;
       return new Point(x + origin.x, y + origin.y);
     }
+    public hexToPixelReflected(h: Hex, isRotated: Boolean): Point {
+if (isRotated) {
+  return this.hexToPixel(h.reflect());
+    }
+    return this.hexToPixel(h);
+  }
   
     public pixelToHex(p: Point): Hex {
       var M: Orientation = this.orientation;
