@@ -246,6 +246,7 @@ handleHexClick = (hex: Hex) => {
  
     
   }
+  else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
 } //*********END OF MOVEMENT LOGIC************//
 //Captues castle
 else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
