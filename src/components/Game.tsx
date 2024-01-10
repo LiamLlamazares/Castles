@@ -115,16 +115,17 @@ get turnCounterIncrement(): number {
     return 3;
   } else if(!hasFutureAttacks && !hasFutureControlledCastles && this.state.turnCounter % 5 === 2){
     return 3 ;
+  } else if(!hasFutureAttacks && hasFutureControlledCastles && this.state.turnCounter % 5 === 2){
+    return 2 ;
+  } else if(!hasFutureControlledCastles && this.state.turnCounter % 5 === 3){
+    return 2 ;
+  } else if (this.turn_phase === 'Castles' && this.state.Castles.filter(castle => this.castleIsControlledbyactivePlayer(castle) &&!castle.used_this_turn).length === 0) {
+    return 1;
+  } else if (this.turn_phase === 'Castles') {    // all castles are not used
+    return 0;
+  } else {
+    return 1;
   }
-  else if(!hasFutureAttacks && hasFutureControlledCastles && this.state.turnCounter % 5 === 2){
-    return 2 ;
-  }  else if(!hasFutureControlledCastles && this.state.turnCounter % 5 === 3){
-    return 2 ;
-  } else if (this.turn_phase === 'Castles') {return 1;}
-  
-  else {return 1;}
-
-
 
 }
 
@@ -133,6 +134,11 @@ get emptyUnusedHexesAdjacentToControlledCastles(): Hex[] {
   const adjacenthexes = this.controlledCastlesActivePlayer.filter(castle => !castle.used_this_turn).map(castle => castle.hex.cubeRing(1)).flat(1);
   return adjacenthexes.filter(hex => !this.occupiedHexes.some(occupiedHex => occupiedHex.equals(hex)));
 }
+public castleIsControlledbyactivePlayer = (castle: Castle) => {
+  const piece = this.state.pieces.find(piece => piece.hex.equals(castle.hex));
+  return piece && piece.color !== castle.color && castle.color !== this.currentPlayer;
+}
+
 
 
 public hexisLegalMove = (hex: Hex) => {
@@ -260,9 +266,11 @@ else if (this.hexisAdjacentToControlledCastle(hex)) {
   const castle = this.state.Castles.find(castle => castle.isAdjacent(hex));
   if (castle) {
     castle.turns_controlled += 1;
+    castle.used_this_turn = true;
     const pieces = this.state.pieces;
     pieces.push(new Piece(hex,this.currentPlayer, PieceType.Swordsman ));
-    this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+1 });
+    console.log('The unused castles are' , this.state.Castles.filter(castle => !castle.used_this_turn));
+    this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+this.turnCounterIncrement });
   }
 }
 
