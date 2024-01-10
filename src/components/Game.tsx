@@ -195,17 +195,15 @@ handleKeyDown = (event: KeyboardEvent) => {
     let turnCounter = this.state.turnCounter;
   // Allow to swap the moving piece
   if (movingPiece === pieceClicked) {//Deselecets piece
-    console.log('Deselecting piece');
     this.setState({ movingPiece: null,  });}
-  else if (movingPiece && pieceClicked.color === this.currentPlayer) {
+  else if (movingPiece && pieceClicked.color === this.currentPlayer) {//Switches selected piece
     this.setState({ movingPiece: pieceClicked});
     return;
   }
                                     //******** PIECE SELECTION LOGIC *******//
     else if(  ((this.turn_phase === 'Movement' && pieceClicked.canMove) ||(this.turn_phase === 'Attack'  && pieceClicked.color === this.currentPlayer&& pieceClicked.canAttack))  && pieceClicked.color === this.currentPlayer) {//Piece is selected 
       this.setState({ movingPiece: pieceClicked });
-
-    }
+    }      else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
 
                                   //************ATTACK LOGIC************//
     if (movingPiece && this.turn_phase === 'Attack' && pieceClicked.color !== this.currentPlayer 
@@ -259,6 +257,7 @@ else if (this.turn_phase === 'Attack' && movingPiece?.canAttack) {
         this.setState({ turnCounter: this.state.turnCounter + this.turnCounterIncrement });
       });
   } 
+  else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
 }
   //Adds a swordsman to clicked adjacent hex and increments the turns controlled counter of all castles controlled
   // by the player by 1
