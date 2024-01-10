@@ -109,6 +109,7 @@ export const startingBoard = new Board(
 
   NSquaresc - 1
 );
+export const emptyBoard = new Board([], NSquaresc - 1);
 
 // Grpahical information
 
@@ -162,6 +163,9 @@ export const whiteCastleHexes = castleHexes.filter((hex: Hex) =>
 );
 export const blackCastleHexes = castleHexes.filter((hex: Hex) =>
   isBlackCastle(hex, NSquaresc - 1)
+);
+export const highGroundHexes = startingBoard.hexes.filter((hex: Hex) =>
+  isCastle(hex, NSquaresc - 2)
 );
 
 

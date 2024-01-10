@@ -33,6 +33,23 @@
     stroke: #aaa; /* Border color for the hexagon */
     stroke-width: 4; /* Border width for the hexagon */
 }
+.hexagon-dark.hexagon-high-ground {
+  fill: rgb(139, 69, 19); /* Darker shade for dark high ground */
+  stroke-width: 4;
+  filter: url(#shadow)
+}
+
+.hexagon-mid.hexagon-high-ground {
+  fill: rgb(157, 78, 21); /* Darker shade for mid high ground */
+  stroke-width: 4;
+  filter: url(#shadow)
+}
+
+.hexagon-light.hexagon-high-ground {
+  fill: rgb(175, 87, 24); /* Darker shade for light high ground */
+  stroke-width: 4;
+  filter: url(#shadow)
+}
 
 .hexagon-castles {
   fill: purple; /* Fill color for the hexagon */

@@ -3,7 +3,7 @@ import { Piece } from '../Classes/Piece';
 import {Castle} from '../Classes/Castle';
 import { Hex } from '../Classes/Hex';
 import { PieceType, NSquaresc, turnPhase,Color, AttackType } from '../Constants';
-import { startingBoard, riverHexes,castleHexes,whiteCastleHexes, blackCastleHexes, layout, colorClassMap, startingCastles  } from '../ConstantImports';
+import { startingBoard, riverHexes,castleHexes,whiteCastleHexes, blackCastleHexes, layout, colorClassMap, startingCastles,emptyBoard  } from '../ConstantImports';
 import "../css/Board.css";
 
 import wswordsmanImage from '../Assets/Images/Chess/wSwordsman.svg';
@@ -319,18 +319,31 @@ componentWillUnmount() {
     return (
       <>
       <button className='pass-button' onClick={this.handlePass}>Pass</button>
- <button className='coordinates-button' onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
-          Toggle Coordinates
-        </button>
-        <button className='takeback-button' onClick={this.handleTakeback}>Takeback</button>
+      <button className='coordinates-button' onClick={() => this.setState({ showCoordinates: !this.state.showCoordinates })}>
+        Toggle Coordinates
+      </button>
+      <button className='takeback-button' onClick={this.handleTakeback}>Takeback</button>
       <svg className="board" height="100%" width="100%">
+        <defs>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+  <feOffset dx="-2" dy="-2" result="offsetblur"/>
+  <feFlood flood-color="rgba(0,0,0,0.5)"/>
+  <feComposite in2="offsetblur" operator="in"/>
+  <feMerge>
+    <feMergeNode/>
+    <feMergeNode in="SourceGraphic"/>
+  </feMerge>
+</filter>
+        </defs>
         {/* Render all hexagons */}
         {this.hexagons.map((hex: Hex) => (
           <g key={hex.getKey()}>
             <polygon 
-              points={layout.polygonCornersString(hex) } 
-              className={`${colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`} 
+              points={layout.polygonCornersString(hex)}
+              className={`${colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`}
               onClick={() => this.handleHexClick(hex)}
+              filter={colorClassMap[hex.getKey()] === 'hexagon-high-ground' ? "url(#shadow)" : ""}
             />
             {this.state.showCoordinates && (
               <text 
@@ -394,6 +407,7 @@ componentWillUnmount() {
   }
   componentDidUpdate() {
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
+    console.log('The highground hexes are', this.hexagons.filter(hex => colorClassMap[hex.getKey()] === 'hexagon-high-ground'));
   }
 }
 

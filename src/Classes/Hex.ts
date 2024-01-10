@@ -17,13 +17,21 @@ export class Point {
         const hexisaCastle = castleHexes.some(castleHex => this.equals(castleHex));
         const hexisWhiteCastle = whitecastleHexes.some(whitecastleHex => this.equals(whitecastleHex));
         const hexisBlackCastle = blackCastleHexes.some(blackCastleHex => this.equals(blackCastleHex));
-
+        
+        const initialHighGroundHexes = [new Hex(0, 1, -1), new Hex(-1, 2, -1), new Hex(0, 2, -2), new Hex(1, 1, -2)];
+        const invertedHighGroundHexes = initialHighGroundHexes.map(hex => new Hex(-hex.q, -hex.r, -hex.s));
+        const highGroundHexes = [...initialHighGroundHexes, ...invertedHighGroundHexes];
+        const hexisHighGround = highGroundHexes.some(highGroundHex => this.equals(highGroundHex));
         let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
           ((this.color_index % 3) + 3) % 3
         ];
+        if (hexisHighGround) {
+          colorClass += " hexagon-high-ground";
+        }
         if (hexisaRiver) {
           colorClass = "hexagon-river";
-        }  else if (hexisWhiteCastle) {
+        } 
+         else if (hexisWhiteCastle) {
           colorClass = "hexagon-white-castle";
         } else if (hexisBlackCastle) {
           colorClass = "hexagon-black-castle";
