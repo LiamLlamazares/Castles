@@ -343,7 +343,7 @@ componentWillUnmount() {
         {this.hexagons.map((hex: Hex) => (
           <g key={hex.getKey()}>
             <polygon 
-              points={startingBoard.layout.polygonCornersString(hex)}
+              points={startingBoard.hexCornerString[hex.getKey()]}
               className={`${startingBoard.colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`}
               onClick={() => this.handleHexClick(hex)}
               filter={startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground' ? "url(#shadow)" : ""}

@@ -26,6 +26,9 @@ export class Board {
   public whiteCastleHexes: Hex[];
   public blackCastleHexes: Hex[];
   public highGroundHexes: Hex[];
+  public colorClassMap: { [key: string]: string };
+  public hexCenters: { [key: string]: Point };
+  public hexCornerString: { [key: string]: string };
   
   constructor(pieces: Piece[], NSquares: number = NSquaresc, HEX_SIZE_FACTOR: number =HEX_SIZE_FACTORc, X_OFFSET: number = X_OFFSETc, layoutType: string = layoutTypec) {
     this.pieces = pieces;
@@ -40,7 +43,20 @@ export class Board {
     this.whiteCastleHexes = this.castleHexes.filter((hex: Hex) => this.isWhiteCastle(hex));
     this.blackCastleHexes = this.castleHexes.filter((hex: Hex) => this.isBlackCastle(hex));
     this.highGroundHexes = this.hexes.filter((hex: Hex) => this.isCastle(hex, this.NSquares-2));
+    let colorClassMap: { [key: string]: string } = {};
+    this.hexes.forEach((hex: Hex) => {
+      colorClassMap[hex.getKey()] = hex.colorClass(
+        this.riverHexes,
+        this.castleHexes,
+        this.whiteCastleHexes,
+        this.blackCastleHexes
+      );
+    });
+this.colorClassMap = colorClassMap;
+  this.hexCornerString = this.layout.hexCornersStringMap(this.hexes);
+  this.hexCenters = this.layout.hexCentersMap(this.hexes);
   }
+
 
   get origin(): Point {
     let x = window.innerWidth / 2 + this.X_OFFSET;
@@ -94,21 +110,6 @@ public isBlackCastle(castleHex: Hex): boolean {
   return false;
 }
 
-
-
-get colorClassMap(): { [key: string]: string } {
-  let colorClassMap: { [key: string]: string } = {};
-  this.hexes.forEach((hex: Hex) => {
-    colorClassMap[hex.getKey()] = hex.colorClass(
-      this.riverHexes,
-      this.castleHexes,
-      this.whiteCastleHexes,
-      this.blackCastleHexes
-    );
-  });
-  return colorClassMap;
-}
-
 get Castles(): Castle[] {
   let castles = [];
   for (let hex of this.whiteCastleHexes) {
@@ -131,7 +132,7 @@ get Castles(): Castle[] {
     return pixels;
   }
 
-  getCenters(): Point[] {
+  get Centers(): Point[] {
     const hexList = this.hexes;
     const centers = hexList.map((hex) => this.layout.hexToPixel(hex));
     return centers;

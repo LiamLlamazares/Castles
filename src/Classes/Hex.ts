@@ -318,6 +318,22 @@ if (isRotated) {
       var corners: Point[] = this.polygonCorners(h);
       return corners.map((p) => `${p.x},${p.y}`).join(" ");
     }
+    public hexCornersStringMap(hexes: Hex[]): { [key: string]: string } {
+      let hexCornersStringMap: { [key: string]: string } = {};
+      for (let hex of hexes) {
+        hexCornersStringMap[hex.getKey()] = this.polygonCornersString(hex);
+      }
+      return hexCornersStringMap;
+    }
+    public hexCentersMap(hexes: Hex[]): { [key: string]: Point } {
+      let hexCentersMap: { [key: string]: Point } = {};
+      for (let hex of hexes) {
+        hexCentersMap[hex.getKey()] = this.hexToPixel(hex);
+      }
+      return hexCentersMap;
+    }
+
+
     public sortHexList(hexList: Hex[]): void {
         hexList.sort((a, b) => {
           let aCenter = this.hexToPixel(a);
