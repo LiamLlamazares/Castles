@@ -3,7 +3,7 @@ import { Piece } from '../Classes/Piece';
 import {Castle} from '../Classes/Castle';
 import { Hex } from '../Classes/Hex';
 import { PieceType, NSquaresc, turnPhase,Color, AttackType } from '../Constants';
-import { startingBoard, riverHexes,castleHexes,whiteCastleHexes, blackCastleHexes, layout, colorClassMap, startingCastles,emptyBoard  } from '../ConstantImports';
+import { startingBoard, emptyBoard  } from '../ConstantImports';
 import "../css/Board.css";
 
 import wswordsmanImage from '../Assets/Images/Chess/wSwordsman.svg';
@@ -36,11 +36,12 @@ class GameBoard extends Component {
     movingPiece: null as Piece | null,
     showCoordinates: false,
     turnCounter: 0 as number,
-    Castles:  startingCastles as Castle[],
+    Castles:  startingBoard.Castles as Castle[],
     cheatMode: false,
     isBoardRotated: false,
 
   };
+ 
 
   get turn_phase(): turnPhase {
     return this.state.turnCounter % 5 < 2 ? 'Movement' : this.state.turnCounter % 5 < 4 ? 'Attack' : 'Castles';
@@ -52,7 +53,7 @@ class GameBoard extends Component {
     return startingBoard.hexes;
   }
   get blockedHexes(): Hex[] {
-    return [...riverHexes, ...castleHexes, ...this.occupiedHexes];
+    return [...startingBoard.riverHexes, ...startingBoard.castleHexes, ...this.occupiedHexes];
   }
   get occupiedHexes(): Hex[] {
 return this.state.pieces.map(piece => piece.hex);
@@ -295,9 +296,6 @@ else { this.setState({ movingPiece: null });}//Illegal move, snap back to origin
 
 componentDidMount() {
   window.addEventListener('keydown', this.handleKeyDown);
-  this.hexagons.forEach(hex => {
-    colorClassMap[hex.getKey()] = hex.colorClass(riverHexes, castleHexes, whiteCastleHexes, blackCastleHexes);
-  });
 }
 //Avoids memory leak
 componentWillUnmount() {
@@ -345,15 +343,15 @@ componentWillUnmount() {
         {this.hexagons.map((hex: Hex) => (
           <g key={hex.getKey()}>
             <polygon 
-              points={layout.polygonCornersString(hex)}
-              className={`${colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`}
+              points={startingBoard.layout.polygonCornersString(hex)}
+              className={`${startingBoard.colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`}
               onClick={() => this.handleHexClick(hex)}
-              filter={colorClassMap[hex.getKey()] === 'hexagon-high-ground' ? "url(#shadow)" : ""}
+              filter={startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground' ? "url(#shadow)" : ""}
             />
             {this.state.showCoordinates && (
               <text 
-                x={layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
-                y={layout.hexToPixelReflected(hex, this.state.isBoardRotated).y+5} 
+                x={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
+                y={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).y+5} 
                 textAnchor="middle" 
                 style={{ fontSize: '15px', color: 'black' }}
               >
@@ -369,8 +367,8 @@ componentWillUnmount() {
           return (
             <circle 
               key={hex.getKey()}
-              cx={layout.hexToPixelReflected(hex,this.state.isBoardRotated).x} 
-              cy={layout.hexToPixelReflected(hex,this.state.isBoardRotated).y}  
+              cx={startingBoard.layout.hexToPixelReflected(hex,this.state.isBoardRotated).x} 
+              cy={startingBoard.layout.hexToPixelReflected(hex,this.state.isBoardRotated).y}  
               r={90/NSquaresc} 
               className ="legalMoveDot"
               onClick={() => this.handleHexClick(hex)}
@@ -380,8 +378,8 @@ componentWillUnmount() {
           return (
             <circle 
               key={hex.getKey()}
-              cx={layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
-              cy={layout.hexToPixelReflected(hex, this.state.isBoardRotated).y} 
+              cx={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
+              cy={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).y} 
               r={90/NSquaresc} 
               className ="legalAttackDot"
               onClick={() => this.handleHexClick(hex)}
@@ -398,8 +396,8 @@ componentWillUnmount() {
           <image
             key={piece.hex.getKey()}
             href={this.getImageByPieceType(piece.type, piece.color)}
-            x={layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).x - 145/NSquaresc}
-            y={layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).y - 145/NSquaresc}
+            x={startingBoard.layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).x - 145/NSquaresc}
+            y={startingBoard.layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).y - 145/NSquaresc}
             height={275 / NSquaresc}
             width={275 / NSquaresc}
             className='piece'
@@ -412,7 +410,18 @@ componentWillUnmount() {
   }
   componentDidUpdate() {
     console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
-    console.log('The highground hexes are', this.hexagons.filter(hex => colorClassMap[hex.getKey()] === 'hexagon-high-ground'));
+    console.log('The highground hexes are', this.hexagons.filter(hex => startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground'));
+    console.log('The occupied hexes are', this.occupiedHexes);
+    console.log('The blocked hexes are', this.blockedHexes);
+    console.log('The legal moves are', this.legalMoves);
+    console.log('The legal attacks are', this.legalAttacks);
+    console.log('The future legal attacks are', this.futureLegalAttacks);
+    console.log('The controlled castles are', this.controlledCastlesActivePlayer);
+    console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);
+    console.log('The enemy hexes are', this.enemyHexes);
+    console.log('The enemy castle hexes are', this.enemyCastleHexes);
+    console.log('The attackable hexes are', this.attackableHexes);
+    console.log('The pieces are', this.state.pieces);
   }
 }
 

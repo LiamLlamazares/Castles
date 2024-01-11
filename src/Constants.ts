@@ -38,7 +38,3 @@ export enum PieceStrength {
 
 export type turnPhase = 'Movement' | 'Attack' | 'Castles';
 export type Color = "w" | "b";
-
-
-
-export{}
