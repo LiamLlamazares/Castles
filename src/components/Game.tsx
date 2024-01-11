@@ -43,17 +43,13 @@ class GameBoard extends Component {
   };
  
   getPieceCenter = (piece: Piece) => {
-    return this.state.isBoardRotated ? startingBoard.hexCenters[piece.hex.reflect().getKey()] : startingBoard.hexCenters[piece.hex.getKey()];
+    return startingBoard.hexCenters[piece.hex.getKey(this.state.isBoardRotated)]
   }
   getHexCenter = (hex: Hex) => {
     return startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated);
   }
   getPolygonPoints = (hex: Hex) => {
-    return this.state.isBoardRotated ? startingBoard.hexCornerString[hex.reflect().getKey()] : startingBoard.hexCornerString[hex.getKey()];
-  }
-  
-  getTextCoordinates = (hex: Hex) => {
-    return startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated);
+    return startingBoard.hexCornerString[hex.reflect().getKey(this.state.isBoardRotated)];
   }
 
   renderCircle = (hex: Hex, className: string) => {
@@ -374,8 +370,8 @@ componentWillUnmount() {
     />
     {this.state.showCoordinates && (
       <text 
-        x={this.getTextCoordinates(hex).x} 
-        y={this.getTextCoordinates(hex).y+5} 
+        x={this.getHexCenter(hex).x} 
+        y={this.getHexCenter(hex).y+5} 
         textAnchor="middle" 
         style={{ fontSize: '15px', color: 'black' }}
       >

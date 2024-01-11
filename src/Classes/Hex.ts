@@ -35,7 +35,10 @@ export class Point {
         }
         return colorClass;
       }
-      public getKey(){
+      public getKey(isReflected: Boolean= false): string {
+        if (isReflected) {
+          return `${-this.q},${-this.r},${-this.s}`;
+        }
         return `${this.q},${this.r},${this.s}`;
       }
     public add(b: Hex): Hex {
