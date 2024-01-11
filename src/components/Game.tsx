@@ -46,8 +46,16 @@ class GameBoard extends Component {
     return this.state.isBoardRotated ? startingBoard.hexCenters[piece.hex.reflect().getKey()] : startingBoard.hexCenters[piece.hex.getKey()];
   }
   getHexCenter = (hex: Hex) => {
-    return this.state.isBoardRotated ? startingBoard.layout.hexToPixelReflected(hex, true) : startingBoard.layout.hexToPixelReflected(hex, false);
+    return startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated);
   }
+  getPolygonPoints = (hex: Hex) => {
+    return this.state.isBoardRotated ? startingBoard.hexCornerString[hex.reflect().getKey()] : startingBoard.hexCornerString[hex.getKey()];
+  }
+  
+  getTextCoordinates = (hex: Hex) => {
+    return startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated);
+  }
+
   renderCircle = (hex: Hex, className: string) => {
     const center = this.getHexCenter(hex);
     return (
@@ -237,11 +245,9 @@ handleKeyDown = (event: KeyboardEvent) => {
       if (pieceClicked.damage >= pieceClicked.Strength || (pieceClicked.type === 'Monarch' && movingPiece.type === 'Assassin') ){
         pieces = this.state.pieces.filter(piece => piece !== pieceClicked);
         if (movingPiece.AttackType === AttackType.Melee){
-          console.log('Melee attack from', movingPiece.hex, 'to', pieceClicked.hex);
           movingPiece.hex = pieceClicked.hex;
         } else{}
       } else{
-        console.log('Ranged attack from', movingPiece.hex, 'to', pieceClicked.hex);
         pieces = this.state.pieces;
       }
       // Update the Pieces
@@ -357,27 +363,27 @@ componentWillUnmount() {
   </feMerge>
 </filter>
         </defs>
-        {/* Render all hexagons */}
-        {this.hexagons.map((hex: Hex) => (
-          <g key={hex.getKey()}>
-            <polygon 
-              points={startingBoard.hexCornerString[hex.getKey()]}
-              className={`${startingBoard.colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`}
-              onClick={() => this.handleHexClick(hex)}
-              filter={startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground' ? "url(#shadow)" : ""}
-            />
-            {this.state.showCoordinates && (
-              <text 
-                x={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
-                y={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).y+5} 
-                textAnchor="middle" 
-                style={{ fontSize: '15px', color: 'black' }}
-              >
-                {`${-hex.q}, ${-hex.s}`}
-              </text>
-            )}
-          </g>
-        ))}
+{/* Render all hexagons */}
+{this.hexagons.map((hex: Hex) => (
+  <g key={hex.getKey()}>
+    <polygon 
+      points={this.getPolygonPoints(hex)}
+      className={`${startingBoard.colorClassMap[hex.getKey()]} ${this.hexisAdjacentToControlledCastle(hex) ? 'hexagon-castle-adjacent'  : ''}`}
+      onClick={() => this.handleHexClick(hex)}
+      filter={startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground' ? "url(#shadow)" : ""}
+    />
+    {this.state.showCoordinates && (
+      <text 
+        x={this.getTextCoordinates(hex).x} 
+        y={this.getTextCoordinates(hex).y+5} 
+        textAnchor="middle" 
+        style={{ fontSize: '15px', color: 'black' }}
+      >
+        {`${-hex.q}, ${-hex.s}`}
+      </text>
+    )}
+  </g>
+))}
      {/* Render dots for legal moves */}
 {this.hexagons.map((hex: Hex) => {
   if (this.hexisLegalMove(hex)) {
@@ -412,19 +418,19 @@ componentWillUnmount() {
     );
   }
   componentDidUpdate() {
-    console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
-    console.log('The highground hexes are', this.hexagons.filter(hex => startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground'));
-    console.log('The occupied hexes are', this.occupiedHexes);
-    console.log('The blocked hexes are', this.blockedHexes);
-    console.log('The legal moves are', this.legalMoves);
-    console.log('The legal attacks are', this.legalAttacks);
-    console.log('The future legal attacks are', this.futureLegalAttacks);
-    console.log('The controlled castles are', this.controlledCastlesActivePlayer);
-    console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);
-    console.log('The enemy hexes are', this.enemyHexes);
-    console.log('The enemy castle hexes are', this.enemyCastleHexes);
-    console.log('The attackable hexes are', this.attackableHexes);
-    console.log('The pieces are', this.state.pieces);
+    // console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
+    // console.log('The highground hexes are', this.hexagons.filter(hex => startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground'));
+    // console.log('The occupied hexes are', this.occupiedHexes);
+    // console.log('The blocked hexes are', this.blockedHexes);
+    // console.log('The legal moves are', this.legalMoves);
+    // console.log('The legal attacks are', this.legalAttacks);
+    // console.log('The future legal attacks are', this.futureLegalAttacks);
+    // console.log('The controlled castles are', this.controlledCastlesActivePlayer);
+    // console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);
+    // console.log('The enemy hexes are', this.enemyHexes);
+    // console.log('The enemy castle hexes are', this.enemyCastleHexes);
+    // console.log('The attackable hexes are', this.attackableHexes);
+    // console.log('The pieces are', this.state.pieces);
   }
 }
 
