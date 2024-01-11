@@ -42,7 +42,25 @@ class GameBoard extends Component {
 
   };
  
-
+  getPieceCenter = (piece: Piece) => {
+    return this.state.isBoardRotated ? startingBoard.hexCenters[piece.hex.reflect().getKey()] : startingBoard.hexCenters[piece.hex.getKey()];
+  }
+  getHexCenter = (hex: Hex) => {
+    return this.state.isBoardRotated ? startingBoard.layout.hexToPixelReflected(hex, true) : startingBoard.layout.hexToPixelReflected(hex, false);
+  }
+  renderCircle = (hex: Hex, className: string) => {
+    const center = this.getHexCenter(hex);
+    return (
+      <circle 
+        key={hex.getKey()}
+        cx={center.x} 
+        cy={center.y} 
+        r={90/NSquaresc} 
+        className={className}
+        onClick={() => this.handleHexClick(hex)}
+      />
+    );
+  }
   get turn_phase(): turnPhase {
     return this.state.turnCounter % 5 < 2 ? 'Movement' : this.state.turnCounter % 5 < 4 ? 'Attack' : 'Castles';
   }
@@ -360,50 +378,35 @@ componentWillUnmount() {
             )}
           </g>
         ))}
-      {/* Render dots for legal moves */}
-      {this.hexagons.map((hex: Hex) => {
-         
-        if (this.hexisLegalMove(hex)) {
-          return (
-            <circle 
-              key={hex.getKey()}
-              cx={startingBoard.layout.hexToPixelReflected(hex,this.state.isBoardRotated).x} 
-              cy={startingBoard.layout.hexToPixelReflected(hex,this.state.isBoardRotated).y}  
-              r={90/NSquaresc} 
-              className ="legalMoveDot"
-              onClick={() => this.handleHexClick(hex)}
-            />
-          );
-        }else if(this.hexisLegalAttack(hex)){
-          return (
-            <circle 
-              key={hex.getKey()}
-              cx={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).x} 
-              cy={startingBoard.layout.hexToPixelReflected(hex, this.state.isBoardRotated).y} 
-              r={90/NSquaresc} 
-              className ="legalAttackDot"
-              onClick={() => this.handleHexClick(hex)}
-            />
-          );
-        }
-        return null;
-      })}
+     {/* Render dots for legal moves */}
+{this.hexagons.map((hex: Hex) => {
+  if (this.hexisLegalMove(hex)) {
+    return this.renderCircle(hex, "legalMoveDot");
+  } else if(this.hexisLegalAttack(hex)){
+    return this.renderCircle(hex, "legalAttackDot");
+  }
+  return null;
+})}
 
 
-        {/* Render all pieces */}
-        {/* We loop over pieces instead of hexagons  */}
-        {this.state.pieces.map((piece: Piece) => (
-          <image
-            key={piece.hex.getKey()}
-            href={this.getImageByPieceType(piece.type, piece.color)}
-            x={startingBoard.layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).x - 145/NSquaresc}
-            y={startingBoard.layout.hexToPixelReflected(piece.hex, this.state.isBoardRotated).y - 145/NSquaresc}
-            height={275 / NSquaresc}
-            width={275 / NSquaresc}
-            className='piece'
-            onClick={() => this.handlePieceClick(piece)}
-          />
-        ))}
+
+{/* Render all pieces */}
+{/* We loop over pieces instead of hexagons  */}
+{this.state.pieces.map((piece: Piece) => {
+  const center = this.getPieceCenter(piece);
+  return (
+    <image
+      key={piece.hex.getKey()}
+      href={this.getImageByPieceType(piece.type, piece.color)}
+      x={center.x - 145/NSquaresc}
+      y={center.y - 145/NSquaresc}
+      height={275 / NSquaresc}
+      width={275 / NSquaresc}
+      className='piece'
+      onClick={() => this.handlePieceClick(piece)}
+    />
+  );
+})}
       </svg>
       </>
     );

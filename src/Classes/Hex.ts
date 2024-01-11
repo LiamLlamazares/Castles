@@ -305,7 +305,10 @@ if (isRotated) {
       return new Point(size.x * Math.cos(angle), size.y * Math.sin(angle));
     }
   
-    public polygonCorners(h: Hex): Point[] {
+    public polygonCorners(h: Hex, isReflected: Boolean= false): Point[] {
+      if (isReflected) {
+        h = h.reflect();
+      }
       var corners: Point[] = [];
       var center: Point = this.hexToPixel(h);
       for (var i = 0; i < 6; i++) {
@@ -314,18 +317,27 @@ if (isRotated) {
       }
       return corners;
     }
-    public polygonCornersString(h: Hex): string {
+    public polygonCornersString(h: Hex, isReflected: Boolean= false): string {
+      if (isReflected) {
+        h = h.reflect();
+      }
       var corners: Point[] = this.polygonCorners(h);
       return corners.map((p) => `${p.x},${p.y}`).join(" ");
     }
-    public hexCornersStringMap(hexes: Hex[]): { [key: string]: string } {
+    public hexCornersStringMap(hexes: Hex[], isReflected: Boolean= false): { [key: string]: string } {
+      if (isReflected) {
+        hexes = hexes.map(hex => hex.reflect());
+      }
       let hexCornersStringMap: { [key: string]: string } = {};
       for (let hex of hexes) {
         hexCornersStringMap[hex.getKey()] = this.polygonCornersString(hex);
       }
       return hexCornersStringMap;
     }
-    public hexCentersMap(hexes: Hex[]): { [key: string]: Point } {
+    public hexCentersMap(hexes: Hex[], isReflected: Boolean= false): { [key: string]: Point } {
+      if (isReflected) {
+        hexes = hexes.map(hex => hex.reflect());
+      }
       let hexCentersMap: { [key: string]: Point } = {};
       for (let hex of hexes) {
         hexCentersMap[hex.getKey()] = this.hexToPixel(hex);
