@@ -2,9 +2,10 @@ import { Component } from 'react';
 import { Piece } from '../Classes/Piece';
 import {Castle} from '../Classes/Castle';
 import { Hex } from '../Classes/Hex';
-import { PieceType, NSquaresc, turnPhase,Color, AttackType } from '../Constants';
+import { PieceType, NSquaresc, turnPhase,Color, AttackType, startingTime } from '../Constants';
 import { startingBoard, emptyBoard  } from '../ConstantImports';
 import "../css/Board.css";
+import ChessClock from './Clock';
 
 import wswordsmanImage from '../Assets/Images/Chess/wSwordsman.svg';
 import bswordsmanImage from '../Assets/Images/Chess/bSwordsman.svg';
@@ -346,6 +347,10 @@ componentWillUnmount() {
       </button>
       <button className='takeback-button' onClick={this.handleTakeback}>Takeback</button>
       <button className='pass-button' onClick={this.handleFlipBoard}>Flip Board</button>
+      <div className='clock'>
+    <ChessClock initialTime={startingTime} isActive={this.currentPlayer === 'w'} /> {/* White's clock */}
+    <ChessClock initialTime ={startingTime} isActive={this.currentPlayer === 'b'} /> {/* Black's clock */}
+  </div>
       <svg className="board" height="100%" width="100%">
         <defs>
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
@@ -412,6 +417,7 @@ componentWillUnmount() {
       </svg>
       </>
     );
+
   }
   componentDidUpdate() {
     // console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);

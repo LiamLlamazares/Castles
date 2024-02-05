@@ -96,7 +96,7 @@ import { Board } from '../Classes/Board';
     public eagleMoves(blockedhexes: Hex[]): Hex[] {//The eagle can move to any hex in a radius of 3
       const hex = this.hex;
       let moves: Hex[] = []; // Declare the 'moves' variable
-      moves =[...hex.cubeRing(1),...hex.cubeRing(2),...hex.cubeRing(3),... hex.cubeRing(11)];
+      moves =[...hex.cubeRing(1),...hex.cubeRing(2),...hex.cubeRing(3)];
       moves = moves.filter((move) => !blockedhexes.some((hex) => hex.equals(move)));
       return moves;
     }
