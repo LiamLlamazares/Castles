@@ -58,7 +58,7 @@ class GameBoard extends Component {
   };
   getPolygonPoints = (hex: Hex) => {
     return startingBoard.hexCornerString[
-      hex.reflect().getKey(!this.state.isBoardRotated)
+      hex.reflect().getKey(this.state.isBoardRotated)
     ];
   };
 
@@ -219,11 +219,11 @@ class GameBoard extends Component {
   }
 
   get emptyUnusedHexesAdjacentToControlledCastles(): Hex[] {
-    const adjacentHexes = this.controlledCastlesActivePlayer
+    const adjacenthexes = this.controlledCastlesActivePlayer
       .filter((castle) => !castle.used_this_turn)
       .map((castle) => castle.hex.cubeRing(1))
       .flat(1);
-    return adjacentHexes.filter(
+    return adjacenthexes.filter(
       (hex) =>
         !this.occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
     );
@@ -337,10 +337,7 @@ class GameBoard extends Component {
         (pieceClicked.type === "Monarch" && movingPiece.type === "Assassin")
       ) {
         pieces = this.state.pieces.filter((piece) => piece !== pieceClicked);
-        if (
-          movingPiece.AttackType === AttackType.Melee ||
-          movingPiece.AttackType === AttackType.Swordsman
-        ) {
+        if (movingPiece.AttackType === AttackType.Melee) {
           movingPiece.hex = pieceClicked.hex;
         } else {
         }
@@ -386,13 +383,12 @@ class GameBoard extends Component {
         this.setState({ movingPiece: null });
       } //Illegal move, snap back to original position
     } //*********END OF MOVEMENT LOGIC************//
-    //Captures castle
+    //Captues castle
     else if (this.turn_phase === "Attack" && movingPiece?.canAttack) {
       if (this.legalAttacks.some((attack) => attack.equals(hex))) {
         //Makes a legal attack
         this.setState({ movingPiece: null });
         movingPiece.hex = hex; //Update piece position
-        movingPiece.canAttack = false;
         const pieces = this.state.pieces;
         this.setState({ movingPiece: null, pieces }, () => {
           this.setState({
@@ -431,11 +427,147 @@ class GameBoard extends Component {
       this.setState({ movingPiece: null });
     } //Illegal move, snap back to original position
   };
-
+// CHANGED CODE
   componentDidMount() {
-    const gameSocket = new WebSocket("ws://51.178.38.169/ws/game/1/");
     window.addEventListener("keydown", this.handleKeyDown);
-  }
+    // Establish the WebSocket connection
+      const gameSocket = new WebSocket("ws://51.178.38.169/ws/game/1/");
+      function reset(){
+        this.state= {
+            history: [],
+            pieces: startingBoard.pieces as Piece[], // We need to cast the pieces to Piece type because they are initially created as object literals
+            movingPiece: null as Piece | null,
+            showCoordinates: false,
+            turnCounter: 0 as number,
+            Castles:  startingBoard.Castles as Castle[],
+            cheatMode: false,
+            isBoardRotated: false,
+        
+          }
+    }
+    gameSocket.onmessage = function (e) {
+        let data = JSON.parse(e.data);
+        data = data["payload"];
+        let message = data['message'];
+        let event = data["event"];
+        switch (event) {
+            case "START":
+                reset();
+                break;
+            case "END":
+                alert(message);
+                reset();
+                break;
+            case "MOVE":
+                make_move(message["movingPiece"], message["hex"], message["turnCounter"]); // Moves piece
+                const alertMoveElement = document.getElementById("alert_move");
+                if (alertMoveElement) {
+                    alertMoveElement.style.display = 'inline';
+                }
+                break;
+            case "CAPTURE":
+                make_capture(message["movingPiece"], message["capturedPiece"], message["turnCounter"]); // Captures piece
+            case "CASTLE":
+                make_castle(message["castle"], message["hex"], message["turnCounter"]); // Puts piece on square adjacent to castle 
+                break;
+            default:
+                console.log("No event")
+        }
+    };
+    
+function make_move(movingPiece, hex, turnCounter) {
+    let data = {
+        "event": "MOVE",
+        "message": {
+            "movingPiece": movingPiece,
+            "hex": hex,
+            "turnCounter": turnCounter
+        }
+    }
+    if (movingPiece?.canMove&& this.turn_phase === 'Movement') {
+        if(this.legalMoves.some(move => move.equals(hex))){//Makes a legal move
+          if (turnCounter % 5 === 1) {//Resets all pieces and castles in movement phase
+            this.state.pieces.forEach(piece => piece.canMove = true);
+            this.state.pieces.forEach(piece => piece.canAttack = true);
+            this.state.pieces.forEach(piece => piece.damage = 0);
+            this.state.Castles.forEach(castle => castle.used_this_turn = false);
+          }
+          movingPiece.hex = hex; //Update piece position
+          movingPiece.canMove = false;
+        this.setState({ movingPiece: null, turnCounter: turnCounter+this.turnCounterIncrement });
+      }
+      else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
+
+        gameSocket.send(JSON.stringify(data))
+    }
+
+      }
+      function make_capture(movingPiece, capturedPiece, turnCounter) {
+            
+            let data = {
+                "event": "CAPTURE",
+                "message": {
+                    "movingPiece": movingPiece,
+                    "capturedPiece": capturedPiece,
+                    "turnCounter": turnCounter
+                }
+          }
+          
+          if (movingPiece && this.turn_phase === 'Attack' && capturedPiece.color !== this.currentPlayer 
+          && this.legalAttacks.some(attack => attack.equals(capturedPiece.hex)) ) {//Checks if attack is legal, if it is, attack
+            
+           capturedPiece.damage = capturedPiece.damage + movingPiece.Strength;
+           let pieces = this.state.pieces;
+            if (capturedPiece.damage >= capturedPiece.Strength || (capturedPiece.type === 'Monarch' && movingPiece.type === 'Assassin') ){
+              pieces = this.state.pieces.filter(piece => piece !== capturedPiece);
+              if (movingPiece.AttackType === AttackType.Melee){
+                movingPiece.hex = capturedPiece.hex;
+              } else{}
+            } else{
+              pieces = this.state.pieces;
+            }
+            // Update the Pieces
+            movingPiece.canAttack = false;
+      
+           
+            
+      //When set state is called an update is scheduled, but not executed immediately.
+      // As a result, need to use a callback function to ensure 
+      //that the state is updated before the next line of code is executed.
+            this.setState({ movingPiece: null, pieces }, () => {
+              this.setState({ turnCounter: this.state.turnCounter + this.turnCounterIncrement });
+            });
+          }
+            gameSocket.send(JSON.stringify(data))
+      }
+      
+        function make_castle(castle, hex, turnCounter) {
+            let data = {
+                "event": "CASTLE",
+                "message": {
+                    "castle": castle,
+                    "hex": hex,
+                    "turnCounter": turnCounter
+                }
+            }
+            if (this.hexisAdjacentToControlledCastle(hex)) {
+                const castle = this.state.Castles.find(castle => castle.isAdjacent(hex));
+                if (castle) {
+                  const pieces = this.state.pieces;
+                  const pieceTypes = Object.values(PieceType);
+                  const pieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
+                  pieces.push(new Piece(hex, this.currentPlayer, pieceType));
+                  castle.turns_controlled += 1;
+                  castle.used_this_turn = true;
+                  console.log('The unused castles are' , this.state.Castles.filter(castle => !castle.used_this_turn));
+                  this.setState({ movingPiece: null, pieces, turnCounter: turnCounter+this.turnCounterIncrement });
+                }
+              }
+            else { this.setState({ movingPiece: null });}//Illegal move, snap back to original position
+            gameSocket.send(JSON.stringify(data))
+        }
+      // CHANGED CODE END
+
   //Avoids memory leak
   componentWillUnmount() {
     window.removeEventListener("keydown", this.handleKeyDown);
@@ -570,19 +702,7 @@ class GameBoard extends Component {
     // console.log('The legal moves are', this.legalMoves);
     // console.log('The legal attacks are', this.legalAttacks);
     // console.log('The future legal attacks are', this.futureLegalAttacks);
-    console.log(
-      "The controlled castles are",
-      this.controlledCastlesActivePlayer
-    );
-    console.log(
-      "The hexes adjacent to controlled castles are",
-      this.emptyUnusedHexesAdjacentToControlledCastles
-    );
-    this.hexagons.forEach((hex) => {
-      if (this.hexisAdjacentToControlledCastle(hex)) {
-        console.log(`Hex ${hex.getKey()} is adjacent to a controlled castle.`);
-      }
-    });
+    // console.log('The controlled castles are', this.controlledCastlesActivePlayer);
     // console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);
     // console.log('The enemy hexes are', this.enemyHexes);
     // console.log('The enemy castle hexes are', this.enemyCastleHexes);
