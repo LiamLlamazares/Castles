@@ -13,25 +13,26 @@ import {
 import { startingBoard, emptyBoard } from "../ConstantImports";
 import "../css/Board.css";
 import ChessClock from "./Clock";
+import TurnBanner from "./Turn_banner";
 
-import wswordsmanImage from "../Assets/Images/Chess/wSwordsman.svg";
-import bswordsmanImage from "../Assets/Images/Chess/bSwordsman.svg";
-import wdragonImage from "../Assets/Images/Chess/wDragon.svg";
-import bdragonImage from "../Assets/Images/Chess/bDragon.svg";
-import warcherImage from "../Assets/Images/Chess/wArcher.svg";
-import barcherImage from "../Assets/Images/Chess/bArcher.svg";
-import wgiantImage from "../Assets/Images/Chess/wGiant.svg";
-import bgiantImage from "../Assets/Images/Chess/bGiant.svg";
-import wassassinImage from "../Assets/Images/Chess/wAssassin.svg";
-import bassassinImage from "../Assets/Images/Chess/bAssassin.svg";
-import wmonarchImage from "../Assets/Images/Chess/wMonarch.svg";
-import bmonarchImage from "../Assets/Images/Chess/bMonarch.svg";
-import wtrebuchetImage from "../Assets/Images/Chess/wTrebuchet.svg";
-import btrebuchetImage from "../Assets/Images/Chess/bTrebuchet.svg";
-import wknightImage from "../Assets/Images/Chess/wKnight.svg";
-import bknightImage from "../Assets/Images/Chess/bKnight.svg";
-import weagleImage from "../Assets/Images/Chess/wEagle.svg";
-import beagleImage from "../Assets/Images/Chess/bEagle.svg";
+import wSwordsmanImage from "../Assets/Images/Chess/wSwordsman.svg";
+import bSwordsmanImage from "../Assets/Images/Chess/bSwordsman.svg";
+import wDragonImage from "../Assets/Images/Chess/wDragon.svg";
+import bDragonImage from "../Assets/Images/Chess/bDragon.svg";
+import wArcherImage from "../Assets/Images/Chess/wArcher.svg";
+import bArcherImage from "../Assets/Images/Chess/bArcher.svg";
+import wGiantImage from "../Assets/Images/Chess/wGiant.svg";
+import bGiantImage from "../Assets/Images/Chess/bGiant.svg";
+import wAssassinImage from "../Assets/Images/Chess/wAssassin.svg";
+import bAssassinImage from "../Assets/Images/Chess/bAssassin.svg";
+import wMonarchImage from "../Assets/Images/Chess/wMonarch.svg";
+import bMonarchImage from "../Assets/Images/Chess/bMonarch.svg";
+import wTrebuchetImage from "../Assets/Images/Chess/wTrebuchet.svg";
+import bTrebuchetImage from "../Assets/Images/Chess/bTrebuchet.svg";
+import wKnightImage from "../Assets/Images/Chess/wKnight.svg";
+import bKnightImage from "../Assets/Images/Chess/bKnight.svg";
+import wEagleImage from "../Assets/Images/Chess/wEagle.svg";
+import bEagleImage from "../Assets/Images/Chess/bEagle.svg";
 
 class GameBoard extends Component {
   state = {
@@ -443,15 +444,15 @@ class GameBoard extends Component {
 
   getImageByPieceType = (type: PieceType, color: string) => {
     const images: { [key in PieceType]: string } = {
-      Swordsman: color === "w" ? wswordsmanImage : bswordsmanImage,
-      Dragon: color === "w" ? wdragonImage : bdragonImage,
-      Archer: color === "w" ? warcherImage : barcherImage,
-      Giant: color === "w" ? wgiantImage : bgiantImage,
-      Assassin: color === "w" ? wassassinImage : bassassinImage,
-      Monarch: color === "w" ? wmonarchImage : bmonarchImage,
-      Trebuchet: color === "w" ? wtrebuchetImage : btrebuchetImage,
-      Knight: color === "w" ? wknightImage : bknightImage,
-      Eagle: color === "w" ? weagleImage : beagleImage,
+      Swordsman: color === "w" ? wSwordsmanImage : bSwordsmanImage,
+      Dragon: color === "w" ? wDragonImage : bDragonImage,
+      Archer: color === "w" ? wArcherImage : bArcherImage,
+      Giant: color === "w" ? wGiantImage : bGiantImage,
+      Assassin: color === "w" ? wAssassinImage : bAssassinImage,
+      Monarch: color === "w" ? wMonarchImage : bMonarchImage,
+      Trebuchet: color === "w" ? wTrebuchetImage : bTrebuchetImage,
+      Knight: color === "w" ? wKnightImage : bKnightImage,
+      Eagle: color === "w" ? wEagleImage : bEagleImage,
     };
     return images[type];
   };
@@ -476,7 +477,15 @@ class GameBoard extends Component {
         <button className="pass-button" onClick={this.handleFlipBoard}>
           Flip Board
         </button>
-        <div className="clock">
+        <div
+          className="clock"
+          style={{
+            position: "absolute",
+            top: "30%",
+            left: "20%",
+            right: "70%",
+          }}
+        >
           <ChessClock
             initialTime={startingTime}
             isActive={this.currentPlayer === "w"}
@@ -487,6 +496,16 @@ class GameBoard extends Component {
             isActive={this.currentPlayer === "b"}
           />{" "}
           {/* Black's clock */}
+        </div>
+        {/* Turn banner */}
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "20%",
+          }}
+        >
+          <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
         </div>
         <svg className="board" height="100%" width="100%">
           <defs>
