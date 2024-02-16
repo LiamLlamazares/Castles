@@ -16,7 +16,7 @@ const TurnBanner: React.FC<TurnBannerProps> = ({ color, phase }) => {
           width: "20px",
           height: "20px",
           backgroundColor: color === "w" ? "white" : "black",
-          border: "5px solid black",
+          borderRadius: "50%",
         }}
       />
       <img

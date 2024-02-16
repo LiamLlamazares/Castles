@@ -478,34 +478,48 @@ class GameBoard extends Component {
           Flip Board
         </button>
         <div
-          className="clock"
-          style={{
-            position: "absolute",
-            top: "30%",
-            left: "20%",
-            right: "70%",
-          }}
-        >
-          <ChessClock
-            initialTime={startingTime}
-            isActive={this.currentPlayer === "w"}
-          />{" "}
-          {/* White's clock */}
-          <ChessClock
-            initialTime={startingTime}
-            isActive={this.currentPlayer === "b"}
-          />{" "}
-          {/* Black's clock */}
-        </div>
-        {/* Turn banner */}
-        <div
           style={{
             position: "absolute",
             top: "50%",
             left: "20%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
           }}
         >
-          <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+            }}
+          >
+            {this.currentPlayer === "b" && (
+              <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
+            )}
+            <ChessClock
+              initialTime={startingTime}
+              isActive={this.currentPlayer === "b"}
+              player="b"
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+            }}
+          >
+            {this.currentPlayer === "w" && (
+              <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
+            )}
+            <ChessClock
+              initialTime={startingTime}
+              isActive={this.currentPlayer === "w"}
+              player="w"
+            />
+          </div>
         </div>
         <svg className="board" height="100%" width="100%">
           <defs>
