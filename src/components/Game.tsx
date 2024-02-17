@@ -9,6 +9,7 @@ import {
   Color,
   AttackType,
   startingTime,
+  defendedPieceIsProtectedRanged,
 } from "../Constants";
 import { startingBoard, emptyBoard } from "../ConstantImports";
 import "../css/Board.css";
@@ -122,10 +123,34 @@ class GameBoard extends Component {
     }
     return [];
   }
+  //Necessary to know who ranged pieces can attack
+  get defendedHexes(): Hex[] {
+    if (defendedPieceIsProtectedRanged) {
+      let enemyMeleePieces = this.state.pieces.filter(
+        (piece) =>
+          piece.color !== this.currentPlayer &&
+          piece.AttackType === AttackType.Melee
+      );
+      //Gets squares attacked by enemy pieces
+      return enemyMeleePieces
+        .map((piece) => piece.legalAttacks(this.hexagons))
+        .flat(1);
+    }
+    return [];
+  }
   //Necessary to display attacks in attack phase
   get legalAttacks(): Hex[] {
     const { movingPiece } = this.state;
     if (movingPiece && this.turn_phase === "Attack" && movingPiece.canAttack) {
+      if (movingPiece.AttackType === AttackType.Ranged) {
+        // Hexes can only be attacked by ranged pieces if they are not defended by enemy melee pieces
+        return movingPiece
+          .legalAttacks(this.attackableHexes)
+          .filter(
+            (hex) =>
+              !this.defendedHexes.some((defendedHex) => defendedHex.equals(hex))
+          );
+      }
       return movingPiece.legalAttacks(this.attackableHexes);
     }
     return [];
@@ -134,8 +159,18 @@ class GameBoard extends Component {
   get futureLegalAttacks(): Hex[] {
     return this.state.pieces
       .filter((piece) => piece.color === this.currentPlayer && piece.canAttack)
-      .map((piece) => piece.legalAttacks(this.attackableHexes))
-      .flat(1);
+      .flatMap((piece) =>
+        piece.AttackType === AttackType.Ranged
+          ? piece
+              .legalAttacks(this.attackableHexes)
+              .filter(
+                (hex) =>
+                  !this.defendedHexes.some((defendedHex) =>
+                    defendedHex.equals(hex)
+                  )
+              )
+          : piece.legalAttacks(this.attackableHexes)
+      );
   }
 
   //Necessary to display castle information in castles phase
@@ -206,7 +241,7 @@ class GameBoard extends Component {
       this.turn_phase === "Castles" &&
       this.state.Castles.filter(
         (castle) =>
-          this.castleIsControlledbyactivePlayer(castle) &&
+          this.castleIsControlledByActivePlayer(castle) &&
           !castle.used_this_turn
       ).length === 0
     ) {
@@ -229,7 +264,7 @@ class GameBoard extends Component {
         !this.occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
     );
   }
-  public castleIsControlledbyactivePlayer = (castle: Castle) => {
+  public castleIsControlledByActivePlayer = (castle: Castle) => {
     const piece = this.state.pieces.find((piece) =>
       piece.hex.equals(castle.hex)
     );
@@ -418,10 +453,10 @@ class GameBoard extends Component {
         pieces.push(new Piece(hex, this.currentPlayer, pieceType));
         castle.turns_controlled += 1;
         castle.used_this_turn = true;
-        console.log(
-          "The unused castles are",
-          this.state.Castles.filter((castle) => !castle.used_this_turn)
-        );
+        // console.log(
+        //   "The unused castles are",
+        //   this.state.Castles.filter((castle) => !castle.used_this_turn)
+        // );
         this.setState({
           movingPiece: null,
           pieces,
@@ -603,17 +638,18 @@ class GameBoard extends Component {
     // console.log('The legal moves are', this.legalMoves);
     // console.log('The legal attacks are', this.legalAttacks);
     // console.log('The future legal attacks are', this.futureLegalAttacks);
-    console.log(
-      "The controlled castles are",
-      this.controlledCastlesActivePlayer
-    );
-    console.log(
-      "The hexes adjacent to controlled castles are",
-      this.emptyUnusedHexesAdjacentToControlledCastles
-    );
+    console.log("The defended hexes are", this.defendedHexes);
+    // console.log(
+    //   "The controlled castles are",
+    //   this.controlledCastlesActivePlayer
+    // );
+    // console.log(
+    //   "The hexes adjacent to controlled castles are",
+    //   this.emptyUnusedHexesAdjacentToControlledCastles
+    // );
     this.hexagons.forEach((hex) => {
       if (this.hexisAdjacentToControlledCastle(hex)) {
-        console.log(`Hex ${hex.getKey()} is adjacent to a controlled castle.`);
+        // console.log(`Hex ${hex.getKey()} is adjacent to a controlled castle.`);
       }
     });
     // console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);

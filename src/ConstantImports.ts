@@ -110,5 +110,3 @@ export const startingBoard = new Board(
   NSquaresc - 1
 );
 export const emptyBoard = new Board([], NSquaresc - 1);
-
-
