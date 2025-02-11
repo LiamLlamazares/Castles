@@ -24,15 +24,15 @@ Within the game each player controls a set of unique [pieces](#pieces) with diff
 
 The game proceeds in turns, each turn is divided into three phases:
 
-### Movement Phase <img src="/src/Assets/Images/Banner/boots.svg" width="30" height="30">
+### Movement Phase <img src="/src/Assets/Images/Banner/boots.svg" width="25" height="25">
 
 During the movement phase, players can move up to two of their pieces according to their movement patterns. Pieces can move to any legal hex that is not occupied by another piece or blocked by an obstacle.
 
-### Attack Phase <img src="/src/Assets/Images/Banner/sword.svg" width="30" height="30">
+### Attack Phase <img src="/src/Assets/Images/Banner/sword.svg" width="25" height="25">
 
 During the attack phase, players can use up to two of their pieces to attack opponent pieces within their attack range. If the sum of the strength of the attacking pieces exceed the strength of the piece that is attacked, the attacked piece is captured. Pieces can capture opponent pieces by moving into their hex or attacking from a distance.
 
-### Castles Phase <img src="/src/Assets/Images/Banner/castle.svg" width="30" height="30">
+### Castles Phase <img src="/src/Assets/Images/Banner/castle.svg" width="25" height="25">
 
 During the castles phase, players can control castles by moving their pieces into castle hexes. In the castles phase, the active player can summon reinforcements by placing a new piece on an unoccupied hex adjacent to each controlled castle. The piece summoned from a controlled castle is initially a Swordsman, than an Archer, Knight, Eagle, Giant, Trebuchet, Assassin, Dragon, and Monarch.
 
@@ -107,7 +107,7 @@ During the attack phase, pieces up to two pieces can attack opponents within the
 
 - **Ranged Units**: Archer, Trebuchet. These pieces can attack opponents at an exact distance of 2 and 3 hexes respectively. When capturing, they do not move into the hex of the captured piece.
 
-### Combat Resolution <img src="/src/Assets/Images/misc/swords-crossed.svg" width="30" height="30">
+### Combat Resolution <img src="/src/Assets/Images/misc/swords-crossed.svg" width="25" height="25">
 
 - Multiple pieces can contribute to a single attack
 - The total strength of attacking pieces must exceed the defender's strength
