@@ -6,7 +6,7 @@ This is a fantasy chess-like game based on the book [The ember blade](https://ww
 
 For more details about the pieces, see the [Pieces section](#pieces).
 
-## General Summary <img src="/src/Assets/Images/misc/trophy.svg" width="30" height="30">
+## General Summary <img src="/src/Assets/Images/misc/scroll.svg" width="30" height="30">
 
 The following is an excerpt from the book that describes the game:
 
