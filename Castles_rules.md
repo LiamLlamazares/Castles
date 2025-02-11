@@ -76,7 +76,7 @@ The three castles are positioned in the corners of each player's side.
 
 Each piece has a unique movement pattern:
 
-#### Ground Units <img src="/src/Assets/Images/misc/melee.svg" width="25" height="25">
+#### Ground Units <img src="/src/Assets/Images/misc/footprint.svg" width="25" height="25">
 
 The movement of ground units is obstructed by river hexes and both friendly and enemy pieces.
 
@@ -93,11 +93,11 @@ Flying units can move over river hexes and other pieces.
 - **Eagle**: Can fly up to 3 hexes in any direction.
 - **Dragon**: Moves like a knight in chess, flying in an L-shaped pattern.
 
-#### Heavy units
+#### Heavy units <img src="/src/Assets/Images/misc/dragon.svg" width="25" height="25">
 
 Each turn a player may move two regular units or one heavy unit. The heavy units are the Trebuchet, Giant, Dragon and Monarch.
 
-### Attack <img src="/src/Assets/Images/misc/sword.svg" width="30" height="30">
+### Attack <img src="/src/Assets/Images/banner/sword.svg" width="30" height="30">
 
 During the attack phase, pieces up to two pieces can attack opponents within their attack range. The attack range of a piece is determined by its type:
 
@@ -105,7 +105,7 @@ During the attack phase, pieces up to two pieces can attack opponents within the
 
 - **Ranged Units**: Archer, Trebuchet. These pieces can attack opponents at an exact distance of 2 and 3 hexes respectively. When capturing, they do not move into the hex of the captured piece.
 
-#### Combat Resolution
+#### Combat Resolution <img src="/src/Assets/Images/misc/swords-crossed.svg" width="30" height="30">
 
 - Multiple pieces can contribute to a single attack
 - The total strength of attacking pieces must exceed the defender's strength
