@@ -12,7 +12,7 @@ The following is an excerpt from the book that describes the game:
 
 "The hexagonal board was divided into hundreds of smaller hexes, across which dozens of carved pieces were scattered, some of ivory and some of polished black stone. The castles which gave the game its name were unevenly placed around the board. The object was to capture and hold them while protecting your king. A broken line of blue counters, representing a river and its fords, meandered between them."
 
-<img src="/src/Assets/Images/misc/board.png" class="center" width="450">
+<img src="/src/Assets/Images/misc/board.png" style="display: block; margin-left: auto; margin-right: auto;" width="450">
 
 Within the game each player controls a set of unique [pieces](#pieces) with different strengths, movement patterns, and abilities. The objective is to capture the opponent's Monarch or control the board by capturing their opponents castles.
 
@@ -72,7 +72,7 @@ Each player starts with the following pieces arranged on their side of the board
 The strength of a piece determines its ability to withstand attacks. Pieces with higher strength are harder to capture.
 The three castles are positioned in the corners of each player's side.
 
-### Movement <img src="/src/Assets/Images/misc/boots.svg" width="30" height="30">
+### Movement <img src="/src/Assets/Images/banner/boots.svg" width="30" height="30">
 
 Each piece has a unique movement pattern:
 
@@ -97,7 +97,7 @@ Flying units can move over river hexes and other pieces.
 
 Each turn a player may move two regular units or one heavy unit. The heavy units are the Trebuchet, Giant, Dragon and Monarch.
 
-### Attack <img src="/src/Assets/Images/banner/sword.svg" width="30" height="30">
+### Attack <img src="/src/Assets/Images/Banner/sword.svg" width="30" height="30">
 
 During the attack phase, pieces up to two pieces can attack opponents within their attack range. The attack range of a piece is determined by its type:
 
