@@ -44,17 +44,18 @@ The board is a hexagonal grid with sides of length 8 and with various types of h
 ### Initial Piece Placement
 
 Each player starts with the following pieces arranged on their side of the board:
+[monarch](/src/Assets/Images/Chess/wMonarch.svg)
 
-| Piece      | Icon                                              | Quantity | Starting Position | Icon |
-| ---------- | ------------------------------------------------- | -------- | ----------------- | ---- |
-| Monarch    | ![Monarch](/src/Assets/Images/Chess/wMonarch.svg) | 1        |                   |
-| Assassin   |                                                   | 1        |
-| Dragon     | 1                                                 | 1        |
-| Giants     | 2                                                 | 2        |
-| Trebuchets | 2                                                 | 2        |
-| Knights    | 4                                                 | 4        |
-| Archers    | 6                                                 | 6        |
-| Swordsmen  | 13                                                | 13       |
+| Piece      | Icon                                                | Quantity | Starting Position | Icon |
+| ---------- | --------------------------------------------------- | -------- | ----------------- | ---- |
+| Monarch    | ![Monarch](monarch)                                 | 1        |                   |
+| Assassin   | ![Assassin](/src/Assets/Images/Chess/wAssassin.svg) | 1        |
+| Dragon     | 1                                                   | 1        |
+| Giants     | 2                                                   | 2        |
+| Trebuchets | 2                                                   | 2        |
+| Knights    | 4                                                   | 4        |
+| Archers    | 6                                                   | 6        |
+| Swordsmen  | 13                                                  | 13       |
 
 The three castles are positioned in the corners of each player's side.
 
