@@ -45,17 +45,17 @@ The board is a hexagonal grid with sides of length 8 and with various types of h
 
 Each player starts with the following pieces arranged on their side of the board. Each piece has unique attributes, including strength, type, movement, capture abilities, and coronation rules.
 
-| Piece      | Icon                                                   | Quantity | Strength | Description                                                  |
-| ---------- | ------------------------------------------------------ | -------- | -------- | ------------------------------------------------------------ |
-| Monarch    | ![Monarch](/src/Assets/Images/Chess/wMonarch.svg)      | 1        | 3        | The key piece that must be protected at all costs.           |
-| Assassin   | ![Assassin](/src/Assets/Images/Chess/wAssassin.svg)    | 1        | 1        | Stealthy unit with the ability to capture Monarchs.          |
-| Dragon     | ![Dragon](/src/Assets/Images/Chess/wDragon.svg)        | 1        | 3        | Powerful unit similar to a knight in chess.                  |
-| Giants     | ![Giants](/src/Assets/Images/Chess/wGiant.svg)         | 2        | 2        | Strong mobile unit. Similar to a rook in chess.              |
-| Eagles     | ![Eagles](/src/Assets/Images/Chess/wEagle.svg)         | 2        | 1        | Highly mobile unit with the ability to fly.                  |
-| Trebuchets | ![Trebuchets](/src/Assets/Images/Chess/wTrebuchet.svg) | 2        | 1        | Long-ranged unit with the ability to attack from a distance. |
-| Knights    | ![Knights](/src/Assets/Images/Chess/wKnight.svg)       | 4        | 1        | Fast-moving unit. Akin to the bishop in chess.               |
-| Archers    | ![Archers](/src/Assets/Images/Chess/wArcher.svg)       | 6        | 1        | Ranged unit with the ability to attack from a distance.      |
-| Swordsmen  | ![Swordsmen](/src/Assets/Images/Chess/wSwordsmen.svg)  | 13       | 1        | Basic melee unit. Akin to a pawn in chess.                   |
+| Piece      | Icon                                                                     | Quantity | Strength | Description                                                  |
+| ---------- | ------------------------------------------------------------------------ | -------- | -------- | ------------------------------------------------------------ |
+| Monarch    | <img src="/src/Assets/Images/Chess/wMonarch.svg" width="50" height="50"> | 1        | 3        | The key piece that must be protected at all costs.           |
+| Assassin   | ![Assassin](/src/Assets/Images/Chess/wAssassin.svg)                      | 1        | 1        | Stealthy unit with the ability to capture Monarchs.          |
+| Dragon     | ![Dragon](/src/Assets/Images/Chess/wDragon.svg)                          | 1        | 3        | Powerful unit similar to a knight in chess.                  |
+| Giants     | ![Giants](/src/Assets/Images/Chess/wGiant.svg)                           | 2        | 2        | Strong mobile unit. Similar to a rook in chess.              |
+| Eagles     | ![Eagles](/src/Assets/Images/Chess/wEagle.svg)                           | 2        | 1        | Highly mobile unit with the ability to fly.                  |
+| Trebuchets | ![Trebuchets](/src/Assets/Images/Chess/wTrebuchet.svg)                   | 2        | 1        | Long-ranged unit with the ability to attack from a distance. |
+| Knights    | ![Knights](/src/Assets/Images/Chess/wKnight.svg)                         | 4        | 1        | Fast-moving unit. Akin to the bishop in chess.               |
+| Archers    | ![Archers](/src/Assets/Images/Chess/wArcher.svg)                         | 6        | 1        | Ranged unit with the ability to attack from a distance.      |
+| Swordsmen  | ![Swordsmen](/src/Assets/Images/Chess/wSwordsmen.svg)                    | 13       | 1        | Basic melee unit. Akin to a pawn in chess.                   |
 
 The three castles are positioned in the corners of each player's side.
 
