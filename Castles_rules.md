@@ -72,11 +72,11 @@ Each player starts with the following pieces arranged on their side of the board
 The strength of a piece determines its ability to withstand attacks. Pieces with higher strength are harder to capture.
 The three castles are positioned in the corners of each player's side.
 
-### Movement
+### Movement <img src="/src/Assets/Images/misc/boots.svg" width="30" height="30">
 
 Each piece has a unique movement pattern:
 
-#### Ground Units
+#### Ground Units <img src="/src/Assets/Images/misc/melee.svg" width="25" height="25">
 
 The movement of ground units is obstructed by river hexes and both friendly and enemy pieces.
 
@@ -86,7 +86,7 @@ The movement of ground units is obstructed by river hexes and both friendly and 
 - **Giant**: The giant moves any distance in a straight line if unobstructed, through any hex which shares an edge with its current position.
 - **Assassin**: Moves like the queen in chess, a combination in this case of the giant and knight.
 
-#### Flying Units
+#### Flying Units <img src="/src/Assets/Images/misc/flying.svg" width="25" height="25">
 
 Flying units can move over river hexes and other pieces.
 
@@ -97,7 +97,7 @@ Flying units can move over river hexes and other pieces.
 
 Each turn a player may move two regular units or one heavy unit. The heavy units are the Trebuchet, Giant, Dragon and Monarch.
 
-### Attack
+### Attack <img src="/src/Assets/Images/misc/sword.svg" width="30" height="30">
 
 During the attack phase, pieces up to two pieces can attack opponents within their attack range. The attack range of a piece is determined by its type:
 
@@ -112,7 +112,7 @@ During the attack phase, pieces up to two pieces can attack opponents within the
 - Pieces fully recover between turns
 - When a castle is captured new pieces can be summoned from the captured castle starting from the current turn.
 
-### Coronation
+### Coronation <img src="/src/Assets/Images/misc/crown.svg" width="30" height="30">
 
 Certain pieces can be promoted or gain special abilities under specific conditions:
 
