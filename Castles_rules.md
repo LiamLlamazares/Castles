@@ -34,7 +34,7 @@ During the attack phase, players can use up to two of their pieces to attack opp
 
 During the castles phase, players can control castles by moving their pieces into castle hexes. In the castles phase, the active player can summon reinforcements by placing a new piece on an unoccupied hex adjacent to each controlled castle. The piece summoned from a controlled castle is initially a Swordsman, than an Archer, Knight, Eagle, Giant, Trebuchet, Assassin, Dragon, and Monarch.
 
-## Win Condition
+## Win Condition <img src="/src/Assets/Images/misc/trophy.svg" width="30" height="30">
 
 The game can be won in two ways:
 
@@ -43,7 +43,7 @@ The game can be won in two ways:
 
 ---
 
-## The Board
+## The Board <img src="/src/Assets/Images/misc/hex-tiles.svg" width="30" height="30">
 
 The board is a hexagonal grid with sides of length 8 and with various types of hexes:
 
@@ -53,7 +53,7 @@ The board is a hexagonal grid with sides of length 8 and with various types of h
 
 <a name="pieces"></a>
 
-## The Pieces
+## The Pieces <img src="/src/Assets/Images/misc/dragon.svg" width="30" height="30">
 
 Each player starts with the following pieces arranged on their side of the board. Each piece has unique attributes, including strength, type, movement, capture abilities, and coronation rules.
 
@@ -120,7 +120,7 @@ Certain pieces can be promoted or gain special abilities under specific conditio
 
 ---
 
-## Game End Conditions
+## Game End Conditions <img src="/src/Assets/Images/misc/flag.svg" width="30" height="30">
 
 The game can end in the following ways:
 
