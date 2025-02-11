@@ -1,0 +1,333 @@
+<h1 id="castles-how-to-play">Castles: How to Play</h1>
+<p>
+  This is a fantasy chess-like game based on the book
+  <a href="https://www.goodreads.com/book/show/34673711-the-ember-blade"
+    >The ember blade</a
+  >, by Chris Wooding. Below are the details of the game, including the win
+  condition, board setup, pieces, and turn phases.
+</p>
+<p>
+  For more details about the pieces, see the
+  <a href="#pieces">Pieces section</a>.
+</p>
+<h2 id="general-rundown">General Rundown</h2>
+<p>The following is an excerpt from the book that describes the game:</p>
+<p>
+  &quot;The hexagonal board was divided into hundreds of smaller hexes, across
+  which dozens of carved pieces were scattered, some of ivory and some of
+  polished black stone. The castles which gave the game its name were unevenly
+  placed around the board. The object was to capture and hold them while
+  protecting your king. A broken line of blue counters, representing a river and
+  its fords, meandered between them.&quot;
+</p>
+<p>
+  Within the game each player controls a set of unique pieces with different
+  strengths, movement patterns, and abilities. The objective is to capture the
+  opponent&#39;s Monarch or control the board by capturing their opponents
+  castles.
+</p>
+<hr />
+<h2 id="turn-phases">Turn Phases</h2>
+<p>The game proceeds in turns, each turn is divided into three phases:</p>
+<h3 id="movement-phase">Movement Phase</h3>
+<p>
+  During the movement phase, players can move up to two of their pieces
+  according to their movement patterns. Pieces can move to any legal hex that is
+  not occupied by another piece or blocked by an obstacle.
+</p>
+<h3 id="attack-phase">Attack Phase</h3>
+<p>
+  During the attack phase, players can use up to two of their pieces to attack
+  opponent pieces within their attack range. If the sum of the strength of the
+  attacking pieces exceed the strength of the piece that is attacked, the
+  attacked piece is captured. Pieces can capture opponent pieces by moving into
+  their hex or attacking from a distance.
+</p>
+<h3 id="castles-phase">Castles Phase</h3>
+<p>
+  During the castles phase, players can control castles by moving their pieces
+  into castle hexes. In the castles phase, the active player can summon
+  reinforcements by placing a new piece on an unoccupied hex adjacent to each
+  controlled castle. The piece summoned from a controlled castle is initially a
+  Swordsman, than an Archer, Knight, Eagle, Giant, Trebuchet, Assassin, Dragon,
+  and Monarch.
+</p>
+<h2 id="win-condition">Win Condition</h2>
+<p>The game can be won in two ways:</p>
+<ol>
+  <li>
+    <strong>Capturing the Opponent&#39;s Monarch</strong>: If a player captures
+    all their opponent&#39;s Monarchs (there may be multiple if one is summoned
+    from a castle), they win the game.
+  </li>
+  <li>
+    <strong>Controlling the Opponent&#39;s Castles</strong>: If a player
+    controls all their opponents castles, they win the game.
+  </li>
+</ol>
+<hr />
+<h2 id="the-board">The Board</h2>
+<p>
+  The board is a hexagonal grid with sides of length 8 and with various types of
+  hexes:
+</p>
+<ul>
+  <li>
+    <strong>Normal Hexes</strong>: Regular hexes where pieces can move and
+    capture.
+  </li>
+  <li>
+    <strong>River Hexes</strong>: Hexes that act as obstacles and cannot be
+    occupied by pieces. Pieces with flying may cross the river.
+  </li>
+  <li>
+    <strong>Castle Hexes</strong>: Key positions on the board located in the 6
+    corners of the board. Each player has three castles. Control of enemy&#39;s
+    castles provides special advantages as well as being a win condition.
+  </li>
+</ul>
+<p><a name="pieces"></a></p>
+<h2 id="the-pieces">The Pieces</h2>
+<p>
+  Each player starts with the following pieces arranged on their side of the
+  board. Each piece has unique attributes, including strength, type, movement,
+  capture abilities, and coronation rules.
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>Piece</th>
+      <th>Icon</th>
+      <th>Quantity</th>
+      <th>Strength</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Monarch</td>
+      <td>
+        <img
+          src="/src/Assets/Images/Chess/wMonarch.svg"
+          width="50"
+          height="50"
+        />
+      </td>
+      <td>1</td>
+      <td>3</td>
+      <td>The key piece that must be protected at all costs.</td>
+    </tr>
+    <tr>
+      <td>Assassin</td>
+      <td>
+        <img
+          src="/src/Assets/Images/Chess/wAssassin.svg"
+          width="50"
+          height="50"
+        />
+      </td>
+      <td>1</td>
+      <td>1</td>
+      <td>Stealthy unit with the ability to capture Monarchs.</td>
+    </tr>
+    <tr>
+      <td>Dragon</td>
+      <td>
+        <img
+          src="/src/Assets/Images/Chess/wDragon.svg"
+          width="50"
+          height="50"
+        />
+      </td>
+      <td>1</td>
+      <td>3</td>
+      <td>Powerful unit similar to a knight in chess.</td>
+    </tr>
+    <tr>
+      <td>Giants</td>
+      <td>
+        <img src="/src/Assets/Images/Chess/wGiant.svg" width="50" height="50" />
+      </td>
+      <td>2</td>
+      <td>2</td>
+      <td>Strong mobile unit. Similar to a rook in chess.</td>
+    </tr>
+    <tr>
+      <td>Eagles</td>
+      <td>
+        <img src="/src/Assets/Images/Chess/wEagle.svg" width="50" height="50" />
+      </td>
+      <td>2</td>
+      <td>1</td>
+      <td>Highly mobile unit with the ability to fly.</td>
+    </tr>
+    <tr>
+      <td>Trebuchets</td>
+      <td>
+        <img
+          src="/src/Assets/Images/Chess/wTrebuchet.svg"
+          width="50"
+          height="50"
+        />
+      </td>
+      <td>2</td>
+      <td>1</td>
+      <td>Long-ranged unit with the ability to attack from a distance.</td>
+    </tr>
+    <tr>
+      <td>Knights</td>
+      <td>
+        <img
+          src="/src/Assets/Images/Chess/wKnight.svg"
+          width="50"
+          height="50"
+        />
+      </td>
+      <td>4</td>
+      <td>1</td>
+      <td>Fast-moving unit. Akin to the bishop in chess.</td>
+    </tr>
+    <tr>
+      <td>Archers</td>
+      <td>
+        <img
+          src="/src/Assets/Images/Chess/wArcher.svg"
+          width="50"
+          height="50"
+        />
+      </td>
+      <td>6</td>
+      <td>1</td>
+      <td>Ranged unit with the ability to attack from a distance.</td>
+    </tr>
+    <tr>
+      <td>Swordsmen</td>
+      <td>
+        <img
+          src="/src/Assets/Images/Chess/wSwordsman.svg"
+          width="50"
+          height="50"
+        />
+      </td>
+      <td>13</td>
+      <td>1</td>
+      <td>Basic melee unit. Akin to a pawn in chess.</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  The strength of a piece determines its ability to withstand attacks. Pieces
+  with higher strength are harder to capture. The three castles are positioned
+  in the corners of each player&#39;s side.
+</p>
+<h3 id="movement">Movement</h3>
+<p>Each piece has a unique movement pattern:</p>
+<h4 id="ground-units">Ground Units</h4>
+<p>
+  The movement of ground units is obstructed by river hexes and both friendly
+  and enemy pieces.
+</p>
+<ul>
+  <li>
+    <strong>Swordsman</strong>: Moves one forward in any direction. Can move two
+    forward on its first move.
+  </li>
+  <li>
+    <strong>Archer,Monarch, Trebuchet</strong>: Moves one hex in any direction.
+  </li>
+  <li>
+    <strong>Knight</strong>: The knight can move any distance in a straight line
+    if unobstructed, jumping along the edge of any hexagon to another hexagon 2
+    squares away.
+  </li>
+  <li>
+    <strong>Giant</strong>: The giant moves any distance in a straight line if
+    unobstructed, through any hex which shares an edge with its current
+    position.
+  </li>
+  <li>
+    <strong>Assassin</strong>: Moves like the queen in chess, a combination in
+    this case of the giant and knight.
+  </li>
+</ul>
+<h4 id="flying-units">Flying Units</h4>
+<p>Flying units can move over river hexes and other pieces.</p>
+<ul>
+  <li><strong>Eagle</strong>: Can fly up to 3 hexes in any direction.</li>
+  <li>
+    <strong>Dragon</strong>: Moves like a knight in chess, flying in an L-shaped
+    pattern.
+  </li>
+</ul>
+<h4 id="heavy-units">Heavy units</h4>
+<p>
+  Each turn a player may move two regular units or one heavy unit. The heavy
+  units are the Trebuchet, Giant, Dragon and Monarch.
+</p>
+<h3 id="attack">Attack</h3>
+<p>
+  During the attack phase, pieces up to two pieces can attack opponents within
+  their attack range. The attack range of a piece is determined by its type:
+</p>
+<ul>
+  <li>
+    <p>
+      <strong>Melee Units</strong>: Swordsman, Eagle, Giant, Dragon. These
+      pieces capture opponent pieces by moving into their hex. The swordsman can
+      only attack diagonally. The remaining melee units can attack any adjacent
+      piece.
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>Ranged Units</strong>: Archer, Trebuchet. These pieces can attack
+      opponents at an exact distance of 2 and 3 hexes respectively. When
+      capturing, they do not move into the hex of the captured piece.
+    </p>
+  </li>
+</ul>
+<h4 id="combat-resolution">Combat Resolution</h4>
+<ul>
+  <li>Multiple pieces can contribute to a single attack</li>
+  <li>
+    The total strength of attacking pieces must exceed the defender&#39;s
+    strength
+  </li>
+  <li>Pieces fully recover between turns</li>
+  <li>
+    When a castle is captured new pieces can be summoned from the captured
+    castle starting from the current turn.
+  </li>
+</ul>
+<h3 id="coronation">Coronation</h3>
+<p>
+  Certain pieces can be promoted or gain special abilities under specific
+  conditions:
+</p>
+<ul>
+  <li>
+    <strong>Swordsman</strong>: Can be promoted to any other piece when it
+    reaches the opponent&#39;s back row.
+  </li>
+</ul>
+<hr />
+<h2 id="game-end-conditions">Game End Conditions</h2>
+<p>The game can end in the following ways:</p>
+<ol>
+  <li>
+    <p><strong>Victory</strong></p>
+    <ul>
+      <li>Capturing all enemy Monarchs</li>
+      <li>Controlling all enemy Castles</li>
+      <li>Stalemate (opponent has no legal moves)</li>
+    </ul>
+  </li>
+  <li>
+    <p><strong>Draw</strong></p>
+    <ul>
+      <li>Mutual agreement</li>
+      <li>Three-fold repetition of board position</li>
+    </ul>
+  </li>
+</ol>
+<p>Enjoy the game and may the best strategist win!</p>

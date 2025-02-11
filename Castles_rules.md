@@ -1,6 +1,8 @@
-# Chess App
+# Castles: How to Play
 
 This is a fantasy chess-like game based on the book [The ember blade](https://www.goodreads.com/book/show/34673711-the-ember-blade), by Chris Wooding. Below are the details of the game, including the win condition, board setup, pieces, and turn phases.
+
+For more details about the pieces, see the [Pieces section](#pieces).
 
 ## General Rundown
 
@@ -8,7 +10,11 @@ The following is an excerpt from the book that describes the game:
 
 "The hexagonal board was divided into hundreds of smaller hexes, across which dozens of carved pieces were scattered, some of ivory and some of polished black stone. The castles which gave the game its name were unevenly placed around the board. The object was to capture and hold them while protecting your king. A broken line of blue counters, representing a river and its fords, meandered between them."
 
-Within the game each player controls a set of unique pieces with different strengths, movement patterns, and abilities. The objective is to capture the opponent's Monarch or control the board by capturing their opponents castles.
+<img src="/src/Assets/Images/misc/board.png" width="400" height="400">
+
+Within the game each player controls a set of unique [pieces](#pieces) with different strengths, movement patterns, and abilities. The objective is to capture the opponent's Monarch or control the board by capturing their opponents castles.
+
+---
 
 ## Turn Phases
 
@@ -33,6 +39,8 @@ The game can be won in two ways:
 1. **Capturing the Opponent's Monarch**: If a player captures all their opponent's Monarchs (there may be multiple if one is summoned from a castle), they win the game.
 2. **Controlling the Opponent's Castles**: If a player controls all their opponents castles, they win the game.
 
+---
+
 ## The Board
 
 The board is a hexagonal grid with sides of length 8 and with various types of hexes:
@@ -40,6 +48,8 @@ The board is a hexagonal grid with sides of length 8 and with various types of h
 - **Normal Hexes**: Regular hexes where pieces can move and capture.
 - **River Hexes**: Hexes that act as obstacles and cannot be occupied by pieces. Pieces with flying may cross the river.
 - **Castle Hexes**: Key positions on the board located in the 6 corners of the board. Each player has three castles. Control of enemy's castles provides special advantages as well as being a win condition.
+
+<a name="pieces"></a>
 
 ## The Pieces
 
@@ -57,11 +67,8 @@ Each player starts with the following pieces arranged on their side of the board
 | Archers    | <img src="/src/Assets/Images/Chess/wArcher.svg" width="50" height="50">    | 6        | 1        | Ranged unit with the ability to attack from a distance.      |
 | Swordsmen  | <img src="/src/Assets/Images/Chess/wSwordsman.svg" width="50" height="50"> | 13       | 1        | Basic melee unit. Akin to a pawn in chess.                   |
 
-The three castles are positioned in the corners of each player's side.
-
-### Strength
-
 The strength of a piece determines its ability to withstand attacks. Pieces with higher strength are harder to capture.
+The three castles are positioned in the corners of each player's side.
 
 ### Movement
 
