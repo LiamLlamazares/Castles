@@ -39,7 +39,24 @@ The board is a hexagonal grid with sides of length 8 and with various types of h
 
 - **Normal Hexes**: Regular hexes where pieces can move and capture.
 - **River Hexes**: Hexes that act as obstacles and cannot be occupied by pieces. Pieces with flying may cross the river.
-- **Castle Hexes**: Key positions on the board located in the 6 corners of the board. Each player has three castles. Control of enemie's castles providesspecial advantages as well as being a win condition.
+- **Castle Hexes**: Key positions on the board located in the 6 corners of the board. Each player has three castles. Control of enemy's castles provides special advantages as well as being a win condition.
+
+### Initial Piece Placement
+
+Each player starts with the following pieces arranged on their side of the board:
+
+| Piece      | Quantity | Starting Position    |
+| ---------- | -------- | -------------------- |
+| Monarch    | 1        | Center back row      |
+| Assassin   | 1        | Adjacent to Monarch  |
+| Dragon     | 1        | Adjacent to Monarch  |
+| Giants     | 2        | Guarding the castles |
+| Trebuchets | 2        | Guarding the castles |
+| Knights    | 4        | Second row flanks    |
+| Archers    | 6        | Second row center    |
+| Swordsmen  | 13       | Front row            |
+
+The three castles are positioned in the corners of each player's side.
 
 ## The Pieces
 
@@ -74,7 +91,7 @@ The movement of ground units is obstructed by river hexes and both friendly and 
 - **Swordsman**: Moves one forward in any direction. Can move two forward on its first move.
 - **Archer,Monarch, Trebuchet**: Moves one hex in any direction.
 - **Knight**: The knight can move any distance in a straight line if unobstructed, jumping along the edge of any hexagon to another hexagon 2 squares away.
-- **Giant**: The giant moves ay distance in a straight line if unobstructed, through any hex which shares an edge with its current position.
+- **Giant**: The giant moves any distance in a straight line if unobstructed, through any hex which shares an edge with its current position.
 - **Assassin**: Moves like the queen in chess, a combination in this case of the giant and knight.
 
 #### Flying Units
@@ -90,34 +107,40 @@ Each turn a player may move two regular units or one heavy unit. The heavy units
 
 ### Attack
 
-During the attack phase, pieces can attack oppon
+During the attack phase, pieces up to two pieces can attack opponents within their attack range. The attack range of a piece is determined by its type:
 
-- **Melee Units**: Swordsman, Eagle, Giant, Dragon. These pieces capture opponent pieces by moving into their hex. The swordsman
+- **Melee Units**: Swordsman, Eagle, Giant, Dragon. These pieces capture opponent pieces by moving into their hex. The swordsman can only attack diagonally. The remaining melee units can attack any adjacent piece.
 
-- **Swordsman**: Captures adjacent pieces.
-- **Archer**: Captures pieces within a two-hex range.
-- **Knight**: Captures pieces in its movement pattern.
-- **Eagle**: Captures pieces within a three-hex range.
-- **Giant**: Captures pieces like a rook in chess.
-- **Assassin**: Captures pieces like a queen in chess.
-- **Dragon**: Captures pieces like a knight in chess but with longer range.
-- **Monarch**: Captures adjacent pieces.
-- **Trebuchet**: Captures pieces within a three-hex range.
+- **Ranged Units**: Archer, Trebuchet. These pieces can attack opponents at an exact distance of 2 and 3 hexes respectively. When capturing, they do not move into the hex of the captured piece.
+
+#### Combat Resolution
+
+- Multiple pieces can contribute to a single attack
+- The total strength of attacking pieces must exceed the defender's strength
+- Pieces fully recover between turns
+- When a castle is captured new pieces can be summoned from the captured castle starting from the current turn.
 
 ### Coronation
 
 Certain pieces can be promoted or gain special abilities under specific conditions:
 
-- **Swordsman**: Can be promoted to a higher rank when reaching the opponent's side.
-- **Archer**: Gains increased range when on high ground.
-- **Knight**: Gains additional movement abilities when controlling a castle.
-- **Eagle**: Gains increased movement range when controlling a castle.
-- **Giant**: Gains additional strength when controlling a castle.
-- **Assassin**: Gains stealth abilities when controlling a castle.
-- **Dragon**: Gains additional attack range when controlling a castle.
-- **Monarch**: Gains special abilities when controlling a castle.
-- **Trebuchet**: Gains increased attack range when controlling a castle.
+- **Swordsman**: Can be promoted to any other piece when it reaches the opponent's back row.
 
 ---
+
+## Game End Conditions
+
+The game can end in the following ways:
+
+1. **Victory**
+
+   - Capturing all enemy Monarchs
+   - Controlling all enemy Castles
+   - Stalemate (opponent has no legal moves)
+
+2. **Draw**
+
+   - Mutual agreement
+   - Three-fold repetition of board position
 
 Enjoy the game and may the best strategist win!
