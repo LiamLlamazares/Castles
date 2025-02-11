@@ -45,16 +45,16 @@ The board is a hexagonal grid with sides of length 8 and with various types of h
 
 Each player starts with the following pieces arranged on their side of the board:
 
-| Piece      | Quantity | Starting Position    |
-| ---------- | -------- | -------------------- |
-| Monarch    | 1        | Center back row      |
-| Assassin   | 1        | Adjacent to Monarch  |
-| Dragon     | 1        | Adjacent to Monarch  |
-| Giants     | 2        | Guarding the castles |
-| Trebuchets | 2        | Guarding the castles |
-| Knights    | 4        | Second row flanks    |
-| Archers    | 6        | Second row center    |
-| Swordsmen  | 13       | Front row            |
+| Piece      | Icon                                              | Quantity | Starting Position | Icon |
+| ---------- | ------------------------------------------------- | -------- | ----------------- | ---- |
+| Monarch    | ![Monarch](/src/Assets/Images/Chess/wMonarch.svg) | 1        |                   |
+| Assassin   |                                                   | 1        |
+| Dragon     | 1                                                 | 1        |
+| Giants     | 2                                                 | 2        |
+| Trebuchets | 2                                                 | 2        |
+| Knights    | 4                                                 | 4        |
+| Archers    | 6                                                 | 6        |
+| Swordsmen  | 13                                                | 13       |
 
 The three castles are positioned in the corners of each player's side.
 
