@@ -1,3 +1,5 @@
+<link rel="stylesheet" type="text/css" href="css/styles.css">
+
 # Castles: How to Play
 
 This is a fantasy chess-like game based on the book [The ember blade](https://www.goodreads.com/book/show/34673711-the-ember-blade), by Chris Wooding. Below are the details of the game, including the win condition, board setup, pieces, and turn phases.
