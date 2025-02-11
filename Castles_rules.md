@@ -10,7 +10,7 @@ The following is an excerpt from the book that describes the game:
 
 "The hexagonal board was divided into hundreds of smaller hexes, across which dozens of carved pieces were scattered, some of ivory and some of polished black stone. The castles which gave the game its name were unevenly placed around the board. The object was to capture and hold them while protecting your king. A broken line of blue counters, representing a river and its fords, meandered between them."
 
-<img src="/src/Assets/Images/misc/board.png" width="400" height="400">
+<img src="/src/Assets/Images/misc/board.png" class="center" width="450">
 
 Within the game each player controls a set of unique [pieces](#pieces) with different strengths, movement patterns, and abilities. The objective is to capture the opponent's Monarch or control the board by capturing their opponents castles.
 
