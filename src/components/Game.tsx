@@ -469,7 +469,6 @@ class GameBoard extends Component {
   };
 
   componentDidMount() {
-    const gameSocket = new WebSocket("ws://51.178.38.169/ws/game/1/");
     window.addEventListener("keydown", this.handleKeyDown);
   }
   //Avoids memory leak

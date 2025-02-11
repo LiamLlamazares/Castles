@@ -1,0 +1,123 @@
+# Chess App
+
+This is a fantasy chess-like game based on the book [The ember blade](https://www.goodreads.com/book/show/34673711-the-ember-blade), by Chris Wooding. Below are the details of the game, including the win condition, board setup, pieces, and turn phases.
+
+## General Rundown
+
+The following is an excerpt from the book that describes the game:
+
+"The hexagonal board was divided into hundreds of smaller hexes, across which dozens of carved pieces were scattered, some of ivory and some of polished black stone. The castles which gave the game its name were unevenly placed around the board. The object was to capture and hold them while protecting your king. A broken line of blue counters, representing a river and its fords, meandered between them."
+
+Within the game each player controls a set of unique pieces with different strengths, movement patterns, and abilities. The objective is to capture the opponent's Monarch or control the board by capturing their opponents castles.
+
+## Turn Phases
+
+The game proceeds in turns, each turn is divided into three phases:
+
+### Movement Phase
+
+During the movement phase, players can move up to two of their pieces according to their movement patterns. Pieces can move to any legal hex that is not occupied by another piece or blocked by an obstacle.
+
+### Attack Phase
+
+During the attack phase, players can use up to two of their pieces to attack opponent pieces within their attack range. If the sum of the strength of the attacking pieces exceed the strength of the piece that is attacked, the attacked piece is captured. Pieces can capture opponent pieces by moving into their hex or attacking from a distance.
+
+### Castles Phase
+
+During the castles phase, players can control castles by moving their pieces into castle hexes. In the castles phase, the active player can summon reinforcements by placing a new piece on an unoccupied hex adjacent to each controlled castle. The piece summoned from a controlled castle is initially a Swordsman, than an Archer, Knight, Eagle, Giant, Trebuchet, Assassin, Dragon, and Monarch.
+
+## Win Condition
+
+The game can be won in two ways:
+
+1. **Capturing the Opponent's Monarch**: If a player captures all their opponent's Monarchs (there may be multiple if one is summoned from a castle), they win the game.
+2. **Controlling the Opponent's Castles**: If a player controls all their opponents castles, they win the game.
+
+## The Board
+
+The board is a hexagonal grid with sides of length 8 and with various types of hexes:
+
+- **Normal Hexes**: Regular hexes where pieces can move and capture.
+- **River Hexes**: Hexes that act as obstacles and cannot be occupied by pieces. Pieces with flying may cross the river.
+- **Castle Hexes**: Key positions on the board located in the 6 corners of the board. Each player has three castles. Control of enemie's castles providesspecial advantages as well as being a win condition.
+
+## The Pieces
+
+Each piece has unique attributes, including strength, type, movement, capture abilities, and coronation rules.
+
+### Strength
+
+The strength of a piece determines its ability to withstand attacks. Pieces with higher strength are harder to capture.
+
+### Type
+
+The game features various types of pieces, each with unique abilities:
+
+- **Swordsman**: Basic melee unit. Akin to a pawn in chess. Strength 1.
+- **Archer**: Ranged unit with the ability to attack pieces 2 hexes away. Strength 1.
+- **Trebuchet**: A long-ranged unit with the ability to attack pieces a radius of three away. Strength 1.
+- **Knight**: Fast-moving unit. Akin to the bishop in chess (sorry about that, but thematically it made sense).Strength 1.
+- **Eagle**: Highly mobile unit with the ability fly across the board quickly. Strength 1.
+- **Giant**: A strong mobile unit with high strength. Similar to a rook in chess.Strength 2.
+- **Assassin**: A stealthy unit with a special ability that allows it to capture the opponent's monarch. Strength 1.
+- **Dragon**: A powerful unit similar to a knight in chess . Strength 3.
+- **Monarch**: The key piece that must be protected at all costs. Similar to the king in chess. Strength 3.
+
+### Movement
+
+Each piece has a unique movement pattern:
+
+#### Ground Units
+
+The movement of ground units is obstructed by river hexes and both friendly and enemy pieces.
+
+- **Swordsman**: Moves one forward in any direction. Can move two forward on its first move.
+- **Archer,Monarch, Trebuchet**: Moves one hex in any direction.
+- **Knight**: The knight can move any distance in a straight line if unobstructed, jumping along the edge of any hexagon to another hexagon 2 squares away.
+- **Giant**: The giant moves ay distance in a straight line if unobstructed, through any hex which shares an edge with its current position.
+- **Assassin**: Moves like the queen in chess, a combination in this case of the giant and knight.
+
+#### Flying Units
+
+Flying units can move over river hexes and other pieces.
+
+- **Eagle**: Can fly up to 3 hexes in any direction.
+- **Dragon**: Moves like a knight in chess, flying in an L-shaped pattern.
+
+#### Heavy units
+
+Each turn a player may move two regular units or one heavy unit. The heavy units are the Trebuchet, Giant, Dragon and Monarch.
+
+### Attack
+
+During the attack phase, pieces can attack oppon
+
+- **Melee Units**: Swordsman, Eagle, Giant, Dragon. These pieces capture opponent pieces by moving into their hex. The swordsman
+
+- **Swordsman**: Captures adjacent pieces.
+- **Archer**: Captures pieces within a two-hex range.
+- **Knight**: Captures pieces in its movement pattern.
+- **Eagle**: Captures pieces within a three-hex range.
+- **Giant**: Captures pieces like a rook in chess.
+- **Assassin**: Captures pieces like a queen in chess.
+- **Dragon**: Captures pieces like a knight in chess but with longer range.
+- **Monarch**: Captures adjacent pieces.
+- **Trebuchet**: Captures pieces within a three-hex range.
+
+### Coronation
+
+Certain pieces can be promoted or gain special abilities under specific conditions:
+
+- **Swordsman**: Can be promoted to a higher rank when reaching the opponent's side.
+- **Archer**: Gains increased range when on high ground.
+- **Knight**: Gains additional movement abilities when controlling a castle.
+- **Eagle**: Gains increased movement range when controlling a castle.
+- **Giant**: Gains additional strength when controlling a castle.
+- **Assassin**: Gains stealth abilities when controlling a castle.
+- **Dragon**: Gains additional attack range when controlling a castle.
+- **Monarch**: Gains special abilities when controlling a castle.
+- **Trebuchet**: Gains increased attack range when controlling a castle.
+
+---
+
+Enjoy the game and may the best strategist win!

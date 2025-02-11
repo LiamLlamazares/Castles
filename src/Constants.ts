@@ -8,12 +8,12 @@ export enum PieceType {
   Swordsman = "Swordsman",
   Archer = "Archer",
   Knight = "Knight",
+  Trebuchet = "Trebuchet",
   Eagle = "Eagle",
   Giant = "Giant",
   Assassin = "Assassin",
   Dragon = "Dragon",
   Monarch = "Monarch",
-  Trebuchet = "Trebuchet",
 }
 export enum AttackType {
   Melee = "Melee",
@@ -26,12 +26,12 @@ export enum PieceStrength {
   Swordsman = 1,
   Archer = 1,
   Knight = 1,
+  Trebuchet = 1,
   Eagle = 1,
   Giant = 2,
   Assassin = 1,
   Dragon = 3,
   Monarch = 3,
-  Trebuchet = 1,
 }
 
 export type turnPhase = "Movement" | "Attack" | "Castles";
