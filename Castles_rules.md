@@ -137,6 +137,8 @@ The game can end in the following ways:
    - Mutual agreement
    - Three-fold repetition of board position
 
+Enjoy the game and may the best strategist win!
+
 ## Future Features <img src="/src/Assets/Images/misc/wizard.svg" width="30" height="30">
 
 - Online multiplayer
@@ -146,5 +148,3 @@ The game can end in the following ways:
 - Custom game rules
 - New pieces (e.g. wizards, healers, necromancers, etc.)
 - Ratings and leaderboards
-
-Enjoy the game and may the best strategist win!
