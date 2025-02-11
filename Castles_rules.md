@@ -20,15 +20,15 @@ Within the game each player controls a set of unique [pieces](#pieces) with diff
 
 The game proceeds in turns, each turn is divided into three phases:
 
-### Movement Phase
+### Movement Phase <img src="/src/Assets/Images/Banner/boots.svg" width="30" height="30">
 
 During the movement phase, players can move up to two of their pieces according to their movement patterns. Pieces can move to any legal hex that is not occupied by another piece or blocked by an obstacle.
 
-### Attack Phase
+### Attack Phase <img src="/src/Assets/Images/Banner/sword.svg" width="30" height="30">
 
 During the attack phase, players can use up to two of their pieces to attack opponent pieces within their attack range. If the sum of the strength of the attacking pieces exceed the strength of the piece that is attacked, the attacked piece is captured. Pieces can capture opponent pieces by moving into their hex or attacking from a distance.
 
-### Castles Phase
+### Castles Phase <img src="/src/Assets/Images/Banner/castle.svg" width="30" height="30">
 
 During the castles phase, players can control castles by moving their pieces into castle hexes. In the castles phase, the active player can summon reinforcements by placing a new piece on an unoccupied hex adjacent to each controlled castle. The piece summoned from a controlled castle is initially a Swordsman, than an Archer, Knight, Eagle, Giant, Trebuchet, Assassin, Dragon, and Monarch.
 
