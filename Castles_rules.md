@@ -41,45 +41,27 @@ The board is a hexagonal grid with sides of length 8 and with various types of h
 - **River Hexes**: Hexes that act as obstacles and cannot be occupied by pieces. Pieces with flying may cross the river.
 - **Castle Hexes**: Key positions on the board located in the 6 corners of the board. Each player has three castles. Control of enemy's castles provides special advantages as well as being a win condition.
 
-### Initial Piece Placement
-
-Each player starts with the following pieces arranged on their side of the board:
-[monarch](/src/Assets/Images/Chess/wMonarch.svg)
-
-| Piece      | Icon                                                | Quantity | Starting Position | Icon |
-| ---------- | --------------------------------------------------- | -------- | ----------------- | ---- |
-| Monarch    | ![Monarch](monarch)                                 | 1        |                   |
-| Assassin   | ![Assassin](/src/Assets/Images/Chess/wAssassin.svg) | 1        |
-| Dragon     | 1                                                   | 1        |
-| Giants     | 2                                                   | 2        |
-| Trebuchets | 2                                                   | 2        |
-| Knights    | 4                                                   | 4        |
-| Archers    | 6                                                   | 6        |
-| Swordsmen  | 13                                                  | 13       |
-
-The three castles are positioned in the corners of each player's side.
-
 ## The Pieces
 
-Each piece has unique attributes, including strength, type, movement, capture abilities, and coronation rules.
+Each player starts with the following pieces arranged on their side of the board. Each piece has unique attributes, including strength, type, movement, capture abilities, and coronation rules.
+
+| Piece      | Icon                                                   | Quantity | Strength | Description                                                  |
+| ---------- | ------------------------------------------------------ | -------- | -------- | ------------------------------------------------------------ |
+| Monarch    | ![Monarch](/src/Assets/Images/Chess/wMonarch.svg)      | 1        | 3        | The key piece that must be protected at all costs.           |
+| Assassin   | ![Assassin](/src/Assets/Images/Chess/wAssassin.svg)    | 1        | 1        | Stealthy unit with the ability to capture Monarchs.          |
+| Dragon     | ![Dragon](/src/Assets/Images/Chess/wDragon.svg)        | 1        | 3        | Powerful unit similar to a knight in chess.                  |
+| Giants     | ![Giants](/src/Assets/Images/Chess/wGiant.svg)         | 2        | 2        | Strong mobile unit. Similar to a rook in chess.              |
+| Eagles     | ![Eagles](/src/Assets/Images/Chess/wEagle.svg)         | 2        | 1        | Highly mobile unit with the ability to fly.                  |
+| Trebuchets | ![Trebuchets](/src/Assets/Images/Chess/wTrebuchet.svg) | 2        | 1        | Long-ranged unit with the ability to attack from a distance. |
+| Knights    | ![Knights](/src/Assets/Images/Chess/wKnight.svg)       | 4        | 1        | Fast-moving unit. Akin to the bishop in chess.               |
+| Archers    | ![Archers](/src/Assets/Images/Chess/wArcher.svg)       | 6        | 1        | Ranged unit with the ability to attack from a distance.      |
+| Swordsmen  | ![Swordsmen](/src/Assets/Images/Chess/wSwordsmen.svg)  | 13       | 1        | Basic melee unit. Akin to a pawn in chess.                   |
+
+The three castles are positioned in the corners of each player's side.
 
 ### Strength
 
 The strength of a piece determines its ability to withstand attacks. Pieces with higher strength are harder to capture.
-
-### Type
-
-The game features various types of pieces, each with unique abilities:
-
-- **Swordsman**: Basic melee unit. Akin to a pawn in chess. Strength 1.
-- **Archer**: Ranged unit with the ability to attack pieces 2 hexes away. Strength 1.
-- **Trebuchet**: A long-ranged unit with the ability to attack pieces a radius of three away. Strength 1.
-- **Knight**: Fast-moving unit. Akin to the bishop in chess (sorry about that, but thematically it made sense).Strength 1.
-- **Eagle**: Highly mobile unit with the ability fly across the board quickly. Strength 1.
-- **Giant**: A strong mobile unit with high strength. Similar to a rook in chess.Strength 2.
-- **Assassin**: A stealthy unit with a special ability that allows it to capture the opponent's monarch. Strength 1.
-- **Dragon**: A powerful unit similar to a knight in chess . Strength 3.
-- **Monarch**: The key piece that must be protected at all costs. Similar to the king in chess. Strength 3.
 
 ### Movement
 
