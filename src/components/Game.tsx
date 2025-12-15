@@ -1,22 +1,19 @@
 import { Component } from "react";
 import { Piece } from "../Classes/Piece";
 import { Castle } from "../Classes/Castle";
-import { Hex, Point } from "../Classes/Hex";
+import { Hex } from "../Classes/Hex";
 import {
-  PieceType,
-  N_SQUARES,
   TurnPhase,
   Color,
-  STARTING_TIME,
   HistoryEntry,
 } from "../Constants";
 import { startingBoard } from "../ConstantImports";
 import "../css/Board.css";
-import ChessClock from "./Clock";
-import TurnBanner from "./Turn_banner";
-import { getImageByPieceType } from "./PieceImages";
 
 import { GameEngine } from "../Classes/GameEngine";
+import HexGrid from "./HexGrid";
+import PieceRenderer from "./PieceRenderer";
+import ControlPanel from "./ControlPanel";
 
 /** State interface for the GameBoard component */
 interface GameBoardState {
@@ -48,38 +45,6 @@ class GameBoard extends Component<{}, GameBoardState> {
     isBoardRotated: false,
   };
 
-  getPieceCenter = (piece: Piece): Point => {
-    return startingBoard.hexCenters[
-      piece.hex.getKey(this.state.isBoardRotated)
-    ];
-  };
-
-  getHexCenter = (hex: Hex): Point => {
-    return startingBoard.layout.hexToPixelReflected(
-      hex,
-      this.state.isBoardRotated
-    );
-  };
-
-  getPolygonPoints = (hex: Hex): string => {
-    return startingBoard.hexCornerString[
-      hex.reflect().getKey(!this.state.isBoardRotated)
-    ];
-  };
-
-  renderCircle = (hex: Hex, className: string) => {
-    const center = this.getHexCenter(hex);
-    return (
-      <circle
-        key={hex.getKey()}
-        cx={center.x}
-        cy={center.y}
-        r={90 / N_SQUARES}
-        className={className}
-        onClick={() => this.handleHexClick(hex)}
-      />
-    );
-  };
   get turn_phase(): TurnPhase {
     return this.gameEngine.getTurnPhase(this.state.turnCounter);
   }
@@ -281,135 +246,7 @@ class GameBoard extends Component<{}, GameBoardState> {
     window.removeEventListener("resize", this.handleResize);
   }
 
-  // =========== RENDER HELPERS ===========
-
-  /** Returns the SVG image path for a piece */
-  // getImageByPieceType is now imported from PieceImages.ts
-
-  /** Renders the control buttons (Pass, Coordinates, Takeback, Flip) */
-  renderControlButtons = (): JSX.Element => (
-    <>
-      <button className="pass-button" onClick={this.handlePass}>
-        Pass
-      </button>
-      <button
-        className="coordinates-button"
-        onClick={() =>
-          this.setState({ showCoordinates: !this.state.showCoordinates })
-        }
-      >
-        Toggle Coordinates
-      </button>
-      <button className="takeback-button" onClick={this.handleTakeback}>
-        Takeback
-      </button>
-      <button className="pass-button" onClick={this.handleFlipBoard}>
-        Flip Board
-      </button>
-    </>
-  );
-
-  /** Renders the chess clocks and turn banners for both players */
-  renderPlayerClocks = (): JSX.Element => (
-    <div
-      style={{
-        position: "absolute",
-        top: "50%",
-        left: "20%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-      }}
-    >
-      <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-        {this.currentPlayer === "b" && (
-          <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
-        )}
-        <ChessClock
-          initialTime={STARTING_TIME}
-          isActive={this.currentPlayer === "b"}
-          player="b"
-        />
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-        {this.currentPlayer === "w" && (
-          <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
-        )}
-        <ChessClock
-          initialTime={STARTING_TIME}
-          isActive={this.currentPlayer === "w"}
-          player="w"
-        />
-      </div>
-    </div>
-  );
-
-  /** Renders the hexagonal grid with legal move/attack indicators */
-  renderHexGrid = (legalMoveSet: Set<string>, legalAttackSet: Set<string>): JSX.Element => (
-    <>
-      {/* Render all hexagons */}
-      {this.hexagons.map((hex: Hex) => (
-        <g key={hex.getKey()}>
-          <polygon
-            points={this.getPolygonPoints(hex)}
-            className={`${startingBoard.colorClassMap[hex.getKey()]} ${
-              this.hexisAdjacentToControlledCastle(hex)
-                ? "hexagon-castle-adjacent"
-                : ""
-            }`}
-            onClick={() => this.handleHexClick(hex)}
-            filter={
-              startingBoard.colorClassMap[hex.getKey()] === "hexagon-high-ground"
-                ? "url(#shadow)"
-                : ""
-            }
-          />
-          {this.state.showCoordinates && (
-            <text
-              x={this.getHexCenter(hex).x}
-              y={this.getHexCenter(hex).y + 5}
-              textAnchor="middle"
-              style={{ fontSize: "15px", color: "black" }}
-            >
-              {`${-hex.q}, ${-hex.s}`}
-            </text>
-          )}
-        </g>
-      ))}
-      {/* Render dots for legal moves and attacks */}
-      {this.hexagons.map((hex: Hex) => {
-        const key = hex.getKey();
-        if (legalMoveSet.has(key)) {
-          return this.renderCircle(hex, "legalMoveDot");
-        } else if (legalAttackSet.has(key)) {
-          return this.renderCircle(hex, "legalAttackDot");
-        }
-        return null;
-      })}
-    </>
-  );
-
-  /** Renders all pieces on the board */
-  renderPieces = (): JSX.Element => (
-    <>
-      {this.state.pieces.map((piece: Piece) => {
-        const center = this.getPieceCenter(piece);
-        return (
-          <image
-            key={piece.hex.getKey()}
-            href={getImageByPieceType(piece.type, piece.color)}
-            x={center.x - 145 / N_SQUARES}
-            y={center.y - 145 / N_SQUARES}
-            height={275 / N_SQUARES}
-            width={275 / N_SQUARES}
-            className="piece"
-            onClick={() => this.handlePieceClick(piece)}
-          />
-        );
-      })}
-    </>
-  );
+  // =========== RENDER ===========
 
   render() {
     // Optimization: Calculate legal moves/attacks ONCE per render
@@ -418,8 +255,14 @@ class GameBoard extends Component<{}, GameBoardState> {
 
     return (
       <>
-        {this.renderControlButtons()}
-        {this.renderPlayerClocks()}
+        <ControlPanel
+          currentPlayer={this.currentPlayer}
+          turnPhase={this.turn_phase}
+          onPass={this.handlePass}
+          onToggleCoordinates={() => this.setState({ showCoordinates: !this.state.showCoordinates })}
+          onTakeback={this.handleTakeback}
+          onFlipBoard={this.handleFlipBoard}
+        />
         
         <svg className="board" height="100%" width="100%">
           {/* SVG filter for high-ground shadow effect */}
@@ -436,8 +279,20 @@ class GameBoard extends Component<{}, GameBoardState> {
             </filter>
           </defs>
           
-          {this.renderHexGrid(legalMoveSet, legalAttackSet)}
-          {this.renderPieces()}
+          <HexGrid
+            hexagons={this.hexagons}
+            legalMoveSet={legalMoveSet}
+            legalAttackSet={legalAttackSet}
+            showCoordinates={this.state.showCoordinates}
+            isBoardRotated={this.state.isBoardRotated}
+            isAdjacentToControlledCastle={this.hexisAdjacentToControlledCastle}
+            onHexClick={this.handleHexClick}
+          />
+          <PieceRenderer
+            pieces={this.state.pieces}
+            isBoardRotated={this.state.isBoardRotated}
+            onPieceClick={this.handlePieceClick}
+          />
         </svg>
       </>
     );
