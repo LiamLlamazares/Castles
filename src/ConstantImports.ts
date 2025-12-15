@@ -2,10 +2,6 @@ import { Hex } from "./Classes/Hex";
 import { Piece } from "./Classes/Piece";
 import { Board } from "./Classes/Board";
 import { N_SQUARES, PieceType } from "./Constants";
-import {
-  N_SQUARES,
-  PieceType,
-} from "./Constants";
 
 //Starting board = starting pieces + hexes
 function generatePieces(pieceType: PieceType, coordinates: Hex[]): Piece[] {

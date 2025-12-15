@@ -26,7 +26,7 @@ export class Board {
   public hexes: Hex[];
   
   /** Layout orientation: "flat" or "pointy" */
-  public layoutType: string;
+  public layoutType: "flat" | "pointy";
   
   /** Layout for hex ↔ pixel coordinate transformations */
   public layout: Layout;
@@ -72,7 +72,7 @@ export class Board {
     NSquares: number = N_SQUARES,
     HEX_SIZE_FACTOR_ARG: number = HEX_SIZE_FACTOR,
     X_OFFSET_ARG: number = X_OFFSET,
-    layoutType: string = LAYOUT_TYPE
+    layoutType: "flat" | "pointy" = LAYOUT_TYPE as "flat" | "pointy"
   ) {
     this.pieces = pieces;
     this.NSquares = NSquares;
@@ -205,46 +205,5 @@ get Castles(): Castle[] {
   getHexCenter(hex: Hex): Point {
     return this.layout.hexToPixel(hex);
   }
-
-  //Creates a list of hexagons that can be rendered of the form {key, corners, colorClass, center}
-  renderHexagons = () => {
-    const hexList = generateHexagons(this.NSquares);
-    this.layout.sortHexList(hexList);
-
-    const hexagons = hexList.map((hex) => {
-      const corners = this.layout
-        .polygonCorners(hex)
-        .map((p) => `${p.x},${p.y}`)
-        .join(" ");
-      const center = this.layout.hexToPixel(hex);
-
-      let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
-        ((hex.color_index % 3) + 3) % 3
-      ];
-      const hexisaRiver = this.isRiver(hex);
-      const hexisaCastle = this.isCastle(hex, this.NSquares);
-      if (hexisaRiver) {
-        colorClass = "hexagon-river";
-      } else if (hexisaCastle) {
-        colorClass = "hexagon-castles";
-      }
-      const piece = this.pieces.find(
-        (piece) => piece.hex.q === hex.q && piece.hex.r === hex.r && piece.hex.s === hex.s
-      );
-
-      return {
-        key: `${hex.q}-${hex.r}-${hex.s}`,
-        corners,
-        colorClass,
-        center,
-        piece,
-        q: hex.q,
-        r: hex.r,
-        s: hex.s,
-      };
-    });
-
-    return hexagons;
-  };
 }
 
