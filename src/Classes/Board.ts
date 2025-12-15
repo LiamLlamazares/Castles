@@ -21,6 +21,8 @@ export class Board {
   public colorClassMap: { [key: string]: string };
   public hexCenters: { [key: string]: Point };
   public hexCornerString: { [key: string]: string };
+  public pixelWidth: number;
+  public pixelHeight: number;
   
   constructor(pieces: Piece[], NSquares: number = NSquaresc, HEX_SIZE_FACTOR: number =HEX_SIZE_FACTORc, X_OFFSET: number = X_OFFSETc, layoutType: string = layoutTypec) {
     this.pieces = pieces;
@@ -29,12 +31,20 @@ export class Board {
     this.HEX_SIZE_FACTOR = HEX_SIZE_FACTOR;
     this.X_OFFSET = X_OFFSET;
     this.layoutType = layoutType;
+    
+    // Default to window size if available, otherwise 0/default
+    this.pixelWidth = typeof window !== 'undefined' ? window.innerWidth : 800;
+    this.pixelHeight = typeof window !== 'undefined' ? window.innerHeight : 600;
+
     this.layout = this.getLayout();
-    this.riverHexes = this.hexes.filter((hex: Hex) => this.isRiver(this.layout.hexToPixel(hex)));
+    
+    // Logical sets - computed once as they don't depend on pixels anymore (refactored below)
+    this.riverHexes = this.hexes.filter((hex: Hex) => this.isRiver(hex));
     this.castleHexes = this.hexes.filter((hex: Hex) => this.isCastle(hex, this.NSquares));
     this.whiteCastleHexes = this.castleHexes.filter((hex: Hex) => this.isWhiteCastle(hex));
     this.blackCastleHexes = this.castleHexes.filter((hex: Hex) => this.isBlackCastle(hex));
     this.highGroundHexes = this.hexes.filter((hex: Hex) => this.isCastle(hex, this.NSquares-2));
+    
     let colorClassMap: { [key: string]: string } = {};
     this.hexes.forEach((hex: Hex) => {
       colorClassMap[hex.getKey()] = hex.colorClass(
@@ -44,24 +54,33 @@ export class Board {
         this.blackCastleHexes
       );
     });
-this.colorClassMap = colorClassMap;
-  this.hexCornerString = this.layout.hexCornersStringMap(this.hexes);
-  this.hexCenters = this.layout.hexCentersMap(this.hexes);
+    this.colorClassMap = colorClassMap;
+
+    // Layout dependent maps
+    this.hexCornerString = this.layout.hexCornersStringMap(this.hexes);
+    this.hexCenters = this.layout.hexCentersMap(this.hexes);
   }
 
+  // Method to update dimensions and recompute layout
+  public updateDimensions(width: number, height: number) {
+    this.pixelWidth = width;
+    this.pixelHeight = height;
+    this.layout = this.getLayout();
+    this.hexCornerString = this.layout.hexCornersStringMap(this.hexes);
+    this.hexCenters = this.layout.hexCentersMap(this.hexes);
+  }
 
   get origin(): Point {
-    let x = window.innerWidth / 2 + this.X_OFFSET;
-    let y = window.innerHeight / 2;
+    let x = this.pixelWidth / 2 + this.X_OFFSET;
+    let y = this.pixelHeight / 2;
     return new Point(x, y);
   }
   get size_hexes(): number {
-    return Math.min(window.innerWidth, window.innerHeight) / (this.HEX_SIZE_FACTOR * this.NSquares);
+    return Math.min(this.pixelWidth, this.pixelHeight) / (this.HEX_SIZE_FACTOR * this.NSquares);
   }
   get hexSize(): Point {
     return new Point(this.size_hexes, this.size_hexes);
   }
-  
   
   getLayout(): Layout {
     if (this.layoutType === "flat") {
@@ -71,8 +90,11 @@ this.colorClassMap = colorClassMap;
     }
   }
 
- public isRiver(center: Point): boolean {
-    return center.y === this.origin.y; // Return true if the hexagon is at the center
+ public isRiver(hex: Hex): boolean {
+    // Replaced pixel check with logical check.
+    // Original: center.y === this.origin.y
+    // For pointy layout, y depends on r. y=0 implies r=0.
+    return hex.r === 0;
   }
 
 public isCastle(hex: Hex, N: number): boolean {
@@ -80,26 +102,18 @@ public isCastle(hex: Hex, N: number): boolean {
     (hex.q === 0 && Math.abs(hex.r) === N && Math.abs(hex.s) === N) ||
     (hex.r === 0 && Math.abs(hex.q) === N && Math.abs(hex.s) === N) ||
     (hex.s === 0 && Math.abs(hex.q) === N && Math.abs(hex.r) === N)
-  ); // Return true if the hexagon is at a corner
+  ); 
 };
-// const isWhiteCastle = (hex: Hex, N: number): boolean => {
-//   if (layout.hexToPixel(hex).y - origin.y > 0) {
-//     return true;
-//   }
-//   return false;
-// };
 
 public isWhiteCastle(castleHex: Hex): boolean {
-  if (this.layout.hexToPixel(castleHex).y - this.origin.y > 0) {
-    return true;
-  }
-  return false;
+  // Replaced pixel check: layout.hexToPixel(castleHex).y - this.origin.y > 0
+  // In pointy layout, y > 0 implies r > 0
+  return castleHex.r > 0;
 }
 public isBlackCastle(castleHex: Hex): boolean {
-  if (this.layout.hexToPixel(castleHex).y - this.origin.y < 0) {
-    return true;
-  }
-  return false;
+  // Replaced pixel check: layout.hexToPixel(castleHex).y - this.origin.y < 0
+  // In pointy layout, y < 0 implies r < 0
+  return castleHex.r < 0;
 }
 
 get Castles(): Castle[] {
@@ -149,7 +163,7 @@ get Castles(): Castle[] {
       let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
         ((hex.color_index % 3) + 3) % 3
       ];
-      const hexisaRiver = this.isRiver(center);
+      const hexisaRiver = this.isRiver(hex);
       const hexisaCastle = this.isCastle(hex, this.NSquares);
       if (hexisaRiver) {
         colorClass = "hexagon-river";

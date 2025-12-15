@@ -35,7 +35,11 @@ import bKnightImage from "../Assets/Images/Chess/bKnight.svg";
 import wEagleImage from "../Assets/Images/Chess/wEagle.svg";
 import bEagleImage from "../Assets/Images/Chess/bEagle.svg";
 
+import { GameEngine } from "../Classes/GameEngine";
+
 class GameBoard extends Component {
+  gameEngine = new GameEngine(startingBoard);
+
   state = {
     history: [],
     pieces: startingBoard.pieces as Piece[], // We need to cast the pieces to Piece type because they are initially created as object literals
@@ -78,180 +82,59 @@ class GameBoard extends Component {
     );
   };
   get turn_phase(): turnPhase {
-    return this.state.turnCounter % 5 < 2
-      ? "Movement"
-      : this.state.turnCounter % 5 < 4
-      ? "Attack"
-      : "Castles";
+    return this.gameEngine.getTurnPhase(this.state.turnCounter);
   }
   get currentPlayer(): Color {
-    return this.state.turnCounter % 10 < 5 ? "w" : "b";
+    return this.gameEngine.getCurrentPlayer(this.state.turnCounter);
   }
   get hexagons(): Hex[] {
     return startingBoard.hexes;
   }
   get blockedHexes(): Hex[] {
-    return [
-      ...startingBoard.riverHexes,
-      ...startingBoard.castleHexes,
-      ...this.occupiedHexes,
-    ];
+    return this.gameEngine.getBlockedHexes(this.state.pieces, this.state.Castles);
   }
   get occupiedHexes(): Hex[] {
-    return this.state.pieces.map((piece) => piece.hex);
+    return this.gameEngine.getOccupiedHexes(this.state.pieces);
   }
   get enemyCastleHexes(): Hex[] {
-    return this.state.Castles.filter(
-      (castle) => castle.color !== this.currentPlayer
-    ).map((castle) => castle.hex);
+    return this.gameEngine.getEnemyCastleHexes(this.state.Castles, this.currentPlayer);
   }
 
   get enemyHexes(): Hex[] {
-    return this.state.pieces
-      .filter((piece) => piece.color !== this.currentPlayer)
-      .map((piece) => piece.hex);
+    return this.gameEngine.getEnemyHexes(this.state.pieces, this.currentPlayer);
   }
   get attackableHexes(): Hex[] {
-    return [...this.enemyHexes, ...this.enemyCastleHexes];
+    return this.gameEngine.getAttackableHexes(this.state.pieces, this.state.Castles, this.currentPlayer);
   }
 
   get legalMoves(): Hex[] {
-    const { movingPiece } = this.state;
-    if (movingPiece && this.turn_phase === "Movement" && movingPiece.canMove) {
-      const color = movingPiece.color;
-      return movingPiece.legalmoves(this.blockedHexes, color);
-    }
-    return [];
+    const { movingPiece, pieces, Castles, turnCounter } = this.state;
+    return this.gameEngine.getLegalMoves(movingPiece, pieces, Castles, turnCounter);
   }
-  //Necessary to know who ranged pieces can attack
+  
   get defendedHexes(): Hex[] {
-    if (defendedPieceIsProtectedRanged) {
-      let enemyMeleePieces = this.state.pieces.filter(
-        (piece) =>
-          piece.color !== this.currentPlayer &&
-          piece.AttackType === AttackType.Melee
-      );
-      //Gets squares attacked by enemy pieces
-      return enemyMeleePieces
-        .map((piece) => piece.legalAttacks(this.hexagons))
-        .flat(1);
-    }
-    return [];
+     return this.gameEngine.getDefendedHexes(this.state.pieces, this.currentPlayer);
   }
-  //Necessary to display attacks in attack phase
+  
   get legalAttacks(): Hex[] {
-    const { movingPiece } = this.state;
-    if (movingPiece && this.turn_phase === "Attack" && movingPiece.canAttack) {
-      if (movingPiece.AttackType === AttackType.Ranged) {
-        // Hexes can only be attacked by ranged pieces if they are not defended by enemy melee pieces
-        return movingPiece
-          .legalAttacks(this.attackableHexes)
-          .filter(
-            (hex) =>
-              !this.defendedHexes.some((defendedHex) => defendedHex.equals(hex))
-          );
-      }
-      return movingPiece.legalAttacks(this.attackableHexes);
-    }
-    return [];
+    const { movingPiece, pieces, Castles, turnCounter } = this.state;
+    return this.gameEngine.getLegalAttacks(movingPiece, pieces, Castles, turnCounter);
   }
-  //Necessary to know if attack phase can be skipped, looks over every piece to see if it can attack something
+
   get futureLegalAttacks(): Hex[] {
-    return this.state.pieces
-      .filter((piece) => piece.color === this.currentPlayer && piece.canAttack)
-      .flatMap((piece) =>
-        piece.AttackType === AttackType.Ranged
-          ? piece
-              .legalAttacks(this.attackableHexes)
-              .filter(
-                (hex) =>
-                  !this.defendedHexes.some((defendedHex) =>
-                    defendedHex.equals(hex)
-                  )
-              )
-          : piece.legalAttacks(this.attackableHexes)
-      );
+    return this.gameEngine.getFutureLegalAttacks(this.state.pieces, this.state.Castles, this.state.turnCounter);
   }
 
-  //Necessary to display castle information in castles phase
   get controlledCastlesActivePlayer(): Castle[] {
-    return this.state.Castles.filter((castle) => {
-      const piece = this.state.pieces.find((piece) =>
-        piece.hex.equals(castle.hex)
-      );
-      return (
-        piece &&
-        piece.color !== castle.color &&
-        castle.color !== this.currentPlayer &&
-        this.turn_phase === "Castles"
-      );
-    });
+    return this.gameEngine.getControlledCastlesActivePlayer(this.state.Castles, this.state.pieces, this.state.turnCounter);
   }
-  //Necessary to know if castles phase can be skipped
+
   get futurecontrolledCastlesActivePlayer(): Castle[] {
-    return this.state.Castles.filter((castle) => {
-      const piece = this.state.pieces.find((piece) =>
-        piece.hex.equals(castle.hex)
-      );
-      return (
-        piece &&
-        piece.color !== castle.color &&
-        castle.color !== this.currentPlayer
-      );
-    });
+    return this.gameEngine.getFutureControlledCastlesActivePlayer(this.state.Castles, this.state.pieces, this.state.turnCounter);
   }
 
-  // Necessary to know by how much to increment turn counter
   get turnCounterIncrement(): number {
-    // calculate if there are potential attacks
-    const hasFutureAttacks = this.futureLegalAttacks.length > 0;
-    const hasFutureControlledCastles =
-      this.futurecontrolledCastlesActivePlayer.length > 0;
-
-    if (
-      !hasFutureAttacks &&
-      !hasFutureControlledCastles &&
-      this.state.turnCounter % 5 === 1
-    ) {
-      return 4;
-    } else if (
-      !hasFutureAttacks &&
-      hasFutureControlledCastles &&
-      this.state.turnCounter % 5 === 1
-    ) {
-      return 3;
-    } else if (
-      !hasFutureAttacks &&
-      !hasFutureControlledCastles &&
-      this.state.turnCounter % 5 === 2
-    ) {
-      return 3;
-    } else if (
-      !hasFutureAttacks &&
-      hasFutureControlledCastles &&
-      this.state.turnCounter % 5 === 2
-    ) {
-      return 2;
-    } else if (
-      !hasFutureControlledCastles &&
-      this.state.turnCounter % 5 === 3
-    ) {
-      return 2;
-    } else if (
-      this.turn_phase === "Castles" &&
-      this.state.Castles.filter(
-        (castle) =>
-          this.castleIsControlledByActivePlayer(castle) &&
-          !castle.used_this_turn
-      ).length === 0
-    ) {
-      return 1;
-    } else if (this.turn_phase === "Castles") {
-      // all castles are not used
-      return 0;
-    } else {
-      return 1;
-    }
+    return this.gameEngine.getTurnCounterIncrement(this.state.pieces, this.state.Castles, this.state.turnCounter);
   }
 
   get emptyUnusedHexesAdjacentToControlledCastles(): Hex[] {
@@ -265,14 +148,7 @@ class GameBoard extends Component {
     );
   }
   public castleIsControlledByActivePlayer = (castle: Castle) => {
-    const piece = this.state.pieces.find((piece) =>
-      piece.hex.equals(castle.hex)
-    );
-    return (
-      piece &&
-      piece.color !== castle.color &&
-      castle.color !== this.currentPlayer
-    );
+    return this.gameEngine.castleIsControlledByActivePlayer(castle, this.state.pieces, this.currentPlayer);
   };
 
   public hexisLegalMove = (hex: Hex) => {
@@ -365,24 +241,8 @@ class GameBoard extends Component {
       this.legalAttacks.some((attack) => attack.equals(pieceClicked.hex))
     ) {
       //Checks if attack is legal, if it is, attack
-
-      pieceClicked.damage = pieceClicked.damage + movingPiece.Strength;
-      let pieces = this.state.pieces;
-      if (
-        pieceClicked.damage >= pieceClicked.Strength ||
-        (pieceClicked.type === "Monarch" && movingPiece.type === "Assassin")
-      ) {
-        pieces = this.state.pieces.filter((piece) => piece !== pieceClicked);
-        if (
-          movingPiece.AttackType === AttackType.Melee ||
-          movingPiece.AttackType === AttackType.Swordsman
-        ) {
-          movingPiece.hex = pieceClicked.hex;
-        } else {
-        }
-      } else {
-        pieces = this.state.pieces;
-      }
+      const { newPieces } = this.gameEngine.resolveCombat(movingPiece, pieceClicked, this.state.pieces);
+      const pieces = newPieces;
       // Update the Pieces
       movingPiece.canAttack = false;
 
@@ -468,12 +328,21 @@ class GameBoard extends Component {
     } //Illegal move, snap back to original position
   };
 
+  handleResize = () => {
+    startingBoard.updateDimensions(window.innerWidth, window.innerHeight);
+    this.forceUpdate();
+  };
+
   componentDidMount() {
     window.addEventListener("keydown", this.handleKeyDown);
+    window.addEventListener("resize", this.handleResize);
+    // Ensure board is synced with current window on mount
+    startingBoard.updateDimensions(window.innerWidth, window.innerHeight); 
   }
   //Avoids memory leak
   componentWillUnmount() {
     window.removeEventListener("keydown", this.handleKeyDown);
+    window.removeEventListener("resize", this.handleResize);
   }
 
   getImageByPieceType = (type: PieceType, color: string) => {
