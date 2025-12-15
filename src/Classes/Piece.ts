@@ -1,6 +1,12 @@
-
-
-//Defines the piece class which has a hex, color, and type
+/**
+ * Represents a game piece on the board.
+ * 
+ * Each piece has:
+ * - Position (hex coordinates)
+ * - Allegiance (color: white or black)
+ * - Type (determines movement, attack range, and strength)
+ * - Turn state (canMove, canAttack, damage taken)
+ */
 import { Hex, highGroundHexes } from "./Hex";
 import {
   PieceType,
@@ -20,91 +26,115 @@ import {
   giantMoves,
 } from "./MoveStrategies";
 
+/**
+ * A piece on the game board.
+ * 
+ * Movement and attack patterns are determined by the piece type.
+ * See MoveStrategies.ts for movement implementations.
+ */
 export class Piece {
   constructor(
+    /** Current position on the hex grid */
     public hex: Hex,
+    /** Which player owns this piece */
     public color: Color,
+    /** Piece variant (determines movement/attack/strength) */
     public type: PieceType,
+    /** Whether this piece can still move this turn */
     public canMove: boolean = true,
+    /** Whether this piece can still attack this turn */
     public canAttack: boolean = true,
+    /** Damage accumulated this turn (resets each round) */
     public damage: number = 0
   ) {
     if (!hex || !color || !type) {
       throw new Error("Invalid arguments for Piece constructor");
     }
   }
+
+  /** Combat strength - must exceed defender's strength to capture */
   get Strength(): number {
     return PieceStrength[this.type];
   }
+
+  /** 
+   * Attack type determines attack range and capture behavior:
+   * - Melee: adjacent hexes, moves onto target when capturing
+   * - Ranged: exactly 2 hexes away (3 from high ground), doesn't move
+   * - LongRanged: exactly 3 hexes away (4 from high ground), doesn't move
+   * - Swordsman: diagonal-forward only, moves onto target
+   */
   get AttackType(): AttackType {
-    return this.type === PieceType.Archer
-      ? AttackType.Ranged
-      : this.type === PieceType.Trebuchet
-      ? AttackType.LongRanged
-      : this.type === PieceType.Swordsman
-      ? AttackType.Swordsman
-      : AttackType.Melee;
+    switch (this.type) {
+      case PieceType.Archer:
+        return AttackType.Ranged;
+      case PieceType.Trebuchet:
+        return AttackType.LongRanged;
+      case PieceType.Swordsman:
+        return AttackType.Swordsman;
+      default:
+        return AttackType.Melee;
+    }
   }
 
-  public legalmoves(blockedhexes: Hex[], color: Color): Hex[] {
-    let moves: Hex[] = []; 
+  /**
+   * Returns all legal movement destinations for this piece.
+   * Delegates to the appropriate move strategy based on piece type.
+   * 
+   * @param blockedHexes - Hexes that cannot be moved to (occupied, river, castle)
+   * @param color - Color of the moving piece (affects swordsman direction)
+   */
+  public legalmoves(blockedHexes: Hex[], color: Color): Hex[] {
     switch (this.type) {
       case PieceType.Swordsman:
-        moves = swordsmanMoves(this.hex, blockedhexes, color);
-        break;
+        return swordsmanMoves(this.hex, blockedHexes, color);
       case PieceType.Archer:
       case PieceType.Trebuchet:
       case PieceType.Monarch:
-        moves = archerMoves(this.hex, blockedhexes);
-        break;
+        return archerMoves(this.hex, blockedHexes);
       case PieceType.Knight:
-        moves = knightMoves(this.hex, blockedhexes, N_SQUARES);
-        break;
+        return knightMoves(this.hex, blockedHexes, N_SQUARES);
       case PieceType.Eagle:
-        moves = eagleMoves(this.hex, blockedhexes);
-        break;
+        return eagleMoves(this.hex, blockedHexes);
       case PieceType.Giant:
-        moves = giantMoves(this.hex, blockedhexes, N_SQUARES);
-        break;
+        return giantMoves(this.hex, blockedHexes, N_SQUARES);
       case PieceType.Dragon:
-        moves = dragonMoves(this.hex, blockedhexes);
-        break;
+        return dragonMoves(this.hex, blockedHexes);
       case PieceType.Assassin:
-        moves = assassinMoves(this.hex, blockedhexes, N_SQUARES);
-        break;
+        return assassinMoves(this.hex, blockedHexes, N_SQUARES);
+      default:
+        return [];
     }
+  }
 
-    return moves;
+  // =========== ATTACK LOGIC ===========
+
+  /** Checks if a target hex contains an attackable enemy */
+  private isValidAttack(targetHex: Hex, enemyHexes: Hex[]): boolean {
+    return enemyHexes.some((enemyHex) => enemyHex.equals(targetHex));
   }
-  //LEGAL ATTACK LOGIC //
-  //Enemy hexes are hexes on board that can be attacked
-  private isValidAttack(newHex: Hex, enemyHexes: Hex[]): boolean {
-    return enemyHexes.some((hex) => hex.equals(newHex));
-  }
+
+  /** Melee attacks: all adjacent hexes (radius 1) */
   public meleeAttacks(enemyHexes: Hex[]): Hex[] {
-    let attacks = [];
-    let hex = this.hex;
-    let potentialAttacks = hex.cubeRing(1);
+    const attacks: Hex[] = [];
+    const potentialAttacks = this.hex.cubeRing(1);
 
-    // Loop over each potential move
-    for (let newHex of potentialAttacks) {
-      if (this.isValidAttack(newHex, enemyHexes)) {
-        attacks.push(newHex);
+    for (const target of potentialAttacks) {
+      if (this.isValidAttack(target, enemyHexes)) {
+        attacks.push(target);
       }
     }
 
     return attacks;
   }
   public rangedAttacks(enemyHexes: Hex[]): Hex[] {
-    let attacks = [];
-    let hex = this.hex;
-    let potentialAttacks = hex.cubeRing(2);
-    if (highGroundHexes.some((hex) => hex.equals(this.hex))) {
-      potentialAttacks.push(...hex.cubeRing(3));
+    const attacks: Hex[] = [];
+    let potentialAttacks = this.hex.cubeRing(2);
+    if (highGroundHexes.some((hgHex) => hgHex.equals(this.hex))) {
+      potentialAttacks.push(...this.hex.cubeRing(3));
     }
 
-    // Loop over each potential move
-    for (let newHex of potentialAttacks) {
+    for (const newHex of potentialAttacks) {
       if (this.isValidAttack(newHex, enemyHexes)) {
         attacks.push(newHex);
       }
@@ -112,15 +142,13 @@ export class Piece {
     return attacks;
   }
   public longRangedAttacks(enemyHexes: Hex[]): Hex[] {
-    let attacks = [];
-    let hex = this.hex;
-    let potentialAttacks = hex.cubeRing(3);
-    if (highGroundHexes.some((hex) => hex.equals(this.hex))) {
-      potentialAttacks.push(...hex.cubeRing(4));
+    const attacks: Hex[] = [];
+    let potentialAttacks = this.hex.cubeRing(3);
+    if (highGroundHexes.some((hgHex) => hgHex.equals(this.hex))) {
+      potentialAttacks.push(...this.hex.cubeRing(4));
     }
 
-    // Loop over each potential move
-    for (let newHex of potentialAttacks) {
+    for (const newHex of potentialAttacks) {
       if (this.isValidAttack(newHex, enemyHexes)) {
         attacks.push(newHex);
       }
@@ -129,21 +157,18 @@ export class Piece {
   }
 
   public swordsmanAttacks(enemyHexes: Hex[]): Hex[] {
-    let attacks = [];
-    let hex = this.hex;
-    let q = hex.q;
-    let r = hex.r;
-    let s = hex.s;
-    let offset = this.color === "b" ? -1 : 1;
+    const attacks: Hex[] = [];
+    const { q, r, s } = this.hex;
+    const direction = this.color === "b" ? -1 : 1;
 
-    let offsets = [
-      { q: offset, r: -offset, s: 0 },
-      { q: -offset, r: 0, s: offset },
+    const attackDirections = [
+      { q: direction, r: -direction, s: 0 },
+      { q: -direction, r: 0, s: direction },
     ];
 
-    for (let offset of offsets) {
-      let newHex = new Hex(q + offset.q, r + offset.r, s + offset.s);
-      if (enemyHexes.some((hex) => hex.equals(newHex))) {
+    for (const dir of attackDirections) {
+      const newHex = new Hex(q + dir.q, r + dir.r, s + dir.s);
+      if (enemyHexes.some((enemyHex) => enemyHex.equals(newHex))) {
         attacks.push(newHex);
       }
     }

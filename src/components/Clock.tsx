@@ -16,9 +16,9 @@ const ChessClock: React.FC<ChessClockProps> = ({
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (isActive) {
+    if (isActive && timeLeft > 0) {
       timer = setInterval(() => {
-        setTimeLeft((timeLeft) => timeLeft - 1);
+        setTimeLeft((prev) => Math.max(0, prev - 1));
       }, 1000);
     }
 
@@ -27,7 +27,7 @@ const ChessClock: React.FC<ChessClockProps> = ({
         clearInterval(timer);
       }
     };
-  }, [isActive]);
+  }, [isActive, timeLeft]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;

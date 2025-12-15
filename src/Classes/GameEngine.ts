@@ -15,6 +15,10 @@ import {
   HistoryEntry,
 } from "../Constants";
 
+/**
+ * Represents the complete state of a game at any point.
+ * Used for state transitions and history tracking.
+ */
 export interface GameState {
   pieces: Piece[];
   Castles: Castle[];
@@ -22,10 +26,26 @@ export interface GameState {
   movingPiece: Piece | null;
   history: HistoryEntry[];
 }
-// Rulebook for game: Can I move here? Is this a legal attack?...
+
+/**
+ * GameEngine: The "rulebook" for the Castles game.
+ * 
+ * Handles all game logic including:
+ * - Turn phase determination (Movement → Attack → Castles)
+ * - Legal move/attack calculation
+ * - State transitions (applying moves, attacks, recruits)
+ * - Win condition checking (future: not yet implemented)
+ * 
+ * The engine is stateless - it takes game state as input and returns
+ * new state as output, making it easy to test and reason about.
+ */
 export class GameEngine {
   constructor(public board: Board) {}
 
+  /**
+   * Determines the current turn phase based on the turn counter.
+   * Each player's turn consists of 5 sub-turns: Movement(0,1), Attack(2,3), Castles(4)
+   */
   public getTurnPhase(turnCounter: number): TurnPhase {
     const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
     if (phaseIndex < MOVEMENT_PHASE_END) return "Movement";
@@ -33,18 +53,24 @@ export class GameEngine {
     return "Castles";
   }
 
+  /**
+   * Determines which player's turn it is based on the turn counter.
+   * White plays turns 0-4, Black plays turns 5-9, then cycles.
+   */
   public getCurrentPlayer(turnCounter: number): Color {
     return turnCounter % PLAYER_CYCLE_LENGTH < PHASE_CYCLE_LENGTH ? "w" : "b";
   }
 
+  /** Returns all hexes currently occupied by pieces */
   public getOccupiedHexes(pieces: Piece[]): Hex[] {
     return pieces.map((piece) => piece.hex);
   }
 
+  /**
+   * Returns all hexes that block ground movement.
+   * Includes: rivers, castles, and occupied hexes.
+   */
   public getBlockedHexes(pieces: Piece[], castles: Castle[]): Hex[] {
-    // Assuming board logic is used here, logic from Game.tsx:
-    // blockedHexes = [...riverHexes, ...castleHexes, ...occupiedHexes]
-    // The river/castle hexes are static on the board.
     const occupied = this.getOccupiedHexes(pieces);
     return [
         ...this.board.riverHexes, 
@@ -58,8 +84,6 @@ export class GameEngine {
     const blockedHexes = this.getBlockedHexes(pieces, castles);
     return new Set(blockedHexes.map(hex => hex.getKey()));
   }
-
-  // ... Transferring more logic
   
   public getEnemyHexes(pieces: Piece[], currentPlayer: Color): Hex[] {
     return pieces
@@ -189,42 +213,78 @@ export class GameEngine {
     });
   }
 
+  /**
+   * Calculates how many turn counter steps to advance based on available actions.
+   * 
+   * The turn counter cycles through phases (0-4 per player):
+   * - 0,1 = Movement (two sub-turns)
+   * - 2,3 = Attack (two sub-turns)  
+   * - 4   = Castles (one sub-turn)
+   * 
+   * When a player has no legal actions remaining in future phases,
+   * we skip ahead to avoid pointless empty turns.
+   * 
+   * @returns Number of turn counter steps to advance (0-4)
+   */
   public getTurnCounterIncrement(pieces: Piece[], castles: Castle[], turnCounter: number): number {
-      const futureAttacks = this.getFutureLegalAttacks(pieces, castles, turnCounter);
-      const hasFutureAttacks = futureAttacks.length > 0;
-      
-      const futureControlledCastles = this.getFutureControlledCastlesActivePlayer(castles, pieces, turnCounter);
-      const hasFutureControlledCastles = futureControlledCastles.length > 0;
-      
-      const phase = this.getTurnPhase(turnCounter);
-      const mod5 = turnCounter % 5;
+    const futureAttacks = this.getFutureLegalAttacks(pieces, castles, turnCounter);
+    const hasFutureAttacks = futureAttacks.length > 0;
+    
+    const futureControlledCastles = this.getFutureControlledCastlesActivePlayer(castles, pieces, turnCounter);
+    const hasFutureControlledCastles = futureControlledCastles.length > 0;
+    
+    const phase = this.getTurnPhase(turnCounter);
+    const phasePosition = turnCounter % PHASE_CYCLE_LENGTH; // 0-4 within current player's turn
 
-    if (!hasFutureAttacks && !hasFutureControlledCastles && mod5 === 1) {
-      return 4;
-    } else if (!hasFutureAttacks && hasFutureControlledCastles && mod5 === 1) {
-      return 3;
-    } else if (!hasFutureAttacks && !hasFutureControlledCastles && mod5 === 2) {
-      return 3;
-    } else if (!hasFutureAttacks && hasFutureControlledCastles && mod5 === 2) {
-      return 2;
-    } else if (!hasFutureControlledCastles && mod5 === 3) {
-      // Logic check: Game.tsx line 236
-      return 2;
-    } else if (
-      phase === "Castles" &&
-      castles.filter(
-        (castle) =>
-          this.castleIsControlledByActivePlayer(castle, pieces, this.getCurrentPlayer(turnCounter)) &&
-          !castle.used_this_turn
-      ).length === 0
-    ) {
-      return 1;
-    } else if (phase === "Castles") {
-      // all castles are not used
-      return 0;
-    } else {
-      return 1;
+    // MOVEMENT PHASE: After first movement turn (position 1)
+    if (phasePosition === 1) {
+      if (!hasFutureAttacks && !hasFutureControlledCastles) {
+        // Skip Attack (2 turns) + Castles (1 turn) = +4 to next player
+        return 4;
+      }
+      if (!hasFutureAttacks && hasFutureControlledCastles) {
+        // Skip Attack phase only = +3 to Castles
+        return 3;
+      }
     }
+
+    // ATTACK PHASE: After first attack turn (position 2)
+    if (phasePosition === 2) {
+      if (!hasFutureAttacks && !hasFutureControlledCastles) {
+        // Skip second attack + Castles = +3 to next player
+        return 3;
+      }
+      if (!hasFutureAttacks && hasFutureControlledCastles) {
+        // Skip second attack only = +2 to Castles
+        return 2;
+      }
+    }
+
+    // ATTACK PHASE: After second attack turn (position 3)
+    if (phasePosition === 3 && !hasFutureControlledCastles) {
+      // Skip Castles phase = +2 to next player
+      return 2;
+    }
+
+    // CASTLES PHASE: Check if any controlled castles remain usable
+    if (phase === "Castles") {
+      const currentPlayer = this.getCurrentPlayer(turnCounter);
+      const unusedControlledCastles = castles.filter(
+        (castle) =>
+          this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
+          !castle.used_this_turn
+      );
+      
+      if (unusedControlledCastles.length === 0) {
+        // All castles used or none controlled - advance to next player
+        return 1;
+      }
+      // Still have castles to use - stay in Castles phase
+      return 0;
+    }
+
+    // Default: advance one turn counter step
+    return 1;
   }
 
   // State Transition Methods
