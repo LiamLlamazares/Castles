@@ -89,61 +89,32 @@ class GameBoard extends Component<{}, GameBoardState> {
   get hexagons(): Hex[] {
     return startingBoard.hexes;
   }
-  get blockedHexes(): Hex[] {
-    return this.gameEngine.getBlockedHexes(this.state.pieces, this.state.Castles);
-  }
-  get occupiedHexes(): Hex[] {
-    return this.gameEngine.getOccupiedHexes(this.state.pieces);
-  }
-  get enemyCastleHexes(): Hex[] {
-    return this.gameEngine.getEnemyCastleHexes(this.state.Castles, this.currentPlayer);
-  }
 
-  get enemyHexes(): Hex[] {
-    return this.gameEngine.getEnemyHexes(this.state.pieces, this.currentPlayer);
-  }
-  get attackableHexes(): Hex[] {
-    return this.gameEngine.getAttackableHexes(this.state.pieces, this.state.Castles, this.currentPlayer);
-  }
 
   get legalMoves(): Hex[] {
     const { movingPiece, pieces, Castles, turnCounter } = this.state;
     return this.gameEngine.getLegalMoves(movingPiece, pieces, Castles, turnCounter);
   }
-  
-  get defendedHexes(): Hex[] {
-     return this.gameEngine.getDefendedHexes(this.state.pieces, this.currentPlayer);
-  }
-  
+
+
   get legalAttacks(): Hex[] {
     const { movingPiece, pieces, Castles, turnCounter } = this.state;
     return this.gameEngine.getLegalAttacks(movingPiece, pieces, Castles, turnCounter);
-  }
-
-  get futureLegalAttacks(): Hex[] {
-    return this.gameEngine.getFutureLegalAttacks(this.state.pieces, this.state.Castles, this.state.turnCounter);
   }
 
   get controlledCastlesActivePlayer(): Castle[] {
     return this.gameEngine.getControlledCastlesActivePlayer(this.state.Castles, this.state.pieces, this.state.turnCounter);
   }
 
-  get futurecontrolledCastlesActivePlayer(): Castle[] {
-    return this.gameEngine.getFutureControlledCastlesActivePlayer(this.state.Castles, this.state.pieces, this.state.turnCounter);
-  }
-
-  get turnCounterIncrement(): number {
-    return this.gameEngine.getTurnCounterIncrement(this.state.pieces, this.state.Castles, this.state.turnCounter);
-  }
-
   get emptyUnusedHexesAdjacentToControlledCastles(): Hex[] {
+    const occupiedHexes = this.gameEngine.getOccupiedHexes(this.state.pieces);
     const adjacentHexes = this.controlledCastlesActivePlayer
       .filter((castle) => !castle.used_this_turn)
       .map((castle) => castle.hex.cubeRing(1))
       .flat(1);
     return adjacentHexes.filter(
       (hex) =>
-        !this.occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
+        !occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
     );
   }
 
