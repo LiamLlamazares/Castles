@@ -1,5 +1,5 @@
 import { Hex } from "./Hex";
-import { Color, N_SQUARES } from "../Constants";
+import { Color } from "../Constants";
 
 /** Direction vector for hex movement */
 interface HexDirection {
@@ -13,14 +13,14 @@ interface HexDirection {
  * Used by Knight, Giant, and Assassin.
  * 
  * @param hex - Starting hex position
- * @param blockedHexes - Hexes that cannot be moved through
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
  * @param directions - Array of direction vectors to check
  * @param maxDistance - Maximum distance piece can travel in each direction
  * @returns Array of legal moves
  */
 const getSlidingMoves = (
   hex: Hex,
-  blockedHexes: Hex[],
+  blockedHexSet: Set<string>,
   directions: HexDirection[],
   maxDistance: number
 ): Hex[] => {
@@ -31,7 +31,7 @@ const getSlidingMoves = (
     // Check moves in the positive direction
     for (let k = 1; k <= maxDistance; k++) {
       const newHex = new Hex(q + k * dir.dq, r + k * dir.dr, s + k * dir.ds);
-      if (!blockedHexes.some((blocked) => blocked.equals(newHex))) {
+      if (!blockedHexSet.has(newHex.getKey())) {
         moves.push(newHex);
       } else {
         break; // Blocked - stop in this direction
@@ -41,7 +41,7 @@ const getSlidingMoves = (
     // Check moves in the negative direction
     for (let k = -1; k >= -maxDistance; k--) {
       const newHex = new Hex(q + k * dir.dq, r + k * dir.dr, s + k * dir.ds);
-      if (!blockedHexes.some((blocked) => blocked.equals(newHex))) {
+      if (!blockedHexSet.has(newHex.getKey())) {
         moves.push(newHex);
       } else {
         break; // Blocked - stop in this direction
@@ -55,8 +55,12 @@ const getSlidingMoves = (
 /**
  * Swordsman movement: Forward in 3 diagonal directions (color-dependent).
  * Similar to pawn in chess but with hex geometry.
+ * 
+ * @param hex - Starting position
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param color - Piece color (determines forward direction)
  */
-export const swordsmanMoves = (hex: Hex, blockedHexes: Hex[], color: Color): Hex[] => {
+export const swordsmanMoves = (hex: Hex, blockedHexSet: Set<string>, color: Color): Hex[] => {
   const moves: Hex[] = [];
   const { q, r, s } = hex;
   const direction = color === "b" ? -1 : 1;
@@ -69,7 +73,7 @@ export const swordsmanMoves = (hex: Hex, blockedHexes: Hex[], color: Color): Hex
 
   for (const dir of moveDirections) {
     const newHex = new Hex(q + dir.q, r + dir.r, s + dir.s);
-    if (!blockedHexes.some((blocked) => blocked.equals(newHex))) {
+    if (!blockedHexSet.has(newHex.getKey())) {
       moves.push(newHex);
     }
   }
@@ -80,19 +84,24 @@ export const swordsmanMoves = (hex: Hex, blockedHexes: Hex[], color: Color): Hex
 /**
  * Archer/Monarch/Trebuchet movement: One hex in any direction.
  * Simple adjacent movement (radius 1).
+ * 
+ * @param hex - Starting position
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
  */
-export const archerMoves = (hex: Hex, blockedHexes: Hex[]): Hex[] => {
+export const archerMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
   const potentialMoves = hex.cubeRing(1);
-  return potentialMoves.filter(
-    (move) => !blockedHexes.some((blocked) => blocked.equals(move))
-  );
+  return potentialMoves.filter((move) => !blockedHexSet.has(move.getKey()));
 };
 
 /**
  * Knight movement: Slides along diagonal lines (like bishop in chess).
  * Uses 3 diagonal direction vectors, can move any distance until blocked.
+ * 
+ * @param hex - Starting position
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param boardSize - Maximum board dimension (limits sliding distance)
  */
-export const knightMoves = (hex: Hex, blockedHexes: Hex[], boardSize: number): Hex[] => {
+export const knightMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: number): Hex[] => {
   // Diagonal directions (similar to bishop movement in standard chess)
   const knightDirections: HexDirection[] = [
     { dq: -1, dr: -1, ds: 2 },
@@ -100,14 +109,17 @@ export const knightMoves = (hex: Hex, blockedHexes: Hex[], boardSize: number): H
     { dq: 2, dr: -1, ds: -1 },
   ];
 
-  return getSlidingMoves(hex, blockedHexes, knightDirections, boardSize);
+  return getSlidingMoves(hex, blockedHexSet, knightDirections, boardSize);
 };
 
 /**
  * Eagle movement: Flying unit that can move up to 3 hexes in any direction.
  * Not blocked by units in between (can fly over).
+ * 
+ * @param hex - Starting position
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
  */
-export const eagleMoves = (hex: Hex, blockedHexes: Hex[]): Hex[] => {
+export const eagleMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
   // Collect all hexes in radius 1, 2, and 3
   const potentialMoves: Hex[] = [];
   for (let radius = 1; radius <= 3; radius++) {
@@ -115,16 +127,17 @@ export const eagleMoves = (hex: Hex, blockedHexes: Hex[]): Hex[] => {
   }
   
   // Eagles fly, so only the destination needs to be unblocked
-  return potentialMoves.filter(
-    (move) => !blockedHexes.some((blocked) => blocked.equals(move))
-  );
+  return potentialMoves.filter((move) => !blockedHexSet.has(move.getKey()));
 };
 
 /**
  * Dragon movement: L-shaped jumps like knight in standard chess.
  * Flies (not blocked by pieces in between), can land at 12 specific positions.
+ * 
+ * @param hex - Starting position
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
  */
-export const dragonMoves = (hex: Hex, blockedHexes: Hex[]): Hex[] => {
+export const dragonMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
   const { q, r, s } = hex;
   const moves: Hex[] = [];
 
@@ -146,16 +159,18 @@ export const dragonMoves = (hex: Hex, blockedHexes: Hex[]): Hex[] => {
   }
 
   // Dragons fly, so only the landing spot needs to be unblocked
-  return moves.filter(
-    (move) => !blockedHexes.some((blocked) => blocked.equals(move))
-  );
+  return moves.filter((move) => !blockedHexSet.has(move.getKey()));
 };
 
 /**
  * Assassin movement: Combines Giant (orthogonal) and Knight (diagonal).
  * Similar to Queen in standard chess (rook + bishop).
+ * 
+ * @param hex - Starting position
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param boardSize - Maximum board dimension (limits sliding distance)
  */
-export const assassinMoves = (hex: Hex, blockedHexes: Hex[], boardSize: number): Hex[] => {
+export const assassinMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: number): Hex[] => {
   // All 6 directions: 3 orthogonal + 3 diagonal
   const assassinDirections: HexDirection[] = [
     // Orthogonal (like Giant/Rook)
@@ -168,14 +183,18 @@ export const assassinMoves = (hex: Hex, blockedHexes: Hex[], boardSize: number):
     { dq: 1, dr: 1, ds: -2 },
   ];
 
-  return getSlidingMoves(hex, blockedHexes, assassinDirections, 2 * boardSize);
+  return getSlidingMoves(hex, blockedHexSet, assassinDirections, 2 * boardSize);
 };
 
 /**
  * Giant movement: Slides along orthogonal lines (like rook in chess).
  * Uses 3 orthogonal direction vectors, can move any distance until blocked.
+ * 
+ * @param hex - Starting position
+ * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param boardSize - Maximum board dimension (limits sliding distance)
  */
-export const giantMoves = (hex: Hex, blockedHexes: Hex[], boardSize: number): Hex[] => {
+export const giantMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: number): Hex[] => {
   // Orthogonal directions (similar to rook movement in standard chess)
   const giantDirections: HexDirection[] = [
     { dq: 0, dr: -1, ds: 1 },
@@ -183,5 +202,5 @@ export const giantMoves = (hex: Hex, blockedHexes: Hex[], boardSize: number): He
     { dq: 1, dr: 0, ds: -1 },
   ];
 
-  return getSlidingMoves(hex, blockedHexes, giantDirections, 2 * boardSize);
+  return getSlidingMoves(hex, blockedHexSet, giantDirections, 2 * boardSize);
 };

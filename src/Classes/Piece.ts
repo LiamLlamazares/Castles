@@ -85,23 +85,26 @@ export class Piece {
    * @param color - Color of the moving piece (affects swordsman direction)
    */
   public legalmoves(blockedHexes: Hex[], color: Color): Hex[] {
+    // Convert to Set for O(1) lookups in move strategies
+    const blockedHexSet = new Set(blockedHexes.map((hex) => hex.getKey()));
+    
     switch (this.type) {
       case PieceType.Swordsman:
-        return swordsmanMoves(this.hex, blockedHexes, color);
+        return swordsmanMoves(this.hex, blockedHexSet, color);
       case PieceType.Archer:
       case PieceType.Trebuchet:
       case PieceType.Monarch:
-        return archerMoves(this.hex, blockedHexes);
+        return archerMoves(this.hex, blockedHexSet);
       case PieceType.Knight:
-        return knightMoves(this.hex, blockedHexes, N_SQUARES);
+        return knightMoves(this.hex, blockedHexSet, N_SQUARES);
       case PieceType.Eagle:
-        return eagleMoves(this.hex, blockedHexes);
+        return eagleMoves(this.hex, blockedHexSet);
       case PieceType.Giant:
-        return giantMoves(this.hex, blockedHexes, N_SQUARES);
+        return giantMoves(this.hex, blockedHexSet, N_SQUARES);
       case PieceType.Dragon:
-        return dragonMoves(this.hex, blockedHexes);
+        return dragonMoves(this.hex, blockedHexSet);
       case PieceType.Assassin:
-        return assassinMoves(this.hex, blockedHexes, N_SQUARES);
+        return assassinMoves(this.hex, blockedHexSet, N_SQUARES);
       default:
         return [];
     }

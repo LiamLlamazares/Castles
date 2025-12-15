@@ -1,17 +1,16 @@
 import { Component } from "react";
 import { Piece } from "../Classes/Piece";
 import { Castle } from "../Classes/Castle";
-import { Hex } from "../Classes/Hex";
+import { Hex, Point } from "../Classes/Hex";
 import {
   PieceType,
   N_SQUARES,
   TurnPhase,
   Color,
-  AttackType,
   STARTING_TIME,
-  DEFENDED_PIECE_IS_PROTECTED_RANGED,
+  HistoryEntry,
 } from "../Constants";
-import { startingBoard, emptyBoard } from "../ConstantImports";
+import { startingBoard } from "../ConstantImports";
 import "../css/Board.css";
 import ChessClock from "./Clock";
 import TurnBanner from "./Turn_banner";
@@ -37,36 +36,50 @@ import bEagleImage from "../Assets/Images/Chess/bEagle.svg";
 
 import { GameEngine } from "../Classes/GameEngine";
 
-class GameBoard extends Component {
+/** State interface for the GameBoard component */
+interface GameBoardState {
+  history: HistoryEntry[];
+  pieces: Piece[];
+  movingPiece: Piece | null;
+  showCoordinates: boolean;
+  turnCounter: number;
+  Castles: Castle[];
+  cheatMode: boolean;
+  isBoardRotated: boolean;
+}
+
+/**
+ * Main game board component.
+ * Renders the hex grid, pieces, and handles user interactions.
+ */
+class GameBoard extends Component<{}, GameBoardState> {
   gameEngine = new GameEngine(startingBoard);
 
-  state = {
-    history: [] as {
-        pieces: Piece[];
-        Castles: Castle[];
-        turnCounter: number;
-    }[],
-    pieces: startingBoard.pieces as Piece[], // We need to cast the pieces to Piece type because they are initially created as object literals
-    movingPiece: null as Piece | null,
+  state: GameBoardState = {
+    history: [],
+    pieces: startingBoard.pieces as Piece[],
+    movingPiece: null,
     showCoordinates: false,
-    turnCounter: 0 as number,
+    turnCounter: 0,
     Castles: startingBoard.Castles as Castle[],
     cheatMode: false,
     isBoardRotated: false,
   };
 
-  getPieceCenter = (piece: Piece) => {
+  getPieceCenter = (piece: Piece): Point => {
     return startingBoard.hexCenters[
       piece.hex.getKey(this.state.isBoardRotated)
     ];
   };
-  getHexCenter = (hex: Hex) => {
+
+  getHexCenter = (hex: Hex): Point => {
     return startingBoard.layout.hexToPixelReflected(
       hex,
       this.state.isBoardRotated
     );
   };
-  getPolygonPoints = (hex: Hex) => {
+
+  getPolygonPoints = (hex: Hex): string => {
     return startingBoard.hexCornerString[
       hex.reflect().getKey(!this.state.isBoardRotated)
     ];
@@ -151,36 +164,36 @@ class GameBoard extends Component {
         !this.occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
     );
   }
-  public castleIsControlledByActivePlayer = (castle: Castle) => {
+
+  public castleIsControlledByActivePlayer = (castle: Castle): boolean => {
     return this.gameEngine.castleIsControlledByActivePlayer(castle, this.state.pieces, this.currentPlayer);
   };
 
-  public hexisLegalMove = (hex: Hex) => {
-    const legalMoves = this.legalMoves;
-    return legalMoves.some((move) => move.equals(hex));
+  public hexisLegalMove = (hex: Hex): boolean => {
+    return this.legalMoves.some((move) => move.equals(hex));
   };
 
-  public hexisLegalAttack = (hex: Hex) => {
-    const legalAttacks = this.legalAttacks;
-    return legalAttacks.some((attack) => attack.equals(hex));
+  public hexisLegalAttack = (hex: Hex): boolean => {
+    return this.legalAttacks.some((attack) => attack.equals(hex));
   };
-  public hexisAdjacentToControlledCastle = (hex: Hex) => {
-    const hexesAdjacentToControlledCastles =
-      this.emptyUnusedHexesAdjacentToControlledCastles;
-    return hexesAdjacentToControlledCastles.some((adjacentHex) =>
-      hex.equals(adjacentHex)
+
+  public hexisAdjacentToControlledCastle = (hex: Hex): boolean => {
+    return this.emptyUnusedHexesAdjacentToControlledCastles.some(
+      (adjacentHex) => hex.equals(adjacentHex)
     );
   };
-  handleFlipBoard = () => {
+
+  handleFlipBoard = (): void => {
     this.setState({ isBoardRotated: !this.state.isBoardRotated });
   };
-  // Add this method to your GameBoard component
-  handlePass = () => {
+
+  handlePass = (): void => {
     this.saveHistory();
     const newState = this.gameEngine.passTurn(this.state);
     this.setState(newState);
   };
-  handleKeyDown = (event: KeyboardEvent) => {
+
+  handleKeyDown = (event: KeyboardEvent): void => {
     if (event.code === "KeyQ") {
       this.handlePass();
     }
@@ -474,32 +487,8 @@ class GameBoard extends Component {
     );
   }
   componentDidUpdate() {
-    // console.log(`The turn counter is ${this.state.turnCounter}. The turn phase is ${this.turn_phase}. It is ${this.currentPlayer}'s turn`);
-    // console.log('The highground hexes are', this.hexagons.filter(hex => startingBoard.colorClassMap[hex.getKey()] === 'hexagon-high-ground'));
-    // console.log('The occupied hexes are', this.occupiedHexes);
-    // console.log('The blocked hexes are', this.blockedHexes);
-    // console.log('The legal moves are', this.legalMoves);
-    // console.log('The legal attacks are', this.legalAttacks);
-    // console.log('The future legal attacks are', this.futureLegalAttacks);
-    console.log("The defended hexes are", this.defendedHexes);
-    // console.log(
-    //   "The controlled castles are",
-    //   this.controlledCastlesActivePlayer
-    // );
-    // console.log(
-    //   "The hexes adjacent to controlled castles are",
-    //   this.emptyUnusedHexesAdjacentToControlledCastles
-    // );
-    this.hexagons.forEach((hex) => {
-      if (this.hexisAdjacentToControlledCastle(hex)) {
-        // console.log(`Hex ${hex.getKey()} is adjacent to a controlled castle.`);
-      }
-    });
-    // console.log('The future controlled castles are', this.futurecontrolledCastlesActivePlayer);
-    // console.log('The enemy hexes are', this.enemyHexes);
-    // console.log('The enemy castle hexes are', this.enemyCastleHexes);
-    // console.log('The attackable hexes are', this.attackableHexes);
-    // console.log('The pieces are', this.state.pieces);
+    // Debug logging can be enabled by uncommenting below:
+    // console.log(`Turn: ${this.state.turnCounter}, Phase: ${this.turn_phase}, Player: ${this.currentPlayer}`);
   }
 }
 

@@ -1,21 +1,48 @@
-// Generated code -- CC0 -- No Rights Reserved -- http://www.redblobgames.com/grids/hexagons/
+/**
+ * Hexagonal grid utilities based on Red Blob Games' hex grid guide.
+ * @see https://www.redblobgames.com/grids/hexagons/
+ * 
+ * License: CC0 -- No Rights Reserved
+ */
+
+/** A 2D point in pixel coordinates */
 export class Point {
   constructor(public x: number, public y: number) {}
 }
-// Hexes contain cube coordinates as well as color
+
+/**
+ * Represents a hex position using cube coordinates (q, r, s).
+ * 
+ * Cube coordinates satisfy the constraint: q + r + s = 0
+ * This constraint enables simple arithmetic operations like addition and scaling.
+ * 
+ * Coordinate system:
+ * - q: increases to the right (east)
+ * - r: increases down-left (south-west)  
+ * - s: increases up-left (north-west)
+ * 
+ * The coordinate is valid if and only if q + r + s = 0.
+ */
 export class Hex {
   constructor(
+    /** Column position (increases eastward) */
     public q: number,
+    /** Row position (increases south-westward) */
     public r: number,
+    /** Diagonal position (increases north-westward) */
     public s: number,
+    /** Index for checkerboard coloring (0, 1, or 2) */
     public color_index: number = 0
   ) {
     if (Math.round(q + r + s) !== 0) throw new Error("q + r + s must be 0");
   }
+
+  /** Checks if two hexes have the same coordinates */
   public equals(other: Hex): boolean {
     return this.q === other.q && this.r === other.r && this.s === other.s;
   }
 
+  /** Returns the CSS class for this hex based on its type (river, castle, etc.) */
   public colorClass(
     riverHexes: Hex[],
     castleHexes: Hex[],
@@ -52,31 +79,41 @@ export class Hex {
     }
     return colorClass;
   }
+
+  /** Returns a unique string key for this hex (used for Maps/Sets) */
   public getKey(isReflected: Boolean = false): string {
     if (isReflected) {
       return `${-this.q},${-this.r},${-this.s}`;
     }
     return `${this.q},${this.r},${this.s}`;
   }
+
+  /** Vector addition: returns a new hex at position (this + b) */
   public add(b: Hex): Hex {
     return new Hex(this.q + b.q, this.r + b.r, this.s + b.s);
   }
 
+  /** Vector subtraction: returns a new hex at position (this - b) */
   public subtract(b: Hex): Hex {
     return new Hex(this.q - b.q, this.r - b.r, this.s - b.s);
   }
 
+  /** Scalar multiplication: returns a hex scaled by factor k */
   public scale(k: number): Hex {
     return new Hex(this.q * k, this.r * k, this.s * k);
   }
+
+  /** Returns the hex reflected through the origin (negation of all coordinates) */
   public reflect(): Hex {
     return new Hex(-this.q, -this.r, -this.s);
   }
 
+  /** Rotates the hex 60° counter-clockwise around the origin */
   public rotateLeft(): Hex {
     return new Hex(-this.s, -this.q, -this.r);
   }
 
+  /** Rotates the hex 60° clockwise around the origin */
   public rotateRight(): Hex {
     return new Hex(-this.r, -this.s, -this.q);
   }
