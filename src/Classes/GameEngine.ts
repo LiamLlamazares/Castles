@@ -101,33 +101,22 @@ export class GameEngine {
     return [...this.getEnemyHexes(pieces, currentPlayer), ...this.getEnemyCastleHexes(castles, currentPlayer)];
   }
 
+  /**
+   * Returns hexes that are protected from ranged attacks.
+   * These are hexes adjacent to enemy melee pieces.
+   */
   public getDefendedHexes(pieces: Piece[], currentPlayer: Color): Hex[] {
-    if (DEFENDED_PIECE_IS_PROTECTED_RANGED) {
-      let enemyMeleePieces = pieces.filter(
-        (piece) =>
-          piece.color !== currentPlayer &&
-          piece.AttackType === AttackType.Melee
-      );
-      //Gets squares attacked by enemy pieces
-      // Note: legalAttacks logic in Piece depends on enemyHexes.
-      // Enemy melee pieces attack YOUR hexes.
-      // So enemyHexes for THEM is YOUR pieces.
-      // Wait, Piece.legalAttacks takes 'enemyHexes'.
-      // If we want to know what squares are defended by ENEMY melee pieces (so ranged can't attack them),
-      // we need to see where enemy melee pieces can attack.
-      // They can attack anything adjacent (usually).
-      // Piece.legalAttacks checks if the target is in 'enemyHexes'.
-      // If we pass ALL hexes as 'enemyHexes', we get all VALID attacks.
-      // But 'defendedHexes' in Game.tsx implies "squares attacked by enemy pieces".
-      // Game.tsx:136: `piece.legalAttacks(this.hexagons)`
-      // It passes ALL hexagons. So it checks if any hexagon is attackable.
-      // Piece code: `isValidAttack` checks if `newHex` is in `enemyHexes`.
-      // So passing `this.hexagons` (all hexes) means it returns all adjacent hexes (since all are "valid" targets if we consider space).
-      return enemyMeleePieces
-        .map((piece) => piece.legalAttacks(this.board.hexes)) 
-        .flat(1);
-    }
-    return [];
+    if (!DEFENDED_PIECE_IS_PROTECTED_RANGED) return [];
+    
+    const enemyMeleePieces = pieces.filter(
+      (piece) =>
+        piece.color !== currentPlayer &&
+        piece.AttackType === AttackType.Melee
+    );
+    
+    // Enemy melee pieces "defend" all hexes they can attack
+    return enemyMeleePieces
+      .flatMap((piece) => piece.legalAttacks(this.board.hexes));
   }
 
   // This method calculates legal moves for a specific piece
@@ -161,26 +150,28 @@ export class GameEngine {
       return [];
   }
 
+  /**
+   * Returns all hexes that the current player could attack with any of their pieces.
+   * Used for turn skip logic (skip attack phase if no legal attacks exist).
+   */
   public getFutureLegalAttacks(pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
     const currentPlayer = this.getCurrentPlayer(turnCounter);
     const attackable = this.getAttackableHexes(pieces, castles, currentPlayer);
     
-    // Adapted from Game.tsx logic
+    // Calculate defended hexes ONCE (fixes O(n²) issue)
+    const defended = this.getDefendedHexes(pieces, currentPlayer);
+    const defendedSet = new Set(defended.map(h => h.getKey()));
+    
     return pieces
       .filter((piece) => piece.color === currentPlayer && piece.canAttack)
       .flatMap((piece) => {
-        if (piece.AttackType === AttackType.Ranged) {
-            const defended = this.getDefendedHexes(pieces, currentPlayer);
-            return piece
-              .legalAttacks(attackable)
-              .filter(
-                (hex) =>
-                  !defended.some((defendedHex) =>
-                    defendedHex.equals(hex)
-                  )
-              );
+        const attacks = piece.legalAttacks(attackable);
+        
+        // Ranged pieces can't attack defended hexes
+        if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {
+          return attacks.filter(hex => !defendedSet.has(hex.getKey()));
         }
-        return piece.legalAttacks(attackable);
+        return attacks;
       });
   }
 

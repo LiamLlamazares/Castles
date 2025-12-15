@@ -113,24 +113,25 @@ export class Piece {
   // =========== ATTACK LOGIC ===========
 
   /** Checks if a target hex contains an attackable enemy */
-  private isValidAttack(targetHex: Hex, enemyHexes: Hex[]): boolean {
-    return enemyHexes.some((enemyHex) => enemyHex.equals(targetHex));
+  private isValidAttack(targetHex: Hex, attackableHexes: Hex[]): boolean {
+    return attackableHexes.some((attackableHex) => attackableHex.equals(targetHex));
   }
 
   /** Melee attacks: all adjacent hexes (radius 1) */
-  public meleeAttacks(enemyHexes: Hex[]): Hex[] {
+  public meleeAttacks(attackableHexes: Hex[]): Hex[] {
     const attacks: Hex[] = [];
     const potentialAttacks = this.hex.cubeRing(1);
 
     for (const target of potentialAttacks) {
-      if (this.isValidAttack(target, enemyHexes)) {
+      if (this.isValidAttack(target, attackableHexes)) {
         attacks.push(target);
       }
     }
 
     return attacks;
   }
-  public rangedAttacks(enemyHexes: Hex[]): Hex[] {
+  /** Ranged attacks: ring at distance 2 (+3 from high ground) */
+  public rangedAttacks(attackableHexes: Hex[]): Hex[] {
     const attacks: Hex[] = [];
     let potentialAttacks = this.hex.cubeRing(2);
     if (highGroundHexes.some((hgHex) => hgHex.equals(this.hex))) {
@@ -138,13 +139,14 @@ export class Piece {
     }
 
     for (const newHex of potentialAttacks) {
-      if (this.isValidAttack(newHex, enemyHexes)) {
+      if (this.isValidAttack(newHex, attackableHexes)) {
         attacks.push(newHex);
       }
     }
     return attacks;
   }
-  public longRangedAttacks(enemyHexes: Hex[]): Hex[] {
+  /** Long-ranged attacks: ring at distance 3 (+4 from high ground) */
+  public longRangedAttacks(attackableHexes: Hex[]): Hex[] {
     const attacks: Hex[] = [];
     let potentialAttacks = this.hex.cubeRing(3);
     if (highGroundHexes.some((hgHex) => hgHex.equals(this.hex))) {
@@ -152,14 +154,15 @@ export class Piece {
     }
 
     for (const newHex of potentialAttacks) {
-      if (this.isValidAttack(newHex, enemyHexes)) {
+      if (this.isValidAttack(newHex, attackableHexes)) {
         attacks.push(newHex);
       }
     }
     return attacks;
   }
 
-  public swordsmanAttacks(enemyHexes: Hex[]): Hex[] {
+  /** Swordsman attacks: diagonal-forward only */
+  public swordsmanAttacks(attackableHexes: Hex[]): Hex[] {
     const attacks: Hex[] = [];
     const { q, r, s } = this.hex;
     const direction = this.color === "b" ? -1 : 1;
@@ -171,45 +174,27 @@ export class Piece {
 
     for (const dir of attackDirections) {
       const newHex = new Hex(q + dir.q, r + dir.r, s + dir.s);
-      if (enemyHexes.some((enemyHex) => enemyHex.equals(newHex))) {
+      if (attackableHexes.some((attackableHex) => attackableHex.equals(newHex))) {
         attacks.push(newHex);
       }
     }
     return attacks;
   }
 
-  public legalAttacks(enemyHexes: Hex[]): Hex[] {
+  /** Returns all legal attacks based on attack type */
+  public legalAttacks(attackableHexes: Hex[]): Hex[] {
     if (this.AttackType === AttackType.Melee) {
-      return this.meleeAttacks(enemyHexes);
+      return this.meleeAttacks(attackableHexes);
     } else if (this.AttackType === AttackType.Ranged) {
-      return this.rangedAttacks(enemyHexes);
+      return this.rangedAttacks(attackableHexes);
     } else if (this.AttackType === AttackType.LongRanged) {
-      return this.longRangedAttacks(enemyHexes);
+      return this.longRangedAttacks(attackableHexes);
     } else {
-      return this.swordsmanAttacks(enemyHexes);
+      return this.swordsmanAttacks(attackableHexes);
     }
   }
 
-  public getHex(): Hex {
-    return this.hex;
-  }
-
-  public setHex(newHex: Hex): void {
-    this.hex = newHex;
-  }
-
-  public setColor(color: Color): void {
-    this.color = color;
-  }
-
-  public getColor(): Color {
-    return this.color;
-  }
-
-  public getType(): PieceType {
-    return this.type;
-  }
-
+  /** Creates a deep copy of this piece (for immutable state updates) */
   public clone(): Piece {
     return new Piece(this.hex, this.color, this.type, this.canMove, this.canAttack, this.damage);
   }

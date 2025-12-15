@@ -14,25 +14,7 @@ import { startingBoard } from "../ConstantImports";
 import "../css/Board.css";
 import ChessClock from "./Clock";
 import TurnBanner from "./Turn_banner";
-
-import wSwordsmanImage from "../Assets/Images/Chess/wSwordsman.svg";
-import bSwordsmanImage from "../Assets/Images/Chess/bSwordsman.svg";
-import wDragonImage from "../Assets/Images/Chess/wDragon.svg";
-import bDragonImage from "../Assets/Images/Chess/bDragon.svg";
-import wArcherImage from "../Assets/Images/Chess/wArcher.svg";
-import bArcherImage from "../Assets/Images/Chess/bArcher.svg";
-import wGiantImage from "../Assets/Images/Chess/wGiant.svg";
-import bGiantImage from "../Assets/Images/Chess/bGiant.svg";
-import wAssassinImage from "../Assets/Images/Chess/wAssassin.svg";
-import bAssassinImage from "../Assets/Images/Chess/bAssassin.svg";
-import wMonarchImage from "../Assets/Images/Chess/wMonarch.svg";
-import bMonarchImage from "../Assets/Images/Chess/bMonarch.svg";
-import wTrebuchetImage from "../Assets/Images/Chess/wTrebuchet.svg";
-import bTrebuchetImage from "../Assets/Images/Chess/bTrebuchet.svg";
-import wKnightImage from "../Assets/Images/Chess/wKnight.svg";
-import bKnightImage from "../Assets/Images/Chess/bKnight.svg";
-import wEagleImage from "../Assets/Images/Chess/wEagle.svg";
-import bEagleImage from "../Assets/Images/Chess/bEagle.svg";
+import { getImageByPieceType } from "./PieceImages";
 
 import { GameEngine } from "../Classes/GameEngine";
 
@@ -331,20 +313,7 @@ class GameBoard extends Component<{}, GameBoardState> {
   // =========== RENDER HELPERS ===========
 
   /** Returns the SVG image path for a piece */
-  getImageByPieceType = (type: PieceType, color: string): string => {
-    const images: { [key in PieceType]: string } = {
-      Swordsman: color === "w" ? wSwordsmanImage : bSwordsmanImage,
-      Dragon: color === "w" ? wDragonImage : bDragonImage,
-      Archer: color === "w" ? wArcherImage : bArcherImage,
-      Giant: color === "w" ? wGiantImage : bGiantImage,
-      Assassin: color === "w" ? wAssassinImage : bAssassinImage,
-      Monarch: color === "w" ? wMonarchImage : bMonarchImage,
-      Trebuchet: color === "w" ? wTrebuchetImage : bTrebuchetImage,
-      Knight: color === "w" ? wKnightImage : bKnightImage,
-      Eagle: color === "w" ? wEagleImage : bEagleImage,
-    };
-    return images[type];
-  };
+  // getImageByPieceType is now imported from PieceImages.ts
 
   /** Renders the control buttons (Pass, Coordinates, Takeback, Flip) */
   renderControlButtons = (): JSX.Element => (
@@ -458,7 +427,7 @@ class GameBoard extends Component<{}, GameBoardState> {
         return (
           <image
             key={piece.hex.getKey()}
-            href={this.getImageByPieceType(piece.type, piece.color)}
+            href={getImageByPieceType(piece.type, piece.color)}
             x={center.x - 145 / N_SQUARES}
             y={center.y - 145 / N_SQUARES}
             height={275 / N_SQUARES}
