@@ -1,7 +1,7 @@
 import { Hex, Layout, generateHexagons, Point} from './Hex'; 
 import { Piece } from './Piece'; 
 //imports constants
-import { NSquaresc, HEX_SIZE_FACTORc, X_OFFSETc, layoutTypec } from '../Constants';
+import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, LAYOUT_TYPE } from '../Constants';
 import { Castle } from './Castle';
 
 
@@ -24,12 +24,12 @@ export class Board {
   public pixelWidth: number;
   public pixelHeight: number;
   
-  constructor(pieces: Piece[], NSquares: number = NSquaresc, HEX_SIZE_FACTOR: number =HEX_SIZE_FACTORc, X_OFFSET: number = X_OFFSETc, layoutType: string = layoutTypec) {
+  constructor(pieces: Piece[], NSquares: number = N_SQUARES, HEX_SIZE_FACTOR_ARG: number = HEX_SIZE_FACTOR, X_OFFSET_ARG: number = X_OFFSET, layoutType: string = LAYOUT_TYPE) {
     this.pieces = pieces;
     this.NSquares = NSquares;
     this.hexes = generateHexagons(this.NSquares);
-    this.HEX_SIZE_FACTOR = HEX_SIZE_FACTOR;
-    this.X_OFFSET = X_OFFSET;
+    this.HEX_SIZE_FACTOR = HEX_SIZE_FACTOR_ARG;
+    this.X_OFFSET = X_OFFSET_ARG;
     this.layoutType = layoutType;
     
     // Default to window size if available, otherwise 0/default

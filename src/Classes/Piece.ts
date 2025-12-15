@@ -7,7 +7,7 @@ import {
   AttackType,
   PieceStrength,
   Color,
-  NSquaresc,
+  N_SQUARES,
 } from "../Constants";
 
 import {
@@ -40,7 +40,7 @@ export class Piece {
     return this.type === PieceType.Archer
       ? AttackType.Ranged
       : this.type === PieceType.Trebuchet
-      ? AttackType.longRanged
+      ? AttackType.LongRanged
       : this.type === PieceType.Swordsman
       ? AttackType.Swordsman
       : AttackType.Melee;
@@ -58,19 +58,19 @@ export class Piece {
         moves = archerMoves(this.hex, blockedhexes);
         break;
       case PieceType.Knight:
-        moves = knightMoves(this.hex, blockedhexes, NSquaresc);
+        moves = knightMoves(this.hex, blockedhexes, N_SQUARES);
         break;
       case PieceType.Eagle:
         moves = eagleMoves(this.hex, blockedhexes);
         break;
       case PieceType.Giant:
-        moves = giantMoves(this.hex, blockedhexes, NSquaresc);
+        moves = giantMoves(this.hex, blockedhexes, N_SQUARES);
         break;
       case PieceType.Dragon:
         moves = dragonMoves(this.hex, blockedhexes);
         break;
       case PieceType.Assassin:
-        moves = assassinMoves(this.hex, blockedhexes, NSquaresc);
+        moves = assassinMoves(this.hex, blockedhexes, N_SQUARES);
         break;
     }
 
@@ -155,7 +155,7 @@ export class Piece {
       return this.meleeAttacks(enemyHexes);
     } else if (this.AttackType === AttackType.Ranged) {
       return this.rangedAttacks(enemyHexes);
-    } else if (this.AttackType === AttackType.longRanged) {
+    } else if (this.AttackType === AttackType.LongRanged) {
       return this.longRangedAttacks(enemyHexes);
     } else {
       return this.swordsmanAttacks(enemyHexes);

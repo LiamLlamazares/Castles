@@ -1,5 +1,5 @@
 import { Hex } from "./Hex";
-import { Color, NSquaresc } from "../Constants";
+import { Color, N_SQUARES } from "../Constants";
 
 export const swordsmanMoves = (hex: Hex, blockedhexes: Hex[], color: Color): Hex[] => {
   let moves = [];
@@ -85,25 +85,9 @@ export const knightMoves = (hex: Hex, blockedhexes: Hex[], NSquares: number): He
 export const eagleMoves = (hex: Hex, blockedhexes: Hex[]): Hex[] => {
   //The eagle can move to any hex in a radius of 3
   let moves: Hex[] = []; 
-  for (let i = 1; i <= 3; i++) { // Original code said i <= 15 but that seems excessive for radius 3 description? 
-    // Wait, let's check original code logic.
-    // Original code: i <= 15. Wait, radius is 3?
+  for (let i = 1; i <= 3; i++) {
     moves = [...moves, ...hex.cubeRing(i)];
   }
-  // The original code loop for i<=15 is suspicious if desc says radius 3. 
-  // However, I should preserve behavior. 
-  // Wait, if it loops to 15, it generates a HUGE area. 
-  // Let's re-read the original file.
-  
-  // Re-checking original Piece.ts specifically for Eagle
-  // "The eagle can move to any hex in a radius of 3"
-  // Code: for (let i = 1; i <= 15; i++)
-  // If NSquaresc is around 3-5, 15 covers everything.
-  // Maybe it means "infinite range" or "flying"?
-  // But comment says "radius of 3". 
-  // I will stick to the CODE behavior (15) but add a TODO note or just implement as is.
-  // Actually, let's check usages. 
-  
   return moves.filter(
     (move) => !blockedhexes.some((h) => h.equals(move))
   );

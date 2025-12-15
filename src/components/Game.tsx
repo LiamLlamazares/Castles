@@ -4,12 +4,12 @@ import { Castle } from "../Classes/Castle";
 import { Hex } from "../Classes/Hex";
 import {
   PieceType,
-  NSquaresc,
-  turnPhase,
+  N_SQUARES,
+  TurnPhase,
   Color,
   AttackType,
-  startingTime,
-  defendedPieceIsProtectedRanged,
+  STARTING_TIME,
+  DEFENDED_PIECE_IS_PROTECTED_RANGED,
 } from "../Constants";
 import { startingBoard, emptyBoard } from "../ConstantImports";
 import "../css/Board.css";
@@ -79,13 +79,13 @@ class GameBoard extends Component {
         key={hex.getKey()}
         cx={center.x}
         cy={center.y}
-        r={90 / NSquaresc}
+        r={90 / N_SQUARES}
         className={className}
         onClick={() => this.handleHexClick(hex)}
       />
     );
   };
-  get turn_phase(): turnPhase {
+  get turn_phase(): TurnPhase {
     return this.gameEngine.getTurnPhase(this.state.turnCounter);
   }
   get currentPlayer(): Color {
@@ -176,26 +176,9 @@ class GameBoard extends Component {
   };
   // Add this method to your GameBoard component
   handlePass = () => {
-    // let turnCounter = this.state.turnCounter;
-    // console.log('Passing. The turn counter is', turnCounter);
-
-    // // Check if there are any legal attacks for the current player's pieces
-    // const hasLegalAttacks = this.state.pieces.some(piece =>
-    //   piece.color === this.currentPlayer && piece.legalAttacks(this.attackableHexes).length > 0
-    // );
-
-    // // If there are no legal attacks, increment the turn counter to reach the castles phase
-    // if (!hasLegalAttacks && (turnCounter % 5 === 2 || turnCounter % 5 === 3)) {
-    //   turnCounter += 2;
-    // } else {
-    //   turnCounter += 1;
-    // }
-
     this.saveHistory();
-    this.setState({
-      movingPiece: null,
-      turnCounter: this.state.turnCounter + this.turnCounterIncrement,
-    });
+    const newState = this.gameEngine.passTurn(this.state);
+    this.setState(newState);
   };
   handleKeyDown = (event: KeyboardEvent) => {
     if (event.code === "KeyQ") {
@@ -232,7 +215,6 @@ class GameBoard extends Component {
 
   handlePieceClick = (pieceClicked: Piece) => {
     const { movingPiece } = this.state;
-    let turnCounter = this.state.turnCounter;
     // Allow to swap the moving piece
     if (movingPiece === pieceClicked) {
       //Deselecets piece
@@ -263,94 +245,95 @@ class GameBoard extends Component {
       pieceClicked.color !== this.currentPlayer &&
       this.legalAttacks.some((attack) => attack.equals(pieceClicked.hex))
     ) {
-      //Checks if attack is legal, if it is, attack
       this.saveHistory();
-      const { newPieces } = this.gameEngine.resolveCombat(movingPiece, pieceClicked, this.state.pieces);
-      const pieces = newPieces;
-      // Update the Pieces
-      movingPiece.canAttack = false;
-
-      //When set state is called an update is scheduled, but not executed immediately.
-      // As a result, need to use a callback function to ensure
-      //that the state is updated before the next line of code is executed.
-      this.setState({ movingPiece: null, pieces }, () => {
-        this.setState({
-          turnCounter: this.state.turnCounter + this.turnCounterIncrement,
-        });
-      });
+      // Use GameEngine for attack
+      const newState = this.gameEngine.applyAttack(this.state, movingPiece, pieceClicked.hex);
+      this.setState(newState);
     }
   }; //*********END OF PIECE CLICK LOGIC********//
 
   handleHexClick = (hex: Hex) => {
-    const { movingPiece, turnCounter } = this.state;
+    const { movingPiece } = this.state;
     //*****MOVEMENT LOGIC TO HEX**************//
     if (movingPiece?.canMove && this.turn_phase === "Movement") {
       if (this.legalMoves.some((move) => move.equals(hex))) {
-        //Makes a legal move
         this.saveHistory();
-        //Makes a legal move
-        if (turnCounter % 5 === 1) {
-          //Resets all pieces and castles in movement phase
-          this.state.pieces.forEach((piece) => (piece.canMove = true));
-          this.state.pieces.forEach((piece) => (piece.canAttack = true));
-          this.state.pieces.forEach((piece) => (piece.damage = 0));
-          this.state.Castles.forEach(
-            (castle) => (castle.used_this_turn = false)
-          );
-        }
-        movingPiece.hex = hex; //Update piece position
-        movingPiece.canMove = false;
-        this.setState({
-          movingPiece: null,
-          turnCounter: turnCounter + this.turnCounterIncrement,
-        });
+        // Use GameEngine for move
+        const newState = this.gameEngine.applyMove(this.state, movingPiece, hex);
+        this.setState(newState);
       } else {
         this.setState({ movingPiece: null });
-      } //Illegal move, snap back to original position
+      } 
     } //*********END OF MOVEMENT LOGIC************//
     //Captures castle
-    else if (this.turn_phase === "Attack" && movingPiece?.canAttack) {
-      if (this.legalAttacks.some((attack) => attack.equals(hex))) {
-        //Makes a legal attack
-        //Makes a legal attack
-        this.saveHistory();
-        this.setState({ movingPiece: null });
-        movingPiece.hex = hex; //Update piece position
-        movingPiece.canAttack = false;
-        const pieces = this.state.pieces;
-        this.setState({ movingPiece: null, pieces }, () => {
-          this.setState({
-            turnCounter: this.state.turnCounter + this.turnCounterIncrement,
-          });
-        });
-      } else {
-        this.setState({ movingPiece: null });
-      } //Illegal move, snap back to original position
+    else if (this.turn_phase === "Attack" && movingPiece?.canAttack) {     
+       if (this.legalAttacks.some((attack) => attack.equals(hex))) {
+           this.saveHistory();
+           // Is it a piece or a castle?
+           const targetPiece = this.state.pieces.find(p => p.hex.equals(hex));
+           if (targetPiece) {
+               const newState = this.gameEngine.applyAttack(this.state, movingPiece, hex);
+               this.setState(newState);
+           } else {
+               // Must be a castle
+               // Attacking a castle:
+               // In original code: `movingPiece.hex = hex`. (Capture it by moving onto it).
+               // So this is effectively a MOVE, but technically an "Attack" action in the rulebook?
+               // The original code just moved the piece there.
+               // So I can use `applyMove`?
+               // `applyMove` checks `getTurnIncrement`.
+               // If I move onto a castle, do I destroy it?
+               // `castle.color` changes?
+               // `castleIsControlledByActivePlayer` is checked.
+               // If I move onto it, I now occupy it.
+               // `getControlledCastlesActivePlayer` checks if a piece is on it.
+               // So `applyMove` correctly handles occupying.
+               // Does it consume "Attack" capability?
+               // Original code: `movingPiece.canAttack = false`.
+               // Move logic usually sets `canMove = false`.
+               // If I attack a castle, do I use my Move or Attack?
+               // Original code inner block (312): `this.turn_phase === "Attack"`.
+               // So it consumes Attack.
+               // `applyMove` consumes `canMove`.
+               // I might need a specific `applyCastleCapture` or `applyAttackMove`.
+               
+               // For now, let's replicate original behavior: Move the piece, consume Attack flag.
+               // I can manually tweak the result of applyMove?
+               // Or add `applyCastleAttack` to GameEngine.
+               // I will choose to add `applyCastleAttack` to GameEngine afterwards.
+               // For now, I'll do it manually here to save the file, then fix Engine.
+               
+               let newState = this.gameEngine.applyMove(this.state, movingPiece, hex);
+               // Fix flags: It was an attack, not a move.
+               // applyMove sets canMove=false.
+               // We want canAttack=false. (And maybe canMove is already false if phase is Attack).
+               // In Attack phase, canMove is usually false/irrelevant?
+               // Wait, phase is Attack. Piece has `canAttack`.
+               // `applyMove` assumes Movement phase? 
+               // `applyMove` logic: `newPiece.canMove = false`.
+               // It doesn't check phase.
+               // So if I use `applyMove` in Attack phase, it sets `canMove=false` (already false probably).
+               // But I need `canAttack=false`.
+               
+               // I should implement `applyCastleAttack` in GameEngine. 
+               // I will call `this.gameEngine.applyCastleAttack(...)` assuming I will write it next.
+               
+               const newState2 = this.gameEngine.applyCastleAttack(this.state, movingPiece, hex);
+               this.setState(newState2);
+           }
+       } else {
+         this.setState({ movingPiece: null });
+       }
     }
-    //Adds a swordsman to clicked adjacent hex and increments the turns controlled counter of all castles controlled
-    // by the player by 1
+    //Adds a piece to clicked adjacent hex (Recruit)
     else if (this.hexisAdjacentToControlledCastle(hex)) {
       const castle = this.state.Castles.find((castle) =>
         castle.isAdjacent(hex)
       );
       if (castle) {
-        const pieces = this.state.pieces;
-        const pieceTypes = Object.values(PieceType);
-        const pieceType =
-          pieceTypes[castle.turns_controlled % pieceTypes.length];
         this.saveHistory();
-        pieces.push(new Piece(hex, this.currentPlayer, pieceType));
-        castle.turns_controlled += 1;
-        castle.used_this_turn = true;
-        // console.log(
-        //   "The unused castles are",
-        //   this.state.Castles.filter((castle) => !castle.used_this_turn)
-        // );
-        this.setState({
-          movingPiece: null,
-          pieces,
-          turnCounter: turnCounter + this.turnCounterIncrement,
-        });
+        const newState = this.gameEngine.recruitPiece(this.state, castle, hex);
+        this.setState(newState);
       }
     } else {
       this.setState({ movingPiece: null });
@@ -390,6 +373,10 @@ class GameBoard extends Component {
   };
 
   render() {
+    // Optimization: Calculate legal moves/attacks ONCE per render
+    const legalMoveSet = new Set(this.legalMoves.map(h => h.getKey()));
+    const legalAttackSet = new Set(this.legalAttacks.map(h => h.getKey()));
+    
     return (
       <>
         <button className="pass-button" onClick={this.handlePass}>
@@ -430,7 +417,7 @@ class GameBoard extends Component {
               <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
             )}
             <ChessClock
-              initialTime={startingTime}
+              initialTime={STARTING_TIME}
               isActive={this.currentPlayer === "b"}
               player="b"
             />
@@ -447,7 +434,7 @@ class GameBoard extends Component {
               <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
             )}
             <ChessClock
-              initialTime={startingTime}
+              initialTime={STARTING_TIME}
               isActive={this.currentPlayer === "w"}
               player="w"
             />
@@ -498,9 +485,10 @@ class GameBoard extends Component {
           ))}
           {/* Render dots for legal moves */}
           {this.hexagons.map((hex: Hex) => {
-            if (this.hexisLegalMove(hex)) {
+            const key = hex.getKey();
+            if (legalMoveSet.has(key)) {
               return this.renderCircle(hex, "legalMoveDot");
-            } else if (this.hexisLegalAttack(hex)) {
+            } else if (legalAttackSet.has(key)) {
               return this.renderCircle(hex, "legalAttackDot");
             }
             return null;
@@ -514,10 +502,10 @@ class GameBoard extends Component {
               <image
                 key={piece.hex.getKey()}
                 href={this.getImageByPieceType(piece.type, piece.color)}
-                x={center.x - 145 / NSquaresc}
-                y={center.y - 145 / NSquaresc}
-                height={275 / NSquaresc}
-                width={275 / NSquaresc}
+                x={center.x - 145 / N_SQUARES}
+                y={center.y - 145 / N_SQUARES}
+                height={275 / N_SQUARES}
+                width={275 / N_SQUARES}
                 className="piece"
                 onClick={() => this.handlePieceClick(piece)}
               />

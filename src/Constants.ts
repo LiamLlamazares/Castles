@@ -1,9 +1,10 @@
 //Size of board
-export const NSquaresc = 8;
-export const HEX_SIZE_FACTORc = 4;
-export const X_OFFSETc = 100;
-export const layoutTypec = "flat";
-export const colorsc = ["w", "b"];
+export const N_SQUARES = 8;
+export const HEX_SIZE_FACTOR = 4;
+export const X_OFFSET = 100;
+export const LAYOUT_TYPE = "flat";
+export const COLORS = ["w", "b"] as const;
+
 export enum PieceType {
   Swordsman = "Swordsman",
   Archer = "Archer",
@@ -18,7 +19,7 @@ export enum PieceType {
 export enum AttackType {
   Melee = "Melee",
   Ranged = "Ranged",
-  longRanged = "longRanged",
+  LongRanged = "longRanged",
   Swordsman = "Swordsman",
 }
 
@@ -34,7 +35,8 @@ export enum PieceStrength {
   Monarch = 3,
 }
 
-export type turnPhase = "Movement" | "Attack" | "Castles";
+export type TurnPhase = "Movement" | "Attack" | "Castles";
 export type Color = "w" | "b";
-export const startingTime = 20 * 60;
-export const defendedPieceIsProtectedRanged = true; //if true, a defended piece is protected from ranged attacks
+export const STARTING_TIME = 20 * 60;
+export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended piece is protected from ranged attacks
+

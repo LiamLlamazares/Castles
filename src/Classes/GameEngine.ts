@@ -2,7 +2,7 @@ import { Piece } from "./Piece";
 import { Castle } from "./Castle";
 import { Hex } from "./Hex";
 import { Board } from "./Board";
-import { Color, AttackType, turnPhase, defendedPieceIsProtectedRanged, PieceType } from "../Constants";
+import { Color, AttackType, TurnPhase, DEFENDED_PIECE_IS_PROTECTED_RANGED, PieceType } from "../Constants";
 
 export interface GameState {
   pieces: Piece[];
@@ -15,7 +15,7 @@ export interface GameState {
 export class GameEngine {
   constructor(public board: Board) {}
 
-  public getTurnPhase(turnCounter: number): turnPhase {
+  public getTurnPhase(turnCounter: number): TurnPhase {
     return turnCounter % 5 < 2
       ? "Movement"
       : turnCounter % 5 < 4
@@ -62,7 +62,7 @@ export class GameEngine {
   }
 
   public getDefendedHexes(pieces: Piece[], currentPlayer: Color): Hex[] {
-    if (defendedPieceIsProtectedRanged) {
+    if (DEFENDED_PIECE_IS_PROTECTED_RANGED) {
       let enemyMeleePieces = pieces.filter(
         (piece) =>
           piece.color !== currentPlayer &&
@@ -211,28 +211,161 @@ export class GameEngine {
     }
   }
 
-  // Combat Logic
-  public resolveCombat(attacker: Piece, defender: Piece, pieces: Piece[]): { newPieces: Piece[], attackerMoved: boolean } {
-      defender.damage = defender.damage + attacker.Strength;
-      let newPieces = [...pieces];
-      let attackerMoved = false;
+  // State Transition Methods
+  public applyMove(state: GameState, piece: Piece, targetHex: Hex): GameState {
+    const newPieces = state.pieces.map(p => {
+        if (p === piece) {
+            const newPiece = p.clone(); // Clone to avoid mutation
+            newPiece.hex = targetHex;
+            newPiece.canMove = false;
+            return newPiece;
+        }
+        return p;
+    });
 
-      if (
-        defender.damage >= defender.Strength ||
-        (defender.type === PieceType.Monarch && attacker.type === PieceType.Assassin)
+    const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, state.Castles, state.turnCounter);
+    
+    let nextState: GameState = {
+        ...state,
+        pieces: newPieces,
+        movingPiece: null,
+        turnCounter: newTurnCounter
+    };
+    
+    if (state.turnCounter % 5 === 1) {
+       nextState = this.resetTurnFlags(nextState);
+    }
+
+    return nextState;
+  }
+
+  public applyCastleAttack(state: GameState, piece: Piece, targetHex: Hex): GameState {
+    const newPieces = state.pieces.map(p => {
+        if (p === piece) {
+            const newPiece = p.clone();
+            newPiece.hex = targetHex;
+            newPiece.canAttack = false; // Consumes Attack action
+            // Note: We do NOT set canMove=false (it might already be), but this is Attack phase.
+            return newPiece;
+        }
+        return p;
+    });
+
+    const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, state.Castles, state.turnCounter);
+    
+    return {
+        ...state,
+        pieces: newPieces,
+        movingPiece: null,
+        turnCounter: newTurnCounter
+    };
+  }
+
+  public applyAttack(state: GameState, attacker: Piece, targetHex: Hex): GameState {
+     const defender = state.pieces.find(p => p.hex.equals(targetHex));
+     if (!defender) return state; // Should not happen if legal
+
+     // Combat Logic
+     // We need new copies of pieces involved
+     let newPieces = state.pieces.map(p => p.clone());
+     const attackerClone = newPieces.find(p => p.hex.equals(attacker.hex))!;
+     const defenderClone = newPieces.find(p => p.hex.equals(defender.hex))!;
+
+     defenderClone.damage += attackerClone.Strength;
+     
+     let attackerMoved = false;
+
+     // Check Death
+     if (
+        defenderClone.damage >= defenderClone.Strength ||
+        (defenderClone.type === PieceType.Monarch && attackerClone.type === PieceType.Assassin)
       ) {
         // Defender dies
-        newPieces = newPieces.filter((p) => p !== defender);
+        newPieces = newPieces.filter((p) => p !== defenderClone);
         
         if (
-          attacker.AttackType === AttackType.Melee ||
-          attacker.AttackType === AttackType.Swordsman
+          attackerClone.AttackType === AttackType.Melee ||
+          attackerClone.AttackType === AttackType.Swordsman
         ) {
           // Move attacker to defender hex
-          attacker.hex = defender.hex;
+          attackerClone.hex = defenderClone.hex;
           attackerMoved = true;
         }
       }
-      return { newPieces, attackerMoved };
+
+      attackerClone.canAttack = false;
+
+      const increment = this.getTurnCounterIncrement(newPieces, state.Castles, state.turnCounter);
+      
+      const nextState: GameState = {
+          ...state,
+          pieces: newPieces,
+          movingPiece: null,
+          turnCounter: state.turnCounter + increment
+      };
+      
+      return nextState;
+  }
+
+  public passTurn(state: GameState): GameState {
+      // Logic from Game.tsx:178
+      // It calls getTurnCounterIncrement.
+      const increment = this.getTurnCounterIncrement(state.pieces, state.Castles, state.turnCounter);
+      return {
+          ...state,
+          movingPiece: null,
+          turnCounter: state.turnCounter + increment
+      };
+  }
+
+  public recruitPiece(state: GameState, castle: Castle, hex: Hex): GameState {
+      // Logic from Game.tsx:342
+      const pieceTypes = Object.values(PieceType);
+      const pieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
+      const newPiece = new Piece(hex, this.getCurrentPlayer(state.turnCounter), pieceType);
+      
+      const newPieces = [...state.pieces, newPiece]; // Shallow copy of array, but new piece
+      
+      // Update Castle
+      const newCastles = state.Castles.map(c => {
+          if (c === castle) {
+              const newCastle = c.clone();
+              newCastle.turns_controlled += 1;
+              newCastle.used_this_turn = true;
+              return newCastle;
+          }
+          return c;
+      });
+
+      const increment = this.getTurnCounterIncrement(newPieces, newCastles, state.turnCounter);
+
+      return {
+          ...state,
+          pieces: newPieces,
+          Castles: newCastles,
+          movingPiece: null,
+          turnCounter: state.turnCounter + increment
+      };
+  }
+
+  // Helper to reset flags (originally in Game.tsx:292)
+  private resetTurnFlags(state: GameState): GameState {
+      const newPieces = state.pieces.map(p => {
+          const pc = p.clone();
+          pc.canMove = true;
+          pc.canAttack = true;
+          pc.damage = 0;
+          return pc;
+      });
+      const newCastles = state.Castles.map(c => {
+          const cc = c.clone();
+          cc.used_this_turn = false;
+          return cc;
+      });
+      return {
+          ...state,
+          pieces: newPieces,
+          Castles: newCastles
+      };
   }
 }
