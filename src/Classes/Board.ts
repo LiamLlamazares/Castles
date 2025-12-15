@@ -3,15 +3,7 @@ import { Piece } from './Piece';
 //imports constants
 import { NSquaresc, HEX_SIZE_FACTORc, X_OFFSETc, layoutTypec } from '../Constants';
 import { Castle } from './Castle';
-const isRiver = (center: Point, origin: Point): boolean => {
-  return center.y === origin.y; // Return true if the hexagon is at the center
-};
 
-const isCastle = (hex: Hex, N: number): boolean => {
-  return (hex.q === 0 && Math.abs(hex.r) === N+1 && Math.abs(hex.s) === N+1) || 
-         (hex.r === 0 && Math.abs(hex.q) === N+1 && Math.abs(hex.s) === N+1) || 
-         (hex.s === 0 && Math.abs(hex.q) === N+1 && Math.abs(hex.r) === N+1); // Return true if the hexagon is at a corner
-};
 
 export class Board {
   public pieces: Piece[];
@@ -157,8 +149,8 @@ get Castles(): Castle[] {
       let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
         ((hex.color_index % 3) + 3) % 3
       ];
-      const hexisaRiver = isRiver(center, this.origin);
-      const hexisaCastle = isCastle(hex, this.NSquares);
+      const hexisaRiver = this.isRiver(center);
+      const hexisaCastle = this.isCastle(hex, this.NSquares);
       if (hexisaRiver) {
         colorClass = "hexagon-river";
       } else if (hexisaCastle) {
