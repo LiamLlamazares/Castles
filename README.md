@@ -44,3 +44,25 @@ You don’t have to ever use `eject`. The curated feature set is suitable for sm
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
 To learn React, check out the [React documentation](https://reactjs.org/).
+
+## Project Overview
+
+This project implements "Castles", a hexagonal strategy game based on *The Ember Blade*.
+
+### Directory Structure
+
+The project structure is organized as follows:
+
+*   **`src/`**: Main source code directory.
+    *   **`Classes/`**: Contains core game logic and data structures.
+        *   `Board.ts`: Manages the game board state and grid.
+        *   `Hex.ts`: Defines hexagonal tile logic and coordinates.
+        *   `Piece.ts`: Base class for game pieces.
+        *   `Move.ts` & `Castle.ts`: Logic for movements and castle specifics.
+    *   **`components/`**: React UI components.
+        *   `Game.tsx`: The primary game engine and rendering component.
+        *   `Clock.tsx`: Handles the game timer.
+        *   `Turn_banner.tsx`: Specific UI for turn phases.
+    *   **`Assets/`**: Contains game assets (Images for pieces, banners, etc.).
+    *   **`css/`**: Styling files.
+*   **`Castles_rules.md`**: Detailed documentation of the game rules.

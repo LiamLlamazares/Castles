@@ -1,5 +1,5 @@
-import { Hex, Layout, generateHexagons, Point} from './Hex'; // adjust the path as needed
-import { Piece } from './Piece'; // adjust the path as needed
+import { Hex, Layout, generateHexagons, Point} from './Hex'; 
+import { Piece } from './Piece'; 
 //imports constants
 import { NSquaresc, HEX_SIZE_FACTORc, X_OFFSETc, layoutTypec } from '../Constants';
 import { Castle } from './Castle';
