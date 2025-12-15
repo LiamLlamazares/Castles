@@ -1,13 +1,10 @@
-import { Hex, Layout, Point } from "./Classes/Hex";
+import { Hex } from "./Classes/Hex";
 import { Piece } from "./Classes/Piece";
 import { Board } from "./Classes/Board";
-import { Castle } from "./Classes/Castle";
+import { N_SQUARES, PieceType } from "./Constants";
 import {
   N_SQUARES,
-  HEX_SIZE_FACTOR,
   PieceType,
-  LAYOUT_TYPE,
-  X_OFFSET,
 } from "./Constants";
 
 //Starting board = starting pieces + hexes

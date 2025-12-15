@@ -340,7 +340,7 @@ export class GameEngine {
 
      defenderClone.damage += attackerClone.Strength;
      
-     let attackerMoved = false;
+      let _attackerMoved = false;
 
      // Check Death
      if (
@@ -356,7 +356,7 @@ export class GameEngine {
         ) {
           // Move attacker to defender hex
           attackerClone.hex = defenderClone.hex;
-          attackerMoved = true;
+          _attackerMoved = true;
         }
       }
 
