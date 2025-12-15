@@ -322,13 +322,16 @@ class GameBoard extends Component<{}, GameBoardState> {
     // Ensure board is synced with current window on mount
     startingBoard.updateDimensions(window.innerWidth, window.innerHeight); 
   }
-  //Avoids memory leak
+
   componentWillUnmount() {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("resize", this.handleResize);
   }
 
-  getImageByPieceType = (type: PieceType, color: string) => {
+  // =========== RENDER HELPERS ===========
+
+  /** Returns the SVG image path for a piece */
+  getImageByPieceType = (type: PieceType, color: string): string => {
     const images: { [key in PieceType]: string } = {
       Swordsman: color === "w" ? wSwordsmanImage : bSwordsmanImage,
       Dragon: color === "w" ? wDragonImage : bDragonImage,
@@ -343,75 +346,143 @@ class GameBoard extends Component<{}, GameBoardState> {
     return images[type];
   };
 
+  /** Renders the control buttons (Pass, Coordinates, Takeback, Flip) */
+  renderControlButtons = (): JSX.Element => (
+    <>
+      <button className="pass-button" onClick={this.handlePass}>
+        Pass
+      </button>
+      <button
+        className="coordinates-button"
+        onClick={() =>
+          this.setState({ showCoordinates: !this.state.showCoordinates })
+        }
+      >
+        Toggle Coordinates
+      </button>
+      <button className="takeback-button" onClick={this.handleTakeback}>
+        Takeback
+      </button>
+      <button className="pass-button" onClick={this.handleFlipBoard}>
+        Flip Board
+      </button>
+    </>
+  );
+
+  /** Renders the chess clocks and turn banners for both players */
+  renderPlayerClocks = (): JSX.Element => (
+    <div
+      style={{
+        position: "absolute",
+        top: "50%",
+        left: "20%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+        {this.currentPlayer === "b" && (
+          <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
+        )}
+        <ChessClock
+          initialTime={STARTING_TIME}
+          isActive={this.currentPlayer === "b"}
+          player="b"
+        />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+        {this.currentPlayer === "w" && (
+          <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
+        )}
+        <ChessClock
+          initialTime={STARTING_TIME}
+          isActive={this.currentPlayer === "w"}
+          player="w"
+        />
+      </div>
+    </div>
+  );
+
+  /** Renders the hexagonal grid with legal move/attack indicators */
+  renderHexGrid = (legalMoveSet: Set<string>, legalAttackSet: Set<string>): JSX.Element => (
+    <>
+      {/* Render all hexagons */}
+      {this.hexagons.map((hex: Hex) => (
+        <g key={hex.getKey()}>
+          <polygon
+            points={this.getPolygonPoints(hex)}
+            className={`${startingBoard.colorClassMap[hex.getKey()]} ${
+              this.hexisAdjacentToControlledCastle(hex)
+                ? "hexagon-castle-adjacent"
+                : ""
+            }`}
+            onClick={() => this.handleHexClick(hex)}
+            filter={
+              startingBoard.colorClassMap[hex.getKey()] === "hexagon-high-ground"
+                ? "url(#shadow)"
+                : ""
+            }
+          />
+          {this.state.showCoordinates && (
+            <text
+              x={this.getHexCenter(hex).x}
+              y={this.getHexCenter(hex).y + 5}
+              textAnchor="middle"
+              style={{ fontSize: "15px", color: "black" }}
+            >
+              {`${-hex.q}, ${-hex.s}`}
+            </text>
+          )}
+        </g>
+      ))}
+      {/* Render dots for legal moves and attacks */}
+      {this.hexagons.map((hex: Hex) => {
+        const key = hex.getKey();
+        if (legalMoveSet.has(key)) {
+          return this.renderCircle(hex, "legalMoveDot");
+        } else if (legalAttackSet.has(key)) {
+          return this.renderCircle(hex, "legalAttackDot");
+        }
+        return null;
+      })}
+    </>
+  );
+
+  /** Renders all pieces on the board */
+  renderPieces = (): JSX.Element => (
+    <>
+      {this.state.pieces.map((piece: Piece) => {
+        const center = this.getPieceCenter(piece);
+        return (
+          <image
+            key={piece.hex.getKey()}
+            href={this.getImageByPieceType(piece.type, piece.color)}
+            x={center.x - 145 / N_SQUARES}
+            y={center.y - 145 / N_SQUARES}
+            height={275 / N_SQUARES}
+            width={275 / N_SQUARES}
+            className="piece"
+            onClick={() => this.handlePieceClick(piece)}
+          />
+        );
+      })}
+    </>
+  );
+
   render() {
     // Optimization: Calculate legal moves/attacks ONCE per render
     const legalMoveSet = new Set(this.legalMoves.map(h => h.getKey()));
     const legalAttackSet = new Set(this.legalAttacks.map(h => h.getKey()));
-    
+
     return (
       <>
-        <button className="pass-button" onClick={this.handlePass}>
-          Pass
-        </button>
-        <button
-          className="coordinates-button"
-          onClick={() =>
-            this.setState({ showCoordinates: !this.state.showCoordinates })
-          }
-        >
-          Toggle Coordinates
-        </button>
-        <button className="takeback-button" onClick={this.handleTakeback}>
-          Takeback
-        </button>
-        <button className="pass-button" onClick={this.handleFlipBoard}>
-          Flip Board
-        </button>
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "20%",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-            }}
-          >
-            {this.currentPlayer === "b" && (
-              <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
-            )}
-            <ChessClock
-              initialTime={STARTING_TIME}
-              isActive={this.currentPlayer === "b"}
-              player="b"
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "center",
-            }}
-          >
-            {this.currentPlayer === "w" && (
-              <TurnBanner color={this.currentPlayer} phase={this.turn_phase} />
-            )}
-            <ChessClock
-              initialTime={STARTING_TIME}
-              isActive={this.currentPlayer === "w"}
-              player="w"
-            />
-          </div>
-        </div>
+        {this.renderControlButtons()}
+        {this.renderPlayerClocks()}
+        
         <svg className="board" height="100%" width="100%">
+          {/* SVG filter for high-ground shadow effect */}
           <defs>
             <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur in="SourceAlpha" stdDeviation="5" />
@@ -424,64 +495,9 @@ class GameBoard extends Component<{}, GameBoardState> {
               </feMerge>
             </filter>
           </defs>
-          {/* Render all hexagons */}
-          {this.hexagons.map((hex: Hex) => (
-            <g key={hex.getKey()}>
-              <polygon
-                points={this.getPolygonPoints(hex)}
-                className={`${startingBoard.colorClassMap[hex.getKey()]} ${
-                  this.hexisAdjacentToControlledCastle(hex)
-                    ? "hexagon-castle-adjacent"
-                    : ""
-                }`}
-                onClick={() => this.handleHexClick(hex)}
-                filter={
-                  startingBoard.colorClassMap[hex.getKey()] ===
-                  "hexagon-high-ground"
-                    ? "url(#shadow)"
-                    : ""
-                }
-              />
-              {this.state.showCoordinates && (
-                <text
-                  x={this.getHexCenter(hex).x}
-                  y={this.getHexCenter(hex).y + 5}
-                  textAnchor="middle"
-                  style={{ fontSize: "15px", color: "black" }}
-                >
-                  {`${-hex.q}, ${-hex.s}`}
-                </text>
-              )}
-            </g>
-          ))}
-          {/* Render dots for legal moves */}
-          {this.hexagons.map((hex: Hex) => {
-            const key = hex.getKey();
-            if (legalMoveSet.has(key)) {
-              return this.renderCircle(hex, "legalMoveDot");
-            } else if (legalAttackSet.has(key)) {
-              return this.renderCircle(hex, "legalAttackDot");
-            }
-            return null;
-          })}
-
-          {/* Render all pieces */}
-          {/* We loop over pieces instead of hexagons  */}
-          {this.state.pieces.map((piece: Piece) => {
-            const center = this.getPieceCenter(piece);
-            return (
-              <image
-                key={piece.hex.getKey()}
-                href={this.getImageByPieceType(piece.type, piece.color)}
-                x={center.x - 145 / N_SQUARES}
-                y={center.y - 145 / N_SQUARES}
-                height={275 / N_SQUARES}
-                width={275 / N_SQUARES}
-                className="piece"
-                onClick={() => this.handlePieceClick(piece)}
-              />
-            );
-          })}
+          
+          {this.renderHexGrid(legalMoveSet, legalAttackSet)}
+          {this.renderPieces()}
         </svg>
       </>
     );
