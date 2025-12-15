@@ -2,29 +2,39 @@ import { Piece } from "./Piece";
 import { Castle } from "./Castle";
 import { Hex } from "./Hex";
 import { Board } from "./Board";
-import { Color, AttackType, TurnPhase, DEFENDED_PIECE_IS_PROTECTED_RANGED, PieceType } from "../Constants";
+import {
+  Color,
+  AttackType,
+  TurnPhase,
+  DEFENDED_PIECE_IS_PROTECTED_RANGED,
+  PieceType,
+  PHASE_CYCLE_LENGTH,
+  PLAYER_CYCLE_LENGTH,
+  MOVEMENT_PHASE_END,
+  ATTACK_PHASE_END,
+  HistoryEntry,
+} from "../Constants";
 
 export interface GameState {
   pieces: Piece[];
   Castles: Castle[];
   turnCounter: number;
   movingPiece: Piece | null;
-  history: any[]; // Todo: Define history type stricter
+  history: HistoryEntry[];
 }
 // Rulebook for game: Can I move here? Is this a legal attack?...
 export class GameEngine {
   constructor(public board: Board) {}
 
   public getTurnPhase(turnCounter: number): TurnPhase {
-    return turnCounter % 5 < 2
-      ? "Movement"
-      : turnCounter % 5 < 4
-      ? "Attack"
-      : "Castles";
+    const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
+    if (phaseIndex < MOVEMENT_PHASE_END) return "Movement";
+    if (phaseIndex < ATTACK_PHASE_END) return "Attack";
+    return "Castles";
   }
 
   public getCurrentPlayer(turnCounter: number): Color {
-    return turnCounter % 10 < 5 ? "w" : "b";
+    return turnCounter % PLAYER_CYCLE_LENGTH < PHASE_CYCLE_LENGTH ? "w" : "b";
   }
 
   public getOccupiedHexes(pieces: Piece[]): Hex[] {
@@ -41,6 +51,12 @@ export class GameEngine {
         ...this.board.castleHexes, 
         ...occupied
     ];
+  }
+
+  /** Returns a Set of hex keys for O(1) blocked hex lookups */
+  public getBlockedHexSet(pieces: Piece[], castles: Castle[]): Set<string> {
+    const blockedHexes = this.getBlockedHexes(pieces, castles);
+    return new Set(blockedHexes.map(hex => hex.getKey()));
   }
 
   // ... Transferring more logic

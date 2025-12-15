@@ -36,7 +36,7 @@ export class Piece {
   get Strength(): number {
     return PieceStrength[this.type];
   }
-  get AttackType(): string {
+  get AttackType(): AttackType {
     return this.type === PieceType.Archer
       ? AttackType.Ranged
       : this.type === PieceType.Trebuchet

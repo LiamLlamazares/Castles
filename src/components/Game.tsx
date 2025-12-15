@@ -275,51 +275,9 @@ class GameBoard extends Component {
                const newState = this.gameEngine.applyAttack(this.state, movingPiece, hex);
                this.setState(newState);
            } else {
-               // Must be a castle
-               // Attacking a castle:
-               // In original code: `movingPiece.hex = hex`. (Capture it by moving onto it).
-               // So this is effectively a MOVE, but technically an "Attack" action in the rulebook?
-               // The original code just moved the piece there.
-               // So I can use `applyMove`?
-               // `applyMove` checks `getTurnIncrement`.
-               // If I move onto a castle, do I destroy it?
-               // `castle.color` changes?
-               // `castleIsControlledByActivePlayer` is checked.
-               // If I move onto it, I now occupy it.
-               // `getControlledCastlesActivePlayer` checks if a piece is on it.
-               // So `applyMove` correctly handles occupying.
-               // Does it consume "Attack" capability?
-               // Original code: `movingPiece.canAttack = false`.
-               // Move logic usually sets `canMove = false`.
-               // If I attack a castle, do I use my Move or Attack?
-               // Original code inner block (312): `this.turn_phase === "Attack"`.
-               // So it consumes Attack.
-               // `applyMove` consumes `canMove`.
-               // I might need a specific `applyCastleCapture` or `applyAttackMove`.
-               
-               // For now, let's replicate original behavior: Move the piece, consume Attack flag.
-               // I can manually tweak the result of applyMove?
-               // Or add `applyCastleAttack` to GameEngine.
-               // I will choose to add `applyCastleAttack` to GameEngine afterwards.
-               // For now, I'll do it manually here to save the file, then fix Engine.
-               
-               let newState = this.gameEngine.applyMove(this.state, movingPiece, hex);
-               // Fix flags: It was an attack, not a move.
-               // applyMove sets canMove=false.
-               // We want canAttack=false. (And maybe canMove is already false if phase is Attack).
-               // In Attack phase, canMove is usually false/irrelevant?
-               // Wait, phase is Attack. Piece has `canAttack`.
-               // `applyMove` assumes Movement phase? 
-               // `applyMove` logic: `newPiece.canMove = false`.
-               // It doesn't check phase.
-               // So if I use `applyMove` in Attack phase, it sets `canMove=false` (already false probably).
-               // But I need `canAttack=false`.
-               
-               // I should implement `applyCastleAttack` in GameEngine. 
-               // I will call `this.gameEngine.applyCastleAttack(...)` assuming I will write it next.
-               
-               const newState2 = this.gameEngine.applyCastleAttack(this.state, movingPiece, hex);
-               this.setState(newState2);
+                // Capturing a castle by moving onto it - uses applyCastleAttack which consumes canAttack flag
+                const newState = this.gameEngine.applyCastleAttack(this.state, movingPiece, hex);
+                this.setState(newState);
            }
        } else {
          this.setState({ movingPiece: null });

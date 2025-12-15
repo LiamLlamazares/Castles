@@ -40,3 +40,15 @@ export type Color = "w" | "b";
 export const STARTING_TIME = 20 * 60;
 export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended piece is protected from ranged attacks
 
+// Turn phase cycle constants
+export const PHASE_CYCLE_LENGTH = 5; // Movement(0-1) → Attack(2-3) → Castles(4)
+export const PLAYER_CYCLE_LENGTH = 10; // Full round = 2 players × 5 phases
+export const MOVEMENT_PHASE_END = 2; // turnCounter % 5 < 2 = Movement
+export const ATTACK_PHASE_END = 4; // turnCounter % 5 < 4 = Attack
+
+// History entry type for strict typing
+export interface HistoryEntry {
+  pieces: import('./Classes/Piece').Piece[];
+  Castles: import('./Classes/Castle').Castle[];
+  turnCounter: number;
+}

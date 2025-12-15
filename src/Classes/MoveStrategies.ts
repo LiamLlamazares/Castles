@@ -14,8 +14,8 @@ export const swordsmanMoves = (hex: Hex, blockedhexes: Hex[], color: Color): Hex
     { q: -offset, r: 0, s: offset },
   ];
 
-  for (let offset of offsets) {
-    let newHex = new Hex(q + offset.q, r + offset.r, s + offset.s);
+  for (let dir of offsets) {
+    let newHex = new Hex(q + dir.q, r + dir.r, s + dir.s);
     if (!blockedhexes.some((blockedHex) => blockedHex.equals(newHex))) {
       moves.push(newHex);
     }
@@ -93,17 +93,6 @@ export const eagleMoves = (hex: Hex, blockedhexes: Hex[]): Hex[] => {
   );
 };
 
-// Re-implementing Eagle logic exactly as is to be safe, but cleaning it slightly.
-export const eagleMovesLegacy = (hex: Hex, blockedhexes: Hex[]): Hex[] => {
-    let moves: Hex[] = [];
-    for (let i = 1; i <= 15; i++) {
-      moves = [...moves, ...hex.cubeRing(i)];
-    }
-    moves = moves.filter(
-      (move) => !blockedhexes.some((h) => h.equals(move))
-    );
-    return moves;
-}
 
 export const dragonMoves = (hex: Hex, blockedhexes: Hex[]): Hex[] => {
   //Dragons move like the knight in chess, orthogonally two and then 1 diagonally
