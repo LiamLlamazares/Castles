@@ -41,7 +41,11 @@ class GameBoard extends Component {
   gameEngine = new GameEngine(startingBoard);
 
   state = {
-    history: [],
+    history: [] as {
+        pieces: Piece[];
+        Castles: Castle[];
+        turnCounter: number;
+    }[],
     pieces: startingBoard.pieces as Piece[], // We need to cast the pieces to Piece type because they are initially created as object literals
     movingPiece: null as Piece | null,
     showCoordinates: false,
@@ -187,6 +191,7 @@ class GameBoard extends Component {
     //   turnCounter += 1;
     // }
 
+    this.saveHistory();
     this.setState({
       movingPiece: null,
       turnCounter: this.state.turnCounter + this.turnCounterIncrement,
@@ -198,11 +203,29 @@ class GameBoard extends Component {
     }
   };
 
+  saveHistory = () => {
+      const currentState = {
+          pieces: this.state.pieces.map((p) => p.clone()),
+          Castles: this.state.Castles.map((c) => c.clone()),
+          turnCounter: this.state.turnCounter,
+      };
+      this.setState({
+          history: [...this.state.history, currentState]
+      });
+  };
+
   handleTakeback = () => {
     if (this.state.history.length > 0) {
-      const previousState: GameBoard | undefined = this.state.history.pop();
+      const history = [...this.state.history];
+      const previousState = history.pop();
       if (previousState) {
-        this.setState({ current: previousState });
+        this.setState({ 
+            pieces: previousState.pieces, 
+            Castles: previousState.Castles,
+            turnCounter: previousState.turnCounter,
+            history: history,
+            movingPiece: null // Reset selection
+        });
       }
     }
   };
@@ -241,6 +264,7 @@ class GameBoard extends Component {
       this.legalAttacks.some((attack) => attack.equals(pieceClicked.hex))
     ) {
       //Checks if attack is legal, if it is, attack
+      this.saveHistory();
       const { newPieces } = this.gameEngine.resolveCombat(movingPiece, pieceClicked, this.state.pieces);
       const pieces = newPieces;
       // Update the Pieces
@@ -262,6 +286,8 @@ class GameBoard extends Component {
     //*****MOVEMENT LOGIC TO HEX**************//
     if (movingPiece?.canMove && this.turn_phase === "Movement") {
       if (this.legalMoves.some((move) => move.equals(hex))) {
+        //Makes a legal move
+        this.saveHistory();
         //Makes a legal move
         if (turnCounter % 5 === 1) {
           //Resets all pieces and castles in movement phase
@@ -286,6 +312,8 @@ class GameBoard extends Component {
     else if (this.turn_phase === "Attack" && movingPiece?.canAttack) {
       if (this.legalAttacks.some((attack) => attack.equals(hex))) {
         //Makes a legal attack
+        //Makes a legal attack
+        this.saveHistory();
         this.setState({ movingPiece: null });
         movingPiece.hex = hex; //Update piece position
         movingPiece.canAttack = false;
@@ -310,6 +338,7 @@ class GameBoard extends Component {
         const pieceTypes = Object.values(PieceType);
         const pieceType =
           pieceTypes[castle.turns_controlled % pieceTypes.length];
+        this.saveHistory();
         pieces.push(new Piece(hex, this.currentPlayer, pieceType));
         castle.turns_controlled += 1;
         castle.used_this_turn = true;

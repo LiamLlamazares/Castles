@@ -181,6 +181,10 @@ export class Piece {
   public getType(): PieceType {
     return this.type;
   }
+
+  public clone(): Piece {
+    return new Piece(this.hex, this.color, this.type, this.canMove, this.canAttack, this.damage);
+  }
 }
 
 

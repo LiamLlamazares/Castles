@@ -13,4 +13,7 @@ export class Castle {
   public isAdjacent(hex: Hex): boolean {
     return this.adjacentHexes().some((castleHex) => castleHex.equals(hex));
   }
+  public clone(): Castle {
+      return new Castle(this.hex, this.color, this.turns_controlled, this.used_this_turn);
+  }
 }
