@@ -1,105 +1,108 @@
+/**
+ * Starting board configuration.
+ * Defines initial piece positions and creates the game board.
+ */
 import { Hex } from "./Classes/Hex";
 import { Piece } from "./Classes/Piece";
 import { Board } from "./Classes/Board";
-import { N_SQUARES, PieceType } from "./Constants";
+import { N_SQUARES, PieceType, Color } from "./Constants";
 
-//Starting board = starting pieces + hexes
-function generatePieces(pieceType: PieceType, coordinates: Hex[]): Piece[] {
-  const whitePieces = coordinates.map(
-    (coordinate) => new Piece(coordinate, "w", pieceType)
-  );
-  const blackPieces = whitePieces.map(
-    (piece) =>
-      new Piece(
-        new Hex(-piece.hex.q, -piece.hex.r, -piece.hex.s),
-        "b",
-        pieceType
-      )
-  );
-  return [...whitePieces, ...blackPieces];
+// =========== PIECE GENERATION ===========
+
+const IS_SMALL_BOARD = N_SQUARES <= 6;
+
+/**
+ * Creates a piece for white at the given coordinates,
+ * and its mirrored counterpart for black.
+ */
+function createMirroredPair(type: PieceType, q: number, r: number, s: number): Piece[] {
+  return [
+    new Piece(new Hex(q, r, s), "w" as Color, type),
+    new Piece(new Hex(-q, -r, -s), "b" as Color, type),
+  ];
 }
-const boardisSmall = N_SQUARES <= 6;
-const swordsmen1 = generatePieces(
-  PieceType.Swordsman,
-  Array.from({ length: N_SQUARES - 1 }, (_, k) => new Hex(-k, k + 1, -1))
-);
-const swordsmen2 = generatePieces(
-  PieceType.Swordsman,
-  Array.from({ length: N_SQUARES - 2 }, (_, k) => new Hex(k + 1, 1, -k - 2))
-);
-const archers1 = generatePieces(
-  PieceType.Archer,
-  Array.from(
-    { length: Math.max(N_SQUARES - 5) },
-    (_, k) => new Hex(-2, N_SQUARES - 1 - k, k + 3 - N_SQUARES)
-  )
-);
-const archers2 = generatePieces(
-  PieceType.Archer,
-  Array.from(
-    { length: Math.max(N_SQUARES - 5, 1) },
-    (_, k) => new Hex(2, N_SQUARES - k - 3, k + 1 - N_SQUARES)
-  )
-);
-const knights = generatePieces(
-  PieceType.Knight,
-  Array.from(
-    { length: Math.max(N_SQUARES - 4, 1) },
-    (_, k) => new Hex(0, N_SQUARES - 1 - k, k + 1 - N_SQUARES)
-  )
-);
-const trebuchets = generatePieces(PieceType.Trebuchet, [
-  new Hex(-3, N_SQUARES - 1, 4 - N_SQUARES),
-  new Hex(3, N_SQUARES - 4, 1 - N_SQUARES),
-]);
-const eagles = generatePieces(PieceType.Eagle, [
-  new Hex(-1, N_SQUARES - 2, 3 - N_SQUARES),
-  new Hex(1, N_SQUARES - 3, 2 - N_SQUARES),
-]);
-const giantCoordinates = boardisSmall
-  ? [
-      new Hex(-1, N_SQUARES - 3, 4 - N_SQUARES),
-      new Hex(1, N_SQUARES - 4, 3 - N_SQUARES),
-    ]
-  : [
-      new Hex(-5, N_SQUARES - 1, 6 - N_SQUARES),
-      new Hex(5, N_SQUARES - 6, 1 - N_SQUARES),
-    ];
 
-const giants = generatePieces(PieceType.Giant, giantCoordinates);
-const dragonCoordinates = boardisSmall
-  ? [
-      new Hex(-2, N_SQUARES - 2, 4 - N_SQUARES),
-      new Hex(2, N_SQUARES - 4, 2 - N_SQUARES),
-    ]
-  : [
-      new Hex(-4, N_SQUARES - 1, 5 - N_SQUARES),
-      new Hex(4, N_SQUARES - 5, 1 - N_SQUARES),
-    ];
+/**
+ * Creates pieces along a line from start coordinates.
+ */
+function createLine(
+  type: PieceType,
+  count: number,
+  startQ: number,
+  startR: number,
+  deltaQ: number,
+  deltaR: number
+): Piece[] {
+  const pieces: Piece[] = [];
+  for (let i = 0; i < count; i++) {
+    const q = startQ + i * deltaQ;
+    const r = startR + i * deltaR;
+    const s = -q - r;
+    pieces.push(...createMirroredPair(type, q, r, s));
+  }
+  return pieces;
+}
 
-const dragons = generatePieces(PieceType.Dragon, dragonCoordinates);
-const assassin = generatePieces(PieceType.Assassin, [
-  new Hex(-1, N_SQUARES - 1, 2 - N_SQUARES),
-]);
-const monarch = generatePieces(PieceType.Monarch, [
-  new Hex(1, N_SQUARES - 2, 1 - N_SQUARES),
-]);
+// =========== PIECE CONFIGURATIONS ===========
 
-export const startingBoard = new Board(
-  [
-    ...swordsmen1,
-    ...swordsmen2,
-    ...knights,
-    ...archers1,
-    ...archers2,
-    ...trebuchets,
-    ...eagles,
-    ...giants,
-    ...dragons,
-    ...assassin,
-    ...monarch,
-  ],
+const n = N_SQUARES; // Shorthand
 
-  N_SQUARES - 1
-);
+// Swordsmen: two lines of pawns
+const swordsmen = [
+  ...createLine(PieceType.Swordsman, n - 1, 0, 1, -1, 1),      // Left diagonal
+  ...createLine(PieceType.Swordsman, n - 2, 1, 1, 1, 0),      // Right diagonal
+];
+
+// Knights: vertical line in center
+const knights = createLine(PieceType.Knight, Math.max(n - 4, 1), 0, n - 1, 0, -1);
+
+// Archers: two columns
+const archers = [
+  ...createLine(PieceType.Archer, Math.max(n - 5, 0), -2, n - 1, 0, -1),
+  ...createLine(PieceType.Archer, Math.max(n - 5, 1), 2, n - 3, 0, -1),
+];
+
+// Fixed position pieces (explicit coordinates)
+const trebuchets = [
+  ...createMirroredPair(PieceType.Trebuchet, -3, n - 1, 4 - n),
+  ...createMirroredPair(PieceType.Trebuchet, 3, n - 4, 1 - n),
+];
+
+const eagles = [
+  ...createMirroredPair(PieceType.Eagle, -1, n - 2, 3 - n),
+  ...createMirroredPair(PieceType.Eagle, 1, n - 3, 2 - n),
+];
+
+// Giants and Dragons: different positions based on board size
+const giants = IS_SMALL_BOARD
+  ? [...createMirroredPair(PieceType.Giant, -1, n - 3, 4 - n),
+     ...createMirroredPair(PieceType.Giant, 1, n - 4, 3 - n)]
+  : [...createMirroredPair(PieceType.Giant, -5, n - 1, 6 - n),
+     ...createMirroredPair(PieceType.Giant, 5, n - 6, 1 - n)];
+
+const dragons = IS_SMALL_BOARD
+  ? [...createMirroredPair(PieceType.Dragon, -2, n - 2, 4 - n),
+     ...createMirroredPair(PieceType.Dragon, 2, n - 4, 2 - n)]
+  : [...createMirroredPair(PieceType.Dragon, -4, n - 1, 5 - n),
+     ...createMirroredPair(PieceType.Dragon, 4, n - 5, 1 - n)];
+
+// Unique pieces
+const assassins = createMirroredPair(PieceType.Assassin, -1, n - 1, 2 - n);
+const monarchs = createMirroredPair(PieceType.Monarch, 1, n - 2, 1 - n);
+
+// =========== BOARD EXPORTS ===========
+
+const allPieces = [
+  ...swordsmen,
+  ...knights,
+  ...archers,
+  ...trebuchets,
+  ...eagles,
+  ...giants,
+  ...dragons,
+  ...assassins,
+  ...monarchs,
+];
+
+export const startingBoard = new Board(allPieces, N_SQUARES - 1);
 export const emptyBoard = new Board([], N_SQUARES - 1);

@@ -339,8 +339,6 @@ export class GameEngine {
      const defenderClone = newPieces.find(p => p.hex.equals(defender.hex))!;
 
      defenderClone.damage += attackerClone.Strength;
-     
-      let _attackerMoved = false;
 
      // Check Death
      if (
@@ -350,13 +348,12 @@ export class GameEngine {
         // Defender dies
         newPieces = newPieces.filter((p) => p !== defenderClone);
         
+        // Melee attackers move onto the captured hex
         if (
           attackerClone.AttackType === AttackType.Melee ||
           attackerClone.AttackType === AttackType.Swordsman
         ) {
-          // Move attacker to defender hex
           attackerClone.hex = defenderClone.hex;
-          _attackerMoved = true;
         }
       }
 
