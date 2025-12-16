@@ -76,7 +76,8 @@ export class Board {
   
 
   constructor(
-    configOrSize: number | BoardConfig = N_SQUARES
+    configOrSize: number | BoardConfig = N_SQUARES,
+    customCastles?: Castle[]
   ) {
     // Backward compatibility: handle number input
     if (typeof configOrSize === 'number') {
@@ -88,12 +89,32 @@ export class Board {
     this.NSquares = this.config.nSquares;
     this.hexes = generateHexagons(this.NSquares);
 
+    // Use custom castles if provided, otherwise default logic (will be computed in getters/isCastle)
+    if (customCastles) {
+        this._castles = customCastles;
+        // If we have custom castles, our isCastle check needs to use them
+        // But isCastle logic below uses geometric corners.
+        // We should update isCastle to check the _castles array if it exists.
+    }
+
     // Precompute special hex classifications (computed once, independent of pixels)
     this.riverHexes = this.hexes.filter((hex) => this.isRiver(hex));
-    this.castleHexes = this.hexes.filter((hex) => this.isCastle(hex, this.NSquares));
+    
+    // Castle logic: precise or geometric?
+    // If we have custom castles, we trust them.
+    if (this._castles) {
+        this.castleHexes = this._castles.map(c => c.hex);
+    } else {
+        this.castleHexes = this.hexes.filter((hex) => this.isCastle(hex, this.NSquares));
+    }
+    
+    // We need to categorize them for sets
     this.whiteCastleHexes = this.castleHexes.filter((hex) => this.isWhiteCastle(hex));
     this.blackCastleHexes = this.castleHexes.filter((hex) => this.isBlackCastle(hex));
-    this.highGroundHexes = this.hexes.filter((hex) => this.isCastle(hex, this.NSquares - 2));
+    
+    // High ground still based on default corners? Or relative to castles? 
+    // Keeping default high ground for now.
+    this.highGroundHexes = this.hexes.filter((hex) => this.isDefaultCastleLocation(hex, this.NSquares - 2));
 
     // Precompute Sets for O(1) lookups
     this.riverHexSet = new Set(this.riverHexes.map(h => h.getKey()));
@@ -145,13 +166,20 @@ export class Board {
     return positionInPattern >= RIVER_CROSSING_LENGTH;
   }
 
-public isCastle(hex: Hex, N: number): boolean {
-  return (
-    (hex.q === 0 && Math.abs(hex.r) === N && Math.abs(hex.s) === N) ||
-    (hex.r === 0 && Math.abs(hex.q) === N && Math.abs(hex.s) === N) ||
-    (hex.s === 0 && Math.abs(hex.q) === N && Math.abs(hex.r) === N)
-  ); 
-};
+  public isCastle(hex: Hex, N: number): boolean {
+    if (this._castles) {
+        return this._castles.some(c => c.hex.equals(hex));
+    }
+    return this.isDefaultCastleLocation(hex, N);
+  }
+
+  public isDefaultCastleLocation(hex: Hex, N: number): boolean {
+    return (
+      (hex.q === 0 && Math.abs(hex.r) === N && Math.abs(hex.s) === N) ||
+      (hex.r === 0 && Math.abs(hex.q) === N && Math.abs(hex.s) === N) ||
+      (hex.s === 0 && Math.abs(hex.q) === N && Math.abs(hex.r) === N)
+    ); 
+  };
 
 /**
  * Checks if a castle belongs to the white player's side.

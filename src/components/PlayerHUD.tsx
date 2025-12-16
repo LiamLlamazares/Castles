@@ -6,16 +6,17 @@ import { TurnPhase, Color, STARTING_TIME } from "../Constants";
 interface PlayerHUDProps {
   currentPlayer: Color;
   turnPhase: TurnPhase;
+  hasGameStarted: boolean;
 }
 
-const PlayerHUD: React.FC<PlayerHUDProps> = ({ currentPlayer, turnPhase }) => {
+const PlayerHUD: React.FC<PlayerHUDProps> = ({ currentPlayer, turnPhase, hasGameStarted }) => {
   return (
     <div className="player-hud">
       {/* Black Player Status */}
       <div className="player-status">
         <ChessClock
           initialTime={STARTING_TIME}
-          isActive={currentPlayer === "b"}
+          isActive={hasGameStarted && currentPlayer === "b"}
           player="b"
         />
         {currentPlayer === "b" && (
@@ -27,7 +28,7 @@ const PlayerHUD: React.FC<PlayerHUDProps> = ({ currentPlayer, turnPhase }) => {
       <div className="player-status">
         <ChessClock
           initialTime={STARTING_TIME}
-          isActive={currentPlayer === "w"}
+          isActive={hasGameStarted && currentPlayer === "w"}
           player="w"
         />
         {currentPlayer === "w" && (

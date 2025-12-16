@@ -3,10 +3,9 @@ import '../css/Board.css'; // Reusing global styles for now
 
 interface MainMenuProps {
     onPlay: () => void;
-    onEditor: () => void;
 }
 
-const MainMenu: React.FC<MainMenuProps> = ({ onPlay, onEditor }) => {
+const MainMenu: React.FC<MainMenuProps> = ({ onPlay }) => {
     return (
         <div className="main-menu" style={{
             display: 'flex',
@@ -22,30 +21,18 @@ const MainMenu: React.FC<MainMenuProps> = ({ onPlay, onEditor }) => {
                 <button 
                     onClick={onPlay}
                     style={{
-                        padding: '15px 30px',
-                        fontSize: '1.5rem',
+                        padding: '15px 40px',
+                        fontSize: '1.8rem',
                         cursor: 'pointer',
                         borderRadius: '8px',
                         border: 'none',
                         background: '#e74c3c',
-                        color: 'white'
+                        color: 'white',
+                        fontWeight: 'bold',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.2)'
                     }}
                 >
-                    New Game
-                </button>
-                <button 
-                    onClick={onEditor}
-                    style={{
-                        padding: '15px 30px',
-                        fontSize: '1.5rem',
-                        cursor: 'pointer',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: '#3498db',
-                        color: 'white'
-                    }}
-                >
-                    Map Editor
+                    NEW GAME
                 </button>
             </div>
         </div>

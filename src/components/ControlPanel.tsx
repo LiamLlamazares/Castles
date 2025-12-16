@@ -12,6 +12,7 @@ interface ControlPanelProps {
   onToggleCoordinates: () => void;
   onTakeback: () => void;
   onFlipBoard: () => void;
+  onResign: () => void;
   moveHistory: MoveRecord[];
 }
 
@@ -22,6 +23,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onToggleCoordinates,
   onTakeback,
   onFlipBoard,
+  onResign,
   moveHistory,
 }) => {
   return (
@@ -31,15 +33,13 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <button className="game-button" onClick={onPass} title="Pass Turn (Space)">
           Pass Move (Space)
         </button>
-        <button className="game-button" onClick={onTakeback} title="Takeback (Z)">
+        <button className="game-button" onClick={onResign} style={{ background: '#c0392b' }}>
+          Resign
+        </button>
+         {/* Hidden/Debug buttons can be added back if needed, but user requested simplified UI */}
+        {/* <button className="game-button" onClick={onTakeback} title="Takeback (Z)">
           Takeback (Z)
-        </button>
-        <button className="game-button" onClick={onToggleCoordinates}>
-          Toggle Coordinates
-        </button>
-        <button className="game-button" onClick={onFlipBoard} title="Flip Board (R)">
-          Flip Board (R)
-        </button>
+        </button> */}
       </div>
       
       {/* Move History */}
@@ -47,8 +47,23 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           <h3>Move History</h3>
           <HistoryTable moveHistory={moveHistory} currentPlayer={currentPlayer} />
       </div>
+
+      {/* Settings / Extra Controls (Optional) */}
+      <div style={{ marginTop: 'auto', padding: '10px', display: 'flex', gap: '10px', opacity: 0.5 }}>
+          <button onClick={onFlipBoard} style={iconButtonStyle} title="Flip Board">🔄</button>
+          <button onClick={onToggleCoordinates} style={iconButtonStyle} title="Coordinates">#</button>
+      </div>
     </div>
   );
+};
+
+const iconButtonStyle = {
+    background: 'none',
+    border: '1px solid #666',
+    color: '#888',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '4px'
 };
 
 export default ControlPanel;

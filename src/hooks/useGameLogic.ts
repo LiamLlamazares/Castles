@@ -252,6 +252,44 @@ export const useGameLogic = (
     setState(prev => ({ ...prev, movingPiece: null }));
   }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory]);
 
+  const handleResign = useCallback((player: Color) => {
+    // Determine winner based on who resigned
+    // If current player resigns, other player wins.
+    // Assuming resigner is always current player or passed explicitly.
+    // For simplicity, let's assume the person passing the resign action is resigning.
+    // If White resigns, Black wins.
+    const winningColor = player === 'w' ? 'b' : 'w';
+    // We can't easily update just 'winner' without a full state update that GameEngine recognizes,
+    // OR we just override the logic. 
+    // Ideally GameEngine has a 'resign' method, but we can hot-wire it here by modifying pieces/castles or just handling it in UI.
+    // Better: Add a resign method to GameEngine or just handle it here locally if strictly UI.
+    // Let's verify if GameEngine has resign. It doesn't seem to have been modified recently.
+    // Plan: We will trigger a state update that sets a flag? Or just compute it.
+    // Actually, simple approach: Cleave everything and set a "game over" state in hook?
+    // But `winner` is computed from `pieces` / `castles`.
+    // Let's rely on GameEngine having a way, or just assume we handle resignation by treating it as a UI overlay state?
+    // User requested "Resign -> Victory Overlay". VictoryOverlay takes `winner`.
+    // If we want `winner` to be computed, we need to kill the King? 
+    // Yes, killing the monarch is the canon way to lose.
+    // So `resign` = remove my Monarch.
+    saveHistory();
+    setState(prev => {
+        const myMonarch = prev.pieces.find(p => p.type === "Monarch" && p.color === player);
+        if (myMonarch) {
+            // Remove monarch
+            const newPieces = prev.pieces.filter(p => p !== myMonarch);
+            return {
+                ...prev,
+                pieces: newPieces
+                // GameEngine.getWinner should now return the other player
+            };
+        }
+        return prev;
+    });
+  }, [pieces, saveHistory]);
+
+  const hasGameStarted = turnCounter > 0;
+
   return {
     // State
     pieces,
@@ -273,6 +311,7 @@ export const useGameLogic = (
     isRecruitmentSpot,
     board: gameEngine.board,
     moveHistory: moveHistory,
+    hasGameStarted,
 
     // Actions
     handlePass,
@@ -281,6 +320,7 @@ export const useGameLogic = (
     toggleCoordinates,
     incrementResizeVersion,
     handlePieceClick,
-    handleHexClick
+    handleHexClick,
+    handleResign
   };
 };

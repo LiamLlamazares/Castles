@@ -15,6 +15,7 @@ interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
   initialLayout?: LayoutService;
+  onResign?: () => void;
 }
 
 /**
@@ -24,7 +25,8 @@ interface GameBoardProps {
 const GameBoard: React.FC<GameBoardProps> = ({ 
   initialBoard = startingBoard, 
   initialPieces = allPieces, 
-  initialLayout = startingLayout 
+  initialLayout = startingLayout,
+  onResign = () => {}
 }) => {
     
   const {
@@ -74,6 +76,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onToggleCoordinates={toggleCoordinates}
         onTakeback={handleTakeback}
         onFlipBoard={handleFlipBoard}
+        onResign={onResign}
         moveHistory={moveHistory || []}
       />
       
