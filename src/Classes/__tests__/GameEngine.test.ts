@@ -97,9 +97,9 @@ describe('GameEngine', () => {
 
     it('contains river hexes', () => {
       const blockedSet = gameEngine.getBlockedHexSet([], []);
-      // River pattern: crossing at q%3=0, river at q%3=1,2
-      // q=1 is always river (position 1 in pattern of length 3)
-      const riverHex = new Hex(1, 0, -1);
+      // River pattern: 2 crossing (q=0,1), 2 river (q=2,3), repeat
+      // q=2 is always river (first river hex in pattern)
+      const riverHex = new Hex(2, 0, -2);
       expect(blockedSet.has(riverHex.getKey())).toBe(true);
     });
 

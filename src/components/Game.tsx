@@ -1,4 +1,4 @@
-import { Component } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Piece } from "../Classes/Piece";
 import { Castle } from "../Classes/Castle";
 import { Hex } from "../Classes/Hex";
@@ -10,336 +10,340 @@ import {
 import { startingBoard, allPieces } from "../ConstantImports";
 import "../css/Board.css";
 
-import { GameEngine } from "../Classes/GameEngine";
+import { GameEngine, GameState } from "../Classes/GameEngine";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import ControlPanel from "./ControlPanel";
 
-/** State interface for the GameBoard component */
-interface GameBoardState {
-  history: HistoryEntry[];
-  pieces: Piece[];
-  movingPiece: Piece | null;
+/** Extended state for UI-specific properties */
+interface GameBoardState extends GameState {
   showCoordinates: boolean;
-  turnCounter: number;
-  Castles: Castle[];
   cheatMode: boolean;
   isBoardRotated: boolean;
 }
+
+// Create game engine instance (stable reference)
+const gameEngine = new GameEngine(startingBoard);
 
 /**
  * Main game board component.
  * Renders the hex grid, pieces, and handles user interactions.
  */
-class GameBoard extends Component<{}, GameBoardState> {
-  gameEngine = new GameEngine(startingBoard);
-
-  state: GameBoardState = {
+const GameBoard = () => {
+  // =========== STATE ===========
+  const [state, setState] = useState<GameBoardState>({
     history: [],
     pieces: allPieces,
     movingPiece: null,
-    showCoordinates: false,
     turnCounter: 0,
     Castles: startingBoard.Castles as Castle[],
+    showCoordinates: false,
     cheatMode: false,
     isBoardRotated: false,
-  };
+  });
 
-  get turn_phase(): TurnPhase {
-    return this.gameEngine.getTurnPhase(this.state.turnCounter);
-  }
-  get currentPlayer(): Color {
-    return this.gameEngine.getCurrentPlayer(this.state.turnCounter);
-  }
-  get hexagons(): Hex[] {
-    return startingBoard.hexes;
-  }
+  const { pieces, Castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated } = state;
 
+  // =========== COMPUTED VALUES (useMemo) ===========
+  
+  const turn_phase = useMemo<TurnPhase>(
+    () => gameEngine.getTurnPhase(turnCounter),
+    [turnCounter]
+  );
 
-  get legalMoves(): Hex[] {
-    const { movingPiece, pieces, Castles, turnCounter } = this.state;
-    return this.gameEngine.getLegalMoves(movingPiece, pieces, Castles, turnCounter);
-  }
+  const currentPlayer = useMemo<Color>(
+    () => gameEngine.getCurrentPlayer(turnCounter),
+    [turnCounter]
+  );
 
+  const hexagons = useMemo(() => startingBoard.hexes, []);
 
-  get legalAttacks(): Hex[] {
-    const { movingPiece, pieces, Castles, turnCounter } = this.state;
-    return this.gameEngine.getLegalAttacks(movingPiece, pieces, Castles, turnCounter);
-  }
+  const legalMoves = useMemo(
+    () => gameEngine.getLegalMoves(movingPiece, pieces, Castles, turnCounter),
+    [movingPiece, pieces, Castles, turnCounter]
+  );
 
-  /** Returns victory message if someone has won, null otherwise */
-  get victoryMessage(): string | null {
-    return this.gameEngine.getVictoryMessage(this.state.pieces, this.state.Castles);
-  }
+  const legalAttacks = useMemo(
+    () => gameEngine.getLegalAttacks(movingPiece, pieces, Castles, turnCounter),
+    [movingPiece, pieces, Castles, turnCounter]
+  );
 
-  /** Returns the winning player's color, or null if game is ongoing */
-  get winner(): Color | null {
-    return this.gameEngine.getWinner(this.state.pieces, this.state.Castles);
-  }
+  const victoryMessage = useMemo(
+    () => gameEngine.getVictoryMessage(pieces, Castles),
+    [pieces, Castles]
+  );
 
-  get controlledCastlesActivePlayer(): Castle[] {
-    return this.gameEngine.getControlledCastlesActivePlayer(this.state.Castles, this.state.pieces, this.state.turnCounter);
-  }
+  const winner = useMemo(
+    () => gameEngine.getWinner(pieces, Castles),
+    [pieces, Castles]
+  );
 
-  get emptyUnusedHexesAdjacentToControlledCastles(): Hex[] {
-    const occupiedHexes = this.gameEngine.getOccupiedHexes(this.state.pieces);
-    const adjacentHexes = this.controlledCastlesActivePlayer
+  const controlledCastlesActivePlayer = useMemo(
+    () => gameEngine.getControlledCastlesActivePlayer(Castles, pieces, turnCounter),
+    [Castles, pieces, turnCounter]
+  );
+
+  const emptyUnusedHexesAdjacentToControlledCastles = useMemo(() => {
+    const occupiedHexes = gameEngine.getOccupiedHexes(pieces);
+    const adjacentHexes = controlledCastlesActivePlayer
       .filter((castle) => !castle.used_this_turn)
       .map((castle) => castle.hex.cubeRing(1))
       .flat(1);
     return adjacentHexes.filter(
-      (hex) =>
-        !occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
+      (hex) => !occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
     );
-  }
+  }, [pieces, controlledCastlesActivePlayer]);
 
-  public castleIsControlledByActivePlayer = (castle: Castle): boolean => {
-    return this.gameEngine.castleIsControlledByActivePlayer(castle, this.state.pieces, this.currentPlayer);
-  };
+  // Sets for O(1) lookup in render
+  const legalMoveSet = useMemo(
+    () => new Set(legalMoves.map(h => h.getKey())),
+    [legalMoves]
+  );
 
-  public hexisLegalMove = (hex: Hex): boolean => {
-    return this.legalMoves.some((move) => move.equals(hex));
-  };
+  const legalAttackSet = useMemo(
+    () => new Set(legalAttacks.map(h => h.getKey())),
+    [legalAttacks]
+  );
 
-  public hexisLegalAttack = (hex: Hex): boolean => {
-    return this.legalAttacks.some((attack) => attack.equals(hex));
-  };
+  // =========== HELPER FUNCTIONS ===========
 
-  public hexisAdjacentToControlledCastle = (hex: Hex): boolean => {
-    return this.emptyUnusedHexesAdjacentToControlledCastles.some(
+  const hexisLegalMove = useCallback(
+    (hex: Hex): boolean => legalMoves.some((move) => move.equals(hex)),
+    [legalMoves]
+  );
+
+  const hexisLegalAttack = useCallback(
+    (hex: Hex): boolean => legalAttacks.some((attack) => attack.equals(hex)),
+    [legalAttacks]
+  );
+
+  const hexisAdjacentToControlledCastle = useCallback(
+    (hex: Hex): boolean => emptyUnusedHexesAdjacentToControlledCastles.some(
       (adjacentHex) => hex.equals(adjacentHex)
-    );
-  };
+    ),
+    [emptyUnusedHexesAdjacentToControlledCastles]
+  );
 
-  handleFlipBoard = (): void => {
-    this.setState({ isBoardRotated: !this.state.isBoardRotated });
-  };
+  // =========== HISTORY ===========
 
-  handlePass = (): void => {
-    this.saveHistory();
-    const newState = this.gameEngine.passTurn(this.state);
-    this.setState(newState);
-  };
+  const saveHistory = useCallback(() => {
+    const currentState: HistoryEntry = {
+      pieces: pieces.map((p) => p.clone()),
+      Castles: Castles.map((c) => c.clone()),
+      turnCounter: turnCounter,
+    };
+    setState(prev => ({
+      ...prev,
+      history: [...prev.history, currentState]
+    }));
+  }, [pieces, Castles, turnCounter]);
 
-  handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.code === "KeyQ") {
-      this.handlePass();
-    }
-  };
+  // =========== EVENT HANDLERS ===========
 
-  saveHistory = () => {
-      const currentState = {
-          pieces: this.state.pieces.map((p) => p.clone()),
-          Castles: this.state.Castles.map((c) => c.clone()),
-          turnCounter: this.state.turnCounter,
-      };
-      this.setState({
-          history: [...this.state.history, currentState]
-      });
-  };
+  const handleFlipBoard = useCallback(() => {
+    setState(prev => ({ ...prev, isBoardRotated: !prev.isBoardRotated }));
+  }, []);
 
-  handleTakeback = () => {
-    if (this.state.history.length > 0) {
-      const history = [...this.state.history];
-      const previousState = history.pop();
+  const handlePass = useCallback(() => {
+    saveHistory();
+    setState(prev => {
+      const newState = gameEngine.passTurn(prev);
+      return { ...prev, ...newState };
+    });
+  }, [saveHistory]);
+
+  const handleTakeback = useCallback(() => {
+    if (history.length > 0) {
+      const newHistory = [...history];
+      const previousState = newHistory.pop();
       if (previousState) {
-        this.setState({ 
-            pieces: previousState.pieces, 
-            Castles: previousState.Castles,
-            turnCounter: previousState.turnCounter,
-            history: history,
-            movingPiece: null // Reset selection
-        });
+        setState(prev => ({
+          ...prev,
+          pieces: previousState.pieces,
+          Castles: previousState.Castles,
+          turnCounter: previousState.turnCounter,
+          history: newHistory,
+          movingPiece: null
+        }));
       }
     }
-  };
+  }, [history]);
 
-  /**
-   * Handles clicks on game pieces.
-   * - Clicking own piece: select/deselect for movement or attack
-   * - Clicking enemy piece while attacking: execute attack
-   */
-  handlePieceClick = (pieceClicked: Piece): void => {
-    const { movingPiece } = this.state;
-
+  const handlePieceClick = useCallback((pieceClicked: Piece) => {
     // CASE 1: Deselect currently selected piece
     if (movingPiece === pieceClicked) {
-      this.setState({ movingPiece: null });
+      setState(prev => ({ ...prev, movingPiece: null }));
       return;
     }
 
     // CASE 2: Switch to different friendly piece
-    if (movingPiece && pieceClicked.color === this.currentPlayer) {
-      this.setState({ movingPiece: pieceClicked });
+    if (movingPiece && pieceClicked.color === currentPlayer) {
+      setState(prev => ({ ...prev, movingPiece: pieceClicked }));
       return;
     }
 
     // CASE 3: Attack enemy piece
     if (
       movingPiece &&
-      this.turn_phase === "Attack" &&
-      pieceClicked.color !== this.currentPlayer &&
-      this.hexisLegalAttack(pieceClicked.hex)
+      turn_phase === "Attack" &&
+      pieceClicked.color !== currentPlayer &&
+      hexisLegalAttack(pieceClicked.hex)
     ) {
-      this.saveHistory();
-      const newState = this.gameEngine.applyAttack(this.state, movingPiece, pieceClicked.hex);
-      this.setState(newState);
+      saveHistory();
+      setState(prev => {
+        const newState = gameEngine.applyAttack(prev, movingPiece, pieceClicked.hex);
+        return { ...prev, ...newState };
+      });
       return;
     }
 
     // CASE 4: Select own piece (if valid for current phase)
-    const canSelectForMovement = this.turn_phase === "Movement" && pieceClicked.canMove;
-    const canSelectForAttack = this.turn_phase === "Attack" && pieceClicked.canAttack;
-    const isOwnPiece = pieceClicked.color === this.currentPlayer;
+    const canSelectForMovement = turn_phase === "Movement" && pieceClicked.canMove;
+    const canSelectForAttack = turn_phase === "Attack" && pieceClicked.canAttack;
+    const isOwnPiece = pieceClicked.color === currentPlayer;
 
     if (isOwnPiece && (canSelectForMovement || canSelectForAttack)) {
-      this.setState({ movingPiece: pieceClicked });
+      setState(prev => ({ ...prev, movingPiece: pieceClicked }));
       return;
     }
 
     // Default: Invalid click, deselect
-    this.setState({ movingPiece: null });
-  };
+    setState(prev => ({ ...prev, movingPiece: null }));
+  }, [movingPiece, currentPlayer, turn_phase, hexisLegalAttack, saveHistory]);
 
-  /**
-   * Handles clicks on empty hexes (or hexes with castles).
-   * - Movement phase: move selected piece to hex
-   * - Attack phase: attack castle on hex
-   * - Castle phase: recruit at hex adjacent to controlled castle
-   */
-  handleHexClick = (hex: Hex): void => {
-    const { movingPiece } = this.state;
-
+  const handleHexClick = useCallback((hex: Hex) => {
     // CASE 1: Movement - move piece to empty hex
-    if (this.turn_phase === "Movement" && movingPiece?.canMove) {
-      if (this.hexisLegalMove(hex)) {
-        this.saveHistory();
-        const newState = this.gameEngine.applyMove(this.state, movingPiece, hex);
-        this.setState(newState);
+    if (turn_phase === "Movement" && movingPiece?.canMove) {
+      if (hexisLegalMove(hex)) {
+        saveHistory();
+        setState(prev => {
+          const newState = gameEngine.applyMove(prev, movingPiece, hex);
+          return { ...prev, ...newState };
+        });
         return;
       }
-      this.setState({ movingPiece: null });
+      setState(prev => ({ ...prev, movingPiece: null }));
       return;
     }
 
     // CASE 2: Attack - attack piece or capture castle
-    if (this.turn_phase === "Attack" && movingPiece?.canAttack) {
-      if (this.hexisLegalAttack(hex)) {
-        this.saveHistory();
-        const targetPiece = this.state.pieces.find(p => p.hex.equals(hex));
-        if (targetPiece) {
-          // Attack enemy piece
-          const newState = this.gameEngine.applyAttack(this.state, movingPiece, hex);
-          this.setState(newState);
-        } else {
-          // Capture castle (move onto it)
-          const newState = this.gameEngine.applyCastleAttack(this.state, movingPiece, hex);
-          this.setState(newState);
-        }
+    if (turn_phase === "Attack" && movingPiece?.canAttack) {
+      if (hexisLegalAttack(hex)) {
+        saveHistory();
+        const targetPiece = pieces.find(p => p.hex.equals(hex));
+        setState(prev => {
+          if (targetPiece) {
+            const newState = gameEngine.applyAttack(prev, movingPiece, hex);
+            return { ...prev, ...newState };
+          } else {
+            const newState = gameEngine.applyCastleAttack(prev, movingPiece, hex);
+            return { ...prev, ...newState };
+          }
+        });
         return;
       }
-      this.setState({ movingPiece: null });
+      setState(prev => ({ ...prev, movingPiece: null }));
       return;
     }
 
     // CASE 3: Castles phase - recruit new piece
-    if (this.hexisAdjacentToControlledCastle(hex)) {
-      const castle = this.state.Castles.find(c => c.isAdjacent(hex));
+    if (hexisAdjacentToControlledCastle(hex)) {
+      const castle = Castles.find(c => c.isAdjacent(hex));
       if (castle) {
-        this.saveHistory();
-        const newState = this.gameEngine.recruitPiece(this.state, castle, hex);
-        this.setState(newState);
+        saveHistory();
+        setState(prev => {
+          const newState = gameEngine.recruitPiece(prev, castle, hex);
+          return { ...prev, ...newState };
+        });
         return;
       }
     }
 
     // Default: Invalid click, deselect
-    this.setState({ movingPiece: null });
-  };
+    setState(prev => ({ ...prev, movingPiece: null }));
+  }, [turn_phase, movingPiece, pieces, Castles, hexisLegalMove, hexisLegalAttack, hexisAdjacentToControlledCastle, saveHistory]);
 
-  handleResize = () => {
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.code === "KeyQ") {
+      handlePass();
+    }
+  }, [handlePass]);
+
+  const handleResize = useCallback(() => {
     startingBoard.updateDimensions(window.innerWidth, window.innerHeight);
-    this.forceUpdate();
-  };
+    // Force re-render by updating a dummy state
+    setState(prev => ({ ...prev }));
+  }, []);
 
-  componentDidMount() {
-    window.addEventListener("keydown", this.handleKeyDown);
-    window.addEventListener("resize", this.handleResize);
-    // Ensure board is synced with current window on mount
-    startingBoard.updateDimensions(window.innerWidth, window.innerHeight); 
-  }
+  // =========== LIFECYCLE (useEffect) ===========
 
-  componentWillUnmount() {
-    window.removeEventListener("keydown", this.handleKeyDown);
-    window.removeEventListener("resize", this.handleResize);
-  }
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleResize);
+    startingBoard.updateDimensions(window.innerWidth, window.innerHeight);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [handleKeyDown, handleResize]);
 
   // =========== RENDER ===========
 
-  render() {
-    // Optimization: Calculate legal moves/attacks ONCE per render
-    const legalMoveSet = new Set(this.legalMoves.map(h => h.getKey()));
-    const legalAttackSet = new Set(this.legalAttacks.map(h => h.getKey()));
-
-    return (
-      <>
-        <ControlPanel
-          currentPlayer={this.currentPlayer}
-          turnPhase={this.turn_phase}
-          onPass={this.handlePass}
-          onToggleCoordinates={() => this.setState({ showCoordinates: !this.state.showCoordinates })}
-          onTakeback={this.handleTakeback}
-          onFlipBoard={this.handleFlipBoard}
-        />
+  return (
+    <>
+      <ControlPanel
+        currentPlayer={currentPlayer}
+        turnPhase={turn_phase}
+        onPass={handlePass}
+        onToggleCoordinates={() => setState(prev => ({ ...prev, showCoordinates: !prev.showCoordinates }))}
+        onTakeback={handleTakeback}
+        onFlipBoard={handleFlipBoard}
+      />
+      
+      <svg className="board" height="100%" width="100%">
+        {/* SVG filter for high-ground shadow effect */}
+        <defs>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5" />
+            <feOffset dx="-2" dy="-2" result="offsetblur" />
+            <feFlood floodColor="rgba(0,0,0,0.5)" />
+            <feComposite in2="offsetblur" operator="in" />
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
         
-        <svg className="board" height="100%" width="100%">
-          {/* SVG filter for high-ground shadow effect */}
-          <defs>
-            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur in="SourceAlpha" stdDeviation="5" />
-              <feOffset dx="-2" dy="-2" result="offsetblur" />
-              <feFlood flood-color="rgba(0,0,0,0.5)" />
-              <feComposite in2="offsetblur" operator="in" />
-              <feMerge>
-                <feMergeNode />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          
-          <HexGrid
-            hexagons={this.hexagons}
-            castles={this.state.Castles}
-            legalMoveSet={legalMoveSet}
-            legalAttackSet={legalAttackSet}
-            showCoordinates={this.state.showCoordinates}
-            isBoardRotated={this.state.isBoardRotated}
-            isAdjacentToControlledCastle={this.hexisAdjacentToControlledCastle}
-            onHexClick={this.handleHexClick}
-          />
-          <PieceRenderer
-            pieces={this.state.pieces}
-            isBoardRotated={this.state.isBoardRotated}
-            onPieceClick={this.handlePieceClick}
-          />
-        </svg>
+        <HexGrid
+          hexagons={hexagons}
+          castles={Castles}
+          legalMoveSet={legalMoveSet}
+          legalAttackSet={legalAttackSet}
+          showCoordinates={showCoordinates}
+          isBoardRotated={isBoardRotated}
+          isAdjacentToControlledCastle={hexisAdjacentToControlledCastle}
+          onHexClick={handleHexClick}
+        />
+        <PieceRenderer
+          pieces={pieces}
+          isBoardRotated={isBoardRotated}
+          onPieceClick={handlePieceClick}
+        />
+      </svg>
 
-        {/* Victory Overlay */}
-        {this.victoryMessage && (
-          <div className="victory-overlay">
-            <div className={`victory-banner ${this.winner}`}>
-              <h1>{this.victoryMessage}</h1>
-              <button onClick={() => window.location.reload()}>Play Again</button>
-            </div>
+      {/* Victory Overlay */}
+      {victoryMessage && (
+        <div className="victory-overlay">
+          <div className={`victory-banner ${winner}`}>
+            <h1>{victoryMessage}</h1>
+            <button onClick={() => window.location.reload()}>Play Again</button>
           </div>
-        )}
-      </>
-    );
-  }
-  componentDidUpdate() {
-    // Debug logging can be enabled by uncommenting below:
-    // console.log(`Turn: ${this.state.turnCounter}, Phase: ${this.turn_phase}, Player: ${this.currentPlayer}`);
-  }
-}
+        </div>
+      )}
+    </>
+  );
+};
 
 export default GameBoard;
