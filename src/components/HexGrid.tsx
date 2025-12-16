@@ -18,6 +18,7 @@ interface HexGridProps {
   /** Returns CSS class indicating if hex is adjacent to controlled castle */
   isAdjacentToControlledCastle: (hex: Hex) => boolean;
   onHexClick: (hex: Hex) => void;
+  resizeVersion: number;
 }
 
 /** Get the owner class for a castle hex (if applicable) */

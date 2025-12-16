@@ -13,6 +13,7 @@ interface PieceRendererProps {
   pieces: Piece[];
   isBoardRotated: boolean;
   onPieceClick: (piece: Piece) => void;
+  resizeVersion: number;
 }
 
 /** Get the pixel center of a piece */

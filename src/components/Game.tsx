@@ -20,6 +20,7 @@ interface GameBoardState extends GameState {
   showCoordinates: boolean;
   cheatMode: boolean;
   isBoardRotated: boolean;
+  resizeVersion: number;
 }
 
 // Create game engine instance (stable reference)
@@ -40,9 +41,12 @@ const GameBoard = () => {
     showCoordinates: false,
     cheatMode: false,
     isBoardRotated: false,
+    resizeVersion: 0,
   });
 
-  const { pieces, Castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated } = state;
+  const { pieces, Castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated, resizeVersion } = state;
+
+
 
   // =========== COMPUTED VALUES (useMemo) ===========
   
@@ -289,8 +293,8 @@ const GameBoard = () => {
   const handleResize = useCallback(() => {
     // Subtract sidebar width (200px) from valid board area
     startingBoard.updateDimensions(window.innerWidth - 200, window.innerHeight);
-    // Force re-render by updating a dummy state
-    setState(prev => ({ ...prev }));
+    // Force re-render by incrementing resizeVersion
+    setState(prev => ({ ...prev, resizeVersion: prev.resizeVersion + 1 }));
   }, []);
 
   // =========== LIFECYCLE (useEffect) ===========
@@ -345,11 +349,13 @@ const GameBoard = () => {
           isBoardRotated={isBoardRotated}
           isAdjacentToControlledCastle={hexisAdjacentToControlledCastle}
           onHexClick={handleHexClick}
+          resizeVersion={resizeVersion}
         />
         <PieceRenderer
           pieces={pieces}
           isBoardRotated={isBoardRotated}
           onPieceClick={handlePieceClick}
+          resizeVersion={resizeVersion}
         />
       </svg>
 
