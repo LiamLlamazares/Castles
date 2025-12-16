@@ -7,8 +7,7 @@ import { Hex, Point } from "../Classes/Entities/Hex";
 import { Castle } from "../Classes/Entities/Castle";
 import { Board } from "../Classes/Core/Board";
 import { LayoutService } from "../Classes/Systems/LayoutService";
-import { N_SQUARES, LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
-import { startingBoard, startingLayout } from "../ConstantImports";
+import { LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
 import { getHexVisualClass, getCastleOwnerClass } from "../utils/HexRenderUtils";
 
 interface HexGridProps {

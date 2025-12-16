@@ -8,8 +8,7 @@ export const generateHexagons = (N: number) => {
     let color_index = q >= 1 ? -q : q; // Set color_index to q+1 when q >= 1
     for (let r = r1; r <= r2; r++) {
       const s = -q - r;
-      const hex = new Hex(q, r, s);
-      hex.color_index = color_index; // Add color_index as a property
+      const hex = new Hex(q, r, s, color_index); // Pass color_index to constructor
       hexList.push(hex);
       color_index = color_index + 1;
     }

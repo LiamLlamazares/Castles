@@ -6,8 +6,6 @@ import React from "react";
 import { Piece } from "../Classes/Entities/Piece";
 import { Point } from "../Classes/Entities/Hex";
 import { LayoutService } from "../Classes/Systems/LayoutService";
-import { N_SQUARES } from "../Constants";
-import { startingBoard, startingLayout } from "../ConstantImports";
 import { getImageByPieceType } from "./PieceImages";
 
 interface PieceRendererProps {

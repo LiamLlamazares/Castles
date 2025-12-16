@@ -1,6 +1,7 @@
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { PieceType, AttackType } from "../../Constants";
+import { PieceMap } from "../../utils/PieceMap";
 
 export interface CombatResult {
   pieces: Piece[];
@@ -21,20 +22,26 @@ export class CombatSystem {
     attacker: Piece,
     targetHex: Hex
   ): CombatResult {
-    const defenderIndex = pieces.findIndex((p) => p.hex.equals(targetHex));
-    if (defenderIndex === -1) {
-      // Should not happen if move was legal
+    // Use PieceMap for O(1) lookups instead of O(N) findIndex
+    const pieceMap = new PieceMap(pieces);
+    
+    const defender = pieceMap.get(targetHex);
+    if (!defender) {
+      console.warn(
+        `CombatSystem: No piece found at target hex ${targetHex.getKey()}. ` +
+        `This should not happen if move validation is correct.`
+      );
       return { pieces: [...pieces], victimDied: false };
     }
 
-    const attackerIndex = pieces.findIndex((p) => p.hex.equals(attacker.hex));
-    if (attackerIndex === -1) {
-       // Should not happen
-       return { pieces: [...pieces], victimDied: false };
+    const originalAttacker = pieceMap.get(attacker.hex);
+    if (!originalAttacker) {
+      console.warn(
+        `CombatSystem: Attacker not found at ${attacker.hex.getKey()}. ` +
+        `This should not happen.`
+      );
+      return { pieces: [...pieces], victimDied: false };
     }
-
-    const defender = pieces[defenderIndex];
-    const originalAttacker = pieces[attackerIndex];
 
     // Apply Damage using immutable update
     const damageDealt = originalAttacker.Strength;
@@ -49,13 +56,12 @@ export class CombatSystem {
 
     if (isDefenderDead) {
       // Remove defender
+      const defenderIndex = pieces.findIndex((p) => p.hex.equals(targetHex));
       finalPieces.splice(defenderIndex, 1);
       
-      // Since we removed an item, indices might shift. 
-      // If defender was before attacker, attacker index shifts down by 1.
-      const adjustedAttackerIndex = (defenderIndex < attackerIndex) ? attackerIndex - 1 : attackerIndex;
-      
-      let finalAttacker = finalPieces[adjustedAttackerIndex];
+      // Since we removed an item, indices might shift
+      const attackerIndex = finalPieces.findIndex((p) => p.hex.equals(attacker.hex));
+      let finalAttacker = finalPieces[attackerIndex];
 
       // Melee attackers move onto the captured hex
       if (
@@ -67,16 +73,18 @@ export class CombatSystem {
       
       // Mark as having attacked
       finalAttacker = finalAttacker.with({ canAttack: false });
-      finalPieces[adjustedAttackerIndex] = finalAttacker;
+      finalPieces[attackerIndex] = finalAttacker;
 
       return { pieces: finalPieces, victimDied: true };
     } else {
       // Defender survives, update it in the list
+      const defenderIndex = pieces.findIndex((p) => p.hex.equals(targetHex));
       finalPieces[defenderIndex] = damagedDefender;
       
       // Mark attacker as having attacked
+      const attackerIndex = pieces.findIndex((p) => p.hex.equals(attacker.hex));
       const finalAttacker = originalAttacker.with({ canAttack: false });
-      finalPieces[attackerIndex] = finalAttacker; // Indices haven't shifted
+      finalPieces[attackerIndex] = finalAttacker;
       
       return { pieces: finalPieces, victimDied: false };
     }

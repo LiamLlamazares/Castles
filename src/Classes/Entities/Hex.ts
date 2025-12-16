@@ -34,16 +34,16 @@ function assertInteger(value: number, name: string): void {
  * The coordinate is valid if and only if q + r + s = 0.
  */
 export class Hex {
+  public readonly q: number;
+  public readonly r: number;
+  public readonly s: number;
+  public readonly color_index: number;
+
   constructor(
-    /** Column position (increases eastward) */
-    public q: number,
-    /** Row position (increases south-westward) */
-    public r: number,
-    /** Diagonal position (increases north-westward) */
-    public s: number,
-    /** Index for checkerboard coloring (0, 1, or 2) */
-    public color_index: number = 0,
-    /** Set to true to allow floating-point coordinates (used internally by lerp) */
+    q: number,
+    r: number,
+    s: number,
+    color_index: number = 0,
     allowFloat: boolean = false
   ) {
     // Validate integer coordinates (except when explicitly allowing floats for lerp)
@@ -53,11 +53,18 @@ export class Hex {
       assertInteger(s, 's');
     }
     
-    if (Math.round(q + r + s) !== 0) throw new Error("q + r + s must be 0");
-    // Normalize -0 to 0
+    if (Math.round(q + r + s) !== 0) {
+      throw new Error(
+        `Invalid hex coordinates: q=${q}, r=${r}, s=${s}. ` +
+        `Constraint q + r + s = 0 not satisfied (sum = ${q + r + s})`
+      );
+    }
+
+    // Normalize -0 to 0 before assigning to readonly properties
     this.q = q === 0 ? 0 : q;
     this.r = r === 0 ? 0 : r;
     this.s = s === 0 ? 0 : s;
+    this.color_index = color_index;
   }
 
   /** Checks if two hexes have the same coordinates */

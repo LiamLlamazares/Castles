@@ -45,39 +45,39 @@ export const useGameLogic = () => {
   
   const turnPhase = useMemo<TurnPhase>(
     () => gameEngine.getTurnPhase(turnCounter),
-    [turnCounter]
+    [gameEngine, turnCounter]
   );
 
   const currentPlayer = useMemo<Color>(
     () => gameEngine.getCurrentPlayer(turnCounter),
-    [turnCounter]
+    [gameEngine, turnCounter]
   );
 
   const hexagons = useMemo(() => startingBoard.hexes, []);
 
   const legalMoves = useMemo(
     () => gameEngine.getLegalMoves(movingPiece, pieces, castles, turnCounter),
-    [movingPiece, pieces, castles, turnCounter]
+    [gameEngine, movingPiece, pieces, castles, turnCounter]
   );
 
   const legalAttacks = useMemo(
     () => gameEngine.getLegalAttacks(movingPiece, pieces, castles, turnCounter),
-    [movingPiece, pieces, castles, turnCounter]
+    [gameEngine, movingPiece, pieces, castles, turnCounter]
   );
 
   const victoryMessage = useMemo(
     () => gameEngine.getVictoryMessage(pieces, castles),
-    [pieces, castles]
+    [gameEngine, pieces, castles]
   );
 
   const winner = useMemo(
     () => gameEngine.getWinner(pieces, castles),
-    [pieces, castles]
+    [gameEngine, pieces, castles]
   );
 
   const emptyUnusedHexesAdjacentToControlledCastles = useMemo(() => {
     return gameEngine.getRecruitmentHexes(pieces, castles, turnCounter);
-  }, [pieces, castles, turnCounter]);
+  }, [gameEngine, pieces, castles, turnCounter]);
 
   // Sets for O(1) lookup in render
   const legalMoveSet = useMemo(
@@ -130,7 +130,7 @@ export const useGameLogic = () => {
       const newState = gameEngine.passTurn(prev);
       return { ...prev, ...newState };
     });
-  }, [saveHistory]);
+  }, [gameEngine, saveHistory]);
 
   const handleTakeback = useCallback(() => {
     if (history.length > 0) {
@@ -155,10 +155,6 @@ export const useGameLogic = () => {
 
   const toggleCoordinates = useCallback(() => {
     setState(prev => ({ ...prev, showCoordinates: !prev.showCoordinates }));
-  }, []);
-
-  const setResizeVersion = useCallback((version: number) => {
-    setState(prev => ({ ...prev, resizeVersion: version }));
   }, []);
 
   const incrementResizeVersion = useCallback(() => {
@@ -202,7 +198,7 @@ export const useGameLogic = () => {
     }
 
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
+  }, [gameEngine, movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
 
   const handleHexClick = useCallback((hex: Hex) => {
     if (turnPhase === "Movement" && movingPiece?.canMove) {
@@ -250,7 +246,7 @@ export const useGameLogic = () => {
     }
 
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory]);
+  }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory]);
 
   return {
     // State
