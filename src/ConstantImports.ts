@@ -149,6 +149,6 @@ const allPieces = [
 /** Exported for Game.tsx initial state */
 export { allPieces };
 
-export const startingBoard = new Board(N_SQUARES - 1);
-export const emptyBoard = new Board(N_SQUARES - 1);
+export const startingBoard = new Board({ nSquares: N_SQUARES - 1 });
+export const emptyBoard = new Board({ nSquares: N_SQUARES - 1 });
 export const startingLayout = new LayoutService(startingBoard);

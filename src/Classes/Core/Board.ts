@@ -4,6 +4,13 @@ import { N_SQUARES} from '../../Constants';
 
 import { Castle } from '../Entities/Castle';
 
+// Define configuration interface
+export interface BoardConfig {
+  nSquares: number;
+  riverCrossingLength?: number;
+  riverSegmentLength?: number;
+}
+
 /**
  * Manages the topological structure and static data of the game board.
  * 
@@ -22,6 +29,9 @@ export class Board {
   /** Board size (number of hexes from center to edge) */
   public NSquares: number;
   
+  /** Configuration for board generation */
+  public config: BoardConfig;
+
   /** All hexes on the board */
   public hexes: Hex[];
   
@@ -65,11 +75,17 @@ export class Board {
 
   
 
-
   constructor(
-    NSquares: number = N_SQUARES
+    configOrSize: number | BoardConfig = N_SQUARES
   ) {
-    this.NSquares = NSquares;
+    // Backward compatibility: handle number input
+    if (typeof configOrSize === 'number') {
+      this.config = { nSquares: configOrSize };
+    } else {
+      this.config = configOrSize;
+    }
+
+    this.NSquares = this.config.nSquares;
     this.hexes = generateHexagons(this.NSquares);
 
     // Precompute special hex classifications (computed once, independent of pixels)
@@ -114,8 +130,9 @@ export class Board {
     if (this.isCastle(hex, this.NSquares)) return false;
     
     // Define pattern lengths (can be adjusted for gameplay balance)
-    const RIVER_CROSSING_LENGTH = 2;  // 1 hex crossing gap
-    const RIVER_SEGMENT_LENGTH = 2;   // 2 hex river segment
+    const RIVER_CROSSING_LENGTH = this.config.riverCrossingLength ?? 2;  // 1 hex crossing gap (default 2 per side from center?) 
+    // Wait, original was 2. Let's keep logic same.
+    const RIVER_SEGMENT_LENGTH = this.config.riverSegmentLength ?? 2;   // 2 hex river segment
     const PATTERN_LENGTH = RIVER_CROSSING_LENGTH + RIVER_SEGMENT_LENGTH;
     
     // Use absolute q value to calculate position in repeating pattern
