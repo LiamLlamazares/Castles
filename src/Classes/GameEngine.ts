@@ -3,6 +3,9 @@ import { Castle } from "./Castle";
 import { NotationService } from "./NotationService";
 import { Hex } from "./Hex";
 import { Board } from "./Board";
+import { TurnManager } from "./TurnManager";
+import { CombatSystem } from "./CombatSystem";
+import { WinCondition } from "./WinCondition";
 import {
   Color,
   AttackType,
@@ -10,9 +13,6 @@ import {
   DEFENDED_PIECE_IS_PROTECTED_RANGED,
   PieceType,
   PHASE_CYCLE_LENGTH,
-  PLAYER_CYCLE_LENGTH,
-  MOVEMENT_PHASE_END,
-  ATTACK_PHASE_END,
   MoveRecord,
   HistoryEntry,
 } from "../Constants";
@@ -35,9 +35,9 @@ export interface GameState {
  * 
  * Responsibilities:
  * - Validates logical state transitions (Move, Attack, Recruit).
- * - Enforces phase cycle (Movement -> Attack -> Castles) and turn order.
+ * - Enforces phase cycle using TurnManager.
  * - Computes legal actions based on piece capabilities and board topology.
- * - Determines victory conditions (Monarch Capture, Castle Control).
+ * - delegated victory conditions to WinCondition.
  * 
  * Architecture:
  * Purely functional core. Takes current `GameState` and action parameters,
@@ -46,24 +46,25 @@ export interface GameState {
 export class GameEngine {
   constructor(public board: Board) {}
 
-  /**
-   * Determines the current turn phase based on the turn counter.
-   * Each player's turn consists of 5 sub-turns: Movement(0,1), Attack(2,3), Castles(4)
-   */
+  // ================= DELEGATED METHODS =================
+
   public getTurnPhase(turnCounter: number): TurnPhase {
-    const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
-    if (phaseIndex < MOVEMENT_PHASE_END) return "Movement";
-    if (phaseIndex < ATTACK_PHASE_END) return "Attack";
-    return "Castles";
+    return TurnManager.getTurnPhase(turnCounter);
   }
 
-  /**
-   * Determines which player's turn it is based on the turn counter.
-   * White plays turns 0-4, Black plays turns 5-9, then cycles.
-   */
   public getCurrentPlayer(turnCounter: number): Color {
-    return turnCounter % PLAYER_CYCLE_LENGTH < PHASE_CYCLE_LENGTH ? "w" : "b";
+    return TurnManager.getCurrentPlayer(turnCounter);
   }
+
+  public getWinner(pieces: Piece[], castles: Castle[]): Color | null {
+    return WinCondition.getWinner(pieces, castles);
+  }
+
+  public getVictoryMessage(pieces: Piece[], castles: Castle[]): string | null {
+    return WinCondition.getVictoryMessage(pieces, castles);
+  }
+
+  // ================= BOARD QUERIES =================
 
   /** Returns all hexes currently occupied by pieces */
   public getOccupiedHexes(pieces: Piece[]): Hex[] {
@@ -119,10 +120,11 @@ export class GameEngine {
     );
     
     // Enemy melee pieces "defend" all hexes they can attack
-    // We pass the Set of ALL board hexes because they threaten everything around them
     return enemyMeleePieces
       .flatMap((piece) => piece.legalAttacks(this.board.hexSet, this.board.highGroundHexSet));
   }
+
+  // ================= LEGAL ACTIONS =================
 
   // This method calculates legal moves for a specific piece
   public getLegalMoves(piece: Piece | null, pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
@@ -165,7 +167,7 @@ export class GameEngine {
     const attackable = this.getAttackableHexes(pieces, castles, currentPlayer);
     const attackableSet = new Set(attackable.map(h => h.getKey()));
     
-    // Calculate defended hexes ONCE (fixes O(n²) issue)
+    // Calculate defended hexes ONCE
     const defended = this.getDefendedHexes(pieces, currentPlayer);
     const defendedSet = new Set(defended.map(h => h.getKey()));
     
@@ -202,7 +204,6 @@ export class GameEngine {
     const currentPlayer = this.getCurrentPlayer(turnCounter);
     return castles.filter((castle) => {
       // Logic from Game.tsx: similar to above but without phase check?
-      // Game.tsx:191 uses same condition without phase check.
       return (
         this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
         castle.color !== currentPlayer
@@ -237,18 +238,11 @@ export class GameEngine {
      return recruitmentHexes;
   }
 
+  // ================= TURN MANAGEMENT HELPER =================
+
   /**
-   * Calculates how many turn counter steps to advance based on available actions.
-   * 
-   * The turn counter cycles through phases (0-4 per player):
-   * - 0,1 = Movement (two sub-turns)
-   * - 2,3 = Attack (two sub-turns)  
-   * - 4   = Castles (one sub-turn)
-   * 
-   * When a player has no legal actions remaining in future phases,
-   * we skip ahead to avoid pointless empty turns.
-   * 
-   * @returns Number of turn counter steps to advance (0-4)
+   * Delegates the complex turn increment logic to TurnManager,
+   * passing in the necessary calculated booleans.
    */
   public getTurnCounterIncrement(pieces: Piece[], castles: Castle[], turnCounter: number): number {
     const futureAttacks = this.getFutureLegalAttacks(pieces, castles, turnCounter);
@@ -256,66 +250,30 @@ export class GameEngine {
     
     const futureControlledCastles = this.getFutureControlledCastlesActivePlayer(castles, pieces, turnCounter);
     const hasFutureControlledCastles = futureControlledCastles.length > 0;
+
+    const currentPlayer = this.getCurrentPlayer(turnCounter);
     
-    const phase = this.getTurnPhase(turnCounter);
-    const phasePosition = turnCounter % PHASE_CYCLE_LENGTH; // 0-4 within current player's turn
-
-    // MOVEMENT PHASE: After first movement turn (position 1)
-    if (phasePosition === 1) {
-      if (!hasFutureAttacks && !hasFutureControlledCastles) {
-        // Skip Attack (2 turns) + Castles (1 turn) = +4 to next player
-        return 4;
-      }
-      if (!hasFutureAttacks && hasFutureControlledCastles) {
-        // Skip Attack phase only = +3 to Castles
-        return 3;
-      }
-    }
-
-    // ATTACK PHASE: After first attack turn (position 2)
-    if (phasePosition === 2) {
-      if (!hasFutureAttacks && !hasFutureControlledCastles) {
-        // Skip second attack + Castles = +3 to next player
-        return 3;
-      }
-      if (!hasFutureAttacks && hasFutureControlledCastles) {
-        // Skip second attack only = +2 to Castles
-        return 2;
-      }
-    }
-
-    // ATTACK PHASE: After second attack turn (position 3)
-    if (phasePosition === 3 && !hasFutureControlledCastles) {
-      // Skip Castles phase = +2 to next player
-      return 2;
-    }
-
-    // CASTLES PHASE: Check if any controlled castles remain usable
-    if (phase === "Castles") {
-      const currentPlayer = this.getCurrentPlayer(turnCounter);
-      const unusedControlledCastles = castles.filter(
+    // Check if castles are usable in the current Castles phase
+    const unusedControlledCastles = castles.filter(
         (castle) =>
           this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
           !castle.used_this_turn
-      );
-      
-      if (unusedControlledCastles.length === 0) {
-        // All castles used or none controlled - advance to next player
-        return 1;
-      }
-      // Still have castles to use - stay in Castles phase
-      return 0;
-    }
+    );
+    const hasUsableCastles = unusedControlledCastles.length > 0;
 
-    // Default: advance one turn counter step
-    return 1;
+    return TurnManager.getTurnCounterIncrement(
+        turnCounter,
+        hasFutureAttacks,
+        hasFutureControlledCastles,
+        hasUsableCastles
+    );
   }
 
-  // State Transition Methods
+  // ================= STATE TRANSITIONS =================
+
   public applyMove(state: GameState, piece: Piece, targetHex: Hex): GameState {
     const notation = NotationService.getMoveNotation(piece, targetHex);
-    
-    // Create Record
+
     const record: MoveRecord = {
         notation,
         turnNumber: Math.floor(state.turnCounter / 10) + 1,
@@ -356,7 +314,7 @@ export class GameEngine {
     const castle = state.castles.find(c => c.hex.equals(targetHex));
     const notation = castle 
         ? NotationService.getCastleCaptureNotation(piece, castle)
-        : NotationService.getMoveNotation(piece, targetHex); // Fallback should not happen
+        : NotationService.getMoveNotation(piece, targetHex);
     
     const record: MoveRecord = {
         notation,
@@ -368,18 +326,19 @@ export class GameEngine {
     const newMoveHistory = [...(state.moveHistory || []), record];
     const capturer = this.getCurrentPlayer(state.turnCounter);
     
-    // Move the piece onto the castle
+    // Move the piece onto the castle AND consume attack
     const newPieces = state.pieces.map(p => {
         if (p === piece) {
             const newPiece = p.clone();
             newPiece.hex = targetHex;
             newPiece.canAttack = false; // Consumes Attack action
+            // Note: Does it consume Move too? Original only said canAttack = false.
             return newPiece;
         }
         return p;
     });
 
-    // Transfer castle ownership to the capturing player
+    // Transfer castle ownership
     const newCastles = state.castles.map(c => {
         if (c.hex.equals(targetHex)) {
             const newCastle = c.clone();
@@ -413,65 +372,31 @@ export class GameEngine {
 
      const newMoveHistory = [...(state.moveHistory || []), record];
 
-     const defender = state.pieces.find(p => p.hex.equals(targetHex));
-     if (!defender) return state; // Should not happen if legal
+     // Use CombatSystem to resolve the logic
+     const result = CombatSystem.resolveAttack(state.pieces, attacker, targetHex);
 
-     // Combat Logic
-     // We need new copies of pieces involved
-     let newPieces = state.pieces.map(p => p.clone());
-     const attackerClone = newPieces.find(p => p.hex.equals(attacker.hex))!;
-     const defenderClone = newPieces.find(p => p.hex.equals(defender.hex))!;
-
-     defenderClone.damage += attackerClone.Strength;
-
-     // Check Death
-     if (
-        defenderClone.damage >= defenderClone.Strength ||
-        (defenderClone.type === PieceType.Monarch && attackerClone.type === PieceType.Assassin)
-      ) {
-        // Defender dies
-        newPieces = newPieces.filter((p) => p !== defenderClone);
-        
-        // Melee attackers move onto the captured hex
-        if (
-          attackerClone.AttackType === AttackType.Melee ||
-          attackerClone.AttackType === AttackType.Swordsman
-        ) {
-          attackerClone.hex = defenderClone.hex;
-        }
-      }
-
-      attackerClone.canAttack = false;
-
-      const increment = this.getTurnCounterIncrement(newPieces, state.castles, state.turnCounter);
+     const increment = this.getTurnCounterIncrement(result.pieces, state.castles, state.turnCounter);
       
-      const nextState: GameState = {
+     return {
           ...state,
-          pieces: newPieces,
+          pieces: result.pieces,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory
-      };
-      
-      return nextState;
+     };
   }
 
   public passTurn(state: GameState): GameState {
-      // Logic from Game.tsx:178
-      // It calls getTurnCounterIncrement.
-      // We do NOT record Pass in history lists (User Request)
-      
+      // User requested NO history for Pass
       const increment = this.getTurnCounterIncrement(state.pieces, state.castles, state.turnCounter);
       return {
           ...state,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
-          // moveHistory remains unchanged
       };
   }
 
   public recruitPiece(state: GameState, castle: Castle, hex: Hex): GameState {
-      // Logic from Game.tsx:342
       const pieceTypes = Object.values(PieceType);
       const pieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
       
@@ -488,7 +413,7 @@ export class GameEngine {
       
       const newPiece = new Piece(hex, this.getCurrentPlayer(state.turnCounter), pieceType);
       
-      const newPieces = [...state.pieces, newPiece]; // Shallow copy of array, but new piece
+      const newPieces = [...state.pieces, newPiece];
       
       // Update Castle
       const newCastles = state.castles.map(c => {
@@ -513,7 +438,6 @@ export class GameEngine {
       };
   }
 
-  // Helper to reset flags (originally in Game.tsx:292)
   private resetTurnFlags(state: GameState): GameState {
       const newPieces = state.pieces.map(p => {
           const pc = p.clone();
@@ -532,106 +456,5 @@ export class GameEngine {
           pieces: newPieces,
           castles: newCastles
       };
-  }
-
-  // =========== WIN CONDITION LOGIC ===========
-
-  /**
-   * Checks if the game has been won.
-   * 
-   * Victory conditions:
-   * 1. Monarch Capture: Opponent's Monarch (king) has been captured
-   * 2. Castle Control: Player controls all 6 castles on the board
-   * 
-   * @returns The winning player's color, or null if game is ongoing
-   */
-  public getWinner(pieces: Piece[], castles: Castle[]): Color | null {
-    // Check for Monarch capture
-    const monarchCaptureWinner = this.checkMonarchCapture(pieces);
-    if (monarchCaptureWinner) return monarchCaptureWinner;
-
-    // Check for castle control
-    const castleControlWinner = this.checkCastleControl(pieces, castles);
-    if (castleControlWinner) return castleControlWinner;
-
-    return null;
-  }
-
-  /**
-   * Checks if either player has lost their Monarch.
-   * @returns The winning player (opponent of the player who lost their Monarch), or null
-   */
-  private checkMonarchCapture(pieces: Piece[]): Color | null {
-    const whiteMonarch = pieces.find(p => p.type === PieceType.Monarch && p.color === 'w');
-    const blackMonarch = pieces.find(p => p.type === PieceType.Monarch && p.color === 'b');
-
-    // If white's monarch is gone, black wins
-    if (!whiteMonarch) return 'b';
-    
-    // If black's monarch is gone, white wins
-    if (!blackMonarch) return 'w';
-    
-    return null;
-  }
-
-  /**
-   * Checks if either player controls all castles.
-   * 
-   * Control rules:
-   * - A player controls their OWN castles by default (castle.color === player)
-   * - A player controls an ENEMY castle if they have a piece ON it (captured)
-   * 
-   * @returns The winning player who controls all castles, or null
-   */
-  private checkCastleControl(pieces: Piece[], castles: Castle[]): Color | null {
-    const controlledByWhite = castles.filter(castle => 
-      this.playerControlsCastle(castle, pieces, 'w')
-    ).length;
-
-    const controlledByBlack = castles.filter(castle => 
-      this.playerControlsCastle(castle, pieces, 'b')
-    ).length;
-
-    const totalCastles = castles.length;
-
-    // Player must control ALL castles to win
-    if (controlledByWhite === totalCastles) return 'w';
-    if (controlledByBlack === totalCastles) return 'b';
-
-    return null;
-  }
-
-  /**
-   * Checks if a specific player controls a castle.
-   * Uses the castle's `owner` property which tracks persistent ownership.
-   * 
-   * @param castle - The castle to check
-   * @param _pieces - Unused (kept for signature compatibility)
-   * @param player - The player to check control for
-   * @returns true if player controls this castle
-   */
-  private playerControlsCastle(castle: Castle, _pieces: Piece[], player: Color): boolean {
-    return castle.owner === player;
-  }
-
-  /**
-   * Returns a human-readable description of the victory.
-   */
-  public getVictoryMessage(pieces: Piece[], castles: Castle[]): string | null {
-    const winner = this.getWinner(pieces, castles);
-    if (!winner) return null;
-
-    const winnerName = winner === 'w' ? 'White' : 'Black';
-    
-    // Determine victory type
-    if (this.checkMonarchCapture(pieces)) {
-      return `${winnerName} wins by capturing the Monarch!`;
-    }
-    
-    if (this.checkCastleControl(pieces, castles)) {
-      return `${winnerName} wins by controlling all castles!`;
-    }
-
-    return `${winnerName} wins!`;
   }
 }
