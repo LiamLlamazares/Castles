@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { createPieceMap } from "../utils/PieceMap";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
@@ -29,6 +30,7 @@ export const useGameLogic = () => {
   const [state, setState] = useState<GameBoardState>({
     history: [],
     pieces: allPieces,
+    pieceMap: createPieceMap(allPieces),
     movingPiece: null,
     turnCounter: 0,
     castles: startingBoard.castles as Castle[],
