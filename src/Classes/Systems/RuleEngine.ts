@@ -200,7 +200,7 @@ export class RuleEngine {
   public static getFutureControlledCastlesActivePlayer(castles: Castle[], pieces: Piece[], turnCounter: number): Castle[] {
     const currentPlayer = TurnManager.getCurrentPlayer(turnCounter);
     return castles.filter((castle) => {
-      // Logic from Game.tsx: similar to above but without phase check?
+
       return (
         RuleEngine.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
         castle.color !== currentPlayer

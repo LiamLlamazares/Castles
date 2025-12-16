@@ -12,8 +12,7 @@ import {
 } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
 
-// Create game engine instance (stable reference)
-// const gameEngine = new GameEngine(startingBoard);
+
 
 export interface GameBoardState extends Omit<GameState, 'moveHistory'> {
   showCoordinates: boolean;
@@ -23,17 +22,20 @@ export interface GameBoardState extends Omit<GameState, 'moveHistory'> {
   moveHistory: MoveRecord[];
 }
 
-export const useGameLogic = () => {
+export const useGameLogic = (
+  initialBoard: import("../Classes/Core/Board").Board = startingBoard,
+  initialPieces: Piece[] = allPieces
+) => {
   // Create game engine instance (stable reference)
-  const gameEngine = useMemo(() => new GameEngine(startingBoard), []);
+  const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>({
     history: [],
-    pieces: allPieces,
-    pieceMap: createPieceMap(allPieces),
+    pieces: initialPieces,
+    pieceMap: createPieceMap(initialPieces),
     movingPiece: null,
     turnCounter: 0,
-    castles: startingBoard.castles as Castle[],
+    castles: initialBoard.castles as Castle[],
     showCoordinates: false,
     cheatMode: false,
     isBoardRotated: false,
@@ -55,7 +57,7 @@ export const useGameLogic = () => {
     [gameEngine, turnCounter]
   );
 
-  const hexagons = useMemo(() => startingBoard.hexes, []);
+  const hexagons = useMemo(() => initialBoard.hexes, [initialBoard]);
 
   const legalMoves = useMemo(
     () => gameEngine.getLegalMoves(movingPiece, pieces, castles, turnCounter),

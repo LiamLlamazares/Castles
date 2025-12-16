@@ -36,9 +36,6 @@ import { N_SQUARES, PieceType, Color } from "./Constants";
 
 // =========== PIECE GENERATION HELPERS ===========
 
-/** Small boards (≤6) have different piece positions for better playability */
-const IS_SMALL_BOARD = N_SQUARES <= 6;
-
 /**
  * Creates a piece for white at the given coordinates,
  * and its mirrored counterpart for black.
@@ -84,71 +81,81 @@ function createLine(
   return pieces;
 }
 
-// =========== PIECE CONFIGURATIONS ===========
-// n = N_SQUARES = board radius (8 for standard board)
+// =========== DYNAMIC PIECE GENERATION ===========
 
-const n = N_SQUARES;
+export function getStartingPieces(boardRadius: number): Piece[] {
+  const n = boardRadius;
+  const isSmallBoard = n <= 6;
 
-// Swordsmen: two lines of pawns
-const swordsmen = [
-  ...createLine(PieceType.Swordsman, n - 1, 0, 1, -1, 1),      // Left diagonal
-  ...createLine(PieceType.Swordsman, n - 2, 1, 1, 1, 0),      // Right diagonal
-];
+  // Swordsmen: two lines of pawns
+  const swordsmen = [
+    ...createLine(PieceType.Swordsman, n - 1, 0, 1, -1, 1),      // Left diagonal
+    ...createLine(PieceType.Swordsman, n - 2, 1, 1, 1, 0),      // Right diagonal
+  ];
 
-// Knights: vertical line in center
-const knights = createLine(PieceType.Knight, Math.max(n - 4, 1), 0, n - 1, 0, -1);
+  // Knights: vertical line in center
+  const knights = createLine(PieceType.Knight, Math.max(n - 4, 1), 0, n - 1, 0, -1);
 
-// Archers: two columns
-const archers = [
-  ...createLine(PieceType.Archer, Math.max(n - 5, 0), -2, n - 1, 0, -1),
-  ...createLine(PieceType.Archer, Math.max(n - 5, 1), 2, n - 3, 0, -1),
-];
+  // Archers: two columns
+  const archers = [
+    ...createLine(PieceType.Archer, Math.max(n - 5, 0), -2, n - 1, 0, -1),
+    ...createLine(PieceType.Archer, Math.max(n - 5, 1), 2, n - 3, 0, -1),
+  ];
 
-// Fixed position pieces (explicit coordinates)
-const trebuchets = [
-  ...createMirroredPair(PieceType.Trebuchet, -3, n - 1, 4 - n),
-  ...createMirroredPair(PieceType.Trebuchet, 3, n - 4, 1 - n),
-];
+  // Fixed position pieces (explicit coordinates)
+  const trebuchets = [
+    ...createMirroredPair(PieceType.Trebuchet, -3, n - 1, 4 - n),
+    ...createMirroredPair(PieceType.Trebuchet, 3, n - 4, 1 - n),
+  ];
 
-const eagles = [
-  ...createMirroredPair(PieceType.Eagle, -1, n - 2, 3 - n),
-  ...createMirroredPair(PieceType.Eagle, 1, n - 3, 2 - n),
-];
+  const eagles = [
+    ...createMirroredPair(PieceType.Eagle, -1, n - 2, 3 - n),
+    ...createMirroredPair(PieceType.Eagle, 1, n - 3, 2 - n),
+  ];
 
-// Giants and Dragons: different positions based on board size
-const giants = IS_SMALL_BOARD
-  ? [...createMirroredPair(PieceType.Giant, -1, n - 3, 4 - n),
-     ...createMirroredPair(PieceType.Giant, 1, n - 4, 3 - n)]
-  : [...createMirroredPair(PieceType.Giant, -5, n - 1, 6 - n),
-     ...createMirroredPair(PieceType.Giant, 5, n - 6, 1 - n)];
+  // Giants and Dragons: different positions based on board size
+  const giants = isSmallBoard
+    ? [...createMirroredPair(PieceType.Giant, -1, n - 3, 4 - n),
+       ...createMirroredPair(PieceType.Giant, 1, n - 4, 3 - n)]
+    : [...createMirroredPair(PieceType.Giant, -5, n - 1, 6 - n),
+       ...createMirroredPair(PieceType.Giant, 5, n - 6, 1 - n)];
 
-const dragons = IS_SMALL_BOARD
-  ? [...createMirroredPair(PieceType.Dragon, -2, n - 2, 4 - n),
-     ...createMirroredPair(PieceType.Dragon, 2, n - 4, 2 - n)]
-  : [...createMirroredPair(PieceType.Dragon, -4, n - 1, 5 - n),
-     ...createMirroredPair(PieceType.Dragon, 4, n - 5, 1 - n)];
+  const dragons = isSmallBoard
+    ? [...createMirroredPair(PieceType.Dragon, -2, n - 2, 4 - n),
+       ...createMirroredPair(PieceType.Dragon, 2, n - 4, 2 - n)]
+    : [...createMirroredPair(PieceType.Dragon, -4, n - 1, 5 - n),
+       ...createMirroredPair(PieceType.Dragon, 4, n - 5, 1 - n)];
 
-// Unique pieces
-const assassins = createMirroredPair(PieceType.Assassin, -1, n - 1, 2 - n);
-const monarchs = createMirroredPair(PieceType.Monarch, 1, n - 2, 1 - n);
+  // Unique pieces
+  const assassins = createMirroredPair(PieceType.Assassin, -1, n - 1, 2 - n);
+  const monarchs = createMirroredPair(PieceType.Monarch, 1, n - 2, 1 - n);
 
-// =========== BOARD EXPORTS ===========
+  return [
+    ...swordsmen,
+    ...knights,
+    ...archers,
+    ...trebuchets,
+    ...eagles,
+    ...giants,
+    ...dragons,
+    ...assassins,
+    ...monarchs,
+  ];
+}
 
-const allPieces = [
-  ...swordsmen,
-  ...knights,
-  ...archers,
-  ...trebuchets,
-  ...eagles,
-  ...giants,
-  ...dragons,
-  ...assassins,
-  ...monarchs,
-];
+export function getStartingBoard(boardRadius: number): Board {
+  return new Board({ nSquares: boardRadius - 1 });
+}
+
+export function getStartingLayout(board: Board): LayoutService {
+  return new LayoutService(board);
+}
+
+// =========== BOARD EXPORTS (Backwards Compatibility) ===========
 
 /** Exported for Game.tsx initial state */
-export { allPieces };
+export const allPieces = getStartingPieces(N_SQUARES);
 
-export const startingBoard = new Board({ nSquares: N_SQUARES - 1 });
-export const emptyBoard = new Board({ nSquares: N_SQUARES - 1 });
-export const startingLayout = new LayoutService(startingBoard);
+export const startingBoard = getStartingBoard(N_SQUARES);
+export const emptyBoard = getStartingBoard(N_SQUARES);
+export const startingLayout = getStartingLayout(startingBoard);

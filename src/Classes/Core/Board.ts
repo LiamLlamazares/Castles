@@ -131,7 +131,7 @@ export class Board {
     
     // Define pattern lengths (can be adjusted for gameplay balance)
     const RIVER_CROSSING_LENGTH = this.config.riverCrossingLength ?? 2;  // 1 hex crossing gap (default 2 per side from center?) 
-    // Wait, original was 2. Let's keep logic same.
+
     const RIVER_SEGMENT_LENGTH = this.config.riverSegmentLength ?? 2;   // 2 hex river segment
     const PATTERN_LENGTH = RIVER_CROSSING_LENGTH + RIVER_SEGMENT_LENGTH;
     

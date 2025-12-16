@@ -5,14 +5,27 @@ import PieceRenderer from "./PieceRenderer";
 import ControlPanel from "./ControlPanel";
 import PlayerHUD from "./PlayerHUD";
 import VictoryOverlay from "./VictoryOverlay";
-import { startingLayout, startingBoard } from "../ConstantImports";
+import { Board } from "../Classes/Core/Board";
+import { Piece } from "../Classes/Entities/Piece";
+import { LayoutService } from "../Classes/Systems/LayoutService";
+import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import "../css/Board.css";
+
+interface GameBoardProps {
+  initialBoard?: Board;
+  initialPieces?: Piece[];
+  initialLayout?: LayoutService;
+}
 
 /**
  * Main game board component.
  * Renders the hex grid, pieces, and handles user interactions.
  */
-const GameBoard = () => {
+const GameBoard: React.FC<GameBoardProps> = ({ 
+  initialBoard = startingBoard, 
+  initialPieces = allPieces, 
+  initialLayout = startingLayout 
+}) => {
     
   const {
     // State
@@ -41,7 +54,7 @@ const GameBoard = () => {
     incrementResizeVersion,
     handlePieceClick,
     handleHexClick
-  } = useGameLogic();
+  } = useGameLogic(initialBoard, initialPieces);
 
   useInputHandler({
     onPass: handlePass,
@@ -94,15 +107,15 @@ const GameBoard = () => {
           isAdjacentToControlledCastle={isRecruitmentSpot}
           onHexClick={handleHexClick}
           resizeVersion={resizeVersion}
-          layout={startingLayout}
-          board={startingBoard}
+          layout={initialLayout}
+          board={initialBoard}
         />
         <PieceRenderer
           pieces={pieces}
           isBoardRotated={isBoardRotated}
           onPieceClick={handlePieceClick}
           resizeVersion={resizeVersion}
-          layout={startingLayout}
+          layout={initialLayout}
         />
       </svg>
 
