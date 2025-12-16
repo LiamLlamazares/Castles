@@ -170,11 +170,35 @@ export class Board {
     return new Layout(Layout.pointy, this.hexSize, this.origin);
   }
 
+ /**
+  * Checks if a hex is part of the river (impassable for ground units).
+  * 
+  * The river runs along r=0 (middle of the board) with a repeating pattern:
+  * - RIVER_CROSSING_LENGTH hexes of crossing (passable)
+  * - RIVER_SEGMENT_LENGTH hexes of river (impassable)
+  * 
+  * Castle hexes at the edges are excluded from the river.
+  */
  public isRiver(hex: Hex): boolean {
-    // Replaced pixel check with logical check.
-    // Original: center.y === this.origin.y
-    // For pointy layout, y depends on r. y=0 implies r=0.
-    return hex.r === 0;
+    // River is only at r=0
+    if (hex.r !== 0) return false;
+    
+    // Exclude castle hexes at the edges
+    if (this.isCastle(hex, this.NSquares)) return false;
+    
+    // Define pattern lengths (can be adjusted for gameplay balance)
+    const RIVER_CROSSING_LENGTH = 2;  // 1 hex crossing gap
+    const RIVER_SEGMENT_LENGTH = 2;   // 2 hex river segment
+    const PATTERN_LENGTH = RIVER_CROSSING_LENGTH + RIVER_SEGMENT_LENGTH;
+    
+    // Use absolute q value to calculate position in repeating pattern
+    // This ensures symmetry: crossing at center (q=0), then pattern repeats outward
+    const absQ = Math.abs(hex.q);
+    const positionInPattern = absQ % PATTERN_LENGTH;
+    
+    // Positions 0 to (CROSSING_LENGTH-1) are crossings (passable)
+    // Positions CROSSING_LENGTH to (PATTERN_LENGTH-1) are river (impassable)
+    return positionInPattern >= RIVER_CROSSING_LENGTH;
   }
 
 public isCastle(hex: Hex, N: number): boolean {
@@ -185,15 +209,30 @@ public isCastle(hex: Hex, N: number): boolean {
   ); 
 };
 
+/**
+ * Checks if a castle belongs to the white player's side.
+ * 
+ * White castles are in the "southern" half of the board:
+ * - r > 0: normal case (below the river)
+ * - r = 0: edge castles use s coordinate (s < 0 = white side)
+ */
 public isWhiteCastle(castleHex: Hex): boolean {
-  // Replaced pixel check: layout.hexToPixel(castleHex).y - this.origin.y > 0
-  // In pointy layout, y > 0 implies r > 0
-  return castleHex.r > 0;
+  if (castleHex.r > 0) return true;
+  if (castleHex.r === 0) return castleHex.s < 0; // Edge case: use s coordinate
+  return false;
 }
+
+/**
+ * Checks if a castle belongs to the black player's side.
+ * 
+ * Black castles are in the "northern" half of the board:
+ * - r < 0: normal case (above the river)
+ * - r = 0: edge castles use s coordinate (s > 0 = black side)
+ */
 public isBlackCastle(castleHex: Hex): boolean {
-  // Replaced pixel check: layout.hexToPixel(castleHex).y - this.origin.y < 0
-  // In pointy layout, y < 0 implies r < 0
-  return castleHex.r < 0;
+  if (castleHex.r < 0) return true;
+  if (castleHex.r === 0) return castleHex.s > 0; // Edge case: use s coordinate
+  return false;
 }
 
 get Castles(): Castle[] {

@@ -6,8 +6,7 @@ import { PieceType, Color } from '../../Constants';
 
 // Create a minimal board for testing
 const createTestBoard = () => {
-  const pieces: Piece[] = [];
-  return new Board(pieces, 7); // N_SQUARES - 1 = 7
+  return new Board(7); // N_SQUARES - 1 = 7
 };
 
 describe('GameEngine', () => {
@@ -98,8 +97,9 @@ describe('GameEngine', () => {
 
     it('contains river hexes', () => {
       const blockedSet = gameEngine.getBlockedHexSet([], []);
-      // River hexes are at r=0
-      const riverHex = new Hex(0, 0, 0);
+      // River pattern: crossing at q%3=0, river at q%3=1,2
+      // q=1 is always river (position 1 in pattern of length 3)
+      const riverHex = new Hex(1, 0, -1);
       expect(blockedSet.has(riverHex.getKey())).toBe(true);
     });
 
