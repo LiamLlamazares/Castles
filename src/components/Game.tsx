@@ -67,6 +67,16 @@ class GameBoard extends Component<{}, GameBoardState> {
     return this.gameEngine.getLegalAttacks(movingPiece, pieces, Castles, turnCounter);
   }
 
+  /** Returns victory message if someone has won, null otherwise */
+  get victoryMessage(): string | null {
+    return this.gameEngine.getVictoryMessage(this.state.pieces, this.state.Castles);
+  }
+
+  /** Returns the winning player's color, or null if game is ongoing */
+  get winner(): Color | null {
+    return this.gameEngine.getWinner(this.state.pieces, this.state.Castles);
+  }
+
   get controlledCastlesActivePlayer(): Castle[] {
     return this.gameEngine.getControlledCastlesActivePlayer(this.state.Castles, this.state.pieces, this.state.turnCounter);
   }
@@ -299,6 +309,7 @@ class GameBoard extends Component<{}, GameBoardState> {
           
           <HexGrid
             hexagons={this.hexagons}
+            castles={this.state.Castles}
             legalMoveSet={legalMoveSet}
             legalAttackSet={legalAttackSet}
             showCoordinates={this.state.showCoordinates}
@@ -312,6 +323,16 @@ class GameBoard extends Component<{}, GameBoardState> {
             onPieceClick={this.handlePieceClick}
           />
         </svg>
+
+        {/* Victory Overlay */}
+        {this.victoryMessage && (
+          <div className="victory-overlay">
+            <div className={`victory-banner ${this.winner}`}>
+              <h1>{this.victoryMessage}</h1>
+              <button onClick={() => window.location.reload()}>Play Again</button>
+            </div>
+          </div>
+        )}
       </>
     );
   }

@@ -307,22 +307,35 @@ export class GameEngine {
   }
 
   public applyCastleAttack(state: GameState, piece: Piece, targetHex: Hex): GameState {
+    const capturer = this.getCurrentPlayer(state.turnCounter);
+    
+    // Move the piece onto the castle
     const newPieces = state.pieces.map(p => {
         if (p === piece) {
             const newPiece = p.clone();
             newPiece.hex = targetHex;
             newPiece.canAttack = false; // Consumes Attack action
-            // Note: We do NOT set canMove=false (it might already be), but this is Attack phase.
             return newPiece;
         }
         return p;
     });
 
-    const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, state.Castles, state.turnCounter);
+    // Transfer castle ownership to the capturing player
+    const newCastles = state.Castles.map(c => {
+        if (c.hex.equals(targetHex)) {
+            const newCastle = c.clone();
+            newCastle.owner = capturer;
+            return newCastle;
+        }
+        return c;
+    });
+
+    const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, newCastles, state.turnCounter);
     
     return {
         ...state,
         pieces: newPieces,
+        Castles: newCastles,
         movingPiece: null,
         turnCounter: newTurnCounter
     };
@@ -431,5 +444,106 @@ export class GameEngine {
           pieces: newPieces,
           Castles: newCastles
       };
+  }
+
+  // =========== WIN CONDITION LOGIC ===========
+
+  /**
+   * Checks if the game has been won.
+   * 
+   * Victory conditions:
+   * 1. Monarch Capture: Opponent's Monarch (king) has been captured
+   * 2. Castle Control: Player controls all 6 castles on the board
+   * 
+   * @returns The winning player's color, or null if game is ongoing
+   */
+  public getWinner(pieces: Piece[], castles: Castle[]): Color | null {
+    // Check for Monarch capture
+    const monarchCaptureWinner = this.checkMonarchCapture(pieces);
+    if (monarchCaptureWinner) return monarchCaptureWinner;
+
+    // Check for castle control
+    const castleControlWinner = this.checkCastleControl(pieces, castles);
+    if (castleControlWinner) return castleControlWinner;
+
+    return null;
+  }
+
+  /**
+   * Checks if either player has lost their Monarch.
+   * @returns The winning player (opponent of the player who lost their Monarch), or null
+   */
+  private checkMonarchCapture(pieces: Piece[]): Color | null {
+    const whiteMonarch = pieces.find(p => p.type === PieceType.Monarch && p.color === 'w');
+    const blackMonarch = pieces.find(p => p.type === PieceType.Monarch && p.color === 'b');
+
+    // If white's monarch is gone, black wins
+    if (!whiteMonarch) return 'b';
+    
+    // If black's monarch is gone, white wins
+    if (!blackMonarch) return 'w';
+    
+    return null;
+  }
+
+  /**
+   * Checks if either player controls all castles.
+   * 
+   * Control rules:
+   * - A player controls their OWN castles by default (castle.color === player)
+   * - A player controls an ENEMY castle if they have a piece ON it (captured)
+   * 
+   * @returns The winning player who controls all castles, or null
+   */
+  private checkCastleControl(pieces: Piece[], castles: Castle[]): Color | null {
+    const controlledByWhite = castles.filter(castle => 
+      this.playerControlsCastle(castle, pieces, 'w')
+    ).length;
+
+    const controlledByBlack = castles.filter(castle => 
+      this.playerControlsCastle(castle, pieces, 'b')
+    ).length;
+
+    const totalCastles = castles.length;
+
+    // Player must control ALL castles to win
+    if (controlledByWhite === totalCastles) return 'w';
+    if (controlledByBlack === totalCastles) return 'b';
+
+    return null;
+  }
+
+  /**
+   * Checks if a specific player controls a castle.
+   * Uses the castle's `owner` property which tracks persistent ownership.
+   * 
+   * @param castle - The castle to check
+   * @param _pieces - Unused (kept for signature compatibility)
+   * @param player - The player to check control for
+   * @returns true if player controls this castle
+   */
+  private playerControlsCastle(castle: Castle, _pieces: Piece[], player: Color): boolean {
+    return castle.owner === player;
+  }
+
+  /**
+   * Returns a human-readable description of the victory.
+   */
+  public getVictoryMessage(pieces: Piece[], castles: Castle[]): string | null {
+    const winner = this.getWinner(pieces, castles);
+    if (!winner) return null;
+
+    const winnerName = winner === 'w' ? 'White' : 'Black';
+    
+    // Determine victory type
+    if (this.checkMonarchCapture(pieces)) {
+      return `${winnerName} wins by capturing the Monarch!`;
+    }
+    
+    if (this.checkCastleControl(pieces, castles)) {
+      return `${winnerName} wins by controlling all castles!`;
+    }
+
+    return `${winnerName} wins!`;
   }
 }

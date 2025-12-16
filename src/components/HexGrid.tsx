@@ -3,11 +3,13 @@
  * Extracted from Game.tsx for better separation of concerns.
  */
 import { Hex, Point } from "../Classes/Hex";
+import { Castle } from "../Classes/Castle";
 import { N_SQUARES, LEGAL_MOVE_DOT_RADIUS } from "../Constants";
 import { startingBoard } from "../ConstantImports";
 
 interface HexGridProps {
   hexagons: Hex[];
+  castles: Castle[];
   legalMoveSet: Set<string>;
   legalAttackSet: Set<string>;
   showCoordinates: boolean;
@@ -16,6 +18,14 @@ interface HexGridProps {
   isAdjacentToControlledCastle: (hex: Hex) => boolean;
   onHexClick: (hex: Hex) => void;
 }
+
+/** Get the owner class for a castle hex (if applicable) */
+const getCastleOwnerClass = (hex: Hex, castles: Castle[]): string => {
+  const castle = castles.find(c => c.hex.equals(hex));
+  if (!castle) return '';
+  // Return class based on current owner (not original color)
+  return castle.owner === 'w' ? 'castle-owned-white' : 'castle-owned-black';
+};
 
 /** Get the polygon points for a hex */
 const getPolygonPoints = (hex: Hex, isBoardRotated: boolean): string => {
@@ -51,6 +61,7 @@ const renderCircle = (
 
 const HexGrid: React.FC<HexGridProps> = ({
   hexagons,
+  castles,
   legalMoveSet,
   legalAttackSet,
   showCoordinates,
@@ -69,7 +80,7 @@ const HexGrid: React.FC<HexGridProps> = ({
               isAdjacentToControlledCastle(hex)
                 ? "hexagon-castle-adjacent"
                 : ""
-            }`}
+            } ${getCastleOwnerClass(hex, castles)}`}
             onClick={() => onHexClick(hex)}
             filter={
               startingBoard.colorClassMap[hex.getKey()] === "hexagon-high-ground"
