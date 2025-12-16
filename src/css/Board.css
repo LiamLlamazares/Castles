@@ -155,13 +155,10 @@ body {
   z-index: 200;
   gap: 16px;
   overflow-y: auto;
-  pointer-events: none; /* Let clicks pass through empty areas */
+  overflow-y: auto;
 }
 
-/* Re-enable pointer events for actual controls */
-.sidebar-section, .game-button, .player-status {
-  pointer-events: auto;
-}
+
 
 .sidebar-section {
   display: flex;
@@ -197,7 +194,7 @@ body {
 }
 
 .control-buttons {
-  margin-top: auto; 
+  margin-top: 20px; 
 }
 
 /* Updated Button Styles for Sidebar */
