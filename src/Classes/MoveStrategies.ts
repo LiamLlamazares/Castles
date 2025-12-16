@@ -14,6 +14,7 @@ interface HexDirection {
  * 
  * @param hex - Starting hex position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  * @param directions - Array of direction vectors to check
  * @param maxDistance - Maximum distance piece can travel in each direction
  * @returns Array of legal moves
@@ -21,6 +22,7 @@ interface HexDirection {
 const getSlidingMoves = (
   hex: Hex,
   blockedHexSet: Set<string>,
+  validHexSet: Set<string>,
   directions: HexDirection[],
   maxDistance: number
 ): Hex[] => {
@@ -31,7 +33,11 @@ const getSlidingMoves = (
     // Check moves in the positive direction
     for (let k = 1; k <= maxDistance; k++) {
       const newHex = new Hex(q + k * dir.dq, r + k * dir.dr, s + k * dir.ds);
-      if (!blockedHexSet.has(newHex.getKey())) {
+      const key = newHex.getKey();
+      
+      if (!validHexSet.has(key)) break; // Stop if off board
+      
+      if (!blockedHexSet.has(key)) {
         moves.push(newHex);
       } else {
         break; // Blocked - stop in this direction
@@ -41,7 +47,11 @@ const getSlidingMoves = (
     // Check moves in the negative direction
     for (let k = -1; k >= -maxDistance; k--) {
       const newHex = new Hex(q + k * dir.dq, r + k * dir.dr, s + k * dir.ds);
-      if (!blockedHexSet.has(newHex.getKey())) {
+      const key = newHex.getKey();
+
+      if (!validHexSet.has(key)) break; // Stop if off board
+
+      if (!blockedHexSet.has(key)) {
         moves.push(newHex);
       } else {
         break; // Blocked - stop in this direction
@@ -58,9 +68,10 @@ const getSlidingMoves = (
  * 
  * @param hex - Starting position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  * @param color - Piece color (determines forward direction)
  */
-export const swordsmanMoves = (hex: Hex, blockedHexSet: Set<string>, color: Color): Hex[] => {
+export const swordsmanMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>, color: Color): Hex[] => {
   const moves: Hex[] = [];
   const { q, r, s } = hex;
   const direction = color === "b" ? -1 : 1;
@@ -73,7 +84,8 @@ export const swordsmanMoves = (hex: Hex, blockedHexSet: Set<string>, color: Colo
 
   for (const dir of moveDirections) {
     const newHex = new Hex(q + dir.q, r + dir.r, s + dir.s);
-    if (!blockedHexSet.has(newHex.getKey())) {
+    const key = newHex.getKey();
+    if (validHexSet.has(key) && !blockedHexSet.has(key)) {
       moves.push(newHex);
     }
   }
@@ -87,10 +99,14 @@ export const swordsmanMoves = (hex: Hex, blockedHexSet: Set<string>, color: Colo
  * 
  * @param hex - Starting position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  */
-export const archerMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
+export const archerMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>): Hex[] => {
   const potentialMoves = hex.cubeRing(1);
-  return potentialMoves.filter((move) => !blockedHexSet.has(move.getKey()));
+  return potentialMoves.filter((move) => {
+    const key = move.getKey();
+    return validHexSet.has(key) && !blockedHexSet.has(key);
+  });
 };
 
 /**
@@ -99,9 +115,10 @@ export const archerMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
  * 
  * @param hex - Starting position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  * @param boardSize - Maximum board dimension (limits sliding distance)
  */
-export const knightMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: number): Hex[] => {
+export const knightMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>, boardSize: number): Hex[] => {
   // Diagonal directions (similar to bishop movement in standard chess)
   const knightDirections: HexDirection[] = [
     { dq: -1, dr: -1, ds: 2 },
@@ -109,7 +126,7 @@ export const knightMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: num
     { dq: 2, dr: -1, ds: -1 },
   ];
 
-  return getSlidingMoves(hex, blockedHexSet, knightDirections, boardSize);
+  return getSlidingMoves(hex, blockedHexSet, validHexSet, knightDirections, boardSize);
 };
 
 /**
@@ -118,8 +135,9 @@ export const knightMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: num
  * 
  * @param hex - Starting position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  */
-export const eagleMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
+export const eagleMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>): Hex[] => {
   // Collect all hexes in radius 1, 2, and 3
   const potentialMoves: Hex[] = [];
   for (let radius = 1; radius <= 3; radius++) {
@@ -127,7 +145,10 @@ export const eagleMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
   }
   
   // Eagles fly, so only the destination needs to be unblocked
-  return potentialMoves.filter((move) => !blockedHexSet.has(move.getKey()));
+  return potentialMoves.filter((move) => {
+    const key = move.getKey();
+    return validHexSet.has(key) && !blockedHexSet.has(key);
+  });
 };
 
 /**
@@ -136,8 +157,9 @@ export const eagleMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
  * 
  * @param hex - Starting position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  */
-export const dragonMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
+export const dragonMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>): Hex[] => {
   const { q, r, s } = hex;
   const moves: Hex[] = [];
 
@@ -159,7 +181,10 @@ export const dragonMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
   }
 
   // Dragons fly, so only the landing spot needs to be unblocked
-  return moves.filter((move) => !blockedHexSet.has(move.getKey()));
+  return moves.filter((move) => {
+    const key = move.getKey();
+    return validHexSet.has(key) && !blockedHexSet.has(key);
+  });
 };
 
 /**
@@ -168,9 +193,10 @@ export const dragonMoves = (hex: Hex, blockedHexSet: Set<string>): Hex[] => {
  * 
  * @param hex - Starting position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  * @param boardSize - Maximum board dimension (limits sliding distance)
  */
-export const assassinMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: number): Hex[] => {
+export const assassinMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>, boardSize: number): Hex[] => {
   // All 6 directions: 3 orthogonal + 3 diagonal
   const assassinDirections: HexDirection[] = [
     // Orthogonal (like Giant/Rook)
@@ -183,7 +209,7 @@ export const assassinMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: n
     { dq: 1, dr: 1, ds: -2 },
   ];
 
-  return getSlidingMoves(hex, blockedHexSet, assassinDirections, 2 * boardSize);
+  return getSlidingMoves(hex, blockedHexSet, validHexSet, assassinDirections, 2 * boardSize);
 };
 
 /**
@@ -192,9 +218,10 @@ export const assassinMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: n
  * 
  * @param hex - Starting position
  * @param blockedHexSet - Set of hex keys for O(1) blocked lookups
+ * @param validHexSet - Set of valid board hex keys
  * @param boardSize - Maximum board dimension (limits sliding distance)
  */
-export const giantMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: number): Hex[] => {
+export const giantMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>, boardSize: number): Hex[] => {
   // Orthogonal directions (similar to rook movement in standard chess)
   const giantDirections: HexDirection[] = [
     { dq: 0, dr: -1, ds: 1 },
@@ -202,5 +229,5 @@ export const giantMoves = (hex: Hex, blockedHexSet: Set<string>, boardSize: numb
     { dq: 1, dr: 0, ds: -1 },
   ];
 
-  return getSlidingMoves(hex, blockedHexSet, giantDirections, 2 * boardSize);
+  return getSlidingMoves(hex, blockedHexSet, validHexSet, giantDirections, 2 * boardSize);
 };

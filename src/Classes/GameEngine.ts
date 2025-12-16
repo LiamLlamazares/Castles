@@ -126,7 +126,7 @@ export class GameEngine {
     const phase = this.getTurnPhase(turnCounter);
     if (piece && phase === "Movement" && piece.canMove) {
         const blockedSet = this.getBlockedHexSet(pieces, castles);
-        return piece.legalmoves(blockedSet, piece.color);
+        return piece.legalmoves(blockedSet, piece.color, this.board.hexSet);
     }
     return [];
   }
