@@ -31,21 +31,24 @@ import {
  * 
  * Movement and attack patterns are determined by the piece type.
  * See MoveStrategies.ts for movement implementations.
+ * 
+ * IMMUTABILITY:
+ * All properties are readonly. Use the `with()` method to create updated copies.
  */
 export class Piece {
   constructor(
     /** Current position on the hex grid */
-    public hex: Hex,
+    public readonly hex: Hex,
     /** Which player owns this piece */
-    public color: Color,
+    public readonly color: Color,
     /** Piece variant (determines movement/attack/strength) */
-    public type: PieceType,
+    public readonly type: PieceType,
     /** Whether this piece can still move this turn */
-    public canMove: boolean = true,
+    public readonly canMove: boolean = true,
     /** Whether this piece can still attack this turn */
-    public canAttack: boolean = true,
+    public readonly canAttack: boolean = true,
     /** Damage accumulated this turn (resets each round) */
-    public damage: number = 0
+    public readonly damage: number = 0
   ) {
     if (!hex || !color || !type) {
       throw new Error("Invalid arguments for Piece constructor");
@@ -75,6 +78,21 @@ export class Piece {
       default:
         return AttackType.Melee;
     }
+  }
+
+  /**
+   * Creates a copy of this piece with specified properties updated.
+   * This is the primary way to "modify" a piece.
+   */
+  public with(updates: Partial<Piece>): Piece {
+    return new Piece(
+        updates.hex !== undefined ? updates.hex : this.hex,
+        updates.color !== undefined ? updates.color : this.color,
+        updates.type !== undefined ? updates.type : this.type,
+        updates.canMove !== undefined ? updates.canMove : this.canMove,
+        updates.canAttack !== undefined ? updates.canAttack : this.canAttack,
+        updates.damage !== undefined ? updates.damage : this.damage
+    );
   }
 
   /**
@@ -194,8 +212,7 @@ export class Piece {
 
   /** Creates a deep copy of this piece (for immutable state updates) */
   public clone(): Piece {
-    return new Piece(this.hex, this.color, this.type, this.canMove, this.canAttack, this.damage);
+    // Clone via copy constructor pattern
+    return this.with({});
   }
 }
-
-

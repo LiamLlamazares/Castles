@@ -184,6 +184,44 @@ export class GameEngine {
       });
   }
 
+  /**
+   * Checks if the current player has ANY legal attacks available.
+   * Optimized for early exit (O(1) best case, instead of O(N)).
+   */
+  public hasAnyFutureLegalAttacks(pieces: Piece[], castles: Castle[], turnCounter: number): boolean {
+    const currentPlayer = this.getCurrentPlayer(turnCounter);
+    
+    // 1. Identify potential attackers first (cheap filter)
+    const potentialAttackers = pieces.filter(
+      (piece) => piece.color === currentPlayer && piece.canAttack
+    );
+    if (potentialAttackers.length === 0) return false;
+
+    // 2. Build expensive sets only if needed
+    const attackable = this.getAttackableHexes(pieces, castles, currentPlayer);
+    if (attackable.length === 0) return false;
+    
+    const attackableSet = new Set(attackable.map(h => h.getKey()));
+    
+    // Calculate defended hexes ONCE (FIX to ensure O(N) not O(N^2) for many ranged)
+    const defended = this.getDefendedHexes(pieces, currentPlayer);
+    const defendedSet = new Set(defended.map(h => h.getKey()));
+
+    // 3. Check each attacker, returning true immediately if one has choices
+    for (const piece of potentialAttackers) {
+      const attacks = piece.legalAttacks(attackableSet, this.board.highGroundHexSet);
+      
+      if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {
+         // Must find at least one non-defended attack
+         if (attacks.some(hex => !defendedSet.has(hex.getKey()))) return true;
+      } else {
+         if (attacks.length > 0) return true;
+      }
+    }
+
+    return false;
+  }
+
   public castleIsControlledByActivePlayer(castle: Castle, _pieces: Piece[], currentPlayer: Color): boolean {
     return castle.owner === currentPlayer;
   }
@@ -198,6 +236,18 @@ export class GameEngine {
         castle.color !== currentPlayer
       );
     });
+  }
+
+  /**
+   * Optimized check if ANY castle is controlled by active player (for turn skipping).
+   */
+  public hasAnyFutureControlledCastles(castles: Castle[], pieces: Piece[], turnCounter: number): boolean {
+    const currentPlayer = this.getCurrentPlayer(turnCounter);
+    // Use some() for early exit
+    return castles.some((castle) => 
+        this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
+        castle.color !== currentPlayer
+    );
   }
 
   public getFutureControlledCastlesActivePlayer(castles: Castle[], pieces: Piece[], turnCounter: number): Castle[] {
@@ -245,11 +295,9 @@ export class GameEngine {
    * passing in the necessary calculated booleans.
    */
   public getTurnCounterIncrement(pieces: Piece[], castles: Castle[], turnCounter: number): number {
-    const futureAttacks = this.getFutureLegalAttacks(pieces, castles, turnCounter);
-    const hasFutureAttacks = futureAttacks.length > 0;
-    
-    const futureControlledCastles = this.getFutureControlledCastlesActivePlayer(castles, pieces, turnCounter);
-    const hasFutureControlledCastles = futureControlledCastles.length > 0;
+    // Optimization Phase 3: Use early-exit checks instead of full list generation
+    const hasFutureAttacks = this.hasAnyFutureLegalAttacks(pieces, castles, turnCounter);
+    const hasFutureControlledCastles = this.hasAnyFutureControlledCastles(castles, pieces, turnCounter);
 
     const currentPlayer = this.getCurrentPlayer(turnCounter);
     
@@ -285,10 +333,8 @@ export class GameEngine {
 
     const newPieces = state.pieces.map(p => {
         if (p === piece) {
-            const newPiece = p.clone(); // Clone to avoid mutation
-            newPiece.hex = targetHex;
-            newPiece.canMove = false;
-            return newPiece;
+            // Use immutable update via 'with'
+            return p.with({ hex: targetHex, canMove: false });
         }
         return p;
     });
@@ -329,11 +375,7 @@ export class GameEngine {
     // Move the piece onto the castle AND consume attack
     const newPieces = state.pieces.map(p => {
         if (p === piece) {
-            const newPiece = p.clone();
-            newPiece.hex = targetHex;
-            newPiece.canAttack = false; // Consumes Attack action
-            // Note: Does it consume Move too? Original only said canAttack = false.
-            return newPiece;
+            return p.with({ hex: targetHex, canAttack: false });
         }
         return p;
     });
@@ -341,9 +383,7 @@ export class GameEngine {
     // Transfer castle ownership
     const newCastles = state.castles.map(c => {
         if (c.hex.equals(targetHex)) {
-            const newCastle = c.clone();
-            newCastle.owner = capturer;
-            return newCastle;
+            return c.with({ owner: capturer });
         }
         return c;
     });
@@ -418,10 +458,10 @@ export class GameEngine {
       // Update Castle
       const newCastles = state.castles.map(c => {
           if (c === castle) {
-              const newCastle = c.clone();
-              newCastle.turns_controlled += 1;
-              newCastle.used_this_turn = true;
-              return newCastle;
+              return c.with({ 
+                  turns_controlled: c.turns_controlled + 1,
+                  used_this_turn: true
+              });
           }
           return c;
       });
@@ -440,16 +480,14 @@ export class GameEngine {
 
   private resetTurnFlags(state: GameState): GameState {
       const newPieces = state.pieces.map(p => {
-          const pc = p.clone();
-          pc.canMove = true;
-          pc.canAttack = true;
-          pc.damage = 0;
-          return pc;
+          return p.with({ 
+              canMove: true, 
+              canAttack: true, 
+              damage: 0 
+          });
       });
       const newCastles = state.castles.map(c => {
-          const cc = c.clone();
-          cc.used_this_turn = false;
-          return cc;
+          return c.with({ used_this_turn: false });
       });
       return {
           ...state,
