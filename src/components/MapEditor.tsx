@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import HexGrid from './HexGrid';
 import { getStartingPieces, getStartingBoard, getStartingLayout } from '../ConstantImports';
 import { Board } from '../Classes/Core/Board';
-import { LayoutService } from '../Classes/Systems/LayoutService';
 import { Piece } from '../Classes/Entities/Piece';
 import '../css/Board.css';
 

@@ -13,6 +13,7 @@ interface ControlPanelProps {
   onTakeback: () => void;
   onFlipBoard: () => void;
   onResign: () => void;
+  onNewGame: () => void;
   moveHistory: MoveRecord[];
 }
 
@@ -24,6 +25,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onTakeback,
   onFlipBoard,
   onResign,
+  onNewGame,
   moveHistory,
 }) => {
   return (
@@ -35,6 +37,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         </button>
         <button className="game-button" onClick={onResign} style={{ background: '#c0392b' }}>
           Resign
+        </button>
+        <button className="game-button" onClick={onNewGame} style={{ background: '#3498db' }}>
+          New Game
         </button>
          {/* Hidden/Debug buttons can be added back if needed, but user requested simplified UI */}
         {/* <button className="game-button" onClick={onTakeback} title="Takeback (Z)">

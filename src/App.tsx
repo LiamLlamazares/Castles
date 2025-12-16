@@ -16,7 +16,7 @@ interface GameConfig {
 }
 
 function App() {
-  const [view, setView] = useState<ViewState>('menu');
+  const [view, setView] = useState<ViewState>('game');
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
 
   const handleNewGameClick = () => {
@@ -26,14 +26,15 @@ function App() {
   const handleStartGame = (board: Board, pieces: Piece[], timeControl?: { initial: number, increment: number }) => {
     const layout = getStartingLayout(board);
     setGameConfig({ board, pieces, layout });
-    // TODO: Pass timeControl to GameBoard if implemented
     setView('game');
   };
 
-  const handleResign = () => {
-    setView('menu');
-    setGameConfig({});
+  const handleRestartGame = () => {
+    // Adds a `gameKey` state to force remount.
+    setGameKey(prev => prev + 1);
   };
+  
+  const [gameKey, setGameKey] = useState(0);
 
   return (
     <div className="App">
@@ -52,10 +53,13 @@ function App() {
       {view === 'game' && (
         <div style={{ height: '100vh', width: '100vw' }}> {/* Ensure full screen for game */}
             <GameBoard 
+              key={gameKey}
               initialBoard={gameConfig.board}
               initialPieces={gameConfig.pieces}
               initialLayout={gameConfig.layout}
-              onResign={handleResign}
+              onResign={() => {}} // Controlled internally or via prop if we want to bubble up
+              onSetup={handleNewGameClick}
+              onRestart={handleRestartGame}
             />
         </div>
       )}

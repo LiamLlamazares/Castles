@@ -15,7 +15,9 @@ interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
   initialLayout?: LayoutService;
-  onResign?: () => void;
+  onResign?: () => void; // Optional callback to parent (e.g. log event)
+  onSetup?: () => void;
+  onRestart?: () => void;
 }
 
 /**
@@ -26,10 +28,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
   initialBoard = startingBoard, 
   initialPieces = allPieces, 
   initialLayout = startingLayout,
-  onResign = () => {}
+  onResign = () => {},
+  onSetup = () => {},
+  onRestart = () => {}
 }) => {
     
   const {
+    // State
     // State
     pieces,
     castles,
@@ -47,7 +52,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
     winner,
     isRecruitmentSpot,
     moveHistory,
-
     // Actions
     handlePass,
     handleTakeback,
@@ -55,7 +59,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
     toggleCoordinates,
     incrementResizeVersion,
     handlePieceClick,
-    handleHexClick
+    handleHexClick,
+    handleResign,
+    hasGameStarted
   } = useGameLogic(initialBoard, initialPieces);
 
   useInputHandler({
@@ -76,17 +82,22 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onToggleCoordinates={toggleCoordinates}
         onTakeback={handleTakeback}
         onFlipBoard={handleFlipBoard}
-        onResign={onResign}
+        onResign={() => {
+            handleResign(currentPlayer);
+            onResign();
+        }}
+        onNewGame={onSetup}
         moveHistory={moveHistory || []}
       />
       
       <PlayerHUD 
         currentPlayer={currentPlayer} 
         turnPhase={turnPhase} 
+        hasGameStarted={hasGameStarted}
       />
       
       <svg className="board" height="100%" width="100%">
-        {/* SVG filter for high-ground shadow effect */}
+        {/* ... SVG Content ... */}
         <defs>
           <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur in="SourceAlpha" stdDeviation="5" />
@@ -122,7 +133,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
         />
       </svg>
 
-      <VictoryOverlay victoryMessage={victoryMessage} winner={winner} />
+      <VictoryOverlay 
+        victoryMessage={victoryMessage} 
+        winner={winner} 
+        onRestart={onRestart}
+        onSetup={onSetup}
+      />
     </>
   );
 };

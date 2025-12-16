@@ -6,7 +6,6 @@ import { TurnManager } from "../Core/TurnManager";
 import {
   Color,
   AttackType,
-  TurnPhase,
   DEFENDED_PIECE_IS_PROTECTED_RANGED,
 } from "../../Constants";
 
