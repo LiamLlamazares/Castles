@@ -1,5 +1,5 @@
 import { Hex, Layout, generateHexagons, Point } from './Hex';
-import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, LAYOUT_TYPE } from '../Constants';
+import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE } from '../Constants';
 import { Castle } from './Castle';
 
 /**
@@ -33,6 +33,9 @@ export class Board {
   /** Sizing factor for hex rendering */
   public HEX_SIZE_FACTOR: number;
   
+  /** Vertical offset for board centering */
+  public Y_OFFSET: number;
+
   /** Horizontal offset for board centering */
   public X_OFFSET: number;
   
@@ -67,7 +70,7 @@ export class Board {
   
   /** Set of high ground hex keys */
   public highGroundHexSet: Set<string>;
-
+  
   /** Set of ALL hex keys on board */
   public hexSet: Set<string>;
   
@@ -90,12 +93,14 @@ export class Board {
     NSquares: number = N_SQUARES,
     HEX_SIZE_FACTOR_ARG: number = HEX_SIZE_FACTOR,
     X_OFFSET_ARG: number = X_OFFSET,
+    Y_OFFSET_ARG: number = Y_OFFSET,
     layoutType: "flat" | "pointy" = LAYOUT_TYPE as "flat" | "pointy"
   ) {
     this.NSquares = NSquares;
     this.hexes = generateHexagons(this.NSquares);
     this.HEX_SIZE_FACTOR = HEX_SIZE_FACTOR_ARG;
     this.X_OFFSET = X_OFFSET_ARG;
+    this.Y_OFFSET = Y_OFFSET_ARG;
     this.layoutType = layoutType;
 
     // Default to standard size, updated by UI later
@@ -154,7 +159,7 @@ export class Board {
   /** Center point of the board in pixel coordinates */
   get origin(): Point {
     const x = this.pixelWidth / 2 + this.X_OFFSET;
-    const y = this.pixelHeight / 2;
+    const y = this.pixelHeight / 2 + this.Y_OFFSET;
     return new Point(x, y);
   }
 

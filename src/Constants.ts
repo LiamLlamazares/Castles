@@ -1,7 +1,8 @@
 //Size of board
 export const N_SQUARES = 8;
-export const HEX_SIZE_FACTOR = 4;
-export const X_OFFSET = 100;
+export const HEX_SIZE_FACTOR = 3.0; // Zoomed in
+export const X_OFFSET = -50;
+export const Y_OFFSET = 70; // Top padding
 export const LAYOUT_TYPE = "flat";
 export const COLORS = ["w", "b"] as const;
 

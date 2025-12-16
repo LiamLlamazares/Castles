@@ -287,7 +287,8 @@ const GameBoard = () => {
   }, [handlePass, handleFlipBoard, handleTakeback]);
 
   const handleResize = useCallback(() => {
-    startingBoard.updateDimensions(window.innerWidth, window.innerHeight);
+    // Subtract sidebar width (200px) from valid board area
+    startingBoard.updateDimensions(window.innerWidth - 200, window.innerHeight);
     // Force re-render by updating a dummy state
     setState(prev => ({ ...prev }));
   }, []);
@@ -297,7 +298,8 @@ const GameBoard = () => {
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleResize);
-    startingBoard.updateDimensions(window.innerWidth, window.innerHeight);
+    // Initial resize call
+    startingBoard.updateDimensions(window.innerWidth - 200, window.innerHeight);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
