@@ -20,10 +20,11 @@ export class CombatSystem {
   public static resolveAttack(
     pieces: Piece[],
     attacker: Piece,
-    targetHex: Hex
+    targetHex: Hex,
+    existingPieceMap?: PieceMap
   ): CombatResult {
-    // Use PieceMap for O(1) lookups instead of O(N) findIndex
-    const pieceMap = new PieceMap(pieces);
+    // Use provided map or create one (O(N) if created, O(1) if provided)
+    const pieceMap = existingPieceMap || new PieceMap(pieces);
     
     const defender = pieceMap.get(targetHex);
     if (!defender) {
@@ -47,21 +48,16 @@ export class CombatSystem {
     const damageDealt = originalAttacker.Strength;
     const damagedDefender = defender.with({ damage: defender.damage + damageDealt });
     
-    let finalPieces = [...pieces];
-    
     // Check Death
     const isDefenderDead = 
       damagedDefender.damage >= damagedDefender.Strength ||
       (damagedDefender.type === PieceType.Monarch && originalAttacker.type === PieceType.Assassin);
 
+    let finalPieces: Piece[];
+
     if (isDefenderDead) {
-      // Remove defender
-      const defenderIndex = pieces.findIndex((p) => p.hex.equals(targetHex));
-      finalPieces.splice(defenderIndex, 1);
-      
-      // Since we removed an item, indices might shift
-      const attackerIndex = finalPieces.findIndex((p) => p.hex.equals(attacker.hex));
-      let finalAttacker = finalPieces[attackerIndex];
+      // Logic: Remove defender, Upgrade attacker
+      let finalAttacker = originalAttacker;
 
       // Melee attackers move onto the captured hex
       if (
@@ -73,18 +69,24 @@ export class CombatSystem {
       
       // Mark as having attacked
       finalAttacker = finalAttacker.with({ canAttack: false });
-      finalPieces[attackerIndex] = finalAttacker;
+
+      // Rebuild array: Filter out defender, Update attacker
+      // This is O(N) but clean and robust
+      finalPieces = pieces
+        .filter(p => p !== defender) // Remove defender
+        .map(p => p === originalAttacker ? finalAttacker : p); // Update attacker
 
       return { pieces: finalPieces, victimDied: true };
     } else {
-      // Defender survives, update it in the list
-      const defenderIndex = pieces.findIndex((p) => p.hex.equals(targetHex));
-      finalPieces[defenderIndex] = damagedDefender;
-      
-      // Mark attacker as having attacked
-      const attackerIndex = pieces.findIndex((p) => p.hex.equals(attacker.hex));
+      // Defender survives
       const finalAttacker = originalAttacker.with({ canAttack: false });
-      finalPieces[attackerIndex] = finalAttacker;
+      
+      // Rebuild array: Update both
+      finalPieces = pieces.map(p => {
+          if (p === defender) return damagedDefender;
+          if (p === originalAttacker) return finalAttacker;
+          return p;
+      });
       
       return { pieces: finalPieces, victimDied: false };
     }

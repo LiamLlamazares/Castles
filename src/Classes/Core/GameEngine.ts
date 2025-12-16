@@ -6,6 +6,7 @@ import { Board } from "./Board";
 import { TurnManager } from "./TurnManager";
 import { CombatSystem } from "../Systems/CombatSystem";
 import { WinCondition } from "../Systems/WinCondition";
+import { PieceMap, createPieceMap } from "../../utils/PieceMap";
 import {
   Color,
   AttackType,
@@ -23,6 +24,7 @@ import {
  */
 export interface GameState {
   pieces: Piece[];
+  pieceMap: PieceMap; // O(1) lookup
   castles: Castle[];
   turnCounter: number;
   movingPiece: Piece | null;
@@ -339,11 +341,13 @@ export class GameEngine {
         return p;
     });
 
+    const newPieceMap = createPieceMap(newPieces);
     const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, state.castles, state.turnCounter);
     
     let nextState: GameState = {
         ...state,
         pieces: newPieces,
+        pieceMap: newPieceMap,
         movingPiece: null,
         turnCounter: newTurnCounter,
         moveHistory: newMoveHistory
@@ -388,11 +392,13 @@ export class GameEngine {
         return c;
     });
 
+    const newPieceMap = createPieceMap(newPieces);
     const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, newCastles, state.turnCounter);
     
     return {
         ...state,
         pieces: newPieces,
+        pieceMap: newPieceMap,
         castles: newCastles,
         movingPiece: null,
         turnCounter: newTurnCounter,
@@ -413,13 +419,16 @@ export class GameEngine {
      const newMoveHistory = [...(state.moveHistory || []), record];
 
      // Use CombatSystem to resolve the logic
-     const result = CombatSystem.resolveAttack(state.pieces, attacker, targetHex);
+     // PASSING optional pieceMap if we update CombatSystem to take it
+     const result = CombatSystem.resolveAttack(state.pieces, attacker, targetHex, state.pieceMap);
 
+     const newPieceMap = createPieceMap(result.pieces);
      const increment = this.getTurnCounterIncrement(result.pieces, state.castles, state.turnCounter);
       
      return {
           ...state,
           pieces: result.pieces,
+          pieceMap: newPieceMap,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory
@@ -466,11 +475,13 @@ export class GameEngine {
           return c;
       });
 
+      const newPieceMap = createPieceMap(newPieces);
       const increment = this.getTurnCounterIncrement(newPieces, newCastles, state.turnCounter);
 
       return {
           ...state,
           pieces: newPieces,
+          pieceMap: newPieceMap,
           castles: newCastles,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
@@ -489,9 +500,13 @@ export class GameEngine {
       const newCastles = state.castles.map(c => {
           return c.with({ used_this_turn: false });
       });
+      
+      const newPieceMap = createPieceMap(newPieces);
+
       return {
           ...state,
           pieces: newPieces,
+          pieceMap: newPieceMap,
           castles: newCastles
       };
   }
