@@ -85,8 +85,16 @@ export const PIECE_IMAGE_OFFSET = 145; // Offset to center piece on hex
 export const LEGAL_MOVE_DOT_SCALE_FACTOR = 0.25;
 
 // History entry type for strict typing
+export interface MoveRecord {
+  notation: string;
+  turnNumber: number;
+  color: Color;
+  phase: TurnPhase;
+}
+
 export interface HistoryEntry {
   pieces: import('./Classes/Piece').Piece[];
   castles: import('./Classes/Castle').Castle[];
   turnCounter: number;
+  moveNotation: MoveRecord[]; // List of all moves made so far
 }

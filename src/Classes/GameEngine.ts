@@ -1,5 +1,6 @@
 import { Piece } from "./Piece";
 import { Castle } from "./Castle";
+import { NotationService } from "./NotationService";
 import { Hex } from "./Hex";
 import { Board } from "./Board";
 import {
@@ -12,6 +13,7 @@ import {
   PLAYER_CYCLE_LENGTH,
   MOVEMENT_PHASE_END,
   ATTACK_PHASE_END,
+  MoveRecord,
   HistoryEntry,
 } from "../Constants";
 
@@ -25,6 +27,7 @@ export interface GameState {
   turnCounter: number;
   movingPiece: Piece | null;
   history: HistoryEntry[];
+  moveHistory: MoveRecord[];
 }
 
 /**
@@ -310,6 +313,18 @@ export class GameEngine {
 
   // State Transition Methods
   public applyMove(state: GameState, piece: Piece, targetHex: Hex): GameState {
+    const notation = NotationService.getMoveNotation(piece, targetHex);
+    
+    // Create Record
+    const record: MoveRecord = {
+        notation,
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+        color: this.getCurrentPlayer(state.turnCounter),
+        phase: this.getTurnPhase(state.turnCounter)
+    };
+
+    const newMoveHistory = [...(state.moveHistory || []), record];
+
     const newPieces = state.pieces.map(p => {
         if (p === piece) {
             const newPiece = p.clone(); // Clone to avoid mutation
@@ -326,7 +341,8 @@ export class GameEngine {
         ...state,
         pieces: newPieces,
         movingPiece: null,
-        turnCounter: newTurnCounter
+        turnCounter: newTurnCounter,
+        moveHistory: newMoveHistory
     };
     
     if (state.turnCounter % PHASE_CYCLE_LENGTH === 1) {
@@ -337,6 +353,19 @@ export class GameEngine {
   }
 
   public applyCastleAttack(state: GameState, piece: Piece, targetHex: Hex): GameState {
+    const castle = state.castles.find(c => c.hex.equals(targetHex));
+    const notation = castle 
+        ? NotationService.getCastleCaptureNotation(piece, castle)
+        : NotationService.getMoveNotation(piece, targetHex); // Fallback should not happen
+    
+    const record: MoveRecord = {
+        notation,
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+        color: this.getCurrentPlayer(state.turnCounter),
+        phase: this.getTurnPhase(state.turnCounter)
+    };
+
+    const newMoveHistory = [...(state.moveHistory || []), record];
     const capturer = this.getCurrentPlayer(state.turnCounter);
     
     // Move the piece onto the castle
@@ -367,11 +396,23 @@ export class GameEngine {
         pieces: newPieces,
         castles: newCastles,
         movingPiece: null,
-        turnCounter: newTurnCounter
+        turnCounter: newTurnCounter,
+        moveHistory: newMoveHistory
     };
   }
 
   public applyAttack(state: GameState, attacker: Piece, targetHex: Hex): GameState {
+     const notation = NotationService.getAttackNotation(attacker, targetHex);
+     
+     const record: MoveRecord = {
+        notation,
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+        color: this.getCurrentPlayer(state.turnCounter),
+        phase: this.getTurnPhase(state.turnCounter)
+    };
+
+     const newMoveHistory = [...(state.moveHistory || []), record];
+
      const defender = state.pieces.find(p => p.hex.equals(targetHex));
      if (!defender) return state; // Should not happen if legal
 
@@ -408,7 +449,8 @@ export class GameEngine {
           ...state,
           pieces: newPieces,
           movingPiece: null,
-          turnCounter: state.turnCounter + increment
+          turnCounter: state.turnCounter + increment,
+          moveHistory: newMoveHistory
       };
       
       return nextState;
@@ -417,11 +459,14 @@ export class GameEngine {
   public passTurn(state: GameState): GameState {
       // Logic from Game.tsx:178
       // It calls getTurnCounterIncrement.
+      // We do NOT record Pass in history lists (User Request)
+      
       const increment = this.getTurnCounterIncrement(state.pieces, state.castles, state.turnCounter);
       return {
           ...state,
           movingPiece: null,
-          turnCounter: state.turnCounter + increment
+          turnCounter: state.turnCounter + increment,
+          // moveHistory remains unchanged
       };
   }
 
@@ -429,6 +474,18 @@ export class GameEngine {
       // Logic from Game.tsx:342
       const pieceTypes = Object.values(PieceType);
       const pieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
+      
+      const notation = NotationService.getRecruitNotation(castle, pieceType, hex);
+      
+      const record: MoveRecord = {
+        notation,
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+        color: this.getCurrentPlayer(state.turnCounter),
+        phase: this.getTurnPhase(state.turnCounter)
+      };
+
+      const newMoveHistory = [...(state.moveHistory || []), record];
+      
       const newPiece = new Piece(hex, this.getCurrentPlayer(state.turnCounter), pieceType);
       
       const newPieces = [...state.pieces, newPiece]; // Shallow copy of array, but new piece
@@ -451,7 +508,8 @@ export class GameEngine {
           pieces: newPieces,
           castles: newCastles,
           movingPiece: null,
-          turnCounter: state.turnCounter + increment
+          turnCounter: state.turnCounter + increment,
+          moveHistory: newMoveHistory
       };
   }
 

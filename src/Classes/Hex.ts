@@ -35,6 +35,10 @@ export class Hex {
     public color_index: number = 0
   ) {
     if (Math.round(q + r + s) !== 0) throw new Error("q + r + s must be 0");
+    // Normalize -0 to 0
+    this.q = q === 0 ? 0 : q;
+    this.r = r === 0 ? 0 : r;
+    this.s = s === 0 ? 0 : s;
   }
 
   /** Checks if two hexes have the same coordinates */
@@ -146,13 +150,12 @@ export class Hex {
   }
 
   public linedraw(b: Hex): Hex[] {
-    var N: number = this.distance(b);
-    var a_nudge: Hex = new Hex(this.q + 1e-6, this.r + 1e-6, this.s - 2e-6);
-    var b_nudge: Hex = new Hex(b.q + 1e-6, b.r + 1e-6, b.s - 2e-6);
-    var results: Hex[] = [];
-    var step: number = 1.0 / Math.max(N, 1);
-    for (var i = 0; i <= N; i++) {
-      results.push(a_nudge.lerp(b_nudge, step * i).round());
+    const N: number = this.distance(b);
+    const results: Hex[] = [];
+    const step = 1.0 / Math.max(N, 1);
+    
+    for (let i = 0; i <= N; i++) {
+        results.push(this.lerp(b, step * i).round());
     }
     return results;
   }

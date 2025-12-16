@@ -5,6 +5,7 @@ import PieceRenderer from "./PieceRenderer";
 import ControlPanel from "./ControlPanel";
 import PlayerHUD from "./PlayerHUD";
 import VictoryOverlay from "./VictoryOverlay";
+import { startingLayout, startingBoard } from "../ConstantImports";
 import "../css/Board.css";
 
 /**
@@ -31,6 +32,7 @@ const GameBoard = () => {
     victoryMessage,
     winner,
     isRecruitmentSpot,
+    moveHistory,
 
     // Actions
     handlePass,
@@ -60,6 +62,7 @@ const GameBoard = () => {
         onToggleCoordinates={toggleCoordinates}
         onTakeback={handleTakeback}
         onFlipBoard={handleFlipBoard}
+        moveHistory={moveHistory || []}
       />
       
       <PlayerHUD 
@@ -92,12 +95,15 @@ const GameBoard = () => {
           isAdjacentToControlledCastle={isRecruitmentSpot}
           onHexClick={handleHexClick}
           resizeVersion={resizeVersion}
+          layout={startingLayout}
+          board={startingBoard}
         />
         <PieceRenderer
           pieces={pieces}
           isBoardRotated={isBoardRotated}
           onPieceClick={handlePieceClick}
           resizeVersion={resizeVersion}
+          layout={startingLayout}
         />
       </svg>
 

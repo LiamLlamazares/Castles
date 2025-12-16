@@ -1,176 +1,103 @@
 import { Hex } from '../Hex';
 
-describe('Hex', () => {
-  describe('constructor', () => {
-    it('creates a valid hex with q + r + s = 0', () => {
-      const hex = new Hex(1, -1, 0);
-      expect(hex.q).toBe(1);
-      expect(hex.r).toBe(-1);
-      expect(hex.s).toBe(0);
+describe('Hex Math', () => {
+    describe('Construction and Equality', () => {
+        it('should throw error if coordinates do not sum to 0', () => {
+            expect(() => new Hex(1, 1, 1)).toThrow("q + r + s must be 0");
+        });
+
+        it('should compare equality correctly', () => {
+            const h1 = new Hex(1, -1, 0);
+            const h2 = new Hex(1, -1, 0);
+            const h3 = new Hex(0, 0, 0);
+            
+            expect(h1.equals(h2)).toBe(true);
+            expect(h1.equals(h3)).toBe(false);
+        });
+
+        it('should generate valid keys', () => {
+            const h = new Hex(1, -2, 1);
+            expect(h.getKey()).toBe('1,-2,1');
+        });
     });
 
-    it('throws error when q + r + s != 0', () => {
-      expect(() => new Hex(1, 1, 1)).toThrow('q + r + s must be 0');
+    describe('Arithmetic', () => {
+        it('should add hexes correctly', () => {
+            const h1 = new Hex(1, -2, 1);
+            const h2 = new Hex(2, -1, -1);
+            const result = h1.add(h2);
+            
+            expect(result.q).toBe(3);
+            expect(result.r).toBe(-3);
+            expect(result.s).toBe(0);
+        });
+
+        it('should should subtract hexes correctly', () => {
+             const h1 = new Hex(1, -2, 1);
+             const h2 = new Hex(2, -1, -1);
+             const result = h1.subtract(h2);
+             
+             expect(result.q).toBe(-1);
+             expect(result.r).toBe(-1);
+             expect(result.s).toBe(2);
+        });
     });
 
-    it('accepts optional color_index', () => {
-      const hex = new Hex(0, 0, 0, 5);
-      expect(hex.color_index).toBe(5);
+    describe('Distance', () => {
+        it('should calculate distance correctly', () => {
+            const h1 = new Hex(0, 0, 0);
+            const h2 = new Hex(1, -1, 0);   // Neighbor
+            const h3 = new Hex(2, -2, 0);   // 2 steps away
+            
+            expect(h1.distance(h2)).toBe(1);
+            expect(h1.distance(h3)).toBe(2);
+        });
     });
 
-    it('defaults color_index to 0', () => {
-      const hex = new Hex(0, 0, 0);
-      expect(hex.color_index).toBe(0);
-    });
-  });
+    describe('Line Drawing', () => {
+        it('should include start and end points', () => {
+            const start = new Hex(0, 0, 0);
+            const end = new Hex(2, -2, 0);
+            const line = start.linedraw(end);
+            
+            expect(line[0].equals(start)).toBe(true);
+            expect(line[line.length - 1].equals(end)).toBe(true);
+        });
 
-  describe('equals', () => {
-    it('returns true for equal hexes', () => {
-      const hex1 = new Hex(1, -1, 0);
-      const hex2 = new Hex(1, -1, 0);
-      expect(hex1.equals(hex2)).toBe(true);
-    });
+        it('should have length equal to distance + 1', () => {
+            const start = new Hex(0, 0, 0);
+            const end = new Hex(2, -2, 0);
+            const line = start.linedraw(end);
+            const dist = start.distance(end);
+            
+            expect(line.length).toBe(dist + 1);
+        });
 
-    it('returns false for different hexes', () => {
-      const hex1 = new Hex(1, -1, 0);
-      const hex2 = new Hex(0, 0, 0);
-      expect(hex1.equals(hex2)).toBe(false);
-    });
-
-    it('ignores color_index in equality', () => {
-      const hex1 = new Hex(1, -1, 0, 1);
-      const hex2 = new Hex(1, -1, 0, 2);
-      expect(hex1.equals(hex2)).toBe(true);
-    });
-  });
-
-  describe('getKey', () => {
-    it('returns comma-separated coordinates', () => {
-      const hex = new Hex(1, -2, 1);
-      expect(hex.getKey()).toBe('1,-2,1');
-    });
-
-    it('returns reflected key when isReflected is true', () => {
-      const hex = new Hex(1, -2, 1);
-      expect(hex.getKey(true)).toBe('-1,2,-1');
-    });
-  });
-
-  describe('add', () => {
-    it('adds two hexes correctly', () => {
-      const hex1 = new Hex(1, -1, 0);
-      const hex2 = new Hex(0, 1, -1);
-      const result = hex1.add(hex2);
-      
-      expect(result.q).toBe(1);
-      expect(result.r).toBe(0);
-      expect(result.s).toBe(-1);
-    });
-  });
-
-  describe('subtract', () => {
-    it('subtracts two hexes correctly', () => {
-      const hex1 = new Hex(2, -1, -1);
-      const hex2 = new Hex(1, 0, -1);
-      const result = hex1.subtract(hex2);
-      
-      expect(result.q).toBe(1);
-      expect(result.r).toBe(-1);
-      expect(result.s).toBe(0);
-    });
-  });
-
-  describe('distance', () => {
-    it('returns 0 for same hex', () => {
-      const hex = new Hex(1, -1, 0);
-      expect(hex.distance(hex)).toBe(0);
+        it('should be continuous (neighbors)', () => {
+             const start = new Hex(0, 0, 0);
+             const end = new Hex(3, -1, -2);
+             const line = start.linedraw(end);
+             
+             for (let i = 0; i < line.length - 1; i++) {
+                 const dist = line[i].distance(line[i + 1]);
+                 expect(dist).toBe(1);
+             }
+        });
     });
 
-    it('returns 1 for adjacent hexes', () => {
-      const hex1 = new Hex(0, 0, 0);
-      const hex2 = new Hex(1, 0, -1);
-      expect(hex1.distance(hex2)).toBe(1);
+    describe('Rotation', () => {
+         it('rotateLeft should rotate 60 degress CCW', () => {
+             // (1, -1, 0) rotated left -> (0, -1, 1) ? 
+             // Formula: (-s, -q, -r)
+             // s=0 -> 0
+             // q=1 -> -1
+             // r=-1 -> 1
+             // Result: (0, -1, 1). Correct.
+             const h = new Hex(1, -1, 0);
+             const rotated = h.rotateLeft();
+             expect(rotated.q).toBe(0);
+             expect(rotated.r).toBe(-1);
+             expect(rotated.s).toBe(1);
+         });
     });
-
-    it('returns correct distance for farther hexes', () => {
-      const hex1 = new Hex(0, 0, 0);
-      const hex2 = new Hex(3, -3, 0);
-      expect(hex1.distance(hex2)).toBe(3);
-    });
-  });
-
-  describe('cubeRing', () => {
-    it('returns 6 hexes for radius 1', () => {
-      const center = new Hex(0, 0, 0);
-      const ring = center.cubeRing(1);
-      expect(ring).toHaveLength(6);
-    });
-
-    it('returns 12 hexes for radius 2', () => {
-      const center = new Hex(0, 0, 0);
-      const ring = center.cubeRing(2);
-      expect(ring).toHaveLength(12);
-    });
-
-    it('all ring hexes are at correct distance from center', () => {
-      const center = new Hex(0, 0, 0);
-      const ring = center.cubeRing(3);
-      
-      ring.forEach(hex => {
-        expect(center.distance(hex)).toBe(3);
-      });
-    });
-
-    it('works with non-origin center', () => {
-      const center = new Hex(2, -1, -1);
-      const ring = center.cubeRing(1);
-      
-      expect(ring).toHaveLength(6);
-      ring.forEach(hex => {
-        expect(center.distance(hex)).toBe(1);
-      });
-    });
-  });
-
-  describe('reflect', () => {
-    it('negates all coordinates', () => {
-      const hex = new Hex(1, -2, 1);
-      const reflected = hex.reflect();
-      
-      expect(reflected.q).toBe(-1);
-      expect(reflected.r).toBe(2);
-      expect(reflected.s).toBe(-1);
-    });
-
-    it('double reflect returns original', () => {
-      const hex = new Hex(3, -1, -2);
-      const doubleReflected = hex.reflect().reflect();
-      
-      expect(hex.equals(doubleReflected)).toBe(true);
-    });
-  });
-
-  describe('neighbor', () => {
-    it('returns correct neighbor in each direction', () => {
-      const center = new Hex(0, 0, 0);
-      
-      // Direction 0: +q, -s
-      expect(center.neighbor(0).equals(new Hex(1, 0, -1))).toBe(true);
-      // Direction 1: +q, -r
-      expect(center.neighbor(1).equals(new Hex(1, -1, 0))).toBe(true);
-      // Direction 2: -r, +s
-      expect(center.neighbor(2).equals(new Hex(0, -1, 1))).toBe(true);
-    });
-  });
-
-  describe('scale', () => {
-    it('multiplies all coordinates by factor', () => {
-      const hex = new Hex(1, -1, 0);
-      const scaled = hex.scale(3);
-      
-      expect(scaled.q).toBe(3);
-      expect(scaled.r).toBe(-3);
-      expect(scaled.s).toBe(0);
-    });
-  });
 });

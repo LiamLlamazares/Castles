@@ -7,20 +7,24 @@ import {
   TurnPhase,
   Color,
   HistoryEntry,
+  MoveRecord,
 } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
 
 // Create game engine instance (stable reference)
-const gameEngine = new GameEngine(startingBoard);
+// const gameEngine = new GameEngine(startingBoard);
 
-export interface GameBoardState extends GameState {
+export interface GameBoardState extends Omit<GameState, 'moveHistory'> {
   showCoordinates: boolean;
   cheatMode: boolean;
   isBoardRotated: boolean;
   resizeVersion: number;
+  moveHistory: MoveRecord[];
 }
 
 export const useGameLogic = () => {
+  // Create game engine instance (stable reference)
+  const gameEngine = useMemo(() => new GameEngine(startingBoard), []);
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>({
     history: [],
@@ -32,9 +36,10 @@ export const useGameLogic = () => {
     cheatMode: false,
     isBoardRotated: false,
     resizeVersion: 0,
+    moveHistory: [],
   });
 
-  const { pieces, castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated, resizeVersion } = state;
+  const { pieces, castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated, resizeVersion, moveHistory } = state;
 
   // =========== COMPUTED VALUES (useMemo) ===========
   
@@ -111,12 +116,13 @@ export const useGameLogic = () => {
       pieces: pieces.map((p) => p.clone()),
       castles: castles.map((c) => c.clone()),
       turnCounter: turnCounter,
+      moveNotation: moveHistory,
     };
     setState(prev => ({
       ...prev,
       history: [...prev.history, currentState]
     }));
-  }, [pieces, castles, turnCounter]);
+  }, [pieces, castles, turnCounter, moveHistory]);
 
   const handlePass = useCallback(() => {
     saveHistory();
@@ -274,6 +280,8 @@ export const useGameLogic = () => {
     victoryMessage,
     winner,
     isRecruitmentSpot,
+    board: gameEngine.board,
+    moveHistory: moveHistory,
 
     // Actions
     handlePass,

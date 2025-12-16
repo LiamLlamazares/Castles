@@ -4,7 +4,8 @@
  */
 import ChessClock from "./Clock";
 import TurnBanner from "./Turn_banner";
-import { TurnPhase, Color, STARTING_TIME } from "../Constants";
+import HistoryTable from "./HistoryTable";
+import { TurnPhase, Color, STARTING_TIME, MoveRecord } from "../Constants";
 
 interface ControlPanelProps {
   currentPlayer: Color;
@@ -13,6 +14,7 @@ interface ControlPanelProps {
   onToggleCoordinates: () => void;
   onTakeback: () => void;
   onFlipBoard: () => void;
+  moveHistory: MoveRecord[];
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -22,6 +24,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onToggleCoordinates,
   onTakeback,
   onFlipBoard,
+  moveHistory,
 }) => {
   return (
     <div className="sidebar">
@@ -39,6 +42,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <button className="game-button" onClick={onFlipBoard} title="Flip Board (R)">
           Flip Board (R)
         </button>
+      </div>
+      
+      {/* Move History */}
+      <div className="sidebar-section move-history">
+          <h3>Move History</h3>
+          <HistoryTable moveHistory={moveHistory} currentPlayer={currentPlayer} />
       </div>
     </div>
   );

@@ -14,23 +14,25 @@ interface PieceRendererProps {
   isBoardRotated: boolean;
   onPieceClick: (piece: Piece) => void;
   resizeVersion: number;
+  layout: any;
 }
 
 /** Get the pixel center of a piece */
-const getPieceCenter = (piece: Piece, isBoardRotated: boolean): Point => {
-  return startingLayout.hexCenters[piece.hex.getKey(isBoardRotated)];
+const getPieceCenter = (piece: Piece, isBoardRotated: boolean, layout: any): Point => {
+  return layout.hexCenters[piece.hex.getKey(isBoardRotated)];
 };
 
 const PieceRenderer = React.memo(({
   pieces,
   isBoardRotated,
   onPieceClick,
+  layout
 }: PieceRendererProps) => {
-  const pieceSize = startingLayout.size_image;
+  const pieceSize = layout.size_image;
   return (
     <>
       {pieces.map((piece: Piece) => {
-        const center = getPieceCenter(piece, isBoardRotated);
+        const center = getPieceCenter(piece, isBoardRotated, layout);
         return (
           <image
             key={piece.hex.getKey()}
