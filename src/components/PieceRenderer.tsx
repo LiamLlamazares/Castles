@@ -5,7 +5,7 @@
 import React from "react";
 import { Piece } from "../Classes/Piece";
 import { Point } from "../Classes/Hex";
-import { N_SQUARES, PIECE_IMAGE_SIZE, PIECE_IMAGE_OFFSET } from "../Constants";
+import { N_SQUARES } from "../Constants";
 import { startingBoard } from "../ConstantImports";
 import { getImageByPieceType } from "./PieceImages";
 
@@ -25,6 +25,7 @@ const PieceRenderer = React.memo(({
   isBoardRotated,
   onPieceClick,
 }: PieceRendererProps) => {
+  const pieceSize = startingBoard.size_image;
   return (
     <>
       {pieces.map((piece: Piece) => {
@@ -33,10 +34,10 @@ const PieceRenderer = React.memo(({
           <image
             key={piece.hex.getKey()}
             href={getImageByPieceType(piece.type, piece.color)}
-            x={center.x - PIECE_IMAGE_OFFSET / N_SQUARES}
-            y={center.y - PIECE_IMAGE_OFFSET / N_SQUARES}
-            height={PIECE_IMAGE_SIZE / N_SQUARES}
-            width={PIECE_IMAGE_SIZE / N_SQUARES}
+            x={center.x - pieceSize / 2}
+            y={center.y - pieceSize / 2}
+            height={pieceSize}
+            width={pieceSize}
             className="piece"
             onClick={() => onPieceClick(piece)}
           />

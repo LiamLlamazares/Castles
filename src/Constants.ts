@@ -1,8 +1,37 @@
 //Size of board
 export const N_SQUARES = 8;
-export const HEX_SIZE_FACTOR = 3.0; // Zoomed in
+
+/**
+ * ZOOM LEVEL (Smaller number = Larger Board)
+ * 3.0 = Very Large (Maximized)
+ * 3.2 = Balanced
+ * 3.8 = Small
+ */
+export const HEX_SIZE_FACTOR = 3.2;
+
+/**
+ * HORIZONTAL OFFSET (Pixels)
+ * Negative = Shift Left (closer to sidebar)
+ * Positive = Shift Right
+ * 0 = Just next to sidebar
+ */
 export const X_OFFSET = -50;
-export const Y_OFFSET = 70; // Top padding
+
+/**
+ * VERTICAL OFFSET (Pixels)
+ * Positive = Shift Down (creates top padding)
+ * Negative = Shift Up
+ */
+export const Y_OFFSET = 70;
+
+/**
+ * PIECE SIZE SCALAR
+ * Multiplier for piece image size relative to hex size.
+ * 1.0 = Bounds match hex flat-to-flat width approx.
+ * 1.5 = Large pieces (overflow hex slightly)
+ */
+export const PIECE_SCALE_FACTOR = 1.35;
+
 export const LAYOUT_TYPE = "flat";
 export const COLORS = ["w", "b"] as const;
 

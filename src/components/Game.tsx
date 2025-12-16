@@ -298,8 +298,9 @@ const GameBoard = () => {
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleResize);
-    // Initial resize call
-    startingBoard.updateDimensions(window.innerWidth - 200, window.innerHeight);
+    
+    // Initial resize to set correct dimensions immediately
+    handleResize();
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);

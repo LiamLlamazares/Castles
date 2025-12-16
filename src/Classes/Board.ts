@@ -1,5 +1,6 @@
 import { Hex, Layout, generateHexagons, Point } from './Hex';
-import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE } from '../Constants';
+import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../Constants';
+
 import { Castle } from './Castle';
 
 /**
@@ -166,6 +167,14 @@ export class Board {
   /** Size of each hex in pixels (width and height are equal for regular hexagons) */
   get size_hexes(): number {
     return Math.min(this.pixelWidth, this.pixelHeight) / (this.HEX_SIZE_FACTOR * this.NSquares);
+  }
+
+  /**
+   * Optimal size for piece images based on hex size.
+   * Scales dynamically with board zoom.
+   */
+  get size_image(): number {
+    return this.size_hexes * PIECE_SCALE_FACTOR;
   }
 
   /** Size as a Point for Layout constructor */
