@@ -299,7 +299,7 @@ export class GameEngine {
         turnCounter: newTurnCounter
     };
     
-    if (state.turnCounter % 5 === 1) {
+    if (state.turnCounter % PHASE_CYCLE_LENGTH === 1) {
        nextState = this.resetTurnFlags(nextState);
     }
 

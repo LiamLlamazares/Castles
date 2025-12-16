@@ -42,39 +42,38 @@ export class Hex {
     return this.q === other.q && this.r === other.r && this.s === other.s;
   }
 
-  /** Returns the CSS class for this hex based on its type (river, castle, etc.) */
+  /** 
+   * Returns the CSS class for this hex based on its type (river, castle, etc.)
+   * Uses Set-based lookups for O(1) performance.
+   */
   public colorClass(
-    riverHexes: Hex[],
-    castleHexes: Hex[],
-    whitecastleHexes: Hex[],
-    blackCastleHexes: Hex[]
+    riverHexSet: Set<string>,
+    castleHexSet: Set<string>,
+    whitecastleHexSet: Set<string>,
+    blackCastleHexSet: Set<string>,
+    highGroundHexSet: Set<string>
   ): string {
-    const hexisaRiver = riverHexes.some((riverHex) => this.equals(riverHex));
-    const hexisaCastle = castleHexes.some((castleHex) =>
-      this.equals(castleHex)
-    );
-    const hexisWhiteCastle = whitecastleHexes.some((whitecastleHex) =>
-      this.equals(whitecastleHex)
-    );
-    const hexisBlackCastle = blackCastleHexes.some((blackCastleHex) =>
-      this.equals(blackCastleHex)
-    );
-    const hexisHighGround = highGroundHexes.some((highGroundHex) =>
-      this.equals(highGroundHex)
-    );
+    const key = this.getKey();
+    const isRiver = riverHexSet.has(key);
+    const isCastle = castleHexSet.has(key);
+    const isWhiteCastle = whitecastleHexSet.has(key);
+    const isBlackCastle = blackCastleHexSet.has(key);
+    const isHighGround = highGroundHexSet.has(key);
+    
     let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
       ((this.color_index % 3) + 3) % 3
     ];
-    if (hexisHighGround) {
+    
+    if (isHighGround) {
       colorClass += " hexagon-high-ground";
     }
-    if (hexisaRiver) {
+    if (isRiver) {
       colorClass = "hexagon-river";
-    } else if (hexisWhiteCastle) {
+    } else if (isWhiteCastle) {
       colorClass = "hexagon-white-castle";
-    } else if (hexisBlackCastle) {
+    } else if (isBlackCastle) {
       colorClass = "hexagon-black-castle";
-    } else if (hexisaCastle) {
+    } else if (isCastle) {
       colorClass = "hexagon-castle";
     }
     return colorClass;

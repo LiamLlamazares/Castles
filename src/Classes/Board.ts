@@ -1,5 +1,4 @@
 import { Hex, Layout, generateHexagons, Point } from './Hex';
-import { Piece } from './Piece';
 import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, LAYOUT_TYPE } from '../Constants';
 import { Castle } from './Castle';
 
@@ -16,8 +15,8 @@ import { Castle } from './Castle';
  * and converts to pixel coordinates for rendering.
  */
 export class Board {
-  /** All pieces currently on the board */
-  public pieces: Piece[];
+  /** Cached castle objects (computed once) */
+  private _castles: Castle[] | null = null;
   
   /** Board size (number of hexes from center to edge) */
   public NSquares: number;
@@ -52,6 +51,23 @@ export class Board {
   /** Hexes providing high ground advantage (extended ranged attack range) */
   public highGroundHexes: Hex[];
   
+  // --- O(1) lookup Sets (precomputed from arrays above) ---
+  
+  /** Set of river hex keys for O(1) membership testing */
+  public riverHexSet: Set<string>;
+  
+  /** Set of all castle hex keys for O(1) membership testing */
+  public castleHexSet: Set<string>;
+  
+  /** Set of white castle hex keys */
+  public whiteCastleHexSet: Set<string>;
+  
+  /** Set of black castle hex keys */
+  public blackCastleHexSet: Set<string>;
+  
+  /** Set of high ground hex keys */
+  public highGroundHexSet: Set<string>;
+  
   /** Precomputed CSS class for each hex (for rendering) */
   public colorClassMap: { [key: string]: string };
   
@@ -68,13 +84,11 @@ export class Board {
   public pixelHeight: number;
 
   constructor(
-    pieces: Piece[],
     NSquares: number = N_SQUARES,
     HEX_SIZE_FACTOR_ARG: number = HEX_SIZE_FACTOR,
     X_OFFSET_ARG: number = X_OFFSET,
     layoutType: "flat" | "pointy" = LAYOUT_TYPE as "flat" | "pointy"
   ) {
-    this.pieces = pieces;
     this.NSquares = NSquares;
     this.hexes = generateHexagons(this.NSquares);
     this.HEX_SIZE_FACTOR = HEX_SIZE_FACTOR_ARG;
@@ -94,14 +108,22 @@ export class Board {
     this.blackCastleHexes = this.castleHexes.filter((hex) => this.isBlackCastle(hex));
     this.highGroundHexes = this.hexes.filter((hex) => this.isCastle(hex, this.NSquares - 2));
 
-    // Precompute CSS classes for each hex
+    // Precompute Sets for O(1) lookups
+    this.riverHexSet = new Set(this.riverHexes.map(h => h.getKey()));
+    this.castleHexSet = new Set(this.castleHexes.map(h => h.getKey()));
+    this.whiteCastleHexSet = new Set(this.whiteCastleHexes.map(h => h.getKey()));
+    this.blackCastleHexSet = new Set(this.blackCastleHexes.map(h => h.getKey()));
+    this.highGroundHexSet = new Set(this.highGroundHexes.map(h => h.getKey()));
+
+    // Precompute CSS classes for each hex (using O(1) Set lookups)
     const colorClassMap: { [key: string]: string } = {};
     this.hexes.forEach((hex) => {
       colorClassMap[hex.getKey()] = hex.colorClass(
-        this.riverHexes,
-        this.castleHexes,
-        this.whiteCastleHexes,
-        this.blackCastleHexes
+        this.riverHexSet,
+        this.castleHexSet,
+        this.whiteCastleHexSet,
+        this.blackCastleHexSet,
+        this.highGroundHexSet
       );
     });
     this.colorClassMap = colorClassMap;
@@ -175,16 +197,17 @@ public isBlackCastle(castleHex: Hex): boolean {
 }
 
 get Castles(): Castle[] {
-  let castles = [];
-  for (let hex of this.whiteCastleHexes) {
-    let castle = new Castle(hex, 'w', 0);
-    castles.push(castle);
+  if (!this._castles) {
+    const castles: Castle[] = [];
+    for (const hex of this.whiteCastleHexes) {
+      castles.push(new Castle(hex, 'w', 0));
+    }
+    for (const hex of this.blackCastleHexes) {
+      castles.push(new Castle(hex, 'b', 0));
+    }
+    this._castles = castles;
   }
-  for (let hex of this.blackCastleHexes) {
-    let castle = new Castle(hex, 'b', 0);
-    castles.push(castle);
-  }
-  return castles;
+  return this._castles;
 }
 
 

@@ -7,7 +7,7 @@ import {
   Color,
   HistoryEntry,
 } from "../Constants";
-import { startingBoard } from "../ConstantImports";
+import { startingBoard, allPieces } from "../ConstantImports";
 import "../css/Board.css";
 
 import { GameEngine } from "../Classes/GameEngine";
@@ -36,7 +36,7 @@ class GameBoard extends Component<{}, GameBoardState> {
 
   state: GameBoardState = {
     history: [],
-    pieces: startingBoard.pieces as Piece[],
+    pieces: allPieces,
     movingPiece: null,
     showCoordinates: false,
     turnCounter: 0,

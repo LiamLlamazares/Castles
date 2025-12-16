@@ -3,7 +3,7 @@
  * Extracted from Game.tsx for better separation of concerns.
  */
 import { Hex, Point } from "../Classes/Hex";
-import { N_SQUARES } from "../Constants";
+import { N_SQUARES, LEGAL_MOVE_DOT_RADIUS } from "../Constants";
 import { startingBoard } from "../ConstantImports";
 
 interface HexGridProps {
@@ -42,7 +42,7 @@ const renderCircle = (
       key={hex.getKey()}
       cx={center.x}
       cy={center.y}
-      r={90 / N_SQUARES}
+      r={LEGAL_MOVE_DOT_RADIUS / N_SQUARES}
       className={className}
       onClick={() => onHexClick(hex)}
     />

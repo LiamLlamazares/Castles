@@ -46,6 +46,11 @@ export const PLAYER_CYCLE_LENGTH = 10; // Full round = 2 players × 5 phases
 export const MOVEMENT_PHASE_END = 2; // turnCounter % 5 < 2 = Movement
 export const ATTACK_PHASE_END = 4; // turnCounter % 5 < 4 = Attack
 
+// Rendering constants (derived from N_SQUARES for consistent scaling)
+export const PIECE_IMAGE_SIZE = 275; // Base size of piece images in pixels
+export const PIECE_IMAGE_OFFSET = 145; // Offset to center piece on hex
+export const LEGAL_MOVE_DOT_RADIUS = 90; // Radius of legal move indicator dots
+
 // History entry type for strict typing
 export interface HistoryEntry {
   pieces: import('./Classes/Piece').Piece[];

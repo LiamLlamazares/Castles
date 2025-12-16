@@ -104,5 +104,8 @@ const allPieces = [
   ...monarchs,
 ];
 
-export const startingBoard = new Board(allPieces, N_SQUARES - 1);
-export const emptyBoard = new Board([], N_SQUARES - 1);
+/** Exported for Game.tsx initial state */
+export { allPieces };
+
+export const startingBoard = new Board(N_SQUARES - 1);
+export const emptyBoard = new Board(N_SQUARES - 1);
