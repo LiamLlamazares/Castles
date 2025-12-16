@@ -168,19 +168,16 @@ export const useGameLogic = () => {
   // =========== INTERACTION HANDLERS ===========
 
   const handlePieceClick = useCallback((pieceClicked: Piece) => {
-    // CASE 1: Deselect currently selected piece
     if (movingPiece === pieceClicked) {
       setState(prev => ({ ...prev, movingPiece: null }));
       return;
     }
 
-    // CASE 2: Switch to different friendly piece
     if (movingPiece && pieceClicked.color === currentPlayer) {
       setState(prev => ({ ...prev, movingPiece: pieceClicked }));
       return;
     }
 
-    // CASE 3: Attack enemy piece
     if (
       movingPiece &&
       turnPhase === "Attack" &&
@@ -195,7 +192,6 @@ export const useGameLogic = () => {
       return;
     }
 
-    // CASE 4: Select own piece (if valid for current phase)
     const canSelectForMovement = turnPhase === "Movement" && pieceClicked.canMove;
     const canSelectForAttack = turnPhase === "Attack" && pieceClicked.canAttack;
     const isOwnPiece = pieceClicked.color === currentPlayer;
@@ -205,12 +201,10 @@ export const useGameLogic = () => {
       return;
     }
 
-    // Default: Invalid click, deselect
     setState(prev => ({ ...prev, movingPiece: null }));
   }, [movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
 
   const handleHexClick = useCallback((hex: Hex) => {
-    // CASE 1: Movement - move piece to empty hex
     if (turnPhase === "Movement" && movingPiece?.canMove) {
       if (isLegalMove(hex)) {
         saveHistory();
@@ -224,7 +218,6 @@ export const useGameLogic = () => {
       return;
     }
 
-    // CASE 2: Attack - attack piece or capture castle
     if (turnPhase === "Attack" && movingPiece?.canAttack) {
       if (isLegalAttack(hex)) {
         saveHistory();
@@ -244,7 +237,6 @@ export const useGameLogic = () => {
       return;
     }
 
-    // CASE 3: Castles phase - recruit new piece
     if (isRecruitmentSpot(hex)) {
       const castle = castles.find(c => c.isAdjacent(hex));
       if (castle) {
@@ -257,9 +249,8 @@ export const useGameLogic = () => {
       }
     }
 
-    // Default: Invalid click, deselect
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory, isRecruitmentSpot]);
+  }, [turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory]);
 
   return {
     // State

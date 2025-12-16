@@ -11,6 +11,16 @@ export class Point {
 }
 
 /**
+ * Helper function to validate that a number is an integer.
+ * Used to enforce integer-only hex coordinates (except during lerp operations).
+ */
+function assertInteger(value: number, name: string): void {
+  if (!Number.isInteger(value)) {
+    throw new Error(`${name} must be an integer, got ${value}`);
+  }
+}
+
+/**
  * Represents a hex position using cube coordinates (q, r, s).
  * 
  * Cube coordinates satisfy the constraint: q + r + s = 0
@@ -32,8 +42,17 @@ export class Hex {
     /** Diagonal position (increases north-westward) */
     public s: number,
     /** Index for checkerboard coloring (0, 1, or 2) */
-    public color_index: number = 0
+    public color_index: number = 0,
+    /** Set to true to allow floating-point coordinates (used internally by lerp) */
+    allowFloat: boolean = false
   ) {
+    // Validate integer coordinates (except when explicitly allowing floats for lerp)
+    if (!allowFloat) {
+      assertInteger(q, 'q');
+      assertInteger(r, 'r');
+      assertInteger(s, 's');
+    }
+    
     if (Math.round(q + r + s) !== 0) throw new Error("q + r + s must be 0");
     // Normalize -0 to 0
     this.q = q === 0 ? 0 : q;
@@ -114,6 +133,17 @@ export class Hex {
     return this.add(Hex.diagonals[direction]);
   }
 
+  /**
+   * Returns the Manhattan distance from the origin to this hex.
+   * 
+   * Formula: (|q| + |r| + |s|) / 2
+   * 
+   * Why divide by 2? In cube coordinates, moving 1 step changes exactly 2 coordinates.
+   * For example, moving from (0,0,0) to (1,-1,0) changes q and r.
+   * The sum |q| + |r| + |s| counts each step twice, so we divide by 2.
+   * 
+   * This is equivalent to the Manhattan distance on a hex grid.
+   */
   public len(): number {
     return (Math.abs(this.q) + Math.abs(this.r) + Math.abs(this.s)) / 2;
   }
@@ -143,7 +173,9 @@ export class Hex {
     return new Hex(
       this.q * (1.0 - t) + b.q * t,
       this.r * (1.0 - t) + b.r * t,
-      this.s * (1.0 - t) + b.s * t
+      this.s * (1.0 - t) + b.s * t,
+      0, // color_index
+      true // allowFloat for intermediate lerp values
     );
   }
 

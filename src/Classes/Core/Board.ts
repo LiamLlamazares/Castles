@@ -98,6 +98,13 @@ export class Board {
   * - RIVER_CROSSING_LENGTH hexes of crossing (passable)
   * - RIVER_SEGMENT_LENGTH hexes of river (impassable)
   * 
+  * Pattern visualization (looking along r=0, varying q):
+  * ```
+  *   q: ...  -4   -3   -2   -1    0    1    2    3    4  ...
+  *        [RIVER][RIVER][CROSS][CROSS][CROSS][CROSS][RIVER][RIVER][CROSS]...
+  * ```
+  * (Pattern repeats every 4 hexes: 2 crossings + 2 river segments)
+  * 
   * Castle hexes at the edges are excluded from the river.
   */
  public isRiver(hex: Hex): boolean {
