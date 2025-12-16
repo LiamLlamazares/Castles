@@ -144,89 +144,107 @@ class GameBoard extends Component<{}, GameBoardState> {
     }
   };
 
-  handlePieceClick = (pieceClicked: Piece) => {
+  /**
+   * Handles clicks on game pieces.
+   * - Clicking own piece: select/deselect for movement or attack
+   * - Clicking enemy piece while attacking: execute attack
+   */
+  handlePieceClick = (pieceClicked: Piece): void => {
     const { movingPiece } = this.state;
-    // Allow to swap the moving piece
+
+    // CASE 1: Deselect currently selected piece
     if (movingPiece === pieceClicked) {
-      //Deselecets piece
       this.setState({ movingPiece: null });
-    } else if (movingPiece && pieceClicked.color === this.currentPlayer) {
-      //Switches selected piece
+      return;
+    }
+
+    // CASE 2: Switch to different friendly piece
+    if (movingPiece && pieceClicked.color === this.currentPlayer) {
       this.setState({ movingPiece: pieceClicked });
       return;
     }
-    //******** PIECE SELECTION LOGIC *******//
-    else if (
-      ((this.turn_phase === "Movement" && pieceClicked.canMove) ||
-        (this.turn_phase === "Attack" &&
-          pieceClicked.color === this.currentPlayer &&
-          pieceClicked.canAttack)) &&
-      pieceClicked.color === this.currentPlayer
-    ) {
-      //Piece is selected
-      this.setState({ movingPiece: pieceClicked });
-    } else {
-      this.setState({ movingPiece: null });
-    } //Illegal move, snap back to original position
 
-    //************ATTACK LOGIC************//
+    // CASE 3: Attack enemy piece
     if (
       movingPiece &&
       this.turn_phase === "Attack" &&
       pieceClicked.color !== this.currentPlayer &&
-      this.legalAttacks.some((attack) => attack.equals(pieceClicked.hex))
+      this.hexisLegalAttack(pieceClicked.hex)
     ) {
       this.saveHistory();
-      // Use GameEngine for attack
       const newState = this.gameEngine.applyAttack(this.state, movingPiece, pieceClicked.hex);
       this.setState(newState);
+      return;
     }
-  }; //*********END OF PIECE CLICK LOGIC********//
 
-  handleHexClick = (hex: Hex) => {
+    // CASE 4: Select own piece (if valid for current phase)
+    const canSelectForMovement = this.turn_phase === "Movement" && pieceClicked.canMove;
+    const canSelectForAttack = this.turn_phase === "Attack" && pieceClicked.canAttack;
+    const isOwnPiece = pieceClicked.color === this.currentPlayer;
+
+    if (isOwnPiece && (canSelectForMovement || canSelectForAttack)) {
+      this.setState({ movingPiece: pieceClicked });
+      return;
+    }
+
+    // Default: Invalid click, deselect
+    this.setState({ movingPiece: null });
+  };
+
+  /**
+   * Handles clicks on empty hexes (or hexes with castles).
+   * - Movement phase: move selected piece to hex
+   * - Attack phase: attack castle on hex
+   * - Castle phase: recruit at hex adjacent to controlled castle
+   */
+  handleHexClick = (hex: Hex): void => {
     const { movingPiece } = this.state;
-    //*****MOVEMENT LOGIC TO HEX**************//
-    if (movingPiece?.canMove && this.turn_phase === "Movement") {
-      if (this.legalMoves.some((move) => move.equals(hex))) {
+
+    // CASE 1: Movement - move piece to empty hex
+    if (this.turn_phase === "Movement" && movingPiece?.canMove) {
+      if (this.hexisLegalMove(hex)) {
         this.saveHistory();
-        // Use GameEngine for move
         const newState = this.gameEngine.applyMove(this.state, movingPiece, hex);
         this.setState(newState);
-      } else {
-        this.setState({ movingPiece: null });
-      } 
-    } //*********END OF MOVEMENT LOGIC************//
-    //Captures castle
-    else if (this.turn_phase === "Attack" && movingPiece?.canAttack) {     
-       if (this.legalAttacks.some((attack) => attack.equals(hex))) {
-           this.saveHistory();
-           // Is it a piece or a castle?
-           const targetPiece = this.state.pieces.find(p => p.hex.equals(hex));
-           if (targetPiece) {
-               const newState = this.gameEngine.applyAttack(this.state, movingPiece, hex);
-               this.setState(newState);
-           } else {
-                // Capturing a castle by moving onto it - uses applyCastleAttack which consumes canAttack flag
-                const newState = this.gameEngine.applyCastleAttack(this.state, movingPiece, hex);
-                this.setState(newState);
-           }
-       } else {
-         this.setState({ movingPiece: null });
-       }
+        return;
+      }
+      this.setState({ movingPiece: null });
+      return;
     }
-    //Adds a piece to clicked adjacent hex (Recruit)
-    else if (this.hexisAdjacentToControlledCastle(hex)) {
-      const castle = this.state.Castles.find((castle) =>
-        castle.isAdjacent(hex)
-      );
+
+    // CASE 2: Attack - attack piece or capture castle
+    if (this.turn_phase === "Attack" && movingPiece?.canAttack) {
+      if (this.hexisLegalAttack(hex)) {
+        this.saveHistory();
+        const targetPiece = this.state.pieces.find(p => p.hex.equals(hex));
+        if (targetPiece) {
+          // Attack enemy piece
+          const newState = this.gameEngine.applyAttack(this.state, movingPiece, hex);
+          this.setState(newState);
+        } else {
+          // Capture castle (move onto it)
+          const newState = this.gameEngine.applyCastleAttack(this.state, movingPiece, hex);
+          this.setState(newState);
+        }
+        return;
+      }
+      this.setState({ movingPiece: null });
+      return;
+    }
+
+    // CASE 3: Castles phase - recruit new piece
+    if (this.hexisAdjacentToControlledCastle(hex)) {
+      const castle = this.state.Castles.find(c => c.isAdjacent(hex));
       if (castle) {
         this.saveHistory();
         const newState = this.gameEngine.recruitPiece(this.state, castle, hex);
         this.setState(newState);
+        return;
       }
-    } else {
-      this.setState({ movingPiece: null });
-    } //Illegal move, snap back to original position
+    }
+
+    // Default: Invalid click, deselect
+    this.setState({ movingPiece: null });
   };
 
   handleResize = () => {

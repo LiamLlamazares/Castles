@@ -1,19 +1,49 @@
 /**
  * Starting board configuration.
  * Defines initial piece positions and creates the game board.
+ * 
+ * COORDINATE SYSTEM:
+ * Uses cube coordinates (q, r, s) where q + r + s = 0.
+ * - q: increases eastward (right)
+ * - r: increases south-westward (down-left, towards white's side)
+ * - s: -q - r (derived)
+ * 
+ * PIECE PLACEMENT STRATEGY:
+ * - White pieces have positive r values (southern half of board)
+ * - Black pieces are mirrored: (-q, -r, -s) of white's position
+ * - Most piece positions are relative to N_SQUARES (board radius)
+ * 
+ * VISUAL LAYOUT (n=8, white's perspective):
+ * 
+ *         (Black's side, r < 0)
+ *              ___
+ *          ___/   \___
+ *         /   \___/   \
+ *         \___/   \___/
+ *         /   \___/   \
+ *         \___/   \___/    ← River (r = 0)
+ *         /   \___/   \
+ *         \___/   \___/
+ *         /   \___/   \
+ *              \___/
+ *         (White's side, r > 0)
  */
 import { Hex } from "./Classes/Hex";
 import { Piece } from "./Classes/Piece";
 import { Board } from "./Classes/Board";
 import { N_SQUARES, PieceType, Color } from "./Constants";
 
-// =========== PIECE GENERATION ===========
+// =========== PIECE GENERATION HELPERS ===========
 
+/** Small boards (≤6) have different piece positions for better playability */
 const IS_SMALL_BOARD = N_SQUARES <= 6;
 
 /**
  * Creates a piece for white at the given coordinates,
  * and its mirrored counterpart for black.
+ * 
+ * The mirroring reflects through the origin: (q, r, s) → (-q, -r, -s)
+ * This places black's pieces on the opposite side of the board.
  */
 function createMirroredPair(type: PieceType, q: number, r: number, s: number): Piece[] {
   return [
@@ -24,6 +54,16 @@ function createMirroredPair(type: PieceType, q: number, r: number, s: number): P
 
 /**
  * Creates pieces along a line from start coordinates.
+ * 
+ * @param type - Type of piece to create
+ * @param count - Number of pieces in the line
+ * @param startQ - Starting q coordinate
+ * @param startR - Starting r coordinate  
+ * @param deltaQ - Change in q per step
+ * @param deltaR - Change in r per step
+ * 
+ * Example: createLine(Swordsman, 3, 0, 1, -1, 1) creates swordsmen at:
+ *   (0, 1, -1), (-1, 2, -1), (-2, 3, -1)
  */
 function createLine(
   type: PieceType,
@@ -44,8 +84,9 @@ function createLine(
 }
 
 // =========== PIECE CONFIGURATIONS ===========
+// n = N_SQUARES = board radius (8 for standard board)
 
-const n = N_SQUARES; // Shorthand
+const n = N_SQUARES;
 
 // Swordsmen: two lines of pawns
 const swordsmen = [
