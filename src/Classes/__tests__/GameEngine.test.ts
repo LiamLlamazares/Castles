@@ -2,6 +2,7 @@ import { GameEngine } from '../GameEngine';
 import { Board } from '../Board';
 import { Piece } from '../Piece';
 import { Hex } from '../Hex';
+import { Castle } from '../Castle';
 import { PieceType, Color } from '../../Constants';
 
 // Create a minimal board for testing
@@ -143,7 +144,7 @@ describe('GameEngine', () => {
       const spawnHex = new Hex(0, -5, 5);  // Adjacent
       
       // Create a castle owned by white
-      const castle = new import('../../Classes/Castle').Castle(castleHex, 'w', 0);
+      const castle = new Castle(castleHex, 'w', 0);
       castle.owner = 'w';
       
       const pieces: Piece[] = [];
@@ -172,6 +173,91 @@ describe('GameEngine', () => {
       // Check turn counter incremented
       // With 1 castle used and no others, it should advance
       expect(newState.turnCounter).toBeGreaterThan(4);
+    });
+  });
+
+  describe('getRecruitmentHexes', () => {
+    it('returns empty array if no castles controlled', () => {
+      const pieces: Piece[] = [];
+      const castles: Castle[] = []; // No castles
+      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      expect(recruitHexes).toEqual([]);
+    });
+
+    it('returns empty array if only starting castles held', () => {
+      const castleHex = new Hex(0, -6, 6); 
+      // Starting castle: Owner 'w' matches Color 'w'
+      const castle = new Castle(castleHex, 'w', 0); 
+      castle.owner = 'w';
+
+      const castles = [castle];
+      const pieces: Piece[] = [];
+
+      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      expect(recruitHexes).toEqual([]);
+    });
+
+    it('returns adjacent hexes to CAPTURED castle', () => {
+      // Setup a castle far from edges/river to ensure all 6 neighbors valid
+      const castleHex = new Hex(0, -6, 6); 
+      // Captured castle: Color 'b' (originally black), Owner 'w' (now white)
+      const castle = new Castle(castleHex, 'b', 0); 
+      castle.owner = 'w';
+
+      const castles = [castle];
+      const pieces: Piece[] = [];
+
+      // Turn 4 = Castles phase for White
+      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      
+      const expectedNeighbor = new Hex(0, -5, 5);
+      
+      expect(recruitHexes.length).toBeGreaterThan(0);
+      expect(recruitHexes.some(h => h.equals(expectedNeighbor))).toBe(true);
+    });
+
+    it('excludes occupied hexes', () => {
+      const castleHex = new Hex(0, -6, 6); 
+      const castle = new Castle(castleHex, 'w', 0);
+      castle.owner = 'w';
+
+      const blockingHex = new Hex(0, -5, 5); // Adjacent
+      const blockingPiece = new Piece(blockingHex, 'w', PieceType.Swordsman);
+
+      const castles = [castle];
+      const pieces = [blockingPiece];
+
+      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+
+      // Should NOT contain the blocking hex
+      const hasBlocked = recruitHexes.some(h => h.equals(blockingHex));
+      expect(hasBlocked).toBe(false);
+    });
+
+    it('returns empty if castle used this turn', () => {
+      const castleHex = new Hex(0, -6, 6); 
+      const castle = new Castle(castleHex, 'w', 0);
+      castle.owner = 'w';
+      castle.used_this_turn = true;
+
+      const castles = [castle];
+      const pieces: Piece[] = [];
+
+      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      expect(recruitHexes).toEqual([]);
+    });
+
+    it('returns empty if not Castles phase', () => {
+      const castleHex = new Hex(0, -6, 6); 
+      const castle = new Castle(castleHex, 'w', 0);
+      castle.owner = 'w';
+
+      const castles = [castle];
+      const pieces: Piece[] = [];
+
+      // Turn 0 = Movement phase
+      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 0);
+      expect(recruitHexes).toEqual([]);
     });
   });
 });

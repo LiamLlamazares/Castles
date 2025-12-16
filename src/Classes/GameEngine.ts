@@ -118,7 +118,7 @@ export class GameEngine {
     // Enemy melee pieces "defend" all hexes they can attack
     // We pass the Set of ALL board hexes because they threaten everything around them
     return enemyMeleePieces
-      .flatMap((piece) => piece.legalAttacks(this.board.hexSet));
+      .flatMap((piece) => piece.legalAttacks(this.board.hexSet, this.board.highGroundHexSet));
   }
 
   // This method calculates legal moves for a specific piece
@@ -142,13 +142,13 @@ export class GameEngine {
           if (piece.AttackType === AttackType.Ranged) {
               const defended = this.getDefendedHexes(pieces, currentPlayer);
               return piece
-                .legalAttacks(attackableSet)
+                .legalAttacks(attackableSet, this.board.highGroundHexSet)
                 .filter(
                   (hex) =>
                     !defended.some((defendedHex) => defendedHex.equals(hex))
                 );
           }
-          return piece.legalAttacks(attackableSet);
+          return piece.legalAttacks(attackableSet, this.board.highGroundHexSet);
       }
       return [];
   }
@@ -169,7 +169,7 @@ export class GameEngine {
     return pieces
       .filter((piece) => piece.color === currentPlayer && piece.canAttack)
       .flatMap((piece) => {
-        const attacks = piece.legalAttacks(attackableSet);
+        const attacks = piece.legalAttacks(attackableSet, this.board.highGroundHexSet);
         
         // Ranged pieces can't attack defended hexes
         if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {
@@ -179,15 +179,8 @@ export class GameEngine {
       });
   }
 
-  public castleIsControlledByActivePlayer(castle: Castle, pieces: Piece[], currentPlayer: Color): boolean {
-    const piece = pieces.find((piece) =>
-      piece.hex.equals(castle.hex)
-    );
-    return (
-      !!piece &&
-      piece.color !== castle.color &&
-      castle.color !== currentPlayer
-    );
+  public castleIsControlledByActivePlayer(castle: Castle, _pieces: Piece[], currentPlayer: Color): boolean {
+    return castle.owner === currentPlayer;
   }
 
   public getControlledCastlesActivePlayer(castles: Castle[], pieces: Piece[], turnCounter: number): Castle[] {
@@ -195,7 +188,10 @@ export class GameEngine {
     const phase = this.getTurnPhase(turnCounter);
     return castles.filter((castle) => {
       if (phase !== "Castles") return false;
-      return this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer);
+      return (
+        this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
+        castle.color !== currentPlayer
+      );
     });
   }
 
@@ -204,8 +200,38 @@ export class GameEngine {
     return castles.filter((castle) => {
       // Logic from Game.tsx: similar to above but without phase check?
       // Game.tsx:191 uses same condition without phase check.
-      return this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer);
+      return (
+        this.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
+        castle.color !== currentPlayer
+      );
     });
+  }
+
+  /**
+   * Returns all hexes where a new piece can be recruited.
+   * Logic: Adjacent to a controlled, unused castle, and not occupied.
+   */
+  public getRecruitmentHexes(pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
+     const occupiedSet = new Set(this.getOccupiedHexes(pieces).map(h => h.getKey()));
+     const controlledCastles = this.getControlledCastlesActivePlayer(castles, pieces, turnCounter);
+     
+     const recruitmentHexes: Hex[] = [];
+     const processedHexKeys = new Set<string>();
+
+     for (const castle of controlledCastles) {
+        if (castle.used_this_turn) continue;
+
+        const adjacentHexes = castle.hex.cubeRing(1);
+        for (const hex of adjacentHexes) {
+           const key = hex.getKey();
+           // Must be a valid board hex, not occupied, and not already added
+           if (this.board.hexSet.has(key) && !occupiedSet.has(key) && !processedHexKeys.has(key)) {
+              recruitmentHexes.push(hex);
+              processedHexKeys.add(key);
+           }
+        }
+     }
+     return recruitmentHexes;
   }
 
   /**

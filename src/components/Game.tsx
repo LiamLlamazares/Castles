@@ -7,7 +7,7 @@ import {
   Color,
   HistoryEntry,
 } from "../Constants";
-import { startingBoard, allPieces } from "../ConstantImports";
+import { startingBoard, allPieces, startingLayout } from "../ConstantImports";
 import "../css/Board.css";
 
 import { GameEngine, GameState } from "../Classes/GameEngine";
@@ -89,15 +89,8 @@ const GameBoard = () => {
   );
 
   const emptyUnusedHexesAdjacentToControlledCastles = useMemo(() => {
-    const occupiedHexes = gameEngine.getOccupiedHexes(pieces);
-    const adjacentHexes = controlledCastlesActivePlayer
-      .filter((castle) => !castle.used_this_turn)
-      .map((castle) => castle.hex.cubeRing(1))
-      .flat(1);
-    return adjacentHexes.filter(
-      (hex) => !occupiedHexes.some((occupiedHex) => occupiedHex.equals(hex))
-    );
-  }, [pieces, controlledCastlesActivePlayer]);
+    return gameEngine.getRecruitmentHexes(pieces, Castles, turnCounter);
+  }, [pieces, Castles, turnCounter]);
 
   // Sets for O(1) lookup in render
   const legalMoveSet = useMemo(
@@ -293,7 +286,7 @@ const GameBoard = () => {
 
   const handleResize = useCallback(() => {
     // Subtract sidebar width (200px) AND Right HUD width (~280px)
-    startingBoard.updateDimensions(window.innerWidth - 480, window.innerHeight);
+    startingLayout.updateDimensions(window.innerWidth - 550, window.innerHeight);
     // Force re-render by incrementing resizeVersion
     setState(prev => ({ ...prev, resizeVersion: prev.resizeVersion + 1 }));
   }, []);

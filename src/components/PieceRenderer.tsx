@@ -6,7 +6,7 @@ import React from "react";
 import { Piece } from "../Classes/Piece";
 import { Point } from "../Classes/Hex";
 import { N_SQUARES } from "../Constants";
-import { startingBoard } from "../ConstantImports";
+import { startingBoard, startingLayout } from "../ConstantImports";
 import { getImageByPieceType } from "./PieceImages";
 
 interface PieceRendererProps {
@@ -18,7 +18,7 @@ interface PieceRendererProps {
 
 /** Get the pixel center of a piece */
 const getPieceCenter = (piece: Piece, isBoardRotated: boolean): Point => {
-  return startingBoard.hexCenters[piece.hex.getKey(isBoardRotated)];
+  return startingLayout.hexCenters[piece.hex.getKey(isBoardRotated)];
 };
 
 const PieceRenderer = React.memo(({
@@ -26,7 +26,7 @@ const PieceRenderer = React.memo(({
   isBoardRotated,
   onPieceClick,
 }: PieceRendererProps) => {
-  const pieceSize = startingBoard.size_image;
+  const pieceSize = startingLayout.size_image;
   return (
     <>
       {pieces.map((piece: Piece) => {

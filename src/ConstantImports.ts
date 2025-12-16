@@ -31,6 +31,7 @@
 import { Hex } from "./Classes/Hex";
 import { Piece } from "./Classes/Piece";
 import { Board } from "./Classes/Board";
+import { LayoutService } from "./Classes/LayoutService";
 import { N_SQUARES, PieceType, Color } from "./Constants";
 
 // =========== PIECE GENERATION HELPERS ===========
@@ -150,3 +151,4 @@ export { allPieces };
 
 export const startingBoard = new Board(N_SQUARES - 1);
 export const emptyBoard = new Board(N_SQUARES - 1);
+export const startingLayout = new LayoutService(startingBoard);

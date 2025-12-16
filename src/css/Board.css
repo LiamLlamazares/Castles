@@ -6,7 +6,7 @@ body {
 
 .board {
     position: relative;
-    width: calc(100vw - 480px); /* Subtract sidebar (200px) + HUD (280px) */
+    width: calc(100vw - 550px); /* Subtract sidebar (200px) + Right margin (350px) */
     height: 100vh; /* Use viewport height for full height */
     margin-left: 200px; /* offset by sidebar width */
     padding: 0;
@@ -170,7 +170,7 @@ body {
 
 .player-hud {
   position: fixed;
-  right: 180px; /* Moved closer to board (was 20px) */
+  right: 40px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;

@@ -6,7 +6,7 @@ import React from "react";
 import { Hex, Point } from "../Classes/Hex";
 import { Castle } from "../Classes/Castle";
 import { N_SQUARES, LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
-import { startingBoard } from "../ConstantImports";
+import { startingBoard, startingLayout } from "../ConstantImports";
 
 interface HexGridProps {
   hexagons: Hex[];
@@ -31,14 +31,14 @@ const getCastleOwnerClass = (hex: Hex, castles: Castle[]): string => {
 
 /** Get the polygon points for a hex */
 const getPolygonPoints = (hex: Hex, isBoardRotated: boolean): string => {
-  return startingBoard.hexCornerString[
+  return startingLayout.hexCornerString[
     hex.reflect().getKey(!isBoardRotated)
   ];
 };
 
 /** Get the pixel center of a hex */
 const getHexCenter = (hex: Hex, isBoardRotated: boolean): Point => {
-  return startingBoard.layout.hexToPixelReflected(hex, isBoardRotated);
+  return startingLayout.layout.hexToPixelReflected(hex, isBoardRotated);
 };
 
 /** Render a circle indicator (for legal moves/attacks) */
@@ -50,7 +50,7 @@ const renderCircle = (
 ): JSX.Element => {
   const center = getHexCenter(hex, isBoardRotated);
   // Dynamic radius based on hex size
-  const radius = startingBoard.size_hexes * LEGAL_MOVE_DOT_SCALE_FACTOR;
+  const radius = startingLayout.size_hexes * LEGAL_MOVE_DOT_SCALE_FACTOR;
   
   return (
     <circle
@@ -74,6 +74,29 @@ const HexGrid = React.memo(({
   isAdjacentToControlledCastle,
   onHexClick,
 }: HexGridProps) => {
+
+  const getHexClass = (hex: Hex): string => {
+      const key = hex.getKey();
+      const isHighGround = startingBoard.highGroundHexSet.has(key);
+      const isRiver = startingBoard.riverHexSet.has(key);
+      const isWhiteCastle = startingBoard.whiteCastleHexSet.has(key);
+      const isBlackCastle = startingBoard.blackCastleHexSet.has(key);
+      const isCastle = startingBoard.castleHexSet.has(key);
+      
+      let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
+        ((hex.color_index % 3) + 3) % 3
+      ];
+      
+      if (isHighGround) colorClass += " hexagon-high-ground";
+      
+      if (isRiver) return "hexagon-river";
+      if (isWhiteCastle) return "hexagon-white-castle";
+      if (isBlackCastle) return "hexagon-black-castle";
+      if (isCastle) return "hexagon-castle"; // Fallback
+      
+      return colorClass;
+  };
+
   return (
     <>
       {/* Render all hexagons */}
@@ -81,14 +104,14 @@ const HexGrid = React.memo(({
         <g key={hex.getKey()}>
           <polygon
             points={getPolygonPoints(hex, isBoardRotated)}
-            className={`${startingBoard.colorClassMap[hex.getKey()]} ${
+            className={`${getHexClass(hex)} ${
               isAdjacentToControlledCastle(hex)
                 ? "hexagon-castle-adjacent"
                 : ""
             } ${getCastleOwnerClass(hex, castles)}`}
             onClick={() => onHexClick(hex)}
             filter={
-              startingBoard.colorClassMap[hex.getKey()] === "hexagon-high-ground"
+              getHexClass(hex).includes("hexagon-high-ground")
                 ? "url(#shadow)"
                 : ""
             }

@@ -42,42 +42,7 @@ export class Hex {
     return this.q === other.q && this.r === other.r && this.s === other.s;
   }
 
-  /** 
-   * Returns the CSS class for this hex based on its type (river, castle, etc.)
-   * Uses Set-based lookups for O(1) performance.
-   */
-  public colorClass(
-    riverHexSet: Set<string>,
-    castleHexSet: Set<string>,
-    whitecastleHexSet: Set<string>,
-    blackCastleHexSet: Set<string>,
-    highGroundHexSet: Set<string>
-  ): string {
-    const key = this.getKey();
-    const isRiver = riverHexSet.has(key);
-    const isCastle = castleHexSet.has(key);
-    const isWhiteCastle = whitecastleHexSet.has(key);
-    const isBlackCastle = blackCastleHexSet.has(key);
-    const isHighGround = highGroundHexSet.has(key);
-    
-    let colorClass = ["hexagon-dark", "hexagon-mid", "hexagon-light"][
-      ((this.color_index % 3) + 3) % 3
-    ];
-    
-    if (isHighGround) {
-      colorClass += " hexagon-high-ground";
-    }
-    if (isRiver) {
-      colorClass = "hexagon-river";
-    } else if (isWhiteCastle) {
-      colorClass = "hexagon-white-castle";
-    } else if (isBlackCastle) {
-      colorClass = "hexagon-black-castle";
-    } else if (isCastle) {
-      colorClass = "hexagon-castle";
-    }
-    return colorClass;
-  }
+
 
   /** Returns a unique string key for this hex (used for Maps/Sets) */
   public getKey(isReflected: Boolean = false): string {
@@ -430,33 +395,4 @@ export class Layout {
   }
 }
 
-// My functions
-export const generateHexagons = (N: number) => {
-  const hexList: Hex[] = [];
-  for (let q = -N; q <= N; q++) {
-    let r1 = Math.max(-N, -q - N);
-    let r2 = Math.min(N, -q + N);
-    let color_index = q >= 1 ? -q : q; // Set color_index to q+1 when q >= 1
-    for (let r = r1; r <= r2; r++) {
-      const s = -q - r;
-      const hex = new Hex(q, r, s);
-      hex.color_index = color_index; // Add color_index as a property
-      hexList.push(hex);
-      color_index = color_index + 1;
-    }
-  }
-  return hexList;
-};
-const initialHighGroundHexes = [
-  new Hex(0, 1, -1),
-  new Hex(-1, 2, -1),
-  new Hex(0, 2, -2),
-  new Hex(1, 1, -2),
-];
-const invertedHighGroundHexes = initialHighGroundHexes.map(
-  (hex) => new Hex(-hex.q, -hex.r, -hex.s)
-);
-export const highGroundHexes = [
-  ...initialHighGroundHexes,
-  ...invertedHighGroundHexes,
-];
+

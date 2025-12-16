@@ -1,4 +1,5 @@
-import { Hex, Layout, generateHexagons, Point } from './Hex';
+import { Hex, Layout, Point } from './Hex';
+import { generateHexagons } from './BoardGeneration';
 import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../Constants';
 
 import { Castle } from './Castle';
@@ -25,20 +26,7 @@ export class Board {
   /** All hexes on the board */
   public hexes: Hex[];
   
-  /** Layout orientation: "flat" or "pointy" */
-  public layoutType: "flat" | "pointy";
-  
-  /** Layout for hex ↔ pixel coordinate transformations */
-  public layout: Layout;
-  
-  /** Sizing factor for hex rendering */
-  public HEX_SIZE_FACTOR: number;
-  
-  /** Vertical offset for board centering */
-  public Y_OFFSET: number;
 
-  /** Horizontal offset for board centering */
-  public X_OFFSET: number;
   
   /** Hexes representing the river (impassable for ground units) */
   public riverHexes: Hex[];
@@ -75,40 +63,15 @@ export class Board {
   /** Set of ALL hex keys on board */
   public hexSet: Set<string>;
   
-  /** Precomputed CSS class for each hex (for rendering) */
-  public colorClassMap: { [key: string]: string };
+
   
-  /** Precomputed pixel center for each hex */
-  public hexCenters: { [key: string]: Point };
-  
-  /** Precomputed SVG polygon points for each hex */
-  public hexCornerString: { [key: string]: string };
-  
-  /** Canvas/viewport width in pixels */
-  public pixelWidth: number;
-  
-  /** Canvas/viewport height in pixels */
-  public pixelHeight: number;
+
 
   constructor(
-    NSquares: number = N_SQUARES,
-    HEX_SIZE_FACTOR_ARG: number = HEX_SIZE_FACTOR,
-    X_OFFSET_ARG: number = X_OFFSET,
-    Y_OFFSET_ARG: number = Y_OFFSET,
-    layoutType: "flat" | "pointy" = LAYOUT_TYPE as "flat" | "pointy"
+    NSquares: number = N_SQUARES
   ) {
     this.NSquares = NSquares;
     this.hexes = generateHexagons(this.NSquares);
-    this.HEX_SIZE_FACTOR = HEX_SIZE_FACTOR_ARG;
-    this.X_OFFSET = X_OFFSET_ARG;
-    this.Y_OFFSET = Y_OFFSET_ARG;
-    this.layoutType = layoutType;
-
-    // Default to standard size, updated by UI later
-    this.pixelWidth = 800;
-    this.pixelHeight = 600;
-
-    this.layout = this.getLayout();
 
     // Precompute special hex classifications (computed once, independent of pixels)
     this.riverHexes = this.hexes.filter((hex) => this.isRiver(hex));
@@ -126,68 +89,6 @@ export class Board {
     
     // Set of ALL valid hexes
     this.hexSet = new Set(this.hexes.map(h => h.getKey()));
-
-    // Precompute CSS classes for each hex (using O(1) Set lookups)
-    const colorClassMap: { [key: string]: string } = {};
-    this.hexes.forEach((hex) => {
-      colorClassMap[hex.getKey()] = hex.colorClass(
-        this.riverHexSet,
-        this.castleHexSet,
-        this.whiteCastleHexSet,
-        this.blackCastleHexSet,
-        this.highGroundHexSet
-      );
-    });
-    this.colorClassMap = colorClassMap;
-
-    // Precompute rendering data (layout-dependent)
-    this.hexCornerString = this.layout.hexCornersStringMap(this.hexes);
-    this.hexCenters = this.layout.hexCentersMap(this.hexes);
-  }
-
-  /**
-   * Updates board dimensions and recomputes all layout-dependent data.
-   * Call this when the viewport/window is resized.
-   */
-  public updateDimensions(width: number, height: number): void {
-    this.pixelWidth = width;
-    this.pixelHeight = height;
-    this.layout = this.getLayout();
-    this.hexCornerString = this.layout.hexCornersStringMap(this.hexes);
-    this.hexCenters = this.layout.hexCentersMap(this.hexes);
-  }
-
-  /** Center point of the board in pixel coordinates */
-  get origin(): Point {
-    const x = this.pixelWidth / 2 + this.X_OFFSET;
-    const y = this.pixelHeight / 2 + this.Y_OFFSET;
-    return new Point(x, y);
-  }
-
-  /** Size of each hex in pixels (width and height are equal for regular hexagons) */
-  get size_hexes(): number {
-    return Math.min(this.pixelWidth, this.pixelHeight) / (this.HEX_SIZE_FACTOR * this.NSquares);
-  }
-
-  /**
-   * Optimal size for piece images based on hex size.
-   * Scales dynamically with board zoom.
-   */
-  get size_image(): number {
-    return this.size_hexes * PIECE_SCALE_FACTOR;
-  }
-
-  /** Size as a Point for Layout constructor */
-  get hexSize(): Point {
-    return new Point(this.size_hexes, this.size_hexes);
-  }
-
-  /** Creates a Layout object based on current settings */
-  getLayout(): Layout {
-    if (this.layoutType === "flat") {
-      return new Layout(Layout.flat, this.hexSize, this.origin);
-    }
-    return new Layout(Layout.pointy, this.hexSize, this.origin);
   }
 
  /**
@@ -268,24 +169,5 @@ get Castles(): Castle[] {
   }
   return this._castles;
 }
-
-
-  getCorners(): string[] {
-    const hexList = this.hexes;
-    const pixels = hexList.map((hex) => this.layout.polygonCorners(hex)
-    .map((p) => `${p.x},${p.y}`)
-    .join(" "));
-    return pixels;
-  }
-
-  get Centers(): Point[] {
-    const hexList = this.hexes;
-    const centers = hexList.map((hex) => this.layout.hexToPixel(hex));
-    return centers;
-  }
-  
-  getHexCenter(hex: Hex): Point {
-    return this.layout.hexToPixel(hex);
-  }
 }
 
