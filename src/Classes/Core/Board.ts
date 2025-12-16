@@ -1,6 +1,6 @@
-import { Hex, Layout, Point } from '../Entities/Hex';
+import { Hex } from '../Entities/Hex';
 import { generateHexagons } from '../Systems/BoardGeneration';
-import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../../Constants';
+import { N_SQUARES} from '../../Constants';
 
 import { Castle } from '../Entities/Castle';
 
@@ -14,7 +14,6 @@ import { Castle } from '../Entities/Castle';
  *   - Castles (strategic capture points at board corners).
  *   - High Ground (terrain buffering ranged attacks).
  * - Provides O(1) lookups via Sets for collision detection and rendering.
- * - Maps logical hex coordinates to screen pixels via `Layout` helper.
  */
 export class Board {
   /** Cached castle objects (computed once) */

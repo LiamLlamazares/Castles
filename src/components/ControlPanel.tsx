@@ -2,10 +2,8 @@
  * ControlPanel component - renders game controls and clocks.
  * Extracted from Game.tsx for better separation of concerns.
  */
-import ChessClock from "./Clock";
-import TurnBanner from "./Turn_banner";
 import HistoryTable from "./HistoryTable";
-import { TurnPhase, Color, STARTING_TIME, MoveRecord } from "../Constants";
+import { TurnPhase, Color,MoveRecord } from "../Constants";
 
 interface ControlPanelProps {
   currentPlayer: Color;

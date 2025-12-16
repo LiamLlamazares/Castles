@@ -18,7 +18,6 @@ const GameBoard = () => {
     // State
     pieces,
     castles,
-    movingPiece,
     showCoordinates,
     isBoardRotated,
     resizeVersion,
