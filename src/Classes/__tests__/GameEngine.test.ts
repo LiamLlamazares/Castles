@@ -260,4 +260,49 @@ describe('GameEngine', () => {
       expect(recruitHexes).toEqual([]);
     });
   });
+
+  describe('getLegalMoves', () => {
+    it('returns valid moves for a piece', () => {
+        const hex = new Hex(0, 0, 0); // Center
+        const piece = new Piece(hex, 'w', PieceType.Archer); // Moves 1 hex
+        const pieces = [piece];
+        const castles: Castle[] = [];
+
+        const moves = gameEngine.getLegalMoves(piece, pieces, castles, 0);
+        
+        // Archer has 6 neighbors, all valid on empty board
+        expect(moves.length).toBe(6);
+    });
+
+    it('returns empty if phase is not Movement', () => {
+        const hex = new Hex(0, 0, 0); 
+        const piece = new Piece(hex, 'w', PieceType.Archer);
+        const pieces = [piece];
+        const castles: Castle[] = [];
+
+        // Turn 2 is Attack phase
+        const moves = gameEngine.getLegalMoves(piece, pieces, castles, 2);
+        expect(moves).toEqual([]);
+    });
+  });
+
+  describe('getLegalAttacks', () => {
+      it('returns valid attacks for a piece', () => {
+          const attackerHex = new Hex(0, 0, 0);
+          // White Swordsman attacks (q+1, r-1, s) or (q-1, r, s+1)
+          // Target (1, -1, 0) is valid.
+          const targetHex = new Hex(1, -1, 0);
+          const attacker = new Piece(attackerHex, 'w', PieceType.Swordsman);
+          const victim = new Piece(targetHex, 'b', PieceType.Archer);
+          
+          const pieces = [attacker, victim];
+          const castles: Castle[] = [];
+          
+          // Turn 2 is Attack phase
+          const attacks = gameEngine.getLegalAttacks(attacker, pieces, castles, 2);
+          
+          expect(attacks.length).toBeGreaterThan(0);
+          expect(attacks.some(h => h.equals(targetHex))).toBe(true);
+      });
+  });
 });
