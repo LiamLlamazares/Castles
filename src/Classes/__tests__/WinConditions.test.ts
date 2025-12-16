@@ -1,8 +1,8 @@
-import { GameEngine } from '../GameEngine';
-import { Board } from '../Board';
-import { Piece } from '../Piece';
-import { Castle } from '../Castle';
-import { Hex } from '../Hex';
+import { GameEngine } from '../Core/GameEngine';
+import { Board } from '../Core/Board';
+import { Piece } from '../Entities/Piece';
+import { Castle } from '../Entities/Castle';
+import { Hex } from '../Entities/Hex';
 import { PieceType } from '../../Constants';
 
 // Create a minimal board for testing

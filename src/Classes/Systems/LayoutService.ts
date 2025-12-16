@@ -1,6 +1,6 @@
-import { Hex, Layout, Point } from './Hex';
-import { Board } from './Board';
-import { HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../Constants';
+import { Hex, Layout, Point } from '../Entities/Hex';
+import { Board } from '../Core/Board';
+import { HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../../Constants';
 
 /**
  * Manages the visual layout and coordinate transformations for the board.

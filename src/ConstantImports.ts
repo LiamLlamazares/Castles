@@ -28,10 +28,10 @@
  *              \___/
  *         (White's side, r > 0)
  */
-import { Hex } from "./Classes/Hex";
-import { Piece } from "./Classes/Piece";
-import { Board } from "./Classes/Board";
-import { LayoutService } from "./Classes/LayoutService";
+import { Hex } from "./Classes/Entities/Hex";
+import { Piece } from "./Classes/Entities/Piece";
+import { Board } from "./Classes/Core/Board";
+import { LayoutService } from "./Classes/Systems/LayoutService";
 import { N_SQUARES, PieceType, Color } from "./Constants";
 
 // =========== PIECE GENERATION HELPERS ===========

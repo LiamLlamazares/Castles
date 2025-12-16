@@ -1,7 +1,7 @@
-import { NotationService } from '../NotationService';
-import { Hex } from '../Hex';
-import { Piece } from '../Piece';
-import { Castle } from '../Castle';
+import { NotationService } from '../Systems/NotationService';
+import { Hex } from '../Entities/Hex';
+import { Piece } from '../Entities/Piece';
+import { Castle } from '../Entities/Castle';
 import { PieceType } from '../../Constants';
 
 describe('NotationService', () => {

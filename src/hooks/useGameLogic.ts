@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
-import { GameEngine, GameState } from "../Classes/GameEngine";
-import { Piece } from "../Classes/Piece";
-import { Castle } from "../Classes/Castle";
-import { Hex } from "../Classes/Hex";
+import { GameEngine, GameState } from "../Classes/Core/GameEngine";
+import { Piece } from "../Classes/Entities/Piece";
+import { Castle } from "../Classes/Entities/Castle";
+import { Hex } from "../Classes/Entities/Hex";
 import {
   TurnPhase,
   Color,

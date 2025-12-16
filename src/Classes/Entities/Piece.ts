@@ -14,7 +14,7 @@ import {
   PieceStrength,
   Color,
   N_SQUARES,
-} from "../Constants";
+} from "../../Constants";
 
 import {
   swordsmanMoves,
@@ -24,14 +24,14 @@ import {
   dragonMoves,
   assassinMoves,
   giantMoves,
-} from "./MoveStrategies";
+} from "../Strategies/MoveStrategies";
 
 import {
   meleeAttacks,
   rangedAttacks,
   longRangedAttacks,
   swordsmanAttacks,
-} from "./AttackStrategies";
+} from "../Strategies/AttackStrategies";
 
 /**
  * A piece on the game board.

@@ -1,5 +1,5 @@
 import { Hex } from "./Hex";
-import { Color } from "../Constants";
+import { Color } from "../../Constants";
 
 /**
  * Represents a castle on the game board.

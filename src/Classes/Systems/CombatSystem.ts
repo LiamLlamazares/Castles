@@ -1,6 +1,6 @@
-import { Piece } from "./Piece";
-import { Hex } from "./Hex";
-import { PieceType, AttackType } from "../Constants";
+import { Piece } from "../Entities/Piece";
+import { Hex } from "../Entities/Hex";
+import { PieceType, AttackType } from "../../Constants";
 
 export interface CombatResult {
   pieces: Piece[];

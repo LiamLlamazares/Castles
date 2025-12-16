@@ -1,4 +1,4 @@
-import { Hex } from '../Hex';
+import { Hex } from '../Entities/Hex';
 
 describe('Hex Math', () => {
     describe('Construction and Equality', () => {

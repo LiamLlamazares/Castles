@@ -93,8 +93,8 @@ export interface MoveRecord {
 }
 
 export interface HistoryEntry {
-  pieces: import('./Classes/Piece').Piece[];
-  castles: import('./Classes/Castle').Castle[];
+  pieces: import('./Classes/Entities/Piece').Piece[];
+  castles: import('./Classes/Entities/Castle').Castle[];
   turnCounter: number;
   moveNotation: MoveRecord[]; // List of all moves made so far
 }

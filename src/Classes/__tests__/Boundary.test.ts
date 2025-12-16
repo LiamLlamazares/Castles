@@ -1,7 +1,7 @@
-import { Board } from '../Board';
-import { GameEngine } from '../GameEngine';
-import { Piece } from '../Piece';
-import { Hex } from '../Hex';
+import { Board } from '../Core/Board';
+import { GameEngine } from '../Core/GameEngine';
+import { Piece } from '../Entities/Piece';
+import { Hex } from '../Entities/Hex';
 import { PieceType, Color } from '../../Constants';
 
 describe('Board Boundary Constraints', () => {

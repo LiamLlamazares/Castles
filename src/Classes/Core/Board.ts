@@ -1,8 +1,8 @@
-import { Hex, Layout, Point } from './Hex';
-import { generateHexagons } from './BoardGeneration';
-import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../Constants';
+import { Hex, Layout, Point } from '../Entities/Hex';
+import { generateHexagons } from '../Systems/BoardGeneration';
+import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../../Constants';
 
-import { Castle } from './Castle';
+import { Castle } from '../Entities/Castle';
 
 /**
  * Manages the topological structure and static data of the game board.

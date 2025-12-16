@@ -1,6 +1,6 @@
-import { LayoutService } from '../LayoutService';
-import { Board } from '../Board';
-import { Hex, Point } from '../Hex';
+import { LayoutService } from '../Systems/LayoutService';
+import { Board } from '../Core/Board';
+import { Hex, Point } from '../Entities/Hex';
 import { N_SQUARES } from '../../Constants';
 
 describe('LayoutService', () => {

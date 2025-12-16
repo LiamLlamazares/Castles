@@ -1,6 +1,6 @@
-import { Piece } from "./Piece";
-import { Castle } from "./Castle";
-import { Color, PieceType } from "../Constants";
+import { Piece } from "../Entities/Piece";
+import { Castle } from "../Entities/Castle";
+import { Color, PieceType } from "../../Constants";
 
 export class WinCondition {
   /**

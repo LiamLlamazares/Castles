@@ -1,5 +1,5 @@
-import { Hex } from "./Hex";
-import { Color } from "../Constants";
+import { Hex } from "../Entities/Hex";
+import { Color } from "../../Constants";
 
 /** Direction vector for hex movement */
 interface HexDirection {

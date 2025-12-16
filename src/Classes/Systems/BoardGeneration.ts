@@ -1,4 +1,4 @@
-import { Hex } from "./Hex";
+import { Hex } from "../Entities/Hex";
 
 export const generateHexagons = (N: number) => {
   const hexList: Hex[] = [];

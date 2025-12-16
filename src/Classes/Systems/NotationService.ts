@@ -1,7 +1,7 @@
-import { Hex, OffsetCoord } from "./Hex";
-import { Piece } from "./Piece";
-import { Castle } from "./Castle";
-import { PieceType } from "../Constants";
+import { Hex, OffsetCoord } from "../Entities/Hex";
+import { Piece } from "../Entities/Piece";
+import { Castle } from "../Entities/Castle";
+import { PieceType } from "../../Constants";
 
 export class NotationService {
     /**

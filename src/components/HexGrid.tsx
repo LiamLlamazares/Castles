@@ -3,10 +3,10 @@
  * Extracted from Game.tsx for better separation of concerns.
  */
 import React from "react";
-import { Hex, Point } from "../Classes/Hex";
-import { Castle } from "../Classes/Castle";
-import { Board } from "../Classes/Board";
-import { LayoutService } from "../Classes/LayoutService";
+import { Hex, Point } from "../Classes/Entities/Hex";
+import { Castle } from "../Classes/Entities/Castle";
+import { Board } from "../Classes/Core/Board";
+import { LayoutService } from "../Classes/Systems/LayoutService";
 import { N_SQUARES, LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
 import { startingBoard, startingLayout } from "../ConstantImports";
 

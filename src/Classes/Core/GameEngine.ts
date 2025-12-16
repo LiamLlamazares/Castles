@@ -1,11 +1,11 @@
-import { Piece } from "./Piece";
-import { Castle } from "./Castle";
-import { NotationService } from "./NotationService";
-import { Hex } from "./Hex";
+import { Piece } from "../Entities/Piece";
+import { Castle } from "../Entities/Castle";
+import { NotationService } from "../Systems/NotationService";
+import { Hex } from "../Entities/Hex";
 import { Board } from "./Board";
 import { TurnManager } from "./TurnManager";
-import { CombatSystem } from "./CombatSystem";
-import { WinCondition } from "./WinCondition";
+import { CombatSystem } from "../Systems/CombatSystem";
+import { WinCondition } from "../Systems/WinCondition";
 import {
   Color,
   AttackType,
@@ -15,7 +15,7 @@ import {
   PHASE_CYCLE_LENGTH,
   MoveRecord,
   HistoryEntry,
-} from "../Constants";
+} from "../../Constants";
 
 /**
  * Represents the complete state of a game at any point.

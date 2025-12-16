@@ -5,7 +5,7 @@ import {
   PLAYER_CYCLE_LENGTH,
   MOVEMENT_PHASE_END,
   ATTACK_PHASE_END,
-} from "../Constants";
+} from "../../Constants";
 
 export class TurnManager {
   /**

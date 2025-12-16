@@ -1,4 +1,4 @@
-import { Hex } from "./Hex";
+import { Hex } from "../Entities/Hex";
 
 /**
  * Helper to check if a target hex is valid for attack.
