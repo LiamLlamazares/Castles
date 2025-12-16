@@ -135,4 +135,43 @@ describe('GameEngine', () => {
       expect(enemyHexes).toHaveLength(0);
     });
   });
+
+  describe('recruitPiece', () => {
+    it('adds a new piece and updates castle', () => {
+      // Mock state
+      const castleHex = new Hex(0, -6, 6); // Mock location
+      const spawnHex = new Hex(0, -5, 5);  // Adjacent
+      
+      // Create a castle owned by white
+      const castle = new import('../../Classes/Castle').Castle(castleHex, 'w', 0);
+      castle.owner = 'w';
+      
+      const pieces: Piece[] = [];
+      const castles = [castle];
+      
+      const state = {
+        pieces,
+        Castles: castles,
+        turnCounter: 4, // Castles phase
+        movingPiece: null,
+        history: [],
+      };
+      
+      const newState = gameEngine.recruitPiece(state, castle, spawnHex);
+      
+      // Check piece added
+      expect(newState.pieces).toHaveLength(1);
+      expect(newState.pieces[0].hex.equals(spawnHex)).toBe(true);
+      expect(newState.pieces[0].type).toBe(PieceType.Swordsman); // Default first piece
+      
+      // Check castle updated
+      const updatedCastle = newState.Castles[0];
+      expect(updatedCastle.used_this_turn).toBe(true);
+      expect(updatedCastle.turns_controlled).toBe(1);
+      
+      // Check turn counter incremented
+      // With 1 castle used and no others, it should advance
+      expect(newState.turnCounter).toBeGreaterThan(4);
+    });
+  });
 });

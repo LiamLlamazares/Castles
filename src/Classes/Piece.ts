@@ -81,13 +81,10 @@ export class Piece {
    * Returns all legal movement destinations for this piece.
    * Delegates to the appropriate move strategy based on piece type.
    * 
-   * @param blockedHexes - Hexes that cannot be moved to (occupied, river, castle)
+   * @param blockedHexSet - Set of hex keys that cannot be moved to (occupied, river, castle)
    * @param color - Color of the moving piece (affects swordsman direction)
    */
-  public legalmoves(blockedHexes: Hex[], color: Color): Hex[] {
-    // Convert to Set for O(1) lookups in move strategies
-    const blockedHexSet = new Set(blockedHexes.map((hex) => hex.getKey()));
-    
+  public legalmoves(blockedHexSet: Set<string>, color: Color): Hex[] {
     switch (this.type) {
       case PieceType.Swordsman:
         return swordsmanMoves(this.hex, blockedHexSet, color);
@@ -111,19 +108,19 @@ export class Piece {
   }
 
   // =========== ATTACK LOGIC ===========
-
+  
   /** Checks if a target hex contains an attackable enemy */
-  private isValidAttack(targetHex: Hex, attackableHexes: Hex[]): boolean {
-    return attackableHexes.some((attackableHex) => attackableHex.equals(targetHex));
+  private isValidAttack(targetHex: Hex, attackableHexSet: Set<string>): boolean {
+    return attackableHexSet.has(targetHex.getKey());
   }
 
   /** Melee attacks: all adjacent hexes (radius 1) */
-  public meleeAttacks(attackableHexes: Hex[]): Hex[] {
+  public meleeAttacks(attackableHexSet: Set<string>): Hex[] {
     const attacks: Hex[] = [];
     const potentialAttacks = this.hex.cubeRing(1);
 
     for (const target of potentialAttacks) {
-      if (this.isValidAttack(target, attackableHexes)) {
+      if (this.isValidAttack(target, attackableHexSet)) {
         attacks.push(target);
       }
     }
@@ -131,7 +128,7 @@ export class Piece {
     return attacks;
   }
   /** Ranged attacks: ring at distance 2 (+3 from high ground) */
-  public rangedAttacks(attackableHexes: Hex[]): Hex[] {
+  public rangedAttacks(attackableHexSet: Set<string>): Hex[] {
     const attacks: Hex[] = [];
     let potentialAttacks = this.hex.cubeRing(2);
     if (highGroundHexes.some((hgHex) => hgHex.equals(this.hex))) {
@@ -139,14 +136,14 @@ export class Piece {
     }
 
     for (const newHex of potentialAttacks) {
-      if (this.isValidAttack(newHex, attackableHexes)) {
+      if (this.isValidAttack(newHex, attackableHexSet)) {
         attacks.push(newHex);
       }
     }
     return attacks;
   }
   /** Long-ranged attacks: ring at distance 3 (+4 from high ground) */
-  public longRangedAttacks(attackableHexes: Hex[]): Hex[] {
+  public longRangedAttacks(attackableHexSet: Set<string>): Hex[] {
     const attacks: Hex[] = [];
     let potentialAttacks = this.hex.cubeRing(3);
     if (highGroundHexes.some((hgHex) => hgHex.equals(this.hex))) {
@@ -154,7 +151,7 @@ export class Piece {
     }
 
     for (const newHex of potentialAttacks) {
-      if (this.isValidAttack(newHex, attackableHexes)) {
+      if (this.isValidAttack(newHex, attackableHexSet)) {
         attacks.push(newHex);
       }
     }
@@ -162,7 +159,7 @@ export class Piece {
   }
 
   /** Swordsman attacks: diagonal-forward only */
-  public swordsmanAttacks(attackableHexes: Hex[]): Hex[] {
+  public swordsmanAttacks(attackableHexSet: Set<string>): Hex[] {
     const attacks: Hex[] = [];
     const { q, r, s } = this.hex;
     const direction = this.color === "b" ? -1 : 1;
@@ -174,7 +171,7 @@ export class Piece {
 
     for (const dir of attackDirections) {
       const newHex = new Hex(q + dir.q, r + dir.r, s + dir.s);
-      if (attackableHexes.some((attackableHex) => attackableHex.equals(newHex))) {
+      if (this.isValidAttack(newHex, attackableHexSet)) {
         attacks.push(newHex);
       }
     }
@@ -182,15 +179,15 @@ export class Piece {
   }
 
   /** Returns all legal attacks based on attack type */
-  public legalAttacks(attackableHexes: Hex[]): Hex[] {
+  public legalAttacks(attackableHexSet: Set<string>): Hex[] {
     if (this.AttackType === AttackType.Melee) {
-      return this.meleeAttacks(attackableHexes);
+      return this.meleeAttacks(attackableHexSet);
     } else if (this.AttackType === AttackType.Ranged) {
-      return this.rangedAttacks(attackableHexes);
+      return this.rangedAttacks(attackableHexSet);
     } else if (this.AttackType === AttackType.LongRanged) {
-      return this.longRangedAttacks(attackableHexes);
+      return this.longRangedAttacks(attackableHexSet);
     } else {
-      return this.swordsmanAttacks(attackableHexes);
+      return this.swordsmanAttacks(attackableHexSet);
     }
   }
 

@@ -2,6 +2,7 @@
  * PieceRenderer component - renders all game pieces.
  * Extracted from Game.tsx for better separation of concerns.
  */
+import React from "react";
 import { Piece } from "../Classes/Piece";
 import { Point } from "../Classes/Hex";
 import { N_SQUARES, PIECE_IMAGE_SIZE, PIECE_IMAGE_OFFSET } from "../Constants";
@@ -19,11 +20,11 @@ const getPieceCenter = (piece: Piece, isBoardRotated: boolean): Point => {
   return startingBoard.hexCenters[piece.hex.getKey(isBoardRotated)];
 };
 
-const PieceRenderer: React.FC<PieceRendererProps> = ({
+const PieceRenderer = React.memo(({
   pieces,
   isBoardRotated,
   onPieceClick,
-}) => {
+}: PieceRendererProps) => {
   return (
     <>
       {pieces.map((piece: Piece) => {
@@ -43,6 +44,6 @@ const PieceRenderer: React.FC<PieceRendererProps> = ({
       })}
     </>
   );
-};
+});
 
 export default PieceRenderer;

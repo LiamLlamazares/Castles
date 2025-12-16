@@ -28,16 +28,17 @@ export interface GameState {
 }
 
 /**
- * GameEngine: The "rulebook" for the Castles game.
+ * GameEngine: Central state machine for the Castles game.
  * 
- * Handles all game logic including:
- * - Turn phase determination (Movement → Attack → Castles)
- * - Legal move/attack calculation
- * - State transitions (applying moves, attacks, recruits)
- * - Win condition checking (future: not yet implemented)
+ * Responsibilities:
+ * - Validates logical state transitions (Move, Attack, Recruit).
+ * - Enforces phase cycle (Movement -> Attack -> Castles) and turn order.
+ * - Computes legal actions based on piece capabilities and board topology.
+ * - Determines victory conditions (Monarch Capture, Castle Control).
  * 
- * The engine is stateless - it takes game state as input and returns
- * new state as output, making it easy to test and reason about.
+ * Architecture:
+ * Purely functional core. Takes current `GameState` and action parameters,
+ * returns a new `GameState` without mutation.
  */
 export class GameEngine {
   constructor(public board: Board) {}
@@ -115,16 +116,17 @@ export class GameEngine {
     );
     
     // Enemy melee pieces "defend" all hexes they can attack
+    // We pass the Set of ALL board hexes because they threaten everything around them
     return enemyMeleePieces
-      .flatMap((piece) => piece.legalAttacks(this.board.hexes));
+      .flatMap((piece) => piece.legalAttacks(this.board.hexSet));
   }
 
   // This method calculates legal moves for a specific piece
   public getLegalMoves(piece: Piece | null, pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
     const phase = this.getTurnPhase(turnCounter);
     if (piece && phase === "Movement" && piece.canMove) {
-        const blocked = this.getBlockedHexes(pieces, castles);
-        return piece.legalmoves(blocked, piece.color);
+        const blockedSet = this.getBlockedHexSet(pieces, castles);
+        return piece.legalmoves(blockedSet, piece.color);
     }
     return [];
   }
@@ -135,17 +137,18 @@ export class GameEngine {
 
       if (piece && phase === "Attack" && piece.canAttack) {
           const attackable = this.getAttackableHexes(pieces, castles, currentPlayer);
+          const attackableSet = new Set(attackable.map(h => h.getKey()));
           
           if (piece.AttackType === AttackType.Ranged) {
               const defended = this.getDefendedHexes(pieces, currentPlayer);
               return piece
-                .legalAttacks(attackable)
+                .legalAttacks(attackableSet)
                 .filter(
                   (hex) =>
                     !defended.some((defendedHex) => defendedHex.equals(hex))
                 );
           }
-          return piece.legalAttacks(attackable);
+          return piece.legalAttacks(attackableSet);
       }
       return [];
   }
@@ -157,6 +160,7 @@ export class GameEngine {
   public getFutureLegalAttacks(pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
     const currentPlayer = this.getCurrentPlayer(turnCounter);
     const attackable = this.getAttackableHexes(pieces, castles, currentPlayer);
+    const attackableSet = new Set(attackable.map(h => h.getKey()));
     
     // Calculate defended hexes ONCE (fixes O(n²) issue)
     const defended = this.getDefendedHexes(pieces, currentPlayer);
@@ -165,7 +169,7 @@ export class GameEngine {
     return pieces
       .filter((piece) => piece.color === currentPlayer && piece.canAttack)
       .flatMap((piece) => {
-        const attacks = piece.legalAttacks(attackable);
+        const attacks = piece.legalAttacks(attackableSet);
         
         // Ranged pieces can't attack defended hexes
         if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {

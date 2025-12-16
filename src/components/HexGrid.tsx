@@ -2,6 +2,7 @@
  * HexGrid component - renders the hexagonal board tiles.
  * Extracted from Game.tsx for better separation of concerns.
  */
+import React from "react";
 import { Hex, Point } from "../Classes/Hex";
 import { Castle } from "../Classes/Castle";
 import { N_SQUARES, LEGAL_MOVE_DOT_RADIUS } from "../Constants";
@@ -59,7 +60,7 @@ const renderCircle = (
   );
 };
 
-const HexGrid: React.FC<HexGridProps> = ({
+const HexGrid = React.memo(({
   hexagons,
   castles,
   legalMoveSet,
@@ -68,7 +69,7 @@ const HexGrid: React.FC<HexGridProps> = ({
   isBoardRotated,
   isAdjacentToControlledCastle,
   onHexClick,
-}) => {
+}: HexGridProps) => {
   return (
     <>
       {/* Render all hexagons */}
@@ -112,6 +113,6 @@ const HexGrid: React.FC<HexGridProps> = ({
       })}
     </>
   );
-};
+});
 
 export default HexGrid;

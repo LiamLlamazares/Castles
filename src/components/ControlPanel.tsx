@@ -26,31 +26,24 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   return (
     <>
       {/* Control buttons */}
-      <button className="pass-button" onClick={onPass}>
-        Pass
-      </button>
-      <button className="coordinates-button" onClick={onToggleCoordinates}>
-        Toggle Coordinates
-      </button>
-      <button className="takeback-button" onClick={onTakeback}>
-        Takeback
-      </button>
-      <button className="pass-button" onClick={onFlipBoard}>
-        Flip Board
-      </button>
+      <div className="control-panel-buttons">
+        <button className="game-button" onClick={onPass} title="Pass Turn (Space)">
+          Pass (Space)
+        </button>
+        <button className="game-button" onClick={onToggleCoordinates}>
+          Toggle Coordinates
+        </button>
+        <button className="game-button" onClick={onTakeback} title="Takeback (Z)">
+          Takeback (Z)
+        </button>
+        <button className="game-button" onClick={onFlipBoard} title="Flip Board (R)">
+          Flip Board (R)
+        </button>
+      </div>
 
       {/* Player clocks and turn banners */}
-      <div
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: "20%",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+      <div className="clock-container">
+        <div className="player-clock-row">
           {currentPlayer === "b" && (
             <TurnBanner color={currentPlayer} phase={turnPhase} />
           )}
@@ -61,7 +54,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           />
         </div>
 
-        <div style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+        <div className="player-clock-row">
           {currentPlayer === "w" && (
             <TurnBanner color={currentPlayer} phase={turnPhase} />
           )}

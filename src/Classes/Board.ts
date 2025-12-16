@@ -3,16 +3,16 @@ import { N_SQUARES, HEX_SIZE_FACTOR, X_OFFSET, LAYOUT_TYPE } from '../Constants'
 import { Castle } from './Castle';
 
 /**
- * Represents the game board geometry and rendering data.
+ * Manages the topological structure and static data of the game board.
  * 
- * The Board class handles:
- * - Hexagonal grid generation and layout
- * - Classification of special hexes (rivers, castles, high ground)
- * - Coordinate transformations (hex ↔ pixel)
- * - Rendering data precomputation (corners, centers, CSS classes)
- * 
- * The board uses cube coordinates (q, r, s where q + r + s = 0) for logical operations
- * and converts to pixel coordinates for rendering.
+ * Primary functions:
+ * - Generates the hexagonal grid (q, r, s coordinates).
+ * - Classifies terrain types:
+ *   - Rivers (impassable obstacles at r=0).
+ *   - Castles (strategic capture points at board corners).
+ *   - High Ground (terrain buffering ranged attacks).
+ * - Provides O(1) lookups via Sets for collision detection and rendering.
+ * - Maps logical hex coordinates to screen pixels via `Layout` helper.
  */
 export class Board {
   /** Cached castle objects (computed once) */
@@ -67,6 +67,9 @@ export class Board {
   
   /** Set of high ground hex keys */
   public highGroundHexSet: Set<string>;
+
+  /** Set of ALL hex keys on board */
+  public hexSet: Set<string>;
   
   /** Precomputed CSS class for each hex (for rendering) */
   public colorClassMap: { [key: string]: string };
@@ -95,9 +98,9 @@ export class Board {
     this.X_OFFSET = X_OFFSET_ARG;
     this.layoutType = layoutType;
 
-    // Default to window size if available, otherwise fallback
-    this.pixelWidth = typeof window !== 'undefined' ? window.innerWidth : 800;
-    this.pixelHeight = typeof window !== 'undefined' ? window.innerHeight : 600;
+    // Default to standard size, updated by UI later
+    this.pixelWidth = 800;
+    this.pixelHeight = 600;
 
     this.layout = this.getLayout();
 
@@ -114,6 +117,9 @@ export class Board {
     this.whiteCastleHexSet = new Set(this.whiteCastleHexes.map(h => h.getKey()));
     this.blackCastleHexSet = new Set(this.blackCastleHexes.map(h => h.getKey()));
     this.highGroundHexSet = new Set(this.highGroundHexes.map(h => h.getKey()));
+    
+    // Set of ALL valid hexes
+    this.hexSet = new Set(this.hexes.map(h => h.getKey()));
 
     // Precompute CSS classes for each hex (using O(1) Set lookups)
     const colorClassMap: { [key: string]: string } = {};

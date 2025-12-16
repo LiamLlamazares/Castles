@@ -264,10 +264,27 @@ const GameBoard = () => {
   }, [turn_phase, movingPiece, pieces, Castles, hexisLegalMove, hexisLegalAttack, hexisAdjacentToControlledCastle, saveHistory]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.code === "KeyQ") {
-      handlePass();
+    // Avoid triggering if user is typing in an input (though we don't have inputs yet, good practice)
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      return;
     }
-  }, [handlePass]);
+
+    switch (event.code) {
+      case "Space":
+        event.preventDefault(); // Prevent scrolling
+        handlePass();
+        break;
+      case "KeyR":
+        handleFlipBoard();
+        break;
+      case "KeyZ":
+        handleTakeback();
+        break;
+      case "KeyQ": // Keep legacy binding if desired, or remove. Keeping for now as hidden feature.
+        handlePass();
+        break;
+    }
+  }, [handlePass, handleFlipBoard, handleTakeback]);
 
   const handleResize = useCallback(() => {
     startingBoard.updateDimensions(window.innerWidth, window.innerHeight);
