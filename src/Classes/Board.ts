@@ -156,7 +156,7 @@ public isBlackCastle(castleHex: Hex): boolean {
   return false;
 }
 
-get Castles(): Castle[] {
+get castles(): Castle[] {
   if (!this._castles) {
     const castles: Castle[] = [];
     for (const hex of this.whiteCastleHexes) {

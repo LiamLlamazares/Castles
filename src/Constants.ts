@@ -87,6 +87,6 @@ export const LEGAL_MOVE_DOT_SCALE_FACTOR = 0.25;
 // History entry type for strict typing
 export interface HistoryEntry {
   pieces: import('./Classes/Piece').Piece[];
-  Castles: import('./Classes/Castle').Castle[];
+  castles: import('./Classes/Castle').Castle[];
   turnCounter: number;
 }

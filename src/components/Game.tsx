@@ -38,20 +38,20 @@ const GameBoard = () => {
     pieces: allPieces,
     movingPiece: null,
     turnCounter: 0,
-    Castles: startingBoard.Castles as Castle[],
+    castles: startingBoard.castles as Castle[],
     showCoordinates: false,
     cheatMode: false,
     isBoardRotated: false,
     resizeVersion: 0,
   });
 
-  const { pieces, Castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated, resizeVersion } = state;
+  const { pieces, castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated, resizeVersion } = state;
 
 
 
   // =========== COMPUTED VALUES (useMemo) ===========
   
-  const turn_phase = useMemo<TurnPhase>(
+  const turnPhase = useMemo<TurnPhase>(
     () => gameEngine.getTurnPhase(turnCounter),
     [turnCounter]
   );
@@ -64,33 +64,33 @@ const GameBoard = () => {
   const hexagons = useMemo(() => startingBoard.hexes, []);
 
   const legalMoves = useMemo(
-    () => gameEngine.getLegalMoves(movingPiece, pieces, Castles, turnCounter),
-    [movingPiece, pieces, Castles, turnCounter]
+    () => gameEngine.getLegalMoves(movingPiece, pieces, castles, turnCounter),
+    [movingPiece, pieces, castles, turnCounter]
   );
 
   const legalAttacks = useMemo(
-    () => gameEngine.getLegalAttacks(movingPiece, pieces, Castles, turnCounter),
-    [movingPiece, pieces, Castles, turnCounter]
+    () => gameEngine.getLegalAttacks(movingPiece, pieces, castles, turnCounter),
+    [movingPiece, pieces, castles, turnCounter]
   );
 
   const victoryMessage = useMemo(
-    () => gameEngine.getVictoryMessage(pieces, Castles),
-    [pieces, Castles]
+    () => gameEngine.getVictoryMessage(pieces, castles),
+    [pieces, castles]
   );
 
   const winner = useMemo(
-    () => gameEngine.getWinner(pieces, Castles),
-    [pieces, Castles]
+    () => gameEngine.getWinner(pieces, castles),
+    [pieces, castles]
   );
 
   const controlledCastlesActivePlayer = useMemo(
-    () => gameEngine.getControlledCastlesActivePlayer(Castles, pieces, turnCounter),
-    [Castles, pieces, turnCounter]
+    () => gameEngine.getControlledCastlesActivePlayer(castles, pieces, turnCounter),
+    [castles, pieces, turnCounter]
   );
 
   const emptyUnusedHexesAdjacentToControlledCastles = useMemo(() => {
-    return gameEngine.getRecruitmentHexes(pieces, Castles, turnCounter);
-  }, [pieces, Castles, turnCounter]);
+    return gameEngine.getRecruitmentHexes(pieces, castles, turnCounter);
+  }, [pieces, castles, turnCounter]);
 
   // Sets for O(1) lookup in render
   const legalMoveSet = useMemo(
@@ -105,17 +105,17 @@ const GameBoard = () => {
 
   // =========== HELPER FUNCTIONS ===========
 
-  const hexisLegalMove = useCallback(
+  const isLegalMove = useCallback(
     (hex: Hex): boolean => legalMoves.some((move) => move.equals(hex)),
     [legalMoves]
   );
 
-  const hexisLegalAttack = useCallback(
+  const isLegalAttack = useCallback(
     (hex: Hex): boolean => legalAttacks.some((attack) => attack.equals(hex)),
     [legalAttacks]
   );
 
-  const hexisAdjacentToControlledCastle = useCallback(
+  const isRecruitmentSpot = useCallback(
     (hex: Hex): boolean => emptyUnusedHexesAdjacentToControlledCastles.some(
       (adjacentHex) => hex.equals(adjacentHex)
     ),
@@ -127,14 +127,14 @@ const GameBoard = () => {
   const saveHistory = useCallback(() => {
     const currentState: HistoryEntry = {
       pieces: pieces.map((p) => p.clone()),
-      Castles: Castles.map((c) => c.clone()),
+      castles: castles.map((c) => c.clone()),
       turnCounter: turnCounter,
     };
     setState(prev => ({
       ...prev,
       history: [...prev.history, currentState]
     }));
-  }, [pieces, Castles, turnCounter]);
+  }, [pieces, castles, turnCounter]);
 
   // =========== EVENT HANDLERS ===========
 
@@ -158,7 +158,7 @@ const GameBoard = () => {
         setState(prev => ({
           ...prev,
           pieces: previousState.pieces,
-          Castles: previousState.Castles,
+          castles: previousState.castles,
           turnCounter: previousState.turnCounter,
           history: newHistory,
           movingPiece: null
@@ -183,9 +183,9 @@ const GameBoard = () => {
     // CASE 3: Attack enemy piece
     if (
       movingPiece &&
-      turn_phase === "Attack" &&
+      turnPhase === "Attack" &&
       pieceClicked.color !== currentPlayer &&
-      hexisLegalAttack(pieceClicked.hex)
+      isLegalAttack(pieceClicked.hex)
     ) {
       saveHistory();
       setState(prev => {
@@ -196,8 +196,8 @@ const GameBoard = () => {
     }
 
     // CASE 4: Select own piece (if valid for current phase)
-    const canSelectForMovement = turn_phase === "Movement" && pieceClicked.canMove;
-    const canSelectForAttack = turn_phase === "Attack" && pieceClicked.canAttack;
+    const canSelectForMovement = turnPhase === "Movement" && pieceClicked.canMove;
+    const canSelectForAttack = turnPhase === "Attack" && pieceClicked.canAttack;
     const isOwnPiece = pieceClicked.color === currentPlayer;
 
     if (isOwnPiece && (canSelectForMovement || canSelectForAttack)) {
@@ -207,12 +207,12 @@ const GameBoard = () => {
 
     // Default: Invalid click, deselect
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [movingPiece, currentPlayer, turn_phase, hexisLegalAttack, saveHistory]);
+  }, [movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
 
   const handleHexClick = useCallback((hex: Hex) => {
     // CASE 1: Movement - move piece to empty hex
-    if (turn_phase === "Movement" && movingPiece?.canMove) {
-      if (hexisLegalMove(hex)) {
+    if (turnPhase === "Movement" && movingPiece?.canMove) {
+      if (isLegalMove(hex)) {
         saveHistory();
         setState(prev => {
           const newState = gameEngine.applyMove(prev, movingPiece, hex);
@@ -225,8 +225,8 @@ const GameBoard = () => {
     }
 
     // CASE 2: Attack - attack piece or capture castle
-    if (turn_phase === "Attack" && movingPiece?.canAttack) {
-      if (hexisLegalAttack(hex)) {
+    if (turnPhase === "Attack" && movingPiece?.canAttack) {
+      if (isLegalAttack(hex)) {
         saveHistory();
         const targetPiece = pieces.find(p => p.hex.equals(hex));
         setState(prev => {
@@ -245,8 +245,8 @@ const GameBoard = () => {
     }
 
     // CASE 3: Castles phase - recruit new piece
-    if (hexisAdjacentToControlledCastle(hex)) {
-      const castle = Castles.find(c => c.isAdjacent(hex));
+    if (isRecruitmentSpot(hex)) {
+      const castle = castles.find(c => c.isAdjacent(hex));
       if (castle) {
         saveHistory();
         setState(prev => {
@@ -259,7 +259,7 @@ const GameBoard = () => {
 
     // Default: Invalid click, deselect
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [turn_phase, movingPiece, pieces, Castles, hexisLegalMove, hexisLegalAttack, hexisAdjacentToControlledCastle, saveHistory]);
+  }, [turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     // Avoid triggering if user is typing in an input (though we don't have inputs yet, good practice)
@@ -312,7 +312,7 @@ const GameBoard = () => {
     <>
       <ControlPanel
         currentPlayer={currentPlayer}
-        turnPhase={turn_phase}
+        turnPhase={turnPhase}
         onPass={handlePass}
         onToggleCoordinates={() => setState(prev => ({ ...prev, showCoordinates: !prev.showCoordinates }))}
         onTakeback={handleTakeback}
@@ -321,7 +321,7 @@ const GameBoard = () => {
       
       <PlayerHUD 
         currentPlayer={currentPlayer} 
-        turnPhase={turn_phase} 
+        turnPhase={turnPhase} 
       />
       
       <svg className="board" height="100%" width="100%">
@@ -341,12 +341,12 @@ const GameBoard = () => {
         
         <HexGrid
           hexagons={hexagons}
-          castles={Castles}
+          castles={castles}
           legalMoveSet={legalMoveSet}
           legalAttackSet={legalAttackSet}
           showCoordinates={showCoordinates}
           isBoardRotated={isBoardRotated}
-          isAdjacentToControlledCastle={hexisAdjacentToControlledCastle}
+          isAdjacentToControlledCastle={isRecruitmentSpot}
           onHexClick={handleHexClick}
           resizeVersion={resizeVersion}
         />

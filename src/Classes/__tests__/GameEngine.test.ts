@@ -152,7 +152,7 @@ describe('GameEngine', () => {
       
       const state = {
         pieces,
-        Castles: castles,
+        castles: castles,
         turnCounter: 4, // Castles phase
         movingPiece: null,
         history: [],
@@ -166,7 +166,7 @@ describe('GameEngine', () => {
       expect(newState.pieces[0].type).toBe(PieceType.Swordsman); // Default first piece
       
       // Check castle updated
-      const updatedCastle = newState.Castles[0];
+      const updatedCastle = newState.castles[0];
       expect(updatedCastle.used_this_turn).toBe(true);
       expect(updatedCastle.turns_controlled).toBe(1);
       

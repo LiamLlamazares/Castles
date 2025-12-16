@@ -26,7 +26,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, 5, -5), 'w', PieceType.Monarch),
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
-      const castles = gameEngine.board.Castles;
+      const castles = gameEngine.board.castles;
 
       expect(gameEngine.getWinner(pieces, castles)).toBeNull();
     });
@@ -36,7 +36,7 @@ describe('GameEngine - Win Conditions', () => {
         // White monarch is missing
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
-      const castles = gameEngine.board.Castles;
+      const castles = gameEngine.board.castles;
 
       expect(gameEngine.getWinner(pieces, castles)).toBe('b');
     });
@@ -46,7 +46,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, 5, -5), 'w', PieceType.Monarch),
         // Black monarch is missing
       ];
-      const castles = gameEngine.board.Castles;
+      const castles = gameEngine.board.castles;
 
       expect(gameEngine.getWinner(pieces, castles)).toBe('w');
     });
@@ -59,7 +59,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
       // Default: each player owns their 3 home castles
-      const castles = gameEngine.board.Castles;
+      const castles = gameEngine.board.castles;
 
       expect(gameEngine.getWinner(pieces, castles)).toBeNull();
     });
@@ -70,7 +70,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
       // All castles owned by white
-      const castles = gameEngine.board.Castles.map(c => {
+      const castles = gameEngine.board.castles.map(c => {
         const newCastle = c.clone();
         newCastle.owner = 'w';
         return newCastle;
@@ -85,7 +85,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
       // All castles owned by black
-      const castles = gameEngine.board.Castles.map(c => {
+      const castles = gameEngine.board.castles.map(c => {
         const newCastle = c.clone();
         newCastle.owner = 'b';
         return newCastle;
@@ -101,7 +101,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, 5, -5), 'w', PieceType.Monarch),
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
-      const castles = gameEngine.board.Castles;
+      const castles = gameEngine.board.castles;
 
       expect(gameEngine.getVictoryMessage(pieces, castles)).toBeNull();
     });
@@ -111,7 +111,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
         // White monarch missing
       ];
-      const castles = gameEngine.board.Castles;
+      const castles = gameEngine.board.castles;
 
       const message = gameEngine.getVictoryMessage(pieces, castles);
       expect(message).toContain('Black');
@@ -123,7 +123,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, 5, -5), 'w', PieceType.Monarch),
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
-      const castles = gameEngine.board.Castles.map(c => {
+      const castles = gameEngine.board.castles.map(c => {
         const newCastle = c.clone();
         newCastle.owner = 'w';
         return newCastle;
@@ -151,7 +151,7 @@ describe('GameEngine - Win Conditions', () => {
       
       const state = {
         pieces,
-        Castles: castles,
+        castles: castles,
         turnCounter: 7, // Black's turn (attack phase)
         movingPiece: pieces[0],
         history: [],
@@ -160,7 +160,7 @@ describe('GameEngine - Win Conditions', () => {
       const newState = gameEngine.applyCastleAttack(state, pieces[0], castleHex);
       
       // Castle should now be owned by black
-      const capturedCastle = newState.Castles.find(c => c.hex.equals(castleHex));
+      const capturedCastle = newState.castles.find(c => c.hex.equals(castleHex));
       expect(capturedCastle?.owner).toBe('b');
     });
   });

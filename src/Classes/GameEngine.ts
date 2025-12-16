@@ -21,7 +21,7 @@ import {
  */
 export interface GameState {
   pieces: Piece[];
-  Castles: Castle[];
+  castles: Castle[];
   turnCounter: number;
   movingPiece: Piece | null;
   history: HistoryEntry[];
@@ -320,7 +320,7 @@ export class GameEngine {
         return p;
     });
 
-    const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, state.Castles, state.turnCounter);
+    const newTurnCounter = state.turnCounter + this.getTurnCounterIncrement(newPieces, state.castles, state.turnCounter);
     
     let nextState: GameState = {
         ...state,
@@ -351,7 +351,7 @@ export class GameEngine {
     });
 
     // Transfer castle ownership to the capturing player
-    const newCastles = state.Castles.map(c => {
+    const newCastles = state.castles.map(c => {
         if (c.hex.equals(targetHex)) {
             const newCastle = c.clone();
             newCastle.owner = capturer;
@@ -365,7 +365,7 @@ export class GameEngine {
     return {
         ...state,
         pieces: newPieces,
-        Castles: newCastles,
+        castles: newCastles,
         movingPiece: null,
         turnCounter: newTurnCounter
     };
@@ -402,7 +402,7 @@ export class GameEngine {
 
       attackerClone.canAttack = false;
 
-      const increment = this.getTurnCounterIncrement(newPieces, state.Castles, state.turnCounter);
+      const increment = this.getTurnCounterIncrement(newPieces, state.castles, state.turnCounter);
       
       const nextState: GameState = {
           ...state,
@@ -417,7 +417,7 @@ export class GameEngine {
   public passTurn(state: GameState): GameState {
       // Logic from Game.tsx:178
       // It calls getTurnCounterIncrement.
-      const increment = this.getTurnCounterIncrement(state.pieces, state.Castles, state.turnCounter);
+      const increment = this.getTurnCounterIncrement(state.pieces, state.castles, state.turnCounter);
       return {
           ...state,
           movingPiece: null,
@@ -434,7 +434,7 @@ export class GameEngine {
       const newPieces = [...state.pieces, newPiece]; // Shallow copy of array, but new piece
       
       // Update Castle
-      const newCastles = state.Castles.map(c => {
+      const newCastles = state.castles.map(c => {
           if (c === castle) {
               const newCastle = c.clone();
               newCastle.turns_controlled += 1;
@@ -449,7 +449,7 @@ export class GameEngine {
       return {
           ...state,
           pieces: newPieces,
-          Castles: newCastles,
+          castles: newCastles,
           movingPiece: null,
           turnCounter: state.turnCounter + increment
       };
@@ -464,7 +464,7 @@ export class GameEngine {
           pc.damage = 0;
           return pc;
       });
-      const newCastles = state.Castles.map(c => {
+      const newCastles = state.castles.map(c => {
           const cc = c.clone();
           cc.used_this_turn = false;
           return cc;
@@ -472,7 +472,7 @@ export class GameEngine {
       return {
           ...state,
           pieces: newPieces,
-          Castles: newCastles
+          castles: newCastles
       };
   }
 
