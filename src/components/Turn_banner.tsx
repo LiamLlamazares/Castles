@@ -10,15 +10,8 @@ interface TurnBannerProps {
 
 const TurnBanner: React.FC<TurnBannerProps> = ({ color, phase }) => {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-      <div
-        style={{
-          width: "20px",
-          height: "20px",
-          backgroundColor: color === "w" ? "white" : "black",
-          borderRadius: "50%",
-        }}
-      />
+    <div className="phase-badge">
+      <span>{phase}</span>
       <img
         src={
           phase === "Movement"
@@ -28,7 +21,6 @@ const TurnBanner: React.FC<TurnBannerProps> = ({ color, phase }) => {
             : castleImage
         }
         alt={phase}
-        style={{ width: "50px", height: "50px" }} // Set the size of the images here
       />
     </div>
   );

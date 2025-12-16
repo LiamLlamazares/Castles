@@ -14,6 +14,7 @@ import { GameEngine, GameState } from "../Classes/GameEngine";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import ControlPanel from "./ControlPanel";
+import PlayerHUD from "./PlayerHUD";
 
 /** Extended state for UI-specific properties */
 interface GameBoardState extends GameState {
@@ -291,8 +292,8 @@ const GameBoard = () => {
   }, [handlePass, handleFlipBoard, handleTakeback]);
 
   const handleResize = useCallback(() => {
-    // Subtract sidebar width (200px) from valid board area
-    startingBoard.updateDimensions(window.innerWidth - 200, window.innerHeight);
+    // Subtract sidebar width (200px) AND Right HUD width (~280px)
+    startingBoard.updateDimensions(window.innerWidth - 480, window.innerHeight);
     // Force re-render by incrementing resizeVersion
     setState(prev => ({ ...prev, resizeVersion: prev.resizeVersion + 1 }));
   }, []);
@@ -323,6 +324,11 @@ const GameBoard = () => {
         onToggleCoordinates={() => setState(prev => ({ ...prev, showCoordinates: !prev.showCoordinates }))}
         onTakeback={handleTakeback}
         onFlipBoard={handleFlipBoard}
+      />
+      
+      <PlayerHUD 
+        currentPlayer={currentPlayer} 
+        turnPhase={turn_phase} 
       />
       
       <svg className="board" height="100%" width="100%">

@@ -33,17 +33,7 @@ const ChessClock: React.FC<ChessClockProps> = ({
   const seconds = timeLeft % 60;
 
   return (
-    <div
-      style={{
-        backgroundColor: player === "w" ? "white" : "black",
-        color: timeLeft < 180 ? "red" : player === "w" ? "black" : "white",
-        padding: "10px",
-        borderRadius: "5px",
-        margin: "10px",
-        textAlign: "center",
-        border: isActive ? "5px solid green" : "none",
-      }}
-    >
+    <div className={`clock-box ${player} ${isActive ? "active" : ""}`}>
       {player.toUpperCase()} - {minutes}:
       {seconds < 10 ? `0${seconds}` : seconds}
     </div>

@@ -6,7 +6,7 @@ body {
 
 .board {
     position: relative;
-    width: calc(100vw - 200px); /* Subtract sidebar width */
+    width: calc(100vw - 480px); /* Subtract sidebar (200px) + HUD (280px) */
     height: 100vh; /* Use viewport height for full height */
     margin-left: 200px; /* offset by sidebar width */
     padding: 0;
@@ -164,37 +164,71 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
+}
+
+
+.player-hud {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  z-index: 200;
+  pointer-events: none; /* Let clicks pass through */
 }
 
 .player-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  /* Floating capsule style */
-  background: rgba(30, 30, 30, 0.85); /* Dark semi-transparent */
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-  color: #fff; /* White text for contrast */
+  /* Floating layout without background background */
+  background: transparent;
+  padding: 8px 0;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  color: #333; /* Dark text for contrast against beige body */
+  justify-content: flex-start; /* Align clock and badge */
+  gap: 16px; 
+  min-width: 200px;
 }
 
-.turn-banner-container {
+.phase-badge {
   display: flex;
+  flex-direction: column; /* Stack text above icon */
   align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.9); /* Light background for icons visibility */
-  border-radius: 4px;
-  padding: 2px;
-  margin-left: auto; /* Push to right */
+  gap: 2px;
+  background: transparent;
+  padding: 0 8px;
+  font-family: 'Inter', sans-serif;
+  color: #333; /* Dark text */
+  margin-left: 0; /* Keep it next to clock */
 }
+
+.phase-badge span {
+  font-size: 1.25rem; /* Even larger text */
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.5px;
+  text-transform: uppercase; /* Make it pop */
+}
+
+.phase-badge img {
+  width: 24px;
+  height: 24px;
+  /* Dark icons (no invert) */
+  filter: none; 
+  opacity: 0.9;
+}
+
+
 
 .sidebar-divider {
   display: none; /* visual divider not needed in floating layout */
 }
 
 .control-buttons {
-  margin-top: 20px; 
+  margin-top: 0; /* Align to top */
 }
 
 /* Updated Button Styles for Sidebar */
@@ -233,6 +267,32 @@ body {
   margin: 0;
   border: none;
   box-shadow: none;
+}
+
+.clock-box {
+  padding: 10px 16px;
+  border-radius: 8px;
+  text-align: center;
+  font-family: 'Monaco', monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: 2px solid rgba(0,0,0,0.2);
+  min-width: 120px;
+}
+
+.clock-box.w {
+  background-color: white;
+  color: black;
+}
+
+.clock-box.b {
+  background-color: #222; /* Slightly softer black */
+  color: white;
+}
+
+.clock-box.active {
+  border-color: #00ff00; /* Bright green active border */
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
 }
 
 /* =========== VICTORY OVERLAY =========== */

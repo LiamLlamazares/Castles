@@ -25,37 +25,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 }) => {
   return (
     <div className="sidebar">
-      {/* Player Clocks & Status */}
-      <div className="sidebar-section">
-        <div className="player-status">
-          <ChessClock
-            initialTime={STARTING_TIME}
-            isActive={currentPlayer === "b"}
-            player="b"
-          />
-          {currentPlayer === "b" && (
-            <div className="turn-banner-container">
-               <TurnBanner color={currentPlayer} phase={turnPhase} />
-            </div>
-          )}
-        </div>
-
-        <div className="player-status">
-          <ChessClock
-            initialTime={STARTING_TIME}
-            isActive={currentPlayer === "w"}
-            player="w"
-          />
-          {currentPlayer === "w" && (
-            <div className="turn-banner-container">
-              <TurnBanner color={currentPlayer} phase={turnPhase} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="sidebar-divider"></div>
-
       {/* Control Buttons */}
       <div className="sidebar-section control-buttons">
         <button className="game-button" onClick={onPass} title="Pass Turn (Space)">
