@@ -33,8 +33,13 @@ const MapEditor: React.FC<MapEditorProps> = ({ onPlay }) => {
 
         const width = maxX - minX;
         const height = maxY - minY;
-        const padding = 50; // Padding around the board
-        const vb = `${minX - padding} ${minY - padding} ${width + padding * 2} ${height + padding * 2}`;
+        const padding = 80; // Increased padding
+        const yOffset = 50; // Shift board up by moving viewBox down (positive y is down)
+        
+        // viewBox: min-x, min-y, width, height
+        // To move board UP, we add to min-y (camera moves down).
+        // To reveal more at bottom, we ensure height covers it.
+        const vb = `${minX - padding} ${minY - padding + yOffset} ${width + padding * 2} ${height + padding * 2}`;
 
         return { board: b, layout: l, pieces: p, viewBox: vb };
     }, [boardRadius]);
