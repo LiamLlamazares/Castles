@@ -11,7 +11,6 @@ interface TurnBannerProps {
 const TurnBanner: React.FC<TurnBannerProps> = ({ color, phase }) => {
   return (
     <div className="phase-badge">
-      <span>{phase}</span>
       <img
         src={
           phase === "Movement"

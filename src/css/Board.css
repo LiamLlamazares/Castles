@@ -170,7 +170,7 @@ body {
 
 .player-hud {
   position: fixed;
-  right: 20px;
+  right: 180px; /* Moved closer to board (was 20px) */
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -188,16 +188,19 @@ body {
   border: none;
   box-shadow: none;
   color: #333; /* Dark text for contrast against beige body */
-  justify-content: flex-start; /* Align clock and badge */
-  gap: 16px; 
-  min-width: 200px;
+  justify-content: flex-end; /* Align right */
+  gap: 12px; 
+  min-width: unset; 
+  display: flex; /* CRITICAL: Enable flexbox */
+  flex-direction: row; /* Horizontal alignment */
+  align-items: center; /* Vertically center icon with clock */
 }
 
 .phase-badge {
   display: flex;
-  flex-direction: column; /* Stack text above icon */
+  flex-direction: row; /* Horizontal */
   align-items: center;
-  gap: 2px;
+  gap: 0;
   background: transparent;
   padding: 0 8px;
   font-family: 'Inter', sans-serif;
@@ -214,11 +217,12 @@ body {
 }
 
 .phase-badge img {
-  width: 24px;
-  height: 24px;
+  width: 40px; /* Increased by ~40% for visibility */
+  height: 40px;
+  /* Dark icons (no invert) */
   /* Dark icons (no invert) */
   filter: none; 
-  opacity: 0.9;
+  opacity: 1;
 }
 
 

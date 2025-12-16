@@ -34,8 +34,7 @@ const ChessClock: React.FC<ChessClockProps> = ({
 
   return (
     <div className={`clock-box ${player} ${isActive ? "active" : ""}`}>
-      {player.toUpperCase()} - {minutes}:
-      {seconds < 10 ? `0${seconds}` : seconds}
+      {minutes}:{seconds < 10 ? `0${seconds}` : seconds}
     </div>
   );
 };
