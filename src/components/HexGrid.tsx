@@ -5,7 +5,7 @@
 import React from "react";
 import { Hex, Point } from "../Classes/Hex";
 import { Castle } from "../Classes/Castle";
-import { N_SQUARES, LEGAL_MOVE_DOT_RADIUS } from "../Constants";
+import { N_SQUARES, LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
 import { startingBoard } from "../ConstantImports";
 
 interface HexGridProps {
@@ -49,12 +49,15 @@ const renderCircle = (
   onHexClick: (hex: Hex) => void
 ): JSX.Element => {
   const center = getHexCenter(hex, isBoardRotated);
+  // Dynamic radius based on hex size
+  const radius = startingBoard.size_hexes * LEGAL_MOVE_DOT_SCALE_FACTOR;
+  
   return (
     <circle
       key={hex.getKey()}
       cx={center.x}
       cy={center.y}
-      r={LEGAL_MOVE_DOT_RADIUS / N_SQUARES}
+      r={radius}
       className={className}
       onClick={() => onHexClick(hex)}
     />

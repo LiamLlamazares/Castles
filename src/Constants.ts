@@ -5,24 +5,26 @@ export const N_SQUARES = 8;
  * ZOOM LEVEL (Smaller number = Larger Board)
  * 3.0 = Very Large (Maximized)
  * 3.2 = Balanced
+ * 3.5 = Smaller (Requested)
  * 3.8 = Small
  */
-export const HEX_SIZE_FACTOR = 3.2;
+export const HEX_SIZE_FACTOR = 3.8;
 
 /**
  * HORIZONTAL OFFSET (Pixels)
  * Negative = Shift Left (closer to sidebar)
  * Positive = Shift Right
- * 0 = Just next to sidebar
+ * 0 = Centered in available space (right of sidebar)
  */
-export const X_OFFSET = -50;
+export const X_OFFSET = 0;
 
 /**
  * VERTICAL OFFSET (Pixels)
  * Positive = Shift Down (creates top padding)
  * Negative = Shift Up
+ * 0 = Centered Vertically (Half Screen Height)
  */
-export const Y_OFFSET = 70;
+export const Y_OFFSET = 0;
 
 /**
  * PIECE SIZE SCALAR
@@ -79,7 +81,8 @@ export const ATTACK_PHASE_END = 4; // turnCounter % 5 < 4 = Attack
 // Rendering constants (derived from N_SQUARES for consistent scaling)
 export const PIECE_IMAGE_SIZE = 275; // Base size of piece images in pixels
 export const PIECE_IMAGE_OFFSET = 145; // Offset to center piece on hex
-export const LEGAL_MOVE_DOT_RADIUS = 90; // Radius of legal move indicator dots
+// Dot size scalar relative to hex size (0.25 = 1/4th of hex size)
+export const LEGAL_MOVE_DOT_SCALE_FACTOR = 0.25;
 
 // History entry type for strict typing
 export interface HistoryEntry {
