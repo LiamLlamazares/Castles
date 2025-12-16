@@ -5,6 +5,8 @@
 import React from "react";
 import { Hex, Point } from "../Classes/Hex";
 import { Castle } from "../Classes/Castle";
+import { Board } from "../Classes/Board";
+import { LayoutService } from "../Classes/LayoutService";
 import { N_SQUARES, LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
 import { startingBoard, startingLayout } from "../ConstantImports";
 
@@ -19,8 +21,8 @@ interface HexGridProps {
   isAdjacentToControlledCastle: (hex: Hex) => boolean;
   onHexClick: (hex: Hex) => void;
   resizeVersion: number;
-  layout: any; // Using any temporarily or import LayoutService type if possible without cycle
-  board: any;  // Using any temporarily or import Board type
+  layout: LayoutService;
+  board: Board;
 }
 
 /** Get the owner class for a castle hex (if applicable) */
@@ -32,14 +34,14 @@ const getCastleOwnerClass = (hex: Hex, castles: Castle[]): string => {
 };
 
 /** Get the polygon points for a hex */
-const getPolygonPoints = (hex: Hex, isBoardRotated: boolean, layout: any): string => {
+const getPolygonPoints = (hex: Hex, isBoardRotated: boolean, layout: LayoutService): string => {
   return layout.hexCornerString[
     hex.reflect().getKey(!isBoardRotated)
   ];
 };
 
 /** Get the pixel center of a hex */
-const getHexCenter = (hex: Hex, isBoardRotated: boolean, layout: any): Point => {
+const getHexCenter = (hex: Hex, isBoardRotated: boolean, layout: LayoutService): Point => {
   return layout.layout.hexToPixelReflected(hex, isBoardRotated);
 };
 
@@ -49,7 +51,7 @@ const renderCircle = (
   className: string,
   isBoardRotated: boolean,
   onHexClick: (hex: Hex) => void,
-  layout: any
+  layout: LayoutService
 ): JSX.Element => {
   const center = getHexCenter(hex, isBoardRotated, layout);
   // Dynamic radius based on hex size

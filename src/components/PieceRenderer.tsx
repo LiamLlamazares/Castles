@@ -5,6 +5,7 @@
 import React from "react";
 import { Piece } from "../Classes/Piece";
 import { Point } from "../Classes/Hex";
+import { LayoutService } from "../Classes/LayoutService";
 import { N_SQUARES } from "../Constants";
 import { startingBoard, startingLayout } from "../ConstantImports";
 import { getImageByPieceType } from "./PieceImages";
@@ -14,11 +15,11 @@ interface PieceRendererProps {
   isBoardRotated: boolean;
   onPieceClick: (piece: Piece) => void;
   resizeVersion: number;
-  layout: any;
+  layout: LayoutService;
 }
 
 /** Get the pixel center of a piece */
-const getPieceCenter = (piece: Piece, isBoardRotated: boolean, layout: any): Point => {
+const getPieceCenter = (piece: Piece, isBoardRotated: boolean, layout: LayoutService): Point => {
   return layout.hexCenters[piece.hex.getKey(isBoardRotated)];
 };
 
