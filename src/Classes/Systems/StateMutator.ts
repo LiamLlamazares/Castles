@@ -20,6 +20,7 @@
 import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
+import { MoveTree } from "../Core/MoveTree";
 import { GameState } from "../Core/GameEngine";
 import { NotationService } from "./NotationService";
 import { TurnManager } from "../Core/TurnManager";
@@ -62,11 +63,15 @@ export class StateMutator {
 
   /**
    * Updates the MoveTree with a new move and a snapshot of the resulting state.
+   * Returns a NEW MoveTree instance (cloned).
    */
-  private static recordMoveInTree(state: GameState, record: MoveRecord): void {
+  private static recordMoveInTree(state: GameState, record: MoveRecord): MoveTree | undefined {
       if (state.moveTree) {
-          state.moveTree.addMove(record, createHistorySnapshot(state));
+          const newTree = state.moveTree.clone();
+          newTree.addMove(record, createHistorySnapshot(state));
+          return newTree;
       }
+      return undefined;
   }
 
   // ================= PUBLIC MUTATIONS =================
@@ -104,8 +109,10 @@ export class StateMutator {
     }
 
     const result = StateMutator.checkTurnTransitions(nextState);
-    this.recordMoveInTree(result, record);
-    return result;
+    return {
+        ...result,
+        moveTree: this.recordMoveInTree(result, record)
+    };
   }
 
   public static applyCastleAttack(state: GameState, piece: Piece, targetHex: Hex, board: Board): GameState {
@@ -149,8 +156,10 @@ export class StateMutator {
         moveHistory: newMoveHistory
     });
 
-    this.recordMoveInTree(result, record);
-    return result;
+    return {
+        ...result,
+        moveTree: this.recordMoveInTree(result, record)
+    };
   }
 
   public static applyAttack(state: GameState, attacker: Piece, targetHex: Hex, board: Board): GameState {
@@ -187,8 +196,10 @@ export class StateMutator {
           phoenixRecords: newPhoenixRecords
      });
 
-     this.recordMoveInTree(resultState, record);
-     return resultState;
+     return {
+         ...resultState,
+         moveTree: this.recordMoveInTree(resultState, record)
+     };
   }
 
   public static passTurn(state: GameState, board: Board): GameState {
@@ -242,8 +253,10 @@ export class StateMutator {
           moveHistory: newMoveHistory
       });
 
-      this.recordMoveInTree(result, record);
-      return result;
+      return {
+          ...result,
+          moveTree: this.recordMoveInTree(result, record)
+      };
   }
 
   public static activateAbility(state: GameState, source: Piece, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead", board: Board): GameState {
@@ -358,8 +371,10 @@ export class StateMutator {
            phoenixRecords: newPhoenixRecords
       });
 
-      this.recordMoveInTree(result, record);
-      return result;
+       return {
+           ...result,
+           moveTree: this.recordMoveInTree(result, record)
+       };
   }
 
   public static recruitPiece(state: GameState, castle: Castle, hex: Hex, board: Board): GameState {
@@ -389,18 +404,20 @@ export class StateMutator {
       const tempState: GameState = { ...state, pieces: newPieces, pieceMap: newPieceMap, castles: newCastles };
       const increment = RuleEngine.getTurnCounterIncrement(tempState, board);
 
-       const result = StateMutator.checkTurnTransitions({
-           ...state,
-           pieces: newPieces,
-           pieceMap: newPieceMap,
-           castles: newCastles,
-           movingPiece: null,
-           turnCounter: state.turnCounter + increment,
-           moveHistory: newMoveHistory
-       });
+        const result = StateMutator.checkTurnTransitions({
+            ...state,
+            pieces: newPieces,
+            pieceMap: newPieceMap,
+            castles: newCastles,
+            movingPiece: null,
+            turnCounter: state.turnCounter + increment,
+            moveHistory: newMoveHistory
+        });
 
-       this.recordMoveInTree(result, record);
-       return result;
+        return {
+            ...result,
+            moveTree: this.recordMoveInTree(result, record)
+        };
   }
 
   /**

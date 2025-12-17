@@ -86,7 +86,7 @@ export const useGameLogic = (
   // =========== COMPOSED HOOKS ===========
   const { isAnalysisMode, analysisState, jumpToMove, stepHistory } = useAnalysisMode(state, setState);
   const { showCoordinates, isBoardRotated, resizeVersion, toggleCoordinates, handleFlipBoard, incrementResizeVersion } = useUISettings(state, setState);
-  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory);
+  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree);
 
   // Destructure for convenience
   const { 
@@ -157,6 +157,12 @@ export const useGameLogic = (
           current = current.parent;
       }
       
+      const newTree = state.moveTree!.clone();
+      const newNode = newTree.findNodeById(nodeId);
+      if (newNode) {
+          newTree.setCurrentNode(newNode);
+      }
+
       // Update global state with the new timeline and view index
       setState(prev => ({
           ...prev,
@@ -167,11 +173,9 @@ export const useGameLogic = (
           history: path,
           viewMoveIndex: path.length - 1,
           moveHistory: node.snapshot!.moveNotation,
-          movingPiece: null
+          movingPiece: null,
+          moveTree: newTree
       }));
-
-      // Update MoveTree current node to enable forward/backward from here
-      state.moveTree?.setCurrentNode(node);
   }, [state.moveTree, setState]);
 
   // =========== COMPUTED VALUES ===========
@@ -261,7 +265,7 @@ export const useGameLogic = (
     const snapshot = createHistorySnapshot(effectiveState);
     
     if (isAnalysisMode) {
-         state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+         state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
     }
 
     setState(prev => {
@@ -298,20 +302,6 @@ export const useGameLogic = (
 
     if (movingPiece && pieceClicked.color === currentPlayer) {
       setState(prev => ({ ...prev, movingPiece: pieceClicked }));
-      return;
-    }
-
-    if (
-      movingPiece &&
-      turnPhase === "Attack" &&
-      pieceClicked.color !== currentPlayer &&
-      isLegalAttack(pieceClicked.hex)
-    ) {
-      saveHistory();
-      setState(prev => {
-        const newState = gameEngine.applyAttack(prev as unknown as GameState, movingPiece!, pieceClicked.hex);
-        return { ...prev, ...newState };
-      });
       return;
     }
 
@@ -378,7 +368,7 @@ export const useGameLogic = (
         };
 
         if (isAnalysisMode) {
-             state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+             state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
         }
 
         setState(prev => {
@@ -398,7 +388,7 @@ export const useGameLogic = (
         const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
 
         if (isAnalysisMode) {
-             state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+             state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
         }
         
         const targetPiece = effectiveState.pieces.find(p => p.hex.equals(hex));
@@ -426,7 +416,7 @@ export const useGameLogic = (
         const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
 
         if (isAnalysisMode) {
-             state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+             state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
         }
 
         setState(prev => {
@@ -461,7 +451,7 @@ export const useGameLogic = (
     const snapshot = createHistorySnapshot(effectiveState);
 
     if (isAnalysisMode) {
-         state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+         state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
     }
 
     setState(prevState => {
@@ -480,8 +470,10 @@ export const useGameLogic = (
            
            const moveRecord = { notation, turnNumber, color: currentPlayer, phase: turnPhase };
            
-           if (state.moveTree) {
-               state.moveTree.addMove(moveRecord);
+           let newTree = state.moveTree;
+           if (newTree) {
+               newTree = newTree.clone();
+               newTree.addMove(moveRecord);
            }
            
            return { 
@@ -489,7 +481,8 @@ export const useGameLogic = (
                ...newCoreState, 
                moveHistory: [...stateWithHistory.moveHistory, moveRecord],
                history: stateWithHistory.history,
-               viewMoveIndex: null 
+               viewMoveIndex: null,
+               moveTree: newTree
            };
        } catch (e) {
            console.error(e);

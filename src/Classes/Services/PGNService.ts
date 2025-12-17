@@ -4,7 +4,7 @@ import { Castle } from "../Entities/Castle";
 import { MoveRecord, Color } from "../../Constants";
 import { Hex } from "../Entities/Hex";
 import { GameEngine, GameState } from "../Core/GameEngine";
-import { MoveTree } from "../Core/MoveTree";
+import { MoveTree, MoveNode } from "../Core/MoveTree";
 import { PGNParser } from "../Systems/PGNParser";
 import { createPieceMap } from "../../utils/PieceMap";
 import { NotationService } from "../Systems/NotationService";
@@ -37,7 +37,8 @@ export class PGNService {
     pieces: Piece[],
     history: MoveRecord[],
     sanctuaries: Sanctuary[] = [],
-    gameTags: { [key: string]: string } = {}
+    gameTags: { [key: string]: string } = {},
+    moveTree?: MoveTree
   ): string {
     const setup: GameSetup = {
       boardConfig: board.config,
@@ -88,19 +89,83 @@ export class PGNService {
     pgn += "\n";
 
     // Write Moves
-    let turn = 1;
-    for (let i = 0; i < history.length; i += 2) {
-        const whiteMove = history[i];
-        const blackMove = history[i+1];
-        
-        pgn += `${turn}. ${whiteMove.notation} `;
-        if (blackMove) {
-            pgn += `${blackMove.notation} `;
+    if (moveTree) {
+        pgn += this.renderRecursiveHistory(moveTree.rootNode, 1, 'w');
+    } else {
+        let turn = 1;
+        for (let i = 0; i < history.length; i += 2) {
+            const whiteMove = history[i];
+            const blackMove = history[i+1];
+            
+            pgn += `${turn}. ${whiteMove.notation} `;
+            if (blackMove) {
+                pgn += `${blackMove.notation} `;
+            }
+            turn++;
         }
-        turn++;
     }
 
     return pgn.trim();
+  }
+
+  private static renderRecursiveHistory(node: MoveNode, turnNumber: number, color: Color): string {
+    if (node.children.length === 0) return "";
+
+    let pgn = "";
+    const selectedIndex = node.selectedChildIndex;
+    const mainChild = node.children[selectedIndex] || node.children[0];
+
+    // 1. Render main move
+    if (color === 'w') {
+        pgn += `${turnNumber}. ${mainChild.move.notation} `;
+    } else {
+        // For black's move, we usually just put the notation.
+        // If it's the first move of a variation, we might need 1...
+        pgn += `${mainChild.move.notation} `;
+    }
+
+    // 2. Render variation branches
+    for (let i = 0; i < node.children.length; i++) {
+        if (i === selectedIndex) continue;
+        const variation = node.children[i];
+        
+        // Start variation with (
+        pgn += `(${this.renderVariationLine(variation, turnNumber, color)}) `;
+    }
+
+    // 3. Continue main line
+    const nextColor: Color = color === 'w' ? 'b' : 'w';
+    const nextTurn = color === 'b' ? turnNumber + 1 : turnNumber;
+    pgn += this.renderRecursiveHistory(mainChild, nextTurn, nextColor);
+
+    return pgn;
+  }
+
+  private static renderVariationLine(node: MoveNode, turnNumber: number, color: Color): string {
+      let pgn = "";
+      
+      // Start of variation needs correct numbering
+      if (color === 'w') {
+          pgn += `${turnNumber}. ${node.move.notation} `;
+      } else {
+          pgn += `${turnNumber}... ${node.move.notation} `;
+      }
+
+      // Recursive part for variations of THIS variation
+      for (let i = 0; i < node.children.length; i++) {
+          if (i === node.selectedChildIndex) continue;
+          pgn += `(${this.renderVariationLine(node.children[i], turnNumber, color)}) `;
+      }
+
+      // Continue this variation line
+      if (node.children.length > 0) {
+          const mainNext = node.children[node.selectedChildIndex] || node.children[0];
+          const nextColor: Color = color === 'w' ? 'b' : 'w';
+          const nextTurn = color === 'b' ? turnNumber + 1 : turnNumber;
+          pgn += this.renderRecursiveHistory(mainNext, nextTurn, nextColor);
+      }
+
+      return pgn.trim();
   }
 
   /**

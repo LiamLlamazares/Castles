@@ -12,6 +12,7 @@ import { useCallback } from "react";
 import { PGNService } from "../Classes/Services/PGNService";
 import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
+import { MoveTree } from "../Classes/Core/MoveTree";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveRecord } from "../Constants";
 
@@ -35,12 +36,13 @@ export const usePGN = (
   initialBoard: Board,
   initialPieces: Piece[],
   initialSanctuaries: Sanctuary[],
-  moveHistory: MoveRecord[]
+  moveHistory: MoveRecord[],
+  moveTree: MoveTree | undefined
 ): PGNHookResult => {
   
   const getPGN = useCallback(() => {
-    return PGNService.generatePGN(initialBoard, initialPieces, moveHistory, initialSanctuaries);
-  }, [initialBoard, initialPieces, moveHistory, initialSanctuaries]);
+    return PGNService.generatePGN(initialBoard, initialPieces, moveHistory, initialSanctuaries, {}, moveTree);
+  }, [initialBoard, initialPieces, moveHistory, initialSanctuaries, moveTree]);
 
   const loadPGN = useCallback((pgn: string) => {
     const { setup, moves } = PGNService.parsePGN(pgn);

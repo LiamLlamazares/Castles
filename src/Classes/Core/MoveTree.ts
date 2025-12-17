@@ -24,8 +24,8 @@ export interface MoveNode {
  * - If a move is added to a node that already has children, it creates a new variation (branch).
  */
 export class MoveTree {
-    private root: MoveNode;
-    private currentNode: MoveNode;
+    public root: MoveNode;
+    public currentNode: MoveNode;
 
     constructor() {
         this.root = this.createNode({ 
@@ -186,6 +186,48 @@ export class MoveTree {
         return history;
     }
     
+    /**
+     * Creates a deep clone of the MoveTree.
+     * Essential for React state updates to remain pure.
+     */
+    public clone(): MoveTree {
+        const newTree = new MoveTree();
+        
+        // ID map to help restore currentNode reference if needed, 
+        // but replaying the path is more robust if IDs were to change.
+        const cloneSubtree = (node: MoveNode, parent: MoveNode | null): MoveNode => {
+            const newNode: MoveNode = {
+                ...node,
+                parent,
+                children: [] // will be populated
+            };
+            newNode.children = node.children.map(c => cloneSubtree(c, newNode));
+            return newNode;
+        };
+
+        const newRoot = cloneSubtree(this.root, null);
+        newTree.root = newRoot;
+        
+        // Replay path from root to currentNode to set the new currentNode
+        const pathIndices: number[] = [];
+        let temp: MoveNode | null = this.currentNode;
+        while (temp && temp.parent) {
+            const index = temp.parent.children.indexOf(temp);
+            pathIndices.unshift(index);
+            temp = temp.parent;
+        }
+
+        let newCurr = newRoot;
+        for (const idx of pathIndices) {
+            if (newCurr.children[idx]) {
+                newCurr = newCurr.children[idx];
+            }
+        }
+        newTree.currentNode = newCurr;
+
+        return newTree;
+    }
+
     /**
      * EXPERIMENTAL: Returns specific variation line.
      */
