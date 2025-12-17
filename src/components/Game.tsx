@@ -92,7 +92,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
     winner,
     isRecruitmentSpot,
     moveHistory,
+    moveTree,
     movingPiece,
+    jumpToNode,
 
     // Actions
     handlePass,
@@ -274,6 +276,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
         }}
         onNewGame={handleNewGame}
         moveHistory={moveHistory || []}
+        moveTree={moveTree}
+        onJumpToNode={jumpToNode}
         hasGameStarted={hasGameStarted}
         winner={winner}
       />

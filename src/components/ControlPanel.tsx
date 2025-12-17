@@ -7,6 +7,7 @@ import ChessClock from "./Clock";
 import TurnBanner from "./Turn_banner";
 import HistoryTable from "./HistoryTable";
 import { TurnPhase, Color, MoveRecord, STARTING_TIME } from "../Constants";
+import { MoveTree } from "../Classes/Core/MoveTree";
 
 interface ControlPanelProps {
   currentPlayer: Color;
@@ -15,6 +16,8 @@ interface ControlPanelProps {
   onResign: () => void;
   onNewGame: () => void;
   moveHistory: MoveRecord[];
+  moveTree?: MoveTree;
+  onJumpToNode?: (nodeId: string) => void;
   hasGameStarted: boolean;
   winner: Color | null;
 }
@@ -26,6 +29,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onResign,
   onNewGame,
   moveHistory,
+  moveTree,
+  onJumpToNode,
   hasGameStarted,
   winner,
 }) => {
@@ -48,7 +53,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
       {/* Move History (Middle) */}
       <div className="notation-section">
-        <HistoryTable moveHistory={moveHistory} currentPlayer={currentPlayer} />
+        <HistoryTable 
+          moveHistory={moveHistory} 
+          moveTree={moveTree}
+          onJumpToNode={onJumpToNode}
+          currentPlayer={currentPlayer} 
+        />
       </div>
 
       {/* White Player Section (Bottom) */}

@@ -1,4 +1,4 @@
-import { MoveRecord } from "../../Constants";
+import { MoveRecord, HistoryEntry } from "../../Constants";
 
 
 export interface MoveNode {
@@ -7,6 +7,9 @@ export interface MoveNode {
     parent: MoveNode | null;
     children: MoveNode[];
     selectedChildIndex: number; // For "main line" navigation
+    
+    // For stable re-navigation / state reconstruction
+    snapshot?: HistoryEntry; 
     
     // Annotations or comments could go here
     comment?: string;
@@ -34,13 +37,14 @@ export class MoveTree {
         this.currentNode = this.root;
     }
 
-    private createNode(move: MoveRecord, parent: MoveNode | null): MoveNode {
+    private createNode(move: MoveRecord, parent: MoveNode | null, snapshot?: HistoryEntry): MoveNode {
         return {
             id: Math.random().toString(36).substr(2, 9),
             move,
             parent,
             children: [],
-            selectedChildIndex: 0
+            selectedChildIndex: 0,
+            snapshot
         };
     }
 
@@ -57,7 +61,7 @@ export class MoveTree {
      * If the move already exists as a child (same notation), navigates to it.
      * If other children exist but not this one, adds it as a new variation.
      */
-    public addMove(move: MoveRecord): void {
+    public addMove(move: MoveRecord, snapshot?: HistoryEntry): void {
         const existingChildIndex = this.currentNode.children.findIndex(
             child => child.move.notation === move.notation
         );
@@ -67,13 +71,27 @@ export class MoveTree {
             // Optionally promote it to main line? For now, just select it.
             this.currentNode.selectedChildIndex = existingChildIndex;
             this.currentNode = this.currentNode.children[existingChildIndex];
+            
+            // Update snapshot if provided and missing (e.g. from PGN import)
+            if (snapshot && !this.currentNode.snapshot) {
+                this.currentNode.snapshot = snapshot;
+            }
         } else {
             // Create new child
-            const newNode = this.createNode(move, this.currentNode);
+            const newNode = this.createNode(move, this.currentNode, snapshot);
             this.currentNode.children.push(newNode);
             this.currentNode.selectedChildIndex = this.currentNode.children.length - 1; // Select the new move
             this.currentNode = newNode;
         }
+    }
+
+    public findNodeById(id: string, startNode: MoveNode = this.root): MoveNode | null {
+        if (startNode.id === id) return startNode;
+        for (const child of startNode.children) {
+            const found = this.findNodeById(id, child);
+            if (found) return found;
+        }
+        return null;
     }
 
     public navigateBack(): boolean {

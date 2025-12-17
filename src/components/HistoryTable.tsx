@@ -1,12 +1,15 @@
 import React, { useEffect, useRef } from "react";
 import { MoveRecord, Color } from "../Constants";
+import { MoveTree, MoveNode } from "../Classes/Core/MoveTree";
 
 interface HistoryTableProps {
   moveHistory: MoveRecord[];
+  moveTree?: MoveTree;
+  onJumpToNode?: (id: string) => void;
   currentPlayer: Color;
 }
 
-const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory }) => {
+const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJumpToNode }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when history updates
@@ -14,64 +17,139 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory }) => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [moveHistory]);
+  }, [moveHistory, moveTree]);
 
-  // Group moves by turn number
-  const turns: { [key: number]: { white?: string; black?: string } } = {};
-  
-  moveHistory.forEach((record) => {
-    if (!turns[record.turnNumber]) {
-      turns[record.turnNumber] = {};
-    }
-    // Append move to the correct color slot. 
-    // If multiple moves per turn (e.g. recruit + move), append with comma?
-    // User wants "moves of each player placed side by side".
-    // Let's stack them or comma separate inside the cell.
-    if (record.color === "w") {
-        const current = turns[record.turnNumber].white;
-        turns[record.turnNumber].white = current ? `${current}, ${record.notation}` : record.notation;
-    } else {
-        const current = turns[record.turnNumber].black;
-        turns[record.turnNumber].black = current ? `${current}, ${record.notation}` : record.notation;
-    }
-  });
+  if (!moveTree) return <div className="history-table-container">No history</div>;
 
-  const turnNumbers = Object.keys(turns).map(Number).sort((a, b) => a - b);
+  const currentId = moveTree.current.id;
+
+  const renderMoves = (nodes: MoveNode[], depth: number = 0): React.ReactNode => {
+    if (nodes.length === 0) return null;
+
+    const elements: React.ReactNode[] = [];
+    
+    // Main line for this variation
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const isSelected = node.id === currentId;
+        
+        // Render move number if it's white's move OR if it's the start of a variation
+        const shouldShowNumber = node.move.color === 'w' || i === 0;
+        
+        elements.push(
+            <span 
+                key={node.id}
+                onClick={() => onJumpToNode?.(node.id)}
+                className="history-move"
+                style={{
+                    cursor: "pointer",
+                    padding: "2px 4px",
+                    borderRadius: "3px",
+                    background: isSelected ? "rgba(255, 255, 255, 0.2)" : "transparent",
+                    color: isSelected ? "#fff" : node.move.color === 'w' ? "#ccc" : "#999",
+                    fontWeight: isSelected ? "bold" : "normal",
+                    display: "inline-block",
+                    marginRight: "4px"
+                }}
+            >
+                {shouldShowNumber && <span style={{ opacity: 0.5, marginRight: "4px" }}>{node.move.turnNumber}.</span>}
+                {node.move.notation}
+            </span>
+        );
+
+        // Check for side variations (children other than the selected one)
+        if (node.children.length > 1) {
+            const variations = node.children.filter((_, idx) => idx !== node.selectedChildIndex);
+            variations.forEach((vNode, vIdx) => {
+                elements.push(
+                    <div 
+                        key={`${vNode.id}-var-${vIdx}`}
+                        className="variation-block"
+                        style={{
+                            fontSize: "0.9em",
+                            color: "#888",
+                            background: "rgba(0,0,0,0.15)",
+                            padding: "4px 8px",
+                            margin: "4px 0",
+                            borderRadius: "4px",
+                            borderLeft: "2px solid rgba(255,255,255,0.1)"
+                        }}
+                    >
+                        <span style={{ fontStyle: "italic", marginRight: "4px" }}>(variation) </span>
+                        {renderMoveChain(vNode)}
+                    </div>
+                );
+            });
+        }
+    }
+
+    return elements;
+  };
+
+  const renderMoveChain = (startNode: MoveNode): React.ReactNode => {
+      const chain: MoveNode[] = [];
+      let curr: MoveNode | null = startNode;
+      while (curr) {
+          chain.push(curr);
+          // In a variation "chain", we just follow the selected path of that branch
+          curr = curr.children[curr.selectedChildIndex] || null;
+      }
+      return renderMoves(chain);
+  };
+
+  // The move history displayed in the UI is traditionally the "main line" or the "current branch"
+  // We'll start from the root's first child
+  const rootMoves: MoveNode[] = [];
+  let currentInMain: MoveNode | null = moveTree.rootNode.children[moveTree.rootNode.selectedChildIndex] || null;
+  while(currentInMain) {
+      rootMoves.push(currentInMain);
+      currentInMain = currentInMain.children[currentInMain.selectedChildIndex] || null;
+  }
 
   return (
     <div className="history-table-container" style={{ 
         flex: 1, 
         overflowY: "auto", 
-        background: "rgba(0,0,0,0.2)", 
-        borderRadius: "4px",
-        marginTop: "10px",
-        padding: "5px"
+        background: "rgba(0,0,0,0.3)", 
+        backdropFilter: "blur(4px)",
+        borderRadius: "8px",
+        marginTop: "12px",
+        padding: "12px",
+        fontFamily: "'Inter', 'Roboto Mono', monospace",
+        fontSize: "0.85rem",
+        lineHeight: "1.8",
+        border: "1px solid rgba(255,255,255,0.1)",
+        boxShadow: "inset 0 2px 4px rgba(0,0,0,0.3)"
     }} ref={scrollRef}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9em" }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.3)", textAlign: "left" }}>
-            <th style={{ padding: "4px", width: "15%" }}>#</th>
-            <th style={{ padding: "4px", width: "42%" }}>White</th>
-            <th style={{ padding: "4px", width: "43%" }}>Black</th>
-          </tr>
-        </thead>
-        <tbody>
-          {turnNumbers.map((num) => (
-            <tr key={num} style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-              <td style={{ padding: "4px", opacity: 0.7 }}>{num}.</td>
-              <td style={{ padding: "4px", color: "#eee" }}>{turns[num].white || ""}</td>
-              <td style={{ padding: "4px", color: "#aaa" }}>{turns[num].black || ""}</td>
-            </tr>
-          ))}
-          {turnNumbers.length === 0 && (
-            <tr>
-              <td colSpan={3} style={{ padding: "10px", textAlign: "center", opacity: 0.5 }}>
-                No moves yet
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      {rootMoves.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline" }}>
+            {renderMoves(rootMoves)}
+          </div>
+      ) : (
+          <div style={{ textAlign: "center", opacity: 0.5, padding: "20px" }}>No moves yet</div>
+      )}
+      
+      <style>{`
+        .history-move:hover {
+            background: rgba(255,255,255,0.1) !important;
+            color: #fff !important;
+        }
+        .variation-block {
+            width: 100%;
+            margin: 6px 0;
+            position: relative;
+        }
+        .variation-block::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+        }
+      `}</style>
     </div>
   );
 };

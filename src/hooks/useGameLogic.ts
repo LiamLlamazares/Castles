@@ -22,7 +22,7 @@ import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
-import { MoveTree } from "../Classes/Core/MoveTree";
+import { MoveTree, MoveNode } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
 import {
   TurnPhase,
@@ -139,6 +139,40 @@ export const useGameLogic = (
   const pieces = viewState.pieces;
   const castles = viewState.castles;
   const turnCounter = viewState.turnCounter;
+
+  /**
+   * Jumps to a specific node in the move tree, potentially switching variations.
+   */
+  const jumpToNode = useCallback((nodeId: string) => {
+      const node = state.moveTree?.findNodeById(nodeId);
+      if (!node || !node.snapshot) return;
+
+      // Reconstruct the history line for this node
+      const path: HistoryEntry[] = [];
+      let current: MoveNode | null = node;
+      while (current && current.parent) {
+          if (current.snapshot) {
+              path.unshift(current.snapshot);
+          }
+          current = current.parent;
+      }
+      
+      // Update global state with the new timeline and view index
+      setState(prev => ({
+          ...prev,
+          pieces: node.snapshot!.pieces.map(p => p.clone()),
+          castles: node.snapshot!.castles.map(c => c.clone()),
+          sanctuaries: node.snapshot!.sanctuaries.map(s => s.clone()),
+          turnCounter: node.snapshot!.turnCounter,
+          history: path,
+          viewMoveIndex: path.length - 1,
+          moveHistory: node.snapshot!.moveNotation,
+          movingPiece: null
+      }));
+
+      // Update MoveTree current node to enable forward/backward from here
+      state.moveTree?.setCurrentNode(node);
+  }, [state.moveTree, setState]);
 
   // =========== COMPUTED VALUES ===========
   const turnPhase = useMemo<TurnPhase>(
@@ -503,6 +537,7 @@ export const useGameLogic = (
     winner,
     isRecruitmentSpot,
     board: gameEngine.board,
+    moveTree: state.moveTree,
     moveHistory: moveHistory,
     hasGameStarted,
 
@@ -520,6 +555,7 @@ export const useGameLogic = (
     // Analysis & PGN
     isAnalysisMode,
     jumpToMove,
+    jumpToNode,
     stepHistory,
     getPGN,
     loadPGN,

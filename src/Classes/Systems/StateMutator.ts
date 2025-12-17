@@ -28,6 +28,7 @@ import { CombatSystem } from "./CombatSystem";
 import { DeathSystem } from "./DeathSystem";
 import { Board } from "../Core/Board";
 import { createPieceMap } from "../../utils/PieceMap";
+import { createHistorySnapshot } from "../../utils/GameStateUtils";
 import {
   MoveRecord,
   PieceType,
@@ -52,14 +53,20 @@ export class StateMutator {
   }
 
   /**
-   * Appends a move record to the history and updates the MoveTree.
+   * Appends a move record to the history.
    * Handles undefined moveHistory gracefully.
    */
   private static appendHistory(state: GameState, record: MoveRecord): MoveRecord[] {
-    if (state.moveTree) {
-        state.moveTree.addMove(record);
-    }
     return [...(state.moveHistory || []), record];
+  }
+
+  /**
+   * Updates the MoveTree with a new move and a snapshot of the resulting state.
+   */
+  private static recordMoveInTree(state: GameState, record: MoveRecord): void {
+      if (state.moveTree) {
+          state.moveTree.addMove(record, createHistorySnapshot(state));
+      }
   }
 
   // ================= PUBLIC MUTATIONS =================
@@ -96,7 +103,9 @@ export class StateMutator {
        nextState = StateMutator.resetTurnFlags(nextState);
     }
 
-    return StateMutator.checkTurnTransitions(nextState);
+    const result = StateMutator.checkTurnTransitions(nextState);
+    this.recordMoveInTree(result, record);
+    return result;
   }
 
   public static applyCastleAttack(state: GameState, piece: Piece, targetHex: Hex, board: Board): GameState {
@@ -130,7 +139,7 @@ export class StateMutator {
     const tempState: GameState = { ...state, pieces: newPieces, pieceMap: newPieceMap, castles: newCastles };
     const newTurnCounter = state.turnCounter + RuleEngine.getTurnCounterIncrement(tempState, board);
     
-    return StateMutator.checkTurnTransitions({
+    const result = StateMutator.checkTurnTransitions({
         ...state,
         pieces: newPieces,
         pieceMap: newPieceMap,
@@ -139,6 +148,9 @@ export class StateMutator {
         turnCounter: newTurnCounter,
         moveHistory: newMoveHistory
     });
+
+    this.recordMoveInTree(result, record);
+    return result;
   }
 
   public static applyAttack(state: GameState, attacker: Piece, targetHex: Hex, board: Board): GameState {
@@ -164,7 +176,7 @@ export class StateMutator {
          if (updates.phoenixRecords) newPhoenixRecords = updates.phoenixRecords;
      }
       
-     return StateMutator.checkTurnTransitions({
+     const resultState = StateMutator.checkTurnTransitions({
           ...state,
           pieces: result.pieces,
           pieceMap: newPieceMap,
@@ -174,6 +186,9 @@ export class StateMutator {
           graveyard: newGraveyard,
           phoenixRecords: newPhoenixRecords
      });
+
+     this.recordMoveInTree(resultState, record);
+     return resultState;
   }
 
   public static passTurn(state: GameState, board: Board): GameState {
@@ -218,7 +233,7 @@ export class StateMutator {
       const tempState: GameState = { ...state, pieces: piecesAfterHealing, pieceMap: createPieceMap(piecesAfterHealing) };
       const increment = RuleEngine.getTurnCounterIncrement(tempState, board, true);
       
-      return StateMutator.checkTurnTransitions({
+      const result = StateMutator.checkTurnTransitions({
           ...state,
           pieces: piecesAfterHealing, // Updated with healing
           pieceMap: createPieceMap(piecesAfterHealing), // Rebuild map
@@ -226,6 +241,9 @@ export class StateMutator {
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory
       });
+
+      this.recordMoveInTree(result, record);
+      return result;
   }
 
   public static activateAbility(state: GameState, source: Piece, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead", board: Board): GameState {
@@ -329,19 +347,20 @@ export class StateMutator {
        const record = this.createMoveRecord(abilityNotation, state);
        const newMoveHistory = this.appendHistory(state, record);
 
-       return StateMutator.checkTurnTransitions({
-          ...state,
-          pieces: newPieces,
-          pieceMap: newPieceMap,
-          movingPiece: null,
-          turnCounter: state.turnCounter + increment,
-          moveHistory: newMoveHistory,
-          graveyard: newGraveyard,
-          phoenixRecords: newPhoenixRecords
-     });
+        const result = StateMutator.checkTurnTransitions({
+           ...state,
+           pieces: newPieces,
+           pieceMap: newPieceMap,
+           movingPiece: null,
+           turnCounter: state.turnCounter + increment,
+           moveHistory: newMoveHistory,
+           graveyard: newGraveyard,
+           phoenixRecords: newPhoenixRecords
+      });
+
+      this.recordMoveInTree(result, record);
+      return result;
   }
-
-
 
   public static recruitPiece(state: GameState, castle: Castle, hex: Hex, board: Board): GameState {
       const pieceTypes = Object.values(PieceType);
@@ -370,15 +389,18 @@ export class StateMutator {
       const tempState: GameState = { ...state, pieces: newPieces, pieceMap: newPieceMap, castles: newCastles };
       const increment = RuleEngine.getTurnCounterIncrement(tempState, board);
 
-      return StateMutator.checkTurnTransitions({
-          ...state,
-          pieces: newPieces,
-          pieceMap: newPieceMap,
-          castles: newCastles,
-          movingPiece: null,
-          turnCounter: state.turnCounter + increment,
-          moveHistory: newMoveHistory
-      });
+       const result = StateMutator.checkTurnTransitions({
+           ...state,
+           pieces: newPieces,
+           pieceMap: newPieceMap,
+           castles: newCastles,
+           movingPiece: null,
+           turnCounter: state.turnCounter + increment,
+           moveHistory: newMoveHistory
+       });
+
+       this.recordMoveInTree(result, record);
+       return result;
   }
 
   /**
