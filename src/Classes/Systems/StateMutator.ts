@@ -130,12 +130,23 @@ export class StateMutator {
   }
 
   public static passTurn(state: GameState, board: Board): GameState {
-      // User requested NO history for Pass
+      // User requested NO history for Pass - but we MUST record it for PGN consistency!
+      // The UI can filter it out if needed.
+      const record: MoveRecord = {
+          notation: NotationService.getPassNotation(),
+          turnNumber: Math.floor(state.turnCounter / 10) + 1,
+          color: TurnManager.getCurrentPlayer(state.turnCounter),
+          phase: TurnManager.getTurnPhase(state.turnCounter)
+      };
+
+      const newMoveHistory = [...(state.moveHistory || []), record];
       const increment = RuleEngine.getTurnCounterIncrement(state.pieces, state.castles, state.turnCounter, board, true);
+      
       return StateMutator.checkTurnTransitions({
           ...state,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
+          moveHistory: newMoveHistory
       });
   }
 
