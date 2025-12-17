@@ -335,27 +335,10 @@ export class PGNService {
           turnCounter: state.turnCounter,
           moveNotation: state.moveHistory, // Snapshot of history so far
       };
-      // We also update moveHistory (the list of notations) for the *next* state, 
-      // but usually history tracks *past* states.
-      // GameEngine logic: passTurn etc usually DON'T update `history` array on the state object itself?
-      // useGameLogic manages history. GameEngine manages state transitions.
-      // So here we must manually manage the history array on our `currentState`.
       
-      const newMoveHistory = [...state.moveHistory];
-      
-      const record: MoveRecord = {
-        notation,
-        turnNumber: Math.floor(state.turnCounter / 10) + 1,
-        color: TurnManager.getCurrentPlayer(state.turnCounter),
-        phase: TurnManager.getTurnPhase(state.turnCounter)
-      };
-      
-      newMoveHistory.push(record);
-
       return {
           ...state,
-          history: [...state.history, historyEntry],
-          moveHistory: newMoveHistory
+          history: [...state.history, historyEntry]
       };
   }
 }

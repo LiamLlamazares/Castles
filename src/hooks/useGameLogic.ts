@@ -39,13 +39,7 @@ export const useGameLogic = (
     pieceMap: createPieceMap(initialPieces),
     movingPiece: null,
     turnCounter: initialTurnCounter,
-    castles: initialBoard.castles as Castle[], // Castles might need to be from history? 
-    // Actually if initialHistory is provided, pieces/castles/turnCounter should match the LAST entry?
-    // User passed initialPieces separately. App.tsx passes `gameConfig.pieces`.
-    // If loading game, `App` passes the *Result* of replay.
-    // So initialPieces IS the state at the end of replay.
-    // initialTurnCounter IS the counter at end.
-    // So we just trust them.
+    castles: initialBoard.castles as Castle[], 
     
     showCoordinates: false,
     cheatMode: false,
