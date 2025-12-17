@@ -7,6 +7,8 @@ interface UseInputHandlerProps {
   onTakeback: () => void;
   onResize: () => void;
   onNavigate: (direction: -1 | 1) => void;
+  onNewGame?: () => void;
+  isNewGameEnabled?: boolean;
 }
 
 export const useInputHandler = ({
@@ -15,6 +17,8 @@ export const useInputHandler = ({
   onTakeback,
   onResize,
   onNavigate,
+  onNewGame,
+  isNewGameEnabled = false,
 }: UseInputHandlerProps) => {
   
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -36,6 +40,11 @@ export const useInputHandler = ({
       case "KeyQ":
         onPass();
         break;
+      case "KeyN":
+        if (isNewGameEnabled && onNewGame) {
+          onNewGame();
+        }
+        break;
       case "ArrowLeft":
         onNavigate(-1);
         break;
@@ -43,11 +52,11 @@ export const useInputHandler = ({
         onNavigate(1);
         break;
     }
-  }, [onPass, onFlipBoard, onTakeback, onNavigate]);
+  }, [onPass, onFlipBoard, onTakeback, onNavigate, onNewGame, isNewGameEnabled]);
 
   const handleResize = useCallback(() => {
-    // Subtract sidebar width (200px) AND Right HUD width (~280px)
-    startingLayout.updateDimensions(window.innerWidth - 550, window.innerHeight);
+    // Subtract right panel width (~300px)
+    startingLayout.updateDimensions(window.innerWidth - 300, window.innerHeight);
     onResize();
   }, [onResize]);
 

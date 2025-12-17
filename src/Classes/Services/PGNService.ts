@@ -276,7 +276,21 @@ export class PGNService {
                    if (!pieceType) throw new Error(`Unknown piece code ${pieceCode}`);
 
                    // Find which castle can recruit here.
-                   const castle = currentState.castles.find(c => c.isAdjacent(spawnHex) && c.color === engine.getCurrentPlayer(currentState.turnCounter));
+                   // Must be: adjacent, owned by current player, AND a captured castle (not a starting castle)
+                   const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter);
+                   
+                   // DEBUG: Log all castles and their properties
+                   console.log(`Looking for castle adjacent to ${parts[0]} (${spawnHex.q},${spawnHex.r},${spawnHex.s}) for player ${currentPlayer}`);
+                   currentState.castles.forEach((c, i) => {
+                       const adj = c.isAdjacent(spawnHex);
+                       console.log(`  Castle ${i}: (${c.hex.q},${c.hex.r},${c.hex.s}) color=${c.color} owner=${c.owner} adjacent=${adj}`);
+                   });
+                   
+                   const castle = currentState.castles.find(c => 
+                       c.isAdjacent(spawnHex) && 
+                       c.owner === currentPlayer &&
+                       c.color !== currentPlayer
+                   );
                    if (!castle) throw new Error(`No castle found to recruit at ${parts[0]}`);
 
                    currentState = PGNService.saveHistoryEntry(currentState, token);

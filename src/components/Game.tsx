@@ -4,7 +4,7 @@ import { useInputHandler } from "../hooks/useInputHandler";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import ControlPanel from "./ControlPanel";
-import PlayerHUD from "./PlayerHUD";
+import HamburgerMenu from "./HamburgerMenu";
 import VictoryOverlay from "./VictoryOverlay";
 import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
@@ -44,7 +44,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
     
   const {
-    // State
     // State
     pieces,
     castles,
@@ -86,12 +85,21 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
   }, [victoryMessage]);
 
+  // Handle New Game - only allow if game hasn't started or someone won
+  const handleNewGame = () => {
+    if (!hasGameStarted || winner) {
+      onSetup();
+    }
+  };
+
   useInputHandler({
     onPass: handlePass,
     onFlipBoard: handleFlipBoard,
     onTakeback: handleTakeback,
     onResize: incrementResizeVersion,
-    onNavigate: stepHistory
+    onNavigate: stepHistory,
+    onNewGame: handleNewGame,
+    isNewGameEnabled: !hasGameStarted || !!winner
   });
 
   // =========== RENDER ===========
@@ -108,32 +116,34 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
   };
 
+  const handleExportPGN = () => {
+    const pgn = getPGN();
+    navigator.clipboard.writeText(pgn).then(() => alert("PGN copied to clipboard!"));
+  };
+
   return (
     <>
+      {/* Hamburger Menu (Top Left) */}
+      <HamburgerMenu
+        onExportPGN={handleExportPGN}
+        onImportPGN={handleImportPGN}
+        onFlipBoard={handleFlipBoard}
+        onToggleCoordinates={toggleCoordinates}
+      />
+
+      {/* Game Panel (Right Side - Lichess Style) */}
       <ControlPanel
         currentPlayer={currentPlayer}
         turnPhase={turnPhase}
         onPass={handlePass}
-        onToggleCoordinates={toggleCoordinates}
-        onTakeback={handleTakeback}
-        onFlipBoard={handleFlipBoard}
         onResign={() => {
             handleResign(currentPlayer);
             onResign();
         }}
-        onNewGame={onSetup}
+        onNewGame={handleNewGame}
         moveHistory={moveHistory || []}
-        onExportPGN={() => {
-            const pgn = getPGN();
-            navigator.clipboard.writeText(pgn).then(() => alert("PGN copied to clipboard!"));
-        }}
-        onImportPGN={handleImportPGN}
-      />
-      
-      <PlayerHUD 
-        currentPlayer={currentPlayer} 
-        turnPhase={turnPhase} 
         hasGameStarted={hasGameStarted}
+        winner={winner}
       />
       
       <svg className="board" height="100%" width="100%">
