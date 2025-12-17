@@ -30,10 +30,10 @@
 ## Game Overview
 
 ### The Board
-- Hexagonal grid with sides of length 8
-- **River hexes** divide the board (impassable except for flying units)
-- **6 Castles** positioned in corners (3 per player)
-- **6 Sanctuaries** scattered across the board (for summoning special pieces)
+- **Grass/Plains**: Standard movement terrain.
+- **River**: Impassable to ground units, but flying units (Eagle, Dragon, Phoenix) can cross.
+- **Castle**: Recruitment centers located in the corners.
+- **Sanctuaries**: Magical circles for summoning special units.
 
 ### Starting Setup
 Each player begins with:
@@ -55,20 +55,20 @@ Each player begins with:
 
 ### 2. Attack Phase ⚔️
 - Attack with **up to 2 pieces**
-- Multiple pieces can combine attacks on one target
-- Melee attackers move onto captured hex
+- Multiple pieces can combine attacks on one target (damage stacks)
+- Melee attackers move onto captured hex upon victory
 
 ### 3. Castles Phase 🏰
 - Recruit **one piece per controlled castle**
 - Recruitment order: Swordsman → Archer → Knight → Eagle → Giant → Trebuchet → Assassin → Dragon → Monarch
 - Pieces spawn on unoccupied hex adjacent to castle
+- You cannot recruit if all adjacent hexes are blocked
 
 ---
 
 ## Standard Pieces
 
 ### Movement Types
-
 | Piece | Movement | Range | Notes |
 |-------|----------|-------|-------|
 | **Swordsman** | Forward diagonal (3 dirs) | 1 | Like a pawn |
@@ -82,16 +82,14 @@ Each player begins with:
 | **Dragon** | L-shaped jump | Fixed | Like chess knight, heavy, flying |
 
 ### Attack Types
-
 | Type | Pieces | Range | Behavior |
 |------|--------|-------|----------|
-| **Melee** | Eagle, Giant, Dragon, Assassin, Monarch | Adjacent | Move onto captured hex |
+| **Melee** | Eagle, Giant, Dragon, Assassin, Monarch, Knight | Adjacent | Move onto captured hex |
 | **Swordsman** | Swordsman | Forward diagonal | Move onto captured hex |
-| **Ranged** | Archer | 2 hexes | Does not move |
+| **Ranged** | Archer, Wizard | 2 hexes | Does not move |
 | **Long-Ranged** | Trebuchet, Ranger | 3 hexes | Does not move |
 
 ### Strength (HP)
-
 | Strength 1 | Strength 2 | Strength 3 |
 |------------|------------|------------|
 | Swordsman, Archer, Knight, Trebuchet, Eagle, Assassin | Giant, Phoenix | Dragon, Monarch |
@@ -104,33 +102,32 @@ Special pieces are summoned from **Sanctuaries** located across the board.
 
 | Piece | Movement | Attack | Strength | Special Ability |
 |-------|----------|--------|----------|-----------------|
-| **Wolf** | Walk 3 hexes | Melee | 1 | **Pack Tactics**: +1 strength per adjacent friendly Wolf |
+| **Wolf** | Walk 3 hexes | Melee | 1 | **Pack Tactics**: +1 strength per adjacent friendly Wolf (stackable) |
 | **Healer** | 1 hex | None | 1 | **Heal**: Removes damage from adjacent friendly piece |
-| **Ranger** | Walk 2 hexes | Long-Range (3) | 1 | Mobile archer |
-| **Wizard** | 1 hex | Ranged (2) | 1 | **Fireball**: One-time area damage |
-| **Necromancer** | 1 hex | Melee | 1 | **Raise Dead**: Revive a captured piece (one-time) |
-| **Phoenix** | Fly 3 hexes | Melee | 2 | **Rebirth**: Returns 3 turns after death |
+| **Ranger** | Walk 2 hexes | Long-Range (3) | 1 | Mobile sniper unit |
+| **Wizard** | 1 hex | Ranged (2) | 1 | **Fireball**: Range 2, damages target (one-time use) |
+| **Necromancer** | 1 hex | Melee | 1 | **Raise Dead**: Revive a captured piece to adjacent hex (one-time use) |
+| **Phoenix** | Fly 3 hexes | Melee | 2 | **Rebirth**: Returns to board 3 turns after death |
 
 ---
 
 ## Combat
 
 ### Damage Resolution
-1. Attacker deals damage equal to their **strength**
-2. Damage accumulates on the defender
-3. Defender dies when damage **≥ their strength**
-4. All damage resets at the end of each round
+1. Attacker deals damage equal to their **strength**.
+2. Damage accumulates on the defender throughout the round.
+3. Defender dies when **Total Damage ≥ Max Strength**.
+4. All damage resets at the end of each round.
 
-### Combining Attacks
-- Multiple pieces can attack the same target in one phase
-- Damage stacks, enabling takedowns of high-strength pieces
-- Example: 3 Swordsmen (1+1+1 = 3 damage) can kill a Monarch (3 strength)
+### Ranged Protection 🛡️
+- **Defended Rule**: Any piece currently adjacent to a friendly unit is considered "Defended".
+- **Benefit**: Defended pieces **cannot be targeted** by Ranged (Archer/Wizard) or Long-Ranged (Trebuchet/Ranger) attacks.
+- **Counter**: You must attack Defended pieces using Melee units.
 
-### Assassin Special
-- Assassin **instantly kills** any Monarch, regardless of damage
-
-### Coronation
-- Swordsman reaching opponent's back row can **promote** to any piece type
+### Special Rules
+- **Combined Arms**: Multiple pieces can attack the same target in one turn.
+- **Assassin**: Instantly kills any Monarch regardless of HP/Strength.
+- **Coronation**: Swordsman reaching opponent's back row can promote to any piece type (except Monarch).
 
 ---
 
@@ -138,30 +135,19 @@ Special pieces are summoned from **Sanctuaries** located across the board.
 
 Sanctuaries are special hexes where players can **pledge** to summon powerful creatures.
 
-### Tiers
-
-| Tier | Sanctuaries | Requirement | Location |
-|------|-------------|-------------|----------|
-| **1** | Wolf Covenant, Sacred Spring | Occupy (strength ≥ 1) | Near river (neutral zone) |
-| **2** | Warden's Watch, Arcane Refuge | Strength ≥ 3 | Opponent's shallow territory |
-| **3** | Forsaken Grounds, Pyre Eternal | Strength ≥ 4 + sacrifice | Opponent's deep territory |
-
 ### How to Pledge
-1. Have a piece on the sanctuary hex
-2. Meet the strength requirement (sum of adjacent friendly pieces)
-3. For Tier 3: Sacrifice one adjacent piece
-4. Spawned creature appears on an adjacent unoccupied hex
+1. Move a piece onto the Sanctuary hex.
+2. Meet the **Strength Requirement** (Sum of adjacent friendly pieces).
+3. (Tier 3 Only) Sacrifice an adjacent friendly unit.
+4. Summon the special piece to an adjacent empty hex.
 
-### Sanctuary Types
+### Sanctuary Tiers & Rewards
 
-| Sanctuary | Summons | Tier |
-|-----------|---------|------|
-| Wolf Covenant | Wolf | 1 |
-| Sacred Spring | Healer | 1 |
-| Warden's Watch | Ranger | 2 |
-| Arcane Refuge | Wizard | 2 |
-| Forsaken Grounds | Necromancer | 3 |
-| Pyre Eternal | Phoenix | 3 |
+| Tier | Requirement | Location | Rewards |
+|------|-------------|----------|---------|
+| **1** | Occupy (Any unit) | Neutral Zone | **Wolf** (Pack Tactics)<br>**Healer** (Heal Ally) |
+| **2** | Occupy + 3 Strength | Shallow Enemy Territory | **Ranger** (Long Range)<br>**Wizard** (Fireball) |
+| **3** | Occupy + 4 Strength + Sacrifice | Deep Enemy Territory | **Necromancer** (Raise Dead)<br>**Phoenix** (Rebirth) |
 
 ---
 
