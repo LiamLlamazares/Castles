@@ -25,6 +25,7 @@ import { PieceMap } from "../../utils/PieceMap";
 import { RuleEngine } from "../Systems/RuleEngine";
 import { StateMutator } from "../Systems/StateMutator";
 import { SanctuaryService } from "../Services/SanctuaryService";
+import { MoveTree } from "./MoveTree";
 import {
   Color,
   TurnPhase,
@@ -52,6 +53,7 @@ export interface GameState {
   movingPiece: Piece | null;
   history: HistoryEntry[];
   moveHistory: MoveRecord[];
+  moveTree?: MoveTree; // Optional for now, to support gradual refactor
   graveyard: Piece[]; // Captured pieces eligible for revival
   phoenixRecords: PhoenixRecord[]; // Active rebirth timers
 }

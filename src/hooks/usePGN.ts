@@ -12,6 +12,7 @@ import { useCallback } from "react";
 import { PGNService } from "../Classes/Services/PGNService";
 import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
+import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveRecord } from "../Constants";
 
 export interface PGNHookResult {
@@ -22,6 +23,8 @@ export interface PGNHookResult {
     history: any[];
     moveHistory: MoveRecord[];
     turnCounter: number;
+    sanctuaries: import("../Classes/Entities/Sanctuary").Sanctuary[];
+    castles: import("../Classes/Entities/Castle").Castle[];
   } | null;
 }
 
@@ -31,12 +34,13 @@ export interface PGNHookResult {
 export const usePGN = (
   initialBoard: Board,
   initialPieces: Piece[],
+  initialSanctuaries: Sanctuary[],
   moveHistory: MoveRecord[]
 ): PGNHookResult => {
   
   const getPGN = useCallback(() => {
-    return PGNService.generatePGN(initialBoard, initialPieces, moveHistory);
-  }, [initialBoard, initialPieces, moveHistory]);
+    return PGNService.generatePGN(initialBoard, initialPieces, moveHistory, initialSanctuaries);
+  }, [initialBoard, initialPieces, moveHistory, initialSanctuaries]);
 
   const loadPGN = useCallback((pgn: string) => {
     const { setup, moves } = PGNService.parsePGN(pgn);
@@ -44,15 +48,16 @@ export const usePGN = (
       console.error("Failed to parse PGN setup");
       return null;
     }
-    const { board, pieces: startPieces } = PGNService.reconstructState(setup);
+    const { board, pieces: startPieces, sanctuaries: startSanctuaries } = PGNService.reconstructState(setup);
     
     try {
-      const finalState = PGNService.replayMoveHistory(board, startPieces, moves);
+      const finalState = PGNService.replayMoveHistory(board, startPieces, moves, startSanctuaries);
       
       return { 
         board, 
         pieces: finalState.pieces,
         castles: finalState.castles,
+        sanctuaries: finalState.sanctuaries,
         history: finalState.history,
         moveHistory: finalState.moveHistory,
         turnCounter: finalState.turnCounter
@@ -63,6 +68,8 @@ export const usePGN = (
       return {
         board,
         pieces: startPieces,
+        castles: board.castles, // Add castles return even on error
+        sanctuaries: startSanctuaries, // Add sanctuaries return
         history: [],
         moveHistory: [],
         turnCounter: 0

@@ -41,10 +41,11 @@ interface GameBoardProps {
   initialHistory?: HistoryEntry[]; 
   initialMoveHistory?: MoveRecord[];
   initialTurnCounter?: number;
+  initialSanctuaries?: Sanctuary[];
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
-  onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number) => void;
+  onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
 }
 
 /**
@@ -58,6 +59,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   initialHistory,
   initialMoveHistory,
   initialTurnCounter,
+  initialSanctuaries,
   onResign = () => {},
   onSetup = () => {},
   onRestart = () => {},
@@ -110,7 +112,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries);
 
   // Reset overlay when game restarts (victory message clears or changes)
   React.useEffect(() => {
@@ -232,7 +234,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     if (pgn) {
         const result = loadPGN(pgn);
         if (result && onLoadGame) {
-            onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter);
+            onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter, result.sanctuaries);
         } else {
             alert("Failed to load PGN. Check console for details.");
         }

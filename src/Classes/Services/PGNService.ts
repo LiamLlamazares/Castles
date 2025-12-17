@@ -4,6 +4,8 @@ import { Castle } from "../Entities/Castle";
 import { MoveRecord, Color } from "../../Constants";
 import { Hex } from "../Entities/Hex";
 import { GameEngine, GameState } from "../Core/GameEngine";
+import { MoveTree } from "../Core/MoveTree";
+import { PGNParser } from "../Systems/PGNParser";
 import { createPieceMap } from "../../utils/PieceMap";
 import { NotationService } from "../Systems/NotationService";
 
@@ -106,16 +108,15 @@ export class PGNService {
    * Note: This does NOT replay the moves. It just extracts the initial state and the move strings.
    * You must replay the moves on the Engine to get the final state.
    */
-  public static parsePGN(pgn: string): { setup: GameSetup | null; moves: string[] } {
-    // Normalize newlines and whitespace slightly to ensure clean parsing if it came in as one blob
-    // But be careful not to corrupt the Base64 if it has spaces (though our generator doesn't put spaces in b64)
+  public static parsePGN(pgn: string): { setup: GameSetup | null; moves: string[]; moveTree: MoveTree } {
+    // Normalize newlines and whitespace
     
     // We use a regex loop to find all tags regardless of line breaks.
     const tagRegex = /\[(\w+)\s+"([^"]*)"\]/g;
     let match;
     let lastIndex = 0;
     
-    let setup: GameSetup | null = null; // Declare here so it is available in scope
+    let setup: GameSetup | null = null; 
 
     while ((match = tagRegex.exec(pgn)) !== null) {
         const tagName = match[1];
@@ -125,22 +126,18 @@ export class PGNService {
         if (tagName === 'CustomSetup') {
             try {
                 let parsedData: any;
-                // Try parsing as JSON first (backward compat for V1 w/o Base64)
                 if (tagValue.trim().startsWith('{')) {
                         parsedData = JSON.parse(tagValue);
                 } else {
-                        // Assume Base64 - strip all whitespace first to be safe against line wrapping
                         const base64 = tagValue.replace(/\s/g, '');
-                        // Check for valid Base64 chars mostly to avoid trying to parse garbage
                         const decoded = atob(base64);
                         parsedData = JSON.parse(decoded.trim());
                 }
 
-                // Determine if it is Compact or Legacy format
                 if (parsedData.b && parsedData.c && parsedData.p) {
                     setup = PGNService.decompressSetup(parsedData);
                 } else {
-                    setup = parsedData; // Legacy format
+                    setup = parsedData; 
                 }
 
             } catch (e) {
@@ -152,23 +149,15 @@ export class PGNService {
     // The rest of the string after the last tag is the moves
     const movesString = pgn.substring(lastIndex);
 
-    // Parse moves from movesString
-    // Remove "1.", "2." etc and extra spaces
-    // Regex to find move tokens? 
-    // Matches standard chess moves (e.g. J10K11, J10xK11, Pass)
-    // Simple tokenizer: split by space, ignore numbers with dots.
-    const tokens = movesString.split(/\s+/).filter(t => t.trim() !== '');
-    const cleanMoves: string[] = [];
-    
-    for (const token of tokens) {
-        if (/^\d+\.$/.test(token)) continue; // Skip "1.", "2."
-        if (['1-0', '0-1', '1/2-1/2', '*'].includes(token)) continue; // Skip result
-        cleanMoves.push(token);
-    }
+    // Parse into Tree
+    const moveTree = PGNParser.parseToTree(movesString);
 
-    return { setup, moves: cleanMoves };
+    // Extract main line for compatibility
+    const historyLine = moveTree.getHistoryLine();
+    const cleanMoves = historyLine.map(m => m.notation).filter(n => n !== "Start");
+
+    return { setup, moves: cleanMoves, moveTree };
   }
-
   private static compressSetup(setup: GameSetup): CompactSetup {
       const result: CompactSetup = {
           b: setup.boardConfig,
@@ -242,23 +231,37 @@ export class PGNService {
         return { board, pieces, sanctuaries };
   }
 
-  /**
-   * Replays the parsed moves on top of the initial state to produce the final GameState and History.
-   */
   public static replayMoveHistory(
       board: Board, 
       initialPieces: Piece[], 
-      moves: string[]
+      moves: string[] | MoveTree,
+      initialSanctuaries: Sanctuary[] = []
   ): GameState {
       // Initialize fresh engine and state
       const engine = new GameEngine(board);
-      const castles = board.castles as Castle[]; // Castles from board are effectively the list for now
+      const castles = board.castles as Castle[]; 
+
+      let moveTree: MoveTree;
+      let moveList: string[] = [];
+
+      if (moves instanceof MoveTree) {
+          moveTree = moves;
+          // Get main line to replay
+          const history = moveTree.getHistoryLine();
+          moveList = history.map(h => h.notation).filter(n => n !== "Start");
+          // Reset tree to root so we can traverse it during replay
+          moveTree.goToRoot();
+      } else {
+          moveTree = new MoveTree();
+          moveList = moves;
+      }
 
       let currentState: GameState = {
-          pieces: initialPieces.map(p => p.clone()), // Clone to start fresh
+          pieces: initialPieces.map(p => p.clone()), 
           pieceMap: createPieceMap(initialPieces),
           castles: castles.map(c => c.clone()),
-          sanctuaries: [],
+          sanctuaries: initialSanctuaries.map(s => s.clone()),
+          moveTree: moveTree,
           turnCounter: 0, 
           movingPiece: null,
           history: [],
@@ -268,10 +271,9 @@ export class PGNService {
       };
 
       // Loop through moves and apply them
-      for (const token of moves) {
+      for (const token of moveList) {
           try {
               if (token === "Pass") {
-                  // Save history before move
                   currentState = PGNService.saveHistoryEntry(currentState, token);
                   currentState = engine.passTurn(currentState);
                   continue;
@@ -288,12 +290,10 @@ export class PGNService {
 
                   currentState = PGNService.saveHistoryEntry(currentState, token);
 
-                  // Check if target is a piece or castle
                   const targetPiece = currentState.pieces.find(p => p.hex.equals(targetHex));
                   if (targetPiece) {
                       currentState = engine.applyAttack(currentState, attacker, targetHex);
                   } else {
-                      // Assume castle attack
                       currentState = engine.applyCastleAttack(currentState, attacker, targetHex);
                   }
                   continue;
@@ -305,10 +305,7 @@ export class PGNService {
                    const spawnHex = NotationService.fromCoordinate(parts[0]);
                    const pieceCode = parts[1];
                    
-                   // Find piece type
                    let pieceType: PieceType | undefined;
-                   // Reverse lookup from code... naive approach or need helper
-                   // Codes: Swo, Arc, Kni, Tre, Eag, Gia, Asn, Dra, Mon
                    switch(pieceCode) {
                        case "Swo": pieceType = PieceType.Swordsman; break;
                        case "Arc": pieceType = PieceType.Archer; break;
@@ -323,8 +320,6 @@ export class PGNService {
 
                    if (!pieceType) throw new Error(`Unknown piece code ${pieceCode}`);
 
-                   // Find which castle can recruit here.
-                   // Must be: adjacent, owned by current player, AND a captured castle (not a starting castle)
                    const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter);
                    const castle = currentState.castles.find(c => 
                        c.isAdjacent(spawnHex) && 
@@ -332,27 +327,19 @@ export class PGNService {
                        c.color !== currentPlayer
                    );
                    if (!castle) {
-                       // Build detailed error for debugging
-                       const castleInfo = currentState.castles.map((c, i) => 
-                           `Castle${i}:(${c.hex.q},${c.hex.r},${c.hex.s}) color=${c.color} owner=${c.owner} adj=${c.isAdjacent(spawnHex)}`
-                       ).join('; ');
-                       throw new Error(`No castle found to recruit at ${parts[0]} for player ${currentPlayer}. Turn=${currentState.turnCounter}. Castles: ${castleInfo}`);
+                       throw new Error(`No castle found to recruit at ${parts[0]}`);
                    }
 
                    currentState = PGNService.saveHistoryEntry(currentState, token);
                    currentState = engine.recruitPiece(currentState, castle, spawnHex);
                    
-                   // Force the type of the newly created piece to match PGN, just in case
-                   // The new piece is the last one in the array
                    const recruitedPieceIndex = currentState.pieces.length - 1;
                    if (recruitedPieceIndex >= 0) {
                        const actualType = currentState.pieces[recruitedPieceIndex].type;
                        if (actualType !== pieceType) {
-                           console.warn(`PGN Replay: Recruitment type mismatch. Expected ${pieceType}, got ${actualType}. Correcting...`);
                            const correctedPiece = currentState.pieces[recruitedPieceIndex].with({ type: pieceType });
                            const newPieces = [...currentState.pieces];
                            newPieces[recruitedPieceIndex] = correctedPiece;
-                           // Update currentState with corrected piece
                            currentState = {
                                ...currentState,
                                pieces: newPieces,
@@ -363,15 +350,13 @@ export class PGNService {
                    continue;
               }
 
-              // Pledge: P:WlfK11 (P:PieceCodeCoord)
+              // Pledge: P:WlfK11
               if (token.startsWith('P:')) {
-                   const pledgeData = token.substring(2); // Remove "P:"
-                   // Format: PieceCode(3 chars) + Coord (e.g. "WlfK11")
+                   const pledgeData = token.substring(2); 
                    const pieceCode = pledgeData.substring(0, 3);
                    const spawnCoord = pledgeData.substring(3);
                    const spawnHex = NotationService.fromCoordinate(spawnCoord);
                    
-                   // Reverse lookup piece type from code
                    let pieceType: PieceType | undefined;
                    switch(pieceCode) {
                        case "Wlf": pieceType = PieceType.Wolf; break;
@@ -384,8 +369,6 @@ export class PGNService {
                    
                    if (!pieceType) throw new Error(`Unknown pledge piece code ${pieceCode}`);
                    
-                   // For pledge replay, we directly add the piece since we don't have sanctuary tracking in PGN
-                   // This is a simplified replay - just spawn the piece at the location
                    const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter);
                    const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
                    const newPieces = [...currentState.pieces, newPiece];
@@ -397,13 +380,11 @@ export class PGNService {
                        pieceMap: createPieceMap(newPieces)
                    };
                    
-                   // Advance turn (pledge counts as an action)
                    currentState = engine.passTurn(currentState);
                    continue;
               }
 
               // Movement: J10K11
-              // Parse using Regex
               const moveMatch = token.match(/^([A-Z]\d+)([A-Z]\d+)$/);
               if (moveMatch) {
                    const startHex = NotationService.fromCoordinate(moveMatch[1]);
@@ -419,7 +400,7 @@ export class PGNService {
 
           } catch (e) {
               console.error(`Failed to replay move ${token}:`, e);
-              break; // Stop replaying on error
+              break; 
           }
       }
       return currentState;

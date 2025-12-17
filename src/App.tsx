@@ -16,6 +16,7 @@ interface GameConfig {
   history?: any[];
   moveHistory?: any[];
   turnCounter?: number;
+  sanctuaries?: import('./Classes/Entities/Sanctuary').Sanctuary[];
 }
 
 function App() {
@@ -36,10 +37,10 @@ function App() {
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number) => {
+  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[]) => {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter });
+    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter, sanctuaries });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
   };
@@ -70,6 +71,7 @@ function App() {
               initialHistory={gameConfig.history}
               initialMoveHistory={gameConfig.moveHistory}
               initialTurnCounter={gameConfig.turnCounter}
+              initialSanctuaries={gameConfig.sanctuaries}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}

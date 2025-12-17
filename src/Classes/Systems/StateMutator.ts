@@ -52,10 +52,13 @@ export class StateMutator {
   }
 
   /**
-   * Appends a move record to the history.
+   * Appends a move record to the history and updates the MoveTree.
    * Handles undefined moveHistory gracefully.
    */
   private static appendHistory(state: GameState, record: MoveRecord): MoveRecord[] {
+    if (state.moveTree) {
+        state.moveTree.addMove(record);
+    }
     return [...(state.moveHistory || []), record];
   }
 

@@ -19,6 +19,8 @@ import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
+import { Sanctuary } from "../Classes/Entities/Sanctuary";
+import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
 import {
   TurnPhase,
@@ -42,11 +44,20 @@ export const useGameLogic = (
   initialPieces: Piece[] = allPieces,
   initialHistory: HistoryEntry[] = [],
   initialMoveHistory: MoveRecord[] = [],
-  initialTurnCounter: number = 0
+  initialTurnCounter: number = 0,
+  initialSanctuaries?: Sanctuary[] // Optional, uses default generator if missing
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
   
+  // Use provided sanctuaries or generate default set (random)
+  const startingSanctuaries = useMemo(() => {
+      if (initialSanctuaries && initialSanctuaries.length > 0) {
+          return initialSanctuaries;
+      }
+      return SanctuaryGenerator.generateDefaultSanctuaries(initialBoard);
+  }, [initialBoard, initialSanctuaries]);
+
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>({
     history: initialHistory,
@@ -55,7 +66,8 @@ export const useGameLogic = (
     movingPiece: null,
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
-    sanctuaries: SanctuaryGenerator.generateDefaultSanctuaries(initialBoard), 
+    sanctuaries: startingSanctuaries, 
+    moveTree: new MoveTree(),
     
     // UI Settings
     showCoordinates: false,
@@ -72,7 +84,7 @@ export const useGameLogic = (
   // =========== COMPOSED HOOKS ===========
   const { isAnalysisMode, analysisState, jumpToMove, stepHistory } = useAnalysisMode(state, setState);
   const { showCoordinates, isBoardRotated, resizeVersion, toggleCoordinates, handleFlipBoard, incrementResizeVersion } = useUISettings(state, setState);
-  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, state.moveHistory);
+  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory);
 
   // Destructure for convenience
   const { 
@@ -190,12 +202,34 @@ export const useGameLogic = (
   }, [pieces, castles, state.sanctuaries, turnCounter, moveHistory]);
 
   const handlePass = useCallback(() => {
-    saveHistory();
+    const effectiveState = isAnalysisMode && analysisState 
+        ? { 
+            ...(state as unknown as GameState), 
+            ...analysisState, 
+            moveHistory: analysisState.moveNotation,
+            history: state.history.slice(0, state.viewMoveIndex! + 1),
+            moveTree: state.moveTree
+        } as unknown as GameState
+        : state as unknown as GameState;
+
+    const snapshot: HistoryEntry = {
+        pieces: effectiveState.pieces.map(p => p.clone()),
+        castles: effectiveState.castles.map(c => c.clone()),
+        sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
+        turnCounter: effectiveState.turnCounter,
+        moveNotation: effectiveState.moveHistory
+    };
+    
+    if (isAnalysisMode) {
+         state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+    }
+
     setState(prev => {
-      const newState = gameEngine.passTurn(prev as unknown as GameState);
-      return { ...prev, ...newState };
+      const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
+      const newState = gameEngine.passTurn(stateWithHistory);
+      return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
     });
-  }, [gameEngine, saveHistory]);
+  }, [gameEngine, isAnalysisMode, analysisState, state]);
 
   const handleTakeback = useCallback(() => {
     if (history.length > 0) {
@@ -254,12 +288,81 @@ export const useGameLogic = (
   }, [gameEngine, movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
 
   const handleHexClick = useCallback((hex: Hex) => {
+    // Determine effective "base" state for the move
+    const effectiveState = isAnalysisMode && analysisState 
+        ? { 
+            ...(state as unknown as GameState), // Start with current global state props
+            ...analysisState, // Override with historical props (pieces, turnCounter etc)
+            moveHistory: analysisState.moveNotation,
+            // Reconstruct history array for this point
+            // AnalysisState is just a snapshot, so we assume the history up to this point 
+            // is effectively the first (viewMoveIndex + 1) items of the main history.
+            // NOTE: This assumes linear navigation. If MoveTree is used, we need MoveTree sync.
+            history: state.history.slice(0, state.viewMoveIndex! + 1),
+            // Ensure MoveTree is the global object reference
+            moveTree: state.moveTree
+        } as unknown as GameState
+        : state as unknown as GameState;
+
+    // Helper to commit the new branch
+    const commitBranch = (newState: GameState) => {
+        // If we were in analysis mode, we are now LIVE at the new head.
+        // The GameEngine/StateMutator should have updated the MoveTree already via appendHistory -> moveTree.addMove
+        
+        // We need to sync MoveTree cursor if it wasn't already. (StateMutator updates `currentNode` if addMove is called on it)
+        // BUT StateMutator only calls addMove if we pass `moveTree`.
+        // We passed `state.moveTree`.
+        
+        // HOWEVER: moveTree.addMove adds to `currentNode`.
+        // If we are in analysis mode, we MUST ensure `moveTree.currentNode` points to the node we are viewing!
+        if (isAnalysisMode) {
+            // Sync tree to view index before mutation
+            state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+        }
+        
+        // Now apply final update
+        // We replace the entire history with the new history sequence? 
+        // Or rather, we just update the View to be LIVE.
+        // `newState.moveHistory` will contain the new linear history.
+        
+        setState(prev => ({
+            ...prev,
+            ...newState, // Apply new pieces, turnCounter, etc
+            viewMoveIndex: null, // Exit analysis mode
+            history: newState.history // Use the history returned by mutation (which includes the new snapshot)
+        }));
+    };
+
     if (turnPhase === "Movement" && movingPiece?.canMove) {
       if (isLegalMove(hex)) {
-        saveHistory();
+        // We do NOT call old valid 'saveHistory()' here because we are handling it via StateMutator's internal logic
+        // But wait, `saveHistory` does the SNAPSHOT push. `StateMutator` does the MOVE RECORD push.
+        // `useGameLogic` manages the SNAPSHOT history manually in `handleHexClick` normally via `saveHistory()`.
+        
+        // If we use `effectiveState`, we need to ensure we push the snapshot of `effectiveState` before mutation.
+        // `saveHistory` uses `state` (global).
+        // Let's manually push snapshot of `effectiveState`.
+        
+        const snapshot: HistoryEntry = {
+            pieces: effectiveState.pieces.map(p => p.clone()),
+            castles: effectiveState.castles.map(c => c.clone()),
+            sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
+            turnCounter: effectiveState.turnCounter,
+            moveNotation: effectiveState.moveHistory // This is the history BEFORE the move
+        };
+        
+        const stateWithHistory = {
+            ...effectiveState,
+            history: [...effectiveState.history, snapshot]
+        };
+
+        if (isAnalysisMode) {
+             state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+        }
+
         setState(prev => {
-          const newState = gameEngine.applyMove(prev as unknown as GameState, movingPiece!, hex);
-          return { ...prev, ...newState };
+          const newState = gameEngine.applyMove(stateWithHistory, movingPiece!, hex);
+          return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
         });
         return;
       }
@@ -269,15 +372,29 @@ export const useGameLogic = (
 
     if (turnPhase === "Attack" && movingPiece?.canAttack) {
       if (isLegalAttack(hex)) {
-        saveHistory();
-        const targetPiece = pieces.find(p => p.hex.equals(hex));
+        
+        const snapshot: HistoryEntry = {
+            pieces: effectiveState.pieces.map(p => p.clone()),
+            castles: effectiveState.castles.map(c => c.clone()),
+            sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
+            turnCounter: effectiveState.turnCounter,
+            moveNotation: effectiveState.moveHistory 
+        };
+        const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
+
+        if (isAnalysisMode) {
+             state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+        }
+        
+        const targetPiece = effectiveState.pieces.find(p => p.hex.equals(hex));
+        
         setState(prev => {
           if (targetPiece) {
-            const newState = gameEngine.applyAttack(prev as unknown as GameState, movingPiece!, hex);
-            return { ...prev, ...newState };
+            const newState = gameEngine.applyAttack(stateWithHistory, movingPiece!, hex);
+            return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
           } else {
-            const newState = gameEngine.applyCastleAttack(prev as unknown as GameState, movingPiece!, hex);
-            return { ...prev, ...newState };
+            const newState = gameEngine.applyCastleAttack(stateWithHistory, movingPiece!, hex);
+            return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
           }
         });
         return;
@@ -289,17 +406,30 @@ export const useGameLogic = (
     if (isRecruitmentSpot(hex)) {
       const castle = castles.find(c => c.isAdjacent(hex));
       if (castle) {
-        saveHistory();
+        // Recruitment logic similar to above
+        const snapshot: HistoryEntry = {
+            pieces: effectiveState.pieces.map(p => p.clone()),
+            castles: effectiveState.castles.map(c => c.clone()),
+            sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
+            turnCounter: effectiveState.turnCounter,
+            moveNotation: effectiveState.moveHistory 
+        };
+        const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
+
+        if (isAnalysisMode) {
+             state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+        }
+
         setState(prev => {
-          const newState = gameEngine.recruitPiece(prev as unknown as GameState, castle, hex);
-          return { ...prev, ...newState };
+          const newState = gameEngine.recruitPiece(stateWithHistory, castle, hex);
+          return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
         });
         return;
       }
     }
 
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory]);
+  }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, isAnalysisMode, analysisState, state]);
 
   const handleResign = useCallback((player: Color) => {
     saveHistory();
@@ -317,29 +447,67 @@ export const useGameLogic = (
 
   // Pledge Action
   const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
-    saveHistory();
+    const effectiveState = isAnalysisMode && analysisState 
+        ? { 
+            ...(state as unknown as GameState), 
+            ...analysisState, 
+            moveHistory: analysisState.moveNotation,
+            history: state.history.slice(0, state.viewMoveIndex! + 1),
+            moveTree: state.moveTree
+        } as unknown as GameState
+        : state as unknown as GameState;
+
+    const snapshot: HistoryEntry = {
+        pieces: effectiveState.pieces.map(p => p.clone()),
+        castles: effectiveState.castles.map(c => c.clone()),
+        sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
+        turnCounter: effectiveState.turnCounter,
+        moveNotation: effectiveState.moveHistory
+    };
+
+    if (isAnalysisMode) {
+         state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+    }
+
     setState(prevState => {
        try {
-           const sanctuary = prevState.sanctuaries?.find(s => s.hex.equals(sanctuaryHex));
+           const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
+
+           const sanctuary = stateWithHistory.sanctuaries?.find(s => s.hex.equals(sanctuaryHex));
            if (!sanctuary) throw new Error("Sanctuary not found");
            
-           const newCoreState = gameEngine.pledge(prevState as unknown as GameState, sanctuaryHex, spawnHex);
+           const newCoreState = gameEngine.pledge(stateWithHistory, sanctuaryHex, spawnHex);
            
            const { NotationService } = require("../Classes/Systems/NotationService");
            const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
-           const currentPlayer = gameEngine.getCurrentPlayer(prevState.turnCounter);
-           const turnPhase = gameEngine.getTurnPhase(prevState.turnCounter);
-           const turnNumber = Math.floor(prevState.turnCounter / 10) + 1;
+           const currentPlayer = gameEngine.getCurrentPlayer(stateWithHistory.turnCounter);
+           const turnPhase = gameEngine.getTurnPhase(stateWithHistory.turnCounter);
+           const turnNumber = Math.floor(stateWithHistory.turnCounter / 10) + 1;
            
            const moveRecord = { notation, turnNumber, color: currentPlayer, phase: turnPhase };
            
-           return { ...prevState, ...newCoreState, moveHistory: [...prevState.moveHistory, moveRecord] };
+           // StateMutator normally appends history, but pledge logic in GameEngine is raw?
+           // GameEngine.pledge returns { pieces, sanctuaries, castles, pieceMap }
+           // It does NOT update moveHistory or moveTree automatically via StateMutator.
+           // We must manually update MoveTree here if we want variants for pledges.
+           
+           if (state.moveTree) {
+               state.moveTree.addMove(moveRecord);
+           }
+           
+           return { 
+               ...prevState, 
+               ...newCoreState, 
+               moveHistory: [...stateWithHistory.moveHistory, moveRecord],
+               history: stateWithHistory.history,
+               viewMoveIndex: null 
+           };
        } catch (e) {
            console.error(e);
            return prevState;
        }
     });
-  }, [gameEngine, saveHistory]);
+  }, [gameEngine, isAnalysisMode, analysisState, state]);
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
       return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex);
