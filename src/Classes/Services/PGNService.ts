@@ -8,13 +8,15 @@ import { createPieceMap } from "../../utils/PieceMap";
 import { NotationService } from "../Systems/NotationService";
 import { TurnManager } from "../Core/TurnManager";
 
-import { PieceType } from "../../Constants";
+import { PieceType, SanctuaryType } from "../../Constants";
+import { Sanctuary } from "../Entities/Sanctuary";
 
 // We define a Setup interface for serialization
 export interface GameSetup {
   boardConfig: BoardConfig;
   castles: { q: number; r: number; s: number; color: 'w' | 'b' }[];
   pieces: { type: PieceType; q: number; r: number; s: number; color: 'w' | 'b' }[];
+  sanctuaries?: { type: SanctuaryType; q: number; r: number; s: number; territorySide: 'w' | 'b'; cooldown: number; hasPledgedThisGame: boolean }[];
 }
 
 // Compact types for serialization
@@ -22,6 +24,7 @@ interface CompactSetup {
   b: BoardConfig;
   c: [number, number, number, 0 | 1][]; // q, r, s, color (0=w, 1=b)
   p: [PieceType, number, number, number, 0 | 1][]; // type, q, r, s, color
+  s?: [SanctuaryType, number, number, number, 0 | 1, number, 0 | 1][]; // type, q, r, s, territorySide, cooldown, hasPledgedThisGame
 }
 
 export class PGNService {
@@ -385,6 +388,7 @@ export class PGNService {
       const historyEntry = {
           pieces: state.pieces.map(p => p.clone()),
           castles: state.castles.map(c => c.clone()),
+          sanctuaries: state.sanctuaries.map(s => s.clone()), // Clone sanctuaries too
           turnCounter: state.turnCounter,
           moveNotation: state.moveHistory, // Snapshot of history so far
       };

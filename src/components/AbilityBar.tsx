@@ -59,6 +59,14 @@ const AbilityBar: React.FC<AbilityBarProps> = ({
     </button>
   );
 
+  // Don't render anything if piece has no abilities to show
+  const hasWizardAbilities = movingPiece.type === PieceType.Wizard && !movingPiece.abilityUsed;
+  const hasNecromancerAbilities = movingPiece.type === PieceType.Necromancer && movingPiece.souls > 0;
+  
+  if (!hasWizardAbilities && !hasNecromancerAbilities) {
+    return null;
+  }
+
   return (
     <div
       className="ability-bar"
@@ -72,8 +80,8 @@ const AbilityBar: React.FC<AbilityBarProps> = ({
         pointerEvents: "auto",
       }}
     >
-      {movingPiece.type === PieceType.Wizard && !movingPiece.abilityUsed && renderWizardAbilities()}
-      {movingPiece.type === PieceType.Necromancer && movingPiece.souls > 0 && renderNecromancerAbilities()}
+      {hasWizardAbilities && renderWizardAbilities()}
+      {hasNecromancerAbilities && renderNecromancerAbilities()}
     </div>
   );
 };

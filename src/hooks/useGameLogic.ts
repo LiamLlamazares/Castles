@@ -184,6 +184,7 @@ export const useGameLogic = (
     const currentState: HistoryEntry = {
       pieces: pieces.map((p) => p.clone()),
       castles: castles.map((c) => c.clone()),
+      sanctuaries: state.sanctuaries.map((s) => s.clone()),
       turnCounter: turnCounter,
       moveNotation: moveHistory,
     };
@@ -191,7 +192,7 @@ export const useGameLogic = (
       ...prev,
       history: [...prev.history, currentState]
     }));
-  }, [pieces, castles, turnCounter, moveHistory]);
+  }, [pieces, castles, state.sanctuaries, turnCounter, moveHistory]);
 
   const handlePass = useCallback(() => {
     saveHistory();
@@ -210,6 +211,7 @@ export const useGameLogic = (
           ...prev,
           pieces: previousState.pieces,
           castles: previousState.castles,
+          sanctuaries: previousState.sanctuaries,
           turnCounter: previousState.turnCounter,
           history: newHistory,
           movingPiece: null
@@ -407,6 +409,7 @@ export const useGameLogic = (
 
   // Pledge Action
   const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
+    saveHistory(); // Save state before pledge so it can be undone
     setState(prevState => {
        try {
            // Find the sanctuary to get the piece type for notation
@@ -439,7 +442,7 @@ export const useGameLogic = (
            return prevState;
        }
     });
-  }, [gameEngine]);
+  }, [gameEngine, saveHistory]);
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
       // Use VIEW state? Or Live state?

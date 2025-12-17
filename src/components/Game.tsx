@@ -191,7 +191,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
             return;
         }
         // Attempt pledge
-        if (canPledge(pledgingSanctuary) && hex.distance(pledgingSanctuary) === 1) {
+        // Check spawn hex is empty (no piece there)
+        const isSpawnHexEmpty = !pieces.find(p => p.hex.equals(hex));
+        if (canPledge(pledgingSanctuary) && hex.distance(pledgingSanctuary) === 1 && isSpawnHexEmpty) {
             try {
                 pledge(pledgingSanctuary, hex);
                 setPledgingSanctuary(null);
