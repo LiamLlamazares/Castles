@@ -93,6 +93,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const handleImportPGN = () => {
     const pgn = prompt("Paste PGN here:");
     if (pgn) {
+        console.log("Raw PGN input:", pgn);
         const result = loadPGN(pgn);
         if (result && onLoadGame) {
             onLoadGame(result.board, result.pieces);

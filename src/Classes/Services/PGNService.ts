@@ -13,6 +13,13 @@ export interface GameSetup {
   pieces: { type: PieceType; q: number; r: number; s: number; color: 'w' | 'b' }[];
 }
 
+// Compact types for serialization
+interface CompactSetup {
+  b: BoardConfig;
+  c: [number, number, number, 0 | 1][]; // q, r, s, color (0=w, 1=b)
+  p: [PieceType, number, number, number, 0 | 1][]; // type, q, r, s, color
+}
+
 export class PGNService {
   /**
    * Generates a PGN string from the game state.
@@ -36,9 +43,11 @@ export class PGNService {
         q: p.hex.q,
         r: p.hex.r,
         s: p.hex.s,
-        color: p.color as 'w' | 'b', // Cast generic string to specific union if needed
+        color: p.color as 'w' | 'b',
       })),
     };
+
+    const compactSetup = PGNService.compressSetup(setup);
 
     const tags = {
       Event: "Castles Game",
@@ -49,7 +58,7 @@ export class PGNService {
       Black: "Black",
       Result: "*",
       Setup: "1",
-      CustomSetup: btoa(JSON.stringify(setup)), // Base64 encode to avoid PGN string escaping issues
+      CustomSetup: btoa(JSON.stringify(compactSetup)), // Base64 encoded compact JSON
       ...gameTags,
     };
 
@@ -82,36 +91,51 @@ export class PGNService {
    * You must replay the moves on the Engine to get the final state.
    */
   public static parsePGN(pgn: string): { setup: GameSetup | null; moves: string[] } {
-    const lines = pgn.split('\n');
-    let setup: GameSetup | null = null;
-    let movesString = "";
+    // Normalize newlines and whitespace slightly to ensure clean parsing if it came in as one blob
+    // But be careful not to corrupt the Base64 if it has spaces (though our generator doesn't put spaces in b64)
+    
+    // We use a regex loop to find all tags regardless of line breaks.
+    const tagRegex = /\[(\w+)\s+"([^"]*)"\]/g;
+    let match;
+    let lastIndex = 0;
+    
+    let setup: GameSetup | null = null; // Declare here so it is available in scope
 
-    for (const line of lines) {
-      if (line.startsWith('[')) {
-        // Tag
-        const match = line.match(/^\[(\w+) "(.+)"\]$/);
-        if (match) {
-            const tagName = match[1];
-            const tagValue = match[2];
-            if (tagName === 'CustomSetup') {
-                try {
-                    // Try parsing as JSON first (backward compat for V1 w/o Base64)
-                    if (tagValue.trim().startsWith('{')) {
-                         setup = JSON.parse(tagValue);
-                    } else {
-                         // Assume Base64
-                         setup = JSON.parse(atob(tagValue));
-                    }
-                } catch (e) {
-                    console.error("Failed to parse CustomSetup JSON", e);
+    while ((match = tagRegex.exec(pgn)) !== null) {
+        const tagName = match[1];
+        const tagValue = match[2];
+        lastIndex = tagRegex.lastIndex;
+
+        if (tagName === 'CustomSetup') {
+            console.log("Analyzing CustomSetup...", tagValue);
+            try {
+                let parsedData: any;
+                // Try parsing as JSON first (backward compat for V1 w/o Base64)
+                if (tagValue.trim().startsWith('{')) {
+                        parsedData = JSON.parse(tagValue);
+                } else {
+                        // Assume Base64 - strip all whitespace first to be safe against line wrapping
+                        const base64 = tagValue.replace(/\s/g, '');
+                        // Check for valid Base64 chars mostly to avoid trying to parse garbage
+                        const decoded = atob(base64);
+                        parsedData = JSON.parse(decoded.trim());
                 }
+
+                // Determine if it is Compact or Legacy format
+                if (parsedData.b && parsedData.c && parsedData.p) {
+                    setup = PGNService.decompressSetup(parsedData);
+                } else {
+                    setup = parsedData; // Legacy format
+                }
+
+            } catch (e) {
+                console.error("Failed to parse CustomSetup JSON", e);
             }
         }
-      } else {
-        // Body or empty line
-        movesString += line + " ";
-      }
     }
+
+    // The rest of the string after the last tag is the moves
+    const movesString = pgn.substring(lastIndex);
 
     // Parse moves from movesString
     // Remove "1.", "2." etc and extra spaces
@@ -128,6 +152,33 @@ export class PGNService {
     }
 
     return { setup, moves: cleanMoves };
+  }
+
+  private static compressSetup(setup: GameSetup): CompactSetup {
+      return {
+          b: setup.boardConfig,
+          c: setup.castles.map(c => [c.q, c.r, c.s, c.color === 'w' ? 0 : 1]),
+          p: setup.pieces.map(p => [p.type, p.q, p.r, p.s, p.color === 'w' ? 0 : 1])
+      };
+  }
+
+  private static decompressSetup(compact: CompactSetup): GameSetup {
+      return {
+          boardConfig: compact.b,
+          castles: compact.c.map(c => ({
+              q: c[0],
+              r: c[1],
+              s: c[2],
+              color: c[3] === 0 ? 'w' : 'b'
+          })),
+          pieces: compact.p.map(p => ({
+              type: p[0],
+              q: p[1],
+              r: p[2],
+              s: p[3],
+              color: p[4] === 0 ? 'w' : 'b'
+          }))
+      };
   }
 
   public static reconstructState(setup: GameSetup): { board: Board; pieces: Piece[] } {
