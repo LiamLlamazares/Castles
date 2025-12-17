@@ -47,12 +47,30 @@ export enum PieceType {
   Assassin = "Assassin",
   Dragon = "Dragon",
   Monarch = "Monarch",
+  // Special pieces (from Sanctuaries)
+  Wolf = "Wolf",
+  Healer = "Healer",
+  Ranger = "Ranger",
+  Wizard = "Wizard",
+  Necromancer = "Necromancer",
+  Phoenix = "Phoenix",
 }
+
+export enum SanctuaryType {
+  WolfCovenant = "WolfCovenant",
+  SacredSpring = "SacredSpring",
+  WardensWatch = "WardensWatch",
+  ArcaneRefuge = "ArcaneRefuge",
+  ForsakenGrounds = "ForsakenGrounds",
+  PyreEternal = "PyreEternal",
+}
+
 export enum AttackType {
   Melee = "Melee",
   Ranged = "Ranged",
   LongRanged = "LongRanged",
   Swordsman = "Swordsman",
+  None = "None", // For Healer
 }
 
 export enum PieceStrength {
@@ -65,7 +83,29 @@ export enum PieceStrength {
   Assassin = 1,
   Dragon = 3,
   Monarch = 3,
+  // Special pieces
+  Wolf = 1,
+  Healer = 1,
+  Ranger = 1,
+  Wizard = 1,
+  Necromancer = 1,
+  Phoenix = 2,
 }
+
+// Sanctuary configuration
+export const SanctuaryConfig: Record<SanctuaryType, {
+  pieceType: PieceType;
+  tier: 1 | 2 | 3;
+  requiredStrength: number;
+  requiresSacrifice: boolean;
+}> = {
+  [SanctuaryType.WolfCovenant]: { pieceType: PieceType.Wolf, tier: 1, requiredStrength: 1, requiresSacrifice: false },
+  [SanctuaryType.SacredSpring]: { pieceType: PieceType.Healer, tier: 1, requiredStrength: 1, requiresSacrifice: false },
+  [SanctuaryType.WardensWatch]: { pieceType: PieceType.Ranger, tier: 2, requiredStrength: 3, requiresSacrifice: false },
+  [SanctuaryType.ArcaneRefuge]: { pieceType: PieceType.Wizard, tier: 2, requiredStrength: 3, requiresSacrifice: false },
+  [SanctuaryType.ForsakenGrounds]: { pieceType: PieceType.Necromancer, tier: 3, requiredStrength: 4, requiresSacrifice: true },
+  [SanctuaryType.PyreEternal]: { pieceType: PieceType.Phoenix, tier: 3, requiredStrength: 4, requiresSacrifice: true },
+};
 
 export type TurnPhase = "Movement" | "Attack" | "Castles";
 export type Color = "w" | "b";

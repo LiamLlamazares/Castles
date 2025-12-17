@@ -213,6 +213,7 @@ export class PGNService {
           pieces: initialPieces.map(p => p.clone()), // Clone to start fresh
           pieceMap: createPieceMap(initialPieces),
           castles: castles.map(c => c.clone()),
+          sanctuaries: [], // No sanctuaries in PGN replay (yet)
           turnCounter: 0,
           movingPiece: null,
           history: [],

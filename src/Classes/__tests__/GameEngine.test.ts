@@ -4,6 +4,7 @@ import { Piece } from '../Entities/Piece';
 import { Hex } from '../Entities/Hex';
 import { Castle } from '../Entities/Castle';
 import { PieceType, Color } from '../../Constants';
+import { createPieceMap } from '../../utils/PieceMap';
 
 // Create a minimal board for testing
 const createTestBoard = () => {
@@ -151,8 +152,9 @@ describe('GameEngine', () => {
       
       const state = {
         pieces,
-        pieceMap: new Map(),
+        pieceMap: createPieceMap(pieces),
         castles: castles,
+        sanctuaries: [],
         turnCounter: 4, // Castles phase
         movingPiece: null,
         history: [],

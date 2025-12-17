@@ -1,5 +1,6 @@
 import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
+import { Sanctuary } from "../Entities/Sanctuary";
 import { Hex } from "../Entities/Hex";
 import { Board } from "./Board";
 import { TurnManager } from "./TurnManager";
@@ -22,6 +23,7 @@ export interface GameState {
   pieces: Piece[];
   pieceMap: PieceMap; // O(1) lookup
   castles: Castle[];
+  sanctuaries: Sanctuary[]; // Special piece sanctuaries
   turnCounter: number;
   movingPiece: Piece | null;
   history: HistoryEntry[];

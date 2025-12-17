@@ -40,6 +40,7 @@ export const useGameLogic = (
     movingPiece: null,
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
+    sanctuaries: [], // Sanctuaries not yet integrated with game initialization
     
     showCoordinates: false,
     cheatMode: false,

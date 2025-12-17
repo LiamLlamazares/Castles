@@ -4,6 +4,7 @@ import { Piece } from '../Entities/Piece';
 import { Castle } from '../Entities/Castle';
 import { Hex } from '../Entities/Hex';
 import { PieceType } from '../../Constants';
+import { createPieceMap } from '../../utils/PieceMap';
 
 // Create a minimal board for testing
 const createTestBoard = () => new Board(7);
@@ -70,11 +71,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
       // All castles owned by white
-      const castles = gameEngine.board.castles.map(c => {
-        const newCastle = c.clone();
-        newCastle.owner = 'w';
-        return newCastle;
-      });
+      const castles = gameEngine.board.castles.map(c => c.with({ owner: 'w' }));
 
       expect(gameEngine.getWinner(pieces, castles)).toBe('w');
     });
@@ -85,11 +82,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
       // All castles owned by black
-      const castles = gameEngine.board.castles.map(c => {
-        const newCastle = c.clone();
-        newCastle.owner = 'b';
-        return newCastle;
-      });
+      const castles = gameEngine.board.castles.map(c => c.with({ owner: 'b' }));
 
       expect(gameEngine.getWinner(pieces, castles)).toBe('b');
     });
@@ -123,11 +116,7 @@ describe('GameEngine - Win Conditions', () => {
         new Piece(new Hex(0, 5, -5), 'w', PieceType.Monarch),
         new Piece(new Hex(0, -5, 5), 'b', PieceType.Monarch),
       ];
-      const castles = gameEngine.board.castles.map(c => {
-        const newCastle = c.clone();
-        newCastle.owner = 'w';
-        return newCastle;
-      });
+      const castles = gameEngine.board.castles.map(c => c.with({ owner: 'w' }));
 
       const message = gameEngine.getVictoryMessage(pieces, castles);
       expect(message).toContain('White');
@@ -151,10 +140,13 @@ describe('GameEngine - Win Conditions', () => {
       
       const state = {
         pieces,
+        pieceMap: createPieceMap(pieces),
         castles: castles,
+        sanctuaries: [],
         turnCounter: 7, // Black's turn (attack phase)
         movingPiece: pieces[0],
         history: [],
+        moveHistory: [],
       };
       
       const newState = gameEngine.applyCastleAttack(state, pieces[0], castleHex);

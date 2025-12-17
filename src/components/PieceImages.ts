@@ -34,6 +34,13 @@ const whitePieceImages: Record<PieceType, string> = {
   [PieceType.Trebuchet]: wTrebuchetImage,
   [PieceType.Knight]: wKnightImage,
   [PieceType.Eagle]: wEagleImage,
+  // Special pieces (placeholder images - TODO: create proper assets)
+  [PieceType.Wolf]: wSwordsmanImage,
+  [PieceType.Healer]: wSwordsmanImage,
+  [PieceType.Ranger]: wArcherImage,
+  [PieceType.Wizard]: wAssassinImage,
+  [PieceType.Necromancer]: wAssassinImage,
+  [PieceType.Phoenix]: wDragonImage,
 };
 
 /** Image mapping for black pieces */
@@ -47,6 +54,13 @@ const blackPieceImages: Record<PieceType, string> = {
   [PieceType.Trebuchet]: bTrebuchetImage,
   [PieceType.Knight]: bKnightImage,
   [PieceType.Eagle]: bEagleImage,
+  // Special pieces (placeholder images - TODO: create proper assets)
+  [PieceType.Wolf]: bSwordsmanImage,
+  [PieceType.Healer]: bSwordsmanImage,
+  [PieceType.Ranger]: bArcherImage,
+  [PieceType.Wizard]: bAssassinImage,
+  [PieceType.Necromancer]: bAssassinImage,
+  [PieceType.Phoenix]: bDragonImage,
 };
 
 /**
