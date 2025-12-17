@@ -21,6 +21,7 @@ import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import ControlPanel from "./ControlPanel";
 import HamburgerMenu from "./HamburgerMenu";
+import RulesModal from "./RulesModal";
 import VictoryOverlay from "./VictoryOverlay";
 import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
@@ -67,6 +68,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [pledgingSanctuary, setPledgingSanctuary] = React.useState<Hex | null>(null);
   const [activeAbility, setActiveAbility] = React.useState<"Fireball" | "Teleport" | "RaiseDead" | null>(null);
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
+  const [showRulesModal, setShowRulesModal] = React.useState(false);
     
   const {
     // State
@@ -250,6 +252,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onImportPGN={handleImportPGN}
         onFlipBoard={handleFlipBoard}
         onToggleCoordinates={toggleCoordinates}
+        onShowRules={() => setShowRulesModal(true)}
+      />
+
+      <RulesModal 
+        isOpen={showRulesModal} 
+        onClose={() => setShowRulesModal(false)} 
       />
 
       {/* Game Panel (Right Side - Lichess Style) */}

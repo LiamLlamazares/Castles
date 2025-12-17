@@ -9,6 +9,7 @@ interface HamburgerMenuProps {
   onImportPGN: () => void;
   onFlipBoard: () => void;
   onToggleCoordinates: () => void;
+  onShowRules: () => void;
 }
 
 const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
@@ -16,6 +17,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onImportPGN,
   onFlipBoard,
   onToggleCoordinates,
+  onShowRules,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -109,6 +111,16 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
           >
             <span className="menu-icon">#</span>
             Toggle Coordinates
+          </button>
+          
+          <div className="menu-divider" />
+          
+          <button 
+            className="menu-item" 
+            onClick={() => handleMenuItemClick(onShowRules)}
+          >
+            <span className="menu-icon">📖</span>
+            Rules
           </button>
         </div>
       </div>
