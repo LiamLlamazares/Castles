@@ -22,6 +22,8 @@ interface HexGridProps {
   resizeVersion: number;
   layout: LayoutService;
   board: Board;
+  isPledgeTarget?: (hex: Hex) => boolean;
+  pledgingSanctuary?: Hex | null;
 }
 
 /** Get the polygon points for a hex */
@@ -72,7 +74,9 @@ const HexGrid = React.memo(({
   onHexClick,
   onHexHover,
   layout,
-  board
+  board,
+  isPledgeTarget,
+  pledgingSanctuary
 }: HexGridProps) => {
 
   return (
@@ -84,16 +88,14 @@ const HexGrid = React.memo(({
         const sanctuaryClass = getSanctuaryVisualClass(hex, sanctuaries);
         const adjacencyClass = isAdjacentToControlledCastle(hex) ? "hexagon-castle-adjacent" : "";
         const castleOwnerClass = getCastleOwnerClass(hex, castles);
-        
-        // Combine classes - Sanctuary takes precedence over normal terrain but not castle
-        // Sanctuary class should override base color but be additive to shape?
-        // Actually CSS order matters most. Sanctuary class applied last.
+        const pledgeClass = isPledgeTarget && isPledgeTarget(hex) ? "hexagon-pledge-target" : "";
+        const pledgingSourceClass = pledgingSanctuary && hex.equals(pledgingSanctuary) ? "hexagon-pledging-source" : "";
         
         return (
           <g key={hex.getKey()}>
             <polygon
               points={getPolygonPoints(hex, isBoardRotated, layout)}
-              className={`${visualClass} ${sanctuaryClass} ${adjacencyClass} ${castleOwnerClass}`}
+              className={`${visualClass} ${sanctuaryClass} ${adjacencyClass} ${castleOwnerClass} ${pledgeClass} ${pledgingSourceClass}`}
               onClick={() => onHexClick(hex)}
               onMouseEnter={(e) => onHexHover && onHexHover(hex, e)}
               onMouseLeave={() => onHexHover && onHexHover(null)}

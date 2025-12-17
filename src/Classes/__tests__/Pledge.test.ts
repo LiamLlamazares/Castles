@@ -1,0 +1,148 @@
+import { GameEngine } from '../Core/GameEngine';
+import { Board } from '../Core/Board';
+import { Piece } from '../Entities/Piece';
+import { Hex } from '../Entities/Hex';
+import { Sanctuary } from '../Entities/Sanctuary';
+import { PieceType, SanctuaryType } from '../../Constants';
+import { createPieceMap } from '../../utils/PieceMap';
+
+describe('Pledge Mechanics', () => {
+  let gameEngine: GameEngine;
+  let board: Board;
+  let pieces: Piece[];
+  let sanctuaries: Sanctuary[];
+
+  beforeEach(() => {
+    board = new Board(8); // Standard board
+    pieces = [];
+    gameEngine = new GameEngine(board);
+    
+    // Create a Tier 1 Sanctuary (Wolf Covenant) at 0,-5,5 (near bottom)
+    sanctuaries = [
+        new Sanctuary(new Hex(0, -5, 5), SanctuaryType.WolfCovenant, 'w')
+    ];
+  });
+
+  const createGameState = (currentPieces: Piece[], currentSanctuaries: Sanctuary[]) => ({
+    pieces: currentPieces,
+    pieceMap: createPieceMap(currentPieces),
+    castles: [],
+    sanctuaries: currentSanctuaries,
+    turnCounter: 4, // Castle phase active from turn 5 usually, but logic might just check phase
+    movingPiece: null,
+    history: [],
+    moveHistory: [],
+  });
+  
+  // Helper to place a piece
+  const placePiece = (hex: Hex, type: PieceType, owner: 'w' | 'b') => {
+      pieces.push(new Piece(hex, owner, type));
+  };
+
+  test('Tier 1 pledge requires occupancy by friendly piece', () => {
+    const sanctuary = sanctuaries[0]; // Tier 1
+    const spawnHex = new Hex(1, -5, 4); // Adjacent
+    
+    // 1. Empty sanctuary -> False
+    let state = createGameState(pieces, sanctuaries);
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
+
+    // 2. Enemy piece -> False
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'b');
+    state = createGameState(pieces, sanctuaries);
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
+
+    // 3. Friendly piece -> True (Tier 1 strength req is 0 but requires occupancy usually? 
+    // Wait, design said "Occupancy (Strength 1+)". 
+    // And "Control Mechanics": Activated when friendly piece occupies.
+    pieces = [];
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
+    state = createGameState(pieces, sanctuaries);
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(true);
+  });
+
+  test('Pledge spawns new piece and triggers cooldown', () => {
+    const sanctuary = sanctuaries[0];
+    const spawnHex = new Hex(1, -5, 4);
+    
+    // Setup valid pledge state
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
+    const state = createGameState(pieces, sanctuaries);
+
+    const newState = gameEngine.pledge(state, sanctuary.hex, spawnHex);
+
+    // Check piece spawned
+    const spawned = newState.pieces.find(p => p.hex.equals(spawnHex));
+    expect(spawned).toBeDefined();
+    expect(spawned?.type).toBe(PieceType.Wolf);
+    expect(spawned?.color).toBe('w');
+
+    // Check sanctuary cooldown
+    const newSanctuary = newState.sanctuaries.find(s => s.hex.equals(sanctuary.hex));
+    expect(newSanctuary?.cooldown).toBe(5);
+    expect(newSanctuary?.hasPledgedThisGame).toBe(true);
+  });
+
+  test('Cannot pledge if already pledged this game', () => {
+    const sanctuary = sanctuaries[0].with({ hasPledgedThisGame: true });
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
+    const state = createGameState(pieces, [sanctuary]);
+
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
+  });
+
+  test('Cannot pledge if on cooldown', () => {
+    const sanctuary = sanctuaries[0].with({ cooldown: 3 });
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
+    const state = createGameState(pieces, [sanctuary]);
+
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
+  });
+
+  test('Tier 2 pledge requires surrounding strength >= 3', () => {
+    const t2Sanctuary = new Sanctuary(new Hex(0, 0, 0), SanctuaryType.WardensWatch, 'w'); // Tier 2
+    
+    // 1. Occupied but no support -> False
+    placePiece(t2Sanctuary.hex, PieceType.Swordsman, 'w'); // Str 1
+    let state = createGameState(pieces, [t2Sanctuary]);
+    expect(gameEngine.canPledge(state, t2Sanctuary.hex)).toBe(false); // 1 < 3
+
+    // 2. Add adjacent support
+    placePiece(new Hex(1, -1, 0), PieceType.Dragon, 'w'); // Str 3. Total 1+3=4 >= 3.
+    state = createGameState(pieces, [t2Sanctuary]);
+    expect(gameEngine.canPledge(state, t2Sanctuary.hex)).toBe(true);
+  });
+
+  test('Tier 3 pledge requires sacrifice', () => {
+    const t3Sanctuary = new Sanctuary(new Hex(0, 0, 0), SanctuaryType.PyreEternal, 'w'); // Tier 3
+    
+    // Setup Strength 4+ (Swordsman(1) + Dragon(4) = 5)
+    placePiece(t3Sanctuary.hex, PieceType.Swordsman, 'w'); // The one on the hex
+    placePiece(new Hex(1, -1, 0), PieceType.Dragon, 'w'); // Adjacent support
+    
+    const state = createGameState(pieces, [t3Sanctuary]);
+    
+    // canPledge should return true if conditions met
+    expect(gameEngine.canPledge(state, t3Sanctuary.hex)).toBe(true);
+    
+    // Perform pledge with sacrifice
+    // We sacrifice the piece ON the sanctuary? Or any piece?
+    // Design said: "Tie 3: Surrounding Strength 4+ AND sacrifice 1 piece"
+    // Usually logic implies the piece invoking it might be sacrificed or one nearby.
+    // Let's assume for now the piece ON the sanctuary is sacrificed, or the user picks?
+    // "Sacrifice 1 piece" usually implies cost. 
+    // PROPOSAL: The piece *occupying* the sanctuary is sacrificed to summon the avatar.
+    
+    const spawnHex = new Hex(-1, 0, 1);
+    const newState = gameEngine.pledge(state, t3Sanctuary.hex, spawnHex);
+    
+    // Check old piece is gone (sacrificed)
+    const occupant = newState.pieces.find(p => p.hex.equals(t3Sanctuary.hex));
+    expect(occupant).toBeUndefined(); // Should be gone if sacrificed
+    
+    // Check new piece (Phoenix) is spawned at spawnHex
+    const phoenix = newState.pieces.find(p => p.hex.equals(spawnHex));
+    expect(phoenix?.type).toBe(PieceType.Phoenix);
+  });
+
+});

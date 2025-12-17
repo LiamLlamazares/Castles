@@ -366,6 +366,26 @@ export const useGameLogic = (
     }
   }, []);
 
+  // Pledge Action
+  const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
+    setState(prevState => {
+       try {
+           const newCoreState = gameEngine.pledge(prevState, sanctuaryHex, spawnHex);
+           return {
+               ...prevState,
+               ...newCoreState
+           };
+       } catch (e) {
+           console.error(e);
+           return prevState;
+       }
+    });
+  }, [gameEngine]);
+
+  const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
+      return gameEngine.canPledge(state, sanctuaryHex);
+  }, [gameEngine, state]);
+
   return {
     // State
     pieces,
@@ -399,12 +419,16 @@ export const useGameLogic = (
     handlePieceClick,
     handleHexClick,
     handleResign,
+    pledge,
     
     // Analysis & PGN
     isAnalysisMode,
     jumpToMove,
     stepHistory,
     getPGN,
-    loadPGN
+    loadPGN,
+    
+    // Helpers
+    canPledge
   };
 };

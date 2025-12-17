@@ -46,6 +46,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
+  const [pledgingSanctuary, setPledgingSanctuary] = React.useState<Hex | null>(null);
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
     
   const {
@@ -67,6 +68,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     winner,
     isRecruitmentSpot,
     moveHistory,
+    movingPiece,
+
     // Actions
     handlePass,
     handleTakeback,
@@ -74,9 +77,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
     toggleCoordinates,
     incrementResizeVersion,
     handlePieceClick,
-    handleHexClick,
+    handleHexClick: onEngineHexClick,
     handleResign,
     hasGameStarted,
+    pledge,
+    canPledge,
+    
     // Analysis
     isAnalysisMode,
     stepHistory,
@@ -116,6 +122,47 @@ const GameBoard: React.FC<GameBoardProps> = ({
   });
 
   // =========== RENDER ===========
+
+  // Interaction Handlers
+  const handleHexClick = (hex: Hex) => {
+    // 1. Pledging Interaction
+    if (pledgingSanctuary) {
+        if (hex.equals(pledgingSanctuary)) {
+            setPledgingSanctuary(null);
+            return;
+        }
+        // Attempt pledge
+        if (canPledge(pledgingSanctuary) && hex.distance(pledgingSanctuary) === 1) {
+            try {
+                pledge(pledgingSanctuary, hex);
+                setPledgingSanctuary(null);
+                return;
+            } catch (e) {
+                console.warn("Pledge failed:", e);
+            }
+        }
+        setPledgingSanctuary(null); // Cancel if clicking elsewhere but fallthrough
+    }
+
+    // 2. Sanctuary Selection (Enter Pledge Mode)
+    // Only if NOT currently moving a piece (engine state)
+    if (!movingPiece) {
+        // Find sanctuary at clicked hex
+        const clickedSanctuary = sanctuaries && sanctuaries.find((s: Sanctuary) => s.hex.equals(hex));
+        if (clickedSanctuary && canPledge(hex)) {
+            setPledgingSanctuary(hex);
+            return;
+        }
+    }
+
+    // 3. Delegate to Engine
+    onEngineHexClick(hex);
+  };
+
+  const isPledgeTarget = React.useCallback((hex: Hex) => {
+      if (!pledgingSanctuary) return false;
+      return hex.distance(pledgingSanctuary) === 1;
+  }, [pledgingSanctuary]);
 
   const handleImportPGN = () => {
     const pgn = prompt("Paste PGN here:");
@@ -188,6 +235,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
           resizeVersion={resizeVersion}
           layout={initialLayout}
           board={initialBoard}
+          isPledgeTarget={isPledgeTarget}
+          pledgingSanctuary={pledgingSanctuary}
         />
         <PieceRenderer
           pieces={pieces}

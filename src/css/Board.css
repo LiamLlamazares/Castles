@@ -644,3 +644,24 @@ body {
   background: rgba(0,0,0,0.4);
   z-index: 299;
 }
+
+/* Pledging Highlighting */
+.hexagon-pledging-source {
+    stroke: #fff !important;
+    filter: drop-shadow(0 0 10px #fff);
+    z-index: 10;
+}
+
+.hexagon-pledge-target {
+    fill: rgba(255, 255, 255, 0.3) !important;
+    stroke: #fff !important;
+    stroke-dasharray: 5, 5;
+    cursor: pointer;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.5; }
+}
