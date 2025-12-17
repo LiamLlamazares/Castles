@@ -147,6 +147,8 @@ describe('GameEngine - Win Conditions', () => {
         movingPiece: pieces[0],
         history: [],
         moveHistory: [],
+        graveyard: [],
+        phoenixRecords: [],
       };
       
       const newState = gameEngine.applyCastleAttack(state, pieces[0], castleHex);

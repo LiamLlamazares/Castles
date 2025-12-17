@@ -30,19 +30,20 @@ import { Hex } from "../Classes/Entities/Hex";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
+import { HistoryEntry, MoveRecord } from "../Constants";
 import "../css/Board.css";
 
 interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
   initialLayout?: LayoutService;
-  initialHistory?: any[]; // using any[] to avoid circular dependency hell or import issues, typed in useGameLogic
-  initialMoveHistory?: any[];
+  initialHistory?: HistoryEntry[]; 
+  initialMoveHistory?: MoveRecord[];
   initialTurnCounter?: number;
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
-  onLoadGame?: (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number) => void;
+  onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number) => void;
 }
 
 /**

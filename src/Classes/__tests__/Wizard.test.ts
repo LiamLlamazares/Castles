@@ -12,7 +12,7 @@ describe('Wizard Active Abilities', () => {
     let state: GameState;
 
     beforeEach(() => {
-        board = new Board(new Map());
+        board = new Board(8);
         state = {
             pieces: [],
             pieceMap: new PieceMap([]),
@@ -36,7 +36,7 @@ describe('Wizard Active Abilities', () => {
         state.pieceMap = new PieceMap(state.pieces);
 
         // Wizard casts Fireball at target hex
-        const newState = StateMutator.useAbility(state, wizard, target.hex, "Fireball", board);
+        const newState = StateMutator.activateAbility(state, wizard, target.hex, "Fireball", board);
 
         const newTarget = newState.pieces.find(p => p.hex.equals(target.hex));
         const newNeighbor = newState.pieces.find(p => p.hex.equals(neighbor.hex));
@@ -54,7 +54,7 @@ describe('Wizard Active Abilities', () => {
         state.pieces = [wizard];
         state.pieceMap = new PieceMap(state.pieces);
 
-        const newState = StateMutator.useAbility(state, wizard, targetHex, "Teleport", board);
+        const newState = StateMutator.activateAbility(state, wizard, targetHex, "Teleport", board);
 
         const movedWizard = newState.pieces.find((p: Piece) => p.hex.equals(targetHex));
         expect(movedWizard).toBeDefined();

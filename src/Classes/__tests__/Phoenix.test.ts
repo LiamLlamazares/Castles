@@ -13,7 +13,7 @@ describe('Phoenix Rebirth Logic', () => {
     let state: GameState;
 
     beforeEach(() => {
-        board = new Board(new Map());
+        board = new Board(8);
         state = {
             pieces: [],
             pieceMap: new PieceMap([]),

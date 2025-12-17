@@ -85,10 +85,31 @@ export const useGameLogic = (
   const isAnalysisMode = state.viewMoveIndex !== null;
   const analysisState = isAnalysisMode ? history[state.viewMoveIndex!] : null;
 
-  // Derived state to use for rendering (either live or historical)
-  const pieces = analysisState ? analysisState.pieces : currentPieces;
-  const castles = analysisState ? analysisState.castles : currentCastles;
-  const turnCounter = analysisState ? analysisState.turnCounter : currentTurnCounter;
+  // Constructed View State (GameState compatible)
+  const viewState = useMemo<GameState>(() => {
+      if (isAnalysisMode && analysisState) {
+          // Reconstruct a partial GameState for viewing history
+          // Note: Graveyard/Phoenix/Sanctuaries might be desynced in history view if not tracked
+          return {
+              pieces: analysisState.pieces,
+              pieceMap: createPieceMap(analysisState.pieces),
+              castles: analysisState.castles,
+              sanctuaries: state.sanctuaries, // Assuming constant for now
+              turnCounter: analysisState.turnCounter,
+              movingPiece: null, // Cannot move in history
+              history: [], // Not needed for view
+              moveHistory: analysisState.moveNotation,
+              graveyard: [], // Not tracked in history
+              phoenixRecords: [] // Not tracked in history
+          };
+      }
+      return state as unknown as GameState; // Live state is compatible
+  }, [state, isAnalysisMode, analysisState]);
+
+  // Derived state to use for rendering
+  const pieces = viewState.pieces;
+  const castles = viewState.castles;
+  const turnCounter = viewState.turnCounter;
 
   
   const turnPhase = useMemo<TurnPhase>(
@@ -104,13 +125,13 @@ export const useGameLogic = (
   const hexagons = useMemo(() => initialBoard.hexes, [initialBoard]);
 
   const legalMoves = useMemo(
-    () => gameEngine.getLegalMoves(movingPiece, pieces, castles, turnCounter),
-    [gameEngine, movingPiece, pieces, castles, turnCounter]
+    () => gameEngine.getLegalMoves(viewState, movingPiece),
+    [gameEngine, viewState, movingPiece]
   );
 
   const legalAttacks = useMemo(
-    () => gameEngine.getLegalAttacks(movingPiece, pieces, castles, turnCounter),
-    [gameEngine, movingPiece, pieces, castles, turnCounter]
+    () => gameEngine.getLegalAttacks(viewState, movingPiece),
+    [gameEngine, viewState, movingPiece]
   );
 
   const victoryMessage = useMemo(
@@ -124,8 +145,8 @@ export const useGameLogic = (
   );
 
   const emptyUnusedHexesAdjacentToControlledCastles = useMemo(() => {
-    return gameEngine.getRecruitmentHexes(pieces, castles, turnCounter);
-  }, [gameEngine, pieces, castles, turnCounter]);
+    return gameEngine.getRecruitmentHexes(viewState);
+  }, [gameEngine, viewState]);
 
   // Sets for O(1) lookup in render
   const legalMoveSet = useMemo(
@@ -175,7 +196,7 @@ export const useGameLogic = (
   const handlePass = useCallback(() => {
     saveHistory();
     setState(prev => {
-      const newState = gameEngine.passTurn(prev);
+      const newState = gameEngine.passTurn(prev as unknown as GameState);
       return { ...prev, ...newState };
     });
   }, [gameEngine, saveHistory]);
@@ -230,7 +251,7 @@ export const useGameLogic = (
     ) {
       saveHistory();
       setState(prev => {
-        const newState = gameEngine.applyAttack(prev, movingPiece!, pieceClicked.hex);
+        const newState = gameEngine.applyAttack(prev as unknown as GameState, movingPiece!, pieceClicked.hex);
         return { ...prev, ...newState };
       });
       return;
@@ -253,7 +274,7 @@ export const useGameLogic = (
       if (isLegalMove(hex)) {
         saveHistory();
         setState(prev => {
-          const newState = gameEngine.applyMove(prev, movingPiece!, hex);
+          const newState = gameEngine.applyMove(prev as unknown as GameState, movingPiece!, hex);
           return { ...prev, ...newState };
         });
         return;
@@ -268,10 +289,10 @@ export const useGameLogic = (
         const targetPiece = pieces.find(p => p.hex.equals(hex));
         setState(prev => {
           if (targetPiece) {
-            const newState = gameEngine.applyAttack(prev, movingPiece!, hex);
+            const newState = gameEngine.applyAttack(prev as unknown as GameState, movingPiece!, hex);
             return { ...prev, ...newState };
           } else {
-            const newState = gameEngine.applyCastleAttack(prev, movingPiece!, hex);
+            const newState = gameEngine.applyCastleAttack(prev as unknown as GameState, movingPiece!, hex);
             return { ...prev, ...newState };
           }
         });
@@ -286,7 +307,7 @@ export const useGameLogic = (
       if (castle) {
         saveHistory();
         setState(prev => {
-          const newState = gameEngine.recruitPiece(prev, castle, hex);
+          const newState = gameEngine.recruitPiece(prev as unknown as GameState, castle, hex);
           return { ...prev, ...newState };
         });
         return;
@@ -392,7 +413,7 @@ export const useGameLogic = (
            const sanctuary = prevState.sanctuaries?.find(s => s.hex.equals(sanctuaryHex));
            if (!sanctuary) throw new Error("Sanctuary not found");
            
-           const newCoreState = gameEngine.pledge(prevState, sanctuaryHex, spawnHex);
+           const newCoreState = gameEngine.pledge(prevState as unknown as GameState, sanctuaryHex, spawnHex);
            
            // Generate notation for the pledge
            const { NotationService } = require("../Classes/Systems/NotationService");
@@ -421,7 +442,11 @@ export const useGameLogic = (
   }, [gameEngine]);
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
-      return gameEngine.canPledge(state, sanctuaryHex);
+      // Use VIEW state? Or Live state?
+      // Usually canPledge is for UI state in Live Game.
+      // But we can check it in analysis too (though meaningless).
+      // Let's use PREV state logic (live).
+      return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex);
   }, [gameEngine, state]);
 
   // Ability Usage
@@ -429,7 +454,7 @@ export const useGameLogic = (
       setState(prevState => {
         try {
             saveHistory(); // Save before effect
-            const newState = gameEngine.activateAbility(prevState, sourceHex, targetHex, ability);
+            const newState = gameEngine.activateAbility(prevState as unknown as GameState, sourceHex, targetHex, ability);
             return { ...prevState, ...newState };
         } catch (e) {
             console.error(e);

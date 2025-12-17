@@ -13,7 +13,7 @@ describe('Necromancer Mechanics', () => {
     let state: GameState;
 
     beforeEach(() => {
-        board = new Board(new Map());
+        board = new Board(8);
         state = {
             pieces: [],
             pieceMap: new PieceMap([]),
@@ -22,7 +22,9 @@ describe('Necromancer Mechanics', () => {
             turnCounter: 0,
             movingPiece: null,
             history: [],
-            moveHistory: []
+            moveHistory: [],
+            graveyard: [],
+            phoenixRecords: [],
         };
     });
 
@@ -53,7 +55,7 @@ describe('Necromancer Mechanics', () => {
         // Setup: Necromancer with 1 soul
         const necro = new Piece(new Hex(0, 0, 0), 'w', PieceType.Necromancer, true, true, 0, false, 1); // 1 Soul
         // Setup: Dead friendly unit in graveyard
-        const deadSwordsman = new Piece(new Hex(99, 99, 99), 'w', PieceType.Swordsman);
+        const deadSwordsman = new Piece(new Hex(0, 0, 0), 'w', PieceType.Swordsman);
         
         state.pieces = [necro];
         state.pieceMap = new PieceMap(state.pieces);

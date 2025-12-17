@@ -1,4 +1,4 @@
-import { GameEngine } from '../Core/GameEngine';
+import { GameEngine, GameState } from '../Core/GameEngine';
 import { Board } from '../Core/Board';
 import { Piece } from '../Entities/Piece';
 import { Hex } from '../Entities/Hex';
@@ -10,6 +10,20 @@ import { createPieceMap } from '../../utils/PieceMap';
 const createTestBoard = () => {
   return new Board(7); // N_SQUARES - 1 = 7
 };
+
+// Helper to create mock state
+const createMockState = (pieces: Piece[], castles: Castle[] = [], turnCounter: number = 0): GameState => ({
+    pieces,
+    pieceMap: createPieceMap(pieces),
+    castles,
+    sanctuaries: [],
+    turnCounter,
+    movingPiece: null,
+    history: [],
+    moveHistory: [],
+    graveyard: [],
+    phoenixRecords: []
+});
 
 describe('GameEngine', () => {
   let gameEngine: GameEngine;
@@ -72,7 +86,8 @@ describe('GameEngine', () => {
 
   describe('getOccupiedHexes', () => {
     it('returns empty array for no pieces', () => {
-      expect(gameEngine.getOccupiedHexes([])).toEqual([]);
+      const state = createMockState([]);
+      expect(gameEngine.getOccupiedHexes(state)).toEqual([]);
     });
 
     it('returns hex positions of all pieces', () => {
@@ -82,8 +97,9 @@ describe('GameEngine', () => {
         new Piece(hex1, 'w', PieceType.Swordsman),
         new Piece(hex2, 'b', PieceType.Archer),
       ];
+      const state = createMockState(pieces);
 
-      const occupied = gameEngine.getOccupiedHexes(pieces);
+      const occupied = gameEngine.getOccupiedHexes(state);
       
       expect(occupied).toHaveLength(2);
       expect(occupied[0].equals(hex1)).toBe(true);
@@ -93,14 +109,16 @@ describe('GameEngine', () => {
 
   describe('getBlockedHexSet', () => {
     it('returns a Set for O(1) lookups', () => {
-      const blockedSet = gameEngine.getBlockedHexSet([], []);
+      const state = createMockState([], []);
+      const blockedSet = gameEngine.getBlockedHexSet(state);
       expect(blockedSet).toBeInstanceOf(Set);
     });
 
     it('contains river hexes', () => {
-      const blockedSet = gameEngine.getBlockedHexSet([], []);
+      const state = createMockState([], []);
+      const blockedSet = gameEngine.getBlockedHexSet(state);
       // River pattern: 2 crossing (q=0,1), 2 river (q=2,3), repeat
-      // q=2 is always river (first river hex in pattern)
+      // q=2 is always river await(first river hex in pattern)
       const riverHex = new Hex(2, 0, -2);
       expect(blockedSet.has(riverHex.getKey())).toBe(true);
     });
@@ -108,8 +126,9 @@ describe('GameEngine', () => {
     it('contains piece positions', () => {
       const hex = new Hex(1, 2, -3);
       const pieces = [new Piece(hex, 'w', PieceType.Knight)];
+      const state = createMockState(pieces, []);
       
-      const blockedSet = gameEngine.getBlockedHexSet(pieces, []);
+      const blockedSet = gameEngine.getBlockedHexSet(state);
       expect(blockedSet.has(hex.getKey())).toBe(true);
     });
   });
@@ -122,8 +141,9 @@ describe('GameEngine', () => {
         new Piece(whiteHex, 'w', PieceType.Swordsman),
         new Piece(blackHex, 'b', PieceType.Swordsman),
       ];
+      const state = createMockState(pieces);
 
-      const enemyHexes = gameEngine.getEnemyHexes(pieces, 'w');
+      const enemyHexes = gameEngine.getEnemyHexes(state, 'w');
       
       expect(enemyHexes).toHaveLength(1);
       expect(enemyHexes[0].equals(blackHex)).toBe(true);
@@ -132,8 +152,9 @@ describe('GameEngine', () => {
     it('returns empty array when no enemies', () => {
       const whiteHex = new Hex(0, 1, -1);
       const pieces = [new Piece(whiteHex, 'w', PieceType.Swordsman)];
+      const state = createMockState(pieces);
 
-      const enemyHexes = gameEngine.getEnemyHexes(pieces, 'w');
+      const enemyHexes = gameEngine.getEnemyHexes(state, 'w');
       expect(enemyHexes).toHaveLength(0);
     });
   });
@@ -150,18 +171,7 @@ describe('GameEngine', () => {
       const pieces: Piece[] = [];
       const castles = [castle];
       
-      const state = {
-        pieces,
-        pieceMap: createPieceMap(pieces),
-        castles: castles,
-        sanctuaries: [],
-        turnCounter: 4, // Castles phase
-        movingPiece: null,
-        history: [],
-        moveHistory: [],
-        graveyard: [],
-        phoenixRecords: [],
-      };
+      const state = createMockState(pieces, castles, 4); // Turn 4 = Castles
       
       const newState = gameEngine.recruitPiece(state, castle, spawnHex);
       
@@ -173,11 +183,7 @@ describe('GameEngine', () => {
       // Check castle updated - turns_controlled should increase
       const updatedCastle = newState.castles[0];
       expect(updatedCastle.turns_controlled).toBe(1);
-      
-      // Note: used_this_turn may be reset to false if the turn counter
-      // advanced to a new player's turn (counter % 5 === 0 triggers resetTurnFlags)
-      // This is correct game behavior.
-      
+            
       // Check turn counter incremented
       // With 1 castle used and no others, it should advance to next player's turn
       expect(newState.turnCounter).toBeGreaterThan(4);
@@ -186,9 +192,8 @@ describe('GameEngine', () => {
 
   describe('getRecruitmentHexes', () => {
     it('returns empty array if no castles controlled', () => {
-      const pieces: Piece[] = [];
-      const castles: Castle[] = []; // No castles
-      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      const state = createMockState([], [], 4);
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
       expect(recruitHexes).toEqual([]);
     });
 
@@ -196,11 +201,9 @@ describe('GameEngine', () => {
       const castleHex = new Hex(0, -6, 6); 
       // Starting castle: Owner 'w' matches Color 'w' (not captured)
       const castle = new Castle(castleHex, 'w', 0, false, 'w');
+      const state = createMockState([], [castle], 4);
 
-      const castles = [castle];
-      const pieces: Piece[] = [];
-
-      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
       expect(recruitHexes).toEqual([]);
     });
 
@@ -210,11 +213,10 @@ describe('GameEngine', () => {
       // Captured castle: Color 'b' (originally black), Owner 'w' (now white)
       const castle = new Castle(castleHex, 'b', 0, false, 'w');
 
-      const castles = [castle];
-      const pieces: Piece[] = [];
+      const state = createMockState([], [castle], 4);
 
       // Turn 4 = Castles phase for White
-      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
       
       const expectedNeighbor = new Hex(0, -5, 5);
       
@@ -229,10 +231,9 @@ describe('GameEngine', () => {
       const blockingHex = new Hex(0, -5, 5); // Adjacent
       const blockingPiece = new Piece(blockingHex, 'w', PieceType.Swordsman);
 
-      const castles = [castle];
-      const pieces = [blockingPiece];
+      const state = createMockState([blockingPiece], [castle], 4);
 
-      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
 
       // Should NOT contain the blocking hex
       const hasBlocked = recruitHexes.some(h => h.equals(blockingHex));
@@ -243,23 +244,19 @@ describe('GameEngine', () => {
       const castleHex = new Hex(0, -6, 6); 
       // Castle already used this turn
       const castle = new Castle(castleHex, 'b', 0, true, 'w');
+      const state = createMockState([], [castle], 4);
 
-      const castles = [castle];
-      const pieces: Piece[] = [];
-
-      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 4);
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
       expect(recruitHexes).toEqual([]);
     });
 
     it('returns empty if not Castles phase', () => {
       const castleHex = new Hex(0, -6, 6); 
       const castle = new Castle(castleHex, 'b', 0, false, 'w');
-
-      const castles = [castle];
-      const pieces: Piece[] = [];
+      const state = createMockState([], [castle], 0);
 
       // Turn 0 = Movement phase
-      const recruitHexes = gameEngine.getRecruitmentHexes(pieces, castles, 0);
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
       expect(recruitHexes).toEqual([]);
     });
   });
@@ -268,10 +265,9 @@ describe('GameEngine', () => {
     it('returns valid moves for a piece', () => {
         const hex = new Hex(0, 0, 0); // Center
         const piece = new Piece(hex, 'w', PieceType.Archer); // Moves 1 hex
-        const pieces = [piece];
-        const castles: Castle[] = [];
+        const state = createMockState([piece], [], 0);
 
-        const moves = gameEngine.getLegalMoves(piece, pieces, castles, 0);
+        const moves = gameEngine.getLegalMoves(state, piece);
         
         // Archer has 6 neighbors, all valid on empty board
         expect(moves.length).toBe(6);
@@ -280,11 +276,10 @@ describe('GameEngine', () => {
     it('returns empty if phase is not Movement', () => {
         const hex = new Hex(0, 0, 0); 
         const piece = new Piece(hex, 'w', PieceType.Archer);
-        const pieces = [piece];
-        const castles: Castle[] = [];
+        const state = createMockState([piece], [], 2);
 
         // Turn 2 is Attack phase
-        const moves = gameEngine.getLegalMoves(piece, pieces, castles, 2);
+        const moves = gameEngine.getLegalMoves(state, piece);
         expect(moves).toEqual([]);
     });
   });
@@ -298,11 +293,10 @@ describe('GameEngine', () => {
           const attacker = new Piece(attackerHex, 'w', PieceType.Swordsman);
           const victim = new Piece(targetHex, 'b', PieceType.Archer);
           
-          const pieces = [attacker, victim];
-          const castles: Castle[] = [];
+          const state = createMockState([attacker, victim], [], 2);
           
           // Turn 2 is Attack phase
-          const attacks = gameEngine.getLegalAttacks(attacker, pieces, castles, 2);
+          const attacks = gameEngine.getLegalAttacks(state, attacker);
           
           expect(attacks.length).toBeGreaterThan(0);
           expect(attacks.some(h => h.equals(targetHex))).toBe(true);

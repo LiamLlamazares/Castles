@@ -110,76 +110,77 @@ export class GameEngine {
 
   // ================= BOARD QUERIES (Delegated to RuleEngine) =================
 
-  public getOccupiedHexes(pieces: Piece[]): Hex[] {
-    return RuleEngine.getOccupiedHexes(pieces);
+  public getOccupiedHexes(gameState: GameState): Hex[] {
+    return RuleEngine.getOccupiedHexes(gameState);
   }
 
-  public getBlockedHexes(pieces: Piece[], castles: Castle[]): Hex[] {
-    return RuleEngine.getBlockedHexes(pieces, castles, this.board);
+  public getBlockedHexes(gameState: GameState): Hex[] {
+    return RuleEngine.getBlockedHexes(gameState, this.board);
   }
 
-  public getBlockedHexSet(pieces: Piece[], castles: Castle[]): Set<string> {
-    return RuleEngine.getBlockedHexSet(pieces, castles, this.board);
+  public getBlockedHexSet(gameState: GameState): Set<string> {
+    return RuleEngine.getBlockedHexSet(gameState, this.board);
   }
   
-  public getEnemyHexes(pieces: Piece[], currentPlayer: Color): Hex[] {
-    return RuleEngine.getEnemyHexes(pieces, currentPlayer);
+  public getEnemyHexes(gameState: GameState, currentPlayer: Color): Hex[] {
+    return RuleEngine.getEnemyHexes(gameState, currentPlayer);
   }
 
-  public getEnemyCastleHexes(castles: Castle[], pieces: Piece[], currentPlayer: Color): Hex[] {
-    return RuleEngine.getEnemyCastleHexes(castles, pieces, currentPlayer);
+  public getEnemyCastleHexes(gameState: GameState, currentPlayer: Color): Hex[] {
+    return RuleEngine.getEnemyCastleHexes(gameState, currentPlayer);
   }
 
-  public getAttackableHexes(pieces: Piece[], castles: Castle[], currentPlayer: Color): Hex[] {
-    return RuleEngine.getAttackableHexes(pieces, castles, currentPlayer);
+  public getAttackableHexes(gameState: GameState, currentPlayer: Color): Hex[] {
+    return RuleEngine.getAttackableHexes(gameState, currentPlayer);
   }
 
-  public getDefendedHexes(pieces: Piece[], currentPlayer: Color): Hex[] {
-    return RuleEngine.getDefendedHexes(pieces, currentPlayer, this.board);
+  public getDefendedHexes(gameState: GameState, currentPlayer: Color): Hex[] {
+    return RuleEngine.getDefendedHexes(gameState, currentPlayer, this.board);
   }
 
   // ================= LEGAL ACTIONS (Delegated to RuleEngine) =================
 
-  public getLegalMoves(piece: Piece | null, pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
-    return RuleEngine.getLegalMoves(piece, pieces, castles, turnCounter, this.board);
+  public getLegalMoves(gameState: GameState, piece: Piece | null): Hex[] {
+    return RuleEngine.getLegalMoves(piece, gameState, this.board);
   }
 
-  public getLegalAttacks(piece: Piece | null, pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
-    return RuleEngine.getLegalAttacks(piece, pieces, castles, turnCounter, this.board);
+  public getLegalAttacks(gameState: GameState, piece: Piece | null): Hex[] {
+    return RuleEngine.getLegalAttacks(piece, gameState, this.board);
   }
 
-  public getFutureLegalAttacks(pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
-    return RuleEngine.getFutureLegalAttacks(pieces, castles, turnCounter, this.board);
+  public getFutureLegalAttacks(gameState: GameState): Hex[] {
+    return RuleEngine.getFutureLegalAttacks(gameState, this.board);
   }
 
-  public hasAnyFutureLegalAttacks(pieces: Piece[], castles: Castle[], turnCounter: number): boolean {
-    return RuleEngine.hasAnyFutureLegalAttacks(pieces, castles, turnCounter, this.board);
+  public hasAnyFutureLegalAttacks(gameState: GameState): boolean {
+    return RuleEngine.hasAnyFutureLegalAttacks(gameState, this.board);
   }
 
-  public castleIsControlledByActivePlayer(castle: Castle, pieces: Piece[], currentPlayer: Color): boolean {
-    return RuleEngine.castleIsControlledByActivePlayer(castle, pieces, currentPlayer);
+  public castleIsControlledByActivePlayer(castle: Castle, gameState: GameState): boolean {
+      const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
+    return RuleEngine.castleIsControlledByActivePlayer(castle, currentPlayer);
   }
 
-  public getControlledCastlesActivePlayer(castles: Castle[], pieces: Piece[], turnCounter: number): Castle[] {
-    return RuleEngine.getControlledCastlesActivePlayer(castles, pieces, turnCounter);
+  public getControlledCastlesActivePlayer(gameState: GameState): Castle[] {
+    return RuleEngine.getControlledCastlesActivePlayer(gameState);
   }
 
-  public hasAnyFutureControlledCastles(castles: Castle[], pieces: Piece[], turnCounter: number): boolean {
-    return RuleEngine.hasAnyFutureControlledCastles(castles, pieces, turnCounter);
+  public hasAnyFutureControlledCastles(gameState: GameState): boolean {
+    return RuleEngine.hasAnyFutureControlledCastles(gameState);
   }
 
-  public getFutureControlledCastlesActivePlayer(castles: Castle[], pieces: Piece[], turnCounter: number): Castle[] {
-    return RuleEngine.getFutureControlledCastlesActivePlayer(castles, pieces, turnCounter);
+  public getFutureControlledCastlesActivePlayer(gameState: GameState): Castle[] {
+    return RuleEngine.getFutureControlledCastlesActivePlayer(gameState);
   }
 
-  public getRecruitmentHexes(pieces: Piece[], castles: Castle[], turnCounter: number): Hex[] {
-    return RuleEngine.getRecruitmentHexes(pieces, castles, turnCounter, this.board);
+  public getRecruitmentHexes(gameState: GameState): Hex[] {
+    return RuleEngine.getRecruitmentHexes(gameState, this.board);
   }
 
   // ================= TURN MANAGEMENT HELPER =================
 
-  public getTurnCounterIncrement(pieces: Piece[], castles: Castle[], turnCounter: number): number {
-    return RuleEngine.getTurnCounterIncrement(pieces, castles, turnCounter, this.board);
+  public getTurnCounterIncrement(gameState: GameState): number {
+    return RuleEngine.getTurnCounterIncrement(gameState, this.board);
   }
 
   // ================= STATE TRANSITIONS (Delegated to StateMutator) =================

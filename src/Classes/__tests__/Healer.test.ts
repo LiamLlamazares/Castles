@@ -13,7 +13,7 @@ describe('Healer Restoration', () => {
     let state: GameState;
 
     beforeEach(() => {
-        board = new Board(new Map()); // Empty board mock
+        board = new Board(8); // Standard 8-size board
         state = {
             pieces: [],
             pieceMap: new PieceMap([]),
