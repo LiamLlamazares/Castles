@@ -13,6 +13,9 @@ interface GameConfig {
   board?: Board;
   pieces?: Piece[];
   layout?: LayoutService;
+  history?: any[];
+  moveHistory?: any[];
+  turnCounter?: number;
 }
 
 function App() {
@@ -33,10 +36,10 @@ function App() {
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (board: Board, pieces: Piece[]) => {
+  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number) => {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout });
+    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
   };
@@ -64,6 +67,9 @@ function App() {
               initialBoard={gameConfig.board}
               initialPieces={gameConfig.pieces}
               initialLayout={gameConfig.layout}
+              initialHistory={gameConfig.history}
+              initialMoveHistory={gameConfig.moveHistory}
+              initialTurnCounter={gameConfig.turnCounter}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}

@@ -25,23 +25,33 @@ export interface GameBoardState extends Omit<GameState, 'moveHistory'> {
 
 export const useGameLogic = (
   initialBoard: import("../Classes/Core/Board").Board = startingBoard,
-  initialPieces: Piece[] = allPieces
+  initialPieces: Piece[] = allPieces,
+  initialHistory: HistoryEntry[] = [],
+  initialMoveHistory: MoveRecord[] = [],
+  initialTurnCounter: number = 0
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState & { viewMoveIndex: number | null }>({
-    history: [],
+    history: initialHistory,
     pieces: initialPieces,
     pieceMap: createPieceMap(initialPieces),
     movingPiece: null,
-    turnCounter: 0,
-    castles: initialBoard.castles as Castle[],
+    turnCounter: initialTurnCounter,
+    castles: initialBoard.castles as Castle[], // Castles might need to be from history? 
+    // Actually if initialHistory is provided, pieces/castles/turnCounter should match the LAST entry?
+    // User passed initialPieces separately. App.tsx passes `gameConfig.pieces`.
+    // If loading game, `App` passes the *Result* of replay.
+    // So initialPieces IS the state at the end of replay.
+    // initialTurnCounter IS the counter at end.
+    // So we just trust them.
+    
     showCoordinates: false,
     cheatMode: false,
     isBoardRotated: false,
     resizeVersion: 0,
-    moveHistory: [],
+    moveHistory: initialMoveHistory,
     viewMoveIndex: null, // null = viewing live game
   });
 
@@ -333,8 +343,31 @@ export const useGameLogic = (
         console.error("Failed to parse PGN setup");
         return null;
     }
-    const { board, pieces } = PGNService.reconstructState(setup);
-    return { board, pieces };
+    const { board, pieces: startPieces } = PGNService.reconstructState(setup);
+    
+    // Replay moves to get final state
+    try {
+        const finalState = PGNService.replayMoveHistory(board, startPieces, moves);
+        
+        return { 
+            board, 
+            pieces: finalState.pieces,
+            castles: finalState.castles,
+            history: finalState.history,
+            moveHistory: finalState.moveHistory,
+            turnCounter: finalState.turnCounter
+        };
+    } catch (e) {
+        console.error("Failed to replay moves:", e);
+        alert("Error replaying moves. Game loaded at start position.");
+        return {
+             board,
+             pieces: startPieces,
+             history: [],
+             moveHistory: [],
+             turnCounter: 0
+        };
+    }
   }, []);
 
   return {

@@ -16,10 +16,13 @@ interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
   initialLayout?: LayoutService;
+  initialHistory?: any[]; // using any[] to avoid circular dependency hell or import issues, typed in useGameLogic
+  initialMoveHistory?: any[];
+  initialTurnCounter?: number;
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
-  onLoadGame?: (board: Board, pieces: Piece[]) => void;
+  onLoadGame?: (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number) => void;
 }
 
 /**
@@ -30,6 +33,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
   initialBoard = startingBoard, 
   initialPieces = allPieces, 
   initialLayout = startingLayout,
+  initialHistory,
+  initialMoveHistory,
+  initialTurnCounter,
   onResign = () => {},
   onSetup = () => {},
   onRestart = () => {},
@@ -71,7 +77,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     stepHistory,
     getPGN,
     loadPGN
-  } = useGameLogic(initialBoard, initialPieces);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter);
 
   // Reset overlay when game restarts (victory message clears or changes)
   React.useEffect(() => {
@@ -96,7 +102,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         console.log("Raw PGN input:", pgn);
         const result = loadPGN(pgn);
         if (result && onLoadGame) {
-            onLoadGame(result.board, result.pieces);
+            onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter);
         } else {
             alert("Failed to load PGN. Check console for details.");
         }

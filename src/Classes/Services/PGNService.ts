@@ -1,8 +1,12 @@
 import { Board, BoardConfig } from "../Core/Board";
 import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
-import { MoveRecord } from "../../Constants";
+import { MoveRecord, Color } from "../../Constants";
 import { Hex } from "../Entities/Hex";
+import { GameEngine, GameState } from "../Core/GameEngine";
+import { createPieceMap } from "../../utils/PieceMap";
+import { NotationService } from "../Systems/NotationService";
+import { TurnManager } from "../Core/TurnManager";
 
 import { PieceType } from "../../Constants";
 
@@ -183,11 +187,6 @@ export class PGNService {
 
   public static reconstructState(setup: GameSetup): { board: Board; pieces: Piece[] } {
         // Reconstruct Board
-        // We need to map the raw castle data back into Castle objects
-        // But Board constructor expects Castle[]? 
-        // Let's modify Board constructor or map it here.
-        // Board logic: if custom castles are provided, use them.
-        
         // Convert setup.castles to Castle objects
         const castles = setup.castles.map(c => new Castle(new Hex(c.q, c.r, c.s), c.color, 0));
         
@@ -197,5 +196,166 @@ export class PGNService {
         const pieces = setup.pieces.map(p => new Piece(new Hex(p.q, p.r, p.s), p.color, p.type));
         
         return { board, pieces };
+  }
+
+  /**
+   * Replays the parsed moves on top of the initial state to produce the final GameState and History.
+   */
+  public static replayMoveHistory(
+      board: Board, 
+      initialPieces: Piece[], 
+      moves: string[]
+  ): GameState {
+      // Initialize fresh engine and state
+      const engine = new GameEngine(board);
+      const castles = board.castles as Castle[]; // Castles from board are effectively the list for now
+
+      let currentState: GameState = {
+          pieces: initialPieces.map(p => p.clone()), // Clone to start fresh
+          pieceMap: createPieceMap(initialPieces),
+          castles: castles.map(c => c.clone()),
+          turnCounter: 0,
+          movingPiece: null,
+          history: [],
+          moveHistory: []
+      };
+
+      // Loop through moves and apply them
+      for (const token of moves) {
+          try {
+              if (token === "Pass") {
+                  // Save history before move
+                  currentState = PGNService.saveHistoryEntry(currentState, token);
+                  currentState = engine.passTurn(currentState);
+                  continue;
+              }
+
+              // Attack: J10xK11
+              if (token.includes('x')) {
+                  const parts = token.split('x');
+                  const startHex = NotationService.fromCoordinate(parts[0]);
+                  const targetHex = NotationService.fromCoordinate(parts[1]);
+
+                  const attacker = currentState.pieces.find(p => p.hex.equals(startHex));
+                  if (!attacker) throw new Error(`Attacker not found at ${parts[0]}`);
+
+                  currentState = PGNService.saveHistoryEntry(currentState, token);
+
+                  // Check if target is a piece or castle
+                  const targetPiece = currentState.pieces.find(p => p.hex.equals(targetHex));
+                  if (targetPiece) {
+                      currentState = engine.applyAttack(currentState, attacker, targetHex);
+                  } else {
+                      // Assume castle attack
+                      currentState = engine.applyCastleAttack(currentState, attacker, targetHex);
+                  }
+                  continue;
+              }
+
+              // Recruitment: B2=Kni
+              if (token.includes('=')) {
+                   const parts = token.split('=');
+                   const spawnHex = NotationService.fromCoordinate(parts[0]);
+                   const pieceCode = parts[1];
+                   
+                   // Find piece type
+                   let pieceType: PieceType | undefined;
+                   // Reverse lookup from code... naive approach or need helper
+                   // Codes: Swo, Arc, Kni, Tre, Eag, Gia, Asn, Dra, Mon
+                   switch(pieceCode) {
+                       case "Swo": pieceType = PieceType.Swordsman; break;
+                       case "Arc": pieceType = PieceType.Archer; break;
+                       case "Kni": pieceType = PieceType.Knight; break;
+                       case "Tre": pieceType = PieceType.Trebuchet; break;
+                       case "Eag": pieceType = PieceType.Eagle; break;
+                       case "Gia": pieceType = PieceType.Giant; break;
+                       case "Asn": pieceType = PieceType.Assassin; break;
+                       case "Dra": pieceType = PieceType.Dragon; break;
+                       case "Mon": pieceType = PieceType.Monarch; break;
+                   }
+
+                   if (!pieceType) throw new Error(`Unknown piece code ${pieceCode}`);
+
+                   // Find which castle can recruit here.
+                   const castle = currentState.castles.find(c => c.isAdjacent(spawnHex) && c.color === engine.getCurrentPlayer(currentState.turnCounter));
+                   if (!castle) throw new Error(`No castle found to recruit at ${parts[0]}`);
+
+                   currentState = PGNService.saveHistoryEntry(currentState, token);
+                   currentState = engine.recruitPiece(currentState, castle, spawnHex);
+                   
+                   // Force the type of the newly created piece to match PGN, just in case
+                   // The new piece is the last one in the array
+                   const recruitedPieceIndex = currentState.pieces.length - 1;
+                   if (recruitedPieceIndex >= 0) {
+                       const actualType = currentState.pieces[recruitedPieceIndex].type;
+                       if (actualType !== pieceType) {
+                           console.warn(`PGN Replay: Recruitment type mismatch. Expected ${pieceType}, got ${actualType}. Correcting...`);
+                           const correctedPiece = currentState.pieces[recruitedPieceIndex].with({ type: pieceType });
+                           const newPieces = [...currentState.pieces];
+                           newPieces[recruitedPieceIndex] = correctedPiece;
+                           // Update currentState with corrected piece
+                           currentState = {
+                               ...currentState,
+                               pieces: newPieces,
+                               pieceMap: createPieceMap(newPieces)
+                           };
+                       }
+                   }
+                   continue;
+              }
+
+              // Movement: J10K11
+              // Parse using Regex
+              const moveMatch = token.match(/^([A-Z]\d+)([A-Z]\d+)$/);
+              if (moveMatch) {
+                   const startHex = NotationService.fromCoordinate(moveMatch[1]);
+                   const endHex = NotationService.fromCoordinate(moveMatch[2]);
+                   
+                   const mover = currentState.pieces.find(p => p.hex.equals(startHex));
+                   if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
+
+                   currentState = PGNService.saveHistoryEntry(currentState, token);
+                   currentState = engine.applyMove(currentState, mover, endHex);
+                   continue;
+              }
+
+          } catch (e) {
+              console.error(`Failed to replay move ${token}:`, e);
+              break; // Stop replaying on error
+          }
+      }
+      return currentState;
+  }
+
+  private static saveHistoryEntry(state: GameState, notation: string): GameState {
+      // Helper to push to history before mutation
+      const historyEntry = {
+          pieces: state.pieces.map(p => p.clone()),
+          castles: state.castles.map(c => c.clone()),
+          turnCounter: state.turnCounter,
+          moveNotation: state.moveHistory, // Snapshot of history so far
+      };
+      // We also update moveHistory (the list of notations) for the *next* state, 
+      // but usually history tracks *past* states.
+      // GameEngine logic: passTurn etc usually DON'T update `history` array on the state object itself?
+      // useGameLogic manages history. GameEngine manages state transitions.
+      // So here we must manually manage the history array on our `currentState`.
+      
+      const newMoveHistory = [...state.moveHistory];
+      
+      const record: MoveRecord = {
+        notation,
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+        color: TurnManager.getCurrentPlayer(state.turnCounter),
+        phase: TurnManager.getTurnPhase(state.turnCounter)
+      };
+      
+      newMoveHistory.push(record);
+
+      return {
+          ...state,
+          history: [...state.history, historyEntry],
+          moveHistory: newMoveHistory
+      };
   }
 }

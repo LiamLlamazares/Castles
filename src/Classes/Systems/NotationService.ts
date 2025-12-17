@@ -28,6 +28,26 @@ export class NotationService {
         return `${colLetter}${row}`;
     }
 
+    public static fromCoordinate(coord: string): Hex {
+        const match = coord.match(/^([A-Z])(\d+)$/);
+        if (!match) {
+            throw new Error(`Invalid coordinate format: ${coord}`);
+        }
+        const colLetter = match[1];
+        const rowString = match[2];
+
+        const colIndex = colLetter.charCodeAt(0) - 'A'.charCodeAt(0);
+        const rowIndex = parseInt(rowString, 10);
+
+        // Reverse the mapping
+        // colIndex = offset.col + 9  => offset.col = colIndex - 9
+        // row = offset.row + 10      => offset.row = rowIndex - 10
+        const col = colIndex - 9;
+        const row = rowIndex - 10;
+
+        return OffsetCoord.qoffsetToCube(OffsetCoord.EVEN, new OffsetCoord(col, row));
+    }
+
     /**
      * Helper to get a 3-letter code for a piece type.
      */
