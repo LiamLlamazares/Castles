@@ -6,7 +6,6 @@ import { Hex } from "../Entities/Hex";
 import { GameEngine, GameState } from "../Core/GameEngine";
 import { createPieceMap } from "../../utils/PieceMap";
 import { NotationService } from "../Systems/NotationService";
-import { TurnManager } from "../Core/TurnManager";
 
 import { PieceType, SanctuaryType } from "../../Constants";
 import { Sanctuary } from "../Entities/Sanctuary";
@@ -35,6 +34,7 @@ export class PGNService {
     board: Board,
     pieces: Piece[],
     history: MoveRecord[],
+    sanctuaries: Sanctuary[] = [],
     gameTags: { [key: string]: string } = {}
   ): string {
     const setup: GameSetup = {
@@ -51,6 +51,15 @@ export class PGNService {
         r: p.hex.r,
         s: p.hex.s,
         color: p.color as 'w' | 'b',
+      })),
+      sanctuaries: sanctuaries.map((s) => ({
+        type: s.type,
+        q: s.hex.q,
+        r: s.hex.r,
+        s: s.hex.s,
+        territorySide: s.territorySide as 'w' | 'b',
+        cooldown: s.cooldown,
+        hasPledgedThisGame: s.hasPledgedThisGame,
       })),
     };
 
@@ -161,15 +170,25 @@ export class PGNService {
   }
 
   private static compressSetup(setup: GameSetup): CompactSetup {
-      return {
+      const result: CompactSetup = {
           b: setup.boardConfig,
           c: setup.castles.map(c => [c.q, c.r, c.s, c.color === 'w' ? 0 : 1]),
           p: setup.pieces.map(p => [p.type, p.q, p.r, p.s, p.color === 'w' ? 0 : 1])
       };
+      // Only include sanctuaries if present
+      if (setup.sanctuaries && setup.sanctuaries.length > 0) {
+          result.s = setup.sanctuaries.map(s => [
+              s.type, s.q, s.r, s.s, 
+              s.territorySide === 'w' ? 0 : 1, 
+              s.cooldown, 
+              s.hasPledgedThisGame ? 1 : 0
+          ]);
+      }
+      return result;
   }
 
   private static decompressSetup(compact: CompactSetup): GameSetup {
-      return {
+      const result: GameSetup = {
           boardConfig: compact.b,
           castles: compact.c.map(c => ({
               q: c[0],
@@ -185,9 +204,22 @@ export class PGNService {
               color: p[4] === 0 ? 'w' : 'b'
           }))
       };
+      // Decompress sanctuaries if present
+      if (compact.s && compact.s.length > 0) {
+          result.sanctuaries = compact.s.map(s => ({
+              type: s[0],
+              q: s[1],
+              r: s[2],
+              s: s[3],
+              territorySide: s[4] === 0 ? 'w' : 'b',
+              cooldown: s[5],
+              hasPledgedThisGame: s[6] === 1
+          }));
+      }
+      return result;
   }
 
-  public static reconstructState(setup: GameSetup): { board: Board; pieces: Piece[] } {
+  public static reconstructState(setup: GameSetup): { board: Board; pieces: Piece[]; sanctuaries: Sanctuary[] } {
         // Reconstruct Board
         // Convert setup.castles to Castle objects
         const castles = setup.castles.map(c => new Castle(new Hex(c.q, c.r, c.s), c.color, 0));
@@ -197,7 +229,17 @@ export class PGNService {
         // Convert setup.pieces to Piece objects
         const pieces = setup.pieces.map(p => new Piece(new Hex(p.q, p.r, p.s), p.color, p.type));
         
-        return { board, pieces };
+        // Convert setup.sanctuaries to Sanctuary objects (if present)
+        const sanctuaries = setup.sanctuaries?.map(s => new Sanctuary(
+            new Hex(s.q, s.r, s.s),
+            s.type,
+            s.territorySide,
+            null, // controller - will be determined by game state
+            s.cooldown,
+            s.hasPledgedThisGame
+        )) || [];
+        
+        return { board, pieces, sanctuaries };
   }
 
   /**

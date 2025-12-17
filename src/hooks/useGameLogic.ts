@@ -2,13 +2,12 @@
  * @file useGameLogic.ts
  * @description Central React hook for game state management.
  *
- * Provides all game state and actions to the Game component:
- * - **State**: pieces, castles, sanctuaries, turnCounter, etc.
- * - **Computed**: legalMoves, legalAttacks, winner, victoryMessage
- * - **Actions**: handlePass, handleHexClick, handlePieceClick, etc.
- * - **PGN**: getPGN, loadPGN for import/export
+ * Composes specialized hooks:
+ * - **useAnalysisMode**: History navigation
+ * - **useUISettings**: Board display toggles
+ * - **usePGN**: Import/export functionality
  *
- * Internally uses GameEngine for all game logic delegation.
+ * Provides all game state and actions to the Game component.
  *
  * @usage Called by Game.tsx to power the game UI.
  * @see GameEngine - Core game logic facade
@@ -16,7 +15,6 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
-import { PGNService } from "../Classes/Services/PGNService";
 import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
@@ -30,13 +28,12 @@ import {
 } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
 
+// Composed hooks
+import { useAnalysisMode, AnalysisModeState } from "./useAnalysisMode";
+import { useUISettings, UISettingsState } from "./useUISettings";
+import { usePGN } from "./usePGN";
 
-
-export interface GameBoardState extends Omit<GameState, 'moveHistory'> {
-  showCoordinates: boolean;
-  cheatMode: boolean;
-  isBoardRotated: boolean;
-  resizeVersion: number;
+export interface GameBoardState extends Omit<GameState, 'moveHistory'>, UISettingsState, AnalysisModeState {
   moveHistory: MoveRecord[];
 }
 
@@ -49,8 +46,9 @@ export const useGameLogic = (
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
+  
   // =========== STATE ===========
-  const [state, setState] = useState<GameBoardState & { viewMoveIndex: number | null }>({
+  const [state, setState] = useState<GameBoardState>({
     history: initialHistory,
     pieces: initialPieces,
     pieceMap: createPieceMap(initialPieces),
@@ -59,51 +57,50 @@ export const useGameLogic = (
     castles: initialBoard.castles as Castle[], 
     sanctuaries: SanctuaryGenerator.generateDefaultSanctuaries(initialBoard), 
     
+    // UI Settings
     showCoordinates: false,
-    cheatMode: false,
     isBoardRotated: false,
     resizeVersion: 0,
+    
+    // History
     moveHistory: initialMoveHistory,
-    viewMoveIndex: null, // null = viewing live game
+    viewMoveIndex: null,
     graveyard: [],
     phoenixRecords: []
   });
 
+  // =========== COMPOSED HOOKS ===========
+  const { isAnalysisMode, analysisState, jumpToMove, stepHistory } = useAnalysisMode(state, setState);
+  const { showCoordinates, isBoardRotated, resizeVersion, toggleCoordinates, handleFlipBoard, incrementResizeVersion } = useUISettings(state, setState);
+  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, state.moveHistory);
+
+  // Destructure for convenience
   const { 
     pieces: currentPieces, 
     castles: currentCastles, 
     turnCounter: currentTurnCounter, 
     movingPiece, 
     history, 
-    showCoordinates, 
-    isBoardRotated, 
-    resizeVersion, 
     moveHistory 
   } = state;
-
-  // Analysis Mode Logic: If viewMoveIndex is set, use historical state
-  const isAnalysisMode = state.viewMoveIndex !== null;
-  const analysisState = isAnalysisMode ? history[state.viewMoveIndex!] : null;
 
   // Constructed View State (GameState compatible)
   const viewState = useMemo<GameState>(() => {
       if (isAnalysisMode && analysisState) {
-          // Reconstruct a partial GameState for viewing history
-          // Note: Graveyard/Phoenix/Sanctuaries might be desynced in history view if not tracked
           return {
               pieces: analysisState.pieces,
               pieceMap: createPieceMap(analysisState.pieces),
               castles: analysisState.castles,
-              sanctuaries: state.sanctuaries, // Assuming constant for now
+              sanctuaries: state.sanctuaries,
               turnCounter: analysisState.turnCounter,
-              movingPiece: null, // Cannot move in history
-              history: [], // Not needed for view
+              movingPiece: null,
+              history: [],
               moveHistory: analysisState.moveNotation,
-              graveyard: [], // Not tracked in history
-              phoenixRecords: [] // Not tracked in history
+              graveyard: [],
+              phoenixRecords: []
           };
       }
-      return state as unknown as GameState; // Live state is compatible
+      return state as unknown as GameState;
   }, [state, isAnalysisMode, analysisState]);
 
   // Derived state to use for rendering
@@ -111,7 +108,7 @@ export const useGameLogic = (
   const castles = viewState.castles;
   const turnCounter = viewState.turnCounter;
 
-  
+  // =========== COMPUTED VALUES ===========
   const turnPhase = useMemo<TurnPhase>(
     () => gameEngine.getTurnPhase(turnCounter),
     [gameEngine, turnCounter]
@@ -160,7 +157,6 @@ export const useGameLogic = (
   );
 
   // =========== HELPER FUNCTIONS ===========
-
   const isLegalMove = useCallback(
     (hex: Hex): boolean => legalMoves.some((move) => move.equals(hex)),
     [legalMoves]
@@ -179,7 +175,6 @@ export const useGameLogic = (
   );
 
   // =========== ACTIONS ===========
-
   const saveHistory = useCallback(() => {
     const currentState: HistoryEntry = {
       pieces: pieces.map((p) => p.clone()),
@@ -220,20 +215,7 @@ export const useGameLogic = (
     }
   }, [history]);
 
-  const handleFlipBoard = useCallback(() => {
-    setState(prev => ({ ...prev, isBoardRotated: !prev.isBoardRotated }));
-  }, []);
-
-  const toggleCoordinates = useCallback(() => {
-    setState(prev => ({ ...prev, showCoordinates: !prev.showCoordinates }));
-  }, []);
-
-  const incrementResizeVersion = useCallback(() => {
-    setState(prev => ({ ...prev, resizeVersion: prev.resizeVersion + 1 }));
-  }, []);
-
   // =========== INTERACTION HANDLERS ===========
-
   const handlePieceClick = useCallback((pieceClicked: Piece) => {
     if (movingPiece === pieceClicked) {
       setState(prev => ({ ...prev, movingPiece: null }));
@@ -320,123 +302,38 @@ export const useGameLogic = (
   }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, saveHistory]);
 
   const handleResign = useCallback((player: Color) => {
-    //`resign` = remove Monarch.
     saveHistory();
     setState(prev => {
         const myMonarch = prev.pieces.find(p => p.type === "Monarch" && p.color === player);
         if (myMonarch) {
-            // Remove monarch
             const newPieces = prev.pieces.filter(p => p !== myMonarch);
-            return {
-                ...prev,
-                pieces: newPieces
-                // GameEngine.getWinner should now return the other player
-            };
+            return { ...prev, pieces: newPieces };
         }
         return prev;
     });
-  }, [pieces, saveHistory]);
-
-  const jumpToMove = useCallback((moveIndex: number | null) => {
-    setState(prev => {
-        if (moveIndex === null) return { ...prev, viewMoveIndex: null };
-        if (moveIndex < 0) return { ...prev, viewMoveIndex: 0 };
-        if (moveIndex >= prev.history.length) return { ...prev, viewMoveIndex: prev.history.length - 1 };
-        return { ...prev, viewMoveIndex: moveIndex };
-    });
-  }, []);
-
-  const stepHistory = useCallback((direction: -1 | 1) => {
-    setState(prev => {
-        // If live, "left" goes to last history item.
-        if (prev.viewMoveIndex === null) {
-            if (direction === -1 && prev.history.length > 0) {
-                return { ...prev, viewMoveIndex: prev.history.length - 1 };
-            }
-            return prev;
-        }
-
-        const newIndex = prev.viewMoveIndex + direction;
-        // If stepping past end, go back to live
-        if (newIndex >= prev.history.length) {
-            return { ...prev, viewMoveIndex: null };
-        }
-        if (newIndex < 0) {
-            return { ...prev, viewMoveIndex: 0 };
-        }
-        return { ...prev, viewMoveIndex: newIndex };
-    });
-  }, []);
+  }, [saveHistory]);
 
   const hasGameStarted = turnCounter > 0;
 
-  const getPGN = useCallback(() => {
-    return PGNService.generatePGN(initialBoard, initialPieces, moveHistory);
-  }, [initialBoard, initialPieces, moveHistory]);
-
-  const loadPGN = useCallback((pgn: string) => {
-    const { setup, moves } = PGNService.parsePGN(pgn);
-    if (!setup) {
-        console.error("Failed to parse PGN setup");
-        return null;
-    }
-    const { board, pieces: startPieces } = PGNService.reconstructState(setup);
-    
-    // Replay moves to get final state
-    try {
-        const finalState = PGNService.replayMoveHistory(board, startPieces, moves);
-        
-        return { 
-            board, 
-            pieces: finalState.pieces,
-            castles: finalState.castles,
-            history: finalState.history,
-            moveHistory: finalState.moveHistory,
-            turnCounter: finalState.turnCounter
-        };
-    } catch (e) {
-        console.error("Failed to replay moves:", e);
-        alert("Error replaying moves. Game loaded at start position.");
-        return {
-             board,
-             pieces: startPieces,
-             history: [],
-             moveHistory: [],
-             turnCounter: 0
-        };
-    }
-  }, []);
-
   // Pledge Action
   const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
-    saveHistory(); // Save state before pledge so it can be undone
+    saveHistory();
     setState(prevState => {
        try {
-           // Find the sanctuary to get the piece type for notation
            const sanctuary = prevState.sanctuaries?.find(s => s.hex.equals(sanctuaryHex));
            if (!sanctuary) throw new Error("Sanctuary not found");
            
            const newCoreState = gameEngine.pledge(prevState as unknown as GameState, sanctuaryHex, spawnHex);
            
-           // Generate notation for the pledge
            const { NotationService } = require("../Classes/Systems/NotationService");
            const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
            const currentPlayer = gameEngine.getCurrentPlayer(prevState.turnCounter);
            const turnPhase = gameEngine.getTurnPhase(prevState.turnCounter);
            const turnNumber = Math.floor(prevState.turnCounter / 10) + 1;
            
-           const moveRecord = {
-               notation,
-               turnNumber,
-               color: currentPlayer,
-               phase: turnPhase
-           };
+           const moveRecord = { notation, turnNumber, color: currentPlayer, phase: turnPhase };
            
-           return {
-               ...prevState,
-               ...newCoreState,
-               moveHistory: [...prevState.moveHistory, moveRecord]
-           };
+           return { ...prevState, ...newCoreState, moveHistory: [...prevState.moveHistory, moveRecord] };
        } catch (e) {
            console.error(e);
            return prevState;
@@ -445,10 +342,6 @@ export const useGameLogic = (
   }, [gameEngine, saveHistory]);
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
-      // Use VIEW state? Or Live state?
-      // Usually canPledge is for UI state in Live Game.
-      // But we can check it in analysis too (though meaningless).
-      // Let's use PREV state logic (live).
       return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex);
   }, [gameEngine, state]);
 
@@ -456,7 +349,7 @@ export const useGameLogic = (
   const triggerAbility = useCallback((sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
       setState(prevState => {
         try {
-            saveHistory(); // Save before effect
+            saveHistory();
             const newState = gameEngine.activateAbility(prevState as unknown as GameState, sourceHex, targetHex, ability);
             return { ...prevState, ...newState };
         } catch (e) {
@@ -470,7 +363,7 @@ export const useGameLogic = (
     // State
     pieces,
     castles,
-    sanctuaries: (state as any).sanctuaries || [], // Fallback until fully typed
+    sanctuaries: state.sanctuaries || [],
     turnCounter,
     movingPiece,
     showCoordinates,
