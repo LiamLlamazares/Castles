@@ -15,6 +15,8 @@ interface ControlPanelProps {
   onResign: () => void;
   onNewGame: () => void;
   moveHistory: MoveRecord[];
+  onExportPGN: () => void;
+  onImportPGN: () => void;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -27,6 +29,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onResign,
   onNewGame,
   moveHistory,
+  onExportPGN,
+  onImportPGN,
 }) => {
   return (
     <div className="sidebar">
@@ -40,6 +44,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         </button>
         <button className="game-button" onClick={onNewGame} style={{ background: '#3498db' }}>
           New Game
+        </button>
+        <button className="game-button" onClick={onExportPGN} title="Copy PGN" style={{ background: '#f39c12' }}>
+           Export PGN
+        </button>
+        <button className="game-button" onClick={onImportPGN} title="Import PGN" style={{ background: '#e67e22' }}>
+           Import PGN
         </button>
          {/* Hidden/Debug buttons can be added back if needed, but user requested simplified UI */}
         {/* <button className="game-button" onClick={onTakeback} title="Takeback (Z)">

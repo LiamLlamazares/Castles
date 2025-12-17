@@ -6,9 +6,10 @@ interface VictoryOverlayProps {
   winner: Color | null;
   onRestart: () => void;
   onSetup: () => void;
+  onAnalyze: () => void;
 }
 
-const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ victoryMessage, winner, onRestart, onSetup }) => {
+const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ victoryMessage, winner, onRestart, onSetup, onAnalyze }) => {
   if (!victoryMessage) return null;
 
   return (
@@ -21,6 +22,9 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ victoryMessage, winner,
             </button>
             <button onClick={onSetup} style={{ padding: '10px 20px', fontSize: '1.2rem' }}>
                 Configure New Game
+            </button>
+            <button onClick={onAnalyze} style={{ padding: '10px 20px', fontSize: '1.2rem' }}>
+                Analyze Game
             </button>
         </div>
       </div>

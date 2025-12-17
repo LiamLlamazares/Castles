@@ -6,6 +6,7 @@ interface UseInputHandlerProps {
   onFlipBoard: () => void;
   onTakeback: () => void;
   onResize: () => void;
+  onNavigate: (direction: -1 | 1) => void;
 }
 
 export const useInputHandler = ({
@@ -13,6 +14,7 @@ export const useInputHandler = ({
   onFlipBoard,
   onTakeback,
   onResize,
+  onNavigate,
 }: UseInputHandlerProps) => {
   
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -34,8 +36,14 @@ export const useInputHandler = ({
       case "KeyQ":
         onPass();
         break;
+      case "ArrowLeft":
+        onNavigate(-1);
+        break;
+      case "ArrowRight":
+        onNavigate(1);
+        break;
     }
-  }, [onPass, onFlipBoard, onTakeback]);
+  }, [onPass, onFlipBoard, onTakeback, onNavigate]);
 
   const handleResize = useCallback(() => {
     // Subtract sidebar width (200px) AND Right HUD width (~280px)

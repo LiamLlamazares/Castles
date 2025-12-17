@@ -1,3 +1,4 @@
+import React from 'react';
 import { useGameLogic } from "../hooks/useGameLogic";
 import { useInputHandler } from "../hooks/useInputHandler";
 import HexGrid from "./HexGrid";
@@ -18,6 +19,7 @@ interface GameBoardProps {
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
+  onLoadGame?: (board: Board, pieces: Piece[]) => void;
 }
 
 /**
@@ -30,8 +32,10 @@ const GameBoard: React.FC<GameBoardProps> = ({
   initialLayout = startingLayout,
   onResign = () => {},
   onSetup = () => {},
-  onRestart = () => {}
+  onRestart = () => {},
+  onLoadGame = () => {}
 }) => {
+  const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
     
   const {
     // State
@@ -61,17 +65,42 @@ const GameBoard: React.FC<GameBoardProps> = ({
     handlePieceClick,
     handleHexClick,
     handleResign,
-    hasGameStarted
+    hasGameStarted,
+    // Analysis
+    isAnalysisMode,
+    stepHistory,
+    getPGN,
+    loadPGN
   } = useGameLogic(initialBoard, initialPieces);
+
+  // Reset overlay when game restarts (victory message clears or changes)
+  React.useEffect(() => {
+    if (!victoryMessage) {
+        setOverlayDismissed(false);
+    }
+  }, [victoryMessage]);
 
   useInputHandler({
     onPass: handlePass,
     onFlipBoard: handleFlipBoard,
     onTakeback: handleTakeback,
-    onResize: incrementResizeVersion
+    onResize: incrementResizeVersion,
+    onNavigate: stepHistory
   });
 
   // =========== RENDER ===========
+
+  const handleImportPGN = () => {
+    const pgn = prompt("Paste PGN here:");
+    if (pgn) {
+        const result = loadPGN(pgn);
+        if (result && onLoadGame) {
+            onLoadGame(result.board, result.pieces);
+        } else {
+            alert("Failed to load PGN. Check console for details.");
+        }
+    }
+  };
 
   return (
     <>
@@ -88,6 +117,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
         }}
         onNewGame={onSetup}
         moveHistory={moveHistory || []}
+        onExportPGN={() => {
+            const pgn = getPGN();
+            navigator.clipboard.writeText(pgn).then(() => alert("PGN copied to clipboard!"));
+        }}
+        onImportPGN={handleImportPGN}
       />
       
       <PlayerHUD 
@@ -133,12 +167,15 @@ const GameBoard: React.FC<GameBoardProps> = ({
         />
       </svg>
 
-      <VictoryOverlay 
-        victoryMessage={victoryMessage} 
-        winner={winner} 
-        onRestart={onRestart}
-        onSetup={onSetup}
-      />
+      {!isOverlayDismissed && (
+          <VictoryOverlay 
+            victoryMessage={victoryMessage} 
+            winner={winner} 
+            onRestart={onRestart}
+            onSetup={onSetup}
+            onAnalyze={() => setOverlayDismissed(true)}
+          />
+      )}
     </>
   );
 };

@@ -30,8 +30,15 @@ function App() {
   };
 
   const handleRestartGame = () => {
-    // Adds a `gameKey` state to force remount.
     setGameKey(prev => prev + 1);
+  };
+
+  const handleLoadGame = (board: Board, pieces: Piece[]) => {
+    // Reset layout based on new board size
+    const layout = getStartingLayout(board);
+    setGameConfig({ board, pieces, layout });
+    setGameKey(prev => prev + 1); // Force remount
+    setView('game');
   };
   
   const [gameKey, setGameKey] = useState(0);
@@ -60,6 +67,7 @@ function App() {
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}
+              onLoadGame={handleLoadGame}
             />
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
+import { PGNService } from "../Classes/Services/PGNService";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
@@ -29,7 +30,7 @@ export const useGameLogic = (
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
   // =========== STATE ===========
-  const [state, setState] = useState<GameBoardState>({
+  const [state, setState] = useState<GameBoardState & { viewMoveIndex: number | null }>({
     history: [],
     pieces: initialPieces,
     pieceMap: createPieceMap(initialPieces),
@@ -41,11 +42,30 @@ export const useGameLogic = (
     isBoardRotated: false,
     resizeVersion: 0,
     moveHistory: [],
+    viewMoveIndex: null, // null = viewing live game
   });
 
-  const { pieces, castles, turnCounter, movingPiece, history, showCoordinates, isBoardRotated, resizeVersion, moveHistory } = state;
+  const { 
+    pieces: currentPieces, 
+    castles: currentCastles, 
+    turnCounter: currentTurnCounter, 
+    movingPiece, 
+    history, 
+    showCoordinates, 
+    isBoardRotated, 
+    resizeVersion, 
+    moveHistory 
+  } = state;
 
-  // =========== COMPUTED VALUES (useMemo) ===========
+  // Analysis Mode Logic: If viewMoveIndex is set, use historical state
+  const isAnalysisMode = state.viewMoveIndex !== null;
+  const analysisState = isAnalysisMode ? history[state.viewMoveIndex!] : null;
+
+  // Derived state to use for rendering (either live or historical)
+  const pieces = analysisState ? analysisState.pieces : currentPieces;
+  const castles = analysisState ? analysisState.castles : currentCastles;
+  const turnCounter = analysisState ? analysisState.turnCounter : currentTurnCounter;
+
   
   const turnPhase = useMemo<TurnPhase>(
     () => gameEngine.getTurnPhase(turnCounter),
@@ -270,7 +290,52 @@ export const useGameLogic = (
     });
   }, [pieces, saveHistory]);
 
+  const jumpToMove = useCallback((moveIndex: number | null) => {
+    setState(prev => {
+        if (moveIndex === null) return { ...prev, viewMoveIndex: null };
+        if (moveIndex < 0) return { ...prev, viewMoveIndex: 0 };
+        if (moveIndex >= prev.history.length) return { ...prev, viewMoveIndex: prev.history.length - 1 };
+        return { ...prev, viewMoveIndex: moveIndex };
+    });
+  }, []);
+
+  const stepHistory = useCallback((direction: -1 | 1) => {
+    setState(prev => {
+        // If live, "left" goes to last history item.
+        if (prev.viewMoveIndex === null) {
+            if (direction === -1 && prev.history.length > 0) {
+                return { ...prev, viewMoveIndex: prev.history.length - 1 };
+            }
+            return prev;
+        }
+
+        const newIndex = prev.viewMoveIndex + direction;
+        // If stepping past end, go back to live
+        if (newIndex >= prev.history.length) {
+            return { ...prev, viewMoveIndex: null };
+        }
+        if (newIndex < 0) {
+            return { ...prev, viewMoveIndex: 0 };
+        }
+        return { ...prev, viewMoveIndex: newIndex };
+    });
+  }, []);
+
   const hasGameStarted = turnCounter > 0;
+
+  const getPGN = useCallback(() => {
+    return PGNService.generatePGN(initialBoard, initialPieces, moveHistory);
+  }, [initialBoard, initialPieces, moveHistory]);
+
+  const loadPGN = useCallback((pgn: string) => {
+    const { setup, moves } = PGNService.parsePGN(pgn);
+    if (!setup) {
+        console.error("Failed to parse PGN setup");
+        return null;
+    }
+    const { board, pieces } = PGNService.reconstructState(setup);
+    return { board, pieces };
+  }, []);
 
   return {
     // State
@@ -303,6 +368,13 @@ export const useGameLogic = (
     incrementResizeVersion,
     handlePieceClick,
     handleHexClick,
-    handleResign
+    handleResign,
+    
+    // Analysis & PGN
+    isAnalysisMode,
+    jumpToMove,
+    stepHistory,
+    getPGN,
+    loadPGN
   };
 };
