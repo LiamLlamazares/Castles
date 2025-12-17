@@ -1,3 +1,19 @@
+/**
+ * @file useGameLogic.ts
+ * @description Central React hook for game state management.
+ *
+ * Provides all game state and actions to the Game component:
+ * - **State**: pieces, castles, sanctuaries, turnCounter, etc.
+ * - **Computed**: legalMoves, legalAttacks, winner, victoryMessage
+ * - **Actions**: handlePass, handleHexClick, handlePieceClick, etc.
+ * - **PGN**: getPGN, loadPGN for import/export
+ *
+ * Internally uses GameEngine for all game logic delegation.
+ *
+ * @usage Called by Game.tsx to power the game UI.
+ * @see GameEngine - Core game logic facade
+ * @see Game.tsx - Component that consumes this hook
+ */
 import { useState, useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
 import { PGNService } from "../Classes/Services/PGNService";
@@ -372,10 +388,30 @@ export const useGameLogic = (
   const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
     setState(prevState => {
        try {
+           // Find the sanctuary to get the piece type for notation
+           const sanctuary = prevState.sanctuaries?.find(s => s.hex.equals(sanctuaryHex));
+           if (!sanctuary) throw new Error("Sanctuary not found");
+           
            const newCoreState = gameEngine.pledge(prevState, sanctuaryHex, spawnHex);
+           
+           // Generate notation for the pledge
+           const { NotationService } = require("../Classes/Systems/NotationService");
+           const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
+           const currentPlayer = gameEngine.getCurrentPlayer(prevState.turnCounter);
+           const turnPhase = gameEngine.getTurnPhase(prevState.turnCounter);
+           const turnNumber = Math.floor(prevState.turnCounter / 10) + 1;
+           
+           const moveRecord = {
+               notation,
+               turnNumber,
+               color: currentPlayer,
+               phase: turnPhase
+           };
+           
            return {
                ...prevState,
-               ...newCoreState
+               ...newCoreState,
+               moveHistory: [...prevState.moveHistory, moveRecord]
            };
        } catch (e) {
            console.error(e);

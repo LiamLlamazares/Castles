@@ -28,10 +28,12 @@ describe('Pledge Mechanics', () => {
     pieceMap: createPieceMap(currentPieces),
     castles: [],
     sanctuaries: currentSanctuaries,
-    turnCounter: 4, // Castle phase active from turn 5 usually, but logic might just check phase
+    turnCounter: 4, // White's Castles phase (turnCounter % 10 = 4)
     movingPiece: null,
     history: [],
     moveHistory: [],
+    graveyard: [],
+    phoenixRecords: [],
   });
   
   // Helper to place a piece
@@ -39,26 +41,42 @@ describe('Pledge Mechanics', () => {
       pieces.push(new Piece(hex, owner, type));
   };
 
-  test('Tier 1 pledge requires occupancy by friendly piece', () => {
+  test('Tier 1 pledge requires occupancy by CURRENT PLAYER piece', () => {
     const sanctuary = sanctuaries[0]; // Tier 1
-    const spawnHex = new Hex(1, -5, 4); // Adjacent
     
     // 1. Empty sanctuary -> False
     let state = createGameState(pieces, sanctuaries);
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
 
-    // 2. Enemy piece -> False
+    // 2. Enemy piece (Black piece but it's White's turn at turnCounter=4) -> False
     placePiece(sanctuary.hex, PieceType.Swordsman, 'b');
     state = createGameState(pieces, sanctuaries);
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
 
-    // 3. Friendly piece -> True (Tier 1 strength req is 0 but requires occupancy usually? 
-    // Wait, design said "Occupancy (Strength 1+)". 
-    // And "Control Mechanics": Activated when friendly piece occupies.
+    // 3. Current player's piece (White at turnCounter=4) -> True
     pieces = [];
     placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
     state = createGameState(pieces, sanctuaries);
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(true);
+  });
+
+  test('Cannot pledge when it is not your turn', () => {
+    const sanctuary = sanctuaries[0];
+    
+    // White piece occupies sanctuary
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
+    
+    // At turnCounter=4, it's White's turn -> can pledge
+    let state = createGameState(pieces, sanctuaries);
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(true);
+    
+    // At turnCounter=5 (or any Black turn), White cannot pledge
+    state = { ...state, turnCounter: 5 }; // Black's Movement phase
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
+    
+    // At turnCounter=9 (Black's Castles), White still cannot pledge
+    state = { ...state, turnCounter: 9 };
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
   });
 
   test('Pledge spawns new piece and triggers cooldown', () => {

@@ -21,7 +21,9 @@ describe('Wizard Active Abilities', () => {
             turnCounter: 0,
             movingPiece: null,
             history: [],
-            moveHistory: []
+            moveHistory: [],
+            graveyard: [],
+            phoenixRecords: [],
         };
     });
 
@@ -54,7 +56,7 @@ describe('Wizard Active Abilities', () => {
 
         const newState = StateMutator.useAbility(state, wizard, targetHex, "Teleport", board);
 
-        const movedWizard = newState.pieces.find(p => p.hex.equals(targetHex));
+        const movedWizard = newState.pieces.find((p: Piece) => p.hex.equals(targetHex));
         expect(movedWizard).toBeDefined();
         expect(movedWizard?.type).toBe(PieceType.Wizard);
         expect(movedWizard?.abilityUsed).toBe(true);

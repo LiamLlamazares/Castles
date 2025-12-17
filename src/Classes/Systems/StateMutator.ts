@@ -1,3 +1,22 @@
+/**
+ * @file StateMutator.ts
+ * @description Pure functions for immutable game state transitions.
+ *
+ * Each method takes a GameState and returns a **new** GameState.
+ * No side effects - all mutations are immutable copies.
+ *
+ * Handles:
+ * - Movement (applyMove)
+ * - Combat (applyAttack, applyCastleAttack)
+ * - Turn management (passTurn, resetTurnFlags)
+ * - Abilities (activateAbility - Fireball, Teleport, RaiseDead)
+ * - Recruitment (recruitPiece)
+ * - Special mechanics (processPhoenixRespawns)
+ *
+ * @usage Called exclusively by GameEngine to mutate game state.
+ * @see GameEngine - Facade that validates before calling StateMutator
+ * @see RuleEngine - Validates legality before mutations occur
+ */
 import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
@@ -17,17 +36,35 @@ import {
 
 export class StateMutator {
 
+  // ================= PRIVATE HELPERS =================
+
+  /**
+   * Creates a MoveRecord for the history log.
+   * Centralizes the turn number and phase calculation.
+   */
+  private static createMoveRecord(notation: string, state: GameState): MoveRecord {
+    return {
+      notation,
+      turnNumber: Math.floor(state.turnCounter / 10) + 1,
+      color: TurnManager.getCurrentPlayer(state.turnCounter),
+      phase: TurnManager.getTurnPhase(state.turnCounter)
+    };
+  }
+
+  /**
+   * Appends a move record to the history.
+   * Handles undefined moveHistory gracefully.
+   */
+  private static appendHistory(state: GameState, record: MoveRecord): MoveRecord[] {
+    return [...(state.moveHistory || []), record];
+  }
+
+  // ================= PUBLIC MUTATIONS =================
+
   public static applyMove(state: GameState, piece: Piece, targetHex: Hex, board: Board): GameState {
     const notation = NotationService.getMoveNotation(piece, targetHex);
-
-    const record: MoveRecord = {
-        notation,
-        turnNumber: Math.floor(state.turnCounter / 10) + 1,
-        color: TurnManager.getCurrentPlayer(state.turnCounter),
-        phase: TurnManager.getTurnPhase(state.turnCounter)
-    };
-
-    const newMoveHistory = [...(state.moveHistory || []), record];
+    const record = this.createMoveRecord(notation, state);
+    const newMoveHistory = this.appendHistory(state, record);
 
     const newPieces = state.pieces.map(p => {
         if (p === piece) {
@@ -62,14 +99,8 @@ export class StateMutator {
         ? NotationService.getCastleCaptureNotation(piece, castle)
         : NotationService.getMoveNotation(piece, targetHex);
     
-    const record: MoveRecord = {
-        notation,
-        turnNumber: Math.floor(state.turnCounter / 10) + 1,
-        color: TurnManager.getCurrentPlayer(state.turnCounter),
-        phase: TurnManager.getTurnPhase(state.turnCounter)
-    };
-
-    const newMoveHistory = [...(state.moveHistory || []), record];
+    const record = this.createMoveRecord(notation, state);
+    const newMoveHistory = this.appendHistory(state, record);
     const capturer = TurnManager.getCurrentPlayer(state.turnCounter);
     
     // Move the piece onto the castle AND consume attack
@@ -104,15 +135,8 @@ export class StateMutator {
 
   public static applyAttack(state: GameState, attacker: Piece, targetHex: Hex, board: Board): GameState {
      const notation = NotationService.getAttackNotation(attacker, targetHex);
-     
-     const record: MoveRecord = {
-        notation,
-        turnNumber: Math.floor(state.turnCounter / 10) + 1,
-        color: TurnManager.getCurrentPlayer(state.turnCounter),
-        phase: TurnManager.getTurnPhase(state.turnCounter)
-    };
-
-     const newMoveHistory = [...(state.moveHistory || []), record];
+     const record = this.createMoveRecord(notation, state);
+     const newMoveHistory = this.appendHistory(state, record);
 
      // Use CombatSystem to resolve the logic
      const result = CombatSystem.resolveAttack(state.pieces, attacker, targetHex, state.pieceMap);
@@ -192,14 +216,9 @@ export class StateMutator {
           });
       }
 
-      const record: MoveRecord = {
-          notation: NotationService.getPassNotation(),
-          turnNumber: Math.floor(state.turnCounter / 10) + 1,
-          color: currentPlayerColor,
-          phase: TurnManager.getTurnPhase(state.turnCounter)
-      };
-
-      const newMoveHistory = [...(state.moveHistory || []), record];
+      const notation = NotationService.getPassNotation();
+      const record = this.createMoveRecord(notation, state);
+      const newMoveHistory = this.appendHistory(state, record);
       const increment = RuleEngine.getTurnCounterIncrement(piecesAfterHealing, state.castles, state.turnCounter, board, true);
       
       return StateMutator.checkTurnTransitions({
@@ -302,14 +321,9 @@ export class StateMutator {
        const newPieceMap = createPieceMap(newPieces);
        const increment = RuleEngine.getTurnCounterIncrement(newPieces, state.castles, state.turnCounter, board); 
 
-       const record: MoveRecord = {
-          notation: `${source.type} ${notation}`,
-          turnNumber: Math.floor(state.turnCounter / 10) + 1,
-          color: source.color,
-          phase: TurnManager.getTurnPhase(state.turnCounter)
-       };
-       
-       const newMoveHistory = [...(state.moveHistory || []), record];
+       const abilityNotation = `${source.type} ${notation}`;
+       const record = this.createMoveRecord(abilityNotation, state);
+       const newMoveHistory = this.appendHistory(state, record);
 
        return StateMutator.checkTurnTransitions({
           ...state,
@@ -330,14 +344,8 @@ export class StateMutator {
       
       const notation = NotationService.getRecruitNotation(castle, pieceType, hex);
       
-      const record: MoveRecord = {
-        notation,
-        turnNumber: Math.floor(state.turnCounter / 10) + 1,
-        color: TurnManager.getCurrentPlayer(state.turnCounter),
-        phase: TurnManager.getTurnPhase(state.turnCounter)
-    };
-
-      const newMoveHistory = [...(state.moveHistory || []), record];
+      const record = this.createMoveRecord(notation, state);
+      const newMoveHistory = this.appendHistory(state, record);
       
       const newPiece = new Piece(hex, TurnManager.getCurrentPlayer(state.turnCounter), pieceType);
       

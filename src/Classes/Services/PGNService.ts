@@ -318,6 +318,45 @@ export class PGNService {
                    continue;
               }
 
+              // Pledge: P:WlfK11 (P:PieceCodeCoord)
+              if (token.startsWith('P:')) {
+                   const pledgeData = token.substring(2); // Remove "P:"
+                   // Format: PieceCode(3 chars) + Coord (e.g. "WlfK11")
+                   const pieceCode = pledgeData.substring(0, 3);
+                   const spawnCoord = pledgeData.substring(3);
+                   const spawnHex = NotationService.fromCoordinate(spawnCoord);
+                   
+                   // Reverse lookup piece type from code
+                   let pieceType: PieceType | undefined;
+                   switch(pieceCode) {
+                       case "Wlf": pieceType = PieceType.Wolf; break;
+                       case "Hea": pieceType = PieceType.Healer; break;
+                       case "Rng": pieceType = PieceType.Ranger; break;
+                       case "Wiz": pieceType = PieceType.Wizard; break;
+                       case "Nec": pieceType = PieceType.Necromancer; break;
+                       case "Phx": pieceType = PieceType.Phoenix; break;
+                   }
+                   
+                   if (!pieceType) throw new Error(`Unknown pledge piece code ${pieceCode}`);
+                   
+                   // For pledge replay, we directly add the piece since we don't have sanctuary tracking in PGN
+                   // This is a simplified replay - just spawn the piece at the location
+                   const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter);
+                   const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
+                   const newPieces = [...currentState.pieces, newPiece];
+                   
+                   currentState = PGNService.saveHistoryEntry(currentState, token);
+                   currentState = {
+                       ...currentState,
+                       pieces: newPieces,
+                       pieceMap: createPieceMap(newPieces)
+                   };
+                   
+                   // Advance turn (pledge counts as an action)
+                   currentState = engine.passTurn(currentState);
+                   continue;
+              }
+
               // Movement: J10K11
               // Parse using Regex
               const moveMatch = token.match(/^([A-Z]\d+)([A-Z]\d+)$/);

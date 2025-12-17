@@ -159,6 +159,8 @@ describe('GameEngine', () => {
         movingPiece: null,
         history: [],
         moveHistory: [],
+        graveyard: [],
+        phoenixRecords: [],
       };
       
       const newState = gameEngine.recruitPiece(state, castle, spawnHex);

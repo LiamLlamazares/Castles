@@ -1,3 +1,19 @@
+/**
+ * @file GameEngine.ts
+ * @description Central game state machine for the Castles game.
+ *
+ * This is the **Facade** pattern implementation that provides a unified
+ * interface to the game logic subsystems:
+ * - **RuleEngine** (Queries): Legal moves, attacks, blocked hexes, etc.
+ * - **StateMutator** (Mutations): Apply moves, attacks, recruitment, etc.
+ *
+ * GameEngine owns the Board dependency and passes it to subsystems as needed.
+ *
+ * @usage Instantiated by `useGameLogic` hook with a Board instance.
+ * @see RuleEngine - Pure query functions for game rules
+ * @see StateMutator - Pure state transition functions
+ * @see useGameLogic - React hook that manages GameEngine and game state
+ */
 import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
 import { Sanctuary } from "../Entities/Sanctuary";
@@ -5,9 +21,10 @@ import { Hex } from "../Entities/Hex";
 import { Board } from "./Board";
 import { TurnManager } from "./TurnManager";
 import { WinCondition } from "../Systems/WinCondition";
-import { createPieceMap, PieceMap } from "../../utils/PieceMap";
+import { PieceMap } from "../../utils/PieceMap";
 import { RuleEngine } from "../Systems/RuleEngine";
 import { StateMutator } from "../Systems/StateMutator";
+import { SanctuaryService } from "../Services/SanctuaryService";
 import {
   Color,
   TurnPhase,
@@ -49,62 +66,14 @@ export interface GameState {
 export class GameEngine {
   constructor(public board: Board) {}
 
+  // ================= SANCTUARY (Delegated to SanctuaryService) =================
+
   public canPledge(gameState: GameState, sanctuaryHex: Hex): boolean {
-    const sanctuary = gameState.sanctuaries.find(s => s.hex.equals(sanctuaryHex));
-    if (!sanctuary) return false;
-
-    // 1. Basic Availability Check
-    if (!sanctuary.isReady) return false;
-
-    // 2. Control Check (Must have a friendly piece on it)
-    const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());
-    if (!occupant || occupant.color !== sanctuary.territorySide) return false;
-
-    // 3. Strength Calculation (Occupant + Neighbors)
-    const friendlyPieces = [occupant, ...this.getFriendlyNeighbors(gameState, sanctuaryHex, occupant.color)];
-    const totalStrength = friendlyPieces.reduce((sum, p) => sum + p.Strength, 0);
-
-    // 4. Requirement Check
-    if (totalStrength < sanctuary.requiredStrength) return false;
-
-    return true;
+    return SanctuaryService.canPledge(gameState, sanctuaryHex);
   }
 
   public pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex): GameState {
-    const sanctuary = gameState.sanctuaries.find(s => s.hex.equals(sanctuaryHex));
-    if (!sanctuary || !this.canPledge(gameState, sanctuaryHex)) {
-         throw new Error("Invalid pledge action");
-    }
-
-    const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());
-    if (!occupant) throw new Error("Sanctuary empty during pledge"); // Should be caught by canPledge
-    
-    let newPieces = [...gameState.pieces];
-
-    // Handle Sacrifice for Tier 3
-    if (sanctuary.requiresSacrifice) {
-        // Sacrifice the occupant
-        newPieces = newPieces.filter(p => !p.hex.equals(sanctuaryHex));
-    }
-
-    // Spawn new piece
-    const newPiece = new Piece(spawnHex, occupant.color, sanctuary.pieceType);
-    newPieces.push(newPiece);
-
-    // Update Sanctuary (Cooldown + Pledged flag)
-    const newSanctuaries = gameState.sanctuaries.map(s => 
-        s.hex.equals(sanctuaryHex) 
-            ? s.with({ cooldown: 5, hasPledgedThisGame: true }) 
-            : s
-    );
-
-    return {
-        ...gameState,
-        pieces: newPieces,
-        pieceMap: createPieceMap(newPieces), // Rebuild map
-        sanctuaries: newSanctuaries,
-        // History updates?
-    };
+    return SanctuaryService.pledge(gameState, sanctuaryHex, spawnHex);
   }
 
   public activateAbility(gameState: GameState, sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead"): GameState {
@@ -119,18 +88,7 @@ export class GameEngine {
       return StateMutator.activateAbility(gameState, source, targetHex, ability, this.board);
   }
 
-  // Helper to get friendly neighbors
-  private getFriendlyNeighbors(gameState: GameState, hex: Hex, owner: string): Piece[] {
-      const neighbors = hex.cubeRing(1);
-      const friends: Piece[] = [];
-      for (const n of neighbors) {
-          const p = gameState.pieceMap.getByKey(n.getKey());
-          if (p && p.color === owner) {
-              friends.push(p);
-          }
-      }
-      return friends;
-  }
+
 
   // ================= DELEGATED METHODS =================
 

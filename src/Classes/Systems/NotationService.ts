@@ -59,10 +59,17 @@ export class NotationService {
             case PieceType.Trebuchet: return "Tre";
             case PieceType.Eagle: return "Eag";
             case PieceType.Giant: return "Gia";
-            case PieceType.Assassin: return "Asn"; // Special case to distinguish from Archer if generalized
+            case PieceType.Assassin: return "Asn";
             case PieceType.Dragon: return "Dra";
             case PieceType.Monarch: return "Mon";
-            default: return "Ukwn";
+            // Special pieces (from Sanctuaries)
+            case PieceType.Wolf: return "Wlf";
+            case PieceType.Healer: return "Hea";
+            case PieceType.Ranger: return "Rng";
+            case PieceType.Wizard: return "Wiz";
+            case PieceType.Necromancer: return "Nec";
+            case PieceType.Phoenix: return "Phx";
+            default: return "Ukn";
         }
     }
 
@@ -101,5 +108,15 @@ export class NotationService {
 
     public static getPassNotation(): string {
         return "Pass";
+    }
+
+    /**
+     * Generates notation for a sanctuary pledge action.
+     * Format: "P:PieceCodeCoord" (e.g. "P:WlfK11")
+     */
+    public static getPledgeNotation(pieceType: PieceType, spawnHex: Hex): string {
+        const spawnCoord = NotationService.toCoordinate(spawnHex);
+        const pieceCode = NotationService.getPieceCode(pieceType);
+        return `P:${pieceCode}${spawnCoord}`;
     }
 }

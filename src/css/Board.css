@@ -146,6 +146,13 @@ body {
     /* Removed dashed border for a cleaner, premium look */
     filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
     transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+/* Hover effect for sanctuaries - makes them more discoverable */
+.hexagon-sanctuary:hover {
+    filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)) brightness(1.2);
+    stroke-width: 6 !important;
 }
 
 /* 1. Wolf Covenant (Tier 1) - Grey/Silver */

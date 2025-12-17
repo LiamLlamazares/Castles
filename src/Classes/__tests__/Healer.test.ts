@@ -22,7 +22,9 @@ describe('Healer Restoration', () => {
             turnCounter: 0, // Player White, Turn 1
             movingPiece: null,
             history: [],
-            moveHistory: []
+            moveHistory: [],
+            graveyard: [],
+            phoenixRecords: [],
         };
     });
 

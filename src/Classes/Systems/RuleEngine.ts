@@ -1,3 +1,21 @@
+/**
+ * @file RuleEngine.ts
+ * @description Pure query functions for game rules and legal actions.
+ *
+ * All methods are **static** and **pure** - they read state but never modify it.
+ * Used for validation and legal move calculation before StateMutator applies changes.
+ *
+ * Provides:
+ * - Legal move/attack calculation (getLegalMoves, getLegalAttacks)
+ * - Hex queries (getBlockedHexes, getEnemyHexes, getDefendedHexes)
+ * - Castle control (getControlledCastlesActivePlayer)
+ * - Turn increment calculation (getTurnCounterIncrement)
+ *
+ * @usage Called by GameEngine for all rule queries.
+ * @see GameEngine - Facade that exposes RuleEngine methods
+ * @see TurnManager - Handles phase/player calculation
+ * @see MoveStrategies - Individual piece movement patterns
+ */
 import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";

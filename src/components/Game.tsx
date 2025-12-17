@@ -1,3 +1,19 @@
+/**
+ * @file Game.tsx
+ * @description Main game board component for the Castles game.
+ *
+ * Renders the hex grid, pieces, and handles all user interactions.
+ * Orchestrates child components:
+ * - **HexGrid** - Renders the hex board with visual states
+ * - **PieceRenderer** - Renders all pieces on the board
+ * - **ControlPanel** - Clocks, move history, game controls
+ * - **VictoryOverlay** - End-game overlay
+ *
+ * @usage Mounted by App.tsx when in game view.
+ * @see useGameLogic - Hook providing all game state and actions
+ * @see HexGrid - Board rendering component
+ * @see ControlPanel - Right panel with controls
+ */
 import React from 'react';
 import { useGameLogic } from "../hooks/useGameLogic";
 import { useInputHandler } from "../hooks/useInputHandler";
@@ -12,7 +28,7 @@ import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { Hex } from "../Classes/Entities/Hex";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
-import { PieceType } from "../Constants";
+import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
 import "../css/Board.css";
 
@@ -301,40 +317,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
       {/* Ability Bar */}
       {movingPiece && !victoryMessage && (
-          <div className="ability-bar" style={{
-              position: 'absolute',
-              bottom: '20px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              gap: '10px',
-              pointerEvents: 'auto'
-          }}>
-              {movingPiece.type === PieceType.Wizard && !movingPiece.abilityUsed && (
-                  <>
-                      <button 
-                        className={`ability-btn ${activeAbility === "Fireball" ? "active" : ""}`}
-                        onClick={() => setActiveAbility(activeAbility === "Fireball" ? null : "Fireball")}
-                      >
-                          Current: {activeAbility === "Fireball" ? "TARGETING..." : "Fireball"}
-                      </button>
-                      <button 
-                        className={`ability-btn ${activeAbility === "Teleport" ? "active" : ""}`}
-                        onClick={() => setActiveAbility(activeAbility === "Teleport" ? null : "Teleport")}
-                      >
-                           Current: {activeAbility === "Teleport" ? "TARGETING..." : "Teleport"}
-                      </button>
-                  </>
-              )}
-              {movingPiece.type === PieceType.Necromancer && movingPiece.souls > 0 && (
-                  <button 
-                    className={`ability-btn ${activeAbility === "RaiseDead" ? "active" : ""}`}
-                    onClick={() => setActiveAbility(activeAbility === "RaiseDead" ? null : "RaiseDead")}
-                  >
-                       Current: {activeAbility === "RaiseDead" ? "TARGETING..." : "Raise Dead"}
-                  </button>
-              )}
-          </div>
+          <AbilityBar
+            movingPiece={movingPiece}
+            activeAbility={activeAbility}
+            onAbilitySelect={setActiveAbility}
+          />
       )}
       
       {hoveredHex && sanctuaries && (
