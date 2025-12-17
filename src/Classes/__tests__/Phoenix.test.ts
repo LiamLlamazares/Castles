@@ -1,0 +1,78 @@
+
+import { Piece } from "../Entities/Piece";
+import { Hex } from "../Entities/Hex";
+import { StateMutator } from "../Systems/StateMutator";
+import { GameState, PhoenixRecord } from "../Core/GameEngine";
+import { Board } from "../Core/Board";
+import { PieceType, PLAYER_CYCLE_LENGTH } from "../../Constants";
+import { PieceMap } from "../../utils/PieceMap";
+import { Castle } from "../Entities/Castle";
+
+describe('Phoenix Rebirth Logic', () => {
+    let board: Board;
+    let state: GameState;
+
+    beforeEach(() => {
+        board = new Board(new Map());
+        state = {
+            pieces: [],
+            pieceMap: new PieceMap([]),
+            castles: [],
+            sanctuaries: [],
+            turnCounter: 0,
+            movingPiece: null,
+            history: [],
+            moveHistory: [],
+            graveyard: [],
+            phoenixRecords: []
+        };
+    });
+
+    test('Phoenix death creates a respawn record', () => {
+        // Mock CombatSystem or simulate death via applyAttack
+        // But applyAttack uses CombatSystem.resolveAttack which we can't easily mock return values of here without integration.
+        // INTEGRATION TEST style:
+        
+        const attacker = new Piece(new Hex(0, 0, 0), 'b', PieceType.Dragon); // Strong
+        const phoenix = new Piece(new Hex(0, 1, -1), 'w', PieceType.Phoenix); // Weak (HP 2) vs Dragon (Str 3)
+        // Combat: Dragon (3) > Phoenix (2) -> Kill.
+
+        state.pieces = [attacker, phoenix];
+        state.pieceMap = new PieceMap(state.pieces);
+
+        const newState = StateMutator.applyAttack(state, attacker, phoenix.hex, board);
+        
+        // Verify Phoenix is gone
+        const deadPhoenix = newState.pieces.find(p => p.type === PieceType.Phoenix);
+        expect(deadPhoenix).toBeUndefined();
+
+        // Verify Record created
+        expect(newState.phoenixRecords.length).toBe(1);
+        expect(newState.phoenixRecords[0].owner).toBe('w');
+        expect(newState.phoenixRecords[0].respawnTurn).toBeGreaterThan(0);
+        // Correct calculation: 0 + 3 rounds (30) = 30?
+        // Note: applyAttack might increment turn counter.
+        // Turn increment logic depends on phase.
+    });
+
+    test('Phoenix respawns at castle when timer met', () => {
+        const castle = new Castle(new Hex(0, 0, 0), 'w'); // Owned by white
+        state.castles = [castle];
+        state.phoenixRecords = [{ respawnTurn: 10, owner: 'w' }];
+        state.turnCounter = 10; // Timer met
+
+        // Trigger transition check via passTurn or just applyMove?
+        // checkTurnTransitions is private. We can call resetTurnFlags? No.
+        // We can call passTurn to trigger logic.
+        
+        const newState = StateMutator.passTurn(state, board);
+        
+        const phoenix = newState.pieces.find(p => p.type === PieceType.Phoenix);
+        expect(phoenix).toBeDefined();
+        // Should spawn at castle hex (0,0,0) or neighbor
+        // Since castle hex was empty (castles list doesn't imply piece occupancy), it should be there.
+        expect(phoenix?.hex.equals(castle.hex)).toBe(true);
+        
+        expect(newState.phoenixRecords.length).toBe(0);
+    });
+});

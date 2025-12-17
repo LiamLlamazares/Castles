@@ -63,6 +63,47 @@ const getSlidingMoves = (
 };
 
 /**
+ * Helper for walking units with limited range (BFS).
+ * Stops at obstacles (cannot move through).
+ */
+const getWalkingMoves = (
+  startHex: Hex,
+  blockedHexSet: Set<string>,
+  validHexSet: Set<string>,
+  range: number
+): Hex[] => {
+  const moves: Hex[] = [];
+  const visited = new Set<string>();
+  visited.add(startHex.getKey());
+  
+  // Queue: [Hex, distance]
+  const queue: { hex: Hex; dist: number }[] = [{ hex: startHex, dist: 0 }];
+
+  while (queue.length > 0) {
+    const { hex, dist } = queue.shift()!;
+
+    if (dist < range) {
+      const neighbors = hex.cubeRing(1);
+      for (const neighbor of neighbors) {
+        const key = neighbor.getKey();
+        
+        if (validHexSet.has(key) && !visited.has(key)) {
+           visited.add(key);
+           
+           // If blocked, we can't enter it, nor pass through
+           if (!blockedHexSet.has(key)) {
+               moves.push(neighbor);
+               queue.push({ hex: neighbor, dist: dist + 1 });
+           }
+        }
+      }
+    }
+  }
+
+  return moves;
+};
+
+/**
  * Swordsman movement: Forward in 3 diagonal directions (color-dependent).
  * Similar to pawn in chess but with hex geometry.
  * 
@@ -230,4 +271,12 @@ export const giantMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Se
   ];
 
   return getSlidingMoves(hex, blockedHexSet, validHexSet, giantDirections, 2 * boardSize);
+};
+
+export const rangerMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>): Hex[] => {
+    return getWalkingMoves(hex, blockedHexSet, validHexSet, 2);
+};
+
+export const wolfMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>): Hex[] => {
+    return getWalkingMoves(hex, blockedHexSet, validHexSet, 3);
 };

@@ -661,7 +661,38 @@ body {
 }
 
 @keyframes pulse {
-    0% { opacity: 0.5; }
     50% { opacity: 0.8; }
     100% { opacity: 0.5; }
+}
+
+/* Ability Bar Styles */
+.ability-bar {
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    border-radius: 8px;
+    backdrop-filter: blur(5px);
+}
+
+.ability-btn {
+    background: #4a4a4a;
+    color: white;
+    border: 1px solid #666;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.ability-btn:hover {
+    background: #666;
+    border-color: #888;
+}
+
+.ability-btn.active {
+    background: #3b82f6; /* Blue for active targeting */
+    border-color: #60a5fa;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
 }

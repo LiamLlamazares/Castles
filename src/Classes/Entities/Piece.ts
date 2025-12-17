@@ -24,6 +24,8 @@ import {
   dragonMoves,
   assassinMoves,
   giantMoves,
+  wolfMoves,
+  rangerMoves,
 } from "../Strategies/MoveStrategies";
 
 import {
@@ -55,7 +57,13 @@ export class Piece {
     /** Whether this piece can still attack this turn */
     public readonly canAttack: boolean = true,
     /** Damage accumulated this turn (resets each round) */
-    public readonly damage: number = 0
+    public readonly damage: number = 0,
+    /** Whether this piece has used its special ability (for one-time use pieces like Wizard/Necromancer) */
+    public readonly abilityUsed: boolean = false,
+    /** Number of souls collected by Necromancer */
+    public readonly souls: number = 0,
+    /** Whether this piece was revived by a Necromancer (if killed again, it is exiled) */
+    public readonly isRevived: boolean = false
   ) {
     if (!hex || !color || !type) {
       throw new Error("Invalid arguments for Piece constructor");
@@ -79,9 +87,12 @@ export class Piece {
       case PieceType.Archer:
         return AttackType.Ranged;
       case PieceType.Trebuchet:
+      case PieceType.Ranger: // Ranger has Long Range (3)
         return AttackType.LongRanged;
       case PieceType.Swordsman:
         return AttackType.Swordsman;
+      case PieceType.Wizard:
+        return AttackType.Ranged; // Wizard has Range 2
       default:
         return AttackType.Melee;
     }
@@ -98,7 +109,10 @@ export class Piece {
         updates.type !== undefined ? updates.type : this.type,
         updates.canMove !== undefined ? updates.canMove : this.canMove,
         updates.canAttack !== undefined ? updates.canAttack : this.canAttack,
-        updates.damage !== undefined ? updates.damage : this.damage
+        updates.damage !== undefined ? updates.damage : this.damage,
+        updates.abilityUsed !== undefined ? updates.abilityUsed : this.abilityUsed,
+        updates.souls !== undefined ? updates.souls : this.souls,
+        updates.isRevived !== undefined ? updates.isRevived : this.isRevived
     );
   }
 
@@ -136,6 +150,16 @@ export class Piece {
         return dragonMoves(this.hex, blockedHexSet, validHexSet);
       case PieceType.Assassin:
         return assassinMoves(this.hex, blockedHexSet, validHexSet, N_SQUARES);
+      case PieceType.Wolf:
+        return wolfMoves(this.hex, blockedHexSet, validHexSet);
+      case PieceType.Ranger:
+        return rangerMoves(this.hex, blockedHexSet, validHexSet);
+      case PieceType.Phoenix:
+        return eagleMoves(this.hex, blockedHexSet, validHexSet);
+      case PieceType.Healer:
+      case PieceType.Wizard:
+      case PieceType.Necromancer:
+        return archerMoves(this.hex, blockedHexSet, validHexSet);
       default:
         return [];
     }

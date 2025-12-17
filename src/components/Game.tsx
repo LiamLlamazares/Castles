@@ -12,6 +12,7 @@ import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { Hex } from "../Classes/Entities/Hex";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
+import { PieceType } from "../Constants";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
 import "../css/Board.css";
 
@@ -47,6 +48,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
   const [pledgingSanctuary, setPledgingSanctuary] = React.useState<Hex | null>(null);
+  const [activeAbility, setActiveAbility] = React.useState<"Fireball" | "Teleport" | "RaiseDead" | null>(null);
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
     
   const {
@@ -87,7 +89,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     isAnalysisMode,
     stepHistory,
     getPGN,
-    loadPGN
+    loadPGN,
+    triggerAbility
   } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter);
 
   // Reset overlay when game restarts (victory message clears or changes)
@@ -124,6 +127,45 @@ const GameBoard: React.FC<GameBoardProps> = ({
   // =========== RENDER ===========
 
   // Interaction Handlers
+
+  const onBoardHexClick = (hex: Hex) => {
+      if (activeAbility && movingPiece) {
+          // Validate Range
+          const distance = movingPiece.hex.distance(hex);
+          let valid = false;
+
+          if (activeAbility === "Fireball") {
+              // Range 2 (Wizard)
+              if (distance <= 2 && distance > 0) valid = true;
+          } else if (activeAbility === "Teleport") {
+              // Range 3 (Wizard, self-teleport)
+              if (distance <= 3 && distance > 0) valid = true;
+          } else if (activeAbility === "RaiseDead") {
+              // Range 1 (Necromancer)
+              if (distance === 1) valid = true;
+          }
+
+          if (valid) {
+              triggerAbility(movingPiece.hex, hex, activeAbility);
+              setActiveAbility(null);
+          } else {
+              // Invalid target sound/visual?
+              console.log("Invalid ability target");
+              // setActiveAbility(null); // Keep mode active to retry? Or cancel.
+              // Better UX: keep mode.
+          }
+          return;
+      }
+
+      // Normal Click
+      handleHexClick(hex); // Delegate to engine logic
+  };
+
+  // Reset active ability if moving piece changes
+  React.useEffect(() => {
+      setActiveAbility(null);
+  }, [movingPiece]);
+
   const handleHexClick = (hex: Hex) => {
     // 1. Pledging Interaction
     if (pledgingSanctuary) {
@@ -230,7 +272,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           showCoordinates={showCoordinates}
           isBoardRotated={isBoardRotated}
           isAdjacentToControlledCastle={isRecruitmentSpot}
-          onHexClick={handleHexClick}
+          onHexClick={onBoardHexClick}
           onHexHover={handleHexHover}
           resizeVersion={resizeVersion}
           layout={initialLayout}
@@ -255,6 +297,44 @@ const GameBoard: React.FC<GameBoardProps> = ({
             onSetup={onSetup}
             onAnalyze={() => setOverlayDismissed(true)}
           />
+      )}
+
+      {/* Ability Bar */}
+      {movingPiece && !victoryMessage && (
+          <div className="ability-bar" style={{
+              position: 'absolute',
+              bottom: '20px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              gap: '10px',
+              pointerEvents: 'auto'
+          }}>
+              {movingPiece.type === PieceType.Wizard && !movingPiece.abilityUsed && (
+                  <>
+                      <button 
+                        className={`ability-btn ${activeAbility === "Fireball" ? "active" : ""}`}
+                        onClick={() => setActiveAbility(activeAbility === "Fireball" ? null : "Fireball")}
+                      >
+                          Current: {activeAbility === "Fireball" ? "TARGETING..." : "Fireball"}
+                      </button>
+                      <button 
+                        className={`ability-btn ${activeAbility === "Teleport" ? "active" : ""}`}
+                        onClick={() => setActiveAbility(activeAbility === "Teleport" ? null : "Teleport")}
+                      >
+                           Current: {activeAbility === "Teleport" ? "TARGETING..." : "Teleport"}
+                      </button>
+                  </>
+              )}
+              {movingPiece.type === PieceType.Necromancer && movingPiece.souls > 0 && (
+                  <button 
+                    className={`ability-btn ${activeAbility === "RaiseDead" ? "active" : ""}`}
+                    onClick={() => setActiveAbility(activeAbility === "RaiseDead" ? null : "RaiseDead")}
+                  >
+                       Current: {activeAbility === "RaiseDead" ? "TARGETING..." : "Raise Dead"}
+                  </button>
+              )}
+          </div>
       )}
       
       {hoveredHex && sanctuaries && (

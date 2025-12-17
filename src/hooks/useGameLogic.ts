@@ -49,6 +49,8 @@ export const useGameLogic = (
     resizeVersion: 0,
     moveHistory: initialMoveHistory,
     viewMoveIndex: null, // null = viewing live game
+    graveyard: [],
+    phoenixRecords: []
   });
 
   const { 
@@ -386,6 +388,20 @@ export const useGameLogic = (
       return gameEngine.canPledge(state, sanctuaryHex);
   }, [gameEngine, state]);
 
+  // Ability Usage
+  const triggerAbility = useCallback((sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
+      setState(prevState => {
+        try {
+            saveHistory(); // Save before effect
+            const newState = gameEngine.activateAbility(prevState, sourceHex, targetHex, ability);
+            return { ...prevState, ...newState };
+        } catch (e) {
+            console.error(e);
+            return prevState;
+        }
+      });
+  }, [gameEngine, saveHistory]);
+
   return {
     // State
     pieces,
@@ -429,6 +445,7 @@ export const useGameLogic = (
     loadPGN,
     
     // Helpers
-    canPledge
+    canPledge,
+    triggerAbility
   };
 };

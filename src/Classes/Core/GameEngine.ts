@@ -13,7 +13,14 @@ import {
   TurnPhase,
   MoveRecord,
   HistoryEntry,
+  PieceType,
 } from "../../Constants";
+
+// Phoenix Rebirth Record
+export interface PhoenixRecord {
+    respawnTurn: number;
+    owner: Color;
+}
 
 /**
  * Represents the complete state of a game at any point.
@@ -28,6 +35,8 @@ export interface GameState {
   movingPiece: Piece | null;
   history: HistoryEntry[];
   moveHistory: MoveRecord[];
+  graveyard: Piece[]; // Captured pieces eligible for revival
+  phoenixRecords: PhoenixRecord[]; // Active rebirth timers
 }
 
 /**
@@ -96,6 +105,18 @@ export class GameEngine {
         sanctuaries: newSanctuaries,
         // History updates?
     };
+  }
+
+  public activateAbility(gameState: GameState, sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead"): GameState {
+      // Validation delegated to RuleEngine? Or keep simple for now.
+      // 1. Source existence
+      const source = gameState.pieceMap.getByKey(sourceHex.getKey());
+      if (!source || source.type !== PieceType.Wizard && source.type !== PieceType.Necromancer) throw new Error("Invalid source for ability");
+      
+      // 2. Cooldown check
+      if (source.abilityUsed) throw new Error("Ability already used");
+
+      return StateMutator.activateAbility(gameState, source, targetHex, ability, this.board);
   }
 
   // Helper to get friendly neighbors
