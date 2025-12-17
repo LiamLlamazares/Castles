@@ -98,6 +98,24 @@ export const useGameLogic = (
     moveHistory 
   } = state;
 
+  /**
+   * Returns the "effective" game state for actions.
+   * When in analysis mode, this merges the historical snapshot with current global state.
+   * When live, returns the current state as-is.
+   */
+  const getEffectiveState = useCallback((): GameState => {
+    if (isAnalysisMode && analysisState) {
+      return {
+        ...(state as unknown as GameState),
+        ...analysisState,
+        moveHistory: analysisState.moveNotation,
+        history: state.history.slice(0, state.viewMoveIndex! + 1),
+        moveTree: state.moveTree
+      } as unknown as GameState;
+    }
+    return state as unknown as GameState;
+  }, [isAnalysisMode, analysisState, state]);
+
   // Constructed View State (GameState compatible)
   const viewState = useMemo<GameState>(() => {
       if (isAnalysisMode && analysisState) {
@@ -204,15 +222,7 @@ export const useGameLogic = (
   }, [pieces, castles, state.sanctuaries, turnCounter, moveHistory]);
 
   const handlePass = useCallback(() => {
-    const effectiveState = isAnalysisMode && analysisState 
-        ? { 
-            ...(state as unknown as GameState), 
-            ...analysisState, 
-            moveHistory: analysisState.moveNotation,
-            history: state.history.slice(0, state.viewMoveIndex! + 1),
-            moveTree: state.moveTree
-        } as unknown as GameState
-        : state as unknown as GameState;
+    const effectiveState = getEffectiveState();
 
     const snapshot = createHistorySnapshot(effectiveState);
     
@@ -225,7 +235,7 @@ export const useGameLogic = (
       const newState = gameEngine.passTurn(stateWithHistory);
       return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
     });
-  }, [gameEngine, isAnalysisMode, analysisState, state]);
+  }, [gameEngine, isAnalysisMode, state, getEffectiveState]);
 
   const handleTakeback = useCallback(() => {
     if (history.length > 0) {
@@ -284,21 +294,8 @@ export const useGameLogic = (
   }, [gameEngine, movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
 
   const handleHexClick = useCallback((hex: Hex) => {
-    // Determine effective "base" state for the move
-    const effectiveState = isAnalysisMode && analysisState 
-        ? { 
-            ...(state as unknown as GameState), // Start with current global state props
-            ...analysisState, // Override with historical props (pieces, turnCounter etc)
-            moveHistory: analysisState.moveNotation,
-            // Reconstruct history array for this point
-            // AnalysisState is just a snapshot, so we assume the history up to this point 
-            // is effectively the first (viewMoveIndex + 1) items of the main history.
-            // NOTE: This assumes linear navigation. If MoveTree is used, we need MoveTree sync.
-            history: state.history.slice(0, state.viewMoveIndex! + 1),
-            // Ensure MoveTree is the global object reference
-            moveTree: state.moveTree
-        } as unknown as GameState
-        : state as unknown as GameState;
+    // Get effective state (handles analysis mode merging)
+    const effectiveState = getEffectiveState();
 
     // Helper to commit the new branch
     const commitBranch = (newState: GameState) => {
@@ -407,7 +404,7 @@ export const useGameLogic = (
     }
 
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, isAnalysisMode, analysisState, state]);
+  }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, isAnalysisMode, state, getEffectiveState]);
 
   const handleResign = useCallback((player: Color) => {
     saveHistory();
@@ -425,15 +422,7 @@ export const useGameLogic = (
 
   // Pledge Action
   const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
-    const effectiveState = isAnalysisMode && analysisState 
-        ? { 
-            ...(state as unknown as GameState), 
-            ...analysisState, 
-            moveHistory: analysisState.moveNotation,
-            history: state.history.slice(0, state.viewMoveIndex! + 1),
-            moveTree: state.moveTree
-        } as unknown as GameState
-        : state as unknown as GameState;
+    const effectiveState = getEffectiveState();
 
     const snapshot = createHistorySnapshot(effectiveState);
 
@@ -457,11 +446,6 @@ export const useGameLogic = (
            
            const moveRecord = { notation, turnNumber, color: currentPlayer, phase: turnPhase };
            
-           // StateMutator normally appends history, but pledge logic in GameEngine is raw?
-           // GameEngine.pledge returns { pieces, sanctuaries, castles, pieceMap }
-           // It does NOT update moveHistory or moveTree automatically via StateMutator.
-           // We must manually update MoveTree here if we want variants for pledges.
-           
            if (state.moveTree) {
                state.moveTree.addMove(moveRecord);
            }
@@ -478,7 +462,7 @@ export const useGameLogic = (
            return prevState;
        }
     });
-  }, [gameEngine, isAnalysisMode, analysisState, state]);
+  }, [gameEngine, isAnalysisMode, state, getEffectiveState]);
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
       return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex);

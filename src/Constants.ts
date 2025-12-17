@@ -112,11 +112,33 @@ export type Color = "w" | "b";
 export const STARTING_TIME = 20 * 60;
 export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended piece is protected from ranged attacks
 
-// Turn phase cycle constants
-export const PHASE_CYCLE_LENGTH = 5; // Movement(0-1) → Attack(2-3) → Castles(4)
-export const PLAYER_CYCLE_LENGTH = 10; // Full round = 2 players × 5 phases
-export const MOVEMENT_PHASE_END = 2; // turnCounter % 5 < 2 = Movement
-export const ATTACK_PHASE_END = 4; // turnCounter % 5 < 4 = Attack
+/**
+ * TURN COUNTER SYSTEM
+ * 
+ * The turnCounter is a single integer that encodes both the current player
+ * and the current phase within that player's turn.
+ * 
+ * Turn Structure (one full round = 10 increments):
+ * ```
+ * turnCounter:  0   1   2   3   4   5   6   7   8   9   10  11  ...
+ *              └─── WHITE ────────┘   └─── BLACK ────────┘   └─ WHITE
+ * Phase:        M   M   A   A   C       M   M   A   A   C       M   M
+ * ```
+ * 
+ * Where:
+ *   M = Movement phase (piece can move)
+ *   A = Attack phase (piece can attack)
+ *   C = Castles phase (can recruit from controlled castles)
+ * 
+ * Formula Reference:
+ *   - Current Player: (turnCounter % 10) < 5 ? 'w' : 'b'
+ *   - Current Phase:  turnCounter % 5 → 0,1=Movement, 2,3=Attack, 4=Castles
+ *   - Turn Number:    Math.floor(turnCounter / 10) + 1
+ */
+export const PHASE_CYCLE_LENGTH = 5;    // One player's turn = 5 sub-phases
+export const PLAYER_CYCLE_LENGTH = 10;  // Full round = both players = 10 sub-phases
+export const MOVEMENT_PHASE_END = 2;    // Indices 0-1 are Movement
+export const ATTACK_PHASE_END = 4;      // Indices 2-3 are Attack (index 4 is Castles)
 
 // Rendering constants (derived from N_SQUARES for consistent scaling)
 export const PIECE_IMAGE_SIZE = 275; // Base size of piece images in pixels
