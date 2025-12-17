@@ -144,6 +144,49 @@ Instead of symmetric armies, players choose a **faction** that modifies their st
 
 ---
 
+## Special Fantasy Pieces (New)
+
+### Proposed Pieces
+
+| Piece | Movement | Attack | Strength | Special Ability |
+|-------|----------|--------|----------|-----------------|
+| **Necromancer** | 1 hex | Melee | 1 | **Raise Dead**: Once per game, resurrect a captured friendly piece adjacent to Necromancer |
+| **Wizard** | 1 hex | Ranged (2) | 1 | **Fireball** (AoE attack) OR **Teleport** (move any friendly piece within 3 hexes) |
+| **Ranger** | 2 hex | Long-Ranged (3) | 1 | **Snipe**: Ignores defender's supporting pieces (kill protected units) |
+| **Wolf** | 3 hex | Melee | 1 | **Pack Tactics**: +1 strength per adjacent friendly Wolf |
+| **Healer** | 1 hex | None | 1 | **Heal/Shield**: Remove damage OR grant +1 strength to adjacent piece |
+| **Phoenix** | Flying (3) | Melee | 2 | **Rebirth**: Respawns at nearest castle after 2 turns when captured |
+
+### Earning Mechanics (How to Unlock Special Pieces)
+
+#### Option A: Shrine Hexes (Recommended First Implementation)
+Special map locations that enable recruitment:
+- **Wolf Den** (near river) → Wolves
+- **Wizard Tower** (center) → Wizards
+- **Ancient Graveyard** (corner) → Necromancer
+- **Ranger Outpost** (high ground) → Rangers
+
+Control the shrine to recruit its piece during Castle Phase.
+
+#### Option B: Achievement Unlocks
+| Achievement | Unlocked Piece |
+|-------------|----------------|
+| Capture 3 pieces in one turn | Ranger |
+| Control 2 enemy castles | Necromancer |
+| Move a piece across the river | Wolf |
+| Survive 10 turns without losing | Healer |
+
+#### Option C: Resource Economy (Deck-Builder Style)
+- Gain resources from castle control and captures
+- Spend resources to recruit from a "market"
+- Adds strategic depth but increases complexity
+
+#### Recommended Approach: Hybrid
+1. **Shrines** as primary unlock (control shrine → recruit any special piece)
+2. **Achievements** as secondary path (complete achievement → recruit specific piece without shrine)
+
+---
+
 ## AI Development
 
 ### Phase 1: Heuristic AI

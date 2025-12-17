@@ -143,19 +143,20 @@ describe('GameEngine', () => {
       const castleHex = new Hex(0, -6, 6); // Mock location
       const spawnHex = new Hex(0, -5, 5);  // Adjacent
       
-      // Create a castle owned by white
-      const castle = new Castle(castleHex, 'w', 0);
-      castle.owner = 'w';
+      // Create a captured castle owned by white (color 'b' means originally black, owner 'w' means captured by white)
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
       
       const pieces: Piece[] = [];
       const castles = [castle];
       
       const state = {
         pieces,
+        pieceMap: new Map(),
         castles: castles,
         turnCounter: 4, // Castles phase
         movingPiece: null,
         history: [],
+        moveHistory: [],
       };
       
       const newState = gameEngine.recruitPiece(state, castle, spawnHex);
@@ -165,13 +166,16 @@ describe('GameEngine', () => {
       expect(newState.pieces[0].hex.equals(spawnHex)).toBe(true);
       expect(newState.pieces[0].type).toBe(PieceType.Swordsman); // Default first piece
       
-      // Check castle updated
+      // Check castle updated - turns_controlled should increase
       const updatedCastle = newState.castles[0];
-      expect(updatedCastle.used_this_turn).toBe(true);
       expect(updatedCastle.turns_controlled).toBe(1);
       
+      // Note: used_this_turn may be reset to false if the turn counter
+      // advanced to a new player's turn (counter % 5 === 0 triggers resetTurnFlags)
+      // This is correct game behavior.
+      
       // Check turn counter incremented
-      // With 1 castle used and no others, it should advance
+      // With 1 castle used and no others, it should advance to next player's turn
       expect(newState.turnCounter).toBeGreaterThan(4);
     });
   });
@@ -186,9 +190,8 @@ describe('GameEngine', () => {
 
     it('returns empty array if only starting castles held', () => {
       const castleHex = new Hex(0, -6, 6); 
-      // Starting castle: Owner 'w' matches Color 'w'
-      const castle = new Castle(castleHex, 'w', 0); 
-      castle.owner = 'w';
+      // Starting castle: Owner 'w' matches Color 'w' (not captured)
+      const castle = new Castle(castleHex, 'w', 0, false, 'w');
 
       const castles = [castle];
       const pieces: Piece[] = [];
@@ -201,8 +204,7 @@ describe('GameEngine', () => {
       // Setup a castle far from edges/river to ensure all 6 neighbors valid
       const castleHex = new Hex(0, -6, 6); 
       // Captured castle: Color 'b' (originally black), Owner 'w' (now white)
-      const castle = new Castle(castleHex, 'b', 0); 
-      castle.owner = 'w';
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
 
       const castles = [castle];
       const pieces: Piece[] = [];
@@ -218,8 +220,7 @@ describe('GameEngine', () => {
 
     it('excludes occupied hexes', () => {
       const castleHex = new Hex(0, -6, 6); 
-      const castle = new Castle(castleHex, 'w', 0);
-      castle.owner = 'w';
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
 
       const blockingHex = new Hex(0, -5, 5); // Adjacent
       const blockingPiece = new Piece(blockingHex, 'w', PieceType.Swordsman);
@@ -236,9 +237,8 @@ describe('GameEngine', () => {
 
     it('returns empty if castle used this turn', () => {
       const castleHex = new Hex(0, -6, 6); 
-      const castle = new Castle(castleHex, 'w', 0);
-      castle.owner = 'w';
-      castle.used_this_turn = true;
+      // Castle already used this turn
+      const castle = new Castle(castleHex, 'b', 0, true, 'w');
 
       const castles = [castle];
       const pieces: Piece[] = [];
@@ -249,8 +249,7 @@ describe('GameEngine', () => {
 
     it('returns empty if not Castles phase', () => {
       const castleHex = new Hex(0, -6, 6); 
-      const castle = new Castle(castleHex, 'w', 0);
-      castle.owner = 'w';
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
 
       const castles = [castle];
       const pieces: Piece[] = [];

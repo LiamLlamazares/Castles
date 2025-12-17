@@ -278,20 +278,18 @@ export class PGNService {
                    // Find which castle can recruit here.
                    // Must be: adjacent, owned by current player, AND a captured castle (not a starting castle)
                    const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter);
-                   
-                   // DEBUG: Log all castles and their properties
-                   console.log(`Looking for castle adjacent to ${parts[0]} (${spawnHex.q},${spawnHex.r},${spawnHex.s}) for player ${currentPlayer}`);
-                   currentState.castles.forEach((c, i) => {
-                       const adj = c.isAdjacent(spawnHex);
-                       console.log(`  Castle ${i}: (${c.hex.q},${c.hex.r},${c.hex.s}) color=${c.color} owner=${c.owner} adjacent=${adj}`);
-                   });
-                   
                    const castle = currentState.castles.find(c => 
                        c.isAdjacent(spawnHex) && 
                        c.owner === currentPlayer &&
                        c.color !== currentPlayer
                    );
-                   if (!castle) throw new Error(`No castle found to recruit at ${parts[0]}`);
+                   if (!castle) {
+                       // Build detailed error for debugging
+                       const castleInfo = currentState.castles.map((c, i) => 
+                           `Castle${i}:(${c.hex.q},${c.hex.r},${c.hex.s}) color=${c.color} owner=${c.owner} adj=${c.isAdjacent(spawnHex)}`
+                       ).join('; ');
+                       throw new Error(`No castle found to recruit at ${parts[0]} for player ${currentPlayer}. Turn=${currentState.turnCounter}. Castles: ${castleInfo}`);
+                   }
 
                    currentState = PGNService.saveHistoryEntry(currentState, token);
                    currentState = engine.recruitPiece(currentState, castle, spawnHex);
