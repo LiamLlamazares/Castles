@@ -22,6 +22,18 @@ import wKnightImage from "../Assets/Images/Chess/wKnight.svg";
 import bKnightImage from "../Assets/Images/Chess/bKnight.svg";
 import wEagleImage from "../Assets/Images/Chess/wEagle.svg";
 import bEagleImage from "../Assets/Images/Chess/bEagle.svg";
+import wWolfImage from "../Assets/Images/Chess/wWolf.svg";
+import bWolfImage from "../Assets/Images/Chess/bWolf.svg";
+import wHealerImage from "../Assets/Images/Chess/wHealer.svg";
+import bHealerImage from "../Assets/Images/Chess/bHealer.svg";
+import wRangerImage from "../Assets/Images/Chess/wRanger.svg";
+import bRangerImage from "../Assets/Images/Chess/bRanger.svg";
+import wWizardImage from "../Assets/Images/Chess/wWizard.svg";
+import bWizardImage from "../Assets/Images/Chess/bWizard.svg";
+import wNecromancerImage from "../Assets/Images/Chess/wNecromancer.svg";
+import bNecromancerImage from "../Assets/Images/Chess/bNecromancer.svg";
+import wPhoenixImage from "../Assets/Images/Chess/wPhoenix.svg";
+import bPhoenixImage from "../Assets/Images/Chess/bPhoenix.svg";
 
 /** Image mapping for white pieces */
 const whitePieceImages: Record<PieceType, string> = {
@@ -34,13 +46,12 @@ const whitePieceImages: Record<PieceType, string> = {
   [PieceType.Trebuchet]: wTrebuchetImage,
   [PieceType.Knight]: wKnightImage,
   [PieceType.Eagle]: wEagleImage,
-  // Special pieces (placeholder images - TODO: create proper assets)
-  [PieceType.Wolf]: wSwordsmanImage,
-  [PieceType.Healer]: wSwordsmanImage,
-  [PieceType.Ranger]: wArcherImage,
-  [PieceType.Wizard]: wAssassinImage,
-  [PieceType.Necromancer]: wAssassinImage,
-  [PieceType.Phoenix]: wDragonImage,
+  [PieceType.Wolf]: wWolfImage,
+  [PieceType.Healer]: wHealerImage,
+  [PieceType.Ranger]: wRangerImage,
+  [PieceType.Wizard]: wWizardImage,
+  [PieceType.Necromancer]: wNecromancerImage,
+  [PieceType.Phoenix]: wPhoenixImage,
 };
 
 /** Image mapping for black pieces */
@@ -54,13 +65,12 @@ const blackPieceImages: Record<PieceType, string> = {
   [PieceType.Trebuchet]: bTrebuchetImage,
   [PieceType.Knight]: bKnightImage,
   [PieceType.Eagle]: bEagleImage,
-  // Special pieces (placeholder images - TODO: create proper assets)
-  [PieceType.Wolf]: bSwordsmanImage,
-  [PieceType.Healer]: bSwordsmanImage,
-  [PieceType.Ranger]: bArcherImage,
-  [PieceType.Wizard]: bAssassinImage,
-  [PieceType.Necromancer]: bAssassinImage,
-  [PieceType.Phoenix]: bDragonImage,
+  [PieceType.Wolf]: bWolfImage,
+  [PieceType.Healer]: bHealerImage,
+  [PieceType.Ranger]: bRangerImage,
+  [PieceType.Wizard]: bWizardImage,
+  [PieceType.Necromancer]: bNecromancerImage,
+  [PieceType.Phoenix]: bPhoenixImage,
 };
 
 /**
