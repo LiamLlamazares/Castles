@@ -74,8 +74,8 @@ export class GameEngine {
     return RuleEngine.getEnemyHexes(pieces, currentPlayer);
   }
 
-  public getEnemyCastleHexes(castles: Castle[], currentPlayer: Color): Hex[] {
-    return RuleEngine.getEnemyCastleHexes(castles, currentPlayer);
+  public getEnemyCastleHexes(castles: Castle[], pieces: Piece[], currentPlayer: Color): Hex[] {
+    return RuleEngine.getEnemyCastleHexes(castles, pieces, currentPlayer);
   }
 
   public getAttackableHexes(pieces: Piece[], castles: Castle[], currentPlayer: Color): Hex[] {

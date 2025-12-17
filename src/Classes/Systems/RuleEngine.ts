@@ -42,14 +42,18 @@ export class RuleEngine {
       .map((piece) => piece.hex);
   }
 
-  public static getEnemyCastleHexes(castles: Castle[], currentPlayer: Color): Hex[] {
+  public static getEnemyCastleHexes(castles: Castle[], pieces: Piece[], currentPlayer: Color): Hex[] {
     return castles.filter(
-      (castle) => castle.color !== currentPlayer
+      (castle) => {
+          // Castle is enemy if color is different AND not controlled by us via occupation
+          const isControlledByUs = RuleEngine.castleIsControlledByActivePlayer(castle, pieces, currentPlayer);
+          return castle.color !== currentPlayer && !isControlledByUs;
+      }
     ).map((castle) => castle.hex);
   }
 
   public static getAttackableHexes(pieces: Piece[], castles: Castle[], currentPlayer: Color): Hex[] {
-    return [...RuleEngine.getEnemyHexes(pieces, currentPlayer), ...RuleEngine.getEnemyCastleHexes(castles, currentPlayer)];
+    return [...RuleEngine.getEnemyHexes(pieces, currentPlayer), ...RuleEngine.getEnemyCastleHexes(castles, pieces, currentPlayer)];
   }
 
   /**
