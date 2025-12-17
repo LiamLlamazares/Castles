@@ -84,19 +84,25 @@ export class SanctuaryGenerator {
       // Note: Castles aren't available here, so we skip hexes at extreme corners
       
       // Zone filtering based on tier
+      // Board Size N=8. R-coordinates range roughly -8 to +8.
+      // Starting pieces occupy roughly R=6,7,8.
+      // Safe Zone: Keep Sanctuaries within R <= 5.
+      
       switch (tier) {
         case 1:
-          // Neutral zone: Near river (r close to 0)
-          return Math.abs(h.r) <= 2;
+          // Tier 1: Neutral Central Zone
+          // R: -1 to 1 (River is 0, mostly empty or crossings)
+          return Math.abs(h.r) <= 1 && Math.abs(h.r) >= 1; // Avoid exact river center if desired, but 0 is filtered above
         
         case 2:
-          // Opponent's shallow: Past river but not deep (r between 2-4 for White's targets)
-          // We pick from positive r (Black's territory) and mirror
-          return h.r > 2 && h.r <= board.NSquares - 2;
+          // Tier 2: Mid-Field
+          // R: 2 to 3 (Safe distance from river, far from base)
+          return h.r >= 2 && h.r <= 3;
         
         case 3:
-          // Opponent's deep: Near enemy starting area (r > NSquares - 3)
-          return h.r > board.NSquares - 3;
+          // Tier 3: Forward Aggressive (But SAFE from spawn)
+          // R: 4 to 5 (Still reachable, but definitely not in spawn zone 6+)
+          return h.r >= 4 && h.r <= 5;
         
         default:
           return false;

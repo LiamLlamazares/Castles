@@ -15,7 +15,9 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
+import { createHistorySnapshot } from "../utils/GameStateUtils";
 import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
+import { NotationService } from "../Classes/Systems/NotationService";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
@@ -212,13 +214,7 @@ export const useGameLogic = (
         } as unknown as GameState
         : state as unknown as GameState;
 
-    const snapshot: HistoryEntry = {
-        pieces: effectiveState.pieces.map(p => p.clone()),
-        castles: effectiveState.castles.map(c => c.clone()),
-        sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
-        turnCounter: effectiveState.turnCounter,
-        moveNotation: effectiveState.moveHistory
-    };
+    const snapshot = createHistorySnapshot(effectiveState);
     
     if (isAnalysisMode) {
          state.moveTree?.navigateToIndex(state.viewMoveIndex!);
@@ -343,13 +339,7 @@ export const useGameLogic = (
         // `saveHistory` uses `state` (global).
         // Let's manually push snapshot of `effectiveState`.
         
-        const snapshot: HistoryEntry = {
-            pieces: effectiveState.pieces.map(p => p.clone()),
-            castles: effectiveState.castles.map(c => c.clone()),
-            sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
-            turnCounter: effectiveState.turnCounter,
-            moveNotation: effectiveState.moveHistory // This is the history BEFORE the move
-        };
+        const snapshot = createHistorySnapshot(effectiveState);
         
         const stateWithHistory = {
             ...effectiveState,
@@ -373,13 +363,7 @@ export const useGameLogic = (
     if (turnPhase === "Attack" && movingPiece?.canAttack) {
       if (isLegalAttack(hex)) {
         
-        const snapshot: HistoryEntry = {
-            pieces: effectiveState.pieces.map(p => p.clone()),
-            castles: effectiveState.castles.map(c => c.clone()),
-            sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
-            turnCounter: effectiveState.turnCounter,
-            moveNotation: effectiveState.moveHistory 
-        };
+        const snapshot = createHistorySnapshot(effectiveState);
         const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
 
         if (isAnalysisMode) {
@@ -407,13 +391,7 @@ export const useGameLogic = (
       const castle = castles.find(c => c.isAdjacent(hex));
       if (castle) {
         // Recruitment logic similar to above
-        const snapshot: HistoryEntry = {
-            pieces: effectiveState.pieces.map(p => p.clone()),
-            castles: effectiveState.castles.map(c => c.clone()),
-            sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
-            turnCounter: effectiveState.turnCounter,
-            moveNotation: effectiveState.moveHistory 
-        };
+        const snapshot = createHistorySnapshot(effectiveState);
         const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
 
         if (isAnalysisMode) {
@@ -457,13 +435,7 @@ export const useGameLogic = (
         } as unknown as GameState
         : state as unknown as GameState;
 
-    const snapshot: HistoryEntry = {
-        pieces: effectiveState.pieces.map(p => p.clone()),
-        castles: effectiveState.castles.map(c => c.clone()),
-        sanctuaries: effectiveState.sanctuaries?.map(s => s.clone()) ?? [],
-        turnCounter: effectiveState.turnCounter,
-        moveNotation: effectiveState.moveHistory
-    };
+    const snapshot = createHistorySnapshot(effectiveState);
 
     if (isAnalysisMode) {
          state.moveTree?.navigateToIndex(state.viewMoveIndex!);
@@ -478,7 +450,6 @@ export const useGameLogic = (
            
            const newCoreState = gameEngine.pledge(stateWithHistory, sanctuaryHex, spawnHex);
            
-           const { NotationService } = require("../Classes/Systems/NotationService");
            const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
            const currentPlayer = gameEngine.getCurrentPlayer(stateWithHistory.turnCounter);
            const turnPhase = gameEngine.getTurnPhase(stateWithHistory.turnCounter);

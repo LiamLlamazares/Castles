@@ -242,6 +242,8 @@ export class StateMutator {
 
        newPieces = newPieces.map(p => p.hex.equals(source.hex) ? sourceUpdated : p);
 
+       let newPhoenixRecords = state.phoenixRecords || [];
+
        if (ability === "Fireball") {
            notation = `Fireball -> ${targetHex.toString()}`;
            const impactedHexes = [targetHex, ...targetHex.cubeRing(1)];
@@ -258,18 +260,15 @@ export class StateMutator {
            // Filter dead pieces and update graveyard
            const deadPieces = piecesBeforeDeath.filter(p => p.damage >= p.Strength);
            
-           // Use DeathSystem for each fireball victim?
-           // Note: bulk updates might be tricky with immutable helpers if we just overwrite logic
-           // But 'processDeath' handles SINGLE piece logic.
-           // Simplest: Iterate dead pieces and accumulate side effects.
+           // Use DeathSystem for each fireball victim
+           // Iterate dead pieces and accumulate side effects (graveyard + phoenix records)
            
            let pendingGraveyard = [...newGraveyard];
-           let pendingPhoenixRecords = state.phoenixRecords;
+           let pendingPhoenixRecords = [...newPhoenixRecords];
 
            deadPieces.forEach(p => {
                if (!p.isRevived) {
-                   // Manual graveyard add OR use processDeath logic?
-                   // processDeath handles Phoenix too.
+                   // processDeath handles Phoenix respawn scheduling
                    const updates = DeathSystem.processDeath({ ...state, graveyard: pendingGraveyard, phoenixRecords: pendingPhoenixRecords }, p);
                    if (updates.graveyard) pendingGraveyard = updates.graveyard;
                    if (updates.phoenixRecords) pendingPhoenixRecords = updates.phoenixRecords;
@@ -277,7 +276,7 @@ export class StateMutator {
            });
            
            newGraveyard = pendingGraveyard;
-           // We might need to update phoenixRecords in returned state too if we support Fireball killing Phoenixes
+           newPhoenixRecords = pendingPhoenixRecords;
            
            newPieces = piecesBeforeDeath.filter(p => p.damage < p.Strength);
 
@@ -337,9 +336,8 @@ export class StateMutator {
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory,
-          graveyard: newGraveyard
-          // Need to pass phoenixRecords if updated by Fireball... 
-          // For now, let's assume Fireball updates are handled above if implemented.
+          graveyard: newGraveyard,
+          phoenixRecords: newPhoenixRecords
      });
   }
 

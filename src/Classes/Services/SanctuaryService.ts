@@ -36,6 +36,9 @@ export class SanctuaryService {
     // 1. Basic Availability Check
     if (!sanctuary.isReady) return false;
 
+    // 1b. Turn Requirement (Sanctuaries dormant until Turn 10)
+    if (gameState.turnCounter < 10) return false;
+
     // 2. Control Check (Must have CURRENT PLAYER's piece on it)
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());

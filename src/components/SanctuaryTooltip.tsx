@@ -5,9 +5,10 @@ import { SanctuaryConfig } from '../Constants';
 interface SanctuaryTooltipProps {
   sanctuary: Sanctuary;
   position: { x: number, y: number };
+  turnCounter: number;
 }
 
-export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, position }) => {
+export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, position, turnCounter }) => {
   const config = SanctuaryConfig[sanctuary.type];
 
   // Position slight offset from mouse/hex center
@@ -60,14 +61,32 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
     fontWeight: 500,
   };
 
+  // Turn Lock Logic
+  const TURN_UNLOCK = 10;
+  const isTurnLocked = turnCounter < TURN_UNLOCK;
+
+  // Determine status color / text
+  let statusColor = sanctuary.isReady ? '#2ecc71' : '#e74c3c';
+  let statusText = sanctuary.hasPledgedThisGame 
+    ? "Already Pledged" 
+    : sanctuary.cooldown > 0 
+      ? `Cooldown (${sanctuary.cooldown} turns)` 
+      : "READY TO PLEDGE";
+
+  // Override if locked by turn
+  if (!sanctuary.hasPledgedThisGame && isTurnLocked) {
+      statusText = `Unlocks Turn ${TURN_UNLOCK}`;
+      statusColor = "#e67e22"; // Orange
+  }
+
   const statusStyle: React.CSSProperties = {
     marginTop: '8px',
     fontSize: '0.85rem',
     fontWeight: 'bold',
-    color: sanctuary.isReady ? '#2ecc71' : '#e74c3c',
+    color: statusColor,
     textAlign: 'center',
     padding: '4px',
-    backgroundColor: sanctuary.isReady ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)',
+    backgroundColor: `${statusColor}20`,
     borderRadius: '4px',
   };
 
@@ -91,11 +110,7 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
       </div>
 
       <div style={statusStyle}>
-        {sanctuary.hasPledgedThisGame 
-          ? "Already Pledged" 
-          : sanctuary.cooldown > 0 
-            ? `Cooldown (${sanctuary.cooldown} turns)` 
-            : "READY TO PLEDGE"}
+        {statusText}
       </div>
     </div>
   );

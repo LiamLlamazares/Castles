@@ -77,6 +77,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     pieces,
     castles,
     sanctuaries,
+    turnCounter, // Added
     showCoordinates,
     isBoardRotated,
     resizeVersion,
@@ -344,6 +345,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
                   <SanctuaryTooltip 
                     sanctuary={sanctuary} 
                     position={mousePosition} 
+                    turnCounter={turnCounter}
                   />
               ) : null;
           })()
