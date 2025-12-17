@@ -17,7 +17,7 @@ def process_wizard():
     # We want fill="#ffffff" stroke="#000000" stroke-width="10" (approx)
     
     # We'll replace the group style
-    w_content = content.replace('fill="#000000"', 'fill="#ffffff" stroke="#000000" stroke-width="10"')
+    w_content = content.replace('fill="#000000" stroke="none"', 'fill="#ffffff" stroke="#000000" stroke-width="10"')
     
     with open(w_dest_path, 'w') as f:
         f.write(w_content)
@@ -25,7 +25,7 @@ def process_wizard():
 
     # Create Black Wizard
     # We want fill="#000000" stroke="#ffffff" stroke-width="10"
-    b_content = content.replace('fill="#000000"', 'fill="#000000" stroke="#ffffff" stroke-width="10"')
+    b_content = content.replace('fill="#000000" stroke="none"', 'fill="#000000" stroke="#ffffff" stroke-width="10"')
     
     with open(b_dest_path, 'w') as f:
         f.write(b_content)

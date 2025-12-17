@@ -75,4 +75,27 @@ describe('Phoenix Rebirth Logic', () => {
         
         expect(newState.phoenixRecords.length).toBe(0);
     });
+
+    test('Fireball killing Phoenix schedules respawn (Task 2.1 fix)', () => {
+        // Setup: Wizard has Fireball ability, Phoenix at target hex
+        const wizard = new Piece(new Hex(0, 0, 0), 'w', PieceType.Wizard);
+        // Phoenix placed at target hex, pre-damaged so Fireball kills it (2 HP - 1 damage = 1 remaining, then +1 from Fireball = dead)
+        const phoenix = new Piece(new Hex(1, -1, 0), 'b', PieceType.Phoenix).with({ damage: 1 });
+        
+        state.pieces = [wizard, phoenix];
+        state.pieceMap = new PieceMap(state.pieces);
+        state.turnCounter = 2; // Attack phase for White
+        
+        // Use Fireball ability targeting Phoenix's hex (pass wizard Piece, not hex)
+        const result = StateMutator.activateAbility(state, wizard, phoenix.hex, 'Fireball', board);
+        
+        // Verify Phoenix is dead (1 existing damage + 1 Fireball = 2 = HP, killed)
+        const deadPhoenix = result.pieces.find(p => p.type === PieceType.Phoenix);
+        expect(deadPhoenix).toBeUndefined();
+        
+        // Verify phoenixRecords updated (the bug fix from Task 2.1)
+        expect(result.phoenixRecords).toBeDefined();
+        expect(result.phoenixRecords.length).toBe(1);
+        expect(result.phoenixRecords[0].owner).toBe('b');
+    });
 });

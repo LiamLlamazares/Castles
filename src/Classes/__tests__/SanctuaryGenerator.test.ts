@@ -26,9 +26,11 @@ describe("SanctuaryGenerator", () => {
       const [first, second] = sanctuaries;
       
       // Mirrored means (-q, -r, -s)
-      expect(second.hex.q).toBe(-first.hex.q);
-      expect(second.hex.r).toBe(-first.hex.r);
-      expect(second.hex.s).toBe(-first.hex.s);
+      // JavaScript: -0 !== 0 with Object.is, but -0 == 0 with loose equality
+      // Use expect().toBe() with explicit conversion to avoid -0 issues
+      expect(second.hex.q + 0).toBe(-first.hex.q + 0);
+      expect(second.hex.r + 0).toBe(-first.hex.r + 0);
+      expect(second.hex.s + 0).toBe(-first.hex.s + 0);
     });
 
     it("should generate multiple sanctuary types", () => {

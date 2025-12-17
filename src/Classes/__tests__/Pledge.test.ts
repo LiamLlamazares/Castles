@@ -23,12 +23,12 @@ describe('Pledge Mechanics', () => {
     ];
   });
 
-  const createGameState = (currentPieces: Piece[], currentSanctuaries: Sanctuary[]) => ({
+  const createGameState = (currentPieces: Piece[], currentSanctuaries: Sanctuary[], overrideTurnCounter?: number) => ({
     pieces: currentPieces,
     pieceMap: createPieceMap(currentPieces),
     castles: [],
     sanctuaries: currentSanctuaries,
-    turnCounter: 4, // White's Castles phase (turnCounter % 10 = 4)
+    turnCounter: overrideTurnCounter ?? 14, // White's Castles phase, Turn 10+ (turnCounter % 10 = 4)
     movingPiece: null,
     history: [],
     moveHistory: [],
@@ -66,16 +66,16 @@ describe('Pledge Mechanics', () => {
     // White piece occupies sanctuary
     placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
     
-    // At turnCounter=4, it's White's turn -> can pledge
+    // At turnCounter=14, it's White's Castles phase (14 % 10 = 4) -> can pledge
     let state = createGameState(pieces, sanctuaries);
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(true);
     
-    // At turnCounter=5 (or any Black turn), White cannot pledge
-    state = { ...state, turnCounter: 5 }; // Black's Movement phase
+    // At turnCounter=15 (or any Black turn), White cannot pledge
+    state = createGameState(pieces, sanctuaries, 15); // Black's Movement phase
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
     
-    // At turnCounter=9 (Black's Castles), White still cannot pledge
-    state = { ...state, turnCounter: 9 };
+    // At turnCounter=19 (Black's Castles), White still cannot pledge
+    state = createGameState(pieces, sanctuaries, 19);
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
   });
 
