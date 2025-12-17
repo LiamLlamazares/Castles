@@ -52,7 +52,7 @@ export class StateMutator {
        nextState = StateMutator.resetTurnFlags(nextState);
     }
 
-    return nextState;
+    return StateMutator.checkTurnTransitions(nextState);
   }
 
   public static applyCastleAttack(state: GameState, piece: Piece, targetHex: Hex, board: Board): GameState {
@@ -90,7 +90,7 @@ export class StateMutator {
     const newPieceMap = createPieceMap(newPieces);
     const newTurnCounter = state.turnCounter + RuleEngine.getTurnCounterIncrement(newPieces, newCastles, state.turnCounter, board);
     
-    return {
+    return StateMutator.checkTurnTransitions({
         ...state,
         pieces: newPieces,
         pieceMap: newPieceMap,
@@ -98,7 +98,7 @@ export class StateMutator {
         movingPiece: null,
         turnCounter: newTurnCounter,
         moveHistory: newMoveHistory
-    };
+    });
   }
 
   public static applyAttack(state: GameState, attacker: Piece, targetHex: Hex, board: Board): GameState {
@@ -131,12 +131,12 @@ export class StateMutator {
 
   public static passTurn(state: GameState, board: Board): GameState {
       // User requested NO history for Pass
-      const increment = RuleEngine.getTurnCounterIncrement(state.pieces, state.castles, state.turnCounter, board);
-      return {
+      const increment = RuleEngine.getTurnCounterIncrement(state.pieces, state.castles, state.turnCounter, board, true);
+      return StateMutator.checkTurnTransitions({
           ...state,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
-      };
+      });
   }
 
   public static recruitPiece(state: GameState, castle: Castle, hex: Hex, board: Board): GameState {
@@ -181,6 +181,19 @@ export class StateMutator {
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory
       };
+  }
+
+  /**
+   * Checks if we need to reset turn flags based on phase transitions.
+   * - Resets at start of new Player Turn (turnCounter % 5 === 0)
+   * - Helper to centralize this logic
+   */
+  private static checkTurnTransitions(state: GameState): GameState {
+      // If we just entered a new player's turn (Turn 0, 5, 10...)
+      if (state.turnCounter % PHASE_CYCLE_LENGTH === 0) {
+          return StateMutator.resetTurnFlags(state);
+      }
+      return state;
   }
 
   public static resetTurnFlags(state: GameState): GameState {

@@ -240,7 +240,7 @@ export class RuleEngine {
    * Delegates the complex turn increment logic to TurnManager,
    * passing in the necessary calculated booleans.
    */
-  public static getTurnCounterIncrement(pieces: Piece[], castles: Castle[], turnCounter: number, board: Board): number {
+  public static getTurnCounterIncrement(pieces: Piece[], castles: Castle[], turnCounter: number, board: Board, isPassing: boolean = false): number {
     // Optimization Phase 3: Use early-exit checks instead of full list generation
     const hasFutureAttacks = RuleEngine.hasAnyFutureLegalAttacks(pieces, castles, turnCounter, board);
     const hasFutureControlledCastles = RuleEngine.hasAnyFutureControlledCastles(castles, pieces, turnCounter);
@@ -248,12 +248,18 @@ export class RuleEngine {
     const currentPlayer = TurnManager.getCurrentPlayer(turnCounter);
     
     // Check if castles are usable in the current Castles phase
-    const unusedControlledCastles = castles.filter(
-        (castle) =>
-          RuleEngine.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
-          !castle.used_this_turn
-    );
-    const hasUsableCastles = unusedControlledCastles.length > 0;
+    // If we are passing, we explicitly give up remaining castle usages
+    let hasUsableCastles = false;
+    if (!isPassing) {
+        // Only count castles that are DIFFERENT color (Start-castles cannot recruit)
+        const unusedControlledCastles = castles.filter(
+            (castle) =>
+            RuleEngine.castleIsControlledByActivePlayer(castle, pieces, currentPlayer) &&
+            !castle.used_this_turn &&
+            castle.color !== currentPlayer
+        );
+        hasUsableCastles = unusedControlledCastles.length > 0;
+    }
 
     return TurnManager.getTurnCounterIncrement(
         turnCounter,
