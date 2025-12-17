@@ -111,7 +111,6 @@ export class PGNService {
         lastIndex = tagRegex.lastIndex;
 
         if (tagName === 'CustomSetup') {
-            console.log("Analyzing CustomSetup...", tagValue);
             try {
                 let parsedData: any;
                 // Try parsing as JSON first (backward compat for V1 w/o Base64)
