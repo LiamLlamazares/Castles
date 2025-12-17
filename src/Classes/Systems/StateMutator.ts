@@ -119,14 +119,14 @@ export class StateMutator {
      const newPieceMap = createPieceMap(result.pieces);
      const increment = RuleEngine.getTurnCounterIncrement(result.pieces, state.castles, state.turnCounter, board);
       
-     return {
+     return StateMutator.checkTurnTransitions({
           ...state,
           pieces: result.pieces,
           pieceMap: newPieceMap,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory
-     };
+     });
   }
 
   public static passTurn(state: GameState, board: Board): GameState {
@@ -172,7 +172,7 @@ export class StateMutator {
       const newPieceMap = createPieceMap(newPieces);
       const increment = RuleEngine.getTurnCounterIncrement(newPieces, newCastles, state.turnCounter, board);
 
-      return {
+      return StateMutator.checkTurnTransitions({
           ...state,
           pieces: newPieces,
           pieceMap: newPieceMap,
@@ -180,7 +180,7 @@ export class StateMutator {
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory
-      };
+      });
   }
 
   /**
