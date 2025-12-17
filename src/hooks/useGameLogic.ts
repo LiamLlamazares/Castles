@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
 import { PGNService } from "../Classes/Services/PGNService";
+import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
@@ -40,7 +41,7 @@ export const useGameLogic = (
     movingPiece: null,
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
-    sanctuaries: [], // Sanctuaries not yet integrated with game initialization
+    sanctuaries: SanctuaryGenerator.generateDefaultSanctuaries(initialBoard), 
     
     showCoordinates: false,
     cheatMode: false,
@@ -369,6 +370,7 @@ export const useGameLogic = (
     // State
     pieces,
     castles,
+    sanctuaries: (state as any).sanctuaries || [], // Fallback until fully typed
     turnCounter,
     movingPiece,
     showCoordinates,

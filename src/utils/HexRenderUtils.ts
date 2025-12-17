@@ -1,6 +1,8 @@
 import { Hex } from "../Classes/Entities/Hex";
 import { Board } from "../Classes/Core/Board";
 import { Castle } from "../Classes/Entities/Castle";
+import { Sanctuary } from "../Classes/Entities/Sanctuary";
+import { SanctuaryType } from "../Constants";
 
 /**
  * Determines the CSS classes for a given hex based on board state.
@@ -40,4 +42,31 @@ export const getCastleOwnerClass = (hex: Hex, castles: Castle[]): string => {
   if (!castle) return "";
   // Return class based on current owner (not original color)
   return castle.owner === "w" ? "castle-owned-white" : "castle-owned-black";
+};
+
+/**
+ * Determines the CSS class for a sanctuary.
+ */
+export const getSanctuaryVisualClass = (hex: Hex, sanctuaries: Sanctuary[]): string => {
+  const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
+  if (!sanctuary) return "";
+
+  // Base class
+  let className = "hexagon-sanctuary";
+
+  // Check cooldown
+  if (!sanctuary.isReady) {
+    return `${className} hexagon-sanctuary-cooldown`;
+  }
+
+  // Type-specific classes
+  switch (sanctuary.type) {
+    case SanctuaryType.WolfCovenant: return `${className} hexagon-sanctuary-wolf`;
+    case SanctuaryType.SacredSpring: return `${className} hexagon-sanctuary-healer`;
+    case SanctuaryType.WardensWatch: return `${className} hexagon-sanctuary-ranger`;
+    case SanctuaryType.ArcaneRefuge: return `${className} hexagon-sanctuary-wizard`;
+    case SanctuaryType.ForsakenGrounds: return `${className} hexagon-sanctuary-necromancer`;
+    case SanctuaryType.PyreEternal: return `${className} hexagon-sanctuary-phoenix`;
+    default: return className;
+  }
 };

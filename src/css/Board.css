@@ -138,6 +138,66 @@ body {
   --colorShadeE: rgb(205, 255, 232);
 }
 
+/* =========== SANCTUARIES =========== */
+
+/* Base sanctuary style */
+.hexagon-sanctuary {
+    stroke-width: 5 !important;
+    /* Removed dashed border for a cleaner, premium look */
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+    transition: all 0.3s ease;
+}
+
+/* 1. Wolf Covenant (Tier 1) - Grey/Silver */
+.hexagon-sanctuary-wolf {
+    fill: #95a5a6;
+    stroke: #bdc3c7 !important;
+    filter: drop-shadow(0 0 8px #bdc3c7);
+}
+
+/* 2. Sacred Spring (Tier 1) - Teal/Green */
+.hexagon-sanctuary-healer {
+    fill: #1abc9c;
+    stroke: #16a085 !important;
+    filter: drop-shadow(0 0 8px #1abc9c);
+}
+
+/* 3. Warden's Watch (Tier 2) - Forest Green/Brown */
+.hexagon-sanctuary-ranger {
+    fill: #2ecc71;
+    stroke: #27ae60 !important;
+    filter: drop-shadow(0 0 8px #2ecc71);
+}
+
+/* 4. Arcane Refuge (Tier 2) - Purple/Blue */
+.hexagon-sanctuary-wizard {
+    fill: #9b59b6;
+    stroke: #8e44ad !important;
+    filter: drop-shadow(0 0 8px #9b59b6);
+}
+
+/* 5. Forsaken Grounds (Tier 3) - Dark Grey/Green (Necrotic) */
+.hexagon-sanctuary-necromancer {
+    fill: #34495e;
+    stroke: #2c3e50 !important;
+    filter: drop-shadow(0 0 8px #2c3e50);
+}
+
+/* 6. Pyre Eternal (Tier 3) - Red/Orange/Gold */
+.hexagon-sanctuary-phoenix {
+    fill: #e74c3c;
+    stroke: #c0392b !important;
+    filter: drop-shadow(0 0 8px #e74c3c);
+}
+
+/* Cooldown state (dormant) - Desaturated/Darker */
+.hexagon-sanctuary-cooldown {
+    fill: #555 !important;
+    stroke: #777 !important;
+    filter: none; /* No glow when on cooldown */
+    opacity: 0.7;
+}
+
 /* =========== GAME PANEL (Right Side - Lichess Style) =========== */
 
 .game-panel {

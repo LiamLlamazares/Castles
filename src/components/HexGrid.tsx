@@ -1,18 +1,16 @@
-/**
- * HexGrid component - renders the hexagonal board tiles.
- * Extracted from Game.tsx for better separation of concerns.
- */
 import React from "react";
 import { Hex, Point } from "../Classes/Entities/Hex";
 import { Castle } from "../Classes/Entities/Castle";
+import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { Board } from "../Classes/Core/Board";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
-import { getHexVisualClass, getCastleOwnerClass } from "../utils/HexRenderUtils";
+import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from "../utils/HexRenderUtils";
 
 interface HexGridProps {
   hexagons: Hex[];
   castles: Castle[];
+  sanctuaries: Sanctuary[];
   legalMoveSet: Set<string>;
   legalAttackSet: Set<string>;
   showCoordinates: boolean;
@@ -20,6 +18,7 @@ interface HexGridProps {
   /** Returns CSS class indicating if hex is adjacent to controlled castle */
   isAdjacentToControlledCastle: (hex: Hex) => boolean;
   onHexClick: (hex: Hex) => void;
+  onHexHover?: (hex: Hex | null, event?: React.MouseEvent) => void;
   resizeVersion: number;
   layout: LayoutService;
   board: Board;
@@ -64,12 +63,14 @@ const renderCircle = (
 const HexGrid = React.memo(({
   hexagons,
   castles,
+  sanctuaries,
   legalMoveSet,
   legalAttackSet,
   showCoordinates,
   isBoardRotated,
   isAdjacentToControlledCastle,
   onHexClick,
+  onHexHover,
   layout,
   board
 }: HexGridProps) => {
@@ -77,34 +78,44 @@ const HexGrid = React.memo(({
   return (
     <>
       {/* Render all hexagons */}
-      {hexagons.map((hex: Hex) => (
-        <g key={hex.getKey()}>
-          <polygon
-            points={getPolygonPoints(hex, isBoardRotated, layout)}
-            className={`${getHexVisualClass(hex, board)} ${
-              isAdjacentToControlledCastle(hex)
-                ? "hexagon-castle-adjacent"
-                : ""
-            } ${getCastleOwnerClass(hex, castles)}`}
-            onClick={() => onHexClick(hex)}
-            filter={
-              getHexVisualClass(hex, board).includes("hexagon-high-ground")
-                ? "url(#shadow)"
-                : ""
-            }
-          />
-          {showCoordinates && (
-            <text
-              x={getHexCenter(hex, isBoardRotated, layout).x}
-              y={getHexCenter(hex, isBoardRotated, layout).y + 5}
-              textAnchor="middle"
-              style={{ fontSize: "15px", color: "black" }}
-            >
-              {`${-hex.q}, ${-hex.s}`}
-            </text>
-          )}
-        </g>
-      ))}
+      {hexagons.map((hex: Hex) => {
+        // Compute classes
+        const visualClass = getHexVisualClass(hex, board);
+        const sanctuaryClass = getSanctuaryVisualClass(hex, sanctuaries);
+        const adjacencyClass = isAdjacentToControlledCastle(hex) ? "hexagon-castle-adjacent" : "";
+        const castleOwnerClass = getCastleOwnerClass(hex, castles);
+        
+        // Combine classes - Sanctuary takes precedence over normal terrain but not castle
+        // Sanctuary class should override base color but be additive to shape?
+        // Actually CSS order matters most. Sanctuary class applied last.
+        
+        return (
+          <g key={hex.getKey()}>
+            <polygon
+              points={getPolygonPoints(hex, isBoardRotated, layout)}
+              className={`${visualClass} ${sanctuaryClass} ${adjacencyClass} ${castleOwnerClass}`}
+              onClick={() => onHexClick(hex)}
+              onMouseEnter={(e) => onHexHover && onHexHover(hex, e)}
+              onMouseLeave={() => onHexHover && onHexHover(null)}
+              filter={
+                visualClass.includes("hexagon-high-ground")
+                  ? "url(#shadow)"
+                  : ""
+              }
+            />
+            {showCoordinates && (
+              <text
+                x={getHexCenter(hex, isBoardRotated, layout).x}
+                y={getHexCenter(hex, isBoardRotated, layout).y + 5}
+                textAnchor="middle"
+                style={{ fontSize: "15px", color: "black" }}
+              >
+                {`${-hex.q}, ${-hex.s}`}
+              </text>
+            )}
+          </g>
+        );
+      })}
       {/* Render dots for legal moves and attacks */}
       {hexagons.map((hex: Hex) => {
         const key = hex.getKey();

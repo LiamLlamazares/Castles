@@ -84,6 +84,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ onPlay }) => {
                     <HexGrid
                         hexagons={board.hexes}
                         castles={[]} // No castles for now or generate them too?
+                        sanctuaries={[]}
                         legalMoveSet={new Set()}
                         legalAttackSet={new Set()}
                         showCoordinates={true}

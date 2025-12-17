@@ -136,6 +136,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                     <HexGrid
                         hexagons={board.hexes}
                         castles={board.castles} // Show generated castles
+                        sanctuaries={[]} // Add empty sanctuaries since they generate with game start
                         legalMoveSet={new Set()}
                         legalAttackSet={new Set()}
                         showCoordinates={true}

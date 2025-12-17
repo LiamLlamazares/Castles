@@ -10,6 +10,9 @@ import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
+import { Hex } from "../Classes/Entities/Hex";
+import { Sanctuary } from "../Classes/Entities/Sanctuary";
+import { SanctuaryTooltip } from "./SanctuaryTooltip";
 import "../css/Board.css";
 
 interface GameBoardProps {
@@ -42,11 +45,14 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onLoadGame = () => {}
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
+  const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
+  const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
     
   const {
     // State
     pieces,
     castles,
+    sanctuaries,
     showCoordinates,
     isBoardRotated,
     resizeVersion,
@@ -91,6 +97,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
       onSetup();
     }
   };
+
+  const handleHexHover = React.useCallback((hex: Hex | null, event?: React.MouseEvent) => {
+    setHoveredHex(hex);
+    if (event) {
+        setMousePosition({ x: event.clientX, y: event.clientY });
+    }
+  }, []);
 
   useInputHandler({
     onPass: handlePass,
@@ -164,12 +177,14 @@ const GameBoard: React.FC<GameBoardProps> = ({
         <HexGrid
           hexagons={hexagons}
           castles={castles}
+          sanctuaries={sanctuaries}
           legalMoveSet={legalMoveSet}
           legalAttackSet={legalAttackSet}
           showCoordinates={showCoordinates}
           isBoardRotated={isBoardRotated}
           isAdjacentToControlledCastle={isRecruitmentSpot}
           onHexClick={handleHexClick}
+          onHexHover={handleHexHover}
           resizeVersion={resizeVersion}
           layout={initialLayout}
           board={initialBoard}
@@ -191,6 +206,18 @@ const GameBoard: React.FC<GameBoardProps> = ({
             onSetup={onSetup}
             onAnalyze={() => setOverlayDismissed(true)}
           />
+      )}
+      
+      {hoveredHex && sanctuaries && (
+          (() => {
+              const sanctuary = sanctuaries.find((s: Sanctuary) => s.hex.equals(hoveredHex));
+              return sanctuary ? (
+                  <SanctuaryTooltip 
+                    sanctuary={sanctuary} 
+                    position={mousePosition} 
+                  />
+              ) : null;
+          })()
       )}
     </>
   );
