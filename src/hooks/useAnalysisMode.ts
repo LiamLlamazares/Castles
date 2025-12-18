@@ -54,9 +54,9 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
     setState(prev => {
       // If live, "left" goes to last history item.
       if (prev.viewMoveIndex === null) {
-        if (direction === -1) {
-             const newIndex = prev.history.length - 2;
-             return { ...prev, viewMoveIndex: newIndex < -1 ? -1 : newIndex };
+        if (direction === -1 && prev.history.length > 0) {
+             const newIndex = prev.history.length - 1;
+             return { ...prev, viewMoveIndex: newIndex };
         }
         return prev;
       }
@@ -66,8 +66,8 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
       if (newIndex >= prev.history.length) {
         return { ...prev, viewMoveIndex: null };
       }
-      if (newIndex < -1) {
-        return { ...prev, viewMoveIndex: -1 };
+      if (newIndex < 0) {
+        return { ...prev, viewMoveIndex: 0 };
       }
       return { ...prev, viewMoveIndex: newIndex };
     });

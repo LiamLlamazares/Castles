@@ -31,13 +31,13 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
   let highlightedId: string | undefined = moveTree.current.id;
   
   if (viewMoveIndex !== null && viewMoveIndex !== undefined) {
-      if (viewMoveIndex === -1) {
-          // Start of game: No moves made. Highlight nothing (or root).
+      if (viewMoveIndex <= 0) {
+          // Start of game (Index 0 or -1): No moves made. Highlight nothing (or root).
           highlightedId = moveTree.rootNode.id;
-      } else if (viewMoveIndex >= 0) {
-        // Walk from root to find the node
+      } else {
+        // Walk from root to find the node. Index 1 = 1 step (M1).
         let currentNode = moveTree.rootNode;
-        const stepsToTake = viewMoveIndex + 1; 
+        const stepsToTake = viewMoveIndex; 
         for (let i = 0; i < stepsToTake && currentNode.children.length > 0; i++) {
           currentNode = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
         }
