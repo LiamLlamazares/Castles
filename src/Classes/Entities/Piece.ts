@@ -85,14 +85,22 @@ export class Piece {
   get AttackType(): AttackType {
     switch (this.type) {
       case PieceType.Archer:
+      case PieceType.Wizard:      // Wizard has Range 2 (like Archer)
         return AttackType.Ranged;
+        
       case PieceType.Trebuchet:
-      case PieceType.Ranger: // Ranger has Long Range (3)
+      case PieceType.Ranger:      // Ranger has Long Range (3)
         return AttackType.LongRanged;
+        
       case PieceType.Swordsman:
         return AttackType.Swordsman;
-      case PieceType.Wizard:
-        return AttackType.Ranged; // Wizard has Range 2
+        
+      case PieceType.Healer:      // Healers do not attack
+        return AttackType.None;
+        
+      case PieceType.Necromancer: // Necromancer is Melee
+        return AttackType.Melee;
+        
       default:
         return AttackType.Melee;
     }
@@ -171,6 +179,8 @@ export class Piece {
 
   /** Returns all legal attacks based on attack type */
   public legalAttacks(attackableHexSet: Set<string>, highGroundHexSet?: Set<string>): Hex[] {
+    if (this.AttackType === AttackType.None) return [];
+    
     if (this.AttackType === AttackType.Melee) {
       return meleeAttacks(this.hex, attackableHexSet);
     } else if (this.AttackType === AttackType.Ranged) {

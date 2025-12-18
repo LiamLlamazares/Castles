@@ -53,7 +53,7 @@ export interface GameState {
   movingPiece: Piece | null;
   history: HistoryEntry[];
   moveHistory: MoveRecord[];
-  moveTree?: MoveTree; // Optional for now, to support gradual refactor
+  moveTree: MoveTree; // Mandatory for history and variation tracking
   graveyard: Piece[]; // Captured pieces eligible for revival
   phoenixRecords: PhoenixRecord[]; // Active rebirth timers
 }

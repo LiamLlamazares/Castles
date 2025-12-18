@@ -160,6 +160,7 @@ export const useGameLogic = (
                   movingPiece: null,
                   history: [],
                   moveHistory: [],
+                  moveTree: state.moveTree,
                   graveyard: [],
                   phoenixRecords: []
               };
@@ -174,6 +175,7 @@ export const useGameLogic = (
               movingPiece: null,
               history: [],
               moveHistory: analysisState.moveNotation,
+              moveTree: state.moveTree,
               graveyard: [],
               phoenixRecords: []
           };

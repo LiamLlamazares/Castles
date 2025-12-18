@@ -76,16 +76,10 @@ export class Board {
   
 
   constructor(
-    configOrSize: number | BoardConfig = N_SQUARES,
+    config: BoardConfig = { nSquares: N_SQUARES },
     customCastles?: Castle[]
   ) {
-    // Backward compatibility: handle number input
-    if (typeof configOrSize === 'number') {
-      this.config = { nSquares: configOrSize };
-    } else {
-      this.config = configOrSize;
-    }
-
+    this.config = config;
     this.NSquares = this.config.nSquares;
     this.hexes = generateHexagons(this.NSquares);
 
