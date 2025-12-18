@@ -21,6 +21,7 @@ interface ControlPanelProps {
   hasGameStarted: boolean;
   winner: Color | null;
   timeControl?: { initial: number, increment: number };
+  viewMoveIndex?: number | null;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -35,6 +36,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   hasGameStarted,
   winner,
   timeControl,
+  viewMoveIndex,
 }) => {
   // New Game should only be enabled before game starts OR after someone wins
   const isNewGameDisabled = hasGameStarted && !winner;
@@ -60,7 +62,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           moveHistory={moveHistory} 
           moveTree={moveTree}
           onJumpToNode={onJumpToNode}
-          currentPlayer={currentPlayer} 
+          currentPlayer={currentPlayer}
+          viewMoveIndex={viewMoveIndex}
         />
       </div>
 

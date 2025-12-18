@@ -49,7 +49,7 @@ interface GameBoardProps {
   onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
   timeControl?: { initial: number, increment: number };
   analysisEnabled?: boolean;
-  onEnableAnalysis?: () => void;
+  onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
 }
 
 /**
@@ -102,6 +102,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     moveTree,
     movingPiece,
     jumpToNode,
+    history,
 
     // Actions
     handlePass,
@@ -118,6 +119,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     
     // Analysis
     isAnalysisMode,
+    viewMoveIndex,
     stepHistory,
     getPGN,
     loadPGN,
@@ -137,6 +139,25 @@ const GameBoard: React.FC<GameBoardProps> = ({
       onSetup();
     }
   };
+
+  // Handle entering analysis mode - captures current state
+  // Use last history entry for pieces (handles resign case where monarch was removed)
+  const handleEnterAnalysis = React.useCallback(() => {
+    if (onEnableAnalysis) {
+      // If we have history, use the last snapshot's pieces (preserves pre-resign state)
+      const analysisHistory = history || [];
+      const analysisPieces = analysisHistory.length > 0 
+        ? analysisHistory[analysisHistory.length - 1].pieces 
+        : pieces;
+      const analysisSanctuaries = analysisHistory.length > 0
+        ? analysisHistory[analysisHistory.length - 1].sanctuaries
+        : sanctuaries;
+      const analysisTurnCounter = analysisHistory.length > 0
+        ? analysisHistory[analysisHistory.length - 1].turnCounter
+        : turnCounter;
+      onEnableAnalysis(initialBoard, analysisPieces, analysisHistory, moveHistory || [], analysisTurnCounter, analysisSanctuaries);
+    }
+  }, [onEnableAnalysis, initialBoard, pieces, moveHistory, turnCounter, sanctuaries, history]);
 
   const handleHexHover = React.useCallback((hex: Hex | null, event?: React.MouseEvent) => {
     setHoveredHex(hex);
@@ -265,7 +286,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onFlipBoard={handleFlipBoard}
         onToggleCoordinates={toggleCoordinates}
         onShowRules={() => setShowRulesModal(true)}
-        onEnableAnalysis={onEnableAnalysis}
+        onEnableAnalysis={handleEnterAnalysis}
         isAnalysisEnabled={analysisEnabled}
       />
 
@@ -290,6 +311,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         hasGameStarted={hasGameStarted}
         winner={winner}
         timeControl={timeControl}
+        viewMoveIndex={viewMoveIndex}
       />
       
       <svg className="board" height="100%" width="100%">
@@ -349,7 +371,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
             onRestart={onRestart}
             onSetup={onSetup}
             onAnalyze={() => setOverlayDismissed(true)}
-            onEnableAnalysis={onEnableAnalysis}
+            onEnableAnalysis={handleEnterAnalysis}
           />
       )}
 

@@ -61,6 +61,17 @@ export const useGameLogic = (
       return SanctuaryGenerator.generateDefaultSanctuaries(initialBoard);
   }, [initialBoard, initialSanctuaries]);
 
+  // Build MoveTree from initialMoveHistory if provided
+  const initialMoveTree = useMemo(() => {
+    const tree = new MoveTree();
+    if (initialMoveHistory && initialMoveHistory.length > 0) {
+      for (const move of initialMoveHistory) {
+        tree.addMove(move);
+      }
+    }
+    return tree;
+  }, [initialMoveHistory]);
+
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>({
     history: initialHistory,
@@ -70,7 +81,7 @@ export const useGameLogic = (
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
     sanctuaries: startingSanctuaries, 
-    moveTree: new MoveTree(),
+    moveTree: initialMoveTree,
     
     // UI Settings
     showCoordinates: false,
@@ -619,6 +630,7 @@ export const useGameLogic = (
     board: gameEngine.board,
     moveTree: state.moveTree,
     moveHistory: moveHistory,
+    history: state.history,
     hasGameStarted,
 
     // Actions
@@ -634,6 +646,7 @@ export const useGameLogic = (
     
     // Analysis & PGN
     isAnalysisMode,
+    viewMoveIndex: state.viewMoveIndex,
     jumpToMove,
     jumpToNode,
     stepHistory,

@@ -7,9 +7,10 @@ interface HistoryTableProps {
   moveTree?: MoveTree;
   onJumpToNode?: (id: string) => void;
   currentPlayer: Color;
+  viewMoveIndex?: number | null; // When viewing history, which move index is selected
 }
 
-const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJumpToNode }) => {
+const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJumpToNode, viewMoveIndex }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when history updates
@@ -21,7 +22,21 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
 
   if (!moveTree) return <div className="history-table-container">No history</div>;
 
-  const currentId = moveTree.current.id;
+  // Determine which node is "current" for highlighting
+  // If viewMoveIndex is set, find the node at that index; otherwise use moveTree.current
+  // Note: history[N] is the snapshot AFTER move N+1 (0-indexed)
+  // So viewMoveIndex 0 = state after move 1, highlight move 1
+  // viewMoveIndex 2 = state after move 3, highlight move 3
+  let highlightedId = moveTree.current.id;
+  if (viewMoveIndex !== null && viewMoveIndex !== undefined && viewMoveIndex >= 0) {
+    // Walk from root to find the node: traverse viewMoveIndex+1 steps to get move at that index
+    let currentNode = moveTree.rootNode;
+    const stepsToTake = viewMoveIndex + 1; // history index 0 = 1 step to first move node
+    for (let i = 0; i < stepsToTake && currentNode.children.length > 0; i++) {
+      currentNode = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
+    }
+    highlightedId = currentNode.id;
+  }
 
   const renderMoves = (nodes: MoveNode[], depth: number = 0): React.ReactNode => {
     if (nodes.length === 0) return null;
@@ -31,7 +46,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
     // Main line for this variation
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
-        const isSelected = node.id === currentId;
+        const isSelected = node.id === highlightedId;
         
         // Render move number if it's white's move OR if it's the start of a variation
         const shouldShowNumber = node.move.color === 'w' || i === 0;

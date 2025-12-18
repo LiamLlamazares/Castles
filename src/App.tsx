@@ -49,8 +49,9 @@ function App() {
   
   const [gameKey, setGameKey] = useState(0);
 
-  const handleEnableAnalysis = () => {
-    setGameConfig(prev => ({ ...prev, analysisEnabled: true }));
+  const handleEnableAnalysis = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[]) => {
+    const layout = getStartingLayout(board);
+    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter, sanctuaries, analysisEnabled: true });
     setGameKey(prev => prev + 1); // Force remount with new setting
   };
 
