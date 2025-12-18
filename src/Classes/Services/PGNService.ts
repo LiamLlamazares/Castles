@@ -336,7 +336,6 @@ export class PGNService {
       for (const token of moveList) {
           try {
               if (token === "Pass") {
-                  currentState = PGNService.saveHistoryEntry(currentState, token);
                   currentState = engine.passTurn(currentState);
                   continue;
               }
@@ -349,8 +348,6 @@ export class PGNService {
 
                   const attacker = currentState.pieces.find(p => p.hex.equals(startHex));
                   if (!attacker) throw new Error(`Attacker not found at ${parts[0]}`);
-
-                  currentState = PGNService.saveHistoryEntry(currentState, token);
 
                   const targetPiece = currentState.pieces.find(p => p.hex.equals(targetHex));
                   if (targetPiece) {
@@ -392,7 +389,6 @@ export class PGNService {
                        throw new Error(`No castle found to recruit at ${parts[0]}`);
                    }
 
-                   currentState = PGNService.saveHistoryEntry(currentState, token);
                    currentState = engine.recruitPiece(currentState, castle, spawnHex);
                    
                    const recruitedPieceIndex = currentState.pieces.length - 1;
@@ -435,7 +431,6 @@ export class PGNService {
                    const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
                    const newPieces = [...currentState.pieces, newPiece];
                    
-                   currentState = PGNService.saveHistoryEntry(currentState, token);
                    currentState = {
                        ...currentState,
                        pieces: newPieces,
@@ -455,7 +450,6 @@ export class PGNService {
                    const mover = currentState.pieces.find(p => p.hex.equals(startHex));
                    if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
 
-                   currentState = PGNService.saveHistoryEntry(currentState, token);
                    currentState = engine.applyMove(currentState, mover, endHex);
                    continue;
               }
@@ -466,21 +460,5 @@ export class PGNService {
           }
       }
       return currentState;
-  }
-
-  private static saveHistoryEntry(state: GameState, notation: string): GameState {
-      // Helper to push to history before mutation
-      const historyEntry = {
-          pieces: state.pieces.map(p => p.clone()),
-          castles: state.castles.map(c => c.clone()),
-          sanctuaries: state.sanctuaries.map(s => s.clone()), // Clone sanctuaries too
-          turnCounter: state.turnCounter,
-          moveNotation: state.moveHistory, // Snapshot of history so far
-      };
-      
-      return {
-          ...state,
-          history: [...state.history, historyEntry]
-      };
   }
 }

@@ -65,6 +65,8 @@ export const useGameLogic = (
   const initialMoveTree = useMemo(() => {
     const tree = new MoveTree();
     if (initialMoveHistory && initialMoveHistory.length > 0) {
+      // Ensure we start from root and build tree correctly
+      tree.goToRoot();
       for (const move of initialMoveHistory) {
         tree.addMove(move);
       }
