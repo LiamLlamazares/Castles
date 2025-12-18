@@ -24,18 +24,8 @@ export interface MoveNode {
  * - If a move is added to a node that already has children, it creates a new variation (branch).
  */
 export class MoveTree {
-    public root: MoveNode;
-    public currentNode: MoveNode;
-
-    constructor() {
-        this.root = this.createNode({ 
-            notation: "Start", 
-            turnNumber: 0, 
-            color: 'w' as any, 
-            phase: 'Movement' as any 
-        }, null);
-        this.currentNode = this.root;
-    }
+    private _root: MoveNode;
+    private _currentNode: MoveNode;
 
     private createNode(move: MoveRecord, parent: MoveNode | null, snapshot?: HistoryEntry): MoveNode {
         return {
@@ -48,12 +38,22 @@ export class MoveTree {
         };
     }
 
+    constructor() {
+        this._root = this.createNode({ 
+            notation: "Start", 
+            turnNumber: 0, 
+            color: 'w' as any, 
+            phase: 'Movement' as any 
+        }, null);
+        this._currentNode = this._root;
+    }
+
     public get current(): MoveNode {
-        return this.currentNode;
+        return this._currentNode;
     }
 
     public get rootNode(): MoveNode {
-        return this.root;
+        return this._root;
     }
 
     /**
@@ -62,36 +62,36 @@ export class MoveTree {
      * If other children exist but not this one, adds it as a new variation.
      */
     public addMove(move: MoveRecord, snapshot?: HistoryEntry): void {
-        const existingChildIndex = this.currentNode.children.findIndex(
+        const existingChildIndex = this._currentNode.children.findIndex(
             child => child.move.notation === move.notation
         );
 
         if (existingChildIndex >= 0) {
             // Move already exists, just navigate to it
             // Optionally promote it to main line? For now, just select it.
-            this.currentNode.selectedChildIndex = existingChildIndex;
-            this.currentNode = this.currentNode.children[existingChildIndex];
+            this._currentNode.selectedChildIndex = existingChildIndex;
+            this._currentNode = this._currentNode.children[existingChildIndex];
             
             // Update snapshot if provided and missing (e.g. from PGN import)
-            if (snapshot && !this.currentNode.snapshot) {
-                this.currentNode.snapshot = snapshot;
+            if (snapshot && !this._currentNode.snapshot) {
+                this._currentNode.snapshot = snapshot;
             }
         } else {
             // Create new child
-            const newNode = this.createNode(move, this.currentNode, snapshot);
-            this.currentNode.children.push(newNode);
+            const newNode = this.createNode(move, this._currentNode, snapshot);
+            this._currentNode.children.push(newNode);
             
             // IMPORTANT: Only set selectedChildIndex if this is the FIRST child.
             // Otherwise, keep the existing main line selection and this becomes a variation.
-            if (this.currentNode.children.length === 1) {
-                this.currentNode.selectedChildIndex = 0;
+            if (this._currentNode.children.length === 1) {
+                this._currentNode.selectedChildIndex = 0;
             }
             
-            this.currentNode = newNode;
+            this._currentNode = newNode;
         }
     }
 
-    public findNodeById(id: string, startNode: MoveNode = this.root): MoveNode | null {
+    public findNodeById(id: string, startNode: MoveNode = this._root): MoveNode | null {
         if (startNode.id === id) return startNode;
         for (const child of startNode.children) {
             const found = this.findNodeById(id, child);
@@ -101,18 +101,18 @@ export class MoveTree {
     }
 
     public navigateBack(): boolean {
-        if (this.currentNode.parent) {
-            this.currentNode = this.currentNode.parent;
+        if (this._currentNode.parent) {
+            this._currentNode = this._currentNode.parent;
             return true;
         }
         return false;
     }
 
     public navigateForward(): boolean {
-        if (this.currentNode.children.length > 0) {
-            const index = this.currentNode.selectedChildIndex;
-            if (this.currentNode.children[index]) {
-                this.currentNode = this.currentNode.children[index];
+        if (this._currentNode.children.length > 0) {
+            const index = this._currentNode.selectedChildIndex;
+            if (this._currentNode.children[index]) {
+                this._currentNode = this._currentNode.children[index];
                 return true;
             }
         }
@@ -120,11 +120,11 @@ export class MoveTree {
     }
 
     public goToRoot(): void {
-        this.currentNode = this.root;
+        this._currentNode = this._root;
     }
 
     public setCurrentNode(node: MoveNode): void {
-        this.currentNode = node;
+        this._currentNode = node;
     }
 
     /**
@@ -141,12 +141,12 @@ export class MoveTree {
         
         // Index -1 means go to root
         if (index === -1) {
-            this.currentNode = this.root;
+            this._currentNode = this._root;
             return;
         }
         
         // Traverse from root, following selected children
-        let node = this.root;
+        let node = this._root;
         for (let i = 0; i <= index; i++) {
             if (node.children.length === 0) {
                 // No more children, stop at this node
@@ -163,7 +163,7 @@ export class MoveTree {
             }
         }
         
-        this.currentNode = node;
+        this._currentNode = node;
     }
 
     /**
@@ -172,8 +172,8 @@ export class MoveTree {
      */
     public getHistoryLine(): MoveRecord[] {
         const history: MoveRecord[] = [];
-        let node: MoveNode | null = this.currentNode;
-        while (node && node !== this.root) {
+        let node: MoveNode | null = this._currentNode;
+        while (node && node !== this._root) {
             history.unshift(node.move);
             node = node.parent;
         }
@@ -199,12 +199,12 @@ export class MoveTree {
             return newNode;
         };
 
-        const newRoot = cloneSubtree(this.root, null);
-        newTree.root = newRoot;
+        const newRoot = cloneSubtree(this._root, null);
+        newTree._root = newRoot;
         
         // Replay path from root to currentNode to set the new currentNode
         const pathIndices: number[] = [];
-        let temp: MoveNode | null = this.currentNode;
+        let temp: MoveNode | null = this._currentNode;
         while (temp && temp.parent) {
             const index = temp.parent.children.indexOf(temp);
             pathIndices.unshift(index);
@@ -217,7 +217,7 @@ export class MoveTree {
                 newCurr = newCurr.children[idx];
             }
         }
-        newTree.currentNode = newCurr;
+        newTree._currentNode = newCurr;
 
         return newTree;
     }
