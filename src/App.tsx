@@ -18,6 +18,7 @@ interface GameConfig {
   turnCounter?: number;
   sanctuaries?: import('./Classes/Entities/Sanctuary').Sanctuary[];
   timeControl?: { initial: number, increment: number };
+  analysisEnabled?: boolean;
 }
 
 function App() {
@@ -30,7 +31,7 @@ function App() {
 
   const handleStartGame = (board: Board, pieces: Piece[], timeControl?: { initial: number, increment: number }) => {
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, timeControl });
+    setGameConfig({ board, pieces, layout, timeControl, analysisEnabled: false });
     setView('game');
   };
 
@@ -47,6 +48,11 @@ function App() {
   };
   
   const [gameKey, setGameKey] = useState(0);
+
+  const handleEnableAnalysis = () => {
+    setGameConfig(prev => ({ ...prev, analysisEnabled: true }));
+    setGameKey(prev => prev + 1); // Force remount with new setting
+  };
 
   return (
     <div className="App">
@@ -74,6 +80,8 @@ function App() {
               initialTurnCounter={gameConfig.turnCounter}
               initialSanctuaries={gameConfig.sanctuaries}
               timeControl={gameConfig.timeControl}
+              analysisEnabled={gameConfig.analysisEnabled}
+              onEnableAnalysis={handleEnableAnalysis}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}

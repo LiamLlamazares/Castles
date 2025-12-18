@@ -47,7 +47,8 @@ export const useGameLogic = (
   initialHistory: HistoryEntry[] = [],
   initialMoveHistory: MoveRecord[] = [],
   initialTurnCounter: number = 0,
-  initialSanctuaries?: Sanctuary[] // Optional, uses default generator if missing
+  initialSanctuaries?: Sanctuary[], // Optional, uses default generator if missing
+  allowVariantCreation: boolean = false // When false, blocks moves during analysis mode (Play Mode)
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -260,6 +261,11 @@ export const useGameLogic = (
   }, [pieces, castles, state.sanctuaries, turnCounter, moveHistory]);
 
   const handlePass = useCallback(() => {
+    // Block pass in analysis mode when variant creation is disabled (Play Mode)
+    if (isAnalysisMode && !allowVariantCreation) {
+      return;
+    }
+
     const effectiveState = getEffectiveState();
 
     const snapshot = createHistorySnapshot(effectiveState);
@@ -327,6 +333,12 @@ export const useGameLogic = (
   }, [gameEngine, movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
 
   const handleHexClick = useCallback((hex: Hex) => {
+    // Block moves in analysis mode when variant creation is disabled (Play Mode)
+    if (isAnalysisMode && !allowVariantCreation) {
+      setState(prev => ({ ...prev, movingPiece: null }));
+      return;
+    }
+
     // Get effective state (handles analysis mode merging)
     const effectiveState = getEffectiveState();
 
@@ -482,6 +494,11 @@ export const useGameLogic = (
 
   // Pledge Action
   const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
+    // Block pledge in analysis mode when variant creation is disabled (Play Mode)
+    if (isAnalysisMode && !allowVariantCreation) {
+      return;
+    }
+
     const effectiveState = getEffectiveState();
 
     const snapshot = createHistorySnapshot(effectiveState);
@@ -546,6 +563,11 @@ export const useGameLogic = (
 
   // Ability Usage
   const triggerAbility = useCallback((sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
+      // Block abilities in analysis mode when variant creation is disabled (Play Mode)
+      if (isAnalysisMode && !allowVariantCreation) {
+        return;
+      }
+
       const effectiveState = getEffectiveState();
       const snapshot = createHistorySnapshot(effectiveState);
       

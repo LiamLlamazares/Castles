@@ -112,8 +112,6 @@ export class Board {
     this.whiteCastleHexes = this.castleHexes.filter((hex) => this.isWhiteCastle(hex));
     this.blackCastleHexes = this.castleHexes.filter((hex) => this.isBlackCastle(hex));
     
-    // High ground still based on default corners? Or relative to castles? 
-    // Keeping default high ground for now.
     this.highGroundHexes = this.hexes.filter((hex) => this.isDefaultCastleLocation(hex, this.NSquares - 2));
 
     // Precompute Sets for O(1) lookups

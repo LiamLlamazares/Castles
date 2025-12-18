@@ -10,6 +10,8 @@ interface HamburgerMenuProps {
   onFlipBoard: () => void;
   onToggleCoordinates: () => void;
   onShowRules: () => void;
+  onEnableAnalysis?: () => void;
+  isAnalysisEnabled?: boolean;
 }
 
 const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
@@ -18,6 +20,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onFlipBoard,
   onToggleCoordinates,
   onShowRules,
+  onEnableAnalysis,
+  isAnalysisEnabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -122,6 +126,19 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             <span className="menu-icon">📖</span>
             Rules
           </button>
+          
+          {onEnableAnalysis && !isAnalysisEnabled && (
+            <>
+              <div className="menu-divider" />
+              <button 
+                className="menu-item" 
+                onClick={() => handleMenuItemClick(onEnableAnalysis)}
+              >
+                <span className="menu-icon">🔍</span>
+                Analysis Board
+              </button>
+            </>
+          )}
         </div>
       </div>
 
