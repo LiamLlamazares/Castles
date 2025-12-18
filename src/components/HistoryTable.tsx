@@ -40,19 +40,24 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
             <span 
                 key={node.id}
                 onClick={() => onJumpToNode?.(node.id)}
-                className="history-move"
+                className={`history-move ${isSelected ? 'selected' : ''}`}
                 style={{
                     cursor: "pointer",
-                    padding: "2px 4px",
-                    borderRadius: "3px",
-                    background: isSelected ? "rgba(255, 255, 255, 0.2)" : "transparent",
-                    color: isSelected ? "#fff" : node.move.color === 'w' ? "#ccc" : "#999",
-                    fontWeight: isSelected ? "bold" : "normal",
-                    display: "inline-block",
-                    marginRight: "4px"
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    background: isSelected ? "#fff" : "rgba(255, 255, 255, 0.9)",
+                    color: "#000",
+                    fontWeight: isSelected ? "800" : "500",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    marginRight: "6px",
+                    marginBottom: "6px",
+                    boxShadow: isSelected ? "0 0 0 2px #4a90e2, 0 4px 6px rgba(0,0,0,0.3)" : "0 2px 4px rgba(0,0,0,0.2)",
+                    fontSize: "0.8rem",
+                    transition: "all 0.2s ease"
                 }}
             >
-                {shouldShowNumber && <span style={{ opacity: 0.5, marginRight: "4px" }}>{node.move.turnNumber}.</span>}
+                {shouldShowNumber && <span style={{ opacity: 0.6, marginRight: "4px", fontWeight: "bold" }}>{node.move.turnNumber}.</span>}
                 {node.move.notation}
             </span>
         );
@@ -66,16 +71,17 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
                         key={`${vNode.id}-var-${vIdx}`}
                         className="variation-block"
                         style={{
-                            fontSize: "0.9em",
-                            color: "#888",
-                            background: "rgba(0,0,0,0.15)",
-                            padding: "4px 8px",
-                            margin: "4px 0",
-                            borderRadius: "4px",
-                            borderLeft: "2px solid rgba(255,255,255,0.1)"
+                            fontSize: "0.85em",
+                            color: "#ccc",
+                            background: "rgba(255,255,255,0.05)",
+                            padding: "6px 10px",
+                            margin: "8px 0",
+                            borderRadius: "6px",
+                            borderLeft: "3px solid #4a90e2",
+                            width: "100%"
                         }}
                     >
-                        <span style={{ fontStyle: "italic", marginRight: "4px" }}>(variation) </span>
+                        <span style={{ fontStyle: "italic", marginRight: "6px", opacity: 0.7, fontSize: "0.8em" }}>VARIANT: </span>
                         {renderMoveChain(vNode)}
                     </div>
                 );
@@ -131,23 +137,28 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
       
       <style>{`
         .history-move:hover {
-            background: rgba(255,255,255,0.1) !important;
-            color: #fff !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4) !important;
+            background: #fff !important;
+            filter: brightness(1.1);
+        }
+        .history-move.selected {
+            border: 1px solid #4a90e2;
+            z-index: 2;
         }
         .variation-block {
-            width: 100%;
-            margin: 6px 0;
             position: relative;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
         }
         .variation-block::before {
             content: '';
             position: absolute;
-            left: -8px;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 2px;
+            left: 0;
+            top: 4px;
+            bottom: 4px;
+            width: 3px;
+            background: #4a90e2;
+            border-radius: 4px;
         }
       `}</style>
     </div>
