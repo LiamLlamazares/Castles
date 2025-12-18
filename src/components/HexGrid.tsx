@@ -4,7 +4,6 @@ import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { Board } from "../Classes/Core/Board";
 import { LayoutService } from "../Classes/Systems/LayoutService";
-import { LEGAL_MOVE_DOT_SCALE_FACTOR } from "../Constants";
 import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from "../utils/HexRenderUtils";
 
 interface HexGridProps {
@@ -38,29 +37,6 @@ const getHexCenter = (hex: Hex, isBoardRotated: boolean, layout: LayoutService):
   return layout.layout.hexToPixelReflected(hex, isBoardRotated);
 };
 
-/** Render a circle indicator (for legal moves/attacks) */
-const renderCircle = (
-  hex: Hex,
-  className: string,
-  isBoardRotated: boolean,
-  onHexClick: (hex: Hex) => void,
-  layout: LayoutService
-): JSX.Element => {
-  const center = getHexCenter(hex, isBoardRotated, layout);
-  // Dynamic radius based on hex size
-  const radius = layout.size_hexes * LEGAL_MOVE_DOT_SCALE_FACTOR;
-  
-  return (
-    <circle
-      key={hex.getKey()}
-      cx={center.x}
-      cy={center.y}
-      r={radius}
-      className={className}
-      onClick={() => onHexClick(hex)}
-    />
-  );
-};
 
 const HexGrid = React.memo(({
   hexagons,
@@ -118,16 +94,7 @@ const HexGrid = React.memo(({
           </g>
         );
       })}
-      {/* Render dots for legal moves and attacks */}
-      {hexagons.map((hex: Hex) => {
-        const key = hex.getKey();
-        if (legalMoveSet.has(key)) {
-          return renderCircle(hex, "legalMoveDot", isBoardRotated, onHexClick, layout);
-        } else if (legalAttackSet.has(key)) {
-          return renderCircle(hex, "legalAttackDot", isBoardRotated, onHexClick, layout);
-        }
-        return null;
-      })}
+
     </>
   );
 });

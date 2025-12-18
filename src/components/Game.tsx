@@ -19,6 +19,7 @@ import { useGameLogic } from "../hooks/useGameLogic";
 import { useInputHandler } from "../hooks/useInputHandler";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
+import LegalMoveOverlay from "./LegalMoveOverlay";
 import ControlPanel from "./ControlPanel";
 import HamburgerMenu from "./HamburgerMenu";
 import RulesModal from "./RulesModal";
@@ -46,6 +47,7 @@ interface GameBoardProps {
   onSetup?: () => void;
   onRestart?: () => void;
   onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
+  timeControl?: { initial: number, increment: number };
 }
 
 /**
@@ -63,7 +65,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onResign = () => {},
   onSetup = () => {},
   onRestart = () => {},
-  onLoadGame = () => {}
+  onLoadGame = () => {},
+  timeControl
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
@@ -280,6 +283,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onJumpToNode={jumpToNode}
         hasGameStarted={hasGameStarted}
         winner={winner}
+        timeControl={timeControl}
       />
       
       <svg className="board" height="100%" width="100%">
@@ -319,6 +323,15 @@ const GameBoard: React.FC<GameBoardProps> = ({
           isBoardRotated={isBoardRotated}
           onPieceClick={handlePieceClick}
           resizeVersion={resizeVersion}
+          layout={initialLayout}
+        />
+        {/* Legal move/attack dots rendered AFTER pieces so they appear on top */}
+        <LegalMoveOverlay
+          hexagons={hexagons}
+          legalMoveSet={legalMoveSet}
+          legalAttackSet={legalAttackSet}
+          isBoardRotated={isBoardRotated}
+          onHexClick={onBoardHexClick}
           layout={initialLayout}
         />
       </svg>

@@ -80,7 +80,13 @@ export class MoveTree {
             // Create new child
             const newNode = this.createNode(move, this.currentNode, snapshot);
             this.currentNode.children.push(newNode);
-            this.currentNode.selectedChildIndex = this.currentNode.children.length - 1; // Select the new move
+            
+            // IMPORTANT: Only set selectedChildIndex if this is the FIRST child.
+            // Otherwise, keep the existing main line selection and this becomes a variation.
+            if (this.currentNode.children.length === 1) {
+                this.currentNode.selectedChildIndex = 0;
+            }
+            
             this.currentNode = newNode;
         }
     }
@@ -122,54 +128,42 @@ export class MoveTree {
     }
 
     /**
-     * Navigates to a specific move index in the current line.
+     * Navigates to a specific move index in the current SELECTED line.
      * Index 0 = First Move.
      * Index -1 = Root.
+     * 
+     * IMPORTANT: This follows the selectedChildIndex at each level from root,
+     * NOT the path from the current node. This ensures correct positioning
+     * when stepping back in analysis mode before making a new move.
      */
     public navigateToIndex(index: number): void {
-        const history = this.getHistoryLine();
-        // history[0] is first move.
-        // If index is 0, we want node for history[0].
-        
-        // Optimization: if we just want to sync with linear list
         if (index < -1) return;
-        if (index >= history.length) index = history.length - 1;
         
-        // We can't easily jump random access unless we have the node references or re-traverse.
-        // Since we have the history line nodes? No getHistoryLine returns records.
-        // We need to traverse from root?
-        // Or traverse back/forward from current.
-        
-        // Simple inefficient approach: Go Root, then forward 'index + 1' times?
-        // But forward() is ambiguous if multiple children.
-        // We assume we want the "selected" path if we are just syncing?
-        // BUT, `useAnalysisMode` is linear history of *snapshots*. 
-        // The snapshots correspond to the `moveHistory` list.
-        // So we can assume the `moveTree` current line matches the `history` snapshots.
-        
-        // Better: Find the ancestors of the current node.
-        // The `currentNode` represents the LAST move made (index = length - 1).
-        
-        let path: MoveNode[] = [];
-        let curr: MoveNode | null = this.currentNode;
-        while(curr && curr !== this.root) {
-            path.unshift(curr);
-            curr = curr.parent;
-        }
-        // path is [Move 0, Move 1, ... Move N]
-        
-        // We want to go to index.
+        // Index -1 means go to root
         if (index === -1) {
             this.currentNode = this.root;
             return;
         }
         
-        if (index < path.length) {
-            this.currentNode = path[index];
-        } else {
-            // Warning: index out of bounds of current line
-            console.warn(`MoveTree: Index ${index} out of bounds (length ${path.length})`);
+        // Traverse from root, following selected children
+        let node = this.root;
+        for (let i = 0; i <= index; i++) {
+            if (node.children.length === 0) {
+                // No more children, stop at this node
+                break;
+            }
+            const selectedIdx = node.selectedChildIndex;
+            if (selectedIdx >= 0 && selectedIdx < node.children.length) {
+                node = node.children[selectedIdx];
+            } else if (node.children.length > 0) {
+                // Fallback to first child if selectedChildIndex is invalid
+                node = node.children[0];
+            } else {
+                break;
+            }
         }
+        
+        this.currentNode = node;
     }
 
     /**

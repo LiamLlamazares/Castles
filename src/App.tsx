@@ -17,6 +17,7 @@ interface GameConfig {
   moveHistory?: any[];
   turnCounter?: number;
   sanctuaries?: import('./Classes/Entities/Sanctuary').Sanctuary[];
+  timeControl?: { initial: number, increment: number };
 }
 
 function App() {
@@ -29,7 +30,7 @@ function App() {
 
   const handleStartGame = (board: Board, pieces: Piece[], timeControl?: { initial: number, increment: number }) => {
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout });
+    setGameConfig({ board, pieces, layout, timeControl });
     setView('game');
   };
 
@@ -72,6 +73,7 @@ function App() {
               initialMoveHistory={gameConfig.moveHistory}
               initialTurnCounter={gameConfig.turnCounter}
               initialSanctuaries={gameConfig.sanctuaries}
+              timeControl={gameConfig.timeControl}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}

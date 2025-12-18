@@ -35,13 +35,12 @@ describe("PGNService Variations Export", () => {
         const pgn = PGNService.generatePGN(board, [], [], [], {}, tree);
         
         // 3. Verification
-        // The service renders variations in parentheses.
-        // d4 was main, but e4 was added later to root -> root has [d4, e4]. root.selected=1 (e4).
-        // d4 has children [e5, c5]. d4.selected=1 (c5).
-        // Since e4 is selected at root, main line starts with 1. e4.
-        // d4 is a variation (1. d4).
-        // inside d4 variation, c5 is selected, so d4 c5 is main. e5 is variation (e5).
+        // With the fix: The FIRST move added becomes the main line.
+        // d4 was added first at root -> d4 is main. e4 is a variation.
+        // e5 was added first after d4 -> e5 is main. c5 is a variation.
+        // Note: After a variation, black moves get explicit "1..." numbering (PGN standard)
+        // Expected: 1. d4 (1. e4) 1... e5 (1... c5) 2. c4
         
-        expect(pgn).toContain("1. e4 (1. d4 (1. e5 2. c4) c5)");
+        expect(pgn).toContain("1. d4 (1. e4) 1... e5 (1... c5) 2. c4");
     });
 });

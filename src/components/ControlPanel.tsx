@@ -20,6 +20,7 @@ interface ControlPanelProps {
   onJumpToNode?: (nodeId: string) => void;
   hasGameStarted: boolean;
   winner: Color | null;
+  timeControl?: { initial: number, increment: number };
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -33,6 +34,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onJumpToNode,
   hasGameStarted,
   winner,
+  timeControl,
 }) => {
   // New Game should only be enabled before game starts OR after someone wins
   const isNewGameDisabled = hasGameStarted && !winner;
@@ -45,7 +47,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           <TurnBanner color={currentPlayer} phase={turnPhase} />
         )}
         <ChessClock
-          initialTime={STARTING_TIME}
+          initialTime={(timeControl?.initial ?? 20) * 60}
+          increment={timeControl?.increment ?? 0}
           isActive={hasGameStarted && currentPlayer === "b" && !winner}
           player="b"
         />
@@ -64,7 +67,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       {/* White Player Section (Bottom) */}
       <div className="player-section white">
         <ChessClock
-          initialTime={STARTING_TIME}
+          initialTime={(timeControl?.initial ?? 20) * 60}
+          increment={timeControl?.increment ?? 0}
           isActive={hasGameStarted && currentPlayer === "w" && !winner}
           player="w"
         />

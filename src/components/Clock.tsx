@@ -3,16 +3,25 @@ import { Color } from "../Constants";
 
 interface ChessClockProps {
   initialTime: number; // in seconds
+  increment?: number; // in seconds
   isActive: boolean;
   player: Color;
 }
 
 const ChessClock: React.FC<ChessClockProps> = ({
   initialTime,
+  increment = 0,
   isActive,
   player,
 }) => {
   const [timeLeft, setTimeLeft] = useState(initialTime);
+
+  // Handle increment when turn ends
+  useEffect(() => {
+    if (!isActive) {
+        setTimeLeft(prev => prev + increment);
+    }
+  }, [isActive, increment]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;

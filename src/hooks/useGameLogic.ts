@@ -264,12 +264,21 @@ export const useGameLogic = (
 
     const snapshot = createHistorySnapshot(effectiveState);
     
-    if (isAnalysisMode) {
-         state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
+    let treeForMutation = state.moveTree;
+    if (isAnalysisMode && treeForMutation) {
+         treeForMutation = treeForMutation.clone();
+         const stepsBack = state.history.length - state.viewMoveIndex!;
+         for (let i = 0; i < stepsBack; i++) {
+             treeForMutation.navigateBack();
+         }
     }
 
     setState(prev => {
-      const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
+      const stateWithHistory = { 
+          ...effectiveState, 
+          history: [...effectiveState.history, snapshot],
+          moveTree: treeForMutation
+      };
       const newState = gameEngine.passTurn(stateWithHistory);
       return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
     });
@@ -362,14 +371,21 @@ export const useGameLogic = (
         
         const snapshot = createHistorySnapshot(effectiveState);
         
+        let treeForMutation = state.moveTree;
+        if (isAnalysisMode && treeForMutation) {
+            treeForMutation = treeForMutation.clone();
+            // Navigate back from current node by the number of steps the user has gone back
+            const stepsBack = state.history.length - state.viewMoveIndex!;
+            for (let i = 0; i < stepsBack; i++) {
+                treeForMutation.navigateBack();
+            }
+        }
+
         const stateWithHistory = {
             ...effectiveState,
-            history: [...effectiveState.history, snapshot]
+            history: [...effectiveState.history, snapshot],
+            moveTree: treeForMutation
         };
-
-        if (isAnalysisMode) {
-             state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
-        }
 
         setState(prev => {
           const newState = gameEngine.applyMove(stateWithHistory, movingPiece!, hex);
@@ -385,12 +401,22 @@ export const useGameLogic = (
       if (isLegalAttack(hex)) {
         
         const snapshot = createHistorySnapshot(effectiveState);
-        const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
-
-        if (isAnalysisMode) {
-             state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
-        }
         
+        let treeForMutation = state.moveTree;
+        if (isAnalysisMode && treeForMutation) {
+            treeForMutation = treeForMutation.clone();
+            const stepsBack = state.history.length - state.viewMoveIndex!;
+            for (let i = 0; i < stepsBack; i++) {
+                treeForMutation.navigateBack();
+            }
+        }
+
+        const stateWithHistory = { 
+            ...effectiveState, 
+            history: [...effectiveState.history, snapshot],
+            moveTree: treeForMutation
+        };
+
         const targetPiece = effectiveState.pieces.find(p => p.hex.equals(hex));
         
         setState(prev => {
@@ -413,11 +439,21 @@ export const useGameLogic = (
       if (castle) {
         // Recruitment logic similar to above
         const snapshot = createHistorySnapshot(effectiveState);
-        const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
-
-        if (isAnalysisMode) {
-             state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
+        
+        let treeForMutation = state.moveTree;
+        if (isAnalysisMode && treeForMutation) {
+            treeForMutation = treeForMutation.clone();
+            const stepsBack = state.history.length - state.viewMoveIndex!;
+            for (let i = 0; i < stepsBack; i++) {
+                treeForMutation.navigateBack();
+            }
         }
+
+        const stateWithHistory = { 
+            ...effectiveState, 
+            history: [...effectiveState.history, snapshot],
+            moveTree: treeForMutation
+        };
 
         setState(prev => {
           const newState = gameEngine.recruitPiece(stateWithHistory, castle, hex);
@@ -450,13 +486,22 @@ export const useGameLogic = (
 
     const snapshot = createHistorySnapshot(effectiveState);
 
-    if (isAnalysisMode) {
-         state.moveTree?.navigateToIndex(state.viewMoveIndex! - 1);
+    let treeForMutation = state.moveTree;
+    if (isAnalysisMode && treeForMutation) {
+         treeForMutation = treeForMutation.clone();
+         const stepsBack = state.history.length - state.viewMoveIndex!;
+         for (let i = 0; i < stepsBack; i++) {
+             treeForMutation.navigateBack();
+         }
     }
 
     setState(prevState => {
        try {
-           const stateWithHistory = { ...effectiveState, history: [...effectiveState.history, snapshot] };
+           const stateWithHistory = { 
+               ...effectiveState, 
+               history: [...effectiveState.history, snapshot],
+               moveTree: treeForMutation
+           };
 
            const sanctuary = stateWithHistory.sanctuaries?.find(s => s.hex.equals(sanctuaryHex));
            if (!sanctuary) throw new Error("Sanctuary not found");
@@ -470,10 +515,14 @@ export const useGameLogic = (
            
            const moveRecord = { notation, turnNumber, color: currentPlayer, phase: turnPhase };
            
-           let newTree = state.moveTree;
-           if (newTree) {
-               newTree = newTree.clone();
-               newTree.addMove(moveRecord);
+           let finalTree = treeForMutation;
+           if (finalTree) {
+               // If we already cloned it above due to analysis mode, we mutate the clone.
+               // If not, we clone now.
+               if (!isAnalysisMode) {
+                   finalTree = finalTree.clone();
+               }
+               finalTree.addMove(moveRecord);
            }
            
            return { 
@@ -482,7 +531,7 @@ export const useGameLogic = (
                moveHistory: [...stateWithHistory.moveHistory, moveRecord],
                history: stateWithHistory.history,
                viewMoveIndex: null,
-               moveTree: newTree
+               moveTree: finalTree
            };
        } catch (e) {
            console.error(e);
@@ -497,17 +546,33 @@ export const useGameLogic = (
 
   // Ability Usage
   const triggerAbility = useCallback((sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
+      const effectiveState = getEffectiveState();
+      const snapshot = createHistorySnapshot(effectiveState);
+      
+      let treeForMutation = state.moveTree;
+      if (isAnalysisMode && treeForMutation) {
+          treeForMutation = treeForMutation.clone();
+          const stepsBack = state.history.length - state.viewMoveIndex!;
+          for (let i = 0; i < stepsBack; i++) {
+              treeForMutation.navigateBack();
+          }
+      }
+
       setState(prevState => {
         try {
-            saveHistory();
-            const newState = gameEngine.activateAbility(prevState as unknown as GameState, sourceHex, targetHex, ability);
-            return { ...prevState, ...newState };
+            const stateWithHistory = { 
+                ...effectiveState, 
+                history: [...effectiveState.history, snapshot],
+                moveTree: treeForMutation
+            };
+            const newState = gameEngine.activateAbility(stateWithHistory, sourceHex, targetHex, ability);
+            return { ...prevState, ...newState, viewMoveIndex: null, history: newState.history };
         } catch (e) {
             console.error(e);
             return prevState;
         }
       });
-  }, [gameEngine, saveHistory]);
+  }, [gameEngine, isAnalysisMode, state, getEffectiveState]);
 
   return {
     // State

@@ -7,15 +7,17 @@ interface PlayerHUDProps {
   currentPlayer: Color;
   turnPhase: TurnPhase;
   hasGameStarted: boolean;
+  timeControl?: { initial: number, increment: number };
 }
 
-const PlayerHUD: React.FC<PlayerHUDProps> = ({ currentPlayer, turnPhase, hasGameStarted }) => {
+const PlayerHUD: React.FC<PlayerHUDProps> = ({ currentPlayer, turnPhase, hasGameStarted, timeControl }) => {
   return (
     <div className="player-hud">
       {/* Black Player Status */}
       <div className="player-status">
         <ChessClock
-          initialTime={STARTING_TIME}
+          initialTime={(timeControl?.initial ?? 20) * 60}
+          increment={timeControl?.increment ?? 0}
           isActive={hasGameStarted && currentPlayer === "b"}
           player="b"
         />
@@ -27,7 +29,8 @@ const PlayerHUD: React.FC<PlayerHUDProps> = ({ currentPlayer, turnPhase, hasGame
       {/* White Player Status */}
       <div className="player-status">
         <ChessClock
-          initialTime={STARTING_TIME}
+          initialTime={(timeControl?.initial ?? 20) * 60}
+          increment={timeControl?.increment ?? 0}
           isActive={hasGameStarted && currentPlayer === "w"}
           player="w"
         />

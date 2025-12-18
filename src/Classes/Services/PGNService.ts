@@ -108,7 +108,7 @@ export class PGNService {
     return pgn.trim();
   }
 
-  private static renderRecursiveHistory(node: MoveNode, turnNumber: number, color: Color): string {
+  private static renderRecursiveHistory(node: MoveNode, turnNumber: number, color: Color, forceTurnNumber: boolean = false): string {
     if (node.children.length === 0) return "";
 
     let pgn = "";
@@ -119,15 +119,19 @@ export class PGNService {
     if (color === 'w') {
         pgn += `${turnNumber}. ${mainChild.move.notation} `;
     } else {
-        // For black's move, we usually just put the notation.
-        // If it's the first move of a variation, we might need 1...
-        pgn += `${mainChild.move.notation} `;
+        if (forceTurnNumber) {
+            pgn += `${turnNumber}... ${mainChild.move.notation} `;
+        } else {
+            pgn += `${mainChild.move.notation} `;
+        }
     }
 
     // 2. Render variation branches
+    let hadVariations = false;
     for (let i = 0; i < node.children.length; i++) {
         if (i === selectedIndex) continue;
         const variation = node.children[i];
+        hadVariations = true;
         
         // Start variation with (
         pgn += `(${this.renderVariationLine(variation, turnNumber, color)}) `;
@@ -136,7 +140,9 @@ export class PGNService {
     // 3. Continue main line
     const nextColor: Color = color === 'w' ? 'b' : 'w';
     const nextTurn = color === 'b' ? turnNumber + 1 : turnNumber;
-    pgn += this.renderRecursiveHistory(mainChild, nextTurn, nextColor);
+    
+    // If we had variations and the next move is black, we must force the turn number
+    pgn += this.renderRecursiveHistory(mainChild, nextTurn, nextColor, hadVariations && nextColor === 'b');
 
     return pgn;
   }
@@ -151,19 +157,10 @@ export class PGNService {
           pgn += `${turnNumber}... ${node.move.notation} `;
       }
 
-      // Recursive part for variations of THIS variation
-      for (let i = 0; i < node.children.length; i++) {
-          if (i === node.selectedChildIndex) continue;
-          pgn += `(${this.renderVariationLine(node.children[i], turnNumber, color)}) `;
-      }
-
-      // Continue this variation line
-      if (node.children.length > 0) {
-          const mainNext = node.children[node.selectedChildIndex] || node.children[0];
-          const nextColor: Color = color === 'w' ? 'b' : 'w';
-          const nextTurn = color === 'b' ? turnNumber + 1 : turnNumber;
-          pgn += this.renderRecursiveHistory(mainNext, nextTurn, nextColor);
-      }
+      // Continue this variation line by recursing on the variation node itself
+      const nextColor: Color = color === 'w' ? 'b' : 'w';
+      const nextTurn = color === 'b' ? turnNumber + 1 : turnNumber;
+      pgn += this.renderRecursiveHistory(node, nextTurn, nextColor, false);
 
       return pgn.trim();
   }
