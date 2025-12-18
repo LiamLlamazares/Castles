@@ -38,6 +38,7 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
   state: T,
   setState: React.Dispatch<React.SetStateAction<T>>
 ): AnalysisModeResult => {
+  // In analysis mode iff viewMoveIndex is not null
   const isAnalysisMode = state.viewMoveIndex !== null;
   const analysisState = isAnalysisMode ? state.history[state.viewMoveIndex!] : null;
 
@@ -50,9 +51,10 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
     });
   }, [setState]);
 
+  // Defines function used on left/ right arrow that returns state with updated viewMoveIndex
   const stepHistory = useCallback((direction: -1 | 1) => {
     setState(prev => {
-      // If live, "left" goes to last history item.
+      // If at last move (viewMoveIndex is null), "left" reduces viewMove index by 1
       if (prev.viewMoveIndex === null) {
         if (direction === -1 && prev.history.length > 0) {
              const newIndex = prev.history.length - 1;
@@ -61,14 +63,17 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
         return prev;
       }
 
+      // Otherwise, viewMoveIndex is updated by +1 or -1
       const newIndex = prev.viewMoveIndex + direction;
-      // If stepping past end, go back to live
+      // If stepping past last move, go back to live
       if (newIndex >= prev.history.length) {
         return { ...prev, viewMoveIndex: null };
       }
+      // If stepping back from first move, stay at first move
       if (newIndex < 0) {
         return { ...prev, viewMoveIndex: 0 };
       }
+      // Otherwise, return state with updated viewMoveIndex
       return { ...prev, viewMoveIndex: newIndex };
     });
   }, [setState]);
