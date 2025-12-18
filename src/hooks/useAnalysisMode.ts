@@ -44,7 +44,7 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
   const jumpToMove = useCallback((moveIndex: number | null) => {
     setState(prev => {
       if (moveIndex === null) return { ...prev, viewMoveIndex: null };
-      if (moveIndex < 0) return { ...prev, viewMoveIndex: 0 };
+      if (moveIndex < -1) return { ...prev, viewMoveIndex: -1 };
       if (moveIndex >= prev.history.length) return { ...prev, viewMoveIndex: prev.history.length - 1 };
       return { ...prev, viewMoveIndex: moveIndex };
     });
@@ -54,8 +54,9 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
     setState(prev => {
       // If live, "left" goes to last history item.
       if (prev.viewMoveIndex === null) {
-        if (direction === -1 && prev.history.length > 0) {
-          return { ...prev, viewMoveIndex: prev.history.length - 1 };
+        if (direction === -1) {
+             const newIndex = prev.history.length - 2;
+             return { ...prev, viewMoveIndex: newIndex < -1 ? -1 : newIndex };
         }
         return prev;
       }
@@ -65,8 +66,8 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
       if (newIndex >= prev.history.length) {
         return { ...prev, viewMoveIndex: null };
       }
-      if (newIndex < 0) {
-        return { ...prev, viewMoveIndex: 0 };
+      if (newIndex < -1) {
+        return { ...prev, viewMoveIndex: -1 };
       }
       return { ...prev, viewMoveIndex: newIndex };
     });

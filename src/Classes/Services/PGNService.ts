@@ -336,6 +336,7 @@ export class PGNService {
       for (const token of moveList) {
           try {
               if (token === "Pass") {
+                  currentState = PGNService.saveSnapshot(currentState);
                   currentState = engine.passTurn(currentState);
                   continue;
               }
@@ -348,6 +349,8 @@ export class PGNService {
 
                   const attacker = currentState.pieces.find(p => p.hex.equals(startHex));
                   if (!attacker) throw new Error(`Attacker not found at ${parts[0]}`);
+
+                  currentState = PGNService.saveSnapshot(currentState);
 
                   const targetPiece = currentState.pieces.find(p => p.hex.equals(targetHex));
                   if (targetPiece) {
@@ -389,6 +392,7 @@ export class PGNService {
                        throw new Error(`No castle found to recruit at ${parts[0]}`);
                    }
 
+                   currentState = PGNService.saveSnapshot(currentState);
                    currentState = engine.recruitPiece(currentState, castle, spawnHex);
                    
                    const recruitedPieceIndex = currentState.pieces.length - 1;
@@ -431,6 +435,7 @@ export class PGNService {
                    const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
                    const newPieces = [...currentState.pieces, newPiece];
                    
+                   currentState = PGNService.saveSnapshot(currentState);
                    currentState = {
                        ...currentState,
                        pieces: newPieces,
@@ -450,6 +455,7 @@ export class PGNService {
                    const mover = currentState.pieces.find(p => p.hex.equals(startHex));
                    if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
 
+                   currentState = PGNService.saveSnapshot(currentState);
                    currentState = engine.applyMove(currentState, mover, endHex);
                    continue;
               }
@@ -460,5 +466,25 @@ export class PGNService {
           }
       }
       return currentState;
+  }
+
+  /**
+   * Saves a snapshot of the current state to the history array.
+   * DOES NOT update moveHistory or add to MoveTree (that is handled by StateMutator or the caller).
+   * This is purely for timeline navigation.
+   */
+  private static saveSnapshot(state: GameState): GameState {
+      const historyEntry = {
+          pieces: state.pieces.map(p => p.clone()),
+          castles: state.castles.map(c => c.clone()),
+          sanctuaries: state.sanctuaries.map(s => s.clone()),
+          turnCounter: state.turnCounter,
+          moveNotation: [...state.moveHistory], // Snapshot the history at this point
+      };
+      
+      return {
+          ...state,
+          history: [...state.history, historyEntry]
+      };
   }
 }

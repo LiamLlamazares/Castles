@@ -27,15 +27,22 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
   // Note: history[N] is the snapshot AFTER move N+1 (0-indexed)
   // So viewMoveIndex 0 = state after move 1, highlight move 1
   // viewMoveIndex 2 = state after move 3, highlight move 3
-  let highlightedId = moveTree.current.id;
-  if (viewMoveIndex !== null && viewMoveIndex !== undefined && viewMoveIndex >= 0) {
-    // Walk from root to find the node: traverse viewMoveIndex+1 steps to get move at that index
-    let currentNode = moveTree.rootNode;
-    const stepsToTake = viewMoveIndex + 1; // history index 0 = 1 step to first move node
-    for (let i = 0; i < stepsToTake && currentNode.children.length > 0; i++) {
-      currentNode = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
-    }
-    highlightedId = currentNode.id;
+  // Determine which node is "current" for highlighting
+  let highlightedId: string | undefined = moveTree.current.id;
+  
+  if (viewMoveIndex !== null && viewMoveIndex !== undefined) {
+      if (viewMoveIndex === -1) {
+          // Start of game: No moves made. Highlight nothing (or root).
+          highlightedId = moveTree.rootNode.id;
+      } else if (viewMoveIndex >= 0) {
+        // Walk from root to find the node
+        let currentNode = moveTree.rootNode;
+        const stepsToTake = viewMoveIndex + 1; 
+        for (let i = 0; i < stepsToTake && currentNode.children.length > 0; i++) {
+          currentNode = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
+        }
+        highlightedId = currentNode.id;
+      }
   }
 
   const renderMoves = (nodes: MoveNode[], depth: number = 0): React.ReactNode => {

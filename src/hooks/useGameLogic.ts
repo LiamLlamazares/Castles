@@ -118,7 +118,24 @@ export const useGameLogic = (
    * When live, returns the current state as-is.
    */
   const getEffectiveState = useCallback((): GameState => {
-    if (isAnalysisMode && analysisState) {
+    if (isAnalysisMode) {
+      // Special case: Index -1 means "Start of Game" (Initial State)
+      if (state.viewMoveIndex === -1 || !analysisState) {
+          return {
+              pieces: initialPieces.map(p => p.clone()),
+              pieceMap: createPieceMap(initialPieces.map(p => p.clone())),
+              castles: initialBoard.castles.map(c => c.clone()) as Castle[],
+              sanctuaries: startingSanctuaries.map(s => s.clone()),
+              turnCounter: initialTurnCounter,
+              movingPiece: null,
+              history: [], // Empty history at start
+              moveHistory: [], // Empty move history at start
+              moveTree: state.moveTree,
+              graveyard: [],
+              phoenixRecords: []
+          } as unknown as GameState;
+      }
+      
       return {
         ...(state as unknown as GameState),
         ...analysisState,
@@ -128,11 +145,26 @@ export const useGameLogic = (
       } as unknown as GameState;
     }
     return state as unknown as GameState;
-  }, [isAnalysisMode, analysisState, state]);
+  }, [isAnalysisMode, analysisState, state, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
 
   // Constructed View State (GameState compatible)
   const viewState = useMemo<GameState>(() => {
-      if (isAnalysisMode && analysisState) {
+      if (isAnalysisMode) {
+          if (state.viewMoveIndex === -1 || !analysisState) {
+              return {
+                  pieces: initialPieces,
+                  pieceMap: createPieceMap(initialPieces),
+                  castles: initialBoard.castles as Castle[],
+                  sanctuaries: startingSanctuaries,
+                  turnCounter: initialTurnCounter,
+                  movingPiece: null,
+                  history: [],
+                  moveHistory: [],
+                  graveyard: [],
+                  phoenixRecords: []
+              };
+          }
+
           return {
               pieces: analysisState.pieces,
               pieceMap: createPieceMap(analysisState.pieces),
@@ -147,7 +179,7 @@ export const useGameLogic = (
           };
       }
       return state as unknown as GameState;
-  }, [state, isAnalysisMode, analysisState]);
+  }, [state, isAnalysisMode, analysisState, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
 
   // Derived state to use for rendering
   const pieces = viewState.pieces;
@@ -159,7 +191,29 @@ export const useGameLogic = (
    */
   const jumpToNode = useCallback((nodeId: string) => {
       const node = state.moveTree?.findNodeById(nodeId);
-      if (!node || !node.snapshot) return;
+      if (!node) return;
+
+      // Handle Root Node (No Move, Start of Game)
+      if (node.id === state.moveTree?.rootNode.id) {
+          const newTree = state.moveTree!.clone();
+          newTree.goToRoot();
+          
+          setState(prev => ({
+              ...prev,
+              pieces: initialPieces.map(p => p.clone()),
+              castles: initialBoard.castles.map(c => c.clone()) as Castle[],
+              sanctuaries: startingSanctuaries.map(s => s.clone()),
+              turnCounter: initialTurnCounter,
+              history: [],
+              viewMoveIndex: -1, // Start of game
+              moveHistory: [],
+              movingPiece: null,
+              moveTree: newTree
+          }));
+          return;
+      }
+
+      if (!node.snapshot) return;
 
       // Reconstruct the history line for this node
       const path: HistoryEntry[] = [];
@@ -185,12 +239,12 @@ export const useGameLogic = (
           sanctuaries: node.snapshot!.sanctuaries.map(s => s.clone()),
           turnCounter: node.snapshot!.turnCounter,
           history: path,
-          viewMoveIndex: path.length - 1,
+          viewMoveIndex: path.length - 1, // Points to last valid move
           moveHistory: node.snapshot!.moveNotation,
           movingPiece: null,
           moveTree: newTree
       }));
-  }, [state.moveTree, setState]);
+  }, [state.moveTree, setState, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
 
   // =========== COMPUTED VALUES ===========
   const turnPhase = useMemo<TurnPhase>(
