@@ -65,13 +65,10 @@ export class StateMutator {
    * Updates the MoveTree with a new move and a snapshot of the resulting state.
    * Returns a NEW MoveTree instance (cloned).
    */
-  private static recordMoveInTree(state: GameState, record: MoveRecord): MoveTree | undefined {
-      if (state.moveTree) {
-          const newTree = state.moveTree.clone();
-          newTree.addMove(record, createHistorySnapshot(state));
-          return newTree;
-      }
-      return undefined;
+  private static recordMoveInTree(state: GameState, record: MoveRecord): MoveTree {
+      const newTree = state.moveTree.clone();
+      newTree.addMove(record, createHistorySnapshot(state));
+      return newTree;
   }
 
   // ================= PUBLIC MUTATIONS =================
