@@ -2,12 +2,12 @@
 
 ## React
 ### Components (the function)
-Must use Upper case and inside `</>` like `<Hexagon />`
-Must be imported from another file
+- Must use Upper case and inside `</>` like `<Hexagon />`
+- Can be imported from another file
 ```typescript
 import { Hexagon } from "./Hexagon";
 ```
-Must be returned from a function
+Must be inside `<>...</>` (otherwise won't work with hooks and re-rendering)
 ```typescript
 return <Hexagon />;
 ```
