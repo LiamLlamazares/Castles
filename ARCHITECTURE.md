@@ -1,5 +1,45 @@
 # Notes on react ts and hoooks
-Hook: A function that starts with "use". Cannot be in ifs or loops.
+
+## React
+### Components (the function)
+Must use Upper case and inside `</>` like `<Hexagon />`
+Must be imported from another file
+```typescript
+import { Hexagon } from "./Hexagon";
+```
+Must be returned from a function
+```typescript
+return <Hexagon />;
+```
+Becomes a child when used within another component
+```typescript
+const GameBoard: React.FC<GameBoardProps> = (inputs) => {
+    // Calculations 
+    const hexagons = ...;
+    return(
+        <> HexGrid
+        hexagons = hexagons
+        ....
+        </>
+    )
+}
+```
+
+### Props (the input)
+Piece of data passed from parent to child component. Cannot be changed by component.  In example above `hexagons`.
+
+```
+
+### Components
+Function that returns a piece of UI
+```typescript
+const MyComponent = () => {
+    return <div>My Component</div>;
+}
+```
+
+### Hooks (the state and update functions)
+A function that starts with "use". Cannot be in ifs or loops.
 - `useState`: is a hook with output state and function to change it
 ```typescript
 const [thing, f] = useState<typeof_thing>(x);
@@ -27,7 +67,8 @@ export const useAnalysisMode = (state,setState) => {
 const {a,b,c} = useAnalysisMode(state,setState);
 ```
 
-# Typescript
+
+## Typescript
 - `const`: Thing that is not going to change `const x = 5` means x will always be 5
 - `let`: Thing that is going to change
 - <T extends ...>: T is something that include
