@@ -16,27 +16,16 @@ Becomes a child when used within another component
 const GameBoard: React.FC<GameBoardProps> = (inputs) => {
     // Calculations 
     const hexagons = ...;
-    return(
-        <> HexGrid
-        hexagons = hexagons
-        ....
-        </>
+    return (
+        <HexGrid 
+            hexagons={hexagons} 
+        />
     )
 }
 ```
 
 ### Props (the input)
 Piece of data passed from parent to child component. Cannot be changed by component.  In example above `hexagons`.
-
-```
-
-### Components
-Function that returns a piece of UI
-```typescript
-const MyComponent = () => {
-    return <div>My Component</div>;
-}
-```
 
 ### Hooks (the state and update functions)
 A function that starts with "use". Cannot be in ifs or loops.
@@ -67,11 +56,23 @@ export const useAnalysisMode = (state,setState) => {
 const {a,b,c} = useAnalysisMode(state,setState);
 ```
 
+### Re-rendering
+Occur whenever a hook function (e.g. `setState`) is called. Triggers a re-render of the component and all of its children. All of function finished before value is updated and re-rendered.
+```typescript
+[x,f] = useState<typeof_x>(x);
+const g = () => {
+    y = h(x)
+    f(y) // Triggers a re-render and sets x to y
+    console.log(x) // x is still x
+}
+g(); // prints x changes it to y and re-renders
+```
+
 
 ## Typescript
 - `const`: Thing that is not going to change `const x = 5` means x will always be 5
 - `let`: Thing that is going to change
-- <T extends ...>: T is something that include
+- <T extends ...>: T is something that includes ...
 - `interface`: Blueprint for an object, tells JS object must contain certain properties
 ```typescript
 export interface AnalysisModeActions {
