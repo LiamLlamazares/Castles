@@ -52,6 +52,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ onPlay }) => {
             <div className="editor-controls" style={{ padding: '20px', background: '#222', display: 'flex', gap: '20px', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <label style={{ fontSize: '1.2rem' }}>Board Size: {boardRadius}</label>
+                    {/* Slider for board size */}
                     <input 
                         type="range" 
                         min="4" 
