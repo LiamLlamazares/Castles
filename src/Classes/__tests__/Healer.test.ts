@@ -1,85 +1,78 @@
 
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
-import { StateMutator } from "../Systems/StateMutator";
-import { GameState, GameEngine } from "../Core/GameEngine";
-import { Board } from "../Core/Board";
-import { PieceType, TurnPhase } from "../../Constants";
+import { CombatSystem } from "../Systems/CombatSystem";
+import { PieceType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
 
-describe('Healer Restoration', () => {
-    // Mock Board and State
-    let board: Board;
-    let state: GameState;
-
-    beforeEach(() => {
-        board = new Board(8); // Standard 8-size board
-        state = {
-            pieces: [],
-            pieceMap: new PieceMap([]),
-            castles: [],
-            sanctuaries: [],
-            turnCounter: 0, // Player White, Turn 1
-            movingPiece: null,
-            history: [],
-            moveHistory: [],
-            graveyard: [],
-            phoenixRecords: [],
-        };
-    });
-
-    test('Healer heals adjacent friendly piece at end of turn (Pass)', () => {
+describe('Healer Strength Buff', () => {
+    test('Healer provides +1 STR to adjacent friendly piece', () => {
         const healer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
-        const wounded = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman, true, true, 2); // 2 Damage
+        const ally = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman);
         
-        state.pieces = [healer, wounded];
-        state.pieceMap = new PieceMap(state.pieces);
+        const pieces = [healer, ally];
+        const pieceMap = new PieceMap(pieces);
 
-        // Pass Turn
-        const newState = StateMutator.passTurn(state, board);
-        
-        const healedPiece = newState.pieces.find(p => p.hex.equals(wounded.hex));
-        expect(healedPiece?.damage).toBe(1); // 2 - 1 = 1
+        const allyStrength = CombatSystem.getCombatStrength(ally, pieceMap);
+        expect(allyStrength).toBe(2); // Base 1 + 1 from Healer
     });
 
-    test('Healer does not heal self (unless logic changed, but usually neighbors)', () => {
-        // Spec: "Adjacent allies"
-        const healer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer, true, true, 2);
-        
-        state.pieces = [healer];
-        state.pieceMap = new PieceMap(state.pieces);
-
-        const newState = StateMutator.passTurn(state, board);
-        
-        const after = newState.pieces[0];
-        expect(after.damage).toBe(2); // No self-heal
-    });
-
-    test('Healer does not heal enemies', () => {
+    test('Healer does not buff self', () => {
         const healer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
-        const enemy = new Piece(new Hex(1, -1, 0), 'b', PieceType.Swordsman, true, true, 2);
         
-        state.pieces = [healer, enemy];
-        state.pieceMap = new PieceMap(state.pieces);
+        const pieces = [healer];
+        const pieceMap = new PieceMap(pieces);
 
-        const newState = StateMutator.passTurn(state, board);
-        
-        const afterEnemy = newState.pieces.find(p => p.color === 'b');
-        expect(afterEnemy?.damage).toBe(2);
+        const healerStrength = CombatSystem.getCombatStrength(healer, pieceMap);
+        expect(healerStrength).toBe(1); // Base strength only
     });
 
-    test('Multiple healers stack healing', () => {
+    test('Healer does not buff enemies', () => {
+        const healer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
+        const enemy = new Piece(new Hex(1, -1, 0), 'b', PieceType.Swordsman);
+        
+        const pieces = [healer, enemy];
+        const pieceMap = new PieceMap(pieces);
+
+        const enemyStrength = CombatSystem.getCombatStrength(enemy, pieceMap);
+        expect(enemyStrength).toBe(1); // No buff from enemy Healer
+    });
+
+    test('Multiple Healers stack buffs', () => {
         const h1 = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
         const h2 = new Piece(new Hex(2, -2, 0), 'w', PieceType.Healer);
-        // Wounded in between (adjacent to both)
-        const wounded = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman, true, true, 3);
+        const ally = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman);
         
-        state.pieces = [h1, h2, wounded];
-        state.pieceMap = new PieceMap(state.pieces);
+        const pieces = [h1, h2, ally];
+        const pieceMap = new PieceMap(pieces);
 
-        const newState = StateMutator.passTurn(state, board);
+        const allyStrength = CombatSystem.getCombatStrength(ally, pieceMap);
+        expect(allyStrength).toBe(3); // Base 1 + 1 + 1 from two Healers
+    });
+
+    test('Healer buff works with pieces of different strength', () => {
+        const healer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
+        const dragon = new Piece(new Hex(1, -1, 0), 'w', PieceType.Dragon);
         
-        const afterWounded = newState.pieces.find(p => p.type === PieceType.Swordsman);
-        expect(afterWounded?.damage).toBe(1); // 3 - 1 - 1 = 1
+        const pieces = [healer, dragon];
+        const pieceMap = new PieceMap(pieces);
+
+        const dragonStrength = CombatSystem.getCombatStrength(dragon, pieceMap);
+        expect(dragonStrength).toBe(4); // Base 3 + 1 from Healer
+    });
+
+    test('Healer only buffs pieces within radius 1', () => {
+        const healer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
+        const nearAlly = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman);
+        const farAlly = new Piece(new Hex(2, -2, 0), 'w', PieceType.Swordsman);
+        
+        const pieces = [healer, nearAlly, farAlly];
+        const pieceMap = new PieceMap(pieces);
+
+        const nearStrength = CombatSystem.getCombatStrength(nearAlly, pieceMap);
+        const farStrength = CombatSystem.getCombatStrength(farAlly, pieceMap);
+        
+        expect(nearStrength).toBe(2); // Buffed
+        expect(farStrength).toBe(1); // Not buffed (too far)
     });
 });

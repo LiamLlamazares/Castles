@@ -200,51 +200,14 @@ export class StateMutator {
   }
 
   public static passTurn(state: GameState, board: Board): GameState {
-      // Healer Logic: Restoration
-      const currentPlayerColor = TurnManager.getCurrentPlayer(state.turnCounter);
-      const pieceMap = state.pieceMap; 
-      
-      let healers = state.pieces.filter(p => 
-          p.color === currentPlayerColor && 
-          p.type === PieceType.Healer
-      );
-
-      let healingUpdates = new Map<string, number>();
-
-      for (const healer of healers) {
-          const neighbors = healer.hex.cubeRing(1);
-          for (const n of neighbors) {
-              const friendly = pieceMap.get(n);
-              if (friendly && friendly.color === currentPlayerColor && friendly.damage > 0) {
-                  const key = friendly.hex.getKey();
-                  const currentDamage = healingUpdates.get(key) ?? friendly.damage;
-                  const newDamage = Math.max(0, currentDamage - 1);
-                  healingUpdates.set(key, newDamage);
-              }
-          }
-      }
-
-      let piecesAfterHealing = state.pieces;
-      if (healingUpdates.size > 0) {
-          piecesAfterHealing = state.pieces.map(p => {
-              if (healingUpdates.has(p.hex.getKey())) {
-                  return p.with({ damage: healingUpdates.get(p.hex.getKey()) });
-              }
-              return p;
-          });
-      }
-
       const notation = NotationService.getPassNotation();
       const record = this.createMoveRecord(notation, state);
       const newMoveHistory = this.appendHistory(state, record);
       
-      const tempState: GameState = { ...state, pieces: piecesAfterHealing, pieceMap: createPieceMap(piecesAfterHealing) };
-      const increment = RuleEngine.getTurnCounterIncrement(tempState, board, true);
+      const increment = RuleEngine.getTurnCounterIncrement(state, board, true);
       
       const result = StateMutator.checkTurnTransitions({
           ...state,
-          pieces: piecesAfterHealing, // Updated with healing
-          pieceMap: createPieceMap(piecesAfterHealing), // Rebuild map
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory

@@ -40,6 +40,20 @@ export class CombatSystem {
         strength += adjacentWolves;
     }
 
+    // Healer Aura (Strength Buff)
+    // Healers provide +1 Strength to adjacent friendly pieces
+    const neighbors = piece.hex.cubeRing(1);
+    let adjacentHealers = 0;
+    for (const n of neighbors) {
+        const neighborPiece = pieceMap.get(n);
+        if (neighborPiece && 
+            neighborPiece.color === piece.color && 
+            neighborPiece.type === PieceType.Healer) {
+            adjacentHealers++;
+        }
+    }
+    strength += adjacentHealers;
+
     return strength;
   }
 

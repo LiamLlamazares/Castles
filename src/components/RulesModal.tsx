@@ -147,7 +147,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               </thead>
               <tbody>
                 <tr><td><img src={getImageByPieceType(PieceType.Wolf, 'w')} alt="" className="rule-icon"/> Wolf</td><td>Walk 3</td><td>1</td><td><strong>Pack Tactics:</strong> +1 STR per adjacent Wolf</td></tr>
-                <tr><td><img src={getImageByPieceType(PieceType.Healer, 'w')} alt="" className="rule-icon"/> Healer</td><td>1 any</td><td>1</td><td><strong>Heal:</strong> Remove damage from adjacent ally</td></tr>
+                <tr><td><img src={getImageByPieceType(PieceType.Healer, 'w')} alt="" className="rule-icon"/> Healer</td><td>1 any</td><td>1</td><td><strong>Strength Aura:</strong> +1 STR to adjacent allies</td></tr>
                 <tr><td><img src={getImageByPieceType(PieceType.Ranger, 'w')} alt="" className="rule-icon"/> Ranger</td><td>Walk 2</td><td>1</td><td>Long-Range attack (3 hexes)</td></tr>
                 <tr><td><img src={getImageByPieceType(PieceType.Wizard, 'w')} alt="" className="rule-icon"/> Wizard</td><td>1 any</td><td>1</td><td><strong>Fireball:</strong> One-time area damage</td></tr>
                 <tr><td><img src={getImageByPieceType(PieceType.Necromancer, 'w')} alt="" className="rule-icon"/> Necromancer</td><td>1 any</td><td>1</td><td><strong>Raise Dead:</strong> Revive captured piece</td></tr>
