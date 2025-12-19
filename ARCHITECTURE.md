@@ -28,7 +28,7 @@ const GameBoard: React.FC<GameBoardProps> = (inputs) => {
 Piece of data passed from parent to child component. Cannot be changed by component.  In example above `hexagons`.
 
 ### Hooks (the state and update functions)
-A function that starts with "use". Cannot be in ifs or loops.
+A function that starts with "use". 
 - `useState`: is a hook with output state and function to change it
 ```typescript
 const [thing, f] = useState<typeof_thing>(x);
@@ -56,16 +56,23 @@ export const useAnalysisMode = (state,setState) => {
 const {a,b,c} = useAnalysisMode(state,setState);
 ```
 
+#### Where to call
+- Always inside components (or custom hooks) so that they bind on to the component and re-render when the state changes
+- Cannot be in ifs or loops
+
+
 ### Re-rendering
 Occur whenever a hook function (e.g. `setState`) is called. Triggers a re-render of the component and all of its children. All of function finished before value is updated and re-rendered.
 ```typescript
-[x,f] = useState<typeof_x>(x);
-const g = () => {
-    y = h(x)
-    f(y) // Triggers a re-render and sets x to y
+const MyComponent = () => {
+    const [x,f] = useState<typeof_x>(x);
+    const g = () => {
+        y = h(x)
+        f(y) // Triggers a re-render and sets x to y
     console.log(x) // x is still x
+    }
+    g(); // prints x changes it to y and re-renders
 }
-g(); // prints x changes it to y and re-renders
 ```
 
 
