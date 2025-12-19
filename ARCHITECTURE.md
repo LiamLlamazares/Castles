@@ -1,16 +1,16 @@
 # Notes on react ts and hoooks
 Hook: A function that starts with "use". Cannot be in ifs or loops.
-- useState: is a hook with output state and function to change it
+- `useState`: is a hook with output state and function to change it
 ```typescript
 const [thing, f] = useState<typeof_thing>(x);
 f(y) // Triggers a re-render and sets thing to y
 ```
-- useMemo: hook that returns a memoized value. Only re-computes if [dependencies] change
+- `useMemo`: hook that returns a memoized value. Only re-computes if [dependencies] change
 ```typescript
 const memoizedValue = useMemo<typeof_value>(() => computeExpensiveValue(a, b), [a, b]);
 ```
 
-- useEffect: hook that runs a function when dependencies change
+- `useEffect`: hook that runs a function when dependencies change
 ```typescript
 useEffect(() => {
     // do something
@@ -26,10 +26,11 @@ export const useAnalysisMode = (state,setState) => {
 
 const {a,b,c} = useAnalysisMode(state,setState);
 ```
-# Javascript
+
+# Typescript
 - `const`: Thing that is not going to change `const x = 5` means x will always be 5
 - `let`: Thing that is going to change
-- <T extends ...>: T is something that includes
+- <T extends ...>: T is something that include
 - `interface`: Blueprint for an object, tells JS object must contain certain properties
 ```typescript
 export interface AnalysisModeActions {
@@ -37,7 +38,7 @@ export interface AnalysisModeActions {
   stepHistory: (direction: -1 | 1) => void;
 }
 ```
-- `interface extends`:  Creates a ne blueprint that contains all the properties of the old blueprint + some new ones 
+- `interface extends`:  Creates a new blueprint that contains all the properties of the old blueprint + some new ones 
 
 ```typescript
 interface AnalysisModeState extends HistoryState {
