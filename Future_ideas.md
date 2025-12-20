@@ -19,6 +19,8 @@ Special map locations where players can pledge powerful fantasy creatures to the
 | Forsaken Grounds | Necromancer | 3 | Str 4+ + sacrifice | Opponent's deep |
 | Pyre Eternal | Phoenix | 3 | Str 4+ + sacrifice | Opponent's deep |
 
+Spy (dissapears every 2 turns)
+
 ### Special Pieces
 
 | Piece | Move | Attack | Str | Ability |
