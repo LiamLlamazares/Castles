@@ -49,7 +49,7 @@ interface GameBoardProps {
   onRestart?: () => void;
   onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: import('../Classes/Core/MoveTree').MoveTree) => void;
   timeControl?: { initial: number, increment: number };
-  analysisEnabled?: boolean;
+  isAnalysisMode?: boolean;
   onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
 }
 
@@ -71,7 +71,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onRestart = () => {},
   onLoadGame = () => {},
   timeControl,
-  analysisEnabled = false,
+  isAnalysisMode = false,
   onEnableAnalysis = () => {}
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
@@ -126,7 +126,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, analysisEnabled, initialMoveTree);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree);
 
   // Reset overlay when game restarts (victory message clears or changes)
   React.useEffect(() => {
@@ -289,7 +289,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onToggleCoordinates={toggleCoordinates}
         onShowRules={() => setShowRulesModal(true)}
         onEnableAnalysis={handleEnterAnalysis}
-        isAnalysisEnabled={analysisEnabled}
+        isAnalysisMode={isAnalysisMode}
       />
 
       <RulesModal 

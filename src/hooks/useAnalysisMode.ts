@@ -24,7 +24,7 @@ export interface AnalysisModeActions {
 }
 
 export interface AnalysisModeResult extends AnalysisModeActions {
-  analysisEnabled: boolean;
+  isAnalysisMode: boolean;
   analysisState: HistoryEntry | null;
   isViewingHistory: boolean;
 }
@@ -34,13 +34,13 @@ export interface AnalysisModeResult extends AnalysisModeActions {
  * 
  * @param state - Current state containing moveTree and viewNodeId
  * @param setState - State setter function
- * @param analysisEnabled - Explicit flag indicating if in analysis mode (blocks moves/dots)
+ * @param isAnalysisMode - Explicit flag indicating if in analysis mode (blocks moves/dots)
  * @returns Analysis mode controls and computed values
  */
 export const useAnalysisMode = <T extends AnalysisModeState>(
   state: T,
   setState: React.Dispatch<React.SetStateAction<T>>,
-  analysisEnabled: boolean = false
+  isAnalysisMode: boolean = false
 ): AnalysisModeResult => {
   const { moveTree, viewNodeId } = state;
   
@@ -49,10 +49,6 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
   
   // Viewing history if we have a specific node selected (not live)
   const isViewingHistory = viewNodeId !== null;
-  
-  // Analysis mode is true when:
-  // Explicitly enabled by the user (via button or PGN import)
-  // const isAnalysisMode = analysisEnabled (Pass-through)
   
   // Get the snapshot from the viewed node
   const analysisState = viewNode?.snapshot || null;
@@ -124,7 +120,7 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
   }, [setState]);
 
   return {
-    analysisEnabled,
+    isAnalysisMode,
     isViewingHistory,
     analysisState,
     jumpToNode,

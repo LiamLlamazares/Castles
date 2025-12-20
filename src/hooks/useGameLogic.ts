@@ -50,7 +50,7 @@ export const useGameLogic = (
   initialMoveHistory: MoveRecord[] = [],
   initialTurnCounter: number = 0,
   initialSanctuaries?: Sanctuary[], // Optional, uses default generator if missing
-  analysisEnabled: boolean = false, // When false, blocks moves during analysis mode (Play Mode)
+  isAnalysisMode: boolean = false, // When false, blocks moves during analysis mode (Play Mode)
   initialMoveTree?: MoveTree // Optional, use this tree if provided (e.g., from PGN import with snapshots)
 ) => {
   // Create game engine instance (stable reference)
@@ -105,9 +105,9 @@ export const useGameLogic = (
   });
 
   // =========== COMPOSED HOOKS ===========
-  // analysisEnabled is true when user explicitly entered Analysis Mode
+  // isAnalysisMode is true when user explicitly entered Analysis Mode
   // This enables variant creation and shows move indicators
-  const { analysisEnabled: isAnalysisMode, isViewingHistory, analysisState, jumpToNode: jumpToViewNode, stepHistory } = useAnalysisMode(state, setState, analysisEnabled);
+  const { isViewingHistory, analysisState, jumpToNode: jumpToViewNode, stepHistory } = useAnalysisMode(state, setState, isAnalysisMode);
   const { showCoordinates, isBoardRotated, resizeVersion, toggleCoordinates, handleFlipBoard, incrementResizeVersion } = useUISettings(state, setState);
   const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree);
 
@@ -685,7 +685,7 @@ export const useGameLogic = (
     pledge,
     
     // Analysis & PGN
-    analysisEnabled: isAnalysisMode,
+    isAnalysisMode,
     isViewingHistory,
     viewNodeId: state.viewNodeId,
     jumpToNode,

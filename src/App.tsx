@@ -20,7 +20,7 @@ interface GameConfig {
   turnCounter?: number;
   sanctuaries?: import('./Classes/Entities/Sanctuary').Sanctuary[];
   timeControl?: { initial: number, increment: number };
-  analysisEnabled?: boolean;
+  isAnalysisMode?: boolean;
 }
 
 function App() {
@@ -33,7 +33,7 @@ function App() {
 
   const handleStartGame = (board: Board, pieces: Piece[], timeControl?: { initial: number, increment: number }) => {
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, timeControl, analysisEnabled: false });
+    setGameConfig({ board, pieces, layout, timeControl, isAnalysisMode: false });
     setView('game');
   };
 
@@ -45,7 +45,7 @@ function App() {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
-    setGameConfig({ board, pieces, layout, history, moveHistory, moveTree, turnCounter, sanctuaries, analysisEnabled: true });
+    setGameConfig({ board, pieces, layout, history, moveHistory, moveTree, turnCounter, sanctuaries, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
   };
@@ -54,7 +54,7 @@ function App() {
 
   const handleEnableAnalysis = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[]) => {
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter, sanctuaries, analysisEnabled: true });
+    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter, sanctuaries, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount with new setting
   };
 
@@ -85,7 +85,7 @@ function App() {
               initialTurnCounter={gameConfig.turnCounter}
               initialSanctuaries={gameConfig.sanctuaries}
               timeControl={gameConfig.timeControl}
-              analysisEnabled={gameConfig.analysisEnabled}
+              isAnalysisMode={gameConfig.isAnalysisMode}
               onEnableAnalysis={handleEnableAnalysis}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}

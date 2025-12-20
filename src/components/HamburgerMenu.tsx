@@ -11,7 +11,7 @@ interface HamburgerMenuProps {
   onToggleCoordinates: () => void;
   onShowRules: () => void;
   onEnableAnalysis?: () => void;
-  isAnalysisEnabled?: boolean;
+  isAnalysisMode?: boolean;
 }
 
 const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
@@ -21,7 +21,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onToggleCoordinates,
   onShowRules,
   onEnableAnalysis,
-  isAnalysisEnabled = false,
+  isAnalysisMode = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -127,7 +127,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             Rules
           </button>
           
-          {onEnableAnalysis && !isAnalysisEnabled && (
+          {onEnableAnalysis && !isAnalysisMode && (
             <>
               <div className="menu-divider" />
               <button 
