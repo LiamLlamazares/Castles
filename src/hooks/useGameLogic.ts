@@ -449,7 +449,15 @@ export const useGameLogic = (
 
         setState(prev => {
           const newState = gameEngine.applyMove(stateWithHistory, movingPiece!, hex);
-          return { ...prev, ...newState, viewNodeId: null, history: newState.history };
+          // FORCE reset viewNodeId to null immediately to switch to Live View
+          // Ensure pieces are taken from newState (which are the post-move pieces)
+          return { 
+            ...prev, 
+            ...newState, 
+            viewNodeId: null, 
+            // Update history to match the new linear history
+            history: newState.history 
+          };
         });
         return;
       }

@@ -79,7 +79,7 @@ export class StateMutator {
     const newMoveHistory = this.appendHistory(state, record);
 
     const newPieces = state.pieces.map(p => {
-        if (p === piece) {
+        if (p.hex.equals(piece.hex)) {
             // Use immutable update via 'with'
             return p.with({ hex: targetHex, canMove: false });
         }
@@ -124,7 +124,7 @@ export class StateMutator {
     
     // Move the piece onto the castle AND consume attack
     const newPieces = state.pieces.map(p => {
-        if (p === piece) {
+        if (p.hex.equals(piece.hex)) {
             return p.with({ hex: targetHex, canAttack: false });
         }
         return p;
