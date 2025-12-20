@@ -119,7 +119,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     canPledge,
     
     // Analysis
-    isAnalysisMode,
+
     isViewingHistory,
     viewNodeId,
     stepHistory,
