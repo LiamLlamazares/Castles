@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sanctuary } from '../Classes/Entities/Sanctuary';
-import { SanctuaryConfig } from '../Constants';
+import { PHASE_CYCLE_LENGTH, SanctuaryConfig } from '../Constants';
 
 interface SanctuaryTooltipProps {
   sanctuary: Sanctuary;
@@ -63,7 +63,7 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
 
   // Turn Lock Logic
   const TURN_UNLOCK = 10;
-  const isTurnLocked = turnCounter < TURN_UNLOCK;
+  const isTurnLocked = turnCounter < TURN_UNLOCK * PHASE_CYCLE_LENGTH;
 
   // Determine status color / text
   let statusColor = sanctuary.isReady ? '#2ecc71' : '#e74c3c';
