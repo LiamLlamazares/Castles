@@ -144,22 +144,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
   // Handle entering analysis mode - captures current state
   // Use last history entry for pieces (handles resign case where monarch was removed)
+  // Handle entering analysis mode - export current game as PGN and re-import it
+  // This reuses the PGN flow which handles all edge cases (resign, etc.)
   const handleEnterAnalysis = React.useCallback(() => {
-    if (onEnableAnalysis) {
-      // If we have history, use the last snapshot's pieces (preserves pre-resign state)
-      const analysisHistory = history || [];
-      const analysisPieces = analysisHistory.length > 0 
-        ? analysisHistory[analysisHistory.length - 1].pieces 
-        : pieces;
-      const analysisSanctuaries = analysisHistory.length > 0
-        ? analysisHistory[analysisHistory.length - 1].sanctuaries
-        : sanctuaries;
-      const analysisTurnCounter = analysisHistory.length > 0
-        ? analysisHistory[analysisHistory.length - 1].turnCounter
-        : turnCounter;
-      onEnableAnalysis(initialBoard, analysisPieces, analysisHistory, moveHistory || [], analysisTurnCounter, analysisSanctuaries);
+    const pgn = getPGN();
+    const result = loadPGN(pgn);
+    if (result && onLoadGame) {
+      // loadPGN returns a clean state with the tree containing snapshots
+      onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter, result.sanctuaries, result.moveTree);
     }
-  }, [onEnableAnalysis, initialBoard, pieces, moveHistory, turnCounter, sanctuaries, history]);
+  }, [getPGN, loadPGN, onLoadGame]);
 
   const handleHexHover = React.useCallback((hex: Hex | null, event?: React.MouseEvent) => {
     setHoveredHex(hex);
