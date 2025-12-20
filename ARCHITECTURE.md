@@ -245,3 +245,15 @@ In React, you cannot do `game.turn = 5`. You MUST call a setter.
 
 ### 4. Spread Operator: `...prev`
 This means "Copy all properties from `prev`". It ensures that when you update the `turnNumber`, you don't accidentally delete the list of `pieces`.
+
+### 5. Hook Definition & Destructuring: `export const useX = ({ props }: Type) => ...`
+This is a standard way to define hooks. It combines three things:
+- **`export const`**: Makes the hook available to other files.
+- **`({ props }: Type)`**: This is **Argument Destructuring**. Instead of passing a single `box` and saying `box.onPass`, we "unpack" the box immediately. The `: Type` part ensures the "box" has exactly what we expect.
+- **`=>`**: The arrow that starts the function body.
+
+Example from [useInputHandler.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useInputHandler.ts):
+```typescript
+export const useInputHandler = ({ onPass, ... }: UseInputHandlerProps) => { ... }
+```
+It's like saying: "Here is a hook that needs a suitcase (`UseInputHandlerProps`). Open the suitcase and give me the `onPass` function immediately."
