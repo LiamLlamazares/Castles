@@ -320,31 +320,9 @@ export class PGNService {
           phoenixRecords: []
       };
 
-      // Helper to create a snapshot from current state
-      const createSnapshot = (): import('../../Constants').HistoryEntry => ({
-          pieces: currentState.pieces.map(p => p.clone()),
-          castles: currentState.castles.map(c => c.clone()),
-          sanctuaries: currentState.sanctuaries.map(s => s.clone()),
-          turnCounter: currentState.turnCounter,
-          moveNotation: [...currentState.moveHistory],
-      });
-
-      // Helper to add move to tree with snapshot
-      const addMoveToTree = (notation: string, color: Color) => {
-          const snapshot = createSnapshot();
-          const record: MoveRecord = {
-              notation,
-              turnNumber: Math.floor(currentState.turnCounter / 10) + 1,
-              color,
-              phase: engine.getTurnPhase(currentState.turnCounter)
-          };
-          moveTree.addMove(record, snapshot);
-          currentState = {
-              ...currentState,
-              moveHistory: [...currentState.moveHistory, record],
-              history: [...currentState.history, snapshot]
-          };
-      };
+      // NOTE: Don't manually add moves to tree here!
+      // The engine methods (applyMove, applyAttack, etc.) already call
+      // StateMutator which handles recording moves to the tree with snapshots.
 
       // Loop through moves and apply them
       for (const token of moves) {
@@ -352,7 +330,6 @@ export class PGNService {
               const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter) as Color;
               
               if (token === "Pass") {
-                  addMoveToTree("Pass", currentPlayer);
                   currentState = engine.passTurn(currentState);
                   continue;
               }
@@ -365,8 +342,6 @@ export class PGNService {
 
                   const attacker = currentState.pieces.find(p => p.hex.equals(startHex));
                   if (!attacker) throw new Error(`Attacker not found at ${parts[0]}`);
-
-                  addMoveToTree(token, currentPlayer);
 
                   const targetPiece = currentState.pieces.find(p => p.hex.equals(targetHex));
                   if (targetPiece) {
@@ -407,7 +382,6 @@ export class PGNService {
                        throw new Error(`No castle found to recruit at ${parts[0]}`);
                    }
 
-                   addMoveToTree(token, currentPlayer);
                    currentState = engine.recruitPiece(currentState, castle, spawnHex);
                    
                    const recruitedPieceIndex = currentState.pieces.length - 1;
@@ -449,7 +423,6 @@ export class PGNService {
                    const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
                    const newPieces = [...currentState.pieces, newPiece];
                    
-                   addMoveToTree(token, currentPlayer);
                    currentState = {
                        ...currentState,
                        pieces: newPieces,
@@ -469,7 +442,6 @@ export class PGNService {
                    const mover = currentState.pieces.find(p => p.hex.equals(startHex));
                    if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
 
-                   addMoveToTree(token, currentPlayer);
                    currentState = engine.applyMove(currentState, mover, endHex);
                    continue;
               }
