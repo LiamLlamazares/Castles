@@ -103,7 +103,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
     movingPiece,
     jumpToNode,
     history,
-
     // Actions
     handlePass,
     handleTakeback,
@@ -119,7 +118,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     
     // Analysis
     isAnalysisMode,
-    viewMoveIndex,
+    isViewingHistory,
+    viewNodeId,
     stepHistory,
     getPGN,
     loadPGN,
@@ -311,7 +311,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         hasGameStarted={hasGameStarted}
         winner={winner}
         timeControl={timeControl}
-        viewMoveIndex={viewMoveIndex}
+        viewNodeId={viewNodeId}
       />
       
       <svg className="board" height="100%" width="100%">

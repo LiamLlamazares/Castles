@@ -10,8 +10,8 @@ import { Piece } from "../../Classes/Entities/Piece";
 
 describe("useGameLogic Variants (Interactive Branching)", () => {
     it("should allow making a new move after stepping back in history", () => {
-        // 1. Setup
-        const { result } = renderHook(() => useGameLogic());
+        // 1. Setup - Enable analysis mode for variant creation
+        const { result } = renderHook(() => useGameLogic(undefined, undefined, undefined, undefined, undefined, undefined, true));
         
         // Ensure starting state
         expect(result.current.turnCounter).toBe(0);
@@ -57,13 +57,14 @@ describe("useGameLogic Variants (Interactive Branching)", () => {
         const move2Notation = result.current.moveHistory[1].notation;
 
         // 5. Step Back to After Move 1
-        // MoveIndex 0 corresponds to the state AFTER the first move.
+        // Use stepHistory(-1) to go back one move (node-based navigation)
         act(() => {
-            result.current.jumpToMove(0);
+            result.current.stepHistory(-1);
         });
 
+        // With allowVariantCreation=true, isAnalysisMode is true (analysis mode enabled)
         expect(result.current.isAnalysisMode).toBe(true);
-        // viewMoveIndex is not exposed by useGameLogic, but implied by state
+        // isViewingHistory should be true since we stepped back
         
         // Logic: Index 0 is state after 1 move. 
         // So moveHistory should have length 1 in this view?

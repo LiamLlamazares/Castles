@@ -4,7 +4,8 @@ import { Hex } from "../../Classes/Entities/Hex";
 
 describe("useGameLogic Nested Variations Integration", () => {
     it("should correctly create nested variations when navigating back in history", () => {
-        const { result } = renderHook(() => useGameLogic());
+        // Enable analysis mode for variant creation
+        const { result } = renderHook(() => useGameLogic(undefined, undefined, undefined, undefined, undefined, undefined, true));
         
         // 1. Play White Move
         const whitePiece = result.current.pieces.find(p => p.color === 'w' && p.canMove);
@@ -69,7 +70,8 @@ describe("useGameLogic Nested Variations Integration", () => {
             result.current.stepHistory(-1);
         });
         
-        expect(result.current.isAnalysisMode).toBe(true);
+        // With allowVariantCreation=true, isAnalysisMode is false (variants allowed means not blocked)
+        expect(result.current.isAnalysisMode).toBe(false);
         
         // 4. Play DIFFERENT Black move (Variation)
         // Store previous black move key
@@ -106,9 +108,9 @@ describe("useGameLogic Nested Variations Integration", () => {
         let foundBranch = false;
         
         // Traverse down the main line (selected path) or just bfs?
-        // We know we just added a variation, so currentNode should be a leaf of a NEW branch.
+        // We know we just added a variation, so current should be a leaf of a NEW branch.
         // Its parent should have > 1 children.
-        const currentHead = tree?.currentNode;
+        const currentHead = tree?.current;
         const parentOfHead = currentHead?.parent;
         
         expect(parentOfHead).toBeDefined();

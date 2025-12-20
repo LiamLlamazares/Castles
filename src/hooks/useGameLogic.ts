@@ -37,7 +37,9 @@ import { useAnalysisMode, AnalysisModeState } from "./useAnalysisMode";
 import { useUISettings, UISettingsState } from "./useUISettings";
 import { usePGN } from "./usePGN";
 
-export interface GameBoardState extends Omit<GameState, 'moveHistory'>, UISettingsState, AnalysisModeState {
+// GameBoardState combines GameState and UI/Analysis state
+// We omit moveHistory (redefined) and avoid moveTree conflict by using Omit
+export interface GameBoardState extends Omit<GameState, 'moveHistory'>, UISettingsState, Omit<AnalysisModeState, 'moveTree'> {
   moveHistory: MoveRecord[];
 }
 
@@ -90,15 +92,17 @@ export const useGameLogic = (
     isBoardRotated: false,
     resizeVersion: 0,
     
-    // History
+    // History Navigation (node-based)
     moveHistory: initialMoveHistory,
-    viewMoveIndex: null,
+    viewNodeId: null,  // Node ID for tree navigation (null = live)
     graveyard: [],
     phoenixRecords: []
   });
 
   // =========== COMPOSED HOOKS ===========
-  const { isAnalysisMode, analysisState, jumpToMove, stepHistory } = useAnalysisMode(state, setState);
+  // isAnalysisMode is true when user explicitly entered Analysis Mode (allowVariantCreation = true)
+  // This enables variant creation and shows move indicators
+  const { isAnalysisMode, isViewingHistory, analysisState, jumpToNode: jumpToViewNode, stepHistory } = useAnalysisMode(state, setState, allowVariantCreation);
   const { showCoordinates, isBoardRotated, resizeVersion, toggleCoordinates, handleFlipBoard, incrementResizeVersion } = useUISettings(state, setState);
   const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree);
 
@@ -114,63 +118,50 @@ export const useGameLogic = (
 
   /**
    * Returns the "effective" game state for actions.
-   * When in analysis mode, this merges the historical snapshot with current global state.
+   * When viewing history, this uses the node's snapshot.
    * When live, returns the current state as-is.
    */
   const getEffectiveState = useCallback((): GameState => {
-    if (isAnalysisMode) {
-      // Special case: Index -1 means "Start of Game" (Initial State)
-      if (state.viewMoveIndex === -1 || !analysisState) {
-          return {
-              pieces: initialPieces.map(p => p.clone()),
-              pieceMap: createPieceMap(initialPieces.map(p => p.clone())),
-              castles: initialBoard.castles.map(c => c.clone()) as Castle[],
-              sanctuaries: startingSanctuaries.map(s => s.clone()),
-              turnCounter: initialTurnCounter,
-              movingPiece: null,
-              history: [], // Empty history at start
-              moveHistory: [], // Empty move history at start
-              moveTree: state.moveTree,
-              graveyard: [],
-              phoenixRecords: []
-          } as unknown as GameState;
-      }
-      
+    if (isViewingHistory && analysisState) {
       return {
         ...(state as unknown as GameState),
-        ...analysisState,
+        pieces: analysisState.pieces.map(p => p.clone()),
+        pieceMap: createPieceMap(analysisState.pieces.map(p => p.clone())),
+        castles: analysisState.castles.map(c => c.clone()) as Castle[],
+        sanctuaries: analysisState.sanctuaries.map(s => s.clone()),
+        turnCounter: analysisState.turnCounter,
+        movingPiece: null,
         moveHistory: analysisState.moveNotation,
-        history: state.history.slice(0, state.viewMoveIndex! + 1),
         moveTree: state.moveTree
       } as unknown as GameState;
     }
+    // If viewing history but at root node (no snapshot), return initial state
+    if (isViewingHistory && !analysisState) {
+      return {
+        pieces: initialPieces.map(p => p.clone()),
+        pieceMap: createPieceMap(initialPieces.map(p => p.clone())),
+        castles: initialBoard.castles.map(c => c.clone()) as Castle[],
+        sanctuaries: startingSanctuaries.map(s => s.clone()),
+        turnCounter: initialTurnCounter,
+        movingPiece: null,
+        history: [],
+        moveHistory: [],
+        moveTree: state.moveTree,
+        graveyard: [],
+        phoenixRecords: []
+      } as unknown as GameState;
+    }
     return state as unknown as GameState;
-  }, [isAnalysisMode, analysisState, state, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
+  }, [isViewingHistory, analysisState, state, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
 
   // Constructed View State (GameState compatible)
   const viewState = useMemo<GameState>(() => {
-      if (isAnalysisMode) {
-          if (state.viewMoveIndex === -1 || !analysisState) {
-              return {
-                  pieces: initialPieces,
-                  pieceMap: createPieceMap(initialPieces),
-                  castles: initialBoard.castles as Castle[],
-                  sanctuaries: startingSanctuaries,
-                  turnCounter: initialTurnCounter,
-                  movingPiece: null,
-                  history: [],
-                  moveHistory: [],
-                  moveTree: state.moveTree,
-                  graveyard: [],
-                  phoenixRecords: []
-              };
-          }
-
+      if (isViewingHistory && analysisState) {
           return {
               pieces: analysisState.pieces,
               pieceMap: createPieceMap(analysisState.pieces),
               castles: analysisState.castles,
-              sanctuaries: state.sanctuaries,
+              sanctuaries: analysisState.sanctuaries || state.sanctuaries,
               turnCounter: analysisState.turnCounter,
               movingPiece: null,
               history: [],
@@ -180,8 +171,24 @@ export const useGameLogic = (
               phoenixRecords: []
           };
       }
+      // At root node (start of game)
+      if (isViewingHistory && !analysisState) {
+          return {
+              pieces: initialPieces,
+              pieceMap: createPieceMap(initialPieces),
+              castles: initialBoard.castles as Castle[],
+              sanctuaries: startingSanctuaries,
+              turnCounter: initialTurnCounter,
+              movingPiece: null,
+              history: [],
+              moveHistory: [],
+              moveTree: state.moveTree,
+              graveyard: [],
+              phoenixRecords: []
+          };
+      }
       return state as unknown as GameState;
-  }, [state, isAnalysisMode, analysisState, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
+  }, [state, isViewingHistory, analysisState, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
 
   // Derived state to use for rendering
   const pieces = viewState.pieces;
@@ -190,63 +197,23 @@ export const useGameLogic = (
 
   /**
    * Jumps to a specific node in the move tree, potentially switching variations.
+   * Now simplified - just sets viewNodeId and updates tree cursor.
    */
   const jumpToNode = useCallback((nodeId: string) => {
       const node = state.moveTree?.findNodeById(nodeId);
       if (!node) return;
 
-      // Handle Root Node (No Move, Start of Game)
-      if (node.id === state.moveTree?.rootNode.id) {
-          const newTree = state.moveTree!.clone();
-          newTree.goToRoot();
-          
-          setState(prev => ({
-              ...prev,
-              pieces: initialPieces.map(p => p.clone()),
-              castles: initialBoard.castles.map(c => c.clone()) as Castle[],
-              sanctuaries: startingSanctuaries.map(s => s.clone()),
-              turnCounter: initialTurnCounter,
-              history: [],
-              viewMoveIndex: -1, // Start of game
-              moveHistory: [],
-              movingPiece: null,
-              moveTree: newTree
-          }));
-          return;
-      }
-
-      if (!node.snapshot) return;
-
-      // Reconstruct the history line for this node
-      const path: HistoryEntry[] = [];
-      let current: MoveNode | null = node;
-      while (current && current.parent) {
-          if (current.snapshot) {
-              path.unshift(current.snapshot);
-          }
-          current = current.parent;
-      }
-      
+      // Update tree cursor and set view to this node
       const newTree = state.moveTree!.clone();
-      const newNode = newTree.findNodeById(nodeId);
-      if (newNode) {
-          newTree.setCurrentNode(newNode);
-      }
-
-      // Update global state with the new timeline and view index
+      newTree.setCurrentNode(node);
+      
       setState(prev => ({
           ...prev,
-          pieces: node.snapshot!.pieces.map(p => p.clone()),
-          castles: node.snapshot!.castles.map(c => c.clone()),
-          sanctuaries: node.snapshot!.sanctuaries.map(s => s.clone()),
-          turnCounter: node.snapshot!.turnCounter,
-          history: path,
-          viewMoveIndex: path.length - 1, // Points to last valid move
-          moveHistory: node.snapshot!.moveNotation,
+          viewNodeId: nodeId,
           movingPiece: null,
           moveTree: newTree
       }));
-  }, [state.moveTree, setState, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
+  }, [state.moveTree, setState]);
 
   // =========== COMPUTED VALUES ===========
   const turnPhase = useMemo<TurnPhase>(
@@ -286,14 +253,15 @@ export const useGameLogic = (
   }, [gameEngine, viewState]);
 
   // Sets for O(1) lookup in render
+  // Return empty sets in analysis mode to hide move/attack indicators
   const legalMoveSet = useMemo(
-    () => new Set(legalMoves.map(h => h.getKey())),
-    [legalMoves]
+    () => isAnalysisMode ? new Set<string>() : new Set(legalMoves.map(h => h.getKey())),
+    [legalMoves, isAnalysisMode]
   );
 
   const legalAttackSet = useMemo(
-    () => new Set(legalAttacks.map(h => h.getKey())),
-    [legalAttacks]
+    () => isAnalysisMode ? new Set<string>() : new Set(legalAttacks.map(h => h.getKey())),
+    [legalAttacks, isAnalysisMode]
   );
 
   // =========== HELPER FUNCTIONS ===========
@@ -339,12 +307,13 @@ export const useGameLogic = (
 
     const snapshot = createHistorySnapshot(effectiveState);
     
+    // When viewing history, we need to sync the tree cursor before mutation
     let treeForMutation = state.moveTree;
-    if (isAnalysisMode && treeForMutation) {
+    if (isViewingHistory && treeForMutation && state.viewNodeId) {
          treeForMutation = treeForMutation.clone();
-         const stepsBack = state.history.length - state.viewMoveIndex!;
-         for (let i = 0; i < stepsBack; i++) {
-             treeForMutation.navigateBack();
+         const viewNode = treeForMutation.findNodeById(state.viewNodeId);
+         if (viewNode) {
+             treeForMutation.setCurrentNode(viewNode);
          }
     }
 
@@ -355,9 +324,9 @@ export const useGameLogic = (
           moveTree: treeForMutation
       };
       const newState = gameEngine.passTurn(stateWithHistory);
-      return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
+      return { ...prev, ...newState, viewNodeId: null, history: newState.history };
     });
-  }, [gameEngine, isAnalysisMode, state, getEffectiveState]);
+  }, [gameEngine, isViewingHistory, state, getEffectiveState]);
 
   const handleTakeback = useCallback(() => {
     if (history.length > 0) {
@@ -421,10 +390,13 @@ export const useGameLogic = (
         // We passed `state.moveTree`.
         
         // HOWEVER: moveTree.addMove adds to `currentNode`.
-        // If we are in analysis mode, we MUST ensure `moveTree.currentNode` points to the node we are viewing!
-        if (isAnalysisMode) {
-            // Sync tree to view index before mutation
-            state.moveTree?.navigateToIndex(state.viewMoveIndex!);
+        // If we are viewing history, we MUST ensure `moveTree.currentNode` points to the node we are viewing!
+        if (isViewingHistory && state.viewNodeId) {
+            // Sync tree to viewed node before mutation
+            const viewNode = state.moveTree?.findNodeById(state.viewNodeId);
+            if (viewNode) {
+                state.moveTree?.setCurrentNode(viewNode);
+            }
         }
         
         // Now apply final update
@@ -435,7 +407,7 @@ export const useGameLogic = (
         setState(prev => ({
             ...prev,
             ...newState, // Apply new pieces, turnCounter, etc
-            viewMoveIndex: null, // Exit analysis mode
+            viewNodeId: null, // Exit history view
             history: newState.history // Use the history returned by mutation (which includes the new snapshot)
         }));
     };
@@ -453,12 +425,12 @@ export const useGameLogic = (
         const snapshot = createHistorySnapshot(effectiveState);
         
         let treeForMutation = state.moveTree;
-        if (isAnalysisMode && treeForMutation) {
+        // When viewing history, sync tree cursor to the viewed node before mutation
+        if (isViewingHistory && treeForMutation && state.viewNodeId) {
             treeForMutation = treeForMutation.clone();
-            // Navigate back from current node by the number of steps the user has gone back
-            const stepsBack = state.history.length - state.viewMoveIndex!;
-            for (let i = 0; i < stepsBack; i++) {
-                treeForMutation.navigateBack();
+            const viewNode = treeForMutation.findNodeById(state.viewNodeId);
+            if (viewNode) {
+                treeForMutation.setCurrentNode(viewNode);
             }
         }
 
@@ -470,7 +442,7 @@ export const useGameLogic = (
 
         setState(prev => {
           const newState = gameEngine.applyMove(stateWithHistory, movingPiece!, hex);
-          return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
+          return { ...prev, ...newState, viewNodeId: null, history: newState.history };
         });
         return;
       }
@@ -484,11 +456,12 @@ export const useGameLogic = (
         const snapshot = createHistorySnapshot(effectiveState);
         
         let treeForMutation = state.moveTree;
-        if (isAnalysisMode && treeForMutation) {
+        // When viewing history, sync tree cursor to viewed node before mutation
+        if (isViewingHistory && treeForMutation && state.viewNodeId) {
             treeForMutation = treeForMutation.clone();
-            const stepsBack = state.history.length - state.viewMoveIndex!;
-            for (let i = 0; i < stepsBack; i++) {
-                treeForMutation.navigateBack();
+            const viewNode = treeForMutation.findNodeById(state.viewNodeId);
+            if (viewNode) {
+                treeForMutation.setCurrentNode(viewNode);
             }
         }
 
@@ -503,10 +476,10 @@ export const useGameLogic = (
         setState(prev => {
           if (targetPiece) {
             const newState = gameEngine.applyAttack(stateWithHistory, movingPiece!, hex);
-            return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
+            return { ...prev, ...newState, viewNodeId: null, history: newState.history };
           } else {
             const newState = gameEngine.applyCastleAttack(stateWithHistory, movingPiece!, hex);
-            return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
+            return { ...prev, ...newState, viewNodeId: null, history: newState.history };
           }
         });
         return;
@@ -522,11 +495,11 @@ export const useGameLogic = (
         const snapshot = createHistorySnapshot(effectiveState);
         
         let treeForMutation = state.moveTree;
-        if (isAnalysisMode && treeForMutation) {
+        if (isViewingHistory && treeForMutation && state.viewNodeId) {
             treeForMutation = treeForMutation.clone();
-            const stepsBack = state.history.length - state.viewMoveIndex!;
-            for (let i = 0; i < stepsBack; i++) {
-                treeForMutation.navigateBack();
+            const viewNode = treeForMutation.findNodeById(state.viewNodeId);
+            if (viewNode) {
+                treeForMutation.setCurrentNode(viewNode);
             }
         }
 
@@ -548,16 +521,18 @@ export const useGameLogic = (
   }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, isAnalysisMode, state, getEffectiveState]);
 
   const handleResign = useCallback((player: Color) => {
-    saveHistory();
+    // Reset to live game state before resigning (in case viewing history)
     setState(prev => {
+        // First reset viewMoveIndex to exit history view
+        // Then find and remove the resigning player's monarch from the ACTUAL state
         const myMonarch = prev.pieces.find(p => p.type === "Monarch" && p.color === player);
         if (myMonarch) {
             const newPieces = prev.pieces.filter(p => p !== myMonarch);
-            return { ...prev, pieces: newPieces };
+            return { ...prev, pieces: newPieces, viewMoveIndex: null, movingPiece: null };
         }
-        return prev;
+        return { ...prev, viewMoveIndex: null, movingPiece: null };
     });
-  }, [saveHistory]);
+  }, []);
 
   const hasGameStarted = turnCounter > 0;
 
@@ -573,11 +548,11 @@ export const useGameLogic = (
     const snapshot = createHistorySnapshot(effectiveState);
 
     let treeForMutation = state.moveTree;
-    if (isAnalysisMode && treeForMutation) {
+    if (isViewingHistory && treeForMutation && state.viewNodeId) {
          treeForMutation = treeForMutation.clone();
-         const stepsBack = state.history.length - state.viewMoveIndex!;
-         for (let i = 0; i < stepsBack; i++) {
-             treeForMutation.navigateBack();
+         const viewNode = treeForMutation.findNodeById(state.viewNodeId);
+         if (viewNode) {
+             treeForMutation.setCurrentNode(viewNode);
          }
     }
 
@@ -616,7 +591,7 @@ export const useGameLogic = (
                ...newCoreState, 
                moveHistory: [...stateWithHistory.moveHistory, moveRecord],
                history: stateWithHistory.history,
-               viewMoveIndex: null,
+               viewNodeId: null,
                moveTree: finalTree
            };
        } catch (e) {
@@ -641,11 +616,11 @@ export const useGameLogic = (
       const snapshot = createHistorySnapshot(effectiveState);
       
       let treeForMutation = state.moveTree;
-      if (isAnalysisMode && treeForMutation) {
+      if (isViewingHistory && treeForMutation && state.viewNodeId) {
           treeForMutation = treeForMutation.clone();
-          const stepsBack = state.history.length - state.viewMoveIndex!;
-          for (let i = 0; i < stepsBack; i++) {
-              treeForMutation.navigateBack();
+          const viewNode = treeForMutation.findNodeById(state.viewNodeId);
+          if (viewNode) {
+              treeForMutation.setCurrentNode(viewNode);
           }
       }
 
@@ -657,13 +632,13 @@ export const useGameLogic = (
                 moveTree: treeForMutation
             };
             const newState = gameEngine.activateAbility(stateWithHistory, sourceHex, targetHex, ability);
-            return { ...prevState, ...newState, viewMoveIndex: null, history: newState.history };
+            return { ...prevState, ...newState, viewNodeId: null, history: newState.history };
         } catch (e) {
             console.error(e);
             return prevState;
         }
       });
-  }, [gameEngine, isAnalysisMode, state, getEffectiveState]);
+  }, [gameEngine, isViewingHistory, state, getEffectiveState]);
 
   return {
     // State
@@ -704,8 +679,8 @@ export const useGameLogic = (
     
     // Analysis & PGN
     isAnalysisMode,
-    viewMoveIndex: state.viewMoveIndex,
-    jumpToMove,
+    isViewingHistory,
+    viewNodeId: state.viewNodeId,
     jumpToNode,
     stepHistory,
     getPGN,

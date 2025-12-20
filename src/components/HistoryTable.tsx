@@ -7,10 +7,10 @@ interface HistoryTableProps {
   moveTree?: MoveTree;
   onJumpToNode?: (id: string) => void;
   currentPlayer: Color;
-  viewMoveIndex?: number | null; // When viewing history, which move index is selected
+  viewNodeId?: string | null; // When viewing history, which node is currently being viewed
 }
 
-const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJumpToNode, viewMoveIndex }) => {
+const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJumpToNode, viewNodeId }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when history updates
@@ -23,27 +23,8 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
   if (!moveTree) return <div className="history-table-container">No history</div>;
 
   // Determine which node is "current" for highlighting
-  // If viewMoveIndex is set, find the node at that index; otherwise use moveTree.current
-  // Note: history[N] is the snapshot AFTER move N+1 (0-indexed)
-  // So viewMoveIndex 0 = state after move 1, highlight move 1
-  // viewMoveIndex 2 = state after move 3, highlight move 3
-  // Determine which node is "current" for highlighting
-  let highlightedId: string | undefined = moveTree.current.id;
-  
-  if (viewMoveIndex !== null && viewMoveIndex !== undefined) {
-      if (viewMoveIndex <= 0) {
-          // Start of game (Index 0 or -1): No moves made. Highlight nothing (or root).
-          highlightedId = moveTree.rootNode.id;
-      } else {
-        // Walk from root to find the node. Index 1 = 1 step (M1).
-        let currentNode = moveTree.rootNode;
-        const stepsToTake = viewMoveIndex; 
-        for (let i = 0; i < stepsToTake && currentNode.children.length > 0; i++) {
-          currentNode = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
-        }
-        highlightedId = currentNode.id;
-      }
-  }
+  // With node-based navigation, we simply use the viewNodeId if set, otherwise the tree's current position
+  const highlightedId: string = viewNodeId || moveTree.current.id;
 
   const renderMoves = (nodes: MoveNode[], depth: number = 0): React.ReactNode => {
     if (nodes.length === 0) return null;
