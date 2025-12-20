@@ -51,9 +51,8 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
   const isViewingHistory = viewNodeId !== null;
   
   // Analysis mode is true when:
-  // 1. Variant creation is disabled (Play Mode), AND
-  // 2. Currently viewing history (viewNodeId !== null)
-  const isAnalysisMode = isAnalysisModeExplicit && isViewingHistory;
+  // Explicitly enabled by the user (via button or PGN import)
+  const isAnalysisMode = isAnalysisModeExplicit;
   
   // Get the snapshot from the viewed node
   const analysisState = viewNode?.snapshot || null;

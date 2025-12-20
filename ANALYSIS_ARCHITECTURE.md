@@ -4,19 +4,22 @@
 
 This document describes how Analysis Mode, Variant Creation, and PGN Import/Export work together.
 
+> [!WARNING]
+> This document has been updated to reflect the *actual* current implementation, which contains several bugs and discrepancies from the original design. See "Known Issues" below.
+
 ---
 
 ## Key Concepts
 
 ### MoveTree
-A tree data structure storing all moves with branches (variants).
+A tree data structure storing all moves with branches (variations).
 
 ```
 Root (Start)
   └── G12G11 (Move 1 - Main Line)
         ├── H12H11 (Move 2 - Main Line)
         │     └── ...
-        └── I11I10 (Move 2 - Variant)
+        └── I11I10 (Move 2 - Variation)
               └── ...
 ```
 
@@ -25,11 +28,12 @@ Each node contains:
 - `snapshot`: A `HistoryEntry` capturing game state at this position
 - `children`: Array of child nodes
 - `parent`: Reference to parent node
+- `selectedChildIndex`: Index of the child that represents the "Main Line" from this node.
 
 **Main Line Convention:**
-- `children[0]` is **always** the main line / selected variation.
-- Additional children (`children[1]`, `children[2]`, etc.) are alternative variations.
-- To promote a variation to the main line, simply move it to the front of the array.
+- `children[selectedChildIndex]` is the main line / selected variation.
+- Other children are alternative variations.
+- To promote a variation to the main line, the `selectedChildIndex` is updated.
 
 ### Key Files
 
@@ -47,14 +51,14 @@ Each node contains:
 ## Modes
 
 ### Play Mode (`analysisEnabled = false`)
-- Normal gameplay
-- When viewing history: **moves are blocked** (indicators hidden, input ignored)
-- Cannot create variants
+- Normal gameplay.
+- **Move Blocking**: Moves are NOT strictly blocked in code when viewing history, but making a move will branch from that point and reset the view to "Live".
+- Cannot explicitly "create variants" in the UI sense (no visual branching controls), but the underlying logic supports it.
 
 ### Analysis Mode (`analysisEnabled = true`)
-- Enabled via "Analyze Game" button or PGN import
-- When viewing history: **moves are allowed** (create variants!)
-- Can navigate and branch freely
+- Enabled via "Analyze Game" button or PGN import.
+- **Intended Behavior**: When viewing history, move indicators should be shown to allow creating variants.
+- **Current Bug**: Move indicators are currently **HIDDEN** in Analysis Mode due to inverted logic in `useGameLogic.ts`.
 
 ---
 
@@ -78,7 +82,7 @@ User pastes PGN
     ↓
 loadPGN() in usePGN.ts
     ↓
-PGNService.parsePGN() → Extract moves array
+PGNService.parsePGN() → Extract moves array (Main Line ONLY)
     ↓
 PGNService.replayMoveHistory()
     ↓
@@ -87,45 +91,21 @@ Creates fresh MoveTree + applies each move via GameEngine
 StateMutator.recordMoveInTree() adds each move to tree
     ↓
 Return final state with tree
-    ↓
-App.tsx handleLoadGame() sets analysisEnabled=true
-    ↓
-GameBoard remounts with imported state
 ```
 
-**Key Points:**
-- `replayMoveHistory` does NOT manually add moves to tree
-- The `GameEngine.applyMove()` → `StateMutator` → `recordMoveInTree()` chain handles it
-- This prevents duplicate move recording
-
----
-
-## Analysis Mode Entry
-
-### Via "Analyze Game" button (after resign/victory)
-
-```
-Click Analyze → handleEnterAnalysis() → Export PGN → Import PGN → onLoadGame(analysisEnabled=true)
-```
-
-This reuses the PGN flow, which:
-- Handles edge cases (resign = monarch removed)
-- Creates a clean tree with snapshots
-- Ensures consistent state
-
-### Via PGN Import
-Sets `analysisEnabled: true` automatically in `App.tsx handleLoadGame()`
+> [!IMPORTANT]
+> **Variation Loss**: The current PGN Parser extracts a linear list of moves (`moves: string[]`) to replay. This means **all variations (branches) in the PGN are discarded** upon import. The `MoveTree` returned by the parser is not fully utilized during reconstruction.
 
 ---
 
 ## Variant Creation Flow
 
-When a move is made while viewing history (and `analysisEnabled = true`):
+When a move is made while viewing history:
 
 ```
-User viewing history → Clicks piece → shouldHideMoveIndicators = false
+User viewing history → Clicks piece
     ↓
-Show legal moves → User makes move
+Show legal moves (Currently BUGGED in Analysis Mode) → User makes move
     ↓
 getEffectiveState() uses snapshot from viewed node
     ↓
@@ -139,12 +119,6 @@ If new move → Create new branch/variant
 commitBranch() → viewNodeId = null (go live)
 ```
 
-**Key Logic in `useGameLogic.ts`:**
-```typescript
-// Only hide move indicators in Play Mode when viewing history
-const shouldHideMoveIndicators = !allowVariantCreation && isViewingHistory;
-```
-
 ---
 
 ## State Variables
@@ -152,8 +126,16 @@ const shouldHideMoveIndicators = !allowVariantCreation && isViewingHistory;
 | Variable | Location | Purpose |
 |----------|----------|---------|
 | `analysisEnabled` | Props from App.tsx | Controls variant creation permission |
-| `allowVariantCreation` | useGameLogic param | Same as above, passed down |
 | `viewNodeId` | State | Currently viewed node ID (null = live) |
 | `isViewingHistory` | Computed | `viewNodeId !== null` |
 | `isAnalysisMode` | useAnalysisMode | `analysisEnabled && isViewingHistory` |
-| `shouldHideMoveIndicators` | useGameLogic | `!analysisEnabled && isViewingHistory` |
+| `legalMoveSet` | useGameLogic | **BUG**: Currently returns empty set if `isAnalysisMode` is true. |
+
+
+## Known Issues & Discrepancies
+
+1.  **PGN Helper Logic**:
+    `PGNService.replayMoveHistory` replays moves linearly. It does not support replaying a tree structure, so imported games lose all variations.
+
+2.  **Pledge Data Loss**:
+    `PGNParser` or `replayMoveHistory` may treat Pledges (`P:...`) incorrectly or rely on `Pass` logic that doesn't fully reconstruct the `Pledge` notation in the new history, potentially leading to data loss on re-export.

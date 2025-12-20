@@ -258,15 +258,17 @@ export const useGameLogic = (
   }, [gameEngine, viewState]);
 
   // Sets for O(1) lookup in render
-  // Return empty sets in analysis mode to hide move/attack indicators
+  // Hide indicators ONLY if we are in Play Mode (Read-Only) and viewing history
+  const shouldHideMoveIndicators = !isAnalysisMode && isViewingHistory;
+
   const legalMoveSet = useMemo(
-    () => isAnalysisMode ? new Set<string>() : new Set(legalMoves.map(h => h.getKey())),
-    [legalMoves, isAnalysisMode]
+    () => shouldHideMoveIndicators ? new Set<string>() : new Set(legalMoves.map(h => h.getKey())),
+    [legalMoves, shouldHideMoveIndicators]
   );
 
   const legalAttackSet = useMemo(
-    () => isAnalysisMode ? new Set<string>() : new Set(legalAttacks.map(h => h.getKey())),
-    [legalAttacks, isAnalysisMode]
+    () => shouldHideMoveIndicators ? new Set<string>() : new Set(legalAttacks.map(h => h.getKey())),
+    [legalAttacks, shouldHideMoveIndicators]
   );
 
   // =========== HELPER FUNCTIONS ===========
@@ -303,8 +305,8 @@ export const useGameLogic = (
   }, [pieces, castles, state.sanctuaries, turnCounter, moveHistory]);
 
   const handlePass = useCallback(() => {
-    // Block pass in analysis mode when variant creation is disabled (Play Mode)
-    if (isAnalysisMode && !allowVariantCreation) {
+    // Block moves in Play Mode (Read-Only) when viewing history
+    if (!isAnalysisMode && isViewingHistory) {
       return;
     }
 
@@ -376,8 +378,8 @@ export const useGameLogic = (
   }, [gameEngine, movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
 
   const handleHexClick = useCallback((hex: Hex) => {
-    // Block moves in analysis mode when variant creation is disabled (Play Mode)
-    if (isAnalysisMode && !allowVariantCreation) {
+    // Block moves in Play Mode (Read-Only) when viewing history
+    if (!isAnalysisMode && isViewingHistory) {
       setState(prev => ({ ...prev, movingPiece: null }));
       return;
     }
@@ -543,8 +545,8 @@ export const useGameLogic = (
 
   // Pledge Action
   const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
-    // Block pledge in analysis mode when variant creation is disabled (Play Mode)
-    if (isAnalysisMode && !allowVariantCreation) {
+    // Block pledge in Play Mode (Read-Only) when viewing history
+    if (!isAnalysisMode && isViewingHistory) {
       return;
     }
 
@@ -612,8 +614,8 @@ export const useGameLogic = (
 
   // Ability Usage
   const triggerAbility = useCallback((sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
-      // Block abilities in analysis mode when variant creation is disabled (Play Mode)
-      if (isAnalysisMode && !allowVariantCreation) {
+      // Block abilities in Play Mode (Read-Only) when viewing history
+      if (!isAnalysisMode && isViewingHistory) {
         return;
       }
 
