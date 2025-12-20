@@ -23,6 +23,7 @@ export interface PGNHookResult {
     pieces: Piece[];
     history: any[];
     moveHistory: MoveRecord[];
+    moveTree: MoveTree;
     turnCounter: number;
     sanctuaries: import("../Classes/Entities/Sanctuary").Sanctuary[];
     castles: import("../Classes/Entities/Castle").Castle[];
@@ -62,6 +63,7 @@ export const usePGN = (
         sanctuaries: finalState.sanctuaries,
         history: finalState.history,
         moveHistory: finalState.moveHistory,
+        moveTree: finalState.moveTree!,
         turnCounter: finalState.turnCounter
       };
     } catch (e) {
@@ -74,6 +76,7 @@ export const usePGN = (
         sanctuaries: startSanctuaries, // Add sanctuaries return
         history: [],
         moveHistory: [],
+        moveTree: new MoveTree(),
         turnCounter: 0
       };
     }

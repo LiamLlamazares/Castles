@@ -296,27 +296,15 @@ export class PGNService {
   public static replayMoveHistory(
       board: Board, 
       initialPieces: Piece[], 
-      moves: string[] | MoveTree,
+      moves: string[],
       initialSanctuaries: Sanctuary[] = []
   ): GameState {
       // Initialize fresh engine and state
       const engine = new GameEngine(board);
       const castles = board.castles as Castle[]; 
 
-      let moveTree: MoveTree;
-      let moveList: string[] = [];
-
-      if (moves instanceof MoveTree) {
-          moveTree = moves;
-          // Get main line to replay
-          const history = moveTree.getHistoryLine();
-          moveList = history.map(h => h.notation).filter(n => n !== "Start");
-          // Reset tree to root so we can traverse it during replay
-          moveTree.goToRoot();
-      } else {
-          moveTree = new MoveTree();
-          moveList = moves;
-      }
+      // Create fresh MoveTree for the replay
+      const moveTree = new MoveTree();
 
       let currentState: GameState = {
           pieces: initialPieces.map(p => p.clone()), 
@@ -332,11 +320,39 @@ export class PGNService {
           phoenixRecords: []
       };
 
+      // Helper to create a snapshot from current state
+      const createSnapshot = (): import('../../Constants').HistoryEntry => ({
+          pieces: currentState.pieces.map(p => p.clone()),
+          castles: currentState.castles.map(c => c.clone()),
+          sanctuaries: currentState.sanctuaries.map(s => s.clone()),
+          turnCounter: currentState.turnCounter,
+          moveNotation: [...currentState.moveHistory],
+      });
+
+      // Helper to add move to tree with snapshot
+      const addMoveToTree = (notation: string, color: Color) => {
+          const snapshot = createSnapshot();
+          const record: MoveRecord = {
+              notation,
+              turnNumber: Math.floor(currentState.turnCounter / 10) + 1,
+              color,
+              phase: engine.getTurnPhase(currentState.turnCounter)
+          };
+          moveTree.addMove(record, snapshot);
+          currentState = {
+              ...currentState,
+              moveHistory: [...currentState.moveHistory, record],
+              history: [...currentState.history, snapshot]
+          };
+      };
+
       // Loop through moves and apply them
-      for (const token of moveList) {
+      for (const token of moves) {
           try {
+              const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter) as Color;
+              
               if (token === "Pass") {
-                  currentState = PGNService.saveSnapshot(currentState);
+                  addMoveToTree("Pass", currentPlayer);
                   currentState = engine.passTurn(currentState);
                   continue;
               }
@@ -350,7 +366,7 @@ export class PGNService {
                   const attacker = currentState.pieces.find(p => p.hex.equals(startHex));
                   if (!attacker) throw new Error(`Attacker not found at ${parts[0]}`);
 
-                  currentState = PGNService.saveSnapshot(currentState);
+                  addMoveToTree(token, currentPlayer);
 
                   const targetPiece = currentState.pieces.find(p => p.hex.equals(targetHex));
                   if (targetPiece) {
@@ -382,7 +398,6 @@ export class PGNService {
 
                    if (!pieceType) throw new Error(`Unknown piece code ${pieceCode}`);
 
-                   const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter);
                    const castle = currentState.castles.find(c => 
                        c.isAdjacent(spawnHex) && 
                        c.owner === currentPlayer &&
@@ -392,7 +407,7 @@ export class PGNService {
                        throw new Error(`No castle found to recruit at ${parts[0]}`);
                    }
 
-                   currentState = PGNService.saveSnapshot(currentState);
+                   addMoveToTree(token, currentPlayer);
                    currentState = engine.recruitPiece(currentState, castle, spawnHex);
                    
                    const recruitedPieceIndex = currentState.pieces.length - 1;
@@ -431,11 +446,10 @@ export class PGNService {
                    
                    if (!pieceType) throw new Error(`Unknown pledge piece code ${pieceCode}`);
                    
-                   const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter);
                    const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
                    const newPieces = [...currentState.pieces, newPiece];
                    
-                   currentState = PGNService.saveSnapshot(currentState);
+                   addMoveToTree(token, currentPlayer);
                    currentState = {
                        ...currentState,
                        pieces: newPieces,
@@ -455,7 +469,7 @@ export class PGNService {
                    const mover = currentState.pieces.find(p => p.hex.equals(startHex));
                    if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
 
-                   currentState = PGNService.saveSnapshot(currentState);
+                   addMoveToTree(token, currentPlayer);
                    currentState = engine.applyMove(currentState, mover, endHex);
                    continue;
               }

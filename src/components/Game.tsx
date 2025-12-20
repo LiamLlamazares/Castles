@@ -41,12 +41,13 @@ interface GameBoardProps {
   initialLayout?: LayoutService;
   initialHistory?: HistoryEntry[]; 
   initialMoveHistory?: MoveRecord[];
+  initialMoveTree?: import('../Classes/Core/MoveTree').MoveTree;
   initialTurnCounter?: number;
   initialSanctuaries?: Sanctuary[];
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
-  onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
+  onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: import('../Classes/Core/MoveTree').MoveTree) => void;
   timeControl?: { initial: number, increment: number };
   analysisEnabled?: boolean;
   onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
@@ -62,6 +63,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   initialLayout = startingLayout,
   initialHistory,
   initialMoveHistory,
+  initialMoveTree,
   initialTurnCounter,
   initialSanctuaries,
   onResign = () => {},
@@ -124,7 +126,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, analysisEnabled);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, analysisEnabled, initialMoveTree);
 
   // Reset overlay when game restarts (victory message clears or changes)
   React.useEffect(() => {
@@ -265,7 +267,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     if (pgn) {
         const result = loadPGN(pgn);
         if (result && onLoadGame) {
-            onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter, result.sanctuaries);
+            onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter, result.sanctuaries, result.moveTree);
         } else {
             alert("Failed to load PGN. Check console for details.");
         }

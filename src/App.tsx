@@ -5,6 +5,7 @@ import GameSetup from './components/GameSetup';
 import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
+import { MoveTree } from './Classes/Core/MoveTree';
 import { getStartingLayout } from './ConstantImports';
 
 type ViewState = 'menu' | 'setup' | 'game';
@@ -15,6 +16,7 @@ interface GameConfig {
   layout?: LayoutService;
   history?: any[];
   moveHistory?: any[];
+  moveTree?: MoveTree;
   turnCounter?: number;
   sanctuaries?: import('./Classes/Entities/Sanctuary').Sanctuary[];
   timeControl?: { initial: number, increment: number };
@@ -39,10 +41,11 @@ function App() {
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[]) => {
+  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[], moveTree?: MoveTree) => {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter, sanctuaries });
+    // PGN imports should always start in analysis mode so users can navigate the game
+    setGameConfig({ board, pieces, layout, history, moveHistory, moveTree, turnCounter, sanctuaries, analysisEnabled: true });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
   };
@@ -78,6 +81,7 @@ function App() {
               initialLayout={gameConfig.layout}
               initialHistory={gameConfig.history}
               initialMoveHistory={gameConfig.moveHistory}
+              initialMoveTree={gameConfig.moveTree}
               initialTurnCounter={gameConfig.turnCounter}
               initialSanctuaries={gameConfig.sanctuaries}
               timeControl={gameConfig.timeControl}

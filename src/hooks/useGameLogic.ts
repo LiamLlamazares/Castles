@@ -50,7 +50,8 @@ export const useGameLogic = (
   initialMoveHistory: MoveRecord[] = [],
   initialTurnCounter: number = 0,
   initialSanctuaries?: Sanctuary[], // Optional, uses default generator if missing
-  allowVariantCreation: boolean = false // When false, blocks moves during analysis mode (Play Mode)
+  allowVariantCreation: boolean = false, // When false, blocks moves during analysis mode (Play Mode)
+  initialMoveTree?: MoveTree // Optional, use this tree if provided (e.g., from PGN import with snapshots)
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -63,18 +64,22 @@ export const useGameLogic = (
       return SanctuaryGenerator.generateDefaultSanctuaries(initialBoard);
   }, [initialBoard, initialSanctuaries]);
 
-  // Build MoveTree from initialMoveHistory if provided
-  const initialMoveTree = useMemo(() => {
+  // Use passed MoveTree if available (e.g., from PGN import with snapshots)
+  // Otherwise build a new tree from initialMoveHistory
+  const startingMoveTree = useMemo(() => {
+    if (initialMoveTree) {
+      return initialMoveTree; // Use tree with snapshots from PGN import
+    }
+    // Build new tree from moveHistory (no snapshots, for normal start)
     const tree = new MoveTree();
     if (initialMoveHistory && initialMoveHistory.length > 0) {
-      // Ensure we start from root and build tree correctly
       tree.goToRoot();
       for (const move of initialMoveHistory) {
         tree.addMove(move);
       }
     }
     return tree;
-  }, [initialMoveHistory]);
+  }, [initialMoveHistory, initialMoveTree]);
 
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>({
@@ -85,7 +90,7 @@ export const useGameLogic = (
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
     sanctuaries: startingSanctuaries, 
-    moveTree: initialMoveTree,
+    moveTree: startingMoveTree,
     
     // UI Settings
     showCoordinates: false,
