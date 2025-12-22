@@ -6,6 +6,7 @@
  * - **useAnalysisMode**: History navigation
  * - **useUISettings**: Board display toggles
  * - **usePGN**: Import/export functionality
+ * - **useMoveExecution**: Move/attack/recruit/ability execution
  *
  * Provides all game state and actions to the Game component.
  *
@@ -15,14 +16,12 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
-import { createHistorySnapshot } from "../utils/GameStateUtils";
 import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
-import { NotationService } from "../Classes/Systems/NotationService";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
-import { MoveTree, MoveNode } from "../Classes/Core/MoveTree";
+import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
 import {
   TurnPhase,
@@ -36,6 +35,7 @@ import { startingBoard, allPieces } from "../ConstantImports";
 import { useAnalysisMode, AnalysisModeState } from "./useAnalysisMode";
 import { useUISettings, UISettingsState } from "./useUISettings";
 import { usePGN } from "./usePGN";
+import { useMoveExecution } from "./useMoveExecution";
 
 // GameBoardState combines GameState and UI/Analysis state
 // We omit moveHistory (redefined) and avoid moveTree conflict by using Omit
@@ -289,52 +289,26 @@ export const useGameLogic = (
     [emptyUnusedHexesAdjacentToControlledCastles]
   );
 
-  // =========== ACTIONS ===========
-  const saveHistory = useCallback(() => {
-    const currentState: HistoryEntry = {
-      pieces: pieces.map((p) => p.clone()),
-      castles: castles.map((c) => c.clone()),
-      sanctuaries: state.sanctuaries.map((s) => s.clone()),
-      turnCounter: turnCounter,
-      moveNotation: moveHistory,
-    };
-    setState(prev => ({
-      ...prev,
-      history: [...prev.history, currentState]
-    }));
-  }, [pieces, castles, state.sanctuaries, turnCounter, moveHistory]);
+  // =========== MOVE EXECUTION HOOK ===========
+  const { handlePass, handleHexClick, pledge, triggerAbility } = useMoveExecution({
+    gameEngine,
+    state,
+    setState,
+    isAnalysisMode,
+    isViewingHistory,
+    turnPhase,
+    currentPlayer,
+    isLegalMove,
+    isLegalAttack,
+    isRecruitmentSpot,
+    getEffectiveState,
+    initialPieces,
+    initialBoard,
+    startingSanctuaries,
+    initialTurnCounter,
+  });
 
-  const handlePass = useCallback(() => {
-    // Block moves in Play Mode (Read-Only) when viewing history
-    if (!isAnalysisMode && isViewingHistory) {
-      return;
-    }
-
-    const effectiveState = getEffectiveState();
-
-    const snapshot = createHistorySnapshot(effectiveState);
-    
-    // When viewing history, we need to sync the tree cursor before mutation
-    let treeForMutation = state.moveTree;
-    if (isViewingHistory && treeForMutation && state.viewNodeId) {
-         treeForMutation = treeForMutation.clone();
-         const viewNode = treeForMutation.findNodeById(state.viewNodeId);
-         if (viewNode) {
-             treeForMutation.setCurrentNode(viewNode);
-         }
-    }
-
-    setState(prev => {
-      const stateWithHistory = { 
-          ...effectiveState, 
-          history: [...effectiveState.history, snapshot],
-          moveTree: treeForMutation
-      };
-      const newState = gameEngine.passTurn(stateWithHistory);
-      return { ...prev, ...newState, viewNodeId: null, history: newState.history };
-    });
-  }, [gameEngine, isViewingHistory, state, getEffectiveState]);
-
+  // =========== REMAINING ACTIONS ===========
   const handleTakeback = useCallback(() => {
     if (history.length > 0) {
       const newHistory = [...history];
@@ -375,165 +349,7 @@ export const useGameLogic = (
     }
 
     setState(prev => ({ ...prev, movingPiece: null }));
-  }, [gameEngine, movingPiece, currentPlayer, turnPhase, isLegalAttack, saveHistory]);
-
-  const handleHexClick = useCallback((hex: Hex) => {
-    // Block moves in Play Mode (Read-Only) when viewing history
-    if (!isAnalysisMode && isViewingHistory) {
-      setState(prev => ({ ...prev, movingPiece: null }));
-      return;
-    }
-
-    // Get effective state (handles analysis mode merging)
-    const effectiveState = getEffectiveState();
-
-    // Helper to commit the new branch
-    const commitBranch = (newState: GameState) => {
-        // If we were in analysis mode, we are now LIVE at the new head.
-        // The GameEngine/StateMutator should have updated the MoveTree already via appendHistory -> moveTree.addMove
-        
-        // We need to sync MoveTree cursor if it wasn't already. (StateMutator updates `currentNode` if addMove is called on it)
-        // BUT StateMutator only calls addMove if we pass `moveTree`.
-        // We passed `state.moveTree`.
-        
-        // HOWEVER: moveTree.addMove adds to `currentNode`.
-        // If we are viewing history, we MUST ensure `moveTree.currentNode` points to the node we are viewing!
-        if (isViewingHistory && state.viewNodeId) {
-            // Sync tree to viewed node before mutation
-            const viewNode = state.moveTree?.findNodeById(state.viewNodeId);
-            if (viewNode) {
-                state.moveTree?.setCurrentNode(viewNode);
-            }
-        }
-        
-        // Now apply final update
-        // We replace the entire history with the new history sequence? 
-        // Or rather, we just update the View to be LIVE.
-        // `newState.moveHistory` will contain the new linear history.
-        
-        setState(prev => ({
-            ...prev,
-            ...newState, // Apply new pieces, turnCounter, etc
-            viewNodeId: null, // Exit history view
-            history: newState.history // Use the history returned by mutation (which includes the new snapshot)
-        }));
-    };
-
-    if (turnPhase === "Movement" && movingPiece?.canMove) {
-      if (isLegalMove(hex)) {
-        // We do NOT call old valid 'saveHistory()' here because we are handling it via StateMutator's internal logic
-        // But wait, `saveHistory` does the SNAPSHOT push. `StateMutator` does the MOVE RECORD push.
-        // `useGameLogic` manages the SNAPSHOT history manually in `handleHexClick` normally via `saveHistory()`.
-        
-        // If we use `effectiveState`, we need to ensure we push the snapshot of `effectiveState` before mutation.
-        // `saveHistory` uses `state` (global).
-        // Let's manually push snapshot of `effectiveState`.
-        
-        const snapshot = createHistorySnapshot(effectiveState);
-        
-        let treeForMutation = state.moveTree;
-        // When viewing history, sync tree cursor to the viewed node before mutation
-        if (isViewingHistory && treeForMutation && state.viewNodeId) {
-            treeForMutation = treeForMutation.clone();
-            const viewNode = treeForMutation.findNodeById(state.viewNodeId);
-            if (viewNode) {
-                treeForMutation.setCurrentNode(viewNode);
-            }
-        }
-
-        const stateWithHistory = {
-            ...effectiveState,
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation
-        };
-
-        setState(prev => {
-          const newState = gameEngine.applyMove(stateWithHistory, movingPiece!, hex);
-          // FORCE reset viewNodeId to null immediately to switch to Live View
-          // Ensure pieces are taken from newState (which are the post-move pieces)
-          return { 
-            ...prev, 
-            ...newState, 
-            viewNodeId: null, 
-            // Update history to match the new linear history
-            history: newState.history 
-          };
-        });
-        return;
-      }
-      setState(prev => ({ ...prev, movingPiece: null }));
-      return;
-    }
-
-    if (turnPhase === "Attack" && movingPiece?.canAttack) {
-      if (isLegalAttack(hex)) {
-        
-        const snapshot = createHistorySnapshot(effectiveState);
-        
-        let treeForMutation = state.moveTree;
-        // When viewing history, sync tree cursor to viewed node before mutation
-        if (isViewingHistory && treeForMutation && state.viewNodeId) {
-            treeForMutation = treeForMutation.clone();
-            const viewNode = treeForMutation.findNodeById(state.viewNodeId);
-            if (viewNode) {
-                treeForMutation.setCurrentNode(viewNode);
-            }
-        }
-
-        const stateWithHistory = { 
-            ...effectiveState, 
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation
-        };
-
-        const targetPiece = effectiveState.pieces.find(p => p.hex.equals(hex));
-        
-        setState(prev => {
-          if (targetPiece) {
-            const newState = gameEngine.applyAttack(stateWithHistory, movingPiece!, hex);
-            return { ...prev, ...newState, viewNodeId: null, history: newState.history };
-          } else {
-            const newState = gameEngine.applyCastleAttack(stateWithHistory, movingPiece!, hex);
-            return { ...prev, ...newState, viewNodeId: null, history: newState.history };
-          }
-        });
-        return;
-      }
-      setState(prev => ({ ...prev, movingPiece: null }));
-      return;
-    }
-
-    if (isRecruitmentSpot(hex)) {
-      const castle = castles.find(c => c.isAdjacent(hex));
-      if (castle) {
-        // Recruitment logic similar to above
-        const snapshot = createHistorySnapshot(effectiveState);
-        
-        let treeForMutation = state.moveTree;
-        if (isViewingHistory && treeForMutation && state.viewNodeId) {
-            treeForMutation = treeForMutation.clone();
-            const viewNode = treeForMutation.findNodeById(state.viewNodeId);
-            if (viewNode) {
-                treeForMutation.setCurrentNode(viewNode);
-            }
-        }
-
-        const stateWithHistory = { 
-            ...effectiveState, 
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation
-        };
-
-        setState(prev => {
-          const newState = gameEngine.recruitPiece(stateWithHistory, castle, hex);
-          return { ...prev, ...newState, viewMoveIndex: null, history: newState.history };
-        });
-        return;
-      }
-    }
-
-    setState(prev => ({ ...prev, movingPiece: null }));
-  }, [gameEngine, turnPhase, movingPiece, pieces, castles, isLegalMove, isLegalAttack, isRecruitmentSpot, isAnalysisMode, state, getEffectiveState]);
+  }, [movingPiece, currentPlayer, turnPhase]);
 
   const handleResign = useCallback((player: Color) => {
     // Reset to live game state before resigning (in case viewing history)
@@ -551,109 +367,9 @@ export const useGameLogic = (
 
   const hasGameStarted = turnCounter > 0;
 
-  // Pledge Action
-  const pledge = useCallback((sanctuaryHex: Hex, spawnHex: Hex) => {
-    // Block pledge in Play Mode (Read-Only) when viewing history
-    if (!isAnalysisMode && isViewingHistory) {
-      return;
-    }
-
-    const effectiveState = getEffectiveState();
-
-    const snapshot = createHistorySnapshot(effectiveState);
-
-    let treeForMutation = state.moveTree;
-    if (isViewingHistory && treeForMutation && state.viewNodeId) {
-         treeForMutation = treeForMutation.clone();
-         const viewNode = treeForMutation.findNodeById(state.viewNodeId);
-         if (viewNode) {
-             treeForMutation.setCurrentNode(viewNode);
-         }
-    }
-
-    setState(prevState => {
-       try {
-           const stateWithHistory = { 
-               ...effectiveState, 
-               history: [...effectiveState.history, snapshot],
-               moveTree: treeForMutation
-           };
-
-           const sanctuary = stateWithHistory.sanctuaries?.find(s => s.hex.equals(sanctuaryHex));
-           if (!sanctuary) throw new Error("Sanctuary not found");
-           
-           const newCoreState = gameEngine.pledge(stateWithHistory, sanctuaryHex, spawnHex);
-           
-           const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
-           const currentPlayer = gameEngine.getCurrentPlayer(stateWithHistory.turnCounter);
-           const turnPhase = gameEngine.getTurnPhase(stateWithHistory.turnCounter);
-           const turnNumber = Math.floor(stateWithHistory.turnCounter / 10) + 1;
-           
-           const moveRecord = { notation, turnNumber, color: currentPlayer, phase: turnPhase };
-           
-           let finalTree = treeForMutation;
-           if (finalTree) {
-               // If we already cloned it above due to analysis mode, we mutate the clone.
-               // If not, we clone now.
-               if (!isAnalysisMode) {
-                   finalTree = finalTree.clone();
-               }
-               finalTree.addMove(moveRecord);
-           }
-           
-           return { 
-               ...prevState, 
-               ...newCoreState, 
-               moveHistory: [...stateWithHistory.moveHistory, moveRecord],
-               history: stateWithHistory.history,
-               viewNodeId: null,
-               moveTree: finalTree
-           };
-       } catch (e) {
-           console.error(e);
-           return prevState;
-       }
-    });
-  }, [gameEngine, isAnalysisMode, state, getEffectiveState]);
-
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
       return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex);
   }, [gameEngine, state]);
-
-  // Ability Usage
-  const triggerAbility = useCallback((sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
-      // Block abilities in Play Mode (Read-Only) when viewing history
-      if (!isAnalysisMode && isViewingHistory) {
-        return;
-      }
-
-      const effectiveState = getEffectiveState();
-      const snapshot = createHistorySnapshot(effectiveState);
-      
-      let treeForMutation = state.moveTree;
-      if (isViewingHistory && treeForMutation && state.viewNodeId) {
-          treeForMutation = treeForMutation.clone();
-          const viewNode = treeForMutation.findNodeById(state.viewNodeId);
-          if (viewNode) {
-              treeForMutation.setCurrentNode(viewNode);
-          }
-      }
-
-      setState(prevState => {
-        try {
-            const stateWithHistory = { 
-                ...effectiveState, 
-                history: [...effectiveState.history, snapshot],
-                moveTree: treeForMutation
-            };
-            const newState = gameEngine.activateAbility(stateWithHistory, sourceHex, targetHex, ability);
-            return { ...prevState, ...newState, viewNodeId: null, history: newState.history };
-        } catch (e) {
-            console.error(e);
-            return prevState;
-        }
-      });
-  }, [gameEngine, isViewingHistory, state, getEffectiveState]);
 
   return {
     // State
