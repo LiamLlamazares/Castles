@@ -317,3 +317,45 @@ useGameLogic.ts (389 lines)
     └── triggerAbility
 ```
 
+---
+
+# Event System Architecture
+
+The Event System decouples state mutations from side effects using a pub/sub pattern.
+
+## Event Types
+
+| Event | When Emitted |
+|-------|--------------|
+| `MOVE_MADE` | After piece movement |
+| `ATTACK_RESOLVED` | After combat |
+| `CASTLE_CAPTURED` | Castle changes owner |
+| `PIECE_RECRUITED` | New piece spawned |
+| `TURN_CHANGED` | Phase/player changes |
+| `PIECE_DESTROYED` | Combat death |
+| `SANCTUARY_PLEDGED` | Pledge action |
+| `ABILITY_ACTIVATED` | Special ability |
+| `GAME_ENDED` | Game over |
+
+## Usage
+
+```typescript
+import { gameEvents } from "../Classes/Events";
+
+// Subscribe to specific events
+const unsubscribe = gameEvents.on("MOVE_MADE", (event) => {
+  playMoveSound(event.from, event.to);
+  animatePiece(event.piece, event.from, event.to);
+});
+
+// Subscribe to all events (for logging)
+gameEvents.onAll((event) => {
+  console.log(`[${event.type}]`, event);
+});
+
+// Commands emit events automatically after execution
+const command = new MoveCommand(piece, targetHex, context);
+command.execute(state); // Emits MOVE_MADE event
+```
+
+

@@ -1,9 +1,9 @@
 /**
- * @file AttackCommand.ts
+ * @file AttackCommands.ts
  * @description Command for attack actions (piece and castle attacks).
  *
  * Encapsulates the logic for attacking enemy pieces or castles.
- * Uses GameEngine for state mutation (which includes history/tree updates).
+ * Uses GameEngine for state mutation and emits events after execution.
  */
 
 import { GameCommand, CommandResult, CommandType, CommandContext } from "./GameCommand";
@@ -11,6 +11,7 @@ import { GameState } from "../Core/GameEngine";
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { NotationService } from "../Systems/NotationService";
+import { gameEvents, AttackResolvedEvent } from "../Events";
 
 /**
  * Command for attacking an enemy piece.
@@ -29,7 +30,29 @@ export class AttackCommand implements GameCommand {
 
   execute(state: GameState): CommandResult {
     try {
+      // Find defender before state change
+      const defender = state.pieces.find((p) => p.hex.equals(this.targetHex)) || null;
+      
       const newState = this.context.gameEngine.applyAttack(state, this.attacker, this.targetHex);
+      
+      // Determine result by checking if defender was captured
+      const defenderStillExists = defender && newState.pieces.some(
+        (p) => p.hex.equals(defender.hex) && p.color === defender.color
+      );
+      const result = defenderStillExists ? "damage" : "capture";
+
+      // Emit event
+      const event: AttackResolvedEvent = {
+        type: "ATTACK_RESOLVED",
+        attacker: this.attacker,
+        defender,
+        targetHex: this.targetHex,
+        result,
+        timestamp: Date.now(),
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+      };
+      gameEvents.emit(event);
+
       return {
         newState,
         notation: this.notation,
@@ -68,6 +91,19 @@ export class CastleAttackCommand implements GameCommand {
   execute(state: GameState): CommandResult {
     try {
       const newState = this.context.gameEngine.applyCastleAttack(state, this.attacker, this.targetHex);
+
+      // Emit event (castle attack)
+      const event: AttackResolvedEvent = {
+        type: "ATTACK_RESOLVED",
+        attacker: this.attacker,
+        defender: null,
+        targetHex: this.targetHex,
+        result: "capture",
+        timestamp: Date.now(),
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+      };
+      gameEvents.emit(event);
+
       return {
         newState,
         notation: this.notation,
