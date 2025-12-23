@@ -2,20 +2,25 @@
  * @file useAnalysisMode.ts
  * @description Hook for managing analysis/history navigation mode.
  *
- * Provides:
- * - History viewing state (viewNodeId)
- * - Navigation controls (jumpToNode, stepHistory)
- * - Analysis mode detection
+ * ## Purpose
+ * Provides controls for navigating through move history using the MoveTree.
+ * Uses MoveTree's new consolidated methods for state retrieval.
  *
- * @usage Composed into useGameLogic for history replay functionality.
+ * ## Key Concepts
+ * - `viewNodeId = null` → Live position (current game state)
+ * - `viewNodeId = "abc123"` → Viewing a historical position
+ * - `isViewingHistory` → Derived from `viewNodeId !== null`
+ *
+ * @see MoveTree.getViewState - Gets snapshot for any node
+ * @see MoveTree.getViewNode - Gets node by ID
  */
 import { useCallback } from "react";
 import { HistoryEntry } from "../Constants";
-import { MoveTree, MoveNode } from "../Classes/Core/MoveTree";
+import { MoveTree } from "../Classes/Core/MoveTree";
 
 export interface AnalysisModeState {
-  viewNodeId: string | null;  // Node ID for tree-based navigation (null = live)
-  moveTree?: MoveTree;  // Reference to the move tree for navigation
+  viewNodeId: string | null;  // Node ID for tree navigation (null = live)
+  moveTree?: MoveTree;
 }
 
 export interface AnalysisModeActions {
@@ -34,7 +39,7 @@ export interface AnalysisModeResult extends AnalysisModeActions {
  * 
  * @param state - Current state containing moveTree and viewNodeId
  * @param setState - State setter function
- * @param isAnalysisMode - Explicit flag indicating if in analysis mode (blocks moves/dots)
+ * @param isAnalysisMode - Explicit flag indicating if in analysis mode
  * @returns Analysis mode controls and computed values
  */
 export const useAnalysisMode = <T extends AnalysisModeState>(
@@ -44,14 +49,11 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
 ): AnalysisModeResult => {
   const { moveTree, viewNodeId } = state;
   
-  // Find the current view node from the tree
-  const viewNode = viewNodeId && moveTree ? moveTree.findNodeById(viewNodeId) : null;
+  // Use MoveTree's consolidated method for view state
+  const analysisState = moveTree?.getViewState(viewNodeId) || null;
   
-  // Viewing history if we have a specific node selected (not live)
+  // Simple derivation - viewing history if viewNodeId is set
   const isViewingHistory = viewNodeId !== null;
-  
-  // Get the snapshot from the viewed node
-  const analysisState = viewNode?.snapshot || null;
 
   /**
    * Jump to a specific node by ID (or null for live)
@@ -62,58 +64,48 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
 
   /**
    * Step through history using tree navigation
-   * -1 = go to parent node (back)
-   * +1 = go to selected child node (forward)
+   * -1 = go to parent node (back in time)
+   * +1 = go to selected child node (forward in time)
    */
   const stepHistory = useCallback((direction: -1 | 1) => {
     setState(prev => {
       const { moveTree: tree, viewNodeId: currentNodeId } = prev;
       if (!tree) return prev;
       
-      // If currently live (null), stepping back goes to the parent of current tree head
-      if (currentNodeId === null) {
-        if (direction === -1) {
-          // Go to parent of current tree position (one move back from last played)
-          const currentNode = tree.current;
-          // If at root, stay live (no moves to go back)
-          if (currentNode === tree.rootNode) return prev;
-          // If current has a parent (should always be true if not at root)
-          if (currentNode.parent) {
-            // Go to parent - but if parent is root, go to root
-            return { ...prev, viewNodeId: currentNode.parent.id };
-          }
-          return prev;
-        }
-        // Can't step forward from live
-        return prev;
-      }
-      
-      // Find the current node
-      const currentNode = tree.findNodeById(currentNodeId);
+      // Get the current view node using MoveTree's method
+      const currentNode = tree.getViewNode(currentNodeId);
       if (!currentNode) return prev;
       
       if (direction === -1) {
-        // Go to parent
-        if (currentNode.parent) {
-          // If parent is root, we're at start of game
-          if (currentNode.parent === tree.rootNode) {
+        // Stepping backwards
+        if (currentNodeId === null) {
+          // Currently live - go to parent of current position
+          if (currentNode.parent && currentNode.parent !== tree.rootNode) {
+            return { ...prev, viewNodeId: currentNode.parent.id };
+          } else if (currentNode !== tree.rootNode && currentNode.parent) {
+            // At first move, go to root
             return { ...prev, viewNodeId: tree.rootNode.id };
           }
+          return prev;
+        }
+        
+        // Viewing history - go to parent
+        if (currentNode.parent) {
           return { ...prev, viewNodeId: currentNode.parent.id };
         }
-        // Already at root, stay there
         return prev;
+        
       } else {
-        // Go to selected child
+        // Stepping forward (+1)
         if (currentNode.children.length > 0) {
           const selectedChild = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
           return { ...prev, viewNodeId: selectedChild.id };
         }
-        // No children - if we're at the tree's current position, go live
+        
+        // No children - if at current tree position, go live
         if (currentNode === tree.current) {
           return { ...prev, viewNodeId: null };
         }
-        // Otherwise stay where we are
         return prev;
       }
     });

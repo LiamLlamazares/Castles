@@ -225,4 +225,50 @@ export class MoveTree {
     /**
      * EXPERIMENTAL: Returns specific variation line.
      */
+
+    /**
+     * Gets the game state snapshot for a specific node.
+     * Consolidates view state logic - works for both live and analysis mode.
+     * 
+     * @param viewNodeId - Node ID to get state for, or null for live (current) position
+     * @returns The HistoryEntry snapshot, or null if not found/at start
+     * 
+     * @example
+     * const snapshot = moveTree.getViewState(viewNodeId);
+     * if (snapshot) displayBoard(snapshot.pieces);
+     */
+    public getViewState(viewNodeId: string | null): HistoryEntry | null {
+        if (viewNodeId === null) {
+            // Live position - return current node's snapshot
+            return this._currentNode.snapshot || null;
+        }
+        
+        // Analysis mode - find the specific node
+        const viewNode = this.findNodeById(viewNodeId);
+        return viewNode?.snapshot || null;
+    }
+
+    /**
+     * Checks if currently viewing the live (most recent) position.
+     * Useful for determining if player can make moves.
+     * 
+     * @param viewNodeId - Current view node ID (null = live)
+     * @returns true if at live position, false if viewing history
+     */
+    public isAtLivePosition(viewNodeId: string | null): boolean {
+        return viewNodeId === null;
+    }
+
+    /**
+     * Gets the node for a given viewNodeId.
+     * @param viewNodeId - Node ID to find, or null for current node
+     * @returns The MoveNode or null
+     */
+    public getViewNode(viewNodeId: string | null): MoveNode | null {
+        if (viewNodeId === null) {
+            return this._currentNode;
+        }
+        return this.findNodeById(viewNodeId);
+    }
 }
+

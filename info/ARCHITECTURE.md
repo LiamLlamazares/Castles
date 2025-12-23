@@ -358,4 +358,39 @@ const command = new MoveCommand(piece, targetHex, context);
 command.execute(state); // Emits MOVE_MADE event
 ```
 
+---
+
+# Analysis Mode Architecture
+
+Analysis mode allows players to navigate through move history without affecting the live game.
+
+## Key Concepts
+
+| Concept | Value | Meaning |
+|---------|-------|---------|
+| `viewNodeId` | `null` | Viewing live game |
+| `viewNodeId` | `"abc123"` | Viewing historical position |
+| `isViewingHistory` | `viewNodeId !== null` | Derived, not stored |
+
+## MoveTree Methods
+
+```typescript
+// Get snapshot for display
+const snapshot = moveTree.getViewState(viewNodeId);
+
+// Get the node object
+const node = moveTree.getViewNode(viewNodeId);
+
+// Check if at live position
+const isLive = moveTree.isAtLivePosition(viewNodeId);
+```
+
+## Hook Composition
+
+```typescript
+// useAnalysisMode provides navigation + state retrieval
+const { jumpToNode, stepHistory, analysisState } = useAnalysisMode(state, setState);
+```
+
+
 
