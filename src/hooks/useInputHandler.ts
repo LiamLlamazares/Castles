@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { startingLayout } from "../ConstantImports";
 
 interface UseInputHandlerProps {
@@ -20,6 +20,9 @@ export const useInputHandler = ({
   onNewGame,
   isNewGameEnabled = false,
 }: UseInputHandlerProps) => {
+  // Use ref to store callbacks to avoid dependency issues
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
   
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
@@ -54,22 +57,23 @@ export const useInputHandler = ({
     }
   }, [onPass, onFlipBoard, onTakeback, onNavigate, onNewGame, isNewGameEnabled]);
 
-  const handleResize = useCallback(() => {
-    // Subtract right panel width (~300px)
-    startingLayout.updateDimensions(window.innerWidth - 300, window.innerHeight);
-    onResize();
-  }, [onResize]);
-
+  // Set up resize handler once
   useEffect(() => {
+    const handleResize = () => {
+      startingLayout.updateDimensions(window.innerWidth - 300, window.innerHeight);
+      onResizeRef.current();
+    };
+
+    // Initial resize
+    startingLayout.updateDimensions(window.innerWidth - 300, window.innerHeight);
+    // DON'T call onResize on initial mount - it causes unnecessary re-renders
+
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleResize);
     
-    // Initial resize to set correct dimensions immediately
-    handleResize();
-
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", handleResize);
     };
-  }, [handleKeyDown, handleResize]);
+  }, [handleKeyDown]);
 };
