@@ -18,6 +18,7 @@
  * @see DeathSystem - Handles piece death and respawn logic
  */
 import { Piece } from "../Entities/Piece";
+import { PieceFactory } from "../Entities/PieceFactory";
 import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
 import { MoveTree } from "../Core/MoveTree";
@@ -346,7 +347,7 @@ export class StateMutator {
       const record = this.createMoveRecord(notation, state);
       const newMoveHistory = this.appendHistory(state, record);
       
-      const newPiece = new Piece(hex, TurnManager.getCurrentPlayer(state.turnCounter), pieceType);
+      const newPiece = PieceFactory.create(pieceType, hex, TurnManager.getCurrentPlayer(state.turnCounter));
       
       const newPieces = [...state.pieces, newPiece];
       

@@ -11,6 +11,7 @@
  * @usage Used by StateMutator to process death results from CombatSystem.
  */
 import { Piece } from "../Entities/Piece";
+import { PieceFactory } from "../Entities/PieceFactory";
 import { Castle } from "../Entities/Castle";
 import { GameState } from "../Core/GameEngine";
 import { createPieceMap } from "../../utils/PieceMap";
@@ -72,7 +73,7 @@ export class DeathSystem {
                        const isOccupied = newPieces.some(p => p.hex.equals(spot));
                        if (!isOccupied) {
                            // Spawn!
-                           const phoenix = new Piece(spot, record.owner, PieceType.Phoenix);
+                           const phoenix = PieceFactory.createPhoenix(spot, record.owner);
                            newPieces.push(phoenix);
                            return; // Done for this record
                        }

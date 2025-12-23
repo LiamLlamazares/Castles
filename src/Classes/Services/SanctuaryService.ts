@@ -13,6 +13,7 @@
  * @see SanctuaryGenerator - Creates sanctuaries during setup
  */
 import { Piece } from "../Entities/Piece";
+import { PieceFactory } from "../Entities/PieceFactory";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { Hex } from "../Entities/Hex";
 import { GameState } from "../Core/GameEngine";
@@ -77,7 +78,7 @@ export class SanctuaryService {
     }
 
     // Spawn new piece
-    const newPiece = new Piece(spawnHex, occupant.color, sanctuary.pieceType);
+    const newPiece = PieceFactory.fromType(sanctuary.pieceType, spawnHex, occupant.color);
     newPieces.push(newPiece);
 
     // Update Sanctuary (Cooldown + Pledged flag)

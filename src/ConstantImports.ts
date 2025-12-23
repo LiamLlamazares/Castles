@@ -30,6 +30,7 @@
  */
 import { Hex } from "./Classes/Entities/Hex";
 import { Piece } from "./Classes/Entities/Piece";
+import { PieceFactory } from "./Classes/Entities/PieceFactory";
 import { Board } from "./Classes/Core/Board";
 import { LayoutService } from "./Classes/Systems/LayoutService";
 import { N_SQUARES, PieceType, Color } from "./Constants";
@@ -45,8 +46,8 @@ import { N_SQUARES, PieceType, Color } from "./Constants";
  */
 function createMirroredPair(type: PieceType, q: number, r: number, s: number): Piece[] {
   return [
-    new Piece(new Hex(q, r, s), "w" as Color, type),
-    new Piece(new Hex(-q, -r, -s), "b" as Color, type),
+    PieceFactory.create(type, new Hex(q, r, s), "w"),
+    PieceFactory.create(type, new Hex(-q, -r, -s), "b"),
   ];
 }
 

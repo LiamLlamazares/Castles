@@ -392,5 +392,28 @@ const isLive = moveTree.isAtLivePosition(viewNodeId);
 const { jumpToNode, stepHistory, analysisState } = useAnalysisMode(state, setState);
 ```
 
+---
+
+# Piece Factory Pattern
+
+The PieceFactory centralizes piece creation with type-safe methods.
+
+## Usage
+
+```typescript
+import { PieceFactory } from "../Classes/Entities/PieceFactory";
+
+// Type-specific creation
+const swordsman = PieceFactory.createSwordsman(hex, "w");
+
+// Generic creation with enum
+const piece = PieceFactory.fromType(PieceType.Archer, hex, "b");
+
+// Special cases
+const spent = PieceFactory.createSpent(PieceType.Knight, hex, "w"); // Can't act
+const revived = PieceFactory.createRevived(PieceType.Wolf, hex, "b"); // Necromancer
+```
+
+
 
 
