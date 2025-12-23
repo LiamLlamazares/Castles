@@ -128,6 +128,8 @@ body {
 }
 .piece {
   cursor: pointer;
+  /* Smooth Lichess-style piece movement */
+  transition: x 0.15s ease-out, y 0.15s ease-out;
 }
 :root {
   --backgroundColor: rgba(246, 241, 209);

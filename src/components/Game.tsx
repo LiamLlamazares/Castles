@@ -16,6 +16,7 @@
  */
 import React from 'react';
 import { useGameLogic } from "../hooks/useGameLogic";
+import { useSoundEffects } from "../hooks/useSoundEffects";
 import { useInputHandler } from "../hooks/useInputHandler";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
@@ -80,6 +81,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [activeAbility, setActiveAbility] = React.useState<"Fireball" | "Teleport" | "RaiseDead" | null>(null);
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
   const [showRulesModal, setShowRulesModal] = React.useState(false);
+  
+  // Sound effects hook - subscribes to game events
+  useSoundEffects();
     
   const {
     // State
