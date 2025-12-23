@@ -257,3 +257,63 @@ Example from [useInputHandler.ts](file:///c:/Users/liaml/Documents/GitHub/Castle
 export const useInputHandler = ({ onPass, ... }: UseInputHandlerProps) => { ... }
 ```
 It's like saying: "Here is a hook that needs a suitcase (`UseInputHandlerProps`). Open the suitcase and give me the `onPass` function immediately."
+
+---
+
+# Command Pattern Architecture
+
+The Command Pattern encapsulates game actions as objects. This enables:
+- **Undo/Redo**: Commands can be stored and reversed
+- **Action history**: Complete log for debugging
+- **Testability**: Commands execute in isolation
+
+## Command Interface
+
+```typescript
+// src/Classes/Commands/GameCommand.ts
+interface GameCommand {
+  readonly type: CommandType;
+  execute(state: GameState): CommandResult;
+  getNotation(): string;
+}
+```
+
+## Available Commands
+
+| Command | Type | Description |
+|---------|------|-------------|
+| `MoveCommand` | MOVE | Piece movement |
+| `AttackCommand` | ATTACK | Piece combat |
+| `CastleAttackCommand` | CASTLE_ATTACK | Castle capture |
+| `PassCommand` | PASS | Skip phase |
+| `RecruitCommand` | RECRUIT | Spawn piece |
+
+## Usage Example
+
+```typescript
+import { MoveCommand, CommandContext } from "../Classes/Commands";
+
+const context: CommandContext = { gameEngine, board };
+const command = new MoveCommand(piece, targetHex, context);
+const { newState, notation, success } = command.execute(currentState);
+```
+
+---
+
+# Hook Composition Architecture
+
+The `useGameLogic` hook composes specialized hooks:
+
+```
+useGameLogic.ts (389 lines)
+├── useState (game state)
+├── useAnalysisMode (history navigation)
+├── useUISettings (display toggles)
+├── usePGN (import/export)
+└── useMoveExecution (action execution)
+    ├── handlePass
+    ├── handleHexClick
+    ├── pledge
+    └── triggerAbility
+```
+

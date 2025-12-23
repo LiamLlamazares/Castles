@@ -3,15 +3,14 @@
  * @description Handles all move execution logic (Move, Attack, Recruit, Pass, Pledge, Abilities).
  *
  * Extracted from useGameLogic to reduce complexity and improve separation of concerns.
- * This hook manages the actual execution of game actions, including:
- * - Move validation dispatch
- * - State mutation via GameEngine
+ * This hook manages the actual execution of game actions using the Command Pattern:
+ * - Commands encapsulate actions (Move, Attack, Pass, Recruit)
  * - History/Tree synchronization for branching
  *
  * @see useGameLogic - Composes this hook
- * @see GameEngine - Core game logic facade
+ * @see GameCommand - Base command interface
  */
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
@@ -22,8 +21,17 @@ import { createHistorySnapshot } from "../utils/GameStateUtils";
 import { TurnPhase, Color, HistoryEntry, MoveRecord } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 
-export interface MoveExecutionState {
+// Command Pattern imports
+import {
+  CommandContext,
+  MoveCommand,
+  AttackCommand,
+  CastleAttackCommand,
+  PassCommand,
+  RecruitCommand,
+} from "../Classes/Commands";
 
+export interface MoveExecutionState {
   pieces: Piece[];
   castles: Castle[];
   turnCounter: number;
@@ -58,6 +66,7 @@ export interface MoveExecutionProps {
 
 /**
  * Hook for executing game moves, attacks, and other actions.
+ * Uses Command Pattern for action encapsulation.
  * Handles branching logic when making moves from analysis mode.
  */
 export const useMoveExecution = ({
@@ -74,6 +83,12 @@ export const useMoveExecution = ({
   getEffectiveState,
 }: MoveExecutionProps) => {
   const { movingPiece, castles } = state;
+
+  // Command context for creating commands
+  const commandContext = useMemo<CommandContext>(
+    () => ({ gameEngine, board: gameEngine.board }),
+    [gameEngine]
+  );
 
   /**
    * Syncs the MoveTree cursor to the currently viewed node before mutation.
@@ -92,7 +107,21 @@ export const useMoveExecution = ({
   }, [state.moveTree, state.viewNodeId, isViewingHistory]);
 
   /**
-   * Handles passing the turn.
+   * Prepares state with history snapshot and tree for mutation.
+   */
+  const prepareStateForAction = useCallback((): GameState => {
+    const effectiveState = getEffectiveState();
+    const snapshot = createHistorySnapshot(effectiveState);
+    const treeForMutation = prepareTreeForMutation();
+    return {
+      ...effectiveState,
+      history: [...effectiveState.history, snapshot],
+      moveTree: treeForMutation,
+    };
+  }, [getEffectiveState, prepareTreeForMutation]);
+
+  /**
+   * Handles passing the turn using PassCommand.
    */
   const handlePass = useCallback(() => {
     // Block moves in Play Mode (Read-Only) when viewing history
@@ -100,23 +129,23 @@ export const useMoveExecution = ({
       return;
     }
 
-    const effectiveState = getEffectiveState();
-    const snapshot = createHistorySnapshot(effectiveState);
-    const treeForMutation = prepareTreeForMutation();
+    const stateWithHistory = prepareStateForAction();
+    const command = new PassCommand(commandContext);
+    const result = command.execute(stateWithHistory);
 
-    setState((prev: MoveExecutionState) => {
-      const stateWithHistory = {
-        ...effectiveState,
-        history: [...effectiveState.history, snapshot],
-        moveTree: treeForMutation,
-      };
-      const newState = gameEngine.passTurn(stateWithHistory);
-      return { ...prev, ...newState, viewNodeId: null, history: newState.history };
-    });
-  }, [gameEngine, isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, setState]);
+    if (result.success) {
+      setState((prev: MoveExecutionState) => ({
+        ...prev,
+        ...result.newState,
+        viewNodeId: null,
+        history: result.newState.history,
+      }));
+    }
+  }, [commandContext, isAnalysisMode, isViewingHistory, prepareStateForAction, setState]);
 
   /**
    * Handles clicking on a hex for movement, attack, or recruitment.
+   * Uses MoveCommand, AttackCommand, CastleAttackCommand, or RecruitCommand.
    */
   const handleHexClick = useCallback(
     (hex: Hex) => {
@@ -126,29 +155,21 @@ export const useMoveExecution = ({
         return;
       }
 
-      const effectiveState = getEffectiveState();
-
       // Handle Movement
       if (turnPhase === "Movement" && movingPiece?.canMove) {
         if (isLegalMove(hex)) {
-          const snapshot = createHistorySnapshot(effectiveState);
-          const treeForMutation = prepareTreeForMutation();
+          const stateWithHistory = prepareStateForAction();
+          const command = new MoveCommand(movingPiece, hex, commandContext);
+          const result = command.execute(stateWithHistory);
 
-          const stateWithHistory = {
-            ...effectiveState,
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation,
-          };
-
-          setState((prev: MoveExecutionState) => {
-            const newState = gameEngine.applyMove(stateWithHistory, movingPiece!, hex);
-            return {
+          if (result.success) {
+            setState((prev: MoveExecutionState) => ({
               ...prev,
-              ...newState,
+              ...result.newState,
               viewNodeId: null,
-              history: newState.history,
-            };
-          });
+              history: result.newState.history,
+            }));
+          }
           return;
         }
         setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
@@ -158,26 +179,25 @@ export const useMoveExecution = ({
       // Handle Attack
       if (turnPhase === "Attack" && movingPiece?.canAttack) {
         if (isLegalAttack(hex)) {
-          const snapshot = createHistorySnapshot(effectiveState);
-          const treeForMutation = prepareTreeForMutation();
-
-          const stateWithHistory = {
-            ...effectiveState,
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation,
-          };
-
+          const stateWithHistory = prepareStateForAction();
+          const effectiveState = getEffectiveState();
           const targetPiece = effectiveState.pieces.find((p) => p.hex.equals(hex));
 
-          setState((prev: MoveExecutionState) => {
-            if (targetPiece) {
-              const newState = gameEngine.applyAttack(stateWithHistory, movingPiece!, hex);
-              return { ...prev, ...newState, viewNodeId: null, history: newState.history };
-            } else {
-              const newState = gameEngine.applyCastleAttack(stateWithHistory, movingPiece!, hex);
-              return { ...prev, ...newState, viewNodeId: null, history: newState.history };
-            }
-          });
+          // Use AttackCommand for pieces, CastleAttackCommand for castles
+          const command = targetPiece
+            ? new AttackCommand(movingPiece, hex, commandContext)
+            : new CastleAttackCommand(movingPiece, hex, commandContext);
+
+          const result = command.execute(stateWithHistory);
+
+          if (result.success) {
+            setState((prev: MoveExecutionState) => ({
+              ...prev,
+              ...result.newState,
+              viewNodeId: null,
+              history: result.newState.history,
+            }));
+          }
           return;
         }
         setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
@@ -188,19 +208,18 @@ export const useMoveExecution = ({
       if (isRecruitmentSpot(hex)) {
         const castle = castles.find((c) => c.isAdjacent(hex));
         if (castle) {
-          const snapshot = createHistorySnapshot(effectiveState);
-          const treeForMutation = prepareTreeForMutation();
+          const stateWithHistory = prepareStateForAction();
+          const command = new RecruitCommand(castle, hex, commandContext);
+          const result = command.execute(stateWithHistory);
 
-          const stateWithHistory = {
-            ...effectiveState,
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation,
-          };
-
-          setState((prev: MoveExecutionState) => {
-            const newState = gameEngine.recruitPiece(stateWithHistory, castle, hex);
-            return { ...prev, ...newState, viewNodeId: null, history: newState.history };
-          });
+          if (result.success) {
+            setState((prev: MoveExecutionState) => ({
+              ...prev,
+              ...result.newState,
+              viewNodeId: null,
+              history: result.newState.history,
+            }));
+          }
           return;
         }
       }
@@ -208,7 +227,7 @@ export const useMoveExecution = ({
       setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
     },
     [
-      gameEngine,
+      commandContext,
       turnPhase,
       movingPiece,
       castles,
@@ -218,13 +237,14 @@ export const useMoveExecution = ({
       isAnalysisMode,
       isViewingHistory,
       getEffectiveState,
-      prepareTreeForMutation,
+      prepareStateForAction,
       setState,
     ]
   );
 
   /**
    * Handles pledging at a sanctuary.
+   * (Not yet converted to Command - sanctuary logic is more complex)
    */
   const pledge = useCallback(
     (sanctuaryHex: Hex, spawnHex: Hex) => {
@@ -289,6 +309,7 @@ export const useMoveExecution = ({
 
   /**
    * Handles triggering a special ability (Fireball, Teleport, RaiseDead).
+   * (Not yet converted to Command - ability logic is more complex)
    */
   const triggerAbility = useCallback(
     (sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
