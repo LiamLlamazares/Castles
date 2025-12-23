@@ -3,14 +3,14 @@ import { MoveTree } from "../../Core/MoveTree";
 import { Board } from "../../Core/Board";
 import { Hex } from "../../Entities/Hex";
 import { Castle } from "../../Entities/Castle";
-import { MoveRecord } from "../../../Constants";
+import { MoveRecord, Color } from "../../../Constants";
 
 describe("PGNService Multiple Variations Export", () => {
     it("should export PGN with multiple siblings and deep nesting", () => {
         // 1. Setup a manual MoveTree with the user's specific scenario
         // 1. G12G11 H12H11 (1... I11I10 2. M8M9 N7N8)
         const tree = new MoveTree();
-        const board = new Board({ radius: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
+        const board = new Board({ nSquares: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
         
         const m1w: MoveRecord = { notation: "G12G11", turnNumber: 1, color: "w", phase: "Movement" };
         const m1b_main: MoveRecord = { notation: "H12H11", turnNumber: 1, color: "b", phase: "Movement" };
@@ -41,11 +41,11 @@ describe("PGNService Multiple Variations Export", () => {
 
     it("should handle multiple sibling variations from the same move", () => {
         const tree = new MoveTree();
-        const board = new Board({ radius: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
+        const board = new Board({ nSquares: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
         
-        const m1w_main = { notation: "e4", turnNumber: 1, color: "w", phase: "Movement" as any };
-        const m1w_var1 = { notation: "d4", turnNumber: 1, color: "w", phase: "Movement" as any };
-        const m1w_var2 = { notation: "c4", turnNumber: 1, color: "w", phase: "Movement" as any };
+        const m1w_main: MoveRecord = { notation: "e4", turnNumber: 1, color: "w" as Color, phase: "Movement" };
+        const m1w_var1: MoveRecord = { notation: "d4", turnNumber: 1, color: "w" as Color, phase: "Movement" };
+        const m1w_var2: MoveRecord = { notation: "c4", turnNumber: 1, color: "w" as Color, phase: "Movement" };
         
         tree.addMove(m1w_main);
         
@@ -57,7 +57,7 @@ describe("PGNService Multiple Variations Export", () => {
         
         // Select e4 as main
         tree.goToRoot();
-        tree.currentNode.selectedChildIndex = 0;
+        tree.current.selectedChildIndex = 0;
 
         const pgn = PGNService.generatePGN(board, [], [], [], {}, tree);
         
@@ -67,7 +67,7 @@ describe("PGNService Multiple Variations Export", () => {
 
     it("should handle variations of variations (deep nesting)", () => {
         const tree = new MoveTree();
-        const board = new Board({ radius: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
+        const board = new Board({ nSquares: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
         
         // User's exact scenario:
         // 1. Play J11J10 (w), I11I10 (w)  - main line

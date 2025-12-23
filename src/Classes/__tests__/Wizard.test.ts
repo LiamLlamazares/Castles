@@ -6,13 +6,14 @@ import { GameState } from "../Core/GameEngine";
 import { Board } from "../Core/Board";
 import { PieceType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
+import { MoveTree } from "../Core/MoveTree";
 
 describe('Wizard Active Abilities', () => {
     let board: Board;
     let state: GameState;
 
     beforeEach(() => {
-        board = new Board(8);
+        board = new Board({ nSquares: 8 });
         state = {
             pieces: [],
             pieceMap: new PieceMap([]),
@@ -22,10 +23,12 @@ describe('Wizard Active Abilities', () => {
             movingPiece: null,
             history: [],
             moveHistory: [],
+            moveTree: new MoveTree(),
             graveyard: [],
             phoenixRecords: [],
         };
     });
+
 
     test('Fireball deals 1 damage to target and neighbors', () => {
         const wizard = new Piece(new Hex(0, 0, 0), 'w', PieceType.Wizard);

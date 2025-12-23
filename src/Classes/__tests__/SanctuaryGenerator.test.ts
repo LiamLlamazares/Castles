@@ -7,7 +7,7 @@ describe("SanctuaryGenerator", () => {
 
   beforeEach(() => {
     // Create a standard 8-hex board
-    board = new Board(8);
+    board = new Board({ nSquares: 8 });
   });
 
   describe("generateRandomSanctuaries", () => {

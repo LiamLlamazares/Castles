@@ -5,10 +5,11 @@ import { Hex } from '../Entities/Hex';
 import { Castle } from '../Entities/Castle';
 import { PieceType, Color } from '../../Constants';
 import { createPieceMap } from '../../utils/PieceMap';
+import { MoveTree } from '../Core/MoveTree';
 
 // Create a minimal board for testing
 const createTestBoard = () => {
-  return new Board(7); // N_SQUARES - 1 = 7
+  return new Board({ nSquares: 7 }); // N_SQUARES - 1 = 7
 };
 
 // Helper to create mock state
@@ -21,6 +22,7 @@ const createMockState = (pieces: Piece[], castles: Castle[] = [], turnCounter: n
     movingPiece: null,
     history: [],
     moveHistory: [],
+    moveTree: new MoveTree(),
     graveyard: [],
     phoenixRecords: []
 });

@@ -5,6 +5,7 @@ import { Hex } from '../Entities/Hex';
 import { Sanctuary } from '../Entities/Sanctuary';
 import { PieceType, SanctuaryType } from '../../Constants';
 import { createPieceMap } from '../../utils/PieceMap';
+import { MoveTree } from '../Core/MoveTree';
 
 describe('Pledge Mechanics', () => {
   let gameEngine: GameEngine;
@@ -13,7 +14,7 @@ describe('Pledge Mechanics', () => {
   let sanctuaries: Sanctuary[];
 
   beforeEach(() => {
-    board = new Board(8); // Standard board
+    board = new Board({ nSquares: 8 }); // Standard board
     pieces = [];
     gameEngine = new GameEngine(board);
     
@@ -32,6 +33,7 @@ describe('Pledge Mechanics', () => {
     movingPiece: null,
     history: [],
     moveHistory: [],
+    moveTree: new MoveTree(),
     graveyard: [],
     phoenixRecords: [],
   });

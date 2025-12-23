@@ -7,13 +7,14 @@ import { Board } from "../Core/Board";
 import { PieceType, PLAYER_CYCLE_LENGTH } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
 import { Castle } from "../Entities/Castle";
+import { MoveTree } from "../Core/MoveTree";
 
 describe('Phoenix Rebirth Logic', () => {
     let board: Board;
     let state: GameState;
 
     beforeEach(() => {
-        board = new Board(8);
+        board = new Board({ nSquares: 8 });
         state = {
             pieces: [],
             pieceMap: new PieceMap([]),
@@ -23,10 +24,12 @@ describe('Phoenix Rebirth Logic', () => {
             movingPiece: null,
             history: [],
             moveHistory: [],
+            moveTree: new MoveTree(),
             graveyard: [],
             phoenixRecords: []
         };
     });
+
 
     test('Phoenix death creates a respawn record', () => {
         // Mock CombatSystem or simulate death via applyAttack
@@ -56,7 +59,7 @@ describe('Phoenix Rebirth Logic', () => {
     });
 
     test('Phoenix respawns at castle when timer met', () => {
-        const castle = new Castle(new Hex(0, 0, 0), 'w'); // Owned by white
+        const castle = new Castle(new Hex(0, 0, 0), 'w', 0); // Owned by white
         state.castles = [castle];
         state.phoenixRecords = [{ respawnTurn: 10, owner: 'w' }];
         state.turnCounter = 10; // Timer met

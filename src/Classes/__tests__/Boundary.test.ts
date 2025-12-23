@@ -1,8 +1,25 @@
 import { Board } from '../Core/Board';
-import { GameEngine } from '../Core/GameEngine';
+import { GameEngine, GameState } from '../Core/GameEngine';
 import { Piece } from '../Entities/Piece';
 import { Hex } from '../Entities/Hex';
 import { PieceType, Color } from '../../Constants';
+import { createPieceMap } from '../../utils/PieceMap';
+import { MoveTree } from '../Core/MoveTree';
+
+// Helper to create mock game state
+const createMockState = (pieces: Piece[], turnCounter: number = 0): GameState => ({
+    pieces,
+    pieceMap: createPieceMap(pieces),
+    castles: [],
+    sanctuaries: [],
+    turnCounter,
+    movingPiece: null,
+    history: [],
+    moveHistory: [],
+    moveTree: new MoveTree(),
+    graveyard: [],
+    phoenixRecords: []
+});
 
 describe('Board Boundary Constraints', () => {
     let board: Board;
@@ -10,8 +27,7 @@ describe('Board Boundary Constraints', () => {
 
     beforeEach(() => {
         // Create a small board for testing
-        // N_SQUARES is usually 4 or 5, but we rely on Board default or passed value
-        board = new Board(3); // Small board radius 3
+        board = new Board({ nSquares: 3 }); // Small board radius 3
         gameEngine = new GameEngine(board);
     });
 
@@ -19,10 +35,9 @@ describe('Board Boundary Constraints', () => {
         // Place an Archer at the very edge: q=0, r=-3, s=3 (North edge)
         const edgeHex = new Hex(0, -3, 3);
         const archer = new Piece(edgeHex, 'w', PieceType.Archer);
-        const pieces = [archer];
-        const castles: any[] = []; // No castles needed for this test
+        const state = createMockState([archer], 0);
 
-        const legalMoves = gameEngine.getLegalMoves(archer, pieces, castles, 0);
+        const legalMoves = gameEngine.getLegalMoves(state, archer);
         
         // Archer moves radius 1. 
         // Hex(0, -4, 4) is directly North and valid direction, but OUT OF BOUNDS for radius 3 board.
@@ -42,11 +57,10 @@ describe('Board Boundary Constraints', () => {
         // Knight at edge
         const edgeHex = new Hex(3, -3, 0); // East edge
         const knight = new Piece(edgeHex, 'w', PieceType.Knight);
-        const pieces = [knight];
+        const state = createMockState([knight], 0);
         
-        // Knights move 2 then 1. 
-        // A jump further East would be q=4 or q=5, definitely off board for radius 3
-        const legalMoves = gameEngine.getLegalMoves(knight, pieces, [], 0);
+        // Knights move diagonally (slide)
+        const legalMoves = gameEngine.getLegalMoves(state, knight);
         
         // Filter any move that is NOT in the board's hexSet
         const invalidMoves = legalMoves.filter(m => !board.hexSet.has(m.getKey()));
@@ -58,12 +72,13 @@ describe('Board Boundary Constraints', () => {
         // Giant at center
         const centerHex = new Hex(0, 0, 0);
         const giant = new Piece(centerHex, 'w', PieceType.Giant);
-        const pieces = [giant];
+        const state = createMockState([giant], 0);
 
-        const legalMoves = gameEngine.getLegalMoves(giant, pieces, [], 0);
+        const legalMoves = gameEngine.getLegalMoves(state, giant);
 
         // Should be constrained to board hexes
         const invalidMoves = legalMoves.filter(m => !board.hexSet.has(m.getKey()));
         expect(invalidMoves.length).toBe(0);
     });
 });
+

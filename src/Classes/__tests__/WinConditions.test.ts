@@ -5,9 +5,10 @@ import { Castle } from '../Entities/Castle';
 import { Hex } from '../Entities/Hex';
 import { PieceType } from '../../Constants';
 import { createPieceMap } from '../../utils/PieceMap';
+import { MoveTree } from '../Core/MoveTree';
 
 // Create a minimal board for testing
-const createTestBoard = () => new Board(7);
+const createTestBoard = () => new Board({ nSquares: 7 });
 
 // Helper to create test castle
 const createCastle = (q: number, r: number, s: number, color: 'w' | 'b', owner?: 'w' | 'b') => {
@@ -147,6 +148,7 @@ describe('GameEngine - Win Conditions', () => {
         movingPiece: pieces[0],
         history: [],
         moveHistory: [],
+        moveTree: new MoveTree(),
         graveyard: [],
         phoenixRecords: [],
       };

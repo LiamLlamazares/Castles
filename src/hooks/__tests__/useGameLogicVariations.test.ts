@@ -70,8 +70,8 @@ describe("useGameLogic Nested Variations Integration", () => {
             result.current.stepHistory(-1);
         });
         
-        // With allowVariantCreation=true, isAnalysisMode is false (variants allowed means not blocked)
-        expect(result.current.isAnalysisMode).toBe(false);
+        // When stepping back, we enter analysis mode (viewing history state)
+        expect(result.current.isAnalysisMode).toBe(true);
         
         // 4. Play DIFFERENT Black move (Variation)
         // Store previous black move key

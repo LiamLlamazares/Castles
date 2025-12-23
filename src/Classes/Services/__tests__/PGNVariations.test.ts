@@ -9,7 +9,7 @@ describe("PGNService Variations Export", () => {
     it("should export PGN with nested variations (RAV format)", () => {
         // 1. Setup a manual MoveTree with variations
         const tree = new MoveTree();
-        const board = new Board({ radius: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
+        const board = new Board({ nSquares: 8 }, [new Castle(new Hex(0,0,0), 'w', 0)]);
         
         // Main line: 1. d4 e5 2. c4
         const m1w: MoveRecord = { notation: "d4", turnNumber: 1, color: "w", phase: "Movement" };

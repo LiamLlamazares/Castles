@@ -326,6 +326,9 @@ export class PGNService {
 
       // Loop through moves and apply them
       for (const token of moves) {
+          // Save state to history before applying move
+          currentState = PGNService.saveSnapshot(currentState);
+
           try {
               const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter) as Color;
               

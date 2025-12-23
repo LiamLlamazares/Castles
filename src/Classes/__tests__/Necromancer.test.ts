@@ -7,13 +7,14 @@ import { Board } from "../Core/Board";
 import { PieceType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
 import { CombatSystem } from "../Systems/CombatSystem";
+import { MoveTree } from "../Core/MoveTree";
 
 describe('Necromancer Mechanics', () => {
     let board: Board;
     let state: GameState;
 
     beforeEach(() => {
-        board = new Board(8);
+        board = new Board({ nSquares: 8 });
         state = {
             pieces: [],
             pieceMap: new PieceMap([]),
@@ -23,10 +24,12 @@ describe('Necromancer Mechanics', () => {
             movingPiece: null,
             history: [],
             moveHistory: [],
+            moveTree: new MoveTree(),
             graveyard: [],
             phoenixRecords: [],
         };
     });
+
 
     test('Soul Harvest: Necromancer gains soul upon capturing', () => {
         const necro = new Piece(new Hex(0, 0, 0), 'w', PieceType.Necromancer);

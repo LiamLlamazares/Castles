@@ -8,7 +8,7 @@ describe('LayoutService', () => {
     let layoutService: LayoutService;
 
     beforeEach(() => {
-        board = new Board(N_SQUARES);
+        board = new Board({ nSquares: N_SQUARES });
         layoutService = new LayoutService(board);
     });
 

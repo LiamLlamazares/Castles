@@ -415,5 +415,42 @@ const revived = PieceFactory.createRevived(PieceType.Wolf, hex, "b"); // Necroma
 ```
 
 
+# Strategy Registry Pattern
 
+The Strategy Registry pattern decouples `Piece` class from specific movement/attack implementations.
+
+## Adding a New Piece Type
+
+Only 3 files need to change:
+
+| File | What to Add |
+|------|-------------|
+| [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Add to `PieceType` enum and `PieceStrength` |
+| [MoveStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategyRegistry.ts) | Register movement strategy |
+| [AttackStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/AttackStrategyRegistry.ts) | Register attack type and strategy |
+
+## Example: Adding a "Champion" Piece
+
+```typescript
+// 1. Constants.ts - Add to enums
+export enum PieceType {
+  // ... existing types
+  Champion = "Champion",
+}
+
+export enum PieceStrength {
+  // ... existing types
+  Champion = 2,
+}
+
+// 2. MoveStrategyRegistry.ts - Register movement
+registerMoveStrategy(PieceType.Champion, (hex, blocked, valid, color, boardSize) => 
+  getWalkingMoves(hex, blocked, valid, 2) // Walks 2 hexes
+);
+
+// 3. AttackStrategyRegistry.ts - Register attack
+registerAttackStrategy(PieceType.Champion, AttackType.Melee, meleeAttackStrategy);
+```
+
+**Key Benefit:** No changes needed to `Piece.ts`, `RuleEngine.ts`, or `StateMutator.ts`.
 
