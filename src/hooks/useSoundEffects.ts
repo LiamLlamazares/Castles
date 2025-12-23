@@ -74,6 +74,7 @@ export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
     if (!enabled) return;
 
     const handleEvent = (event: GameEvent) => {
+      console.log("[SoundEffects] Event received:", event.type); // Debug
       switch (event.type) {
         case "MOVE_MADE":
           playSound("move");
@@ -86,7 +87,7 @@ export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
           }
           break;
         case "CASTLE_CAPTURED":
-          playSound("castle");
+          playSound("capture"); // Use capture sound as fallback
           break;
         case "GAME_ENDED":
           // Play victory for winner, defeat for loser
@@ -96,6 +97,7 @@ export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
       }
     };
 
+    console.log("[SoundEffects] Subscribing to events"); // Debug
     const unsubscribe = gameEvents.onAll(handleEvent);
     return () => unsubscribe();
   }, [enabled, playSound]);

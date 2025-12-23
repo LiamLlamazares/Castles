@@ -6,6 +6,12 @@
  * - Allegiance (color: white or black)
  * - Type (determines movement, attack range, and strength)
  * - Turn state (canMove, canAttack, damage taken)
+ * 
+ * EXTENSIBILITY:
+ * To add a new piece type, edit the registry files - NOT this class:
+ * - MoveStrategyRegistry.ts - Register movement behavior
+ * - AttackStrategyRegistry.ts - Register attack behavior and type
+ * - Constants.ts - Add to PieceType enum and PieceStrength
  */
 import { Hex } from "./Hex";
 import {
@@ -16,30 +22,15 @@ import {
   N_SQUARES,
 } from "../../Constants";
 
-import {
-  swordsmanMoves,
-  archerMoves,
-  knightMoves,
-  eagleMoves,
-  dragonMoves,
-  assassinMoves,
-  giantMoves,
-  wolfMoves,
-  rangerMoves,
-} from "../Strategies/MoveStrategies";
-
-import {
-  meleeAttacks,
-  rangedAttacks,
-  longRangedAttacks,
-  swordsmanAttacks,
-} from "../Strategies/AttackStrategies";
+// Registry pattern for strategies - adding new piece types doesn't require modifying this file
+import { getMoveStrategy } from "../Strategies/MoveStrategyRegistry";
+import { getAttackType, getAttackStrategy } from "../Strategies/AttackStrategyRegistry";
 
 /**
  * A piece on the game board.
  * 
- * Movement and attack patterns are determined by the piece type.
- * See MoveStrategies.ts for movement implementations.
+ * Movement and attack patterns are determined by the piece type via registries.
+ * See MoveStrategyRegistry.ts and AttackStrategyRegistry.ts for configurations.
  * 
  * IMMUTABILITY:
  * All properties are readonly. Use the `with()` method to create updated copies.
@@ -81,29 +72,11 @@ export class Piece {
    * - Ranged: exactly 2 hexes away (3 from high ground), doesn't move
    * - LongRanged: exactly 3 hexes away (4 from high ground), doesn't move
    * - Swordsman: diagonal-forward only, moves onto target
+   * 
+   * Uses registry lookup - see AttackStrategyRegistry.ts.
    */
   get AttackType(): AttackType {
-    switch (this.type) {
-      case PieceType.Archer:
-      case PieceType.Wizard:      // Wizard has Range 2 (like Archer)
-        return AttackType.Ranged;
-        
-      case PieceType.Trebuchet:
-      case PieceType.Ranger:      // Ranger has Long Range (3)
-        return AttackType.LongRanged;
-        
-      case PieceType.Swordsman:
-        return AttackType.Swordsman;
-        
-      case PieceType.Healer:      // Healers do not attack
-        return AttackType.None;
-        
-      case PieceType.Necromancer: // Necromancer is Melee
-        return AttackType.Melee;
-        
-      default:
-        return AttackType.Melee;
-    }
+    return getAttackType(this.type);
   }
 
   /**
@@ -126,70 +99,30 @@ export class Piece {
 
   /**
    * Returns all legal movement destinations for this piece.
-   * Delegates to the appropriate move strategy based on piece type.
+   * Delegates to the registered move strategy for this piece type.
    * 
    * @param blockedHexSet - Set of hex keys that cannot be moved to (occupied, river, castle)
    * @param color - Color of the moving piece (affects swordsman direction)
    * @param validHexSet - Set of hex keys representing valid board positions
-   */
-  /**
-   * Returns all legal movement destinations for this piece.
-   * Delegates to the appropriate move strategy based on piece type.
    * 
-   * @param blockedHexSet - Set of hex keys that cannot be moved to (occupied, river, castle)
-   * @param color - Color of the moving piece (affects swordsman direction)
-   * @param validHexSet - Set of hex keys representing valid board positions
+   * Uses registry lookup - see MoveStrategyRegistry.ts.
    */
   public getLegalMoves(blockedHexSet: Set<string>, color: Color, validHexSet: Set<string>): Hex[] {
-    switch (this.type) {
-      case PieceType.Swordsman:
-        return swordsmanMoves(this.hex, blockedHexSet, validHexSet, color);
-      case PieceType.Archer:
-      case PieceType.Trebuchet:
-      case PieceType.Monarch:
-        return archerMoves(this.hex, blockedHexSet, validHexSet);
-      case PieceType.Knight:
-        return knightMoves(this.hex, blockedHexSet, validHexSet, N_SQUARES);
-      case PieceType.Eagle:
-        return eagleMoves(this.hex, blockedHexSet, validHexSet);
-      case PieceType.Giant:
-        return giantMoves(this.hex, blockedHexSet, validHexSet, N_SQUARES);
-      case PieceType.Dragon:
-        return dragonMoves(this.hex, blockedHexSet, validHexSet);
-      case PieceType.Assassin:
-        return assassinMoves(this.hex, blockedHexSet, validHexSet, N_SQUARES);
-      case PieceType.Wolf:
-        return wolfMoves(this.hex, blockedHexSet, validHexSet);
-      case PieceType.Ranger:
-        return rangerMoves(this.hex, blockedHexSet, validHexSet);
-      case PieceType.Phoenix:
-        return eagleMoves(this.hex, blockedHexSet, validHexSet);
-      case PieceType.Healer:
-      case PieceType.Wizard:
-      case PieceType.Necromancer:
-        return archerMoves(this.hex, blockedHexSet, validHexSet);
-      default:
-        return [];
-    }
+    const strategy = getMoveStrategy(this.type);
+    return strategy(this.hex, blockedHexSet, validHexSet, color, N_SQUARES);
   }
 
-  // =========== ATTACK LOGIC ===========
-  
-
-
-  /** Returns all legal attacks based on attack type */
+  /**
+   * Returns all legal attacks based on attack type.
+   * Delegates to the registered attack strategy for this piece type.
+   * 
+   * Uses registry lookup - see AttackStrategyRegistry.ts.
+   */
   public legalAttacks(attackableHexSet: Set<string>, highGroundHexSet?: Set<string>): Hex[] {
     if (this.AttackType === AttackType.None) return [];
     
-    if (this.AttackType === AttackType.Melee) {
-      return meleeAttacks(this.hex, attackableHexSet);
-    } else if (this.AttackType === AttackType.Ranged) {
-      return rangedAttacks(this.hex, attackableHexSet, highGroundHexSet);
-    } else if (this.AttackType === AttackType.LongRanged) {
-      return longRangedAttacks(this.hex, attackableHexSet, highGroundHexSet);
-    } else {
-      return swordsmanAttacks(this.hex, attackableHexSet, this.color);
-    }
+    const strategy = getAttackStrategy(this.type);
+    return strategy(this.hex, attackableHexSet, this.color, highGroundHexSet);
   }
 
   /** Creates a deep copy of this piece (for immutable state updates) */
@@ -198,3 +131,4 @@ export class Piece {
     return this.with({});
   }
 }
+
