@@ -15,4 +15,6 @@ export { MoveCommand } from "./MoveCommand";
 export { AttackCommand, CastleAttackCommand } from "./AttackCommands";
 export { PassCommand } from "./PassCommand";
 export { RecruitCommand } from "./RecruitCommand";
+export { PledgeCommand } from "./PledgeCommand";
+export { AbilityCommand } from "./AbilityCommand";
 

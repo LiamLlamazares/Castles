@@ -29,6 +29,8 @@ import {
   CastleAttackCommand,
   PassCommand,
   RecruitCommand,
+  PledgeCommand,
+  AbilityCommand,
 } from "../Classes/Commands";
 
 export interface MoveExecutionState {
@@ -243,8 +245,7 @@ export const useMoveExecution = ({
   );
 
   /**
-   * Handles pledging at a sanctuary.
-   * (Not yet converted to Command - sanctuary logic is more complex)
+   * Handles pledging at a sanctuary using PledgeCommand.
    */
   const pledge = useCallback(
     (sanctuaryHex: Hex, spawnHex: Hex) => {
@@ -254,62 +255,32 @@ export const useMoveExecution = ({
       }
 
       const effectiveState = getEffectiveState();
-      const snapshot = createHistorySnapshot(effectiveState);
-      const treeForMutation = prepareTreeForMutation();
+      const sanctuary = effectiveState.sanctuaries?.find((s) => s.hex.equals(sanctuaryHex));
+      if (!sanctuary) {
+        console.error("Sanctuary not found");
+        return;
+      }
 
-      setState((prevState: MoveExecutionState) => {
-        try {
-          const stateWithHistory = {
-            ...effectiveState,
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation,
-          };
+      const stateWithHistory = prepareStateForAction();
+      const command = new PledgeCommand(sanctuary, spawnHex, commandContext);
+      const result = command.execute(stateWithHistory);
 
-          const sanctuary = stateWithHistory.sanctuaries?.find((s) => s.hex.equals(sanctuaryHex));
-          if (!sanctuary) throw new Error("Sanctuary not found");
-
-          const newCoreState = gameEngine.pledge(stateWithHistory, sanctuaryHex, spawnHex);
-
-          const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
-          const pledgeCurrentPlayer = gameEngine.getCurrentPlayer(stateWithHistory.turnCounter);
-          const pledgeTurnPhase = gameEngine.getTurnPhase(stateWithHistory.turnCounter);
-          const turnNumber = Math.floor(stateWithHistory.turnCounter / 10) + 1;
-
-          const moveRecord = {
-            notation,
-            turnNumber,
-            color: pledgeCurrentPlayer,
-            phase: pledgeTurnPhase,
-          };
-
-          let finalTree = treeForMutation;
-          if (finalTree) {
-            if (!isAnalysisMode) {
-              finalTree = finalTree.clone();
-            }
-            finalTree.addMove(moveRecord);
-          }
-
-          return {
-            ...prevState,
-            ...newCoreState,
-            moveHistory: [...stateWithHistory.moveHistory, moveRecord],
-            history: stateWithHistory.history,
-            viewNodeId: null,
-            moveTree: finalTree,
-          };
-        } catch (e) {
-          console.error(e);
-          return prevState;
-        }
-      });
+      if (result.success) {
+        setState((prev: MoveExecutionState) => ({
+          ...prev,
+          ...result.newState,
+          viewNodeId: null,
+          history: result.newState.history,
+        }));
+      } else {
+        console.error("Pledge failed:", result.error);
+      }
     },
-    [gameEngine, isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, setState]
+    [commandContext, isAnalysisMode, isViewingHistory, getEffectiveState, prepareStateForAction, setState]
   );
 
   /**
-   * Handles triggering a special ability (Fireball, Teleport, RaiseDead).
-   * (Not yet converted to Command - ability logic is more complex)
+   * Handles triggering a special ability using AbilityCommand.
    */
   const triggerAbility = useCallback(
     (sourceHex: Hex, targetHex: Hex, ability: AbilityType) => {
@@ -319,25 +290,28 @@ export const useMoveExecution = ({
       }
 
       const effectiveState = getEffectiveState();
-      const snapshot = createHistorySnapshot(effectiveState);
-      const treeForMutation = prepareTreeForMutation();
+      const caster = effectiveState.pieceMap.getByKey(sourceHex.getKey());
+      if (!caster) {
+        console.error("Caster not found");
+        return;
+      }
 
-      setState((prevState: MoveExecutionState) => {
-        try {
-          const stateWithHistory = {
-            ...effectiveState,
-            history: [...effectiveState.history, snapshot],
-            moveTree: treeForMutation,
-          };
-          const newState = gameEngine.activateAbility(stateWithHistory, sourceHex, targetHex, ability);
-          return { ...prevState, ...newState, viewNodeId: null, history: newState.history };
-        } catch (e) {
-          console.error(e);
-          return prevState;
-        }
-      });
+      const stateWithHistory = prepareStateForAction();
+      const command = new AbilityCommand(caster, targetHex, ability, commandContext);
+      const result = command.execute(stateWithHistory);
+
+      if (result.success) {
+        setState((prev: MoveExecutionState) => ({
+          ...prev,
+          ...result.newState,
+          viewNodeId: null,
+          history: result.newState.history,
+        }));
+      } else {
+        console.error("Ability failed:", result.error);
+      }
     },
-    [gameEngine, isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, setState]
+    [commandContext, isAnalysisMode, isViewingHistory, getEffectiveState, prepareStateForAction, setState]
   );
 
   return {

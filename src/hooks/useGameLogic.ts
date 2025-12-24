@@ -313,14 +313,14 @@ export const useGameLogic = (
   const handleResign = useCallback((player: Color) => {
     // Reset to live game state before resigning (in case viewing history)
     setState(prev => {
-        // First reset viewMoveIndex to exit history view
+        // First reset viewNodeId to exit history view
         // Then find and remove the resigning player's monarch from the ACTUAL state
         const myMonarch = prev.pieces.find(p => p.type === "Monarch" && p.color === player);
         if (myMonarch) {
             const newPieces = prev.pieces.filter(p => p !== myMonarch);
-            return { ...prev, pieces: newPieces, viewMoveIndex: null, movingPiece: null };
+            return { ...prev, pieces: newPieces, viewNodeId: null, movingPiece: null };
         }
-        return { ...prev, viewMoveIndex: null, movingPiece: null };
+        return { ...prev, viewNodeId: null, movingPiece: null };
     });
   }, []);
 

@@ -1,8 +1,9 @@
 # Castles Architecture Analysis
 ## Living Documentation
 
-> **Version**: 2.0 (December 2025)  
-> **Purpose**: System map and architecture reference for the Castles fantasy chess game.
+> **Version**: 2.1 (December 2025)  
+> **Purpose**: System map and architecture reference for the Castles fantasy chess game.  
+> **Status**: All refactoring complete ✅
 
 ---
 
@@ -14,9 +15,9 @@
 5. [Extension Test: Adding a New Piece](#4-extension-test-adding-a-new-piece)
 6. [MoveTree Structure](#5-movetree-structure)
 7. [Modes](#6-modes)
-8. [God Object Analysis](#7-god-object-analysis)
-9. [Key Files Reference](#8-key-files-reference)
-10. [Refactoring Roadmap](#9-refactoring-roadmap)
+8. [Key Files Reference](#7-key-files-reference)
+9. [Command Pattern Reference](#8-command-pattern-reference)
+10. [Event System Reference](#9-event-system-reference)
 
 ---
 
@@ -30,7 +31,7 @@ This document describes how the core systems work together in the Castles game.
 |---------|----------------|---------|
 | **Facade** | `GameEngine` delegates to `RuleEngine` + `StateMutator` | Clean API, testable subsystems |
 | **Strategy** | `MoveStrategyRegistry`, `AttackStrategyRegistry` | Easy to add new piece types |
-| **Command** | `MoveCommand`, `AttackCommand`, etc. | Encapsulated actions, undo potential |
+| **Command** | 7 commands covering all actions | Encapsulated actions, undo potential |
 | **Immutability** | `Piece.with()` method, readonly properties | Safe state transitions |
 | **O(1) Lookups** | `PieceMap`, `Set<string>` for hexes | Fast validation |
 
@@ -50,7 +51,7 @@ graph TD
     LogicHook --> MoveExec(useMoveExecution.ts)
     
     subgraph "Command Layer"
-        MoveExec --> Cmd(MoveCommand / AttackCommand)
+        MoveExec --> Cmd(MoveCommand / AttackCommand / etc.)
         Cmd --> GE(GameEngine.ts Facade)
     end
     
@@ -84,6 +85,7 @@ graph TD
 | **Input** | `useInputHandler.ts`, `useClickHandler.ts` | Keyboard and mouse handling |
 | **View** | `useGameView.ts` | UI-only state (coordinates, rotation) |
 | **Controller** | `useGameLogic.ts` | Composes Core, Analysis, PGN hooks |
+| **Computed** | `useComputedGame.ts` | Derived values (turnPhase, legalMoves) |
 | **Actions** | `useMoveExecution.ts` | Command execution |
 | **Model** | `useCoreGame.ts` | Strict Game State and Engine instance |
 | **Logic Core** | `GameEngine.ts` | Facade delegating to RuleEngine (Read) and StateMutator (Write) |
@@ -148,6 +150,7 @@ Game.tsx
 ├── useGameView()          → UI state (coordinates, rotation)
 └── useGameLogic()         → Controller
     ├── useCoreGame()      → Model (state + engine)
+    ├── useComputedGame()  → Derived values ✅ NEW
     ├── useAnalysisMode()  → Navigation controls
     ├── usePGN()           → Import/Export
     └── useMoveExecution() → Action execution via Commands
@@ -159,6 +162,7 @@ Game.tsx
 |-------|-------|-------|
 | `pieces`, `castles`, `turnCounter` | `useCoreGame` | Core game state |
 | `moveTree`, `viewNodeId` | `useCoreGame` | History navigation |
+| `turnPhase`, `currentPlayer`, `legalMoves` | `useComputedGame` | Derived values |
 | `showCoordinates`, `isBoardRotated` | `useGameView` | UI preferences |
 | `isAnalysisMode` | Passed as prop | Mode flag |
 
@@ -223,38 +227,14 @@ interface MoveNode {
 
 ---
 
-## 7. God Object Analysis
-
-### `useGameLogic.ts` Breakdown
-
-| Concern | Lines | Description |
-|---------|-------|-------------|
-| State Management | 53-77 | Core state initialization |
-| Analysis Mode | 84-151 | Snapshot computation |
-| Computed Values | 183-231 | Derived game values |
-| Action Handlers | 252-325 | Move/attack/resign handlers |
-| Export Block | 333-376 | ~30 properties exported |
-
-**Status**: ⚠️ This hook has grown to handle multiple concerns. Consider splitting.
-
-### Recommended Separation
-
-| New Hook | Responsibility |
-|----------|----------------|
-| `useComputedGame` | Derived values (turnPhase, legalMoves, etc.) |
-| `useCoreGame` | Already exists - pure state |
-| `useMoveExecution` | Already exists - action execution |
-| `useAnalysisMode` | Already exists - navigation |
-
----
-
-## 8. Key Files Reference
+## 7. Key Files Reference
 
 | File | Purpose |
 |------|---------|
 | `MoveTree.ts` | Tree data structure for move history |
 | `useGameLogic.ts` | Central controller composing all hooks |
 | `useCoreGame.ts` | Core state and engine management |
+| `useComputedGame.ts` | Derived values (turnPhase, legalMoves) ✅ NEW |
 | `useGameView.ts` | UI-only state management |
 | `useAnalysisMode.ts` | History navigation controls |
 | `useMoveExecution.ts` | Command execution |
@@ -269,37 +249,7 @@ interface MoveNode {
 
 ---
 
-## 9. Refactoring Roadmap
-
-### Step 1: Create AbilityType Enum
-Replace magic strings `"Fireball"`, `"Teleport"`, `"RaiseDead"` with:
-```typescript
-export enum AbilityType {
-  Fireball = "Fireball",
-  Teleport = "Teleport", 
-  RaiseDead = "RaiseDead",
-}
-```
-
-### Step 2: Add Missing Commands
-Create `PledgeCommand.ts` and `AbilityCommand.ts` to complete the Command pattern.
-
-### Step 3: Split useGameLogic
-Extract `useComputedGame.ts` for derived values:
-- `turnPhase`, `currentPlayer`
-- `legalMoves`, `legalAttacks`
-- `legalMoveSet`, `legalAttackSet`
-- `victoryMessage`, `winner`
-
-### Step 4: Unify State Computation
-Currently both `getEffectiveState()` and `viewState` compute snapshots. Consolidate to single source.
-
-### Step 5: Event Bus Integration
-Use existing `gameEvents` system for decoupled side effects (sounds, animations).
-
----
-
-## Command Pattern Reference
+## 8. Command Pattern Reference
 
 ```typescript
 // src/Classes/Commands/GameCommand.ts
@@ -315,24 +265,26 @@ enum CommandType {
   CastleAttack = "CASTLE_ATTACK",
   Pass = "PASS",
   Recruit = "RECRUIT",
-  Pledge = "PLEDGE",   // To be implemented
-  Ability = "ABILITY", // To be implemented
+  Pledge = "PLEDGE",   // ✅ Implemented
+  Ability = "ABILITY", // ✅ Implemented
 }
 ```
 
 ### Available Commands
 
-| Command | Purpose |
-|---------|---------|
-| `MoveCommand` | Piece movement |
-| `AttackCommand` | Piece combat |
-| `CastleAttackCommand` | Castle capture |
-| `PassCommand` | Skip phase |
-| `RecruitCommand` | Spawn piece from castle |
+| Command | Purpose | Status |
+|---------|---------|--------|
+| `MoveCommand` | Piece movement | ✅ |
+| `AttackCommand` | Piece combat | ✅ |
+| `CastleAttackCommand` | Castle capture | ✅ |
+| `PassCommand` | Skip phase | ✅ |
+| `RecruitCommand` | Spawn piece from castle | ✅ |
+| `PledgeCommand` | Sanctuary pledging | ✅ NEW |
+| `AbilityCommand` | Special abilities | ✅ NEW |
 
 ---
 
-## Event System Reference
+## 9. Event System Reference
 
 | Event | When Emitted |
 |-------|--------------|
@@ -343,5 +295,26 @@ enum CommandType {
 | `TURN_CHANGED` | Phase/player changes |
 | `PIECE_DESTROYED` | Combat death |
 | `SANCTUARY_PLEDGED` | Pledge action |
-| `ABILITY_ACTIVATED` | Special ability |
+| `ABILITY_ACTIVATED` | Special ability (now uses `AbilityType` enum) |
 | `GAME_ENDED` | Game over |
+
+---
+
+## Enums Reference
+
+### AbilityType (NEW)
+
+```typescript
+export enum AbilityType {
+  Fireball = "Fireball",     // Wizard: AoE damage
+  Teleport = "Teleport",     // Wizard: Move to distant hex
+  RaiseDead = "RaiseDead",   // Necromancer: Revive dead piece
+}
+```
+
+Used in:
+- `GameEngine.activateAbility()`
+- `StateMutator.activateAbility()`
+- `AbilityCommand`
+- `useClickHandler` (ability targeting)
+- `AbilityBar.tsx` (UI buttons)
