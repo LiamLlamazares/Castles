@@ -9,133 +9,102 @@ This document describes how Analysis Mode, Variant Creation, and PGN Import/Expo
 
 ---
 
-## Key Concepts
+## 1. Control Flow Mapping
+
+### User Action Lifecycle
+The path of a user interaction (e.g., clicking a hex to move a piece):
+
+```mermaid
+graph TD
+    User(User Click) --> InputHandler(useInputHandler / useClickHandler)
+    InputHandler --> GameComp(Game.tsx)
+    GameComp --> LogicHook(useGameLogic.ts)
+    
+    subgraph "Core Logic (The Brain)"
+        LogicHook --> GameEngine(GameEngine.ts Facade)
+        GameEngine --> RuleEngine(RuleEngine.ts - Queries)
+        GameEngine --> StateMutator(StateMutator.ts - Updates)
+        StateMutator --> MoveTree(MoveTree.ts - History)
+    end
+    
+    subgraph "Serialization & Render"
+        StateMutator --> NewState(New GameState)
+        NewState --> ReactRender(React Re-render)
+        ReactRender --> UI(HexGrid / PieceRenderer)
+    end
+```
+
+### Key Components
+*   **Input Layer**: `useInputHandler.ts` (Keyboard) & `useClickHandler.ts` (Mouse).
+*   **Orchestrator**: `useGameLogic.ts` (God Hook). Combines UI state, Analysis state, and Game state.
+*   **Logic Core**: `GameEngine.ts`. A clean Facade pattern delegating to `RuleEngine` (Read) and `StateMutator` (Write).
+*   **Data Model**: `Board`, `Piece`, `Castle`, `Sanctuary`.
+
+---
+
+## 2. Data Serialization (PGN)
+
+The game uses a PGN-like string format for saving/loading.
+
+### Export Flow
+`getPGN()` in `usePGN.ts` -> `PGNService.generatePGN()` -> uses `PGNGenerator`.
+*   **Setup Tag**: Encodes `BoardConfig`, `Pieces`, `Castles`, `Sanctuaries`.
+*   **Moves**: Recursive descent of `MoveTree` to generate standard PGN notation (e.g., `1. wSwordsman F5-F6`).
+
+### Import Flow
+`loadPGN()` -> `PGNService.parsePGN()` -> uses `PGNImporter`.
+1.  **Parse Setup**: Reconstructs the exact starting board state.
+2.  **Replay Moves**: **CRITICAL LIMITATION**. Currently extracts a *linear* list of moves from the Main Line, ignoring Side Variations.
+3.  **Rebuild Tree**: Replays moves one-by-one to rebuild the `MoveTree` and snapshots.
+
+---
+
+## 3. The "God Object" Check
+
+| Component | Status | Analysis |
+| :--- | :--- | :--- |
+| **`useGameLogic.ts`** | 🚨 **GOD OBJECT** | Defines **425 lines** of mixed concerns. It handles UI settings (coordinates), Analysis Mode state, PGN wrapping, Game Rules, and Sound triggers. **Result:** Extremely high coupling; changing UI logic risks breaking game rules. |
+| **`Game.tsx`** | ⚠️ Bloated | Handles too much "prop drilling" and layout logic. Acts as a massive switchboard. |
+| **`GameEngine.ts`** | ✅ Clean | Properly implements the Facade pattern. Delegates work to `RuleEngine` and `StateMutator`. |
+| **`Board.ts`** | ✅ Clean | Pure data structure holding Hexes and Edges. |
+
+---
+
+## 4. The "Extension Test": Adding a New Piece
+
+Hypothetical: Adding a "Champion" piece.
+
+**Files Changed:**
+1.  `Constants.ts`: Add `Champion` to `PieceType` enum.
+2.  `PieceTypeConfig.ts`: Add config (Strength: 2, AttackType: Melee, etc.).
+3.  `MoveStrategyRegistry.ts`: Add movement function (e.g., `getWalkingMoves(2)`).
+4.  `AttackStrategyRegistry.ts`: (Optional) If standard Melee, no change needed.
+5.  *Assets*: Add the image file.
+
+**Verdict**: ✅ **PASSED**. The system uses `PieceTypeConfig` and Registries effectively. `Piece.ts` does not need modification.
+
+---
+
+## Key Files & Concepts
 
 ### MoveTree
 A tree data structure storing all moves with branches (variations).
 
-```
-Root (Start)
-  └── G12G11 (Move 1 - Main Line)
-        ├── H12H11 (Move 2 - Main Line)
-        │     └── ...
-        └── I11I10 (Move 2 - Variation)
-              └── ...
-```
-
-Each node contains:
-- `move`: The `MoveRecord` (notation, color, turn#, phase)
-- `snapshot`: A `HistoryEntry` capturing game state at this position
-- `children`: Array of child nodes
-- `parent`: Reference to parent node
-- `selectedChildIndex`: Index of the child that represents the "Main Line" from this node.
-
-**Main Line Convention:**
-- `children[selectedChildIndex]` is the main line / selected variation.
-- Other children are alternative variations.
-- To promote a variation to the main line, the `selectedChildIndex` is updated.
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `MoveTree.ts` | Tree data structure for move history |
-| `useGameLogic.ts` | Central hook managing game state |
-| `useAnalysisMode.ts` | History navigation controls |
-| `usePGN.ts` | PGN import/export functionality |
-| `PGNService.ts` | PGN parsing and generation |
-| `StateMutator.ts` | Records moves to tree during gameplay |
+### Files
+*   `MoveTree.ts`: Tree data structure.
+*   `useGameLogic.ts`: Central hook (God Object).
+*   `PGNService.ts`: Import/Export Facade.
+*   `PieceTypeConfig.ts`: Single source of truth for Piece stats.
 
 ---
 
 ## Modes
 
 ### Play Mode (`analysisEnabled = false`)
-- Normal gameplay.
-- **Move Blocking**: Moves are NOT strictly blocked in code when viewing history, but making a move will branch from that point and reset the view to "Live".
-- Cannot explicitly "create variants" in the UI sense (no visual branching controls), but the underlying logic supports it.
+- Normal gameplay. move indicators active.
 
 ### Analysis Mode (`analysisEnabled = true`)
-- Enabled via "Analyze Game" button or PGN import.
-- **Intended Behavior**: When viewing history, move indicators should be shown to allow creating variants.
-- **Current Bug**: Move indicators are currently **HIDDEN** in Analysis Mode due to inverted logic in `useGameLogic.ts`.
+- **Move Blocking**: Logic exists but `useGameLogic` controls it via `isAnalysisMode` flag.
+- **Bug**: Move indicators explicitly ensuring they are HIDDEN in analysis mode in `useGameLogic.ts`.
 
 ---
-
-## PGN Export Flow
-
-```
-getPGN() → PGNService.generatePGN() → renderRecursiveHistory(moveTree.rootNode) → PGN String
-```
-
-1. `getPGN()` is called from `usePGN.ts`
-2. Calls `PGNService.generatePGN()` with the current `moveTree`
-3. If `moveTree` exists, renders recursively from `rootNode`
-4. Variations are wrapped in parentheses per PGN standard
-
----
-
-## PGN Import Flow
-
-```
-User pastes PGN
-    ↓
-loadPGN() in usePGN.ts
-    ↓
-PGNService.parsePGN() → Extract moves array (Main Line ONLY)
-    ↓
-PGNService.replayMoveHistory()
-    ↓
-Creates fresh MoveTree + applies each move via GameEngine
-    ↓
-StateMutator.recordMoveInTree() adds each move to tree
-    ↓
-Return final state with tree
-```
-
-> [!IMPORTANT]
-> **Variation Loss**: The current PGN Parser extracts a linear list of moves (`moves: string[]`) to replay. This means **all variations (branches) in the PGN are discarded** upon import. The `MoveTree` returned by the parser is not fully utilized during reconstruction.
-
----
-
-## Variant Creation Flow
-
-When a move is made while viewing history:
-
-```
-User viewing history → Clicks piece
-    ↓
-Show legal moves (Currently BUGGED in Analysis Mode) → User makes move
-    ↓
-getEffectiveState() uses snapshot from viewed node
-    ↓
-GameEngine.applyMove() → StateMutator.recordMoveInTree()
-    ↓
-tree.addMove() at current cursor position
-    ↓
-If move exists as child → Navigate to existing
-If new move → Create new branch/variant
-    ↓
-commitBranch() → viewNodeId = null (go live)
-```
-
----
-
-## State Variables
-
-| Variable | Location | Purpose |
-|----------|----------|---------|
-| `analysisEnabled` | Props from App.tsx | Controls variant creation permission |
-| `viewNodeId` | State | Currently viewed node ID (null = live) |
-| `isViewingHistory` | Computed | `viewNodeId !== null` |
-| `isAnalysisMode` | useAnalysisMode | `analysisEnabled && isViewingHistory` |
-| `legalMoveSet` | useGameLogic | **BUG**: Currently returns empty set if `isAnalysisMode` is true. |
-
-
-## Known Issues & Discrepancies
-
-1.  **PGN Helper Logic**:
-    `PGNService.replayMoveHistory` replays moves linearly. It does not support replaying a tree structure, so imported games lose all variations.
-
-2.  **Pledge Data Loss**:
-    `PGNParser` or `replayMoveHistory` may treat Pledges (`P:...`) incorrectly or rely on `Pass` logic that doesn't fully reconstruct the `Pledge` notation in the new history, potentially leading to data loss on re-export.
