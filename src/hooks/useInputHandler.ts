@@ -64,14 +64,21 @@ export const useInputHandler = ({
       onResizeRef.current();
     };
 
-    // Initial resize
+    // Initial resize - update dimensions AND trigger re-render
+    // This ensures the board renders at full size immediately
     startingLayout.updateDimensions(window.innerWidth - 300, window.innerHeight);
-    // DON'T call onResize on initial mount - it causes unnecessary re-renders
+    
+    // Use setTimeout to trigger resize after initial render completes
+    // This avoids state updates during render
+    const timeoutId = setTimeout(() => {
+      onResizeRef.current();
+    }, 0);
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleResize);
     
     return () => {
+      clearTimeout(timeoutId);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", handleResize);
     };
