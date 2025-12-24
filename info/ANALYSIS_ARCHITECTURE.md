@@ -4,9 +4,6 @@
 
 This document describes how Analysis Mode, Variant Creation, and PGN Import/Export work together.
 
-> [!WARNING]
-> This document has been updated to reflect the *actual* current implementation, which contains several bugs and discrepancies from the original design. See "Known Issues" below.
-
 ---
 
 ## 1. Control Flow Mapping
@@ -17,7 +14,6 @@ The path of a user interaction (e.g., clicking a hex to move a piece):
 ```mermaid
 graph TD
     User(User Click) --> InputHandler(useInputHandler / useClickHandler)
-    InputHandler --> GameComp(Game.tsx)
     InputHandler --> GameComp(Game.tsx)
     GameComp --> ViewHook(useGameView.ts)
     GameComp --> LogicHook(useGameLogic.ts)
@@ -38,82 +34,125 @@ graph TD
 ```
 
 ### Key Components
-*   **Input Layer**: `useInputHandler.ts` (Keyboard) & `useClickHandler.ts` (Mouse).
-*   **View Layer**: `useGameView.ts`. Manages UI-only state (coordinates, rotation).
-*   **Controller**: `useGameLogic.ts`. Composes Core Game, Analysis, and PGN hooks.
-*   **Model**: `useCoreGame.ts`. Manages strict Game State and Engine instance.
-*   **Logic Core**: `GameEngine.ts`. A clean Facade pattern delegating to `RuleEngine` (Read) and `StateMutator` (Write).
-*   **Data Model**: `Board`, `Piece`, `Castle`, `Sanctuary`.
+| Layer | Component | Responsibility |
+|-------|-----------|----------------|
+| **Input** | `useInputHandler.ts`, `useClickHandler.ts` | Keyboard and mouse handling |
+| **View** | `useGameView.ts` | UI-only state (coordinates, rotation) |
+| **Controller** | `useGameLogic.ts` | Composes Core, Analysis, PGN hooks |
+| **Model** | `useCoreGame.ts` | Strict Game State and Engine instance |
+| **Logic Core** | `GameEngine.ts` | Facade delegating to RuleEngine (Read) and StateMutator (Write) |
+| **Data Model** | `Board`, `Piece`, `Castle`, `Sanctuary` | Core domain entities |
 
 ---
 
 ## 2. Data Serialization (PGN)
 
-The game uses a PGN-like string format for saving/loading.
+The game uses a PGN-like string format for saving/loading games with full variation support.
 
 ### Export Flow
-`getPGN()` in `usePGN.ts` -> `PGNService.generatePGN()` -> uses `PGNGenerator`.
-*   **Setup Tag**: Encodes `BoardConfig`, `Pieces`, `Castles`, `Sanctuaries`.
-*   **Moves**: Recursive descent of `MoveTree` to generate standard PGN notation (e.g., `1. wSwordsman F5-F6`).
+`getPGN()` in `usePGN.ts` → `PGNService.generatePGN()` → `PGNGenerator`
+
+1. **Root Snapshot**: Uses `moveTree.rootNode.snapshot.pieces` to ensure starting position matches moves.
+2. **Setup Tag**: Base64-encodes `BoardConfig`, `Pieces`, `Castles`, `Sanctuaries`.
+3. **Moves**: Recursive descent of `MoveTree` to generate PGN notation with variations.
 
 ### Import Flow
-`loadPGN()` -> `PGNService.parsePGN()` -> uses `PGNImporter`.
-1.  **Parse Setup**: Reconstructs the exact starting board state.
-1.  **Parse Setup**: Reconstructs the exact starting board state.
-2.  **Hydrate Tree**: Recursively traverses the parsed `MoveTree` structure (including variations).
-3.  **Snapshot Generation**: Replays move logic at each node to attach correct `GameState` snapshots to the tree.
-4.  **Result**: Returns the Initial State with a fully populated, navigable `MoveTree` attached.
+`loadPGN()` → `PGNService.parsePGN()` → `PGNImporter.replayMoveHistory()`
+
+1. **Parse Setup**: Reconstructs the exact starting board state from `CustomSetup` tag.
+2. **Parse Moves**: `PGNParser.parseToTree()` builds skeletal `MoveTree` structure (including variations).
+3. **Hydrate Tree**: `PGNImporter.hydrateRecursive()` traverses tree, replays each move, attaches `GameState` snapshots.
+4. **Result**: Returns final state with fully populated, navigable `MoveTree`.
 
 ---
 
-## 3. The "God Object" Check
+## 3. Hook Composition
 
-| Component | Status | Analysis |
-| :--- | :--- | :--- |
-| **`useGameLogic.ts`** | 🟡 **CONTROLLER** | Refactored. Now acts as a Composition Root. UI state extracted to `useGameView`, core state to `useCoreGame`. Still handles computed view state and actions. |
-| **`useGameView.ts`** | ✅ Clean | New hook handling only UI settings (coordinates, rotation). |
-| **`useCoreGame.ts`** | ✅ Clean | New hook handling strict Game State and Engine instantiation. |
-| **`Game.tsx`** | ⚠️ Bloated | Still handles extensive layout logic, but state management is cleaner. |
-| **`GameEngine.ts`** | ✅ Clean | Properly implements the Facade pattern. Delegates work to `RuleEngine` and `StateMutator`. |
-| **`Board.ts`** | ✅ Clean | Pure data structure holding Hexes and Edges. |
+The hooks form a clean layered architecture:
+
+```
+Game.tsx
+├── useGameView()      → UI state (coordinates, rotation)
+└── useGameLogic()     → Controller
+    ├── useCoreGame()  → Model (state + engine)
+    ├── useAnalysisMode() → Navigation controls
+    └── usePGN()       → Import/Export
+```
+
+### State Ownership
+| State | Owner | Notes |
+|-------|-------|-------|
+| `pieces`, `castles`, `turnCounter` | `useCoreGame` | Core game state |
+| `moveTree`, `viewNodeId` | `useCoreGame` | History navigation |
+| `showCoordinates`, `isBoardRotated` | `useGameView` | UI preferences |
+| `isAnalysisMode` | `useGameLogic` | Mode flag |
 
 ---
 
 ## 4. The "Extension Test": Adding a New Piece
 
-Hypothetical: Adding a "Champion" piece.
+To add a new piece type (e.g., "Champion"):
 
-**Files Changed:**
-1.  `Constants.ts`: Add `Champion` to `PieceType` enum.
-2.  `PieceTypeConfig.ts`: Add config (Strength: 2, AttackType: Melee, etc.).
-3.  `MoveStrategyRegistry.ts`: Add movement function (e.g., `getWalkingMoves(2)`).
-4.  `AttackStrategyRegistry.ts`: (Optional) If standard Melee, no change needed.
-5.  *Assets*: Add the image file.
+| File | Change |
+|------|--------|
+| `Constants.ts` | Add `Champion` to `PieceType` enum |
+| `PieceTypeConfig.ts` | Add config (Strength, AttackType, Description) |
+| `MoveStrategyRegistry.ts` | Add movement function |
+| `AttackStrategyRegistry.ts` | (Optional) If non-standard attack |
+| `assets/` | Add image file |
 
-**Verdict**: ✅ **PASSED**. The system uses `PieceTypeConfig` and Registries effectively. `Piece.ts` does not need modification.
-
----
-
-## Key Files & Concepts
-
-### MoveTree
-A tree data structure storing all moves with branches (variations).
-
-### Files
-*   `MoveTree.ts`: Tree data structure.
-*   `useGameLogic.ts`: Central hook (God Object).
-*   `PGNService.ts`: Import/Export Facade.
-*   `PieceTypeConfig.ts`: Single source of truth for Piece stats.
+**Verdict**: ✅ **PASSED**. Uses Strategy Registry pattern. `Piece.ts` needs no modification.
 
 ---
 
-## Modes
+## 5. MoveTree Structure
 
-### Play Mode (`analysisEnabled = false`)
-- Normal gameplay. move indicators active.
+The `MoveTree` is a tree where:
+- **Root node**: Starting position (snapshot of initial pieces)
+- **Child nodes**: Moves with attached `GameState` snapshots
+- **Branches**: Variations (multiple children from same parent)
 
-### Analysis Mode (`analysisEnabled = true`)
-- **Move Blocking**: Logic exists but `useGameLogic` controls it via `isAnalysisMode` flag.
-- **Bug**: Move indicators explicitly ensuring they are HIDDEN in analysis mode in `useGameLogic.ts`.
+```typescript
+interface MoveNode {
+  id: string;
+  move: MoveRecord;
+  parent: MoveNode | null;
+  children: MoveNode[];
+  selectedChildIndex: number;  // Which variation is "main line"
+  snapshot?: HistoryEntry;     // State after this move
+}
+```
+
+### Navigation
+- `viewNodeId = null` → Live position (current game state)
+- `viewNodeId = "abc123"` → Viewing historical position (analysis mode)
 
 ---
+
+## 6. Modes
+
+### Play Mode (`isAnalysisMode = false`)
+- Normal gameplay with move indicators.
+- Moves advance the game state.
+
+### Analysis Mode (`isAnalysisMode = true`)
+- Move indicators hidden.
+- Arrow keys navigate through history.
+- Making moves creates variations.
+
+---
+
+## Key Files Reference
+
+| File | Purpose |
+|------|---------|
+| `MoveTree.ts` | Tree data structure for move history |
+| `useGameLogic.ts` | Central controller composing all hooks |
+| `useCoreGame.ts` | Core state and engine management |
+| `useGameView.ts` | UI-only state management |
+| `useAnalysisMode.ts` | History navigation controls |
+| `usePGN.ts` | Import/Export functionality |
+| `PGNService.ts` | Facade for PGN operations |
+| `PGNImporter.ts` | Recursive tree hydration |
+| `PGNGenerator.ts` | Recursive tree serialization |
+| `PieceTypeConfig.ts` | Single source of truth for piece stats |
