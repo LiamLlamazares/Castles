@@ -66,69 +66,52 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
    * Step through history using tree navigation
    * -1 = go to parent node (back in time)
    * +1 = go to selected child node (forward in time)
+   * 
+   * DEBUG: Uncomment console.log statements below if navigation issues occur
    */
   const stepHistory = useCallback((direction: -1 | 1) => {
     setState(prev => {
       const { moveTree: tree, viewNodeId: currentNodeId } = prev;
-      if (!tree) {
-        console.log('[stepHistory] No tree!');
-        return prev;
-      }
+      if (!tree) return prev;
       
       // Get the current view node using MoveTree's method
       const currentNode = tree.getViewNode(currentNodeId);
-      if (!currentNode) {
-        console.log('[stepHistory] No currentNode found for ID:', currentNodeId);
-        return prev;
-      }
+      if (!currentNode) return prev;
 
-      console.log('[stepHistory] direction:', direction);
-      console.log('[stepHistory] currentNodeId:', currentNodeId);
-      console.log('[stepHistory] currentNode.id:', currentNode.id);
-      console.log('[stepHistory] currentNode.move.notation:', currentNode.move?.notation);
-      console.log('[stepHistory] currentNode.parent:', currentNode.parent?.id, currentNode.parent?.move?.notation);
-      console.log('[stepHistory] currentNode.children.length:', currentNode.children.length);
-      console.log('[stepHistory] tree.rootNode.id:', tree.rootNode.id);
-      console.log('[stepHistory] tree.current.id:', tree.current.id);
+      // DEBUG: Uncomment these logs if navigation issues occur
+      // console.log('[stepHistory] direction:', direction, 'currentNodeId:', currentNodeId);
+      // console.log('[stepHistory] currentNode:', currentNode.move?.notation, 'parent:', currentNode.parent?.move?.notation);
       
       if (direction === -1) {
         // Stepping backwards
         if (currentNodeId === null) {
           // Currently live - go to parent of current position
           if (currentNode.parent && currentNode.parent !== tree.rootNode) {
-            console.log('[stepHistory] Going back from live to:', currentNode.parent.id);
             return { ...prev, viewNodeId: currentNode.parent.id };
           } else if (currentNode !== tree.rootNode && currentNode.parent) {
             // At first move, go to root
-            console.log('[stepHistory] Going back to root:', tree.rootNode.id);
             return { ...prev, viewNodeId: tree.rootNode.id };
           }
-          console.log('[stepHistory] Cannot go back - at root or no parent');
           return prev;
         }
         
         // Viewing history - go to parent
         if (currentNode.parent) {
-          console.log('[stepHistory] Going back in history to:', currentNode.parent.id);
           return { ...prev, viewNodeId: currentNode.parent.id };
         }
-        console.log('[stepHistory] Cannot go back - no parent');
         return prev;
         
       } else {
         // Stepping forward (+1)
         if (currentNode.children.length > 0) {
           const selectedChild = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
-          console.log('[stepHistory] Going forward to:', selectedChild.id);
           return { ...prev, viewNodeId: selectedChild.id };
         }
         
         // No children - if at current tree position, go live
         if (currentNode === tree.current) {
-          console.log('[stepHistory] At end, going live (null)');
           return { ...prev, viewNodeId: null };
         }
-        console.log('[stepHistory] Cannot go forward - no children');
         return prev;
       }
     });

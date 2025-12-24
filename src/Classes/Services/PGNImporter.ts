@@ -270,10 +270,9 @@ export class PGNImporter {
                        const startHex = NotationService.fromCoordinate(moveMatch[1]);
                        const endHex = NotationService.fromCoordinate(moveMatch[2]);
                        
-                       console.log('[Hydrate] Looking for piece at', moveMatch[1], '-> Hex:', startHex.q, startHex.r, startHex.s);
-                       console.log('[Hydrate] Available pieces:', currentState.pieces.map(p => 
-                           `${p.type}@(${p.hex.q},${p.hex.r},${p.hex.s})`
-                       ).join(', '));
+                       // DEBUG: Uncomment these logs if piece lookup issues occur
+                       // console.log('[Hydrate] Looking for piece at', moveMatch[1], '-> Hex:', startHex.q, startHex.r, startHex.s);
+                       // console.log('[Hydrate] Available pieces:', currentState.pieces.map(p => `${p.type}@(${p.hex.q},${p.hex.r},${p.hex.s})`).join(', '));
                        
                        const mover = currentState.pieces.find(p => p.hex.equals(startHex));
                        if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);

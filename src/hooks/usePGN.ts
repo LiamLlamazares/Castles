@@ -42,10 +42,8 @@ export const usePGN = (
 ): PGNHookResult => {
   
   const getPGN = useCallback(() => {
-    console.log('=== [getPGN] EXPORT DEBUG START ===');
-    console.log('[getPGN] moveTree exists:', !!moveTree);
-    console.log('[getPGN] moveTree.rootNode exists:', !!moveTree?.rootNode);
-    console.log('[getPGN] moveTree.rootNode.snapshot exists:', !!moveTree?.rootNode?.snapshot);
+    // DEBUG: Uncomment these logs if PGN export issues occur
+    // console.log('[getPGN] rootSnapshot exists:', !!moveTree?.rootNode?.snapshot);
     
     // IMPORTANT: Use root node snapshot for starting pieces (not current pieces)
     // This ensures the exported setup matches the move list
@@ -53,65 +51,21 @@ export const usePGN = (
     const startPieces = rootSnapshot?.pieces ?? initialPieces;
     const startSanctuaries = rootSnapshot?.sanctuaries ?? initialSanctuaries;
     
-    console.log('[getPGN] Using rootSnapshot pieces:', !!rootSnapshot?.pieces);
-    console.log('[getPGN] startPieces count:', startPieces.length);
-    console.log('[getPGN] Sample pieces being exported:');
-    startPieces.slice(0, 5).forEach(p => {
-      console.log(`  ${p.type}@(${p.hex.q},${p.hex.r},${p.hex.s}) color=${p.color}`);
-    });
-    
-    // Also log the initialPieces for comparison
-    console.log('[getPGN] initialPieces (passed to hook) count:', initialPieces.length);
-    console.log('[getPGN] Sample initialPieces:');
-    initialPieces.slice(0, 5).forEach(p => {
-      console.log(`  ${p.type}@(${p.hex.q},${p.hex.r},${p.hex.s}) color=${p.color}`);
-    });
-    
-    const pgn = PGNService.generatePGN(initialBoard, startPieces, moveHistory, startSanctuaries, {}, moveTree);
-    console.log('[getPGN] Generated PGN length:', pgn.length);
-    console.log('=== [getPGN] EXPORT DEBUG END ===');
-    
-    return pgn;
+    return PGNService.generatePGN(initialBoard, startPieces, moveHistory, startSanctuaries, {}, moveTree);
   }, [initialBoard, initialPieces, moveHistory, initialSanctuaries, moveTree]);
 
   const loadPGN = useCallback((pgn: string) => {
-    console.log('=== [loadPGN] FULL DEBUG START ===');
-    console.log('[loadPGN] Raw PGN:\n', pgn);
+    // DEBUG: Uncomment these logs if PGN import issues occur
+    // console.log('[loadPGN] Raw PGN:', pgn.substring(0, 200) + '...');
     
-    const { setup, moveTree, moves } = PGNService.parsePGN(pgn);
-    
-    console.log('[loadPGN] Parsed setup:', setup);
-    console.log('[loadPGN] Parsed moves (linear):', moves);
-    console.log('[loadPGN] MoveTree structure:');
-    if (moveTree) {
-      const logTree = (node: any, depth: number = 0) => {
-        const indent = '  '.repeat(depth);
-        console.log(`${indent}Node: ${node.move?.notation || 'ROOT'} (id: ${node.id})`);
-        for (const child of node.children) {
-          logTree(child, depth + 1);
-        }
-      };
-      logTree(moveTree.rootNode);
-    }
+    const { setup, moveTree } = PGNService.parsePGN(pgn);
     
     if (!setup) {
       console.error("[loadPGN] Failed to parse PGN setup");
       return null;
     }
     
-    console.log('[loadPGN] Setup pieces from PGN:');
-    setup.pieces.forEach((p: any) => {
-      console.log(`  ${p.type}@(${p.q},${p.r},${p.s}) color=${p.color}`);
-    });
-    
     const { board, pieces: startPieces, sanctuaries: startSanctuaries } = PGNService.reconstructState(setup);
-    
-    console.log('[loadPGN] Reconstructed pieces:');
-    startPieces.forEach(p => {
-      console.log(`  ${p.type}@(${p.hex.q},${p.hex.r},${p.hex.s}) color=${p.color}`);
-    });
-    
-    console.log('[loadPGN] About to replay with moveTree...');
     
     try {
       const finalState = PGNService.replayMoveHistory(board, startPieces, moveTree, startSanctuaries);
@@ -132,8 +86,8 @@ export const usePGN = (
       return {
         board,
         pieces: startPieces,
-        castles: board.castles, // Add castles return even on error
-        sanctuaries: startSanctuaries, // Add sanctuaries return
+        castles: board.castles,
+        sanctuaries: startSanctuaries,
         history: [],
         moveHistory: [],
         moveTree: new MoveTree(),
