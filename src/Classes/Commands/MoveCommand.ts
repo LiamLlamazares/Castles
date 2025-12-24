@@ -44,6 +44,7 @@ export class MoveCommand implements GameCommand {
         timestamp: Date.now(),
         turnNumber: Math.floor(state.turnCounter / 10) + 1,
       };
+      console.log("[MoveCommand] Emitting MOVE_MADE event:", event);
       gameEvents.emit(event);
 
       return {

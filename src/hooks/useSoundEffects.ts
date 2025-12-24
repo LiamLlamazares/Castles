@@ -7,7 +7,7 @@
  *
  * @usage Add to Game component: useSoundEffects();
  */
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { gameEvents, GameEvent } from "../Classes/Events";
 
 /**
@@ -25,20 +25,26 @@ type SoundType = keyof typeof SOUNDS;
 
 /**
  * Preloads and caches audio elements for instant playback.
+ * Uses lazy initialization to avoid creating elements until first use.
  */
-function createAudioCache(): Map<SoundType, HTMLAudioElement> {
-  const cache = new Map<SoundType, HTMLAudioElement>();
-  
-  if (typeof window !== "undefined") {
-    (Object.keys(SOUNDS) as SoundType[]).forEach((key) => {
-      const audio = new Audio(SOUNDS[key]);
-      audio.preload = "auto";
-      audio.volume = 0.5;
-      cache.set(key, audio);
-    });
+let audioCache: Map<SoundType, HTMLAudioElement> | null = null;
+
+function getAudioCache(): Map<SoundType, HTMLAudioElement> {
+  if (audioCache === null) {
+    console.log("[SoundEffects] Creating audio cache (one-time)");
+    audioCache = new Map<SoundType, HTMLAudioElement>();
+    
+    if (typeof window !== "undefined") {
+      (Object.keys(SOUNDS) as SoundType[]).forEach((key) => {
+        const audio = new Audio(SOUNDS[key]);
+        audio.preload = "auto";
+        audio.volume = 0.5;
+        audioCache!.set(key, audio);
+      });
+    }
   }
   
-  return cache;
+  return audioCache;
 }
 
 /**
@@ -48,24 +54,27 @@ function createAudioCache(): Map<SoundType, HTMLAudioElement> {
  * @param volume - Volume level 0-1 (default: 0.5)
  */
 export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
-  const audioCache = useRef<Map<SoundType, HTMLAudioElement>>(createAudioCache());
+  const cache = getAudioCache();
 
   // Update volume when it changes
   useEffect(() => {
-    audioCache.current.forEach((audio) => {
+    cache.forEach((audio: HTMLAudioElement) => {
       audio.volume = volume;
     });
-  }, [volume]);
+  }, [volume, cache]);
 
   const playSound = useCallback((type: SoundType) => {
+    console.log("[SoundEffects] playSound called for:", type, "| enabled:", enabled);
     if (!enabled) return;
     
-    const audio = audioCache.current.get(type);
+    const audio = cache.get(type);
+    console.log("[SoundEffects] Audio element found:", !!audio, "| src:", audio?.src);
     if (audio) {
       // Reset to start for rapid replays
       audio.currentTime = 0;
-      audio.play().catch(() => {
+      audio.play().catch((err) => {
         // Ignore autoplay errors (browser policies)
+        console.log("[SoundEffects] Audio play error:", err);
       });
     }
   }, [enabled]);

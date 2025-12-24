@@ -122,6 +122,7 @@ export class GameEventEmitter {
    * @param event - The event to emit
    */
   emit(event: GameEvent): void {
+    console.log("[GameEventEmitter] emit() called with event:", event.type, "| allListeners count:", this.allListeners.size, "| type listeners count:", this.listeners.get(event.type)?.size ?? 0);
     // Store in history (useful for debugging/replay)
     this.eventHistory.push(event);
     if (this.eventHistory.length > this.maxHistorySize) {
