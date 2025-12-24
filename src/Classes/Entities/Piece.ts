@@ -8,10 +8,11 @@
  * - Turn state (canMove, canAttack, damage taken)
  * 
  * EXTENSIBILITY:
- * To add a new piece type, edit the registry files - NOT this class:
+ * To add a new piece type, edit these files - NOT this class:
+ * - PieceTypeConfig.ts - Add strength, attackType, and description
  * - MoveStrategyRegistry.ts - Register movement behavior
- * - AttackStrategyRegistry.ts - Register attack behavior and type
- * - Constants.ts - Add to PieceType enum and PieceStrength
+ * - AttackStrategyRegistry.ts - Register attack strategy function
+ * - Constants.ts - Add to PieceType enum
  */
 import { Hex } from "./Hex";
 import {

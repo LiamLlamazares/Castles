@@ -127,8 +127,8 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   
   [PieceType.Ranger]: {
     strength: 1,
-    attackType: AttackType.Ranged,
-    description: "Enhanced Archer. Moves 2 hexes, attacks at range 2 (or 3 from high ground).",
+    attackType: AttackType.LongRanged,
+    description: "Enhanced Archer. Moves 2 hexes, attacks at range 3 (or 4 from high ground).",
   },
   
   [PieceType.Wizard]: {
