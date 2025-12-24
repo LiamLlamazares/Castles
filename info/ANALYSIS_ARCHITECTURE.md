@@ -18,10 +18,13 @@ The path of a user interaction (e.g., clicking a hex to move a piece):
 graph TD
     User(User Click) --> InputHandler(useInputHandler / useClickHandler)
     InputHandler --> GameComp(Game.tsx)
+    InputHandler --> GameComp(Game.tsx)
+    GameComp --> ViewHook(useGameView.ts)
     GameComp --> LogicHook(useGameLogic.ts)
+    LogicHook --> CoreHook(useCoreGame.ts)
     
     subgraph "Core Logic (The Brain)"
-        LogicHook --> GameEngine(GameEngine.ts Facade)
+        CoreHook --> GameEngine(GameEngine.ts Facade)
         GameEngine --> RuleEngine(RuleEngine.ts - Queries)
         GameEngine --> StateMutator(StateMutator.ts - Updates)
         StateMutator --> MoveTree(MoveTree.ts - History)
@@ -36,7 +39,9 @@ graph TD
 
 ### Key Components
 *   **Input Layer**: `useInputHandler.ts` (Keyboard) & `useClickHandler.ts` (Mouse).
-*   **Orchestrator**: `useGameLogic.ts` (God Hook). Combines UI state, Analysis state, and Game state.
+*   **View Layer**: `useGameView.ts`. Manages UI-only state (coordinates, rotation).
+*   **Controller**: `useGameLogic.ts`. Composes Core Game, Analysis, and PGN hooks.
+*   **Model**: `useCoreGame.ts`. Manages strict Game State and Engine instance.
 *   **Logic Core**: `GameEngine.ts`. A clean Facade pattern delegating to `RuleEngine` (Read) and `StateMutator` (Write).
 *   **Data Model**: `Board`, `Piece`, `Castle`, `Sanctuary`.
 
@@ -54,8 +59,10 @@ The game uses a PGN-like string format for saving/loading.
 ### Import Flow
 `loadPGN()` -> `PGNService.parsePGN()` -> uses `PGNImporter`.
 1.  **Parse Setup**: Reconstructs the exact starting board state.
-2.  **Replay Moves**: **CRITICAL LIMITATION**. Currently extracts a *linear* list of moves from the Main Line, ignoring Side Variations.
-3.  **Rebuild Tree**: Replays moves one-by-one to rebuild the `MoveTree` and snapshots.
+1.  **Parse Setup**: Reconstructs the exact starting board state.
+2.  **Hydrate Tree**: Recursively traverses the parsed `MoveTree` structure (including variations).
+3.  **Snapshot Generation**: Replays move logic at each node to attach correct `GameState` snapshots to the tree.
+4.  **Result**: Returns the Initial State with a fully populated, navigable `MoveTree` attached.
 
 ---
 
@@ -63,8 +70,10 @@ The game uses a PGN-like string format for saving/loading.
 
 | Component | Status | Analysis |
 | :--- | :--- | :--- |
-| **`useGameLogic.ts`** | 🚨 **GOD OBJECT** | Defines **425 lines** of mixed concerns. It handles UI settings (coordinates), Analysis Mode state, PGN wrapping, Game Rules, and Sound triggers. **Result:** Extremely high coupling; changing UI logic risks breaking game rules. |
-| **`Game.tsx`** | ⚠️ Bloated | Handles too much "prop drilling" and layout logic. Acts as a massive switchboard. |
+| **`useGameLogic.ts`** | 🟡 **CONTROLLER** | Refactored. Now acts as a Composition Root. UI state extracted to `useGameView`, core state to `useCoreGame`. Still handles computed view state and actions. |
+| **`useGameView.ts`** | ✅ Clean | New hook handling only UI settings (coordinates, rotation). |
+| **`useCoreGame.ts`** | ✅ Clean | New hook handling strict Game State and Engine instantiation. |
+| **`Game.tsx`** | ⚠️ Bloated | Still handles extensive layout logic, but state management is cleaner. |
 | **`GameEngine.ts`** | ✅ Clean | Properly implements the Facade pattern. Delegates work to `RuleEngine` and `StateMutator`. |
 | **`Board.ts`** | ✅ Clean | Pure data structure holding Hexes and Edges. |
 

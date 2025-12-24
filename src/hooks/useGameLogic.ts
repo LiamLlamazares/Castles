@@ -16,7 +16,6 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
-import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
@@ -32,16 +31,12 @@ import {
 import { startingBoard, allPieces } from "../ConstantImports";
 
 // Composed hooks
+import { useCoreGame, GameBoardState } from "./useCoreGame";
 import { useAnalysisMode, AnalysisModeState } from "./useAnalysisMode";
-import { useUISettings, UISettingsState } from "./useUISettings";
 import { usePGN } from "./usePGN";
 import { useMoveExecution } from "./useMoveExecution";
 
-// GameBoardState combines GameState and UI/Analysis state
-// We omit moveHistory (redefined) and avoid moveTree conflict by using Omit
-export interface GameBoardState extends Omit<GameState, 'moveHistory'>, UISettingsState, Omit<AnalysisModeState, 'moveTree'> {
-  moveHistory: MoveRecord[];
-}
+
 
 export const useGameLogic = (
   initialBoard: import("../Classes/Core/Board").Board = startingBoard,
@@ -54,61 +49,21 @@ export const useGameLogic = (
   initialMoveTree?: MoveTree // Optional, use this tree if provided (e.g., from PGN import with snapshots)
 ) => {
   // Create game engine instance (stable reference)
-  const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
-  
-  // Use provided sanctuaries or generate default set (random)
-  const startingSanctuaries = useMemo(() => {
-      if (initialSanctuaries && initialSanctuaries.length > 0) {
-          return initialSanctuaries;
-      }
-      return SanctuaryGenerator.generateDefaultSanctuaries(initialBoard);
-  }, [initialBoard, initialSanctuaries]);
-
-  // Use passed MoveTree if available (e.g., from PGN import with snapshots)
-  // Otherwise build a new tree from initialMoveHistory
-  const startingMoveTree = useMemo(() => {
-    if (initialMoveTree) {
-      return initialMoveTree; // Use tree with snapshots from PGN import
-    }
-    // Build new tree from moveHistory (no snapshots, for normal start)
-    const tree = new MoveTree();
-    if (initialMoveHistory && initialMoveHistory.length > 0) {
-      tree.goToRoot();
-      for (const move of initialMoveHistory) {
-        tree.addMove(move);
-      }
-    }
-    return tree;
-  }, [initialMoveHistory, initialMoveTree]);
-
-  // =========== STATE ===========
-  const [state, setState] = useState<GameBoardState>({
-    history: initialHistory,
-    pieces: initialPieces,
-    pieceMap: createPieceMap(initialPieces),
-    movingPiece: null,
-    turnCounter: initialTurnCounter,
-    castles: initialBoard.castles as Castle[], 
-    sanctuaries: startingSanctuaries, 
-    moveTree: startingMoveTree,
-    
-    // UI Settings
-    showCoordinates: false,
-    isBoardRotated: false,
-    resizeVersion: 0,
-    
-    // History Navigation (node-based)
-    moveHistory: initialMoveHistory,
-    viewNodeId: null,  // Node ID for tree navigation (null = live)
-    graveyard: [],
-    phoenixRecords: []
-  });
+  // =========== CORE GAME STATE ===========
+  const { state, setState, gameEngine, startingSanctuaries } = useCoreGame(
+    initialBoard, 
+    initialPieces, 
+    initialHistory, 
+    initialMoveHistory, 
+    initialTurnCounter, 
+    initialSanctuaries, 
+    initialMoveTree
+  );
 
   // =========== COMPOSED HOOKS ===========
   // isAnalysisMode is true when user explicitly entered Analysis Mode
   // This enables variant creation and shows move indicators
   const { isViewingHistory, analysisState, jumpToNode: jumpToViewNode, stepHistory } = useAnalysisMode(state, setState, isAnalysisMode);
-  const { showCoordinates, isBoardRotated, resizeVersion, toggleCoordinates, handleFlipBoard, incrementResizeVersion } = useUISettings(state, setState);
   const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree);
 
   // Destructure for convenience
@@ -205,12 +160,16 @@ export const useGameLogic = (
    * Now simplified - just sets viewNodeId and updates tree cursor.
    */
   const jumpToNode = useCallback((nodeId: string) => {
-      const node = state.moveTree?.findNodeById(nodeId);
-      if (!node) return;
+      // Must clone first to treat state as immutable
+      const newTree = state.moveTree!.clone();
+      
+      // Find the node in the NEW tree (ensure we don't mix references)
+      const targetNode = newTree.findNodeById(nodeId);
+      
+      if (!targetNode) return;
 
       // Update tree cursor and set view to this node
-      const newTree = state.moveTree!.clone();
-      newTree.setCurrentNode(node);
+      newTree.setCurrentNode(targetNode);
       
       setState(prev => ({
           ...prev,
@@ -378,9 +337,6 @@ export const useGameLogic = (
     sanctuaries: state.sanctuaries || [],
     turnCounter,
     movingPiece,
-    showCoordinates,
-    isBoardRotated,
-    resizeVersion,
     
     // Computed
     turnPhase,
@@ -400,9 +356,6 @@ export const useGameLogic = (
     // Actions
     handlePass,
     handleTakeback,
-    handleFlipBoard,
-    toggleCoordinates,
-    incrementResizeVersion,
     handlePieceClick,
     handleHexClick,
     handleResign,

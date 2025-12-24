@@ -19,6 +19,7 @@ import { useGameLogic } from "../hooks/useGameLogic";
 import { useSoundEffects } from "../hooks/useSoundEffects";
 import { useInputHandler } from "../hooks/useInputHandler";
 import { useClickHandler } from "../hooks/useClickHandler";
+import { useGameView } from "../hooks/useGameView";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import LegalMoveOverlay from "./LegalMoveOverlay";
@@ -89,10 +90,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     pieces,
     castles,
     sanctuaries,
-    turnCounter, // Added
-    showCoordinates,
-    isBoardRotated,
-    resizeVersion,
+    turnCounter,
     
     // Computed
     turnPhase,
@@ -108,12 +106,10 @@ const GameBoard: React.FC<GameBoardProps> = ({
     movingPiece,
     jumpToNode,
     history,
+    
     // Actions
     handlePass,
     handleTakeback,
-    handleFlipBoard,
-    toggleCoordinates,
-    incrementResizeVersion,
     handlePieceClick,
     handleHexClick: onEngineHexClick,
     handleResign,
@@ -122,7 +118,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
     canPledge,
     
     // Analysis
-
     isViewingHistory,
     viewNodeId,
     stepHistory,
@@ -130,6 +125,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
     loadPGN,
     triggerAbility
   } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree);
+
+  // Decoupled View State
+  const { 
+    showCoordinates, 
+    isBoardRotated, 
+    resizeVersion, 
+    toggleCoordinates, 
+    handleFlipBoard, 
+    incrementResizeVersion 
+  } = useGameView();
 
   // Reset overlay when game restarts (victory message clears or changes)
   React.useEffect(() => {

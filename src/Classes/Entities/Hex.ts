@@ -221,7 +221,10 @@ export class OffsetCoord {
 
   public static qoffsetFromCube(offset: number, h: Hex): OffsetCoord {
     const col: number = h.q;
-    const row: number = h.r + (h.q + offset * (h.q % 2)) / 2;
+    // Use & 1 instead of % 2 to correctly handle negative numbers
+    // In JS, -1 % 2 = -1, but we need 0 or 1 for the parity check
+    const parity = h.q & 1; // 0 for even, 1 for odd (works for negative too)
+    const row: number = h.r + (h.q + offset * parity) / 2;
     if (offset !== OffsetCoord.EVEN && offset !== OffsetCoord.ODD) {
       throw new Error("offset must be EVEN (+1) or ODD (-1)");
     }
@@ -230,7 +233,9 @@ export class OffsetCoord {
 
   public static qoffsetToCube(offset: number, h: OffsetCoord): Hex {
     const q: number = h.col;
-    const r: number = h.row - (h.col + offset * (h.col % 2)) / 2;
+    // Use & 1 instead of % 2 to correctly handle negative numbers
+    const parity = h.col & 1; // 0 for even, 1 for odd (works for negative too)
+    const r: number = h.row - (h.col + offset * parity) / 2;
     const s: number = -q - r;
     if (offset !== OffsetCoord.EVEN && offset !== OffsetCoord.ODD) {
       throw new Error("offset must be EVEN (+1) or ODD (-1)");

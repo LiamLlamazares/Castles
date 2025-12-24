@@ -1,46 +1,45 @@
 /**
- * @file useUISettings.ts
- * @description Hook for managing UI-only settings.
+ * @file useGameView.ts
+ * @description Hook for managing UI-only settings independently of Game Logic.
  *
  * Provides:
  * - Board display toggles (coordinates, rotation)
  * - Resize version tracking for layout recalculation
  *
- * @usage Composed into useGameLogic for UI control.
+ * @usage Called directly by Game.tsx to manage view state.
  */
-import { useCallback } from "react";
+import { useState, useCallback } from "react";
 
-export interface UISettingsState {
+export interface GameViewState {
   showCoordinates: boolean;
   isBoardRotated: boolean;
   resizeVersion: number;
 }
 
-export interface UISettingsActions {
+export interface GameViewActions {
   toggleCoordinates: () => void;
   handleFlipBoard: () => void;
   incrementResizeVersion: () => void;
 }
 
-/**
- * Creates UI settings controls bound to a setState function.
- */
-export const useUISettings = <T extends UISettingsState>(
-  state: T,
-  setState: React.Dispatch<React.SetStateAction<T>>
-): UISettingsState & UISettingsActions => {
-  
+export const useGameView = (): GameViewState & GameViewActions => {
+  const [state, setState] = useState<GameViewState>({
+    showCoordinates: false,
+    isBoardRotated: false,
+    resizeVersion: 0,
+  });
+
   const toggleCoordinates = useCallback(() => {
     setState(prev => ({ ...prev, showCoordinates: !prev.showCoordinates }));
-  }, [setState]);
+  }, []);
 
   const handleFlipBoard = useCallback(() => {
     setState(prev => ({ ...prev, isBoardRotated: !prev.isBoardRotated }));
-  }, [setState]);
+  }, []);
 
   const incrementResizeVersion = useCallback(() => {
     setState(prev => ({ ...prev, resizeVersion: prev.resizeVersion + 1 }));
-  }, [setState]);
+  }, []);
 
   return {
     showCoordinates: state.showCoordinates,

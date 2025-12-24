@@ -13,9 +13,6 @@
  * @see PGNImporter - For import functionality
  */
 
-// Re-export types
-export type { GameSetup, CompactSetup } from "./PGNTypes";
-
 // Import modules for facade class
 import { PGNGenerator } from "./PGNGenerator";
 import { PGNImporter } from "./PGNImporter";
@@ -25,7 +22,10 @@ import { MoveRecord } from "../../Constants";
 import { MoveTree } from "../Core/MoveTree";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { GameState } from "../Core/GameEngine";
-import { GameSetup } from "./PGNTypes";
+import { GameSetup } from "./PGNTypes"; // Also re-import locally needed type if necessary, or just rely on the export? GameSetup is used in the class.
+
+// Re-export types
+export type { GameSetup, CompactSetup } from "./PGNTypes";
 
 /**
  * Facade class for PGN operations.
@@ -81,9 +81,9 @@ export class PGNService {
   public static replayMoveHistory(
     board: Board,
     initialPieces: Piece[],
-    moves: string[],
+    input: string[] | MoveTree,
     initialSanctuaries: Sanctuary[] = []
   ): GameState {
-    return PGNImporter.replayMoveHistory(board, initialPieces, moves, initialSanctuaries);
+    return PGNImporter.replayMoveHistory(board, initialPieces, input, initialSanctuaries);
   }
 }
