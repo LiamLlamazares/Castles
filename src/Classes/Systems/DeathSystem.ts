@@ -17,7 +17,8 @@ import { GameState } from "../Core/GameEngine";
 import { createPieceMap } from "../../utils/PieceMap";
 import {
   PieceType,
-  PLAYER_CYCLE_LENGTH
+  PLAYER_CYCLE_LENGTH,
+  PHOENIX_RESPAWN_TURNS
 } from "../../Constants";
 
 export class DeathSystem {
@@ -33,8 +34,9 @@ export class DeathSystem {
 
       if (deadPiece.type === PieceType.Phoenix) {
           // Phoenix Rebirth
+          // Schedule respawn based on configurable turn count
           const newRecord = {
-              respawnTurn: state.turnCounter + (PLAYER_CYCLE_LENGTH * 3),
+              respawnTurn: state.turnCounter + (PLAYER_CYCLE_LENGTH * PHOENIX_RESPAWN_TURNS),
               owner: deadPiece.color
           };
           return {
@@ -79,7 +81,8 @@ export class DeathSystem {
                        }
                   }
               }
-              // If blocked, lost.
+              // If all spawn spots blocked, Phoenix is lost permanently
+              console.warn(`Phoenix for ${record.owner} could not respawn - all castle spawn locations blocked`);
           }
       });
 

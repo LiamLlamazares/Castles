@@ -131,6 +131,17 @@ export const PLAYER_CYCLE_LENGTH = 10;  // Full round = both players = 10 sub-ph
 export const MOVEMENT_PHASE_END = 2;    // Indices 0-1 are Movement
 export const ATTACK_PHASE_END = 4;      // Indices 2-3 are Attack (index 4 is Castles)
 
+/**
+ * PHOENIX RESPAWN TIMING
+ * 
+ * When a Phoenix dies, it respawns after this many full rounds.
+ * A "round" = both players completing their turns (10 sub-phases).
+ * 
+ * At respawn, Phoenix appears at owner's castle (or adjacent hex if occupied).
+ * If no spawn location available, Phoenix is lost permanently.
+ */
+export const PHOENIX_RESPAWN_TURNS = 3;
+
 // Rendering constants (derived from N_SQUARES for consistent scaling)
 export const PIECE_IMAGE_SIZE = 275; // Base size of piece images in pixels
 export const PIECE_IMAGE_OFFSET = 145; // Offset to center piece on hex

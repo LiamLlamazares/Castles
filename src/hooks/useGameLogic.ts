@@ -14,7 +14,7 @@
  * @see GameEngine - Core game logic facade
  * @see Game.tsx - Component that consumes this hook
  */
-import { useState, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
 import { GameEngine, GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
@@ -35,6 +35,7 @@ import { useCoreGame, GameBoardState } from "./useCoreGame";
 import { useAnalysisMode, AnalysisModeState } from "./useAnalysisMode";
 import { usePGN } from "./usePGN";
 import { useMoveExecution } from "./useMoveExecution";
+import { useComputedGame } from "./useComputedGame";
 
 
 
@@ -179,56 +180,31 @@ export const useGameLogic = (
       }));
   }, [state.moveTree, setState]);
 
-  // =========== COMPUTED VALUES ===========
-  const turnPhase = useMemo<TurnPhase>(
-    () => gameEngine.getTurnPhase(turnCounter),
-    [gameEngine, turnCounter]
-  );
-
-  const currentPlayer = useMemo<Color>(
-    () => gameEngine.getCurrentPlayer(turnCounter),
-    [gameEngine, turnCounter]
-  );
+  // =========== COMPUTED VALUES (Delegated to useComputedGame) ===========
+  const {
+    turnPhase,
+    currentPlayer,
+    legalMoves,
+    legalAttacks,
+    legalMoveSet,
+    legalAttackSet,
+    victoryMessage,
+    winner,
+    recruitmentHexes,
+    recruitmentHexSet,
+    shouldHideMoveIndicators
+  } = useComputedGame({
+    gameEngine,
+    viewState,
+    pieces,
+    castles,
+    movingPiece,
+    turnCounter,
+    isAnalysisMode,
+    isViewingHistory
+  });
 
   const hexagons = useMemo(() => initialBoard.hexes, [initialBoard]);
-
-  const legalMoves = useMemo(
-    () => gameEngine.getLegalMoves(viewState, movingPiece),
-    [gameEngine, viewState, movingPiece]
-  );
-
-  const legalAttacks = useMemo(
-    () => gameEngine.getLegalAttacks(viewState, movingPiece),
-    [gameEngine, viewState, movingPiece]
-  );
-
-  const victoryMessage = useMemo(
-    () => gameEngine.getVictoryMessage(pieces, castles),
-    [gameEngine, pieces, castles]
-  );
-
-  const winner = useMemo(
-    () => gameEngine.getWinner(pieces, castles),
-    [gameEngine, pieces, castles]
-  );
-
-  const emptyUnusedHexesAdjacentToControlledCastles = useMemo(() => {
-    return gameEngine.getRecruitmentHexes(viewState);
-  }, [gameEngine, viewState]);
-
-  // Sets for O(1) lookup in render
-  // Hide indicators ONLY if we are in Play Mode (Read-Only) and viewing history
-  const shouldHideMoveIndicators = !isAnalysisMode && isViewingHistory;
-
-  const legalMoveSet = useMemo(
-    () => shouldHideMoveIndicators ? new Set<string>() : new Set(legalMoves.map(h => h.getKey())),
-    [legalMoves, shouldHideMoveIndicators]
-  );
-
-  const legalAttackSet = useMemo(
-    () => shouldHideMoveIndicators ? new Set<string>() : new Set(legalAttacks.map(h => h.getKey())),
-    [legalAttacks, shouldHideMoveIndicators]
-  );
 
   // =========== HELPER FUNCTIONS ===========
   const isLegalMove = useCallback(
@@ -242,10 +218,10 @@ export const useGameLogic = (
   );
 
   const isRecruitmentSpot = useCallback(
-    (hex: Hex): boolean => emptyUnusedHexesAdjacentToControlledCastles.some(
+    (hex: Hex): boolean => recruitmentHexes.some(
       (adjacentHex) => hex.equals(adjacentHex)
     ),
-    [emptyUnusedHexesAdjacentToControlledCastles]
+    [recruitmentHexes]
   );
 
   // =========== MOVE EXECUTION HOOK ===========

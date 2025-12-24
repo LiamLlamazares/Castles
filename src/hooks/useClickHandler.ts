@@ -16,8 +16,7 @@ import { Hex } from "../Classes/Entities/Hex";
 import { Piece } from "../Classes/Entities/Piece";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { AbilityType } from "../Constants";
-
-// Local type for nullable ability selection (extends AbilityType with null)
+import { isValidAbilityTarget } from "../Classes/Config/AbilityConfig";
 
 interface UseClickHandlerProps {
   /** Currently selected piece (from game engine) */
@@ -82,18 +81,9 @@ export function useClickHandler({
       // 1. Ability Targeting Mode
       if (activeAbility && movingPiece) {
         const distance = movingPiece.hex.distance(hex);
-        let valid = false;
-
-        if (activeAbility === AbilityType.Fireball) {
-          // Range 2 (Wizard)
-          if (distance <= 2 && distance > 0) valid = true;
-        } else if (activeAbility === AbilityType.Teleport) {
-          // Range 3 (Wizard, self-teleport)
-          if (distance <= 3 && distance > 0) valid = true;
-        } else if (activeAbility === AbilityType.RaiseDead) {
-          // Range 1 (Necromancer)
-          if (distance === 1) valid = true;
-        }
+        
+        // Use centralized config for range validation (no magic numbers)
+        const valid = isValidAbilityTarget(activeAbility, distance);
 
         if (valid) {
           triggerAbility(movingPiece.hex, hex, activeAbility);
