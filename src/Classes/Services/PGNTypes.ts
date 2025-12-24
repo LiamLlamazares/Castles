@@ -7,23 +7,32 @@
 import { BoardConfig } from "../Core/Board";
 import { PieceType, SanctuaryType } from "../../Constants";
 
+/** Setup data for a castle position */
+export type CastleSetup = { q: number; r: number; s: number; color: 'w' | 'b' };
+
+/** Setup data for a piece position */
+export type PieceSetup = { type: PieceType; q: number; r: number; s: number; color: 'w' | 'b' };
+
+/** Setup data for a sanctuary position */
+export type SanctuarySetup = { 
+  type: SanctuaryType; 
+  q: number; 
+  r: number; 
+  s: number; 
+  territorySide: 'w' | 'b'; 
+  cooldown: number; 
+  hasPledgedThisGame: boolean 
+};
+
 /**
  * Full game setup data for serialization/deserialization.
  * Contains all information needed to reconstruct initial game state.
  */
 export interface GameSetup {
   boardConfig: BoardConfig;
-  castles: { q: number; r: number; s: number; color: 'w' | 'b' }[];
-  pieces: { type: PieceType; q: number; r: number; s: number; color: 'w' | 'b' }[];
-  sanctuaries?: { 
-    type: SanctuaryType; 
-    q: number; 
-    r: number; 
-    s: number; 
-    territorySide: 'w' | 'b'; 
-    cooldown: number; 
-    hasPledgedThisGame: boolean 
-  }[];
+  castles: CastleSetup[];
+  pieces: PieceSetup[];
+  sanctuaries?: SanctuarySetup[];
 }
 
 /**

@@ -18,6 +18,7 @@ import React from 'react';
 import { useGameLogic } from "../hooks/useGameLogic";
 import { useSoundEffects } from "../hooks/useSoundEffects";
 import { useInputHandler } from "../hooks/useInputHandler";
+import { useClickHandler } from "../hooks/useClickHandler";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import LegalMoveOverlay from "./LegalMoveOverlay";
@@ -77,8 +78,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
-  const [pledgingSanctuary, setPledgingSanctuary] = React.useState<Hex | null>(null);
-  const [activeAbility, setActiveAbility] = React.useState<"Fireball" | "Teleport" | "RaiseDead" | null>(null);
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   
@@ -166,6 +165,23 @@ const GameBoard: React.FC<GameBoardProps> = ({
     }
   }, []);
 
+  // Click handler hook - manages abilities, pledging, and delegation
+  const {
+    handleBoardClick,
+    isPledgeTarget,
+    activeAbility,
+    setActiveAbility,
+    pledgingSanctuary,
+  } = useClickHandler({
+    movingPiece,
+    sanctuaries,
+    pieces,
+    canPledge,
+    pledge,
+    triggerAbility,
+    onEngineHexClick,
+  });
+
   useInputHandler({
     onPass: handlePass,
     onFlipBoard: handleFlipBoard,
@@ -177,88 +193,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
   });
 
   // =========== RENDER ===========
-
-  // Interaction Handlers
-
-  const onBoardHexClick = (hex: Hex) => {
-      if (activeAbility && movingPiece) {
-          // Validate Range
-          const distance = movingPiece.hex.distance(hex);
-          let valid = false;
-
-          if (activeAbility === "Fireball") {
-              // Range 2 (Wizard)
-              if (distance <= 2 && distance > 0) valid = true;
-          } else if (activeAbility === "Teleport") {
-              // Range 3 (Wizard, self-teleport)
-              if (distance <= 3 && distance > 0) valid = true;
-          } else if (activeAbility === "RaiseDead") {
-              // Range 1 (Necromancer)
-              if (distance === 1) valid = true;
-          }
-
-          if (valid) {
-              triggerAbility(movingPiece.hex, hex, activeAbility);
-              setActiveAbility(null);
-          } else {
-              // Invalid target sound/visual?
-              console.log("Invalid ability target");
-              // setActiveAbility(null); // Keep mode active to retry? Or cancel.
-              // Better UX: keep mode.
-          }
-          return;
-      }
-
-      // Normal Click
-      handleHexClick(hex); // Delegate to engine logic
-  };
-
-  // Reset active ability if moving piece changes
-  React.useEffect(() => {
-      setActiveAbility(null);
-  }, [movingPiece]);
-
-  const handleHexClick = (hex: Hex) => {
-    // 1. Pledging Interaction
-    if (pledgingSanctuary) {
-        if (hex.equals(pledgingSanctuary)) {
-            setPledgingSanctuary(null);
-            return;
-        }
-        // Attempt pledge
-        // Check spawn hex is empty (no piece there)
-        const isSpawnHexEmpty = !pieces.find(p => p.hex.equals(hex));
-        if (canPledge(pledgingSanctuary) && hex.distance(pledgingSanctuary) === 1 && isSpawnHexEmpty) {
-            try {
-                pledge(pledgingSanctuary, hex);
-                setPledgingSanctuary(null);
-                return;
-            } catch (e) {
-                console.warn("Pledge failed:", e);
-            }
-        }
-        setPledgingSanctuary(null); // Cancel if clicking elsewhere but fallthrough
-    }
-
-    // 2. Sanctuary Selection (Enter Pledge Mode)
-    // Only if NOT currently moving a piece (engine state)
-    if (!movingPiece) {
-        // Find sanctuary at clicked hex
-        const clickedSanctuary = sanctuaries && sanctuaries.find((s: Sanctuary) => s.hex.equals(hex));
-        if (clickedSanctuary && canPledge(hex)) {
-            setPledgingSanctuary(hex);
-            return;
-        }
-    }
-
-    // 3. Delegate to Engine
-    onEngineHexClick(hex);
-  };
-
-  const isPledgeTarget = React.useCallback((hex: Hex) => {
-      if (!pledgingSanctuary) return false;
-      return hex.distance(pledgingSanctuary) === 1;
-  }, [pledgingSanctuary]);
 
   const handleImportPGN = () => {
     const pgn = prompt("Paste PGN here:");
@@ -338,7 +272,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           showCoordinates={showCoordinates}
           isBoardRotated={isBoardRotated}
           isAdjacentToControlledCastle={isRecruitmentSpot}
-          onHexClick={onBoardHexClick}
+          onHexClick={handleBoardClick}
           onHexHover={handleHexHover}
           resizeVersion={resizeVersion}
           layout={initialLayout}
@@ -359,7 +293,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           legalMoveSet={legalMoveSet}
           legalAttackSet={legalAttackSet}
           isBoardRotated={isBoardRotated}
-          onHexClick={onBoardHexClick}
+          onHexClick={handleBoardClick}
           layout={initialLayout}
         />
       </svg>

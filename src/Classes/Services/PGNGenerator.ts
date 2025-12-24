@@ -15,9 +15,9 @@ import { Board } from "../Core/Board";
 import { Piece } from "../Entities/Piece";
 import { MoveRecord, Color } from "../../Constants";
 import { MoveTree, MoveNode } from "../Core/MoveTree";
-import { PieceType, SanctuaryType } from "../../Constants";
+import { SanctuaryType } from "../../Constants";
 import { Sanctuary } from "../Entities/Sanctuary";
-import { GameSetup, CompactSetup } from "./PGNTypes";
+import { GameSetup, CompactSetup, CastleSetup, PieceSetup, SanctuarySetup } from "./PGNTypes";
 
 export class PGNGenerator {
   /**
@@ -169,12 +169,12 @@ export class PGNGenerator {
   public static compressSetup(setup: GameSetup): CompactSetup {
       const result: CompactSetup = {
           b: setup.boardConfig,
-          c: setup.castles.map((c: { q: number; r: number; s: number; color: 'w' | 'b' }) => [c.q, c.r, c.s, c.color === 'w' ? 0 : 1]),
-          p: setup.pieces.map(p => [p.type, p.q, p.r, p.s, p.color === 'w' ? 0 : 1])
+          c: setup.castles.map((c: CastleSetup) => [c.q, c.r, c.s, c.color === 'w' ? 0 : 1]),
+          p: setup.pieces.map((p: PieceSetup) => [p.type, p.q, p.r, p.s, p.color === 'w' ? 0 : 1])
       };
       // Only include sanctuaries if present
       if (setup.sanctuaries && setup.sanctuaries.length > 0) {
-          result.s = setup.sanctuaries.map((s: { type: SanctuaryType; q: number; r: number; s: number; territorySide: 'w' | 'b'; cooldown: number; hasPledgedThisGame: boolean }) => [
+          result.s = setup.sanctuaries.map((s: SanctuarySetup) => [
               s.type, s.q, s.r, s.s, 
               s.territorySide === 'w' ? 0 : 1, 
               s.cooldown, 
