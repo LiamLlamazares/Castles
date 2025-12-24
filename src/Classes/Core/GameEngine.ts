@@ -32,6 +32,7 @@ import {
   MoveRecord,
   HistoryEntry,
   PieceType,
+  AbilityType,
 } from "../../Constants";
 
 // Phoenix Rebirth Record
@@ -78,7 +79,7 @@ export class GameEngine {
     return SanctuaryService.pledge(gameState, sanctuaryHex, spawnHex);
   }
 
-  public activateAbility(gameState: GameState, sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead"): GameState {
+  public activateAbility(gameState: GameState, sourceHex: Hex, targetHex: Hex, ability: AbilityType): GameState {
       // Validation delegated to RuleEngine? Or keep simple for now.
       // 1. Source existence
       const source = gameState.pieceMap.getByKey(sourceHex.getKey());

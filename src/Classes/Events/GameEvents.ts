@@ -27,7 +27,7 @@
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { Castle } from "../Entities/Castle";
-import { Color, TurnPhase, PieceType } from "../../Constants";
+import { Color, TurnPhase, PieceType, AbilityType } from "../../Constants";
 
 /**
  * Base event with common properties.
@@ -126,7 +126,7 @@ export interface SanctuaryPledgedEvent extends BaseGameEvent {
 export interface AbilityActivatedEvent extends BaseGameEvent {
   type: "ABILITY_ACTIVATED";
   caster: Piece;
-  ability: "Fireball" | "Teleport" | "RaiseDead";
+  ability: AbilityType;
   targetHex: Hex;
 }
 

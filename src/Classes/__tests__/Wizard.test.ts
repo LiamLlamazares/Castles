@@ -4,7 +4,7 @@ import { Hex } from "../Entities/Hex";
 import { StateMutator } from "../Systems/StateMutator";
 import { GameState } from "../Core/GameEngine";
 import { Board } from "../Core/Board";
-import { PieceType } from "../../Constants";
+import { PieceType, AbilityType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
 import { MoveTree } from "../Core/MoveTree";
 
@@ -39,7 +39,7 @@ describe('Wizard Active Abilities', () => {
         state.pieceMap = new PieceMap(state.pieces);
 
         // Wizard casts Fireball at target hex
-        const newState = StateMutator.activateAbility(state, wizard, target.hex, "Fireball", board);
+        const newState = StateMutator.activateAbility(state, wizard, target.hex, AbilityType.Fireball, board);
 
         const newTarget = newState.pieces.find(p => p.hex.equals(target.hex));
         const newNeighbor = newState.pieces.find(p => p.hex.equals(neighbor.hex));
@@ -57,7 +57,7 @@ describe('Wizard Active Abilities', () => {
         state.pieces = [wizard];
         state.pieceMap = new PieceMap(state.pieces);
 
-        const newState = StateMutator.activateAbility(state, wizard, targetHex, "Teleport", board);
+        const newState = StateMutator.activateAbility(state, wizard, targetHex, AbilityType.Teleport, board);
 
         const movedWizard = newState.pieces.find((p: Piece) => p.hex.equals(targetHex));
         expect(movedWizard).toBeDefined();

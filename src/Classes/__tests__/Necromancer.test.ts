@@ -4,7 +4,7 @@ import { Hex } from "../Entities/Hex";
 import { StateMutator } from "../Systems/StateMutator";
 import { GameState } from "../Core/GameEngine";
 import { Board } from "../Core/Board";
-import { PieceType } from "../../Constants";
+import { PieceType, AbilityType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
 import { CombatSystem } from "../Systems/CombatSystem";
 import { MoveTree } from "../Core/MoveTree";
@@ -67,7 +67,7 @@ describe('Necromancer Mechanics', () => {
         const spawnHex = new Hex(0, 1, -1);
         
         // Use Ability: Raise Dead
-        const newState = StateMutator.activateAbility(state, necro, spawnHex, "RaiseDead", board);
+        const newState = StateMutator.activateAbility(state, necro, spawnHex, AbilityType.RaiseDead, board);
 
         const newNecro = newState.pieces.find(p => p.hex.equals(necro.hex));
         const raisedUnit = newState.pieces.find(p => p.hex.equals(spawnHex));

@@ -15,8 +15,9 @@ import { useState, useCallback, useEffect } from "react";
 import { Hex } from "../Classes/Entities/Hex";
 import { Piece } from "../Classes/Entities/Piece";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
+import { AbilityType } from "../Constants";
 
-export type AbilityType = "Fireball" | "Teleport" | "RaiseDead" | null;
+// Local type for nullable ability selection (extends AbilityType with null)
 
 interface UseClickHandlerProps {
   /** Currently selected piece (from game engine) */
@@ -30,7 +31,7 @@ interface UseClickHandlerProps {
   /** Execute a pledge action */
   pledge: (sanctuaryHex: Hex, spawnHex: Hex) => void;
   /** Execute an ability (Wizard/Necromancer) */
-  triggerAbility: (sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => void;
+  triggerAbility: (sourceHex: Hex, targetHex: Hex, ability: AbilityType) => void;
   /** Normal hex click handler from game engine */
   onEngineHexClick: (hex: Hex) => void;
 }
@@ -41,9 +42,9 @@ interface UseClickHandlerResult {
   /** Check if hex is a valid pledge target */
   isPledgeTarget: (hex: Hex) => boolean;
   /** Currently active ability mode */
-  activeAbility: AbilityType;
+  activeAbility: AbilityType | null;
   /** Set active ability mode */
-  setActiveAbility: (ability: AbilityType) => void;
+  setActiveAbility: (ability: AbilityType | null) => void;
   /** Currently pledging sanctuary hex (null if not pledging) */
   pledgingSanctuary: Hex | null;
 }
@@ -65,7 +66,7 @@ export function useClickHandler({
   triggerAbility,
   onEngineHexClick,
 }: UseClickHandlerProps): UseClickHandlerResult {
-  const [activeAbility, setActiveAbility] = useState<AbilityType>(null);
+  const [activeAbility, setActiveAbility] = useState<AbilityType | null>(null);
   const [pledgingSanctuary, setPledgingSanctuary] = useState<Hex | null>(null);
 
   // Reset active ability when moving piece changes
@@ -83,13 +84,13 @@ export function useClickHandler({
         const distance = movingPiece.hex.distance(hex);
         let valid = false;
 
-        if (activeAbility === "Fireball") {
+        if (activeAbility === AbilityType.Fireball) {
           // Range 2 (Wizard)
           if (distance <= 2 && distance > 0) valid = true;
-        } else if (activeAbility === "Teleport") {
+        } else if (activeAbility === AbilityType.Teleport) {
           // Range 3 (Wizard, self-teleport)
           if (distance <= 3 && distance > 0) valid = true;
-        } else if (activeAbility === "RaiseDead") {
+        } else if (activeAbility === AbilityType.RaiseDead) {
           // Range 1 (Necromancer)
           if (distance === 1) valid = true;
         }

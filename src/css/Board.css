@@ -131,6 +131,11 @@ body {
   /* Smooth Lichess-style piece movement */
   transition: x 0.15s ease-out, y 0.15s ease-out;
 }
+
+/* Disable transitions during initial load/resize to prevent "flying pieces" */
+.board.no-transition .piece {
+  transition: none !important;
+}
 :root {
   --backgroundColor: rgba(246, 241, 209);
   --colorShadeA: rgb(106, 163, 137);

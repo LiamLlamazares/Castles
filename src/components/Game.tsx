@@ -81,6 +81,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
   const [showRulesModal, setShowRulesModal] = React.useState(false);
+  const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+  
+  // Disable transitions after first render cycle to prevent "flying pieces" on resize
+  React.useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoad(false), 100);
+    return () => clearTimeout(timer);
+  }, []);
   
   // Sound effects hook - subscribes to game events
   useSoundEffects();
@@ -194,7 +201,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     onResize: incrementResizeVersion,
     onNavigate: stepHistory,
     onNewGame: handleNewGame,
-    isNewGameEnabled: !hasGameStarted || !!winner
+    isNewGameEnabled: !hasGameStarted || !!winner,
+    layout: initialLayout
   });
 
   // =========== RENDER ===========
@@ -253,7 +261,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         viewNodeId={viewNodeId}
       />
       
-      <svg className="board" height="100%" width="100%">
+      <svg className={`board ${isInitialLoad ? 'no-transition' : ''}`} height="100%" width="100%">
         {/* ... SVG Content ... */}
         <defs>
           <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">

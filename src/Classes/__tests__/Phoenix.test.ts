@@ -4,7 +4,7 @@ import { Hex } from "../Entities/Hex";
 import { StateMutator } from "../Systems/StateMutator";
 import { GameState, PhoenixRecord } from "../Core/GameEngine";
 import { Board } from "../Core/Board";
-import { PieceType, PLAYER_CYCLE_LENGTH } from "../../Constants";
+import { PieceType, PLAYER_CYCLE_LENGTH, AbilityType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
 import { Castle } from "../Entities/Castle";
 import { MoveTree } from "../Core/MoveTree";
@@ -90,7 +90,7 @@ describe('Phoenix Rebirth Logic', () => {
         state.turnCounter = 2; // Attack phase for White
         
         // Use Fireball ability targeting Phoenix's hex (pass wizard Piece, not hex)
-        const result = StateMutator.activateAbility(state, wizard, phoenix.hex, 'Fireball', board);
+        const result = StateMutator.activateAbility(state, wizard, phoenix.hex, AbilityType.Fireball, board);
         
         // Verify Phoenix is dead (1 existing damage + 1 Fireball = 2 = HP, killed)
         const deadPhoenix = result.pieces.find(p => p.type === PieceType.Phoenix);

@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from "react";
-import { startingLayout } from "../ConstantImports";
+import { LayoutService } from "../Classes/Systems/LayoutService";
 
 interface UseInputHandlerProps {
   onPass: () => void;
@@ -9,6 +9,7 @@ interface UseInputHandlerProps {
   onNavigate: (direction: -1 | 1) => void;
   onNewGame?: () => void;
   isNewGameEnabled?: boolean;
+  layout: LayoutService;  // Accept the actual layout to update
 }
 
 export const useInputHandler = ({
@@ -19,10 +20,14 @@ export const useInputHandler = ({
   onNavigate,
   onNewGame,
   isNewGameEnabled = false,
+  layout,
 }: UseInputHandlerProps) => {
-  // Use ref to store callbacks to avoid dependency issues
+  // Use refs to store callbacks/layout to avoid dependency issues
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
+  
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
   
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
@@ -60,13 +65,13 @@ export const useInputHandler = ({
   // Set up resize handler once
   useEffect(() => {
     const handleResize = () => {
-      startingLayout.updateDimensions(window.innerWidth - 300, window.innerHeight);
+      layoutRef.current.updateDimensions(window.innerWidth - 300, window.innerHeight);
       onResizeRef.current();
     };
 
     // Initial resize - update dimensions AND trigger re-render
     // This ensures the board renders at full size immediately
-    startingLayout.updateDimensions(window.innerWidth - 300, window.innerHeight);
+    layoutRef.current.updateDimensions(window.innerWidth - 300, window.innerHeight);
     
     // Use setTimeout to trigger resize after initial render completes
     // This avoids state updates during render

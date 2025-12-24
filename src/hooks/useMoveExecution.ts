@@ -18,7 +18,7 @@ import { Hex } from "../Classes/Entities/Hex";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { NotationService } from "../Classes/Systems/NotationService";
 import { createHistorySnapshot } from "../utils/GameStateUtils";
-import { TurnPhase, Color, HistoryEntry, MoveRecord } from "../Constants";
+import { TurnPhase, Color, HistoryEntry, MoveRecord, AbilityType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 
 // Command Pattern imports
@@ -312,7 +312,7 @@ export const useMoveExecution = ({
    * (Not yet converted to Command - ability logic is more complex)
    */
   const triggerAbility = useCallback(
-    (sourceHex: Hex, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead") => {
+    (sourceHex: Hex, targetHex: Hex, ability: AbilityType) => {
       // Block abilities in Play Mode (Read-Only) when viewing history
       if (!isAnalysisMode && isViewingHistory) {
         return;

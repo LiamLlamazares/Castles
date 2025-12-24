@@ -35,6 +35,7 @@ import {
   MoveRecord,
   PieceType,
   PHASE_CYCLE_LENGTH,
+  AbilityType,
 } from "../../Constants";
 
 export class StateMutator {
@@ -220,7 +221,7 @@ export class StateMutator {
       };
   }
 
-  public static activateAbility(state: GameState, source: Piece, targetHex: Hex, ability: "Fireball" | "Teleport" | "RaiseDead", board: Board): GameState {
+  public static activateAbility(state: GameState, source: Piece, targetHex: Hex, ability: AbilityType, board: Board): GameState {
        let newPieces = [...state.pieces];
        let newGraveyard = state.graveyard || [];
        let notation = "";
@@ -236,7 +237,7 @@ export class StateMutator {
 
        let newPhoenixRecords = state.phoenixRecords || [];
 
-       if (ability === "Fireball") {
+       if (ability === AbilityType.Fireball) {
            notation = `Fireball -> ${targetHex.toString()}`;
            const impactedHexes = [targetHex, ...targetHex.cubeRing(1)];
            const impactedKeys = new Set(impactedHexes.map(h => h.getKey()));
@@ -272,7 +273,7 @@ export class StateMutator {
            
            newPieces = piecesBeforeDeath.filter(p => p.damage < p.Strength);
 
-       } else if (ability === "Teleport") {
+       } else if (ability === AbilityType.Teleport) {
            notation = `Teleport -> ${targetHex.toString()}`;
            if (state.pieceMap.has(targetHex)) throw new Error("Teleport target blocked");
            
@@ -280,7 +281,7 @@ export class StateMutator {
                 ? p.with({ hex: targetHex })
                 : p
            );
-       } else if (ability === "RaiseDead") {
+       } else if (ability === AbilityType.RaiseDead) {
            notation = `RaiseDead -> ${targetHex.toString()}`;
            
            // Validation

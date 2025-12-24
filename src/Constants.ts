@@ -73,6 +73,16 @@ export enum AttackType {
   None = "None", // For Healer
 }
 
+/**
+ * Ability types for special pieces (Wizard, Necromancer).
+ * Used by activateAbility methods throughout the codebase.
+ */
+export enum AbilityType {
+  Fireball = "Fireball",     // Wizard: AoE damage
+  Teleport = "Teleport",     // Wizard: Move to distant hex
+  RaiseDead = "RaiseDead",   // Necromancer: Revive dead piece
+}
+
 // Sanctuary configuration
 export const SanctuaryConfig: Record<SanctuaryType, {
   pieceType: PieceType;

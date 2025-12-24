@@ -12,9 +12,7 @@
  */
 import React from "react";
 import { Piece } from "../Classes/Entities/Piece";
-import { PieceType } from "../Constants";
-
-type AbilityType = "Fireball" | "Teleport" | "RaiseDead";
+import { PieceType, AbilityType } from "../Constants";
 
 interface AbilityBarProps {
   /** The currently selected piece (must have abilities) */
@@ -36,26 +34,26 @@ const AbilityBar: React.FC<AbilityBarProps> = ({
   const renderWizardAbilities = () => (
     <>
       <button
-        className={`ability-btn ${activeAbility === "Fireball" ? "active" : ""}`}
-        onClick={() => onAbilitySelect(activeAbility === "Fireball" ? null : "Fireball")}
+        className={`ability-btn ${activeAbility === AbilityType.Fireball ? "active" : ""}`}
+        onClick={() => onAbilitySelect(activeAbility === AbilityType.Fireball ? null : AbilityType.Fireball)}
       >
-        {activeAbility === "Fireball" ? "TARGETING..." : "Fireball"}
+        {activeAbility === AbilityType.Fireball ? "TARGETING..." : "Fireball"}
       </button>
       <button
-        className={`ability-btn ${activeAbility === "Teleport" ? "active" : ""}`}
-        onClick={() => onAbilitySelect(activeAbility === "Teleport" ? null : "Teleport")}
+        className={`ability-btn ${activeAbility === AbilityType.Teleport ? "active" : ""}`}
+        onClick={() => onAbilitySelect(activeAbility === AbilityType.Teleport ? null : AbilityType.Teleport)}
       >
-        {activeAbility === "Teleport" ? "TARGETING..." : "Teleport"}
+        {activeAbility === AbilityType.Teleport ? "TARGETING..." : "Teleport"}
       </button>
     </>
   );
 
   const renderNecromancerAbilities = () => (
     <button
-      className={`ability-btn ${activeAbility === "RaiseDead" ? "active" : ""}`}
-      onClick={() => onAbilitySelect(activeAbility === "RaiseDead" ? null : "RaiseDead")}
+      className={`ability-btn ${activeAbility === AbilityType.RaiseDead ? "active" : ""}`}
+      onClick={() => onAbilitySelect(activeAbility === AbilityType.RaiseDead ? null : AbilityType.RaiseDead)}
     >
-      {activeAbility === "RaiseDead" ? "TARGETING..." : "Raise Dead"}
+      {activeAbility === AbilityType.RaiseDead ? "TARGETING..." : "Raise Dead"}
     </button>
   );
 
