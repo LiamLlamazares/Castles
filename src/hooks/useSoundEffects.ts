@@ -31,7 +31,6 @@ let audioCache: Map<SoundType, HTMLAudioElement> | null = null;
 
 function getAudioCache(): Map<SoundType, HTMLAudioElement> {
   if (audioCache === null) {
-    console.log("[SoundEffects] Creating audio cache (one-time)");
     audioCache = new Map<SoundType, HTMLAudioElement>();
     
     if (typeof window !== "undefined") {
@@ -64,17 +63,14 @@ export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
   }, [volume, cache]);
 
   const playSound = useCallback((type: SoundType) => {
-    console.log("[SoundEffects] playSound called for:", type, "| enabled:", enabled);
     if (!enabled) return;
     
     const audio = cache.get(type);
-    console.log("[SoundEffects] Audio element found:", !!audio, "| src:", audio?.src);
     if (audio) {
       // Reset to start for rapid replays
       audio.currentTime = 0;
-      audio.play().catch((err) => {
+      audio.play().catch(() => {
         // Ignore autoplay errors (browser policies)
-        console.log("[SoundEffects] Audio play error:", err);
       });
     }
   }, [enabled]);
@@ -83,7 +79,6 @@ export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
     if (!enabled) return;
 
     const handleEvent = (event: GameEvent) => {
-      console.log("[SoundEffects] Event received:", event.type); // Debug
       switch (event.type) {
         case "MOVE_MADE":
           playSound("move");
@@ -106,7 +101,6 @@ export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
       }
     };
 
-    console.log("[SoundEffects] Subscribing to events"); // Debug
     const unsubscribe = gameEvents.onAll(handleEvent);
     return () => unsubscribe();
   }, [enabled, playSound]);
