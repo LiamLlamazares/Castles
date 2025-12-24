@@ -5,16 +5,21 @@
  * This registry decouples the Piece class from specific attack implementations,
  * making it easy to add new piece types without modifying the Piece class.
  *
+ * NOTE: Attack types (Melee, Ranged, etc.) are defined in PieceTypeConfig.ts.
+ * This registry only stores the strategy functions for determining legal attack hexes.
+ *
  * To add a new piece type:
- * 1. Create the attack function in AttackStrategies.ts (or reuse existing)
- * 2. Register it here with: registerAttackStrategy(PieceType.NewType, newTypeAttacks)
+ * 1. Define attackType in PieceTypeConfig.ts
+ * 2. Create the attack function in AttackStrategies.ts (or reuse existing)
+ * 3. Register it here with: registerAttackStrategy(PieceType.NewType, newTypeAttackStrategy)
  *
  * @see AttackStrategies.ts - Attack algorithm implementations
+ * @see PieceTypeConfig.ts - Attack type definitions
  * @see Piece.ts - Uses this registry via getAttackStrategy()
  */
 
 import { Hex } from "../Entities/Hex";
-import { Color, PieceType, AttackType } from "../../Constants";
+import { Color, PieceType } from "../../Constants";
 
 import {
   meleeAttacks,
@@ -35,17 +40,9 @@ export type AttackStrategy = (
 ) => Hex[];
 
 /**
- * Configuration for a piece's attack behavior.
+ * Internal registry mapping piece types to their attack strategy functions.
  */
-export interface AttackConfig {
-  attackType: AttackType;
-  strategy: AttackStrategy;
-}
-
-/**
- * Internal registry mapping piece types to their attack configurations.
- */
-const attackStrategyRegistry = new Map<PieceType, AttackConfig>();
+const attackStrategyRegistry = new Map<PieceType, AttackStrategy>();
 
 /**
  * Registers an attack strategy for a piece type.
@@ -53,39 +50,24 @@ const attackStrategyRegistry = new Map<PieceType, AttackConfig>();
  */
 export const registerAttackStrategy = (
   pieceType: PieceType,
-  attackType: AttackType,
   strategy: AttackStrategy
 ): void => {
-  attackStrategyRegistry.set(pieceType, { attackType, strategy });
+  attackStrategyRegistry.set(pieceType, strategy);
 };
 
 /**
- * Gets the attack configuration for a piece type.
+ * Gets the attack strategy function for a piece type.
  * @throws Error if no strategy is registered for the type.
  */
-export const getAttackConfig = (pieceType: PieceType): AttackConfig => {
-  const config = attackStrategyRegistry.get(pieceType);
-  if (!config) {
+export const getAttackStrategy = (pieceType: PieceType): AttackStrategy => {
+  const strategy = attackStrategyRegistry.get(pieceType);
+  if (!strategy) {
     throw new Error(
       `No attack strategy registered for piece type: ${pieceType}. ` +
       `Register it in AttackStrategyRegistry.ts.`
     );
   }
-  return config;
-};
-
-/**
- * Gets just the attack type for a piece type.
- */
-export const getAttackType = (pieceType: PieceType): AttackType => {
-  return getAttackConfig(pieceType).attackType;
-};
-
-/**
- * Gets the attack strategy function for a piece type.
- */
-export const getAttackStrategy = (pieceType: PieceType): AttackStrategy => {
-  return getAttackConfig(pieceType).strategy;
+  return strategy;
 };
 
 /**
@@ -122,49 +104,50 @@ const swordsmanAttackStrategy: AttackStrategy = (hex, attackable, color) =>
 // ============================================================================
 // DEFAULT REGISTRATIONS
 // Register all built-in piece types. New pieces can be added to this list.
+// Attack types are defined in PieceTypeConfig.ts.
 // ============================================================================
 
 // Swordsman: Diagonal-forward attacks
-registerAttackStrategy(PieceType.Swordsman, AttackType.Swordsman, swordsmanAttackStrategy);
+registerAttackStrategy(PieceType.Swordsman, swordsmanAttackStrategy);
 
 // Archer: Ranged (distance 2, +3 from high ground)
-registerAttackStrategy(PieceType.Archer, AttackType.Ranged, rangedAttackStrategy);
+registerAttackStrategy(PieceType.Archer, rangedAttackStrategy);
 
 // Knight: Melee
-registerAttackStrategy(PieceType.Knight, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Knight, meleeAttackStrategy);
 
 // Trebuchet: Long ranged (distance 3, +4 from high ground)
-registerAttackStrategy(PieceType.Trebuchet, AttackType.LongRanged, longRangedAttackStrategy);
+registerAttackStrategy(PieceType.Trebuchet, longRangedAttackStrategy);
 
 // Monarch: Melee
-registerAttackStrategy(PieceType.Monarch, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Monarch, meleeAttackStrategy);
 
 // Eagle: Melee
-registerAttackStrategy(PieceType.Eagle, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Eagle, meleeAttackStrategy);
 
 // Giant: Melee
-registerAttackStrategy(PieceType.Giant, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Giant, meleeAttackStrategy);
 
 // Dragon: Melee
-registerAttackStrategy(PieceType.Dragon, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Dragon, meleeAttackStrategy);
 
 // Assassin: Melee
-registerAttackStrategy(PieceType.Assassin, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Assassin, meleeAttackStrategy);
 
 // Wolf: Melee
-registerAttackStrategy(PieceType.Wolf, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Wolf, meleeAttackStrategy);
 
 // Healer: Cannot attack
-registerAttackStrategy(PieceType.Healer, AttackType.None, noAttacks);
+registerAttackStrategy(PieceType.Healer, noAttacks);
 
 // Ranger: Long ranged (like Trebuchet)
-registerAttackStrategy(PieceType.Ranger, AttackType.LongRanged, longRangedAttackStrategy);
+registerAttackStrategy(PieceType.Ranger, longRangedAttackStrategy);
 
 // Phoenix: Melee
-registerAttackStrategy(PieceType.Phoenix, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Phoenix, meleeAttackStrategy);
 
 // Wizard: Ranged (like Archer)
-registerAttackStrategy(PieceType.Wizard, AttackType.Ranged, rangedAttackStrategy);
+registerAttackStrategy(PieceType.Wizard, rangedAttackStrategy);
 
 // Necromancer: Melee
-registerAttackStrategy(PieceType.Necromancer, AttackType.Melee, meleeAttackStrategy);
+registerAttackStrategy(PieceType.Necromancer, meleeAttackStrategy);

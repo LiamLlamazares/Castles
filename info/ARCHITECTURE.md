@@ -415,42 +415,85 @@ const revived = PieceFactory.createRevived(PieceType.Wolf, hex, "b"); // Necroma
 ```
 
 
-# Strategy Registry Pattern
+# Strategy Registry Pattern & Piece Configuration
 
 The Strategy Registry pattern decouples `Piece` class from specific movement/attack implementations.
 
+## Centralized Piece Configuration
+
+All piece metadata (strength, attack type, descriptions) is consolidated in **`PieceTypeConfig.ts`**, which provides a single source of truth for piece characteristics.
+
+```typescript
+// Example: Get piece configuration
+import { getPieceConfig, getPieceStrength } from './Classes/Config/PieceTypeConfig';
+
+const dragonConfig = getPieceConfig(PieceType.Dragon);
+console.log(dragonConfig.strength);      // 3
+console.log(dragonConfig.attackType);    // AttackType.Melee
+console.log(dragonConfig.description);   // "Slides up to 3 hexes..."
+
+// Convenience functions
+const strength = getPieceStrength(PieceType.Archer); // 1
+```
+
+### Benefits
+- **Single Source of Truth**: All piece data in one place
+- **Easy to Extend**: Add new pieces by editing one file
+- **Type-Safe**: Full TypeScript support
+- **Self-Documenting**: Descriptions included in config
+
 ## Adding a New Piece Type
 
-Only 3 files need to change:
+Only **4 files** need to change:
 
 | File | What to Add |
 |------|-------------|
-| [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Add to `PieceType` enum and `PieceStrength` |
-| [MoveStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategyRegistry.ts) | Register movement strategy |
-| [AttackStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/AttackStrategyRegistry.ts) | Register attack type and strategy |
+| [`Constants.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Add to `PieceType` enum |
+| [`PieceTypeConfig.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/PieceTypeConfig.ts) | Add config entry (strength, attackType, description) |
+| [`MoveStrategyRegistry.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategyRegistry.ts) | Register movement strategy |
+| [`AttackStrategyRegistry.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/AttackStrategyRegistry.ts) | Register attack type and strategy |
+
+**That's it!** No need to modify the core `Piece` class or scatter `switch` statements across the codebase.
 
 ## Example: Adding a "Champion" Piece
 
 ```typescript
-// 1. Constants.ts - Add to enums
+// 1. Constants.ts - Add to enum
 export enum PieceType {
   // ... existing types
   Champion = "Champion",
 }
 
-export enum PieceStrength {
-  // ... existing types
-  Champion = 2,
-}
+// 2. PieceTypeConfig.ts - Add configuration
+export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
+  // ... existing configs
+  [PieceType.Champion]: {
+    strength: 2,
+    attackType: AttackType.Melee,
+    description: "Walks up to 2 hexes in any direction. Attacks adjacent hexes. Strength 2.",
+  },
+};
 
-// 2. MoveStrategyRegistry.ts - Register movement
+// 3. MoveStrategyRegistry.ts - Register movement
 registerMoveStrategy(PieceType.Champion, (hex, blocked, valid, color, boardSize) => 
   getWalkingMoves(hex, blocked, valid, 2) // Walks 2 hexes
 );
 
-// 3. AttackStrategyRegistry.ts - Register attack
-registerAttackStrategy(PieceType.Champion, AttackType.Melee, meleeAttackStrategy);
+// 4. AttackStrategyRegistry.ts - Already registered!
+// If using AttackType.Melee, meleeAttacks is already registered for all Melee types
 ```
 
-**Key Benefit:** No changes needed to `Piece.ts`, `RuleEngine.ts`, or `StateMutator.ts`.
+## How It Works
 
+- **PieceTypeConfig**: Stores static metadata (strength, attackType, description)
+- **MoveStrategyRegistry**: Maps `PieceType` → movement function
+- **AttackStrategyRegistry**: Maps `AttackType` → attack function
+- **Piece.ts**: Delegates to registries via getters
+
+This separation ensures that:
+1. Metadata stays centralized and easy to find
+2. Complex strategies can be implemented independently
+3. Adding new pieces doesn't require modifying core class logic
+
+
+**Key Benefit:** No changes needed to `Piece.ts`, `RuleEngine.ts`, or `StateMutator.ts`.

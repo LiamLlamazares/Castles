@@ -17,14 +17,14 @@ import { Hex } from "./Hex";
 import {
   PieceType,
   AttackType,
-  PieceStrength,
   Color,
   N_SQUARES,
 } from "../../Constants";
 
 // Registry pattern for strategies - adding new piece types doesn't require modifying this file
 import { getMoveStrategy } from "../Strategies/MoveStrategyRegistry";
-import { getAttackType, getAttackStrategy } from "../Strategies/AttackStrategyRegistry";
+import { getAttackStrategy } from "../Strategies/AttackStrategyRegistry";
+import { getPieceStrength, getPieceAttackType } from "../Config/PieceTypeConfig";
 
 /**
  * A piece on the game board.
@@ -63,7 +63,7 @@ export class Piece {
 
   /** Combat strength - must exceed defender's strength to capture */
   get Strength(): number {
-    return PieceStrength[this.type];
+    return getPieceStrength(this.type);
   }
 
   /** 
@@ -73,10 +73,10 @@ export class Piece {
    * - LongRanged: exactly 3 hexes away (4 from high ground), doesn't move
    * - Swordsman: diagonal-forward only, moves onto target
    * 
-   * Uses registry lookup - see AttackStrategyRegistry.ts.
+   * Uses centralized config - see PieceTypeConfig.ts.
    */
   get AttackType(): AttackType {
-    return getAttackType(this.type);
+    return getPieceAttackType(this.type);
   }
 
   /**

@@ -73,25 +73,6 @@ export enum AttackType {
   None = "None", // For Healer
 }
 
-export enum PieceStrength {
-  Swordsman = 1,
-  Archer = 1,
-  Knight = 1,
-  Trebuchet = 1,
-  Eagle = 1,
-  Giant = 2,
-  Assassin = 1,
-  Dragon = 3,
-  Monarch = 3,
-  // Special pieces
-  Wolf = 1,
-  Healer = 1,
-  Ranger = 1,
-  Wizard = 1,
-  Necromancer = 1,
-  Phoenix = 2,
-}
-
 // Sanctuary configuration
 export const SanctuaryConfig: Record<SanctuaryType, {
   pieceType: PieceType;
