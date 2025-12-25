@@ -6,8 +6,10 @@ describe("PGN Tree Structure", () => {
     it("should have correct tree structure after replayMoveHistory", () => {
         // Simple 4-move game
         const moves = ["G12G11", "H12H11", "L8L9", "M8M9"];
+        const moveString = moves.join(" ");
+        const { moveTree } = PGNService.parsePGN(moveString);
         
-        const finalState = PGNService.replayMoveHistory(startingBoard, allPieces, moves, []);
+        const finalState = PGNService.replayMoveHistory(startingBoard, allPieces, moveTree, []);
         
         const tree = finalState.moveTree!;
         const root = tree.rootNode;

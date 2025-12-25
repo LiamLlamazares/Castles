@@ -319,33 +319,12 @@ export class PGNImporter {
   public static replayMoveHistory(
       board: Board, 
       initialPieces: Piece[], 
-      input: string[] | MoveTree,
+      moveTree: MoveTree,
       initialSanctuaries: Sanctuary[] = []
   ): GameState {
       // Initialize fresh engine and state
       const engine = new GameEngine(board);
       const castles = board.castles as Castle[]; 
-
-      // Determine tree source
-      let moveTree: MoveTree;
-      if (Array.isArray(input)) {
-          // Legacy support: Convert list to tree
-          moveTree = new MoveTree();
-          // We could parse manually but better to assume caller passes Tree now.
-          // For now, if string[], we lose variants anyway, so linear add is fine.
-          moveTree.goToRoot();
-          // Fallback to legacy loop if needed? 
-          // Actually, if we want to use hydrate, we need skeletal tree.
-          // Let's create skeletal tree from strings.
-          let current = moveTree.rootNode;
-          // This is complex to build properly without PGNParser.
-          // Reverting to legacy loop for string[] is safer/easier.
-          // But implementing Hydrate...
-          console.warn("Legacy string[] passed to replayMoveHistory. Variants lost.");
-          // ... (Existing legacy loop logic could remain here if strictly needed)
-      } else {
-          moveTree = input;
-      }
 
       // Initial State
       const initialState: GameState = {
@@ -353,7 +332,7 @@ export class PGNImporter {
           pieceMap: createPieceMap(initialPieces),
           castles: castles.map(c => c.clone()),
           sanctuaries: initialSanctuaries.map(s => s.clone()),
-          moveTree: moveTree, // Attach the tree we are hydrating!
+          moveTree: moveTree, 
           turnCounter: 0, 
           movingPiece: null,
           history: [],
@@ -362,59 +341,54 @@ export class PGNImporter {
           phoenixRecords: []
       };
 
-      // NOTE: Don't manually add moves to tree here!
-      // The engine methods (applyMove, applyAttack, etc.) already call
-      // StateMutator which handles recording moves to the tree with snapshots.
+      // Set Root Snapshot (Initial State)
+      moveTree.rootNode.snapshot = {
+          pieces: initialState.pieces.map(p => p.clone()),
+          castles: initialState.castles.map(c => c.clone()),
+          sanctuaries: initialState.sanctuaries.map(s => s.clone()),
+          turnCounter: initialState.turnCounter,
+          moveNotation: []
+      };
 
-      if (!Array.isArray(input)) {
-          // Set Root Snapshot (Initial State)
-          // This ensures navigation to "Start of Game" works
-          moveTree.rootNode.snapshot = {
-              pieces: initialState.pieces.map(p => p.clone()),
-              castles: initialState.castles.map(c => c.clone()),
-              sanctuaries: initialState.sanctuaries.map(s => s.clone()),
-              turnCounter: initialState.turnCounter,
-              moveNotation: []
-          };
-
-          // Recursive Hydration
-          PGNImporter.hydrateRecursive(moveTree.rootNode, engine, initialState);
-          
-          // Helper to navigate to end of main line for initial view
-          // (Optional: can be removed if we prefer starting at root)
-          let node = moveTree.rootNode;
-          while (node.children.length > 0) {
-              const next = node.children[node.selectedChildIndex] || node.children[0];
-              moveTree.setCurrentNode(next); // This updates the cursor in the tree object
-              node = next;
-          }
-          
-          // Return the state at the end of the main line?
-          // If we just return `initialState`, moveTree.current is at End, but state pieces are at Start.
-          // We must return the state matching moveTree.current.
-          if (moveTree.current.snapshot) {
-             const snap = moveTree.current.snapshot;
-             // Reconstruct GameState from snapshot
-             return {
-                 ...initialState,
-                 pieces: snap.pieces.map(p => p.clone()),
-                 castles: snap.castles.map(c => c.clone()),
-                 sanctuaries: snap.sanctuaries.map(s => s.clone()),
-                 turnCounter: snap.turnCounter,
-                 moveHistory: snap.moveNotation,
-                 pieceMap: createPieceMap(snap.pieces),
-                 history: [], // History stack is empty if we jump here
-                 moveTree: moveTree
-             };
-          }
-          
-          return initialState;
+      // Recursive Hydration
+      PGNImporter.hydrateRecursive(moveTree.rootNode, engine, initialState);
+      
+      // Auto-navigate to end of line
+      let node = moveTree.rootNode;
+      while (node.children.length > 0) {
+          const next = node.children[node.selectedChildIndex] || node.children[0];
+          moveTree.setCurrentNode(next);
+          node = next;
       }
+      
+      // Return the state at the end of the line
+      if (moveTree.current.snapshot) {
+         const snap = moveTree.current.snapshot;
+         
+         // Reconstruct history stack from tree path for compatibility
+         // (Contains all snapshots from root up to current.parent)
+         const history: GameState['history'] = [];
+         let ptr: MoveNode | null = moveTree.current.parent;
+         while (ptr) {
+             if (ptr.snapshot) {
+                 history.unshift(ptr.snapshot);
+             }
+             ptr = ptr.parent;
+         }
 
-      // Legacy Loop (Backup)
-      let currentState = initialState;
-      // ... (Original loop logic if strict backward compat needed)
-      // Since we control calls, we will ensure we pass Tree.
+         return {
+             ...initialState,
+             pieces: snap.pieces.map(p => p.clone()),
+             castles: snap.castles.map(c => c.clone()),
+             sanctuaries: snap.sanctuaries.map(s => s.clone()),
+             turnCounter: snap.turnCounter,
+             moveHistory: snap.moveNotation,
+             pieceMap: createPieceMap(snap.pieces),
+             history: history, 
+             moveTree: moveTree
+         };
+      }
+      
       return initialState;
   }
 

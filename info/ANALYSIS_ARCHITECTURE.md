@@ -695,16 +695,16 @@ export const AbilityConfig: Record<AbilityType, { range: number; description: st
 
 ### Implementation Priority Matrix
 
-| Step | Impact | Risk | Effort | Priority |
-|------|--------|------|--------|----------|
-| A1. Ability Config | High | Low | 1h | 🔴 **NOW** |
-| A2. Dead Code | Med | Low | 0.5h | 🔴 **NOW** |
-| A3. Hook Consolidation | High | Low | 2h | 🔴 **NOW** |
-| B1. Ability System | High | Med | 4h | 🟡 **SOON** |
-| B2. Phoenix Config | Low | Low | 0.5h | 🟡 **SOON** |
+| Step | Impact | Risk | Effort | Status |
+|------|--------|------|--------|--------|
+| A1. Ability Config | High | Low | 1h | ✅ DONE |
+| A2. Dead Code | Med | Low | 0.5h | ✅ DONE |
+| A3. Hook Consolidation | High | Low | 2h | ✅ DONE |
+| B1. Ability System | High | Med | 4h | ✅ DONE |
+| B2. Phoenix Config | Low | Low | 0.5h | ✅ DONE |
 | C1. Event-Driven UI | High | High | 8h | 🟢 **LATER** |
 | C2. Command Undo | Med | Med | 6h | 🟢 **LATER** |
-| C3. Validation Layer | High | High | 8h | 🟢 **LATER** |
+| C3. Validation Layer | High | High | 8h | ✅ DONE (via AbilitySystem) |
 | D1. Hook Testing | High | Low | 4h | 🟡 **SOON** |
 
 ---
@@ -715,9 +715,10 @@ export const AbilityConfig: Record<AbilityType, { range: number; description: st
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| [GameEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/GameEngine.ts) | Facade for game logic | 215 |
+| [GameEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/GameEngine.ts) | Facade for game logic | 232 |
 | [RuleEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/RuleEngine.ts) | Pure query functions | 326 |
 | [StateMutator.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/StateMutator.ts) | State transitions | 427 |
+| [AbilitySystem.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/AbilitySystem.ts) | Ability validation ⚡ NEW | 280 |
 | [Board.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/Board.ts) | Hexagonal grid topology | 217 |
 | [MoveTree.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/MoveTree.ts) | Move history tree | 256 |
 
@@ -734,18 +735,19 @@ export const AbilityConfig: Record<AbilityType, { range: number; description: st
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| [useGameLogic.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useGameLogic.ts) | Central controller hook | 378 |
+| [useGameLogic.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useGameLogic.ts) | Central controller hook | 354 |
 | [useCoreGame.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useCoreGame.ts) | State initialization | 103 |
 | [useComputedGame.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useComputedGame.ts) | Derived values | 140 |
 | [useMoveExecution.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useMoveExecution.ts) | Action execution | 324 |
-| [useClickHandler.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useClickHandler.ts) | Click processing | 182 |
+| [useClickHandler.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useClickHandler.ts) | Click processing | 172 |
 
 ### Configuration
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Game constants & types | 155 |
+| [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Game constants & types | 166 |
 | [PieceTypeConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/PieceTypeConfig.ts) | Piece metadata | 201 |
+| [AbilityConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/AbilityConfig.ts) | Ability metadata ⚡ NEW | 145 |
 | [MoveStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategyRegistry.ts) | Movement behaviors | 160 |
 | [AttackStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/AttackStrategyRegistry.ts) | Attack behaviors | 145 |
 
@@ -814,6 +816,7 @@ enum CommandType {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.1 | 2025-12-25 | Refactoring complete: AbilityConfig, AbilitySystem, hook consolidation, dead code removal, Phoenix config |
 | 3.0 | 2025-12-25 | Comprehensive audit with 6-dimension review and roadmap |
 | 2.1 | 2025-12 | Ability system refactoring complete |
 | 2.0 | 2025-12 | Hook composition architecture |

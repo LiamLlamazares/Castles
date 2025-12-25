@@ -5,6 +5,7 @@ import { Sanctuary } from "../../Entities/Sanctuary";
 import { Hex } from "../../Entities/Hex";
 import { startingBoard, allPieces } from "../../../ConstantImports";
 import { SanctuaryType } from "../../../Constants";
+import { MoveTree } from "../../Core/MoveTree";
 
 describe("PGNService Sanctuary Persistence", () => {
     it("should preserve sanctuary positions and types after export and import", () => {
@@ -43,7 +44,7 @@ describe("PGNService Sanctuary Persistence", () => {
         ];
         
         // Replay with no moves
-        const state = PGNService.replayMoveHistory(startingBoard, allPieces, [], initialSanctuaries);
+        const state = PGNService.replayMoveHistory(startingBoard, allPieces, new MoveTree(), initialSanctuaries);
         
         expect(state.sanctuaries.length).toBe(1);
         expect(state.sanctuaries[0].hex.equals(new Hex(0, 2, -2))).toBe(true);

@@ -12,6 +12,7 @@ import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
 import { NotationService } from "../Systems/NotationService";
 import { PieceType } from "../../Constants";
+import { gameEvents, PieceRecruitedEvent } from "../Events";
 
 /**
  * Command for recruiting a piece from a castle.
@@ -34,6 +35,19 @@ export class RecruitCommand implements GameCommand {
         PieceType.Swordsman,
         this.spawnHex
       );
+
+      // Emit recruit event
+      const event: PieceRecruitedEvent = {
+        type: "PIECE_RECRUITED",
+        pieceType: PieceType.Swordsman,
+        spawnHex: this.spawnHex,
+        recruitedBy: this.castle.owner,
+        castle: this.castle,
+        timestamp: Date.now(),
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+      };
+      gameEvents.emit(event);
+
       return {
         newState,
         notation,

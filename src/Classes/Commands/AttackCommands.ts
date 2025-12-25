@@ -11,7 +11,7 @@ import { GameState } from "../Core/GameEngine";
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { NotationService } from "../Systems/NotationService";
-import { gameEvents, AttackResolvedEvent } from "../Events";
+import { gameEvents, AttackResolvedEvent, CastleCapturedEvent } from "../Events";
 
 /**
  * Command for attacking an enemy piece.
@@ -90,19 +90,40 @@ export class CastleAttackCommand implements GameCommand {
 
   execute(state: GameState): CommandResult {
     try {
+      // Capture state before mutation for event data
+      const castle = state.castles.find(c => c.hex.equals(this.targetHex));
+      const previousOwner = castle?.owner || null;
+
       const newState = this.context.gameEngine.applyCastleAttack(state, this.attacker, this.targetHex);
 
-      // Emit event (castle attack)
+      const timestamp = Date.now();
+      const turnNumber = Math.floor(state.turnCounter / 10) + 1;
+
+      // Emit generic attack event
       const event: AttackResolvedEvent = {
         type: "ATTACK_RESOLVED",
         attacker: this.attacker,
         defender: null,
         targetHex: this.targetHex,
         result: "capture",
-        timestamp: Date.now(),
-        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+        timestamp,
+        turnNumber,
       };
       gameEvents.emit(event);
+
+      // Emit specific castle capture event
+      if (castle) {
+          const captureEvent: CastleCapturedEvent = {
+              type: "CASTLE_CAPTURED",
+              castle,
+              capturedBy: this.attacker.color,
+              previousOwner,
+              timestamp,
+              turnNumber
+          };
+          gameEvents.emit(captureEvent);
+      }
+
 
       return {
         newState,

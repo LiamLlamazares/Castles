@@ -98,6 +98,15 @@ export function useSoundEffects(enabled: boolean = true, volume: number = 0.5) {
           // For now just play victory (could be enhanced with playerColor)
           playSound("victory");
           break;
+        case "ABILITY_ACTIVATED":
+          playSound("move");
+          break;
+        case "PIECE_RECRUITED":
+          playSound("move");
+          break;
+        case "SANCTUARY_PLEDGED":
+          playSound("move");
+          break;
       }
     };
 

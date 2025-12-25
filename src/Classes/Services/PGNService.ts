@@ -81,7 +81,7 @@ export class PGNService {
   public static replayMoveHistory(
     board: Board,
     initialPieces: Piece[],
-    input: string[] | MoveTree,
+    input: MoveTree,
     initialSanctuaries: Sanctuary[] = []
   ): GameState {
     return PGNImporter.replayMoveHistory(board, initialPieces, input, initialSanctuaries);

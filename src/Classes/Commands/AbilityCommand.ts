@@ -14,6 +14,7 @@ import { GameState } from "../Core/GameEngine";
 import { Hex } from "../Entities/Hex";
 import { Piece } from "../Entities/Piece";
 import { AbilityType } from "../../Constants";
+import { gameEvents } from "../Events";
 
 /**
  * Command for activating a special ability.
@@ -37,6 +38,17 @@ export class AbilityCommand implements GameCommand {
         this.targetHex,
         this.ability
       );
+
+      // Emit event
+      gameEvents.emit({
+        type: "ABILITY_ACTIVATED",
+        caster: this.caster,
+        ability: this.ability,
+        targetHex: this.targetHex,
+        timestamp: Date.now(),
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+      });
+
       return {
         newState,
         notation: this.getNotation(),

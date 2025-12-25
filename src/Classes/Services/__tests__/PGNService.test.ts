@@ -21,7 +21,7 @@ describe("PGNService", () => {
 
 1. K13N11 Pass 2. N11xM11 Pass Pass Pass`;
 
-    const { setup, moves } = PGNService.parsePGN(pgn);
+    const { setup, moves, moveTree } = PGNService.parsePGN(pgn);
     if (!setup) throw new Error("Failed to parse setup");
 
     // Verify parsed moves
@@ -30,7 +30,7 @@ describe("PGNService", () => {
     const { board, pieces } = PGNService.reconstructState(setup);
     
     // Replay
-    const finalState = PGNService.replayMoveHistory(board, pieces, moves);
+    const finalState = PGNService.replayMoveHistory(board, pieces, moveTree);
     
     // Should have history entries for the replayed moves (at least one per move)
     expect(finalState.history.length).toBeGreaterThanOrEqual(3);
@@ -69,7 +69,7 @@ describe("PGNService", () => {
 
 1. K13N11 Pass 2. N11xM11`;
 
-    const { setup, moves } = PGNService.parsePGN(pgn);
+    const { setup, moves, moveTree } = PGNService.parsePGN(pgn);
     expect(setup).not.toBeNull();
     if (!setup) return;
     
@@ -79,7 +79,7 @@ describe("PGNService", () => {
     const { board, pieces } = PGNService.reconstructState(setup);
     
     // Replay moves
-    const finalState = PGNService.replayMoveHistory(board, pieces, moves);
+    const finalState = PGNService.replayMoveHistory(board, pieces, moveTree);
     
     // Castle at M11 (3,-1,-2) should now be owned by white
     const m11Castle = finalState.castles.find(c => 

@@ -14,6 +14,8 @@ import { GameState } from "../Core/GameEngine";
 import { Hex } from "../Entities/Hex";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { NotationService } from "../Systems/NotationService";
+import { gameEvents, SanctuaryPledgedEvent } from "../Events";
+import { Color } from "../../Constants";
 
 /**
  * Command for pledging at a sanctuary.
@@ -31,6 +33,21 @@ export class PledgeCommand implements GameCommand {
   execute(state: GameState): CommandResult {
     try {
       const newState = this.context.gameEngine.pledge(state, this.sanctuary.hex, this.spawnHex);
+
+      const pledgedBy: Color = (state.turnCounter % 10) < 5 ? 'w' : 'b';
+
+      // Emit pledge event
+      const event: SanctuaryPledgedEvent = {
+        type: "SANCTUARY_PLEDGED",
+        sanctuaryHex: this.sanctuary.hex,
+        pieceType: this.sanctuary.pieceType,
+        spawnHex: this.spawnHex,
+        pledgedBy,
+        timestamp: Date.now(),
+        turnNumber: Math.floor(state.turnCounter / 10) + 1,
+      };
+      gameEvents.emit(event);
+
       return {
         newState,
         notation: this.getNotation(),
