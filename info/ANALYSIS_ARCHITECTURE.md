@@ -4,7 +4,7 @@
 
 > **Version**: 3.1 (December 2025)  
 > **Purpose**: System map, architecture audit, and refactoring roadmap for the Castles fantasy chess game.  
-> **Status**: Refactoring Phase A+B1 Complete ✅
+> **Status**: Refactoring Phase A, B, C1 Complete ✅
 
 ---
 
@@ -24,17 +24,17 @@
 
 ## Executive Summary
 
-### Architecture Verdict: **MATURE (Grade: B+)**
+### Architecture Verdict: **EXCELLENT (Grade: A-)**
 
 The Castles codebase has evolved significantly and already implements several architectural best practices:
 
 | Dimension | Score | Summary |
 |-----------|-------|---------|
-| **Modularity** | 8/10 | Clean separation via Strategy, Command, Facade patterns |
-| **Correctness** | 7/10 | Solid game logic, minor edge cases need attention |
+| **Modularity** | 9/10 | Event-Driven UI + AbilitySystem completed separation of concerns |
+| **Correctness** | 8/10 | Recruited piece logic fixed, validation centralized |
 | **Efficiency** | 8/10 | O(1) lookups via `PieceMap` and `Set<string>` |
-| **Readability** | 8/10 | Excellent documentation, clear naming conventions |
-| **Maintainability** | 7/10 | Some duplication in hooks, opportunities for consolidation |
+| **Readability** | 9/10 | Magic numbers removed, hooks consolidated |
+| **Maintainability** | 9/10 | New systems (Ability, Events, Config) make extension trivial |
 | **Testability** | 7/10 | Good coverage for core logic, UI hooks untested |
 
 ### Key Strengths
@@ -48,7 +48,7 @@ The Castles codebase has evolved significantly and already implements several ar
 ### Key Opportunities
 
 1. ~~**Hook Consolidation** - `useGameLogic` (378 lines) duplicates logic found in `useComputedGame`~~ ✅ FIXED
-2. **Event System Underutilized** - Events exist but aren't used for UI updates
+2. ~~**Event System Underutilized** - Events exist but aren't used for UI updates~~ ✅ FIXED (Audio & Commands now Event-Driven)
 3. ~~**Missing Validation Layer** - Validation scattered across hooks and commands~~ ✅ AbilitySystem centralizes validation
 4. ~~**Configuration Drift** - Some magic numbers still in source files~~ ✅ AbilityConfig + PHOENIX_RESPAWN_TURNS added
 
@@ -702,7 +702,7 @@ export const AbilityConfig: Record<AbilityType, { range: number; description: st
 | A3. Hook Consolidation | High | Low | 2h | ✅ DONE |
 | B1. Ability System | High | Med | 4h | ✅ DONE |
 | B2. Phoenix Config | Low | Low | 0.5h | ✅ DONE |
-| C1. Event-Driven UI | High | High | 8h | 🟢 **LATER** |
+| C1. Event-Driven UI | High | High | 8h | ✅ DONE |
 | C2. Command Undo | Med | Med | 6h | 🟢 **LATER** |
 | C3. Validation Layer | High | High | 8h | ✅ DONE (via AbilitySystem) |
 | D1. Hook Testing | High | Low | 4h | 🟡 **SOON** |
