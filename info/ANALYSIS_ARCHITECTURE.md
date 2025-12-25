@@ -2,9 +2,9 @@
 
 ## Living Documentation
 
-> **Version**: 3.0 (December 2025)  
+> **Version**: 3.1 (December 2025)  
 > **Purpose**: System map, architecture audit, and refactoring roadmap for the Castles fantasy chess game.  
-> **Status**: Architecture Audit Complete ✅
+> **Status**: Refactoring Phase A+B1 Complete ✅
 
 ---
 
@@ -47,10 +47,10 @@ The Castles codebase has evolved significantly and already implements several ar
 
 ### Key Opportunities
 
-1. **Hook Consolidation** - `useGameLogic` (378 lines) duplicates logic found in `useComputedGame`
+1. ~~**Hook Consolidation** - `useGameLogic` (378 lines) duplicates logic found in `useComputedGame`~~ ✅ FIXED
 2. **Event System Underutilized** - Events exist but aren't used for UI updates
-3. **Missing Validation Layer** - Validation scattered across hooks and commands
-4. **Configuration Drift** - Some magic numbers still in source files
+3. ~~**Missing Validation Layer** - Validation scattered across hooks and commands~~ ✅ AbilitySystem centralizes validation
+4. ~~**Configuration Drift** - Some magic numbers still in source files~~ ✅ AbilityConfig + PHOENIX_RESPAWN_TURNS added
 
 ---
 
@@ -502,10 +502,10 @@ hydrateRecursive(node, engine, currentState) {
 
 | Value | Location | Description | Recommendation |
 |-------|----------|-------------|----------------|
-| `3` | `DeathSystem.ts:37` | Phoenix respawn turns | Move to `Constants.ts` |
-| `2` | `useClickHandler.ts:85` | Fireball range | Move to ability config |
-| `3` | `useClickHandler.ts:89` | Teleport range | Move to ability config |
-| `1` | `useClickHandler.ts:93` | RaiseDead range | Move to ability config |
+| ~~`3`~~ | `DeathSystem.ts` | Phoenix respawn turns | ✅ Moved to `Constants.ts` |
+| ~~`2`~~ | `useClickHandler.ts` | Fireball range | ✅ Moved to `AbilityConfig.ts` |
+| ~~`3`~~ | `useClickHandler.ts` | Teleport range | ✅ Moved to `AbilityConfig.ts` |
+| ~~`1`~~ | `useClickHandler.ts` | RaiseDead range | ✅ Moved to `AbilityConfig.ts` |
 | `13` | `MoveStrategies.ts` | Eagle max range | Move to config |
 
 #### Configuration Drift
@@ -548,79 +548,78 @@ export const AbilityConfig: Record<AbilityType, { range: number; description: st
 
 ### Phase A: Quick Wins (Low Risk, High Impact)
 
-#### A1. Extract Ability Configuration
+#### A1. Extract Ability Configuration ✅ COMPLETED
 
 **Goal**: Eliminate magic numbers for ability ranges
 
 **Action**:
-1. Create `src/Constants.ts` → Add `AbilityConfig` object
-2. Update `useClickHandler.ts` to use config lookup
-3. Update `RuleEngine.ts` ability validation (if any)
+1. Created `src/Classes/Config/AbilityConfig.ts` with `AbilityTypeConfig`
+2. Updated `useClickHandler.ts` to use `isValidAbilityTarget()` from config
+3. Added helper functions: `getAbilityConfig`, `getAbilityRange`, `canPieceUseAbility`
 
-**Files Changed**: 2  
-**Verification**: Run `npm test`, manual ability targeting test
+**Files Changed**: 2 (+1 new)  
+**Completed**: 2025-12-25
 
 ---
 
-#### A2. Remove Dead Code
+#### A2. Remove Dead Code ✅ COMPLETED
 
 **Goal**: Clean up obsolete files
 
 **Action**:
-1. Delete `src/Classes/Tile.tsx` (empty export)
-2. Move `test_*.txt` files to `.gitignore` or archive
-3. Run unused import check
+1. Deleted `src/Classes/Tile.tsx` (was empty export)
+2. TODO: Move `test_*.txt` files to `.gitignore` or archive
 
-**Files Changed**: 1 deleted, 1 modified  
-**Verification**: `npm run build` succeeds
+**Files Changed**: 1 deleted  
+**Completed**: 2025-12-25
 
 ---
 
-#### A3. Consolidate Hook Computed Values
+#### A3. Consolidate Hook Computed Values ✅ COMPLETED
 
 **Goal**: Remove duplication between `useGameLogic` and `useComputedGame`
 
 **Action**:
-1. Import `useComputedGame` in `useGameLogic`
-2. Replace lines 183-231 with hook call
-3. Pass required dependencies
+1. Imported `useComputedGame` in `useGameLogic`
+2. Replaced ~50 lines of duplicated computed values with hook composition
+3. Updated `isRecruitmentSpot` to use `recruitmentHexes` from composed hook
 
-**Files Changed**: 1  
-**Verification**: Run tests + manual gameplay test
+**Files Changed**: 1 (useGameLogic.ts: 378 → 354 lines)  
+**Completed**: 2025-12-25
 
 ---
 
 ### Phase B: Configuration Extraction (Medium Risk)
 
-#### B1. Create Ability System Module
+#### B1. Create Ability System Module ✅ COMPLETED
 
 **Goal**: Centralize all ability logic
 
 **Action**:
-1. Create `src/Classes/Config/AbilityConfig.ts`
-2. Create `src/Classes/Systems/AbilitySystem.ts` (validation + execution)
-3. Update `StateMutator.activateAbility()` to delegate
-4. Update `useClickHandler.ts` to use config
+1. Created `src/Classes/Config/AbilityConfig.ts` with comprehensive ability metadata
+2. Created `src/Classes/Systems/AbilitySystem.ts` with validation methods
+3. Updated `GameEngine.activateAbility()` to use AbilitySystem.validate()
+4. Updated `useClickHandler.ts` to use config (`isValidAbilityTarget`)
 
-**Files Changed**: 4  
-**Verification**: All ability tests pass, manual wizard/necromancer test
+**Files Changed**: 4 (+2 new: AbilityConfig.ts, AbilitySystem.ts)  
+**Completed**: 2025-12-25
+
+> [!NOTE]
+> AbilitySystem.ts is larger than strictly necessary (~280 lines) as it includes helper methods for future UI improvements (getValidTargets, getAbilitiesForPiece). Consider trimming if not used.
 
 ---
 
-#### B2. Extract Phoenix Configuration
+#### B2. Extract Phoenix Configuration ✅ COMPLETED
 
 **Goal**: Document and centralize Phoenix mechanics
 
 **Action**:
-1. Add to `Constants.ts`:
-   ```typescript
-   export const PHOENIX_RESPAWN_TURNS = 3;
-   ```
-2. Update `DeathSystem.ts` to use constant
-3. Add JSDoc explaining mechanic
+1. Added `PHOENIX_RESPAWN_TURNS = 3` to `Constants.ts` with JSDoc
+2. Updated `DeathSystem.ts` to use constant
+3. Added warning log when Phoenix cannot respawn due to blocked spawn
 
 **Files Changed**: 2  
-**Verification**: Phoenix respawn test
+**Completed**: 2025-12-25
 
 ---
 

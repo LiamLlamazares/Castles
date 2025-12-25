@@ -80,17 +80,37 @@ export class GameEngine {
   }
 
   public activateAbility(gameState: GameState, sourceHex: Hex, targetHex: Hex, ability: AbilityType): GameState {
-      // Validation delegated to RuleEngine? Or keep simple for now.
-      // 1. Source existence
+      // Find source piece
       const source = gameState.pieceMap.getByKey(sourceHex.getKey());
-      if (!source || source.type !== PieceType.Wizard && source.type !== PieceType.Necromancer) throw new Error("Invalid source for ability");
+      if (!source) throw new Error("No piece at source hex");
       
-      // 2. Cooldown check
-      if (source.abilityUsed) throw new Error("Ability already used");
+      // Use AbilitySystem for comprehensive validation
+      const { AbilitySystem } = require("../Systems/AbilitySystem");
+      const validation = AbilitySystem.validate(source, targetHex, ability, gameState);
+      
+      if (!validation.valid) {
+        throw new Error(validation.error || "Invalid ability usage");
+      }
 
       return StateMutator.activateAbility(gameState, source, targetHex, ability, this.board);
   }
 
+  /**
+   * Gets valid ability targets for a piece.
+   * Delegates to AbilitySystem for consistent validation.
+   */
+  public getAbilityTargets(gameState: GameState, piece: Piece, ability: AbilityType): Hex[] {
+    const { AbilitySystem } = require("../Systems/AbilitySystem");
+    return AbilitySystem.getValidTargets(piece, ability, gameState);
+  }
+
+  /**
+   * Gets ability information for a piece (for UI display).
+   */
+  public getAbilitiesForPiece(gameState: GameState, piece: Piece): any[] {
+    const { AbilitySystem } = require("../Systems/AbilitySystem");
+    return AbilitySystem.getAbilitiesForPiece(piece, gameState);
+  }
 
 
   // ================= DELEGATED METHODS =================
