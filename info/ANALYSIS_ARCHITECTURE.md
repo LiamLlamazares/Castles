@@ -143,6 +143,36 @@ App.tsx
     └── RulesModal.tsx
 ```
 
+### Hook Composition Architecture
+
+```mermaid
+graph TD
+    subgraph "Central Controller"
+        UGL[useGameLogic.ts]
+    end
+    
+    subgraph "State Hooks"
+        UCG[useCoreGame.ts<br/>State Initialization]
+        UME[useMoveExecution.ts<br/>Action Execution]
+        UCM[useComputedGame.ts<br/>Derived Values]
+    end
+    
+    subgraph "Feature Hooks"
+        UAM[useAnalysisMode.ts<br/>History Navigation]
+        UPG[usePGN.ts<br/>Import/Export]
+        UCH[useClickHandler.ts<br/>Click Processing]
+        USF[useSoundEffects.ts<br/>Audio Feedback]
+    end
+    
+    UGL --> UCG
+    UGL --> UME
+    UGL --> UCM
+    UGL --> UAM
+    UGL --> UPG
+    UCH -.-> UGL
+    USF -.->|subscribes to| Events[GameEvents]
+```
+
 ---
 
 ## 2. Data Serialization (PGN)
@@ -212,38 +242,27 @@ loadPGN() in usePGN.ts
 
 | Class/Hook | Lines | Responsibilities | Verdict |
 |------------|-------|------------------|---------|
-| `useGameLogic` | 378 | Composes hooks, computed values, handlers | ⚠️ **Borderline** |
-| `GameEngine` | 215 | Facade for queries + mutations | ✅ **Clean Facade** |
+| `useGameLogic` | 354 | Composes hooks, computed values, handlers | ✅ **Refactored** |
+| `GameEngine` | 235 | Facade for queries + mutations | ✅ **Clean Facade** |
 | `StateMutator` | 427 | All state transitions | ✅ **Cohesive** |
 | `RuleEngine` | 326 | All query methods | ✅ **Cohesive** |
+| `StateValidator` | 206 | State invariant checks | ✅ **Cohesive** |
 | `PGNImporter` | 441 | Parse, decompress, reconstruct, hydrate | ⚠️ **Consider split** |
 | `Hex` | 444 | Coordinates + all hex math | ✅ **Domain entity** |
 
 ### Detailed Findings
 
-#### `useGameLogic.ts` - **Borderline God Hook**
+#### `useGameLogic.ts` - ✅ **FIXED** (was Borderline)
 
-**Issue**: Contains computed values that duplicate `useComputedGame`:
-- Lines 183-212 duplicate `turnPhase`, `currentPlayer`, `legalMoves`, `legalAttacks`, `winner`, `victoryMessage`
-- Both hooks compute `shouldHideMoveIndicators` identically
+**Previous Issue**: Contained computed values that duplicated `useComputedGame`.
 
-**Evidence**:
+**Resolution**: Now composes `useComputedGame` hook directly, removing ~50 lines of duplication.
+
 ```typescript
-// useGameLogic.ts:183-212 (duplicated)
-const turnPhase = useMemo<TurnPhase>(
-  () => gameEngine.getTurnPhase(turnCounter),
-  [gameEngine, turnCounter]
-);
-// ... more duplicated computed values
-
-// useComputedGame.ts:69-77 (original)
-const turnPhase = useMemo<TurnPhase>(
-  () => gameEngine.getTurnPhase(turnCounter),
-  [gameEngine, turnCounter]
-);
+// useGameLogic.ts - NOW uses hook composition
+const computedGame = useComputedGame(gameEngine, effectiveState);
+const { turnPhase, currentPlayer, legalMoves, winner, ... } = computedGame;
 ```
-
-**Recommendation**: `useGameLogic` should compose `useComputedGame` instead of duplicating.
 
 #### `PGNImporter.ts` - **Multiple Responsibilities**
 
@@ -258,6 +277,32 @@ const turnPhase = useMemo<TurnPhase>(
 **Impact**: Medium - file is 441 lines but methods are well-separated.
 
 **Recommendation**: Low priority. Consider extracting `PGNHydrator` if file grows.
+
+---
+
+### StateValidator - State Invariant Checking
+
+[StateValidator.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/StateValidator.ts) validates game state invariants to catch bugs early.
+
+**Invariants Checked**:
+| Invariant | Method | Description |
+|-----------|--------|-------------|
+| No duplicate positions | `validateNoDuplicatePieces` | Two pieces cannot occupy same hex |
+| Pieces on board | `validatePiecesOnBoard` | All pieces on valid board hexes |
+| Castle ownership | `validateCastleOwnership` | Ownership state is consistent |
+| Turn counter | `validateTurnCounter` | Non-negative turn number |
+| PieceMap sync | `validatePieceMapSync` | Map matches pieces array |
+
+**Usage Pattern**:
+```typescript
+// Development mode validation
+if (process.env.NODE_ENV === 'development') {
+  StateValidator.assertValid(newState, board);
+}
+
+// Production with logging
+StateValidator.warnIfInvalid(newState, board);
+```
 
 ---
 
@@ -641,22 +686,8 @@ export const AbilityConfig: Record<AbilityType, { range: number; description: st
 
 ---
 
-#### C2. Add Command Undo Infrastructure
 
-**Goal**: Enable takeback using Command Pattern
-
-**Action**:
-1. Extend `GameCommand` interface with `undo(state: GameState): GameState`
-2. Implement `undo` for `MoveCommand` and `AttackCommand`
-3. Store command stack in `GameState`
-4. Wire up takeback button to use command undo
-
-**Files Changed**: 4-6  
-**Verification**: New undo tests + manual takeback
-
----
-
-#### C3. Validation Layer Extraction
+#### C2. Validation Layer Extraction
 
 **Goal**: Centralize validation logic
 
@@ -799,16 +830,57 @@ enum CommandType {
 | `ABILITY_ACTIVATED` | Special ability | `{ ability, source, target }` |
 | `GAME_ENDED` | Game over | `{ winner, reason }` |
 
-### Appendix C: Test Coverage
+### Appendix C: Test Coverage (26 Test Files)
 
-| Domain | Test File | Coverage |
-|--------|-----------|----------|
-| Game Engine | `GameEngine.test.ts` | Core logic |
-| Hex Math | `Hex.test.ts` | Coordinate operations |
-| Win Conditions | `WinConditions.test.ts` | Victory detection |
-| Sanctuary | `Sanctuary.test.ts`, `Pledge.test.ts` | Pledging mechanics |
-| Special Pieces | `Wolf.test.ts`, `Phoenix.test.ts`, `Wizard.test.ts`, etc. | Unique abilities |
-| PGN | Multiple in `Services/__tests__/` | Import/export |
+#### Core Logic (`Classes/__tests__/`)
+| Test File | Coverage |
+|-----------|----------|
+| `GameEngine.test.ts` | Turn phases, moves, attacks, recruitment |
+| `Hex.test.ts` | Coordinate operations, neighbors, distance |
+| `WinConditions.test.ts` | Victory detection |
+| `Boundary.test.ts` | Board edge validation |
+| `LayoutService.test.ts` | Hexagonal layout calculations |
+| `NotationService.test.ts` | Move notation parsing |
+
+#### Special Pieces (`Classes/__tests__/`)
+| Test File | Coverage |
+|-----------|----------|
+| `Wolf.test.ts` | Pack movement |
+| `Phoenix.test.ts` | Respawn mechanics |
+| `Wizard.test.ts` | Fireball, Teleport abilities |
+| `Necromancer.test.ts` | RaiseDead ability |
+| `Healer.test.ts` | Healing mechanics |
+| `SpecialMovement.test.ts` | Eagle, Knight movement |
+| `SpecialUnits.test.ts` | Combined special piece tests |
+
+#### Sanctuaries (`Classes/__tests__/`)
+| Test File | Coverage |
+|-----------|----------|
+| `Sanctuary.test.ts` | Sanctuary mechanics |
+| `SanctuaryGenerator.test.ts` | Sanctuary placement |
+| `Pledge.test.ts` | Pledging flow |
+
+#### PGN (`Classes/Services/__tests__/`)
+| Test File | Coverage |
+|-----------|----------|
+| `PGNService.test.ts` | Import/export |
+| `PGNServiceSanctuaries.test.ts` | Sanctuary serialization |
+| `PGNServiceVariants.test.ts` | Variant board support |
+| `PGNTreeStructure.test.ts` | MoveTree structure |
+| `PGNVariations.test.ts` | Variation handling |
+| `PGNMultiVariations.test.ts` | Complex variation trees |
+
+#### Systems (`Classes/Systems/__tests__/`)
+| Test File | Coverage |
+|-----------|----------|
+| `StateValidator.test.ts` | State invariant validation |
+
+#### Hooks (`hooks/__tests__/`)
+| Test File | Coverage |
+|-----------|----------|
+| `useGameLogicVariants.test.ts` | Variant board logic |
+| `useGameLogicVariations.test.ts` | Variation handling |
+| `HistoryDuplication.test.ts` | History state management |
 
 ---
 
@@ -816,6 +888,7 @@ enum CommandType {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.2 | 2025-12-25 | Added StateValidator section, hook composition diagram, expanded test coverage (6→26 files) |
 | 3.1 | 2025-12-25 | Refactoring complete: AbilityConfig, AbilitySystem, hook consolidation, dead code removal, Phoenix config |
 | 3.0 | 2025-12-25 | Comprehensive audit with 6-dimension review and roadmap |
 | 2.1 | 2025-12 | Ability system refactoring complete |
