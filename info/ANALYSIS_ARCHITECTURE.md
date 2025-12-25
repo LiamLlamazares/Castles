@@ -1,64 +1,62 @@
-# Castles Architecture Analysis
+# Castles Architecture Overview
 
-## Living Documentation
-
-> **Version**: 3.1 (December 2025)  
-> **Purpose**: System map, architecture audit, and refactoring roadmap for the Castles fantasy chess game.  
-> **Status**: Refactoring Phase A, B, C1 Complete ✅
+> **Version**: 4.0 (December 2025)  
+> **Purpose**: Technical reference for understanding and maintaining the Castles codebase.
 
 ---
 
 ## Table of Contents
 
-1. [Executive Summary](#executive-summary)
-2. [Control Flow Mapping](#1-control-flow-mapping)
-3. [Data Serialization (PGN)](#2-data-serialization-pgn)
-4. [God Object Analysis](#3-god-object-analysis)
-5. [Extension Test: Adding a New Piece](#4-extension-test-adding-a-new-piece)
-6. [Deep-Dive Code Review](#5-deep-dive-code-review)
-7. [Refactoring Roadmap](#6-refactoring-roadmap)
-8. [Key Files Reference](#7-key-files-reference)
-9. [Appendices](#8-appendices)
+1. [System Overview](#system-overview)
+2. [Control Flow](#control-flow)
+3. [Core Systems](#core-systems)
+4. [Data Layer](#data-layer)
+5. [React Hooks](#react-hooks)
+6. [Game Serialization (PGN)](#game-serialization-pgn)
+7. [Extension Guide](#extension-guide)
+8. [File Reference](#file-reference)
 
 ---
 
-## Executive Summary
+## System Overview
 
-### Architecture Verdict: **EXCELLENT (Grade: A-)**
+Castles is a fantasy-themed hexagonal chess variant built with React and TypeScript. The architecture follows a layered design:
 
-The Castles codebase has evolved significantly and already implements several architectural best practices:
+```
+┌─────────────────────────────────────────────────┐
+│                  UI Layer                       │
+│   (React Components: Game.tsx, HexGrid.tsx)     │
+├─────────────────────────────────────────────────┤
+│                 Hook Layer                      │
+│   (useGameLogic, useMoveExecution, usePGN)      │
+├─────────────────────────────────────────────────┤
+│               Command Layer                     │
+│   (MoveCommand, AttackCommand, RecruitCommand)  │
+├─────────────────────────────────────────────────┤
+│                Core Logic                       │
+│   GameEngine ──► RuleEngine (queries)           │
+│              └─► StateMutator (mutations)       │
+├─────────────────────────────────────────────────┤
+│               Domain Entities                   │
+│   (Piece, Hex, Castle, Sanctuary, Board)        │
+└─────────────────────────────────────────────────┘
+```
 
-| Dimension | Score | Summary |
-|-----------|-------|---------|
-| **Modularity** | 9/10 | Event-Driven UI + AbilitySystem completed separation of concerns |
-| **Correctness** | 8/10 | Recruited piece logic fixed, validation centralized |
-| **Efficiency** | 8/10 | O(1) lookups via `PieceMap` and `Set<string>` |
-| **Readability** | 9/10 | Magic numbers removed, hooks consolidated |
-| **Maintainability** | 9/10 | New systems (Ability, Events, Config) make extension trivial |
-| **Testability** | 7/10 | Good coverage for core logic, UI hooks untested |
+### Design Patterns Used
 
-### Key Strengths
-
-1. **Facade Pattern** - `GameEngine` cleanly delegates to `RuleEngine` (reads) and `StateMutator` (writes)
-2. **Strategy Pattern** - Movement and attack behaviors are registry-based, not hardcoded
-3. **Command Pattern** - All 7 game actions use consistent command interfaces
-4. **Immutability** - `Piece.with()` ensures safe state transitions
-5. **O(1) Lookups** - `PieceMap` and hex `Set<string>` for fast validation
-
-### Key Opportunities
-
-1. ~~**Hook Consolidation** - `useGameLogic` (378 lines) duplicates logic found in `useComputedGame`~~ ✅ FIXED
-2. ~~**Event System Underutilized** - Events exist but aren't used for UI updates~~ ✅ FIXED (Audio & Commands now Event-Driven)
-3. ~~**Missing Validation Layer** - Validation scattered across hooks and commands~~ ✅ AbilitySystem centralizes validation
-4. ~~**Configuration Drift** - Some magic numbers still in source files~~ ✅ AbilityConfig + PHOENIX_RESPAWN_TURNS added
+| Pattern | Implementation | Purpose |
+|---------|---------------|---------|
+| **Facade** | `GameEngine` | Single entry point to game logic |
+| **Strategy** | `MoveStrategyRegistry` | Piece-specific movement behaviors |
+| **Command** | `*Command` classes | Encapsulate game actions |
+| **Observer** | `GameEventEmitter` | Decouple logic from side effects |
+| **Immutable State** | `Piece.with()` | Safe state transitions |
 
 ---
 
-## 1. Control Flow Mapping
+## Control Flow
 
-### User Action Lifecycle
-
-The complete path from user click to UI update:
+### User Action → State Update → Render
 
 ```mermaid
 graph TD
@@ -84,7 +82,7 @@ graph TD
         Cmd --> |Ability| AbCMD[AbilityCommand]
     end
     
-    subgraph "Core Logic (Facade)"
+    subgraph "Core Logic"
         MoveCMD & AtkCMD & CstCMD & PassCMD & RecCMD & PlgCMD & AbCMD --> GE[GameEngine.ts]
         GE --> RuleEngine[RuleEngine.ts - Queries]
         GE --> StateMutator[StateMutator.ts - Mutations]
@@ -100,50 +98,170 @@ graph TD
         ReactState --> Rerender[React Re-render]
         Rerender --> HexGrid[HexGrid.tsx]
         Rerender --> PieceRenderer[PieceRenderer.tsx]
-        Rerender --> UI[Other UI Components]
     end
 ```
 
-### Input Handler Mapping
+### Click Handling Priority
 
-| Input | Handler | Target Function | Notes |
-|-------|---------|-----------------|-------|
-| Arrow Keys | `useInputHandler.ts` | `stepHistory(-1/+1)` | History navigation |
-| Hex Click | `useClickHandler.ts` | `handleBoardClick` | Prioritized handling |
-| Piece Click | `PieceRenderer.tsx` | `handlePieceClick` | Selection/deselection |
-| Pass Button | `ControlPanel.tsx` | `handlePass` | Phase skip |
-| Escape Key | `useInputHandler.ts` | Clear selection | Reset state |
-| Ability Button | `AbilityBar.tsx` | `setActiveAbility` | Enter targeting mode |
+[useClickHandler.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useClickHandler.ts) processes clicks in this order:
 
-### Click Handler Priority Chain
+1. **Ability Targeting** — If ability active, validate and execute
+2. **Pledge Spawn** — If pledging sanctuary, place new piece
+3. **Sanctuary Selection** — Enter pledge mode
+4. **Engine Delegation** — Normal move/attack/recruit
 
-`useClickHandler.handleBoardClick()` processes clicks in this order:
+### Input Handlers
 
-1. **Ability Targeting** - If ability active, validate and execute
-2. **Pledge Spawn** - If pledging sanctuary, place new piece
-3. **Sanctuary Selection** - Enter pledge mode if clicking pledgeable sanctuary
-4. **Engine Delegation** - Normal move/attack/recruit handling
+| Input | Handler | Action |
+|-------|---------|--------|
+| Arrow Keys | `useInputHandler.ts` | History navigation |
+| Hex Click | `useClickHandler.ts` | Board interaction |
+| Piece Click | `PieceRenderer.tsx` | Selection |
+| Pass Button | `ControlPanel.tsx` | Skip phase |
+| Escape Key | `useInputHandler.ts` | Clear selection |
+| Ability Button | `AbilityBar.tsx` | Enter targeting mode |
 
-### Component Hierarchy
+---
+
+## Core Systems
+
+### GameEngine (Facade)
+
+[GameEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/GameEngine.ts) provides a unified API for all game operations.
+
+**Responsibilities:**
+- Delegates queries to `RuleEngine` (pure functions, read-only)
+- Delegates mutations to `StateMutator` (state transitions)
+- Holds reference to `Board` for topology checks
+
+```typescript
+class GameEngine {
+  constructor(public board: Board) {}
+  
+  // Queries (delegates to RuleEngine)
+  getTurnPhase(turnCounter: number): TurnPhase
+  getCurrentPlayer(turnCounter: number): Color
+  getLegalMoves(state: GameState, piece: Piece): Hex[]
+  getLegalAttacks(state: GameState, piece: Piece): Hex[]
+  
+  // Mutations (delegates to StateMutator)
+  applyMove(state: GameState, piece: Piece, targetHex: Hex): GameState
+  applyAttack(state: GameState, attacker: Piece, targetHex: Hex): GameState
+  recruitPiece(state: GameState, castle: Castle, hex: Hex): GameState
+}
+```
+
+### RuleEngine (Queries)
+
+[RuleEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/RuleEngine.ts) contains **pure static functions** for game rules.
+
+**Key Methods:**
+| Method | Purpose |
+|--------|---------|
+| `getLegalMoves` | Valid movement hexes for a piece |
+| `getLegalAttacks` | Valid attack targets |
+| `getBlockedHexSet` | O(1) blocked hex lookups |
+| `getRecruitmentHexes` | Valid spawn locations |
+| `getTurnCounterIncrement` | Phase transition logic |
+
+### StateMutator (Mutations)
+
+[StateMutator.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/StateMutator.ts) handles **immutable state transitions**.
+
+Every method takes a `GameState` and returns a **new** `GameState`:
+
+```typescript
+class StateMutator {
+  static applyMove(state: GameState, piece: Piece, target: Hex, board: Board): GameState
+  static applyAttack(state: GameState, attacker: Piece, target: Hex, board: Board): GameState
+  static passTurn(state: GameState, board: Board): GameState
+  static activateAbility(state: GameState, source: Piece, target: Hex, ability: AbilityType, board: Board): GameState
+}
+```
+
+### StateValidator
+
+[StateValidator.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/StateValidator.ts) validates game state invariants.
+
+| Invariant | Method |
+|-----------|--------|
+| No duplicate positions | `validateNoDuplicatePieces` |
+| Pieces on valid hexes | `validatePiecesOnBoard` |
+| Castle ownership consistent | `validateCastleOwnership` |
+| Turn counter non-negative | `validateTurnCounter` |
+| PieceMap synced with array | `validatePieceMapSync` |
+
+**Usage:**
+```typescript
+// Development mode
+StateValidator.assertValid(newState, board);
+
+// Production (logs warnings)
+StateValidator.warnIfInvalid(newState, board);
+```
+
+---
+
+## Data Layer
+
+### GameState
+
+The complete state of a game at any point:
+
+```typescript
+interface GameState {
+  pieces: Piece[]           // All pieces on board
+  pieceMap: PieceMap        // O(1) lookup by hex
+  castles: Castle[]         // Castle positions and ownership
+  sanctuaries: Sanctuary[]  // Sanctuary positions
+  turnCounter: number       // Encodes player + phase
+  movingPiece: Piece | null // Currently selected piece
+  history: HistoryEntry[]   // UI display history
+  moveHistory: MoveRecord[] // Move notation records
+  moveTree: MoveTree        // Tree-based history with variations
+  graveyard: Piece[]        // Captured pieces
+  phoenixRecords: PhoenixRecord[] // Phoenix respawn tracking
+}
+```
+
+### Turn Counter Encoding
+
+The turn counter encodes both the current player and phase:
 
 ```
-App.tsx
-└── Game.tsx (GameBoard)
-    ├── HexGrid.tsx
-    │   └── [SVG hex elements]
-    ├── PieceRenderer.tsx
-    │   └── [Piece images]
-    ├── LegalMoveOverlay.tsx
-    ├── ControlPanel.tsx
-    ├── HistoryTable.tsx
-    ├── AbilityBar.tsx
-    ├── SanctuaryTooltip.tsx
-    ├── PlayerHUD.tsx
-    ├── VictoryOverlay.tsx
-    └── RulesModal.tsx
+turnCounter:  0   1   2   3   4   5   6   7   8   9   10  11  ...
+             └─── WHITE ────────┘   └─── BLACK ────────┘   └─ WHITE
+Phase:        M   M   A   A   C       M   M   A   A   C       M   M
 ```
 
-### Hook Composition Architecture
+- **M** = Movement (2 moves per turn)
+- **A** = Attack (2 attacks per turn)
+- **C** = Castles (recruit from controlled castles)
+
+### Domain Entities
+
+| Entity | File | Key Properties |
+|--------|------|----------------|
+| `Piece` | [Piece.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Piece.ts) | `hex`, `color`, `type`, `hasMoved`, `hasAttacked` |
+| `Hex` | [Hex.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Hex.ts) | `q`, `r`, `s` (cube coordinates) |
+| `Castle` | [Castle.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Castle.ts) | `hex`, `color`, `owner`, `spawnCounter` |
+| `Sanctuary` | [Sanctuary.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Sanctuary.ts) | `hex`, `type`, `pledgedBy` |
+| `Board` | [Board.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/Board.ts) | `hexSet`, `riverHexes`, topology |
+
+### Data Structures for Performance
+
+| Use Case | Structure | Lookup |
+|----------|-----------|--------|
+| Piece by hex | `PieceMap` (Map) | O(1) |
+| Blocked hexes | `Set<string>` | O(1) |
+| Legal moves | `Set<string>` | O(1) |
+| Move history | `MoveTree` | O(1) navigation |
+
+---
+
+## React Hooks
+
+### Hook Composition Diagram
 
 ```mermaid
 graph TD
@@ -173,9 +291,22 @@ graph TD
     USF -.->|subscribes to| Events[GameEvents]
 ```
 
+### Hook Responsibilities
+
+| Hook | Purpose | Lines |
+|------|---------|-------|
+| [useGameLogic](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useGameLogic.ts) | Central controller, composes all other hooks | 354 |
+| [useCoreGame](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useCoreGame.ts) | State initialization from props | 103 |
+| [useComputedGame](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useComputedGame.ts) | Derived values (turn phase, legal moves) | 140 |
+| [useMoveExecution](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useMoveExecution.ts) | Executes commands, updates state | 324 |
+| [useClickHandler](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useClickHandler.ts) | Processes board clicks | 172 |
+| [useAnalysisMode](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useAnalysisMode.ts) | History navigation | 112 |
+| [usePGN](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/usePGN.ts) | Import/export game state | 90 |
+| [useSoundEffects](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useSoundEffects.ts) | Audio feedback via event subscription | 119 |
+
 ---
 
-## 2. Data Serialization (PGN)
+## Game Serialization (PGN)
 
 ### Architecture
 
@@ -207,15 +338,11 @@ loadPGN() in usePGN.ts
     → PGNService.parsePGN(pgnString)
     → PGNImporter:
         1. parsePGN() - Extract CustomSetup tag, parse move tokens
-        2. PGNParser.parseToTree() - Build skeletal MoveTree (no snapshots)
-        3. decompressSetup() - Base64 → BoardConfig, Pieces, Castles, Sanctuaries
-        4. reconstructState() - Create Board, Piece[], Sanctuary[] objects
-        5. hydrateRecursive() - For each node:
-           a. Find piece matching notation
-           b. Execute move through GameEngine
-           c. Attach resulting GameState snapshot
-           d. Recurse into child variations
-        6. Return fully navigable GameState with populated MoveTree
+        2. PGNParser.parseToTree() - Build skeletal MoveTree
+        3. decompressSetup() - Base64 → BoardConfig, Pieces, Castles
+        4. reconstructState() - Create domain objects
+        5. hydrateRecursive() - Replay moves, attach snapshots
+        6. Return navigable GameState with MoveTree
 ```
 
 ### CustomSetup Format
@@ -229,594 +356,77 @@ loadPGN() in usePGN.ts
 })"]
 ```
 
-### Critical Consideration
-
-> [!IMPORTANT]
-> The hydration process replays every move through `GameEngine` to ensure snapshots are consistent. This means PGN import time is O(n) where n = total moves across all variations.
-
 ---
 
-## 3. God Object Analysis
+## Extension Guide
 
-### Candidate Inspection
-
-| Class/Hook | Lines | Responsibilities | Verdict |
-|------------|-------|------------------|---------|
-| `useGameLogic` | 354 | Composes hooks, computed values, handlers | ✅ **Refactored** |
-| `GameEngine` | 235 | Facade for queries + mutations | ✅ **Clean Facade** |
-| `StateMutator` | 427 | All state transitions | ✅ **Cohesive** |
-| `RuleEngine` | 326 | All query methods | ✅ **Cohesive** |
-| `StateValidator` | 206 | State invariant checks | ✅ **Cohesive** |
-| `PGNImporter` | 441 | Parse, decompress, reconstruct, hydrate | ⚠️ **Consider split** |
-| `Hex` | 444 | Coordinates + all hex math | ✅ **Domain entity** |
-
-### Detailed Findings
-
-#### `useGameLogic.ts` - ✅ **FIXED** (was Borderline)
-
-**Previous Issue**: Contained computed values that duplicated `useComputedGame`.
-
-**Resolution**: Now composes `useComputedGame` hook directly, removing ~50 lines of duplication.
-
-```typescript
-// useGameLogic.ts - NOW uses hook composition
-const computedGame = useComputedGame(gameEngine, effectiveState);
-const { turnPhase, currentPlayer, legalMoves, winner, ... } = computedGame;
-```
-
-#### `PGNImporter.ts` - **Multiple Responsibilities**
-
-**Responsibilities**:
-1. Parsing PGN strings (`parsePGN`)
-2. Decompressing setup data (`decompressSetup`)
-3. Reconstructing game objects (`reconstructState`)
-4. Hydrating move tree (`hydrateRecursive`)
-5. Replaying move history (`replayMoveHistory`)
-6. Saving snapshots (`saveSnapshot`)
-
-**Impact**: Medium - file is 441 lines but methods are well-separated.
-
-**Recommendation**: Low priority. Consider extracting `PGNHydrator` if file grows.
-
----
-
-### StateValidator - State Invariant Checking
-
-[StateValidator.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/StateValidator.ts) validates game state invariants to catch bugs early.
-
-**Invariants Checked**:
-| Invariant | Method | Description |
-|-----------|--------|-------------|
-| No duplicate positions | `validateNoDuplicatePieces` | Two pieces cannot occupy same hex |
-| Pieces on board | `validatePiecesOnBoard` | All pieces on valid board hexes |
-| Castle ownership | `validateCastleOwnership` | Ownership state is consistent |
-| Turn counter | `validateTurnCounter` | Non-negative turn number |
-| PieceMap sync | `validatePieceMapSync` | Map matches pieces array |
-
-**Usage Pattern**:
-```typescript
-// Development mode validation
-if (process.env.NODE_ENV === 'development') {
-  StateValidator.assertValid(newState, board);
-}
-
-// Production with logging
-StateValidator.warnIfInvalid(newState, board);
-```
-
----
-
-## 4. Extension Test: Adding a New Piece
-
-To add a new piece type (e.g., "Champion"):
+### Adding a New Piece Type
 
 | Step | File | Change |
 |------|------|--------|
-| 1 | [`Constants.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Add `Champion = "Champion"` to `PieceType` enum |
-| 2 | [`PieceTypeConfig.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/PieceTypeConfig.ts) | Add config: `{ strength: 2, attackType: AttackType.Melee, description: "..." }` |
-| 3 | [`MoveStrategyRegistry.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategyRegistry.ts) | Register: `registerMoveStrategy(PieceType.Champion, championMoves)` |
-| 4 | [`MoveStrategies.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategies.ts) | Implement `championMoves()` function |
-| 5 | [`AttackStrategyRegistry.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/AttackStrategyRegistry.ts) | (Optional) If non-standard attack pattern |
-| 6 | `public/images/pieces/` | Add `wChampion.svg` and `bChampion.svg` |
-| 7 | [`PieceImages.ts`](file:///c:/Users/liaml/Documents/GitHub/Castles/src/components/PieceImages.ts) | Map image imports for new piece |
+| 1 | [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Add to `PieceType` enum |
+| 2 | [PieceTypeConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/PieceTypeConfig.ts) | Add config: strength, attackType, description |
+| 3 | [MoveStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategyRegistry.ts) | Register movement function |
+| 4 | [MoveStrategies.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategies.ts) | Implement movement logic |
+| 5 | [AttackStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/AttackStrategyRegistry.ts) | (Optional) Non-standard attacks |
+| 6 | `public/images/pieces/` | Add SVG assets |
+| 7 | [PieceImages.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/components/PieceImages.ts) | Map image imports |
 
-**Verdict**: ✅ **PASSED**
+**Note**: Core files (`Piece.ts`, `GameEngine.ts`, `RuleEngine.ts`) require **no modification**.
 
-- Core files (`Piece.ts`, `GameEngine.ts`, `RuleEngine.ts`, `StateMutator.ts`) need **no modification**
-- New piece behavior is entirely configuration-driven
-- Strategy Registry pattern enables clean O(1) behavior lookup
+### Adding a New Ability
 
----
+| Step | File | Change |
+|------|------|--------|
+| 1 | [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Add to `AbilityType` enum |
+| 2 | [AbilityConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/AbilityConfig.ts) | Add config: range, description, pieceTypes |
+| 3 | [AbilitySystem.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/AbilitySystem.ts) | Add validation logic |
+| 4 | [StateMutator.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/StateMutator.ts) | Add execution logic in `activateAbility()` |
 
-## 5. Deep-Dive Code Review
+### Adding a New Event
 
-### Dimension 1: Correctness & Logic
-
-#### Game Rules Adherence ✅
-
-The implementation correctly handles:
-- Turn phases (Movement → Attack → Castles)
-- Combat resolution with strength-based damage
-- Ranged/Melee attack type distinctions
-- Castle control and recruitment
-- Win conditions (Monarch capture, castle control)
-
-#### State Validity Concerns
-
-| Issue | Severity | Location | Description |
-|-------|----------|----------|-------------|
-| Race condition potential | Medium | `useMoveExecution.ts` | `setState` batching could cause stale reads |
-| Missing two-piece validation | Low | `CombatSystem.ts:60-80` | Multiple attackers not fully validated |
-| Phoenix respawn edge case | Low | `DeathSystem.ts:51-92` | If all spawn spots blocked for 3+ turns, Phoenix is lost silently |
-
-#### Specific Code Concern
-
-```typescript
-// DeathSystem.ts:62-81
-dueRecords.forEach(record => {
-    const friendlyCastles = state.castles.filter(c => c.owner === record.owner);
-    if (friendlyCastles.length > 0) {
-        for (const castle of friendlyCastles) {
-            // Try to spawn...
-            for (const spot of candidates) {
-                if (!isOccupied) {
-                    newPieces.push(phoenix);
-                    return; // ← Inner return exits forEach callback, not the loop
-                }
-            }
-        }
-        // If blocked, lost. ← No notification to player
-    }
-});
-```
-
-**Fix**: Add event emission when Phoenix cannot respawn.
+| Step | File | Change |
+|------|------|--------|
+| 1 | [GameEvents.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Events/GameEvents.ts) | Define event interface |
+| 2 | Command class | Emit event after execution |
+| 3 | Subscriber hook | Subscribe to event |
 
 ---
 
-### Dimension 2: Architecture & Modularity
-
-#### Coupling Analysis
-
-```mermaid
-graph LR
-    subgraph "High Cohesion ✅"
-        GE[GameEngine] --> RE[RuleEngine]
-        GE --> SM[StateMutator]
-        SM --> CS[CombatSystem]
-        SM --> DS[DeathSystem]
-    end
-    
-    subgraph "Moderate Coupling ⚠️"
-        UGL[useGameLogic] --> UCG[useCoreGame]
-        UGL --> UAE[useMoveExecution]
-        UGL --> UPG[usePGN]
-        UGL --> UAM[useAnalysisMode]
-        UGL --> GE
-    end
-    
-    subgraph "UI Coupling ⚠️"
-        Game[Game.tsx] --> UGL
-        Game --> UCH[useClickHandler]
-        UCH --> UGL
-    end
-```
-
-#### Separation of Concerns
-
-| Layer | Responsibility | Files | Clean? |
-|-------|----------------|-------|--------|
-| **Entities** | Domain models | `Piece.ts`, `Castle.ts`, `Hex.ts`, `Sanctuary.ts` | ✅ |
-| **Core** | Game state machine | `GameEngine.ts`, `Board.ts`, `MoveTree.ts` | ✅ |
-| **Systems** | Game rules | `RuleEngine.ts`, `StateMutator.ts`, `CombatSystem.ts` | ✅ |
-| **Commands** | Action encapsulation | `*Command.ts` | ✅ |
-| **Services** | External concerns | `PGNService.ts`, `SanctuaryService.ts` | ✅ |
-| **Hooks** | React state | `use*.ts` | ⚠️ Some overlap |
-| **Components** | UI rendering | `*.tsx` | ⚠️ Some logic |
-
-#### Design Pattern Recommendations
-
-| Pattern | Current Status | Recommendation |
-|---------|----------------|----------------|
-| **Facade** | ✅ Implemented (`GameEngine`) | Keep as-is |
-| **Strategy** | ✅ Implemented (registries) | Keep as-is |
-| **Command** | ✅ Implemented (7 commands) | Add undo capability |
-| **Observer** | ⚠️ Events exist, underutilized | Use for UI updates |
-| **Factory** | ⚠️ Partial (`PieceFactory`) | Extend for all entities |
-| **Repository** | ❌ Not implemented | Consider for save/load |
-
----
-
-### Dimension 3: Efficiency & Data Structures
-
-#### Appropriate Structures ✅
-
-| Use Case | Structure | Lookup Time | Location |
-|----------|-----------|-------------|----------|
-| Piece by hex | `PieceMap` (Map) | O(1) | `utils/PieceMap.ts` |
-| Blocked hexes | `Set<string>` | O(1) | `RuleEngine.ts:52-56` |
-| Legal moves | `Set<string>` | O(1) | `useComputedGame.ts:111-118` |
-| Castle ownership | Array filter | O(n) | Could improve |
-| Move tree navigation | Tree + Map | O(1) find | `MoveTree.ts` |
-
-#### Memory Considerations
-
-| Concern | Severity | Location | Description |
-|---------|----------|----------|-------------|
-| Piece cloning | Low | `Piece.with()` | Creates new object per update, but pieces are small |
-| History snapshots | Medium | `HistoryEntry` | Full piece/castle arrays cloned each move |
-| PieceMap recreation | Low | `createPieceMap()` | Called on each state update |
-
-**Optimization Opportunity**: Consider structural sharing for snapshots using immutable data structures.
-
----
-
-### Dimension 4: Readability & Cognitive Load
-
-#### Naming Conventions ✅
-
-**Excellent naming patterns observed**:
-- Intent-revealing: `isLegalMove`, `canPledge`, `getEffectiveState`
-- Consistent prefixes: `handle*` for event handlers, `use*` for hooks
-- Domain terminology: `turnPhase`, `movingPiece`, `graveyard`
-
-#### Complexity Concerns
-
-| Function | Location | Cyclomatic Complexity | Issue |
-|----------|----------|----------------------|-------|
-| `hydrateRecursive` | `PGNImporter.ts:145-314` | ~15 | Deep nesting, multiple early returns |
-| `handleBoardClick` | `useClickHandler.ts:77-151` | ~10 | Prioritized conditionals |
-| `resolveAttack` | `CombatSystem.ts:60-151` | ~8 | OK but could extract helpers |
-
-**Example of high complexity**:
-
-```typescript
-// PGNImporter.ts - simplified view of hydrateRecursive
-hydrateRecursive(node, engine, currentState) {
-    for (const child of node.children) {
-        const notation = child.move.notation;
-        
-        // Multiple notation parsing patterns
-        if (notation.startsWith("O-O")) { /* castle handling */ }
-        else if (notation.includes("x")) { /* attack parsing */ }
-        else if (notation.includes("+")) { /* recruit parsing */ }
-        else { /* move parsing */ }
-        
-        // Find piece matching notation (multiple fallback patterns)
-        // Execute through engine
-        // Recurse into variations (nested branches)
-    }
-}
-```
-
-**Recommendation**: Extract notation parsing to `NotationService.parseMove()`.
-
----
-
-### Dimension 5: System Documentation
-
-#### Documentation Quality
-
-| Aspect | Score | Notes |
-|--------|-------|-------|
-| File-level JSDoc | 9/10 | Excellent headers with `@file`, `@description`, `@see` |
-| Function documentation | 8/10 | Most public methods documented |
-| Inline comments | 7/10 | Good for complex logic, sparse elsewhere |
-| Theory-to-code mapping | 6/10 | Game rules not always linked to implementation |
-
-#### Missing Conceptual Documentation
-
-| Concept | Where Used | Documentation Status |
-|---------|------------|---------------------|
-| Turn counter encoding | `Constants.ts:107-128` | ✅ Excellent (detailed ASCII diagram) |
-| Hex coordinate system | `Hex.ts:22-35` | ✅ Good (links to Red Blob Games) |
-| PGN CustomSetup format | `PGNImporter.ts` | ⚠️ Format not fully documented |
-| Ability cooldowns | `StateMutator.ts:224-340` | ⚠️ Logic inline, no overview |
-| Phoenix respawn timing | `DeathSystem.ts` | ⚠️ Magic number `3` unexplained |
-
-**Example of good documentation**:
-
-```typescript
-// Constants.ts:107-128 - Excellent turn counter explanation
-/**
- * TURN COUNTER SYSTEM
- * 
- * Turn Structure (one full round = 10 increments):
- * ```
- * turnCounter:  0   1   2   3   4   5   6   7   8   9   10  11  ...
- *              └─── WHITE ────────┘   └─── BLACK ────────┘   └─ WHITE
- * Phase:        M   M   A   A   C       M   M   A   A   C       M   M
- * ```
- */
-```
-
----
-
-### Dimension 6: Refactoring & Maintainability
-
-#### Dead Code Analysis
-
-| Type | Location | Status |
-|------|----------|--------|
-| Unused imports | Various | ❌ None found (TypeScript catches these) |
-| Unused functions | N/A | ❌ All exports used |
-| Obsolete files | `Tile.tsx` | ⚠️ Contains only `export {}` |
-| Test failure logs | Root directory | ⚠️ 7 `test_*.txt` files (10+ KB each) |
-
-#### Hardcoding / Magic Numbers
-
-| Value | Location | Description | Recommendation |
-|-------|----------|-------------|----------------|
-| ~~`3`~~ | `DeathSystem.ts` | Phoenix respawn turns | ✅ Moved to `Constants.ts` |
-| ~~`2`~~ | `useClickHandler.ts` | Fireball range | ✅ Moved to `AbilityConfig.ts` |
-| ~~`3`~~ | `useClickHandler.ts` | Teleport range | ✅ Moved to `AbilityConfig.ts` |
-| ~~`1`~~ | `useClickHandler.ts` | RaiseDead range | ✅ Moved to `AbilityConfig.ts` |
-| `13` | `MoveStrategies.ts` | Eagle max range | Move to config |
-
-#### Configuration Drift
-
-Currently ability ranges are hardcoded in `useClickHandler.ts`:
-
-```typescript
-// useClickHandler.ts:82-94
-if (activeAbility === AbilityType.Fireball) {
-  if (distance <= 2 && distance > 0) valid = true;  // Magic number
-} else if (activeAbility === AbilityType.Teleport) {
-  if (distance <= 3 && distance > 0) valid = true;  // Magic number
-} else if (activeAbility === AbilityType.RaiseDead) {
-  if (distance === 1) valid = true;                  // Magic number
-}
-```
-
-**Recommendation**: Create `AbilityConfig` similar to `PieceTypeConfig`:
-
-```typescript
-export const AbilityConfig: Record<AbilityType, { range: number; description: string }> = {
-  [AbilityType.Fireball]: { range: 2, description: "AoE damage at range 2" },
-  [AbilityType.Teleport]: { range: 3, description: "Teleport up to 3 hexes" },
-  [AbilityType.RaiseDead]: { range: 1, description: "Revive adjacent dead piece" },
-};
-```
-
----
-
-## 6. Refactoring Roadmap
-
-### Guiding Principles
-
-1. **Iterative** - Each step works independently
-2. **Non-breaking** - Tests must pass after each step
-3. **Observable** - Each change should be verifiable
-4. **Documented** - Update this file after each change
-
----
-
-### Phase A: Quick Wins (Low Risk, High Impact)
-
-#### A1. Extract Ability Configuration ✅ COMPLETED
-
-**Goal**: Eliminate magic numbers for ability ranges
-
-**Action**:
-1. Created `src/Classes/Config/AbilityConfig.ts` with `AbilityTypeConfig`
-2. Updated `useClickHandler.ts` to use `isValidAbilityTarget()` from config
-3. Added helper functions: `getAbilityConfig`, `getAbilityRange`, `canPieceUseAbility`
-
-**Files Changed**: 2 (+1 new)  
-**Completed**: 2025-12-25
-
----
-
-#### A2. Remove Dead Code ✅ COMPLETED
-
-**Goal**: Clean up obsolete files
-
-**Action**:
-1. Deleted `src/Classes/Tile.tsx` (was empty export)
-2. TODO: Move `test_*.txt` files to `.gitignore` or archive
-
-**Files Changed**: 1 deleted  
-**Completed**: 2025-12-25
-
----
-
-#### A3. Consolidate Hook Computed Values ✅ COMPLETED
-
-**Goal**: Remove duplication between `useGameLogic` and `useComputedGame`
-
-**Action**:
-1. Imported `useComputedGame` in `useGameLogic`
-2. Replaced ~50 lines of duplicated computed values with hook composition
-3. Updated `isRecruitmentSpot` to use `recruitmentHexes` from composed hook
-
-**Files Changed**: 1 (useGameLogic.ts: 378 → 354 lines)  
-**Completed**: 2025-12-25
-
----
-
-### Phase B: Configuration Extraction (Medium Risk)
-
-#### B1. Create Ability System Module ✅ COMPLETED
-
-**Goal**: Centralize all ability logic
-
-**Action**:
-1. Created `src/Classes/Config/AbilityConfig.ts` with comprehensive ability metadata
-2. Created `src/Classes/Systems/AbilitySystem.ts` with validation methods
-3. Updated `GameEngine.activateAbility()` to use AbilitySystem.validate()
-4. Updated `useClickHandler.ts` to use config (`isValidAbilityTarget`)
-
-**Files Changed**: 4 (+2 new: AbilityConfig.ts, AbilitySystem.ts)  
-**Completed**: 2025-12-25
-
-> [!NOTE]
-> AbilitySystem.ts is larger than strictly necessary (~280 lines) as it includes helper methods for future UI improvements (getValidTargets, getAbilitiesForPiece). Consider trimming if not used.
-
----
-
-#### B2. Extract Phoenix Configuration ✅ COMPLETED
-
-**Goal**: Document and centralize Phoenix mechanics
-
-**Action**:
-1. Added `PHOENIX_RESPAWN_TURNS = 3` to `Constants.ts` with JSDoc
-2. Updated `DeathSystem.ts` to use constant
-3. Added warning log when Phoenix cannot respawn due to blocked spawn
-
-**Files Changed**: 2  
-**Completed**: 2025-12-25
-
----
-
-### Phase C: Architecture Improvements (Higher Risk)
-
-#### C1. Implement Event-Driven UI Updates
-
-**Goal**: Decouple game logic from UI
-
-**Current State**: Events exist in `GameEventEmitter.ts` but aren't used for UI updates.
-
-**Action**:
-1. Add event listeners in `Game.tsx` for key events
-2. Emit events from `StateMutator` on state changes
-3. Consider: Replace direct `setState` with event-driven updates
-
-**Files Changed**: 3-5  
-**Verification**: All tests pass + no visual regressions
-
----
-
-
-#### C2. Validation Layer Extraction
-
-**Goal**: Centralize validation logic
-
-**Current State**: Validation scattered:
-- `RuleEngine.ts` - Legal move checks
-- `useMoveExecution.ts` - Pre-execution checks
-- Command classes - Execution-time checks
-- `useClickHandler.ts` - Ability range checks
-
-**Action**:
-1. Create `src/Classes/Systems/ValidationService.ts`
-2. Move all validation to single service
-3. Commands call validation service
-4. Hooks call validation service
-
-**Files Changed**: 5+  
-**Verification**: Comprehensive test suite
-
----
-
-### Phase D: Testing Infrastructure
-
-#### D1. Add Hook Testing
-
-**Goal**: Test React hooks in isolation
-
-**Action**:
-1. Add `@testing-library/react-hooks`
-2. Create `src/hooks/__tests__/useGameLogic.test.ts`
-3. Test core logic flows
-
-**Files Changed**: New test files  
-**Verification**: Test coverage report
-
----
-
-### Implementation Priority Matrix
-
-| Step | Impact | Risk | Effort | Status |
-|------|--------|------|--------|--------|
-| A1. Ability Config | High | Low | 1h | ✅ DONE |
-| A2. Dead Code | Med | Low | 0.5h | ✅ DONE |
-| A3. Hook Consolidation | High | Low | 2h | ✅ DONE |
-| B1. Ability System | High | Med | 4h | ✅ DONE |
-| B2. Phoenix Config | Low | Low | 0.5h | ✅ DONE |
-| C1. Event-Driven UI | High | High | 8h | ✅ DONE |
-| C2. Command Undo | Med | Med | 6h | 🟢 **LATER** |
-| C3. Validation Layer | High | High | 8h | ✅ DONE (via AbilitySystem) |
-| D1. Hook Testing | High | Low | 4h | 🟡 **SOON** |
-
----
-
-## 7. Key Files Reference
+## File Reference
 
 ### Core Architecture
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| [GameEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/GameEngine.ts) | Facade for game logic | 232 |
+| [GameEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/GameEngine.ts) | Facade for game logic | 235 |
 | [RuleEngine.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/RuleEngine.ts) | Pure query functions | 326 |
 | [StateMutator.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/StateMutator.ts) | State transitions | 427 |
-| [AbilitySystem.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/AbilitySystem.ts) | Ability validation ⚡ NEW | 280 |
+| [AbilitySystem.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Systems/AbilitySystem.ts) | Ability validation | 280 |
 | [Board.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/Board.ts) | Hexagonal grid topology | 217 |
 | [MoveTree.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Core/MoveTree.ts) | Move history tree | 256 |
 
-### Entities
+### Commands
 
-| File | Purpose | Lines |
-|------|---------|-------|
-| [Piece.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Piece.ts) | Piece domain model | 136 |
-| [Hex.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Hex.ts) | Hex coordinate math | 444 |
-| [Castle.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Castle.ts) | Castle domain model | 65 |
-| [Sanctuary.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Entities/Sanctuary.ts) | Sanctuary domain model | 95 |
-
-### Hooks
-
-| File | Purpose | Lines |
-|------|---------|-------|
-| [useGameLogic.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useGameLogic.ts) | Central controller hook | 354 |
-| [useCoreGame.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useCoreGame.ts) | State initialization | 103 |
-| [useComputedGame.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useComputedGame.ts) | Derived values | 140 |
-| [useMoveExecution.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useMoveExecution.ts) | Action execution | 324 |
-| [useClickHandler.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useClickHandler.ts) | Click processing | 172 |
+| File | Action |
+|------|--------|
+| [MoveCommand.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Commands/MoveCommand.ts) | Piece movement |
+| [AttackCommand.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Commands/AttackCommands.ts) | Combat |
+| [CastleAttackCommand.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Commands/AttackCommands.ts) | Castle capture |
+| [PassCommand.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Commands/PassCommand.ts) | Skip phase |
+| [RecruitCommand.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Commands/RecruitCommand.ts) | Spawn piece |
+| [PledgeCommand.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Commands/PledgeCommand.ts) | Sanctuary pledging |
+| [AbilityCommand.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Commands/AbilityCommand.ts) | Special abilities |
 
 ### Configuration
 
-| File | Purpose | Lines |
-|------|---------|-------|
-| [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Game constants & types | 166 |
-| [PieceTypeConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/PieceTypeConfig.ts) | Piece metadata | 201 |
-| [AbilityConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/AbilityConfig.ts) | Ability metadata ⚡ NEW | 145 |
-| [MoveStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/MoveStrategyRegistry.ts) | Movement behaviors | 160 |
-| [AttackStrategyRegistry.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Strategies/AttackStrategyRegistry.ts) | Attack behaviors | 145 |
+| File | Purpose |
+|------|---------|
+| [Constants.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Constants.ts) | Enums, constants, types |
+| [PieceTypeConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/PieceTypeConfig.ts) | Piece metadata |
+| [AbilityConfig.ts](file:///c:/Users/liaml/Documents/GitHub/Castles/src/Classes/Config/AbilityConfig.ts) | Ability metadata |
 
----
-
-## 8. Appendices
-
-### Appendix A: Command Pattern Reference
-
-```typescript
-interface GameCommand {
-  readonly type: CommandType;
-  execute(state: GameState): CommandResult;
-  getNotation(): string;
-}
-
-enum CommandType {
-  Move = "MOVE",
-  Attack = "ATTACK",
-  CastleAttack = "CASTLE_ATTACK",
-  Pass = "PASS",
-  Recruit = "RECRUIT",
-  Pledge = "PLEDGE",
-  Ability = "ABILITY",
-}
-```
-
-| Command | Purpose | Status |
-|---------|---------|--------|
-| `MoveCommand` | Piece movement | ✅ |
-| `AttackCommand` | Piece combat | ✅ |
-| `CastleAttackCommand` | Castle capture | ✅ |
-| `PassCommand` | Skip phase | ✅ |
-| `RecruitCommand` | Spawn from castle | ✅ |
-| `PledgeCommand` | Sanctuary pledging | ✅ |
-| `AbilityCommand` | Special abilities | ✅ |
-
-### Appendix B: Event System Reference
+### Events
 
 | Event | When Emitted | Payload |
 |-------|--------------|---------|
@@ -830,57 +440,16 @@ enum CommandType {
 | `ABILITY_ACTIVATED` | Special ability | `{ ability, source, target }` |
 | `GAME_ENDED` | Game over | `{ winner, reason }` |
 
-### Appendix C: Test Coverage (26 Test Files)
+### Test Files (26 total)
 
-#### Core Logic (`Classes/__tests__/`)
-| Test File | Coverage |
-|-----------|----------|
-| `GameEngine.test.ts` | Turn phases, moves, attacks, recruitment |
-| `Hex.test.ts` | Coordinate operations, neighbors, distance |
-| `WinConditions.test.ts` | Victory detection |
-| `Boundary.test.ts` | Board edge validation |
-| `LayoutService.test.ts` | Hexagonal layout calculations |
-| `NotationService.test.ts` | Move notation parsing |
-
-#### Special Pieces (`Classes/__tests__/`)
-| Test File | Coverage |
-|-----------|----------|
-| `Wolf.test.ts` | Pack movement |
-| `Phoenix.test.ts` | Respawn mechanics |
-| `Wizard.test.ts` | Fireball, Teleport abilities |
-| `Necromancer.test.ts` | RaiseDead ability |
-| `Healer.test.ts` | Healing mechanics |
-| `SpecialMovement.test.ts` | Eagle, Knight movement |
-| `SpecialUnits.test.ts` | Combined special piece tests |
-
-#### Sanctuaries (`Classes/__tests__/`)
-| Test File | Coverage |
-|-----------|----------|
-| `Sanctuary.test.ts` | Sanctuary mechanics |
-| `SanctuaryGenerator.test.ts` | Sanctuary placement |
-| `Pledge.test.ts` | Pledging flow |
-
-#### PGN (`Classes/Services/__tests__/`)
-| Test File | Coverage |
-|-----------|----------|
-| `PGNService.test.ts` | Import/export |
-| `PGNServiceSanctuaries.test.ts` | Sanctuary serialization |
-| `PGNServiceVariants.test.ts` | Variant board support |
-| `PGNTreeStructure.test.ts` | MoveTree structure |
-| `PGNVariations.test.ts` | Variation handling |
-| `PGNMultiVariations.test.ts` | Complex variation trees |
-
-#### Systems (`Classes/Systems/__tests__/`)
-| Test File | Coverage |
-|-----------|----------|
-| `StateValidator.test.ts` | State invariant validation |
-
-#### Hooks (`hooks/__tests__/`)
-| Test File | Coverage |
-|-----------|----------|
-| `useGameLogicVariants.test.ts` | Variant board logic |
-| `useGameLogicVariations.test.ts` | Variation handling |
-| `HistoryDuplication.test.ts` | History state management |
+| Category | Files |
+|----------|-------|
+| Core Logic | `GameEngine.test.ts`, `Hex.test.ts`, `WinConditions.test.ts` |
+| Special Pieces | `Wolf.test.ts`, `Phoenix.test.ts`, `Wizard.test.ts`, `Necromancer.test.ts`, `Healer.test.ts` |
+| Sanctuaries | `Sanctuary.test.ts`, `SanctuaryGenerator.test.ts`, `Pledge.test.ts` |
+| PGN | `PGNService.test.ts`, `PGNTreeStructure.test.ts`, `PGNVariations.test.ts`, + 3 more |
+| Systems | `StateValidator.test.ts` |
+| Hooks | `useGameLogicVariants.test.ts`, `useGameLogicVariations.test.ts`, `HistoryDuplication.test.ts` |
 
 ---
 
@@ -888,9 +457,7 @@ enum CommandType {
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 3.2 | 2025-12-25 | Added StateValidator section, hook composition diagram, expanded test coverage (6→26 files) |
-| 3.1 | 2025-12-25 | Refactoring complete: AbilityConfig, AbilitySystem, hook consolidation, dead code removal, Phoenix config |
-| 3.0 | 2025-12-25 | Comprehensive audit with 6-dimension review and roadmap |
-| 2.1 | 2025-12 | Ability system refactoring complete |
-| 2.0 | 2025-12 | Hook composition architecture |
-| 1.0 | 2025-11 | Initial documentation |
+| 4.0 | 2025-12-25 | Restructured as technical reference (removed evaluative content) |
+| 3.2 | 2025-12-25 | Added StateValidator section, hook composition diagram |
+| 3.1 | 2025-12-25 | AbilityConfig, AbilitySystem, hook consolidation |
+| 3.0 | 2025-12-25 | Comprehensive audit with 6-dimension review |
