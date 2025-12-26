@@ -253,15 +253,26 @@ export class PGNImporter {
                    
                    if (!pieceType) throw new Error(`Unknown pledge piece code ${pieceCode}`);
                    
-                   const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
-                   const newPieces = [...nextState.pieces, newPiece];
+                   // Find the sanctuary that produced this piece type
+                   const sanctuary = currentState.sanctuaries.find(s => 
+                       s.pieceType === pieceType && s.isReady
+                   );
                    
-                   nextState = {
-                       ...nextState,
-                       pieces: newPieces,
-                       pieceMap: createPieceMap(newPieces)
-                   };
-                   nextState = engine.passTurn(nextState);
+                   if (sanctuary) {
+                       // Use the engine's pledge method for full evolution logic
+                       nextState = engine.pledge(currentState, sanctuary.hex, spawnHex);
+                   } else {
+                       // Fallback: Just spawn the piece (legacy PGN compatibility)
+                       const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
+                       const newPieces = [...nextState.pieces, newPiece];
+                       
+                       nextState = {
+                           ...nextState,
+                           pieces: newPieces,
+                           pieceMap: createPieceMap(newPieces)
+                       };
+                       nextState = engine.passTurn(nextState);
+                   }
                }
                // Movement: J10K11
                else {

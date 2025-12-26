@@ -24,8 +24,10 @@ import { Sanctuary } from "../Entities/Sanctuary";
 import { Hex } from "../Entities/Hex";
 import { GameState } from "../Core/GameEngine";
 import { TurnManager } from "../Core/TurnManager";
+import { NotationService } from "../Systems/NotationService";
 import { createPieceMap } from "../../utils/PieceMap";
-import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN } from "../../Constants";
+import { createHistorySnapshot } from "../../utils/GameStateUtils";
+import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, MoveRecord } from "../../Constants";
 
 export class SanctuaryService {
   /**
@@ -64,6 +66,7 @@ export class SanctuaryService {
   /**
    * Executes a pledge action, spawning a new piece from the sanctuary.
    * After pledging, the sanctuary evolves to the next higher-tier type.
+   * Records the pledge in moveHistory and moveTree for PGN export.
    *
    * @throws Error if pledge is invalid (should call canPledge first)
    */
@@ -130,12 +133,33 @@ export class SanctuaryService {
       return s;
     });
 
-    return {
+    // ===== RECORD MOVE IN HISTORY & TREE =====
+    const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
+    const record: MoveRecord = {
+      notation,
+      turnNumber: Math.floor(gameState.turnCounter / 10) + 1,
+      color: TurnManager.getCurrentPlayer(gameState.turnCounter),
+      phase: TurnManager.getTurnPhase(gameState.turnCounter)
+    };
+    const newMoveHistory = [...(gameState.moveHistory || []), record];
+
+    // Build intermediate state for snapshot
+    const intermediateState: GameState = {
       ...gameState,
       pieces: newPieces,
-      pieceMap: createPieceMap(newPieces), // Rebuild map
+      pieceMap: createPieceMap(newPieces),
       sanctuaries: newSanctuaries,
       sanctuaryPool: newPool,
+      moveHistory: newMoveHistory,
+    };
+
+    // Update moveTree with the pledge record and snapshot
+    const newTree = gameState.moveTree.clone();
+    newTree.addMove(record, createHistorySnapshot(intermediateState));
+
+    return {
+      ...intermediateState,
+      moveTree: newTree,
     };
   }
 
