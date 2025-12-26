@@ -1,37 +1,31 @@
-            <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 45 45">
-                
-                <!-- 1. SOLID BLACK PARTS (Silhouette & Bow Stave) -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+                <!-- Solid Black Silhouette -->
                 <g style="stroke:#000000; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
-                    <!-- Body + Head (Filled Black) -->
                     <g style="fill:#000000">
-                        <path d="M 22.5,10 C 18,10 16,14 16,18 L 19,18 C 19,16 20,15 22.5,15 C 25,15 26,16 26,18 L 29,18 C 29,14 27,10 22.5,10 Z" />
-                        <path d="M 16,18 L 13,38 L 32,38 L 29,18 Z" />
+                        <!-- Helmet Dome + Body combined -->
+                        <path d="M 16,15 Q 22.5,6 29,15 L 28,18 L 31,38 L 14,38 L 17,18 L 16,15 Z" />
+                         <!-- Helmet Brim area filled -->
+                        <path d="M 13,15 L 32,15 L 29,18 L 16,18 Z" />
                     </g>
-                    
-                    <!-- Bow Stave (No Fill, just thick black line) -->
-                    <path d="M 12,18 Q 8,28 12,38" fill="none" /> 
- <!-- Bow String (Thin line) -->
-                    <path d="M 12,18 L 12,38" stroke-width="1" />
+                     <!-- Black bow stave -->
+                    <path d="M 12,18 Q 8,28 12,38" fill="none" />
                 </g>
 
-                <!-- 2. WHITE INTERNAL DETAILS -->
+                <!-- White Details -->
                 <g style="fill:none; stroke:#ffffff; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
-                   
-                    
-                    <!-- Strap across chest -->
-                    <path d="M 19,22 L 26,34" />
-
-                    <!-- Neck/Chin Line (Separates hood from cloak visually) -->
-                    <path d="M 16,18 L 19,18 C 19,16 20,15 22.5,15 C 25,15 26,16 26,18 L 29,18" stroke-width="1"/>
+                     <!-- Bow String -->
+                    <path d="M 12,18 L 12,38" stroke-width="1" />
+                    <!-- Helmet Brim Line (crucial for definition) -->
+                    <path d="M 13,15 L 32,15" />
+                    <!-- Shoulder/Neck Line -->
+                    <path d="M 17,18 L 28,18" stroke-width="1"/>
                 </g>
 
-                <!-- 3. HIGHLIGHTS / SHINE -->
-                <g style="fill:none; stroke:#ffffff; stroke-linecap:round">
-                    <!-- Hood Shine -->
-                    <path d="M 18,13 Q 19,11 21.5,11.5" stroke-width="1.2" />
-                    
-                    <!-- Bow Shine (Top Left Gleam) 
-                    <path d="M 12,18 Q 10.5,21 10,23" stroke-width="1" />-->
+                <!-- Highlights -->
+                <g style="fill:none; stroke:#ffffff; stroke-width:1; stroke-linecap:round">
+                    <!-- Helmet Shine -->
+                    <path d="M 18,11 Q 20,9 23,10" />
+                    <!-- Bow Shine -->
+                    <path d="M 11,19 Q 10,21 10,23" />
                 </g>
-
             </svg>
