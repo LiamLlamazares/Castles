@@ -48,7 +48,7 @@ Castles is a fantasy-themed hexagonal chess variant built with React and TypeScr
 |---------|---------------|---------|
 | **Facade** | `GameEngine` | Single entry point to game logic |
 | **Strategy** | `MoveStrategyRegistry` | Piece-specific movement behaviors |
-| **Command** | `*Command` classes | Encapsulate game actions |
+| **Command** | `Command` classes | Encapsulate game actions |
 | **Observer** | `GameEventEmitter` | Decouple logic from side effects |
 | **Immutable State** | `Piece.with()` | Safe state transitions |
 

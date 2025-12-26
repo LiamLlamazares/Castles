@@ -16,14 +16,13 @@
  */
 import { useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
-import { GameEngine, GameState } from "../Classes/Core/GameEngine";
+import { GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
 import {
-  TurnPhase,
   Color,
   HistoryEntry,
   MoveRecord,
@@ -31,8 +30,8 @@ import {
 import { startingBoard, allPieces } from "../ConstantImports";
 
 // Composed hooks
-import { useCoreGame, GameBoardState } from "./useCoreGame";
-import { useAnalysisMode, AnalysisModeState } from "./useAnalysisMode";
+import { useCoreGame} from "./useCoreGame";
+import { useAnalysisMode } from "./useAnalysisMode";
 import { usePGN } from "./usePGN";
 import { useMoveExecution } from "./useMoveExecution";
 import { useComputedGame } from "./useComputedGame";
@@ -64,14 +63,11 @@ export const useGameLogic = (
   // =========== COMPOSED HOOKS ===========
   // isAnalysisMode is true when user explicitly entered Analysis Mode
   // This enables variant creation and shows move indicators
-  const { isViewingHistory, analysisState, jumpToNode: jumpToViewNode, stepHistory } = useAnalysisMode(state, setState, isAnalysisMode);
+  const { isViewingHistory, analysisState, stepHistory } = useAnalysisMode(state, setState, isAnalysisMode);
   const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree);
 
   // Destructure for convenience
-  const { 
-    pieces: currentPieces, 
-    castles: currentCastles, 
-    turnCounter: currentTurnCounter, 
+  const {
     movingPiece, 
     history, 
     moveHistory 
@@ -190,9 +186,7 @@ export const useGameLogic = (
     legalAttackSet,
     victoryMessage,
     winner,
-    recruitmentHexes,
-    recruitmentHexSet,
-    shouldHideMoveIndicators
+    recruitmentHexes
   } = useComputedGame({
     gameEngine,
     viewState,
