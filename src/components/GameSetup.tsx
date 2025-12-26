@@ -4,11 +4,27 @@ import { getStartingPieces, getStartingBoard, getStartingLayout } from '../Const
 import { Board } from '../Classes/Core/Board';
 import { Piece } from '../Classes/Entities/Piece';
 import { CastleGenerator } from '../Classes/Systems/CastleGenerator';
+import { SanctuaryType, SanctuaryConfig, PieceType } from '../Constants';
 import '../css/Board.css';
 
 interface GameSetupProps {
-    onPlay: (board: Board, pieces: Piece[], timeControl?: { initial: number, increment: number }) => void;
+    onPlay: (
+        board: Board, 
+        pieces: Piece[], 
+        timeControl?: { initial: number, increment: number },
+        selectedSanctuaryTypes?: SanctuaryType[]
+    ) => void;
 }
+
+// Sanctuary display info
+const SANCTUARY_INFO: Record<SanctuaryType, { name: string; piece: string; tier: number; color: string }> = {
+    [SanctuaryType.WolfCovenant]: { name: 'Wolf Covenant', piece: 'Wolf', tier: 1, color: '#8b5a2b' },
+    [SanctuaryType.SacredSpring]: { name: 'Sacred Spring', piece: 'Healer', tier: 1, color: '#3cb371' },
+    [SanctuaryType.WardensWatch]: { name: "Warden's Watch", piece: 'Ranger', tier: 2, color: '#228b22' },
+    [SanctuaryType.ArcaneRefuge]: { name: 'Arcane Refuge', piece: 'Wizard', tier: 2, color: '#6a5acd' },
+    [SanctuaryType.ForsakenGrounds]: { name: 'Forsaken Grounds', piece: 'Necromancer', tier: 3, color: '#4a0e4e' },
+    [SanctuaryType.PyreEternal]: { name: 'Pyre Eternal', piece: 'Phoenix', tier: 3, color: '#ff4500' },
+};
 
 const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     // Setup State
@@ -16,6 +32,23 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     const [useRandomCastles, setUseRandomCastles] = useState<boolean>(false);
     const [timeInitial, setTimeInitial] = useState<number>(10); // Minutes
     const [timeIncrement, setTimeIncrement] = useState<number>(5); // Seconds
+    
+    // Sanctuary Selection - Default: Wolf + Healer (Tier 1)
+    const [selectedSanctuaries, setSelectedSanctuaries] = useState<Set<SanctuaryType>>(
+        new Set([SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring])
+    );
+
+    const toggleSanctuary = (type: SanctuaryType) => {
+        setSelectedSanctuaries(prev => {
+            const next = new Set(prev);
+            if (next.has(type)) {
+                next.delete(type);
+            } else {
+                next.add(type);
+            }
+            return next;
+        });
+    };
 
     // Derived state for preview
     const { board, layout, pieces, viewBox } = useMemo(() => {
@@ -31,9 +64,9 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         }
 
         const l = getStartingLayout(b);
-        const p = getStartingPieces(boardRadius); // Note: Pieces might need adjustment if they depend on castle locations? Currently fixed.
+        const p = getStartingPieces(boardRadius);
 
-        // Calculate bounding box for viewBox (same as MapEditor)
+        // Calculate bounding box for viewBox
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         b.hexes.forEach(hex => {
             const corners = l.layout.polygonCorners(hex);
@@ -55,13 +88,18 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     }, [boardRadius, useRandomCastles]);
 
     const handlePlay = () => {
-        onPlay(board, pieces, { initial: timeInitial, increment: timeIncrement });
+        onPlay(
+            board, 
+            pieces, 
+            { initial: timeInitial, increment: timeIncrement },
+            Array.from(selectedSanctuaries)
+        );
     };
 
     return (
         <div className="game-setup" style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#333', color: '#eee' }}>
             {/* Controls Header */}
-            <div className="setup-controls" style={{ padding: '20px', background: '#222', display: 'flex', flexWrap: 'wrap', gap: '30px', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #444' }}>
+            <div className="setup-controls" style={{ padding: '20px', background: '#222', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start', justifyContent: 'center', borderBottom: '1px solid #444' }}>
                 
                 {/* Board Size */}
                 <div style={controlGroupStyle}>
@@ -110,6 +148,46 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         />
                     </div>
                 </div>
+
+                {/* Sanctuary Selection */}
+                <div style={{ ...controlGroupStyle, flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <label style={{ ...labelStyle, marginBottom: '8px' }}>Starting Sanctuaries:</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {Object.entries(SANCTUARY_INFO).map(([type, info]) => {
+                            const sanctuaryType = type as SanctuaryType;
+                            const isSelected = selectedSanctuaries.has(sanctuaryType);
+                            return (
+                                <button
+                                    key={type}
+                                    onClick={() => toggleSanctuary(sanctuaryType)}
+                                    style={{
+                                        padding: '6px 12px',
+                                        fontSize: '0.85rem',
+                                        cursor: 'pointer',
+                                        borderRadius: '4px',
+                                        border: isSelected ? '2px solid #fff' : '2px solid transparent',
+                                        background: isSelected ? info.color : '#555',
+                                        color: 'white',
+                                        opacity: isSelected ? 1 : 0.6,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        minWidth: '90px',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    title={`Tier ${info.tier} - Spawns ${info.piece}`}
+                                >
+                                    <span style={{ fontWeight: 'bold' }}>{info.piece}</span>
+                                    <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>Tier {info.tier}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '4px' }}>
+                        {selectedSanctuaries.size === 0 ? 'No sanctuaries selected' : 
+                         `${selectedSanctuaries.size} selected • Others unlock via evolution`}
+                    </div>
+                </div>
                 
                 {/* Play Button */}
                 <button 
@@ -123,7 +201,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         background: '#27ae60',
                         color: 'white',
                         fontWeight: 'bold',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                        alignSelf: 'center'
                     }}
                 >
                     PLAY GAME
@@ -135,8 +214,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                  <svg className="board" height="100%" width="100%" viewBox={viewBox}>
                     <HexGrid
                         hexagons={board.hexes}
-                        castles={board.castles} // Show generated castles
-                        sanctuaries={[]} // Add empty sanctuaries since they generate with game start
+                        castles={board.castles}
+                        sanctuaries={[]}
                         legalMoveSet={new Set()}
                         legalAttackSet={new Set()}
                         showCoordinates={true}
@@ -183,3 +262,4 @@ const inputNumberStyle: React.CSSProperties = {
 };
 
 export default GameSetup;
+

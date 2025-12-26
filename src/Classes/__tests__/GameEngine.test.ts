@@ -18,6 +18,7 @@ const createMockState = (pieces: Piece[], castles: Castle[] = [], turnCounter: n
     pieceMap: createPieceMap(pieces),
     castles,
     sanctuaries: [],
+    sanctuaryPool: [],
     turnCounter,
     movingPiece: null,
     history: [],

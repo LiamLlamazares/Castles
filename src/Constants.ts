@@ -98,6 +98,12 @@ export const SanctuaryConfig: Record<SanctuaryType, {
   [SanctuaryType.PyreEternal]: { pieceType: PieceType.Phoenix, tier: 3, requiredStrength: 4, requiresSacrifice: true },
 };
 
+/**
+ * Cooldown turns after a sanctuary evolves to a higher tier.
+ * During cooldown, the sanctuary cannot be pledged.
+ */
+export const SANCTUARY_EVOLUTION_COOLDOWN = 5;
+
 export type TurnPhase = "Movement" | "Attack" | "Castles";
 export type Color = "w" | "b";
 export const STARTING_TIME = 20 * 60;

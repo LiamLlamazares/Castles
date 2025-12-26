@@ -17,6 +17,7 @@ function createMinimalState(pieces: Piece[]): GameState {
     pieceMap: createPieceMap(pieces),
     castles: [],
     sanctuaries: [],
+    sanctuaryPool: [],
     turnCounter: 0,
     movingPiece: null,
     history: [],

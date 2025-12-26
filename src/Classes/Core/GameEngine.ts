@@ -49,6 +49,7 @@ export interface GameState {
   pieceMap: PieceMap; // O(1) lookup
   castles: Castle[];
   sanctuaries: Sanctuary[]; // Special piece sanctuaries
+  sanctuaryPool: import("../../Constants").SanctuaryType[]; // Available types for evolution
   turnCounter: number;
   movingPiece: Piece | null;
   history: HistoryEntry[];

@@ -82,7 +82,13 @@ export const useCoreGame = (
     movingPiece: null,
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
-    sanctuaries: startingSanctuaries, 
+    sanctuaries: startingSanctuaries,
+    // Initialize sanctuary pool with types not already on the board
+    sanctuaryPool: Object.values(
+      require("../Constants").SanctuaryType
+    ).filter((t): t is import("../Constants").SanctuaryType => 
+      !startingSanctuaries.some(s => s.type === t)
+    ),
     moveTree: startingMoveTree,
     
     // History Navigation (node-based)

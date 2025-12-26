@@ -327,11 +327,19 @@ export class PGNImporter {
       const castles = board.castles as Castle[]; 
 
       // Initial State
+      // Initialize pool with types NOT already on board
+      const { SanctuaryType } = require("../../Constants");
+      const usedTypes = initialSanctuaries.map(s => s.type);
+      const sanctuaryPool = Object.values(SanctuaryType).filter(
+        (t): t is import("../../Constants").SanctuaryType => !usedTypes.includes(t as any)
+      );
+
       const initialState: GameState = {
           pieces: initialPieces.map(p => p.clone()), 
           pieceMap: createPieceMap(initialPieces),
           castles: castles.map(c => c.clone()),
           sanctuaries: initialSanctuaries.map(s => s.clone()),
+          sanctuaryPool,
           moveTree: moveTree, 
           turnCounter: 0, 
           movingPiece: null,

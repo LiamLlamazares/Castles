@@ -6,6 +6,8 @@ import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
 import { MoveTree } from './Classes/Core/MoveTree';
+import { SanctuaryGenerator } from './Classes/Systems/SanctuaryGenerator';
+import { SanctuaryType } from './Constants';
 import { getStartingLayout } from './ConstantImports';
 
 type ViewState = 'menu' | 'setup' | 'game';
@@ -31,9 +33,22 @@ function App() {
     setView('setup');
   };
 
-  const handleStartGame = (board: Board, pieces: Piece[], timeControl?: { initial: number, increment: number }) => {
+  const handleStartGame = (
+    board: Board, 
+    pieces: Piece[], 
+    timeControl?: { initial: number, increment: number },
+    selectedSanctuaryTypes?: SanctuaryType[]
+  ) => {
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, timeControl, isAnalysisMode: false });
+    
+    // Generate sanctuaries from selected types (defaults to Wolf + Healer if not provided)
+    const typesToGenerate = selectedSanctuaryTypes && selectedSanctuaryTypes.length > 0
+      ? selectedSanctuaryTypes
+      : [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring];
+    
+    const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, typesToGenerate);
+    
+    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, isAnalysisMode: false });
     setView('game');
   };
 

@@ -1,12 +1,18 @@
 /**
  * @file SanctuaryService.ts
- * @description Handles sanctuary pledging mechanics.
+ * @description Handles sanctuary pledging and evolution mechanics.
  *
  * Sanctuaries are special map locations where players can summon powerful
  * fantasy creatures by meeting strength requirements. This service provides:
  * - Pledge eligibility checks (canPledge)
- * - Pledge execution (pledge)
+ * - Pledge execution with sanctuary evolution (pledge)
  * - Helper functions for strength calculation
+ *
+ * EVOLUTION SYSTEM:
+ * When a sanctuary is pledged, it evolves into the next available higher-tier
+ * sanctuary type from the pool. The evolved sanctuary has a cooldown before
+ * it can be pledged again. When no higher-tier types remain, the sanctuary
+ * becomes permanently inactive.
  *
  * @usage Called by GameEngine.canPledge() and GameEngine.pledge()
  * @see Sanctuary - Entity class for sanctuary state
@@ -19,7 +25,7 @@ import { Hex } from "../Entities/Hex";
 import { GameState } from "../Core/GameEngine";
 import { TurnManager } from "../Core/TurnManager";
 import { createPieceMap } from "../../utils/PieceMap";
-import { PieceType } from "../../Constants";
+import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN } from "../../Constants";
 
 export class SanctuaryService {
   /**
@@ -57,6 +63,7 @@ export class SanctuaryService {
 
   /**
    * Executes a pledge action, spawning a new piece from the sanctuary.
+   * After pledging, the sanctuary evolves to the next higher-tier type.
    *
    * @throws Error if pledge is invalid (should call canPledge first)
    */
@@ -81,19 +88,80 @@ export class SanctuaryService {
     const newPiece = PieceFactory.fromType(sanctuary.pieceType, spawnHex, occupant.color);
     newPieces.push(newPiece);
 
-    // Update Sanctuary (Cooldown + Pledged flag)
-    const newSanctuaries = gameState.sanctuaries.map(s =>
-      s.hex.equals(sanctuaryHex)
-        ? s.with({ cooldown: 5, hasPledgedThisGame: true })
-        : s
+    // ===== SANCTUARY EVOLUTION =====
+    // Find the next sanctuary type from the pool that is a higher tier
+    const { evolvedType, newPool } = this.getNextEvolution(
+      gameState.sanctuaryPool,
+      sanctuary.tier
     );
+
+    // Also find the mirrored sanctuary (for fairness, both evolve together)
+    const mirroredHex = new Hex(-sanctuary.hex.q, -sanctuary.hex.r, -sanctuary.hex.s);
+    const mirroredSanctuary = gameState.sanctuaries.find(s => s.hex.equals(mirroredHex));
+
+    // Update ALL sanctuaries (including mirrored one if it exists)
+    const newSanctuaries = gameState.sanctuaries.map(s => {
+      // Update the pledged sanctuary
+      if (s.hex.equals(sanctuaryHex)) {
+        if (evolvedType) {
+          // Evolve to higher tier with cooldown
+          return s.with({ 
+            type: evolvedType, 
+            cooldown: SANCTUARY_EVOLUTION_COOLDOWN, 
+            hasPledgedThisGame: false // Reset so it can be pledged again after cooldown
+          });
+        } else {
+          // No evolution available - sanctuary becomes inactive
+          return s.with({ hasPledgedThisGame: true, cooldown: 0 });
+        }
+      }
+      // Also evolve the mirrored sanctuary (both sides stay in sync)
+      if (mirroredSanctuary && s.hex.equals(mirroredHex)) {
+        if (evolvedType) {
+          return s.with({ 
+            type: evolvedType, 
+            cooldown: SANCTUARY_EVOLUTION_COOLDOWN, 
+            hasPledgedThisGame: false 
+          });
+        } else {
+          return s.with({ hasPledgedThisGame: true, cooldown: 0 });
+        }
+      }
+      return s;
+    });
 
     return {
       ...gameState,
       pieces: newPieces,
       pieceMap: createPieceMap(newPieces), // Rebuild map
       sanctuaries: newSanctuaries,
+      sanctuaryPool: newPool,
     };
+  }
+
+  /**
+   * Finds the next sanctuary type for evolution from the pool.
+   * Prioritizes lower tiers first (Tier 2 before Tier 3).
+   * Returns null if no higher-tier types remain.
+   */
+  private static getNextEvolution(
+    pool: SanctuaryType[],
+    currentTier: 1 | 2 | 3
+  ): { evolvedType: SanctuaryType | null; newPool: SanctuaryType[] } {
+    // Find types of higher tier, sorted by tier (lower first)
+    const higherTiers = pool
+      .filter(t => SanctuaryConfig[t].tier > currentTier)
+      .sort((a, b) => SanctuaryConfig[a].tier - SanctuaryConfig[b].tier);
+
+    if (higherTiers.length === 0) {
+      return { evolvedType: null, newPool: pool };
+    }
+
+    // Take the first (lowest tier) available
+    const evolvedType = higherTiers[0];
+    const newPool = pool.filter(t => t !== evolvedType);
+
+    return { evolvedType, newPool };
   }
 
   /**
@@ -112,3 +180,4 @@ export class SanctuaryService {
     return friends;
   }
 }
+

@@ -29,6 +29,7 @@ describe('Pledge Mechanics', () => {
     pieceMap: createPieceMap(currentPieces),
     castles: [],
     sanctuaries: currentSanctuaries,
+    sanctuaryPool: [], // Empty pool for basic tests
     turnCounter: overrideTurnCounter ?? 14, // White's Castles phase, Turn 10+ (turnCounter % 10 = 4)
     movingPiece: null,
     history: [],
@@ -81,11 +82,11 @@ describe('Pledge Mechanics', () => {
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
   });
 
-  test('Pledge spawns new piece and triggers cooldown', () => {
+  test('Pledge spawns new piece and sanctuary becomes inactive with empty pool', () => {
     const sanctuary = sanctuaries[0];
     const spawnHex = new Hex(1, -5, 4);
     
-    // Setup valid pledge state
+    // Setup valid pledge state (empty pool = no evolution possible)
     placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
     const state = createGameState(pieces, sanctuaries);
 
@@ -97,10 +98,33 @@ describe('Pledge Mechanics', () => {
     expect(spawned?.type).toBe(PieceType.Wolf);
     expect(spawned?.color).toBe('w');
 
-    // Check sanctuary cooldown
+    // With empty pool, sanctuary becomes permanently inactive
     const newSanctuary = newState.sanctuaries.find(s => s.hex.equals(sanctuary.hex));
-    expect(newSanctuary?.cooldown).toBe(5);
     expect(newSanctuary?.hasPledgedThisGame).toBe(true);
+    expect(newSanctuary?.cooldown).toBe(0); // No cooldown for inactive sanctuary
+  });
+
+  test('Pledge evolves sanctuary to higher tier when pool has types', () => {
+    const sanctuary = sanctuaries[0]; // Wolf Covenant (Tier 1)
+    const spawnHex = new Hex(1, -5, 4);
+    
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
+    // Include Tier 2 type in pool
+    const stateWithPool = {
+      ...createGameState(pieces, sanctuaries),
+      sanctuaryPool: [SanctuaryType.WardensWatch] // Tier 2
+    };
+
+    const newState = gameEngine.pledge(stateWithPool, sanctuary.hex, spawnHex);
+
+    // Check sanctuary evolved to Tier 2
+    const evolvedSanctuary = newState.sanctuaries.find(s => s.hex.equals(sanctuary.hex));
+    expect(evolvedSanctuary?.type).toBe(SanctuaryType.WardensWatch);
+    expect(evolvedSanctuary?.cooldown).toBe(5); // Evolution cooldown
+    expect(evolvedSanctuary?.hasPledgedThisGame).toBe(false); // Can pledge again after cooldown
+    
+    // Pool should be reduced
+    expect(newState.sanctuaryPool).not.toContain(SanctuaryType.WardensWatch);
   });
 
   test('Cannot pledge if already pledged this game', () => {
