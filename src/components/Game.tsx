@@ -37,6 +37,7 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
 import { PieceTooltip } from "./PieceTooltip";
+import { TerrainTooltip } from "./TerrainTooltip";
 import { PieceFactory } from "../Classes/Entities/PieceFactory";
 import { HistoryEntry, MoveRecord, SanctuaryConfig } from "../Constants";
 import { createPieceMap } from "../utils/PieceMap";
@@ -91,6 +92,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
   const [tooltipPiece, setTooltipPiece] = React.useState<Piece | null>(null);
+  const [tooltipHex, setTooltipHex] = React.useState<Hex | null>(null);
   
   // Disable transitions after first render cycle to prevent "flying pieces" on resize
   React.useEffect(() => {
@@ -206,6 +208,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
   const handleBoardClick = (hex: Hex) => {
     if (tooltipPiece) setTooltipPiece(null);
+    if (tooltipHex) setTooltipHex(null);
     onEngineBoardClick(hex);
   };
 
@@ -303,12 +306,15 @@ const GameBoard: React.FC<GameBoardProps> = ({
           isAdjacentToControlledCastle={isRecruitmentSpot}
           onHexClick={handleBoardClick}
           onHexRightClick={(hex) => {
+            setTooltipPiece(null);
             const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
             if (sanctuary) {
               const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
-              // Create a dummy piece of the current player's color to show correct stats
               const dummyPiece = PieceFactory.create(pieceType, hex, currentPlayer);
               setTooltipPiece(dummyPiece);
+              setTooltipHex(null);
+            } else {
+              setTooltipHex(hex === tooltipHex ? null : hex);
             }
           }}
           onHexHover={handleHexHover}
@@ -322,7 +328,10 @@ const GameBoard: React.FC<GameBoardProps> = ({
           pieces={pieces}
           isBoardRotated={isBoardRotated}
           onPieceClick={handlePieceClick}
-          onPieceRightClick={(piece) => setTooltipPiece(piece === tooltipPiece ? null : piece)}
+          onPieceRightClick={(piece) => {
+            setTooltipHex(null);
+            setTooltipPiece(piece === tooltipPiece ? null : piece);
+          }}
           resizeVersion={resizeVersion}
           layout={initialLayout}
         />
@@ -382,6 +391,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
             { pieces, pieceMap: createPieceMap(pieces) } as any, 
             board
           )}
+        />
+      )}
+
+      {/* Terrain info tooltip (right-click on empty hex) */}
+      {tooltipHex && (
+        <TerrainTooltip 
+          hex={tooltipHex} 
+          board={board} 
+          castle={castles.find(c => c.hex.equals(tooltipHex))}
+          position={mousePosition} 
         />
       )}
     </>
