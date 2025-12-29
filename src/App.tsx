@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import GameBoard from './components/Game';
 import MainMenu from './components/MainMenu';
 import GameSetup from './components/GameSetup';
+import BoardEditor from './components/BoardEditor';
 import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
 import { MoveTree } from './Classes/Core/MoveTree';
 import { SanctuaryGenerator } from './Classes/Systems/SanctuaryGenerator';
 import { SanctuaryType } from './Constants';
+import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
 
-type ViewState = 'menu' | 'setup' | 'game';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor';
 
 interface GameConfig {
   board?: Board;
@@ -20,14 +22,22 @@ interface GameConfig {
   moveHistory?: any[];
   moveTree?: MoveTree;
   turnCounter?: number;
-  sanctuaries?: import('./Classes/Entities/Sanctuary').Sanctuary[];
+  sanctuaries?: Sanctuary[];
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
+}
+
+interface EditorConfig {
+  board?: Board;
+  pieces?: Piece[];
+  sanctuaries?: Sanctuary[];
 }
 
 function App() {
   const [view, setView] = useState<ViewState>('game');
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
+  const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
+  const [previousView, setPreviousView] = useState<ViewState>('game');
 
   const handleNewGameClick = () => {
     setView('setup');
@@ -56,7 +66,7 @@ function App() {
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[], moveTree?: MoveTree) => {
+  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: MoveTree) => {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
@@ -67,10 +77,28 @@ function App() {
   
   const [gameKey, setGameKey] = useState(0);
 
-  const handleEnableAnalysis = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[]) => {
+  const handleEnableAnalysis = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
     setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter, sanctuaries, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount with new setting
+  };
+
+  // Editor handlers
+  const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
+    setPreviousView(view);
+    setEditorConfig({ board, pieces, sanctuaries });
+    setView('editor');
+  };
+
+  const handleEditorBack = () => {
+    setView(previousView);
+  };
+
+  const handlePlayFromEditor = (board: Board, pieces: Piece[], sanctuaries: Sanctuary[]) => {
+    const layout = getStartingLayout(board);
+    setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
+    setGameKey(prev => prev + 1);
+    setView('game');
   };
 
   return (
@@ -106,11 +134,23 @@ function App() {
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}
               onLoadGame={handleLoadGame}
+              onEditPosition={handleEditPosition}
             />
         </div>
+      )}
+
+      {view === 'editor' && (
+        <BoardEditor
+          initialBoard={editorConfig.board}
+          initialPieces={editorConfig.pieces}
+          initialSanctuaries={editorConfig.sanctuaries}
+          onPlay={handlePlayFromEditor}
+          onBack={handleEditorBack}
+        />
       )}
     </div>
   );
 }
 
 export default App;
+

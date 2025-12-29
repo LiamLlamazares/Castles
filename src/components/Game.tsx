@@ -51,6 +51,7 @@ interface GameBoardProps {
   onSetup?: () => void;
   onRestart?: () => void;
   onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: import('../Classes/Core/MoveTree').MoveTree) => void;
+  onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
   onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
@@ -73,6 +74,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onSetup = () => {},
   onRestart = () => {},
   onLoadGame = () => {},
+  onEditPosition,
   timeControl,
   isAnalysisMode = false,
   onEnableAnalysis = () => {}
@@ -234,6 +236,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onToggleCoordinates={toggleCoordinates}
         onShowRules={() => setShowRulesModal(true)}
         onEnableAnalysis={handleEnterAnalysis}
+        onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
         isAnalysisMode={isAnalysisMode}
       />
 

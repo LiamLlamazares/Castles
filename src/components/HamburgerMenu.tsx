@@ -11,6 +11,7 @@ interface HamburgerMenuProps {
   onToggleCoordinates: () => void;
   onShowRules: () => void;
   onEnableAnalysis?: () => void;
+  onEditPosition?: () => void;
   isAnalysisMode?: boolean;
 }
 
@@ -21,6 +22,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onToggleCoordinates,
   onShowRules,
   onEnableAnalysis,
+  onEditPosition,
   isAnalysisMode = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -136,6 +138,19 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               >
                 <span className="menu-icon">🔍</span>
                 Analysis Board
+              </button>
+            </>
+          )}
+          
+          {onEditPosition && (
+            <>
+              <div className="menu-divider" />
+              <button 
+                className="menu-item" 
+                onClick={() => handleMenuItemClick(onEditPosition)}
+              >
+                <span className="menu-icon">🛠️</span>
+                Edit Position
               </button>
             </>
           )}
