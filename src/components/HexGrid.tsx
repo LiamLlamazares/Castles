@@ -4,6 +4,8 @@ import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { Board } from "../Classes/Core/Board";
 import { LayoutService } from "../Classes/Systems/LayoutService";
+import { PieceType } from "../Constants";
+import { getImageByPieceType } from "./PieceImages";
 import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from "../utils/HexRenderUtils";
 
 interface HexGridProps {
@@ -37,6 +39,20 @@ const getPolygonPoints = (hex: Hex, isBoardRotated: boolean, layout: LayoutServi
 const getHexCenter = (hex: Hex, isBoardRotated: boolean, layout: LayoutService): Point => {
   return layout.layout.hexToPixelReflected(hex, isBoardRotated);
 };
+
+// Recruitment cycle matching rules.md
+const RECRUITMENT_CYCLE = [
+  PieceType.Swordsman,
+  PieceType.Archer,
+  PieceType.Knight,
+  PieceType.Eagle,
+  PieceType.Giant,
+  PieceType.Trebuchet,
+  PieceType.Assassin,
+  PieceType.Dragon,
+  PieceType.Monarch
+];
+
 
 
 const HexGrid = React.memo(({
@@ -99,6 +115,43 @@ const HexGrid = React.memo(({
                 {`${-hex.q}, ${-hex.s}`}
               </text>
             )}
+            
+            {/* Castle Recruitment Preview - always visible */}
+            {(() => {
+              const castle = castles.find(c => c.hex.equals(hex));
+              if (castle) {
+                const center = getHexCenter(hex, isBoardRotated, layout);
+                const nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
+                const iconSize = 18; // Slightly smaller
+                const offsetX = 14;  // Closer to center
+                const offsetY = -14; // Closer to center
+                
+                return (
+                  <g style={{ pointerEvents: 'none' }}>
+                    {/* Icon background - use contrasting color based on piece color */}
+                    <circle
+                      cx={center.x + offsetX}
+                      cy={center.y + offsetY}
+                      r={10}
+                      fill={castle.owner === 'w' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.85)'}
+                      stroke={castle.owner === 'w' ? '#00fbff' : '#8000ff'}
+                      strokeWidth={1.5}
+                    />
+                    {/* Next piece icon */}
+                    <image
+                      href={getImageByPieceType(nextPieceType, castle.owner)}
+                      x={center.x + offsetX - iconSize/2}
+                      y={center.y + offsetY - iconSize/2}
+                      width={iconSize}
+                      height={iconSize}
+                      opacity={0.90}
+                    />
+                    {/* "Next" label - removed to reduce clutter */}
+                  </g>
+                );
+              }
+              return null;
+            })()}
           </g>
         );
       })}

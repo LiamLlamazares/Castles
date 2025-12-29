@@ -27,6 +27,41 @@ const SANCTUARY_INFO: Record<SanctuaryType, { name: string; piece: string; tier:
     [SanctuaryType.PyreEternal]: { name: 'Pyre Eternal', piece: 'Phoenix', tier: 3, color: '#ff4500' },
 };
 
+// Game Mode Presets
+type GameMode = 'quick' | 'standard' | 'full' | 'custom';
+
+interface ModeConfig {
+    boardRadius: number;
+    timeInitial: number;
+    timeIncrement: number;
+    sanctuaries: SanctuaryType[];
+    sanctuaryCooldown: number;
+}
+
+const MODE_PRESETS: Record<Exclude<GameMode, 'custom'>, ModeConfig> = {
+    quick: {
+        boardRadius: 6,
+        timeInitial: 5,
+        timeIncrement: 5,
+        sanctuaries: [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
+        sanctuaryCooldown: 5
+    },
+    standard: {
+        boardRadius: 8,
+        timeInitial: 20,
+        timeIncrement: 20,
+        sanctuaries: [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
+        sanctuaryCooldown: 10
+    },
+    full: {
+        boardRadius: 10,
+        timeInitial: 30,
+        timeIncrement: 30,
+        sanctuaries: Object.keys(SANCTUARY_INFO) as SanctuaryType[],
+        sanctuaryCooldown: 15
+    }
+};
+
 const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     // Setup State
     const [boardRadius, setBoardRadius] = useState<number>(8);
@@ -40,7 +75,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     );
     
     // Sanctuary Configuration
-    const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(10);
+    const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(0);  // Always unlocked
     const [sanctuaryCooldown, setSanctuaryCooldown] = useState<number>(10);
 
     const toggleSanctuary = (type: SanctuaryType) => {
@@ -191,31 +226,17 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                 </div>
 
                 {/* Sanctuary Settings */}
-                <div style={{ ...controlGroupStyle, flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label style={labelStyle}>Unlock Turn</label>
-                        <input 
-                            type="number" 
-                            min="1"
-                            max="50"
-                            value={sanctuaryUnlockTurn} 
-                            onChange={(e) => setSanctuaryUnlockTurn(Number(e.target.value))}
-                            style={inputNumberStyle}
-                            title="Turn when sanctuaries become available"
-                        />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <label style={labelStyle}>Cooldown</label>
-                        <input 
-                            type="number" 
-                            min="1"
-                            max="20"
-                            value={sanctuaryCooldown} 
-                            onChange={(e) => setSanctuaryCooldown(Number(e.target.value))}
-                            style={inputNumberStyle}
-                            title="Cooldown turns after pledging"
-                        />
-                    </div>
+                <div style={{ ...controlGroupStyle, alignItems: 'center' }}>
+                    <label style={labelStyle}>Sanctuary Cooldown</label>
+                    <input 
+                        type="number" 
+                        min="1"
+                        max="20"
+                        value={sanctuaryCooldown} 
+                        onChange={(e) => setSanctuaryCooldown(Number(e.target.value))}
+                        style={inputNumberStyle}
+                        title="Cooldown turns after pledging"
+                    />
                 </div>
 
                 {/* Sanctuary Selection */}

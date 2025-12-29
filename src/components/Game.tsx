@@ -94,6 +94,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [tooltipPiece, setTooltipPiece] = React.useState<Piece | null>(null);
   const [tooltipHex, setTooltipHex] = React.useState<Hex | null>(null);
   
+  // Tooltip discovery hint (show once per browser)
+  const [showTooltipHint, setShowTooltipHint] = React.useState(() => {
+    return !localStorage.getItem('hasSeenTooltipHint');
+  });
+  
+  const dismissTooltipHint = () => {
+    localStorage.setItem('hasSeenTooltipHint', 'true');
+    setShowTooltipHint(false);
+  };
+  
   // Disable transitions after first render cycle to prevent "flying pieces" on resize
   React.useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoad(false), 100);
@@ -334,6 +344,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           }}
           resizeVersion={resizeVersion}
           layout={initialLayout}
+          board={board}
         />
         {/* Legal move/attack dots rendered AFTER pieces so they appear on top */}
         <LegalMoveOverlay
@@ -402,6 +413,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
           castle={castles.find(c => c.hex.equals(tooltipHex))}
           position={mousePosition} 
         />
+      )}
+      
+      {/* Tooltip Discovery Hint Banner */}
+      {showTooltipHint && (
+        <div className="tooltip-hint-banner">
+          💡 Tip: Right-click any piece or hex for detailed information!
+          <button className="hint-dismiss-btn" onClick={dismissTooltipHint}>
+            Got it
+          </button>
+        </div>
       )}
     </>
   );
