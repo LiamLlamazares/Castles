@@ -32,7 +32,7 @@ export class Sanctuary {
     /** Current controller (null if uncontrolled) */
     public readonly controller: Color | null = null,
     /** Turns remaining until sanctuary can be used again (0 = ready) */
-    public readonly cooldown: number = 10,
+    public readonly cooldown: number = 0,
     /** Whether a piece has been pledged from this sanctuary this game */
     public readonly hasPledgedThisGame: boolean = false
   ) {}

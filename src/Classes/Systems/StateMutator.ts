@@ -397,6 +397,13 @@ export class StateMutator {
 
       // If we just entered a new player's turn (Turn 0, 5, 10...)
       if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
+          // Decrement sanctuary cooldowns at the start of each player turn
+          if (newState.sanctuaries && newState.sanctuaries.length > 0) {
+              const updatedSanctuaries = newState.sanctuaries.map(s => 
+                  s.cooldown > 0 ? s.with({ cooldown: s.cooldown - 1 }) : s
+              );
+              newState = { ...newState, sanctuaries: updatedSanctuaries };
+          }
           return StateMutator.resetTurnFlags(newState);
       }
       return newState;

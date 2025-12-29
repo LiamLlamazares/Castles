@@ -27,7 +27,7 @@ import { TurnManager } from "../Core/TurnManager";
 import { NotationService } from "../Systems/NotationService";
 import { createPieceMap } from "../../utils/PieceMap";
 import { createHistorySnapshot } from "../../utils/GameStateUtils";
-import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, MoveRecord } from "../../Constants";
+import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, MoveRecord, PHASE_CYCLE_LENGTH } from "../../Constants";
 
 export class SanctuaryService {
   /**
@@ -46,7 +46,9 @@ export class SanctuaryService {
     if (!sanctuary.isReady) return false;
 
     // 1b. Turn Requirement (Sanctuaries dormant until Turn 10)
-    if (gameState.turnCounter < 10) return false;
+    // Turn 10 = turnCounter >= 10 * PHASE_CYCLE_LENGTH (each turn = 5 phases per player)
+    const TURN_UNLOCK = 10;
+    if (gameState.turnCounter < TURN_UNLOCK * PHASE_CYCLE_LENGTH) return false;
 
     // 2. Control Check (Must have CURRENT PLAYER's piece on it)
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
