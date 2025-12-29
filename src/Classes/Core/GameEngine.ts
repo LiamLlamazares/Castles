@@ -50,6 +50,7 @@ export interface GameState {
   castles: Castle[];
   sanctuaries: Sanctuary[]; // Special piece sanctuaries
   sanctuaryPool: import("../../Constants").SanctuaryType[]; // Available types for evolution
+  sanctuarySettings?: { unlockTurn: number, cooldown: number }; // Configurable sanctuary settings
   turnCounter: number;
   movingPiece: Piece | null;
   history: HistoryEntry[];

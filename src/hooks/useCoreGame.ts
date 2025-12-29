@@ -33,7 +33,8 @@ export const useCoreGame = (
   initialMoveHistory: MoveRecord[] = [],
   initialTurnCounter: number = 0,
   initialSanctuaries?: Sanctuary[],
-  initialMoveTree?: MoveTree
+  initialMoveTree?: MoveTree,
+  sanctuarySettings?: { unlockTurn: number, cooldown: number }
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -89,6 +90,7 @@ export const useCoreGame = (
     ).filter((t): t is import("../Constants").SanctuaryType => 
       !startingSanctuaries.some(s => s.type === t)
     ),
+    sanctuarySettings, // Include configurable sanctuary settings
     moveTree: startingMoveTree,
     
     // History Navigation (node-based)

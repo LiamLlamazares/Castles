@@ -45,9 +45,9 @@ export class SanctuaryService {
     // 1. Basic Availability Check
     if (!sanctuary.isReady) return false;
 
-    // 1b. Turn Requirement (Sanctuaries dormant until Turn 10)
-    // Turn 10 = turnCounter >= 10 * PHASE_CYCLE_LENGTH (each turn = 5 phases per player)
-    const TURN_UNLOCK = 10;
+    // 1b. Turn Requirement (Sanctuaries dormant until configured unlock turn)
+    // Default: Turn 10 = turnCounter >= 10 * PHASE_CYCLE_LENGTH * 2 (5 phases per player, 2 players per turn)
+    const TURN_UNLOCK = gameState.sanctuarySettings?.unlockTurn ?? 10;
     if (gameState.turnCounter < TURN_UNLOCK * PHASE_CYCLE_LENGTH * 2) return false;
 
     // 2. Control Check (Must have CURRENT PLAYER's piece on it)
@@ -104,6 +104,9 @@ export class SanctuaryService {
     const mirroredHex = new Hex(-sanctuary.hex.q, -sanctuary.hex.r, -sanctuary.hex.s);
     const mirroredSanctuary = gameState.sanctuaries.find(s => s.hex.equals(mirroredHex));
 
+    // Get cooldown from settings or use default
+    const cooldownTurns = gameState.sanctuarySettings?.cooldown ?? SANCTUARY_EVOLUTION_COOLDOWN;
+
     // Update ALL sanctuaries (including mirrored one if it exists)
     const newSanctuaries = gameState.sanctuaries.map(s => {
       // Update the pledged sanctuary
@@ -112,7 +115,7 @@ export class SanctuaryService {
           // Evolve to higher tier with cooldown
           return s.with({ 
             type: evolvedType, 
-            cooldown: SANCTUARY_EVOLUTION_COOLDOWN, 
+            cooldown: cooldownTurns, 
             hasPledgedThisGame: false // Reset so it can be pledged again after cooldown
           });
         } else {
@@ -125,7 +128,7 @@ export class SanctuaryService {
         if (evolvedType) {
           return s.with({ 
             type: evolvedType, 
-            cooldown: SANCTUARY_EVOLUTION_COOLDOWN, 
+            cooldown: cooldownTurns, 
             hasPledgedThisGame: false 
           });
         } else {

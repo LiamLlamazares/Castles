@@ -6,9 +6,10 @@ interface SanctuaryTooltipProps {
   sanctuary: Sanctuary;
   position: { x: number, y: number };
   turnCounter: number;
+  sanctuarySettings?: { unlockTurn: number, cooldown: number };
 }
 
-export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, position, turnCounter }) => {
+export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, position, turnCounter, sanctuarySettings }) => {
   const config = SanctuaryConfig[sanctuary.type];
 
   // Position slight offset from mouse/hex center
@@ -62,7 +63,7 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
   };
 
   // Turn Lock Logic (1 turn = both players = PHASE_CYCLE_LENGTH * 2 phases)
-  const TURN_UNLOCK = 10;
+  const TURN_UNLOCK = sanctuarySettings?.unlockTurn ?? 10;
   const FULL_TURN_LENGTH = PHASE_CYCLE_LENGTH * 2;
   const isTurnLocked = turnCounter < TURN_UNLOCK * FULL_TURN_LENGTH;
 

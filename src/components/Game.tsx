@@ -47,6 +47,7 @@ interface GameBoardProps {
   initialMoveTree?: import('../Classes/Core/MoveTree').MoveTree;
   initialTurnCounter?: number;
   initialSanctuaries?: Sanctuary[];
+  sanctuarySettings?: { unlockTurn: number, cooldown: number };
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
@@ -70,6 +71,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   initialMoveTree,
   initialTurnCounter,
   initialSanctuaries,
+  sanctuarySettings,
   onResign = () => {},
   onSetup = () => {},
   onRestart = () => {},
@@ -133,7 +135,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings);
 
   // Decoupled View State
   const { 
@@ -342,6 +344,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
                     sanctuary={sanctuary} 
                     position={mousePosition} 
                     turnCounter={turnCounter}
+                    sanctuarySettings={sanctuarySettings}
                   />
               ) : null;
           })()

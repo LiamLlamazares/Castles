@@ -11,12 +11,19 @@ export class CastleGenerator {
    * @returns Array of Castle objects
    */
   public static generateRandomCastles(board: Board, count: number): Castle[] {
-    const validHexes = board.hexes.filter(h => 
+    // Exclude hexes at distance <=1 from edge (back two rows)
+    // Edge hexes have |q|, |r|, or |s| === NSquares
+    // Distance 1 from edge means |coord| >= NSquares - 1
+    // So we require |coord| <= NSquares - 2 for all coordinates
+    const minDistFromEdge = 2;
+    const maxCoord = board.NSquares - minDistFromEdge;
+    
+    let validHexes = board.hexes.filter(h => 
       h.r > 0 && // South side (White)
       !board.isRiver(h) && // Not in river
-      Math.abs(h.q) < board.NSquares && // Avoid extreme edges if possible, but valid board hexes are fine
-      Math.abs(h.r) < board.NSquares &&
-      Math.abs(h.s) < board.NSquares
+      Math.abs(h.q) <= maxCoord && // Not within distance 1 of edge
+      Math.abs(h.r) <= maxCoord &&
+      Math.abs(h.s) <= maxCoord
     );
 
     const selectedHexes: Hex[] = [];
@@ -33,8 +40,9 @@ export class CastleGenerator {
         selectedHexes.push(hex);
         usedKeys.add(hex.getKey());
         
-        // Remove selected from pool (swap-pop or filter)
-        validHexes.splice(randomIndex, 1);
+        // Remove selected hex AND its neighbors from the pool
+        // This ensures no two castles can be adjacent (neighbors have distance == 1)
+        validHexes = validHexes.filter(h => h.distance(hex) > 1);
     }
 
     const castles: Castle[] = [];

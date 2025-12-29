@@ -46,7 +46,8 @@ export const useGameLogic = (
   initialTurnCounter: number = 0,
   initialSanctuaries?: Sanctuary[], // Optional, uses default generator if missing
   isAnalysisMode: boolean = false, // When false, blocks moves during analysis mode (Play Mode)
-  initialMoveTree?: MoveTree // Optional, use this tree if provided (e.g., from PGN import with snapshots)
+  initialMoveTree?: MoveTree, // Optional, use this tree if provided (e.g., from PGN import with snapshots)
+  sanctuarySettings?: { unlockTurn: number, cooldown: number } // Configurable sanctuary settings
 ) => {
   // Create game engine instance (stable reference)
   // =========== CORE GAME STATE ===========
@@ -57,7 +58,8 @@ export const useGameLogic = (
     initialMoveHistory, 
     initialTurnCounter, 
     initialSanctuaries, 
-    initialMoveTree
+    initialMoveTree,
+    sanctuarySettings
   );
 
   // =========== COMPOSED HOOKS ===========

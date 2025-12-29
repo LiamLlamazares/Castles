@@ -12,7 +12,8 @@ interface GameSetupProps {
         board: Board, 
         pieces: Piece[], 
         timeControl?: { initial: number, increment: number },
-        selectedSanctuaryTypes?: SanctuaryType[]
+        selectedSanctuaryTypes?: SanctuaryType[],
+        sanctuarySettings?: { unlockTurn: number, cooldown: number }
     ) => void;
 }
 
@@ -30,13 +31,17 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     // Setup State
     const [boardRadius, setBoardRadius] = useState<number>(8);
     const [useRandomCastles, setUseRandomCastles] = useState<boolean>(false);
-    const [timeInitial, setTimeInitial] = useState<number>(10); // Minutes
-    const [timeIncrement, setTimeIncrement] = useState<number>(5); // Seconds
+    const [timeInitial, setTimeInitial] = useState<number>(20); // Minutes
+    const [timeIncrement, setTimeIncrement] = useState<number>(20); // Seconds
     
     // Sanctuary Selection - Default: Wolf + Healer (Tier 1)
     const [selectedSanctuaries, setSelectedSanctuaries] = useState<Set<SanctuaryType>>(
         new Set([SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring])
     );
+    
+    // Sanctuary Configuration
+    const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(10);
+    const [sanctuaryCooldown, setSanctuaryCooldown] = useState<number>(10);
 
     const toggleSanctuary = (type: SanctuaryType) => {
         setSelectedSanctuaries(prev => {
@@ -92,7 +97,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             board, 
             pieces, 
             { initial: timeInitial, increment: timeIncrement },
-            Array.from(selectedSanctuaries)
+            Array.from(selectedSanctuaries),
+            { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown }
         );
     };
 
@@ -186,6 +192,34 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                     <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '4px' }}>
                         {selectedSanctuaries.size === 0 ? 'No sanctuaries selected' : 
                          `${selectedSanctuaries.size} selected • Others unlock via evolution`}
+                    </div>
+                </div>
+
+                {/* Sanctuary Settings */}
+                <div style={{ ...controlGroupStyle, flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
+                        <label style={labelStyle}>Unlock Turn:</label>
+                        <input 
+                            type="number" 
+                            min="1"
+                            max="50"
+                            value={sanctuaryUnlockTurn} 
+                            onChange={(e) => setSanctuaryUnlockTurn(Number(e.target.value))}
+                            style={inputNumberStyle}
+                            title="Turn when sanctuaries become available"
+                        />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
+                        <label style={labelStyle}>Cooldown:</label>
+                        <input 
+                            type="number" 
+                            min="1"
+                            max="20"
+                            value={sanctuaryCooldown} 
+                            onChange={(e) => setSanctuaryCooldown(Number(e.target.value))}
+                            style={inputNumberStyle}
+                            title="Cooldown turns after pledging"
+                        />
                     </div>
                 </div>
                 
