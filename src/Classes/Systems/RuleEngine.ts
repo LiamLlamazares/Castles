@@ -85,7 +85,7 @@ export class RuleEngine {
     const enemyMeleePieces = gameState.pieces.filter(
       (piece) =>
         piece.color !== currentPlayer &&
-        piece.AttackType === AttackType.Melee
+        (piece.AttackType === AttackType.Melee || piece.AttackType === AttackType.Swordsman)
     );
     
     // Enemy melee pieces "defend" all hexes they can attack
@@ -113,16 +113,14 @@ export class RuleEngine {
           const attackable = RuleEngine.getAttackableHexes(gameState, currentPlayer);
           const attackableSet = new Set(attackable.map(h => h.getKey()));
           
-          if (piece.AttackType === AttackType.Ranged) {
-              const defended = RuleEngine.getDefendedHexes(gameState, currentPlayer, board);
-              return piece
-                .legalAttacks(attackableSet, board.highGroundHexSet)
-                .filter(
-                  (hex) =>
-                    !defended.some((defendedHex) => defendedHex.equals(hex))
-                );
+          const attacks = piece.legalAttacks(attackableSet, board.highGroundHexSet);
+
+          // Ranged and LongRanged pieces can only attack undefended targets
+          if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {
+              return attacks.filter(hex => !RuleEngine.isHexDefended(hex, currentPlayer, gameState, board));
           }
-          return piece.legalAttacks(attackableSet, board.highGroundHexSet);
+          
+          return attacks;
       }
       return [];
   }
@@ -215,7 +213,8 @@ export class RuleEngine {
           // Use O(1) pieceMap lookup if available in GameState
           // We added pieceMap to GameState in Phase 2!
           const piece = gameState.pieceMap.getByKey(neighbor.getKey());
-          if (piece && piece.color !== attackerColor && piece.AttackType === AttackType.Melee) {
+          if (piece && piece.color !== attackerColor && 
+              (piece.AttackType === AttackType.Melee || piece.AttackType === AttackType.Swordsman)) {
               return true;
           }
       }

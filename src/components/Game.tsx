@@ -32,11 +32,13 @@ import { Piece } from "../Classes/Entities/Piece";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { Hex } from "../Classes/Entities/Hex";
+import { RuleEngine } from "../Classes/Systems/RuleEngine";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
 import { PieceTooltip } from "./PieceTooltip";
 import { HistoryEntry, MoveRecord } from "../Constants";
+import { createPieceMap } from "../utils/PieceMap";
 import "../css/Board.css";
 
 interface GameBoardProps {
@@ -114,6 +116,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     victoryMessage,
     winner,
     isRecruitmentSpot,
+    board,
     moveHistory,
     moveTree,
     movingPiece,
@@ -185,7 +188,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
   // Click handler hook - manages abilities, pledging, and delegation
   const {
-    handleBoardClick,
+    handleBoardClick: onEngineBoardClick,
     isPledgeTarget,
     activeAbility,
     setActiveAbility,
@@ -199,6 +202,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
     triggerAbility,
     onEngineHexClick,
   });
+
+  const handleBoardClick = (hex: Hex) => {
+    if (tooltipPiece) setTooltipPiece(null);
+    onEngineBoardClick(hex);
+  };
 
   useInputHandler({
     onPass: handlePass,
@@ -353,11 +361,17 @@ const GameBoard: React.FC<GameBoardProps> = ({
           })()
       )}
 
-      {/* Piece info tooltip (middle-click on a piece) */}
+      {/* Piece info tooltip (right-click on a piece) */}
       {tooltipPiece && (
         <PieceTooltip 
           piece={tooltipPiece} 
           position={mousePosition} 
+          isDefended={RuleEngine.isHexDefended(
+            tooltipPiece.hex, 
+            tooltipPiece.color === 'w' ? 'b' : 'w', 
+            { pieces, pieceMap: createPieceMap(pieces) } as any, 
+            board
+          )}
         />
       )}
     </>

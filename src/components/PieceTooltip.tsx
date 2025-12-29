@@ -5,6 +5,7 @@ import { PieceType, AttackType } from '../Constants';
 interface PieceTooltipProps {
   piece: Piece;
   position: { x: number, y: number };
+  isDefended?: boolean;
 }
 
 // Piece info data based on rules.md
@@ -33,7 +34,7 @@ const PIECE_INFO: Record<PieceType, {
   [PieceType.Phoenix]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true, special: 'Rebirth after 3 turns' },
 };
 
-export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position }) => {
+export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended }) => {
   const info = PIECE_INFO[piece.type];
   if (!info) return null;
 
@@ -119,6 +120,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position }) =
         {info.flying && <span style={badgeStyle('#3498db')}>Flying</span>}
         {piece.canMove && <span style={badgeStyle('#27ae60')}>Can Move</span>}
         {piece.canAttack && <span style={badgeStyle('#e74c3c')}>Can Attack</span>}
+        {isDefended && <span style={badgeStyle('#f39c12')}>Defended 🛡️</span>}
       </div>
 
       {info.special && (
@@ -141,6 +143,20 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position }) =
           fontSize: '0.85rem'
         }}>
           Damage: {piece.damage}/{piece.Strength}
+        </div>
+      )}
+
+      {/* Ranged Protection Note */}
+      {(info.attackType === 'Ranged' || info.attackType === 'Long-Range') && (
+        <div style={{ 
+          marginTop: '8px', 
+          fontSize: '0.75rem', 
+          color: '#3498db',
+          fontStyle: 'italic',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          paddingTop: '8px'
+        }}>
+          Note: Cannot attack "Defended" pieces (those adjacent to enemy melee units).
         </div>
       )}
     </div>
