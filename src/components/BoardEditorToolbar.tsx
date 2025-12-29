@@ -13,6 +13,8 @@ interface BoardEditorToolbarProps {
   boardRadius: number;
   onBoardRadiusChange: (radius: number) => void;
   isInitialBoard: boolean;
+  showCoordinates: boolean;
+  onShowCoordinatesChange: (show: boolean) => void;
 }
 
 // All piece types (excluding special ones that come from sanctuaries for clarity)
@@ -62,6 +64,8 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
   boardRadius,
   onBoardRadiusChange,
   isInitialBoard,
+  showCoordinates,
+  onShowCoordinatesChange,
 }) => {
   const [selectedColor, setSelectedColor] = React.useState<Color>('w');
 
@@ -129,6 +133,28 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
           />
         </div>
       )}
+
+      {/* Coordinate Toggle */}
+      <div className="toolbar-section" style={{ marginBottom: '20px' }}>
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          cursor: 'pointer',
+          padding: '10px',
+          background: 'rgba(255,255,255,0.1)',
+          borderRadius: '6px',
+          border: '1px solid rgba(255,255,255,0.2)',
+        }}>
+          <input
+            type="checkbox"
+            checked={showCoordinates}
+            onChange={(e) => onShowCoordinatesChange(e.target.checked)}
+            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: '0.9rem' }}>Show Coordinates</span>
+        </label>
+      </div>
 
       {/* Color Selector */}
       <div className="toolbar-section" style={{ marginBottom: '20px' }}>

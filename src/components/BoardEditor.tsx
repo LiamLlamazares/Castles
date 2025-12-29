@@ -67,6 +67,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
   const [selectedTool, setSelectedTool] = useState<EditorTool>(null);
   const [draggedPiece, setDraggedPiece] = useState<Piece | null>(null);
   const [cooldownSanctuary, setCooldownSanctuary] = useState<Sanctuary | null>(null);
+  const [showCoordinates, setShowCoordinates] = useState<boolean>(true);
 
   // Computed board and layout
   const { board, layout, viewBox } = useMemo(() => {
@@ -284,6 +285,8 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
         boardRadius={boardRadius}
         onBoardRadiusChange={setBoardRadius}
         isInitialBoard={!!initialBoard}
+        showCoordinates={showCoordinates}
+        onShowCoordinatesChange={setShowCoordinates}
       />
 
       {/* Main editor area */}
@@ -330,7 +333,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
               sanctuaries={sanctuaries}
               legalMoveSet={new Set()}
               legalAttackSet={new Set()}
-              showCoordinates={true}
+              showCoordinates={showCoordinates}
               isBoardRotated={false}
               isAdjacentToControlledCastle={() => false}
               onHexClick={handleBoardClick}
@@ -344,6 +347,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
               onPieceClick={handlePieceClick}
               resizeVersion={0}
               layout={layout}
+              editorPlacementMode={selectedTool?.type === 'piece' || selectedTool?.type === 'sanctuary'}
             />
           </svg>
         </div>

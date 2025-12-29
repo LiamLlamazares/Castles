@@ -86,7 +86,7 @@ const HexGrid = React.memo(({
                 x={getHexCenter(hex, isBoardRotated, layout).x}
                 y={getHexCenter(hex, isBoardRotated, layout).y + 5}
                 textAnchor="middle"
-                style={{ fontSize: "15px", color: "black" }}
+                style={{ fontSize: "15px", fill: "black", pointerEvents: "none" }}
               >
                 {`${-hex.q}, ${-hex.s}`}
               </text>

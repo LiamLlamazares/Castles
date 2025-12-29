@@ -14,6 +14,8 @@ interface PieceRendererProps {
   onPieceClick: (piece: Piece) => void;
   resizeVersion: number;
   layout: LayoutService;
+  /** When true, clicks pass through pieces to hexes below (for board editor placement mode) */
+  editorPlacementMode?: boolean;
 }
 
 /** Get the pixel center of a piece */
@@ -25,7 +27,8 @@ const PieceRenderer = React.memo(({
   pieces,
   isBoardRotated,
   onPieceClick,
-  layout
+  layout,
+  editorPlacementMode = false
 }: PieceRendererProps) => {
   const pieceSize = layout.size_image;
   return (
@@ -41,6 +44,7 @@ const PieceRenderer = React.memo(({
             height={pieceSize}
             width={pieceSize}
             className="piece"
+            style={{ pointerEvents: editorPlacementMode ? 'none' : 'auto' }}
             onClick={() => onPieceClick(piece)}
           />
         );
