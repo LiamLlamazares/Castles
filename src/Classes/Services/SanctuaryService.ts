@@ -48,7 +48,7 @@ export class SanctuaryService {
     // 1b. Turn Requirement (Sanctuaries dormant until Turn 10)
     // Turn 10 = turnCounter >= 10 * PHASE_CYCLE_LENGTH (each turn = 5 phases per player)
     const TURN_UNLOCK = 10;
-    if (gameState.turnCounter < TURN_UNLOCK * PHASE_CYCLE_LENGTH) return false;
+    if (gameState.turnCounter < TURN_UNLOCK * PHASE_CYCLE_LENGTH * 2) return false;
 
     // 2. Control Check (Must have CURRENT PLAYER's piece on it)
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);

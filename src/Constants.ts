@@ -102,7 +102,7 @@ export const SanctuaryConfig: Record<SanctuaryType, {
  * Cooldown turns after a sanctuary evolves to a higher tier.
  * During cooldown, the sanctuary cannot be pledged.
  */
-export const SANCTUARY_EVOLUTION_COOLDOWN = 5;
+export const SANCTUARY_EVOLUTION_COOLDOWN = 10;
 
 export type TurnPhase = "Movement" | "Attack" | "Castles";
 export type Color = "w" | "b";
