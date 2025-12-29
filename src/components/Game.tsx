@@ -37,7 +37,8 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
 import { PieceTooltip } from "./PieceTooltip";
-import { HistoryEntry, MoveRecord } from "../Constants";
+import { PieceFactory } from "../Classes/Entities/PieceFactory";
+import { HistoryEntry, MoveRecord, SanctuaryConfig } from "../Constants";
 import { createPieceMap } from "../utils/PieceMap";
 import "../css/Board.css";
 
@@ -301,10 +302,19 @@ const GameBoard: React.FC<GameBoardProps> = ({
           isBoardRotated={isBoardRotated}
           isAdjacentToControlledCastle={isRecruitmentSpot}
           onHexClick={handleBoardClick}
+          onHexRightClick={(hex) => {
+            const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
+            if (sanctuary) {
+              const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
+              // Create a dummy piece of the current player's color to show correct stats
+              const dummyPiece = PieceFactory.create(pieceType, hex, currentPlayer);
+              setTooltipPiece(dummyPiece);
+            }
+          }}
           onHexHover={handleHexHover}
           resizeVersion={resizeVersion}
           layout={initialLayout}
-          board={initialBoard}
+          board={board}
           isPledgeTarget={isPledgeTarget}
           pledgingSanctuary={pledgingSanctuary}
         />

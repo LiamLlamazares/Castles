@@ -17,6 +17,7 @@ interface HexGridProps {
   /** Returns CSS class indicating if hex is adjacent to controlled castle */
   isAdjacentToControlledCastle: (hex: Hex) => boolean;
   onHexClick: (hex: Hex) => void;
+  onHexRightClick?: (hex: Hex) => void;
   onHexHover?: (hex: Hex | null, event?: React.MouseEvent) => void;
   resizeVersion: number;
   layout: LayoutService;
@@ -48,6 +49,7 @@ const HexGrid = React.memo(({
   isBoardRotated,
   isAdjacentToControlledCastle,
   onHexClick,
+  onHexRightClick,
   onHexHover,
   layout,
   board,
@@ -73,6 +75,12 @@ const HexGrid = React.memo(({
               points={getPolygonPoints(hex, isBoardRotated, layout)}
               className={`${visualClass} ${sanctuaryClass} ${adjacencyClass} ${castleOwnerClass} ${pledgeClass} ${pledgingSourceClass}`}
               onClick={() => onHexClick(hex)}
+              onContextMenu={(e) => {
+                if (onHexRightClick) {
+                  e.preventDefault();
+                  onHexRightClick(hex);
+                }
+              }}
               onMouseEnter={(e) => onHexHover && onHexHover(hex, e)}
               onMouseLeave={() => onHexHover && onHexHover(null)}
               filter={
