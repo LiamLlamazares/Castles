@@ -134,6 +134,7 @@ export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended pi
  */
 export const PHASE_CYCLE_LENGTH = 5;    // One player's turn = 5 sub-phases
 export const PLAYER_CYCLE_LENGTH = 10;  // Full round = both players = 10 sub-phases
+export const PHASES_PER_TURN = PHASE_CYCLE_LENGTH * 2; // Total phases in a full turn (both players)
 export const MOVEMENT_PHASE_END = 2;    // Indices 0-1 are Movement
 export const ATTACK_PHASE_END = 4;      // Indices 2-3 are Attack (index 4 is Castles)
 

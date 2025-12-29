@@ -35,6 +35,7 @@ import {
   MoveRecord,
   PieceType,
   PHASE_CYCLE_LENGTH,
+  PHASES_PER_TURN,
   AbilityType,
 } from "../../Constants";
 
@@ -395,17 +396,23 @@ export class StateMutator {
           newState = DeathSystem.processPhoenixRespawns(newState);
       }
 
-      // If we just entered a new player's turn (Turn 0, 5, 10...)
-      if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
-          // Decrement sanctuary cooldowns at the start of each player turn
+      // 1. Decrement sanctuary cooldowns ONLY at the start of a FULL turn (both players)
+      // PHASES_PER_TURN = 10 (White sub-phases + Black sub-phases)
+      if (newState.turnCounter % PHASES_PER_TURN === 0) {
           if (newState.sanctuaries && newState.sanctuaries.length > 0) {
               const updatedSanctuaries = newState.sanctuaries.map(s => 
                   s.cooldown > 0 ? s.with({ cooldown: s.cooldown - 1 }) : s
               );
               newState = { ...newState, sanctuaries: updatedSanctuaries };
           }
+      }
+
+      // 2. Global Reset (canMove, canAttack, damage) at the start of EACH player's turn
+      // PHASE_CYCLE_LENGTH = 5 (indices 0 and 5)
+      if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
           return StateMutator.resetTurnFlags(newState);
       }
+      
       return newState;
   }
 

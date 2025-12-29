@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sanctuary } from '../Classes/Entities/Sanctuary';
-import { PHASE_CYCLE_LENGTH, SanctuaryConfig } from '../Constants';
+import { PHASE_CYCLE_LENGTH, PHASES_PER_TURN, SanctuaryConfig } from '../Constants';
 
 interface SanctuaryTooltipProps {
   sanctuary: Sanctuary;
@@ -62,10 +62,12 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
     fontWeight: 500,
   };
 
-  // Turn Lock Logic (1 turn = both players = PHASE_CYCLE_LENGTH * 2 phases)
+  // Turn Lock Logic (One turn = PHASES_PER_TURN sub-phases)
   const TURN_UNLOCK = sanctuarySettings?.unlockTurn ?? 10;
-  const FULL_TURN_LENGTH = PHASE_CYCLE_LENGTH * 2;
-  const isTurnLocked = turnCounter < TURN_UNLOCK * FULL_TURN_LENGTH;
+  const isTurnLocked = turnCounter < TURN_UNLOCK * PHASES_PER_TURN;
+
+  // Calculate current turn for display
+  const currentTurn = Math.floor(turnCounter / PHASES_PER_TURN) + 1;
 
   // Determine status color / text
   let statusColor = sanctuary.isReady ? '#2ecc71' : '#e74c3c';
@@ -77,7 +79,6 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
 
   // Override if locked by turn
   if (!sanctuary.hasPledgedThisGame && isTurnLocked) {
-      const currentTurn = Math.floor(turnCounter / FULL_TURN_LENGTH) + 1;
       const turnsRemaining = TURN_UNLOCK - currentTurn + 1;
       statusText = `Unlocks in ${turnsRemaining} turn${turnsRemaining !== 1 ? 's' : ''}`;
       statusColor = "#e67e22"; // Orange
