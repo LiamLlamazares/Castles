@@ -62,7 +62,7 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
   };
 
   // Turn Lock Logic
-  const TURN_UNLOCK = 1;
+  const TURN_UNLOCK = 10;
   const isTurnLocked = turnCounter < TURN_UNLOCK * PHASE_CYCLE_LENGTH;
 
   // Determine status color / text

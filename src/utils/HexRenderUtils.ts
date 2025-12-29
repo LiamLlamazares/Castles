@@ -54,19 +54,16 @@ export const getSanctuaryVisualClass = (hex: Hex, sanctuaries: Sanctuary[]): str
   // Base class
   let className = "hexagon-sanctuary";
 
-  // Check cooldown
-  if (!sanctuary.isReady) {
-    return `${className} hexagon-sanctuary-cooldown`;
-  }
-
-  // Type-specific classes
+  // Type-specific classes (with cooldown modifier if not ready)
+  const cooldownSuffix = sanctuary.isReady ? "" : "-cooldown";
+  
   switch (sanctuary.type) {
-    case SanctuaryType.WolfCovenant: return `${className} hexagon-sanctuary-wolf`;
-    case SanctuaryType.SacredSpring: return `${className} hexagon-sanctuary-healer`;
-    case SanctuaryType.WardensWatch: return `${className} hexagon-sanctuary-ranger`;
-    case SanctuaryType.ArcaneRefuge: return `${className} hexagon-sanctuary-wizard`;
-    case SanctuaryType.ForsakenGrounds: return `${className} hexagon-sanctuary-necromancer`;
-    case SanctuaryType.PyreEternal: return `${className} hexagon-sanctuary-phoenix`;
+    case SanctuaryType.WolfCovenant: return `${className} hexagon-sanctuary-wolf${cooldownSuffix}`;
+    case SanctuaryType.SacredSpring: return `${className} hexagon-sanctuary-healer${cooldownSuffix}`;
+    case SanctuaryType.WardensWatch: return `${className} hexagon-sanctuary-ranger${cooldownSuffix}`;
+    case SanctuaryType.ArcaneRefuge: return `${className} hexagon-sanctuary-wizard${cooldownSuffix}`;
+    case SanctuaryType.ForsakenGrounds: return `${className} hexagon-sanctuary-necromancer${cooldownSuffix}`;
+    case SanctuaryType.PyreEternal: return `${className} hexagon-sanctuary-phoenix${cooldownSuffix}`;
     default: return className;
   }
 };

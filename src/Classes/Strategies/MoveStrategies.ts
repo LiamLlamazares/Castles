@@ -181,7 +181,7 @@ export const knightMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: S
 export const eagleMoves = (hex: Hex, blockedHexSet: Set<string>, validHexSet: Set<string>): Hex[] => {
   // Collect all hexes in radius 1, 2, and 3
   const potentialMoves: Hex[] = [];
-  for (let radius = 1; radius <= 13; radius++) {
+  for (let radius = 1; radius <= 3; radius++) {
     potentialMoves.push(...hex.cubeRing(radius));
   }
   

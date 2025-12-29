@@ -204,12 +204,47 @@ body {
     filter: drop-shadow(0 0 8px #e74c3c);
 }
 
-/* Cooldown state (dormant) - Desaturated/Darker */
-.hexagon-sanctuary-cooldown {
-    fill: #555 !important;
-    stroke: #777 !important;
-    filter: none; /* No glow when on cooldown */
-    opacity: 0.7;
+/* Cooldown states (dormant) - Desaturated versions of each type */
+.hexagon-sanctuary-wolf-cooldown {
+    fill: #4a4f50 !important;
+    stroke: #5a6062 !important;
+    filter: none;
+    opacity: 0.75;
+}
+
+.hexagon-sanctuary-healer-cooldown {
+    fill: #3a6b64 !important;
+    stroke: #2d524d !important;
+    filter: none;
+    opacity: 0.75;
+}
+
+.hexagon-sanctuary-ranger-cooldown {
+    fill: #4a7a56 !important;
+    stroke: #3a6044 !important;
+    filter: none;
+    opacity: 0.75;
+}
+
+.hexagon-sanctuary-wizard-cooldown {
+    fill: #5c3d6e !important;
+    stroke: #4a2f58 !important;
+    filter: none;
+    opacity: 0.75;
+}
+
+.hexagon-sanctuary-necromancer-cooldown {
+    fill: #2a3540 !important;
+    stroke: #1e2830 !important;
+    filter: none;
+    opacity: 0.75;
+}
+
+.hexagon-sanctuary-phoenix-cooldown {
+    fill: #8a3830 !important;
+    stroke: #6e2c25 !important;
+    filter: none;
+    opacity: 0.75;
 }
 
 /* =========== GAME PANEL (Right Side - Lichess Style) =========== */
