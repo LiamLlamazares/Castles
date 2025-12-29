@@ -341,8 +341,20 @@ export class StateMutator {
   }
 
   public static recruitPiece(state: GameState, castle: Castle, hex: Hex, board: Board): GameState {
-      const pieceTypes = Object.values(PieceType);
-      const pieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
+      // Official recruitment cycle from rules.md
+      const RECRUITMENT_CYCLE = [
+        PieceType.Swordsman,
+        PieceType.Archer,
+        PieceType.Knight,
+        PieceType.Eagle,
+        PieceType.Giant,
+        PieceType.Trebuchet,
+        PieceType.Assassin,
+        PieceType.Dragon,
+        PieceType.Monarch
+      ];
+      
+      const pieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
       
       const notation = NotationService.getRecruitNotation(castle, pieceType, hex);
       

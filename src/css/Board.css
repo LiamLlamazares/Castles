@@ -78,13 +78,13 @@ body {
 
 /* Castle ownership indicators - show who currently controls the castle */
 .castle-owned-white {
-  stroke: gold !important;
+  stroke: #00fbff !important; /* Vivid Cyan for contrast against aquamarine */
   stroke-width: 6 !important;
-  filter: drop-shadow(0 0 4px gold);
+  filter: drop-shadow(0 0 4px #00fbff);
 }
 
 .castle-owned-black {
-  stroke: #8000ff !important;
+  stroke: #8000ff !important; /* Restored vivid purple/violet as it looked correct */
   stroke-width: 6 !important;
   filter: drop-shadow(0 0 4px #8000ff);
 }

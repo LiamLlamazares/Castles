@@ -79,18 +79,32 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
   let badgeText = "Plains";
   let icon: React.ReactNode = null;
 
+  // Official recruitment cycle from rules.md
+  const RECRUITMENT_CYCLE = [
+    PieceType.Swordsman,
+    PieceType.Archer,
+    PieceType.Knight,
+    PieceType.Eagle,
+    PieceType.Giant,
+    PieceType.Trebuchet,
+    PieceType.Assassin,
+    PieceType.Dragon,
+    PieceType.Monarch
+  ];
+
   let nextPieceType: PieceType | null = null;
   if (isCastle && castle) {
     title = "Castle";
     badgeText = "Strategic Point";
-    color = "#f1c40f";
+    // Match the vibrant highlight colors from Board.css
+    color = castle.owner === 'w' ? '#00fbff' : '#8000ff';
     const ownerName = castle.owner === 'w' ? 'White' : castle.owner === 'b' ? 'Black' : 'Neutral';
     description = `A vital stronghold. Controls recruitment and victory. Currently held by ${ownerName}.`;
     
-    // Get next piece info
-    const pieceTypes = Object.values(PieceType);
-    nextPieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
+    // Use the official recruitment cycle
+    nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
     
+    // Castle gets its own distinct icon, but NO piece icon here
     icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #f1c40f', background: 'rgba(241, 196, 15, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🏰</div>;
   } else if (isHighGround) {
     title = "High Ground";
@@ -129,14 +143,14 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
               <div style={infoRowStyle}>
                   <span>Next Recruitment:</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '24px', height: '24px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ width: '28px', height: '28px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <img 
                             src={getImageByPieceType(nextPieceType, castle.owner)} 
                             alt={nextPieceType} 
-                            style={{ width: '20px', height: '20px' }} 
+                            style={{ width: '22px', height: '22px' }} 
                         />
                       </div>
-                      <span style={{ color: '#f1c40f', fontWeight: 'bold' }}>
+                      <span style={{ color: castle.owner === 'w' ? '#eee' : '#bbb', fontWeight: 'bold' }}>
                           {nextPieceType}
                       </span>
                   </div>
@@ -144,7 +158,7 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
           </div>
       )}
       
-      <div style={{ marginTop: '12px', fontSize: '0.75rem', color: '#666', borderTop: '1px solid #333', paddingTop: '8px', textAlign: 'right' }}>
+      <div style={{ position: 'absolute', top: '16px', right: '16px', fontSize: '0.75rem', color: '#666' }}>
         Hex [{hex.q}, {hex.r}, {hex.s}]
       </div>
     </div>
