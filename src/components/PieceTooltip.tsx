@@ -1,6 +1,7 @@
 import React from 'react';
 import { Piece } from '../Classes/Entities/Piece';
 import { PieceType, AttackType } from '../Constants';
+import { getImageByPieceType } from './PieceImages';
 
 interface PieceTooltipProps {
   piece: Piece;
@@ -54,16 +55,18 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
     backdropFilter: 'blur(4px)',
   };
 
-  const titleStyle: React.CSSProperties = {
-    margin: '0 0 12px 0',
-    fontSize: '1.2rem',
-    fontWeight: 'bold',
-    color: '#fff',
+  const titleAreaStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '12px',
     borderBottom: '2px solid #4a90e2',
     paddingBottom: '8px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  };
+
+  const titleStyle: React.CSSProperties = {
+    margin: 0,
+    flex: 1,
   };
 
   const rowStyle: React.CSSProperties = {
@@ -90,12 +93,21 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
 
   return (
     <div style={style}>
-      <h3 style={titleStyle}>
-        <span>{piece.type}</span>
-        <span style={{ fontSize: '0.9rem', color: piece.color === 'w' ? '#eee' : '#888' }}>
-          {piece.color === 'w' ? 'White' : 'Black'}
-        </span>
-      </h3>
+      <div style={titleAreaStyle}>
+        <div style={{ width: '40px', height: '40px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <img 
+            src={getImageByPieceType(piece.type, piece.color)} 
+            alt={piece.type} 
+            style={{ width: '32px', height: '32px' }} 
+          />
+        </div>
+        <div style={titleStyle}>
+           <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff' }}>{piece.type}</h3>
+           <span style={{ fontSize: '0.8rem', color: piece.color === 'w' ? '#aaa' : '#888' }}>
+             {piece.color === 'w' ? 'White' : 'Black'} Team
+           </span>
+        </div>
+      </div>
 
       <div style={rowStyle}>
         <span>Movement:</span>

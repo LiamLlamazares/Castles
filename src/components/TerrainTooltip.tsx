@@ -2,6 +2,8 @@ import React from 'react';
 import { Hex } from '../Classes/Entities/Hex';
 import { Board } from '../Classes/Core/Board';
 import { Castle } from '../Classes/Entities/Castle';
+import { PieceType } from '../Constants';
+import { getImageByPieceType } from './PieceImages';
 
 interface TerrainTooltipProps {
   hex: Hex;
@@ -26,18 +28,25 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
     borderRadius: '8px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
     border: '2px solid #555',
-    minWidth: '220px',
-    maxWidth: '280px',
+    minWidth: '240px',
+    maxWidth: '300px',
     backdropFilter: 'blur(4px)',
   };
 
+  const titleAreaStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '12px',
+    borderBottom: '2px solid #4a90e2',
+    paddingBottom: '8px',
+  };
+
   const titleStyle: React.CSSProperties = {
-    margin: '0 0 12px 0',
+    margin: 0,
     fontSize: '1.2rem',
     fontWeight: 'bold',
     color: '#fff',
-    borderBottom: '2px solid #4a90e2',
-    paddingBottom: '8px',
   };
 
   const descStyle: React.CSSProperties = {
@@ -56,39 +65,87 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
     marginBottom: '8px',
   });
 
+  const infoRowStyle: React.CSSProperties = {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontSize: '0.85rem',
+      marginTop: '8px',
+      color: '#aaa',
+  };
+
   let title = "Normal Terrain";
   let description = "Standard plains. No special effects on movement or combat.";
   let color = "#7f8c8d";
   let badgeText = "Plains";
+  let icon: React.ReactNode = null;
 
+  let nextPieceType: PieceType | null = null;
   if (isCastle && castle) {
     title = "Castle";
     badgeText = "Strategic Point";
     color = "#f1c40f";
     const ownerName = castle.owner === 'w' ? 'White' : castle.owner === 'b' ? 'Black' : 'Neutral';
     description = `A vital stronghold. Controls recruitment and victory. Currently held by ${ownerName}.`;
+    
+    // Get next piece info
+    const pieceTypes = Object.values(PieceType);
+    nextPieceType = pieceTypes[castle.turns_controlled % pieceTypes.length];
+    
+    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #f1c40f', background: 'rgba(241, 196, 15, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🏰</div>;
   } else if (isHighGround) {
     title = "High Ground";
     badgeText = "Tactical Advantage";
     color = "#e67e22";
     description = "Elevated terrain. Ranged and Long-Ranged units attacking FROM high ground gain +1 Range.";
+    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #e67e22', background: 'rgba(230, 126, 34, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🏔️</div>;
   } else if (isRiver) {
     title = "River";
     badgeText = "Hazard";
     color = "#3498db";
     description = "Deep waters. Impassable for all ground units. Only Flying units can cross.";
+    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #3498db', background: 'rgba(52, 152, 219, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🌊</div>;
+  } else {
+    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #7f8c8d', background: 'rgba(127, 140, 141, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🌱</div>;
   }
 
   return (
     <div style={style}>
       <span style={badgeStyle(color)}>{badgeText}</span>
-      <h3 style={titleStyle}>{title}</h3>
+      <div style={titleAreaStyle}>
+        {icon}
+        <h3 style={titleStyle}>{title}</h3>
+      </div>
+      
       <div style={descStyle}>
         {description}
       </div>
+
+      {isCastle && castle && nextPieceType && (
+          <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px' }}>
+              <div style={infoRowStyle}>
+                  <span>Held For:</span>
+                  <span style={{ color: '#fff' }}>{castle.turns_controlled} Full Rounds</span>
+              </div>
+              <div style={infoRowStyle}>
+                  <span>Next Recruitment:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '24px', height: '24px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <img 
+                            src={getImageByPieceType(nextPieceType, castle.owner)} 
+                            alt={nextPieceType} 
+                            style={{ width: '20px', height: '20px' }} 
+                        />
+                      </div>
+                      <span style={{ color: '#f1c40f', fontWeight: 'bold' }}>
+                          {nextPieceType}
+                      </span>
+                  </div>
+              </div>
+          </div>
+      )}
       
-      <div style={{ marginTop: '12px', fontSize: '0.75rem', color: '#666', borderTop: '1px solid #333', paddingTop: '8px' }}>
-        Coordinates: {hex.q}, {hex.r}, {hex.s}
+      <div style={{ marginTop: '12px', fontSize: '0.75rem', color: '#666', borderTop: '1px solid #333', paddingTop: '8px', textAlign: 'right' }}>
+        Hex [{hex.q}, {hex.r}, {hex.s}]
       </div>
     </div>
   );
