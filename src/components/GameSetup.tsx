@@ -103,9 +103,43 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     };
 
     return (
-        <div className="game-setup" style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#333', color: '#eee' }}>
-            {/* Controls Header */}
-            <div className="setup-controls" style={{ padding: '20px', background: '#222', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start', justifyContent: 'center', borderBottom: '1px solid #444' }}>
+
+        <div className="game-setup" style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: '#333', color: '#eee', overflow: 'hidden' }}>
+            {/* Sidebar Controls */}
+            <div className="setup-sidebar" style={{ 
+                width: '380px',
+                height: '100%',
+                padding: '20px', 
+                background: '#222', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '20px', 
+                overflowY: 'auto',
+                borderRight: '1px solid #444',
+                boxSizing: 'border-box',
+                flexShrink: 0
+            }}>
+                <h2 style={{ margin: '0 0 10px 0', fontSize: '1.5rem', textAlign: 'center', color: '#fff' }}>Game Setup</h2>
+
+                {/* Play Button (Top for easy access, or Bottom?) - Let's keep it prominent */}
+                <button 
+                    onClick={handlePlay}
+                    style={{
+                        padding: '15px',
+                        fontSize: '1.2rem',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: '#27ae60',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                        width: '100%',
+                        marginBottom: '10px'
+                    }}
+                >
+                    PLAY GAME
+                </button>
                 
                 {/* Board Size */}
                 <div style={controlGroupStyle}>
@@ -122,83 +156,44 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
 
                 {/* Castles */}
                 <div style={controlGroupStyle}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', ...labelStyle }}>
-                        <input 
-                            type="checkbox" 
-                            checked={useRandomCastles}
-                            onChange={(e) => setUseRandomCastles(e.target.checked)}
-                            style={{ width: '20px', height: '20px' }}
-                        />
-                        Random Castles
-                    </label>
+                    <label style={labelStyle}>Random Castles</label>
+                    <input 
+                        type="checkbox" 
+                        checked={useRandomCastles}
+                        onChange={(e) => setUseRandomCastles(e.target.checked)}
+                        style={{ width: '20px', height: '20px' }}
+                    />
                 </div>
 
                 {/* Time Controls */}
                 <div style={controlGroupStyle}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={labelStyle}>Time (min):</label>
-                        <input 
-                            type="number" 
-                            value={timeInitial} 
-                            onChange={(e) => setTimeInitial(Number(e.target.value))}
-                            style={inputNumberStyle}
-                        />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <label style={labelStyle}>Inc (sec):</label>
-                        <input 
-                            type="number" 
-                            value={timeIncrement} 
-                            onChange={(e) => setTimeIncrement(Number(e.target.value))}
-                            style={inputNumberStyle}
-                        />
-                    </div>
-                </div>
-
-                {/* Sanctuary Selection */}
-                <div style={{ ...controlGroupStyle, flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <label style={{ ...labelStyle, marginBottom: '8px' }}>Starting Sanctuaries:</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {Object.entries(SANCTUARY_INFO).map(([type, info]) => {
-                            const sanctuaryType = type as SanctuaryType;
-                            const isSelected = selectedSanctuaries.has(sanctuaryType);
-                            return (
-                                <button
-                                    key={type}
-                                    onClick={() => toggleSanctuary(sanctuaryType)}
-                                    style={{
-                                        padding: '6px 12px',
-                                        fontSize: '0.85rem',
-                                        cursor: 'pointer',
-                                        borderRadius: '4px',
-                                        border: isSelected ? '2px solid #fff' : '2px solid transparent',
-                                        background: isSelected ? info.color : '#555',
-                                        color: 'white',
-                                        opacity: isSelected ? 1 : 0.6,
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        minWidth: '90px',
-                                        transition: 'all 0.2s'
-                                    }}
-                                    title={`Tier ${info.tier} - Spawns ${info.piece}`}
-                                >
-                                    <span style={{ fontWeight: 'bold' }}>{info.piece}</span>
-                                    <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>Tier {info.tier}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '4px' }}>
-                        {selectedSanctuaries.size === 0 ? 'No sanctuaries selected' : 
-                         `${selectedSanctuaries.size} selected • Others unlock via evolution`}
+                    <label style={labelStyle}>Time Control</label>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#aaa', marginBottom: '2px' }}>Minutes</span>
+                            <input 
+                                type="number" 
+                                value={timeInitial} 
+                                onChange={(e) => setTimeInitial(Number(e.target.value))}
+                                style={{...inputNumberStyle, width: '50px'}}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#aaa', marginBottom: '2px' }}>Increment</span>
+                            <input 
+                                type="number" 
+                                value={timeIncrement} 
+                                onChange={(e) => setTimeIncrement(Number(e.target.value))}
+                                style={{...inputNumberStyle, width: '50px'}}
+                            />
+                        </div>
                     </div>
                 </div>
 
                 {/* Sanctuary Settings */}
-                <div style={{ ...controlGroupStyle, flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
-                        <label style={labelStyle}>Unlock Turn:</label>
+                <div style={{ ...controlGroupStyle, flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={labelStyle}>Unlock Turn</label>
                         <input 
                             type="number" 
                             min="1"
@@ -209,8 +204,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                             title="Turn when sanctuaries become available"
                         />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px' }}>
-                        <label style={labelStyle}>Cooldown:</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={labelStyle}>Cooldown</label>
                         <input 
                             type="number" 
                             min="1"
@@ -222,29 +217,54 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         />
                     </div>
                 </div>
+
+                {/* Sanctuary Selection */}
+                <div style={{ ...controlGroupStyle, flexDirection: 'column', alignItems: 'stretch' }}>
+                    <label style={{ ...labelStyle, marginBottom: '8px', alignSelf: 'flex-start' }}>Starting Sanctuaries</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px', width: '100%' }}>
+                        {Object.entries(SANCTUARY_INFO).map(([type, info]) => {
+                            const sanctuaryType = type as SanctuaryType;
+                            const isSelected = selectedSanctuaries.has(sanctuaryType);
+                            return (
+                                <button
+                                    key={type}
+                                    onClick={() => toggleSanctuary(sanctuaryType)}
+                                    style={{
+                                        padding: '8px 4px',
+                                        fontSize: '0.8rem',
+                                        cursor: 'pointer',
+                                        borderRadius: '4px',
+                                        border: isSelected ? '2px solid #fff' : '1px solid #444',
+                                        background: isSelected ? info.color : '#444',
+                                        color: 'white',
+                                        opacity: isSelected ? 1 : 0.7,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.2s',
+                                        height: '60px'
+                                    }}
+                                    title={`Tier ${info.tier} - Spawns ${info.piece}`}
+                                >
+                                    <span style={{ fontWeight: 'bold' }}>{info.piece}</span>
+                                    <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>Tier {info.tier}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '8px', textAlign: 'center' }}>
+                        {selectedSanctuaries.size === 0 ? 'Select start sanctuaries' : 
+                         `${selectedSanctuaries.size} selected for start`}
+                    </div>
+                </div>
                 
-                {/* Play Button */}
-                <button 
-                    onClick={handlePlay}
-                    style={{
-                        padding: '12px 30px',
-                        fontSize: '1.2rem',
-                        cursor: 'pointer',
-                        borderRadius: '6px',
-                        border: 'none',
-                        background: '#27ae60',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                        alignSelf: 'center'
-                    }}
-                >
-                    PLAY GAME
-                </button>
+                {/* Spacer to push content up if needed */}
+                <div style={{ flex: 1 }}></div>
             </div>
 
             {/* Preview Area */}
-            <div className="editor-preview" style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1a1a1a' }}>
+            <div className="editor-preview" style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1a1a1a', height: '100%' }}>
                  <svg className="board" height="100%" width="100%" viewBox={viewBox}>
                     <HexGrid
                         hexagons={board.hexes}
@@ -261,7 +281,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         board={board}
                     />
                  </svg>
-                 <div style={{ position: 'absolute', bottom: '20px', left: '20px', color: '#888', fontStyle: 'italic' }}>
+                 <div style={{ position: 'absolute', bottom: '20px', left: '20px', color: '#888', fontStyle: 'italic', background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '4px' }}>
                     Preview Mode
                  </div>
             </div>
@@ -273,10 +293,12 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
 const controlGroupStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: '15px',
+    justifyContent: 'space-between',
     background: '#333',
-    padding: '10px 15px',
+    padding: '12px',
     borderRadius: '8px',
+    width: '100%',
+    boxSizing: 'border-box'
 };
 
 const labelStyle: React.CSSProperties = {

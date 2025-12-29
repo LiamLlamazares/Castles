@@ -35,6 +35,7 @@ import { Hex } from "../Classes/Entities/Hex";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
+import { PieceTooltip } from "./PieceTooltip";
 import { HistoryEntry, MoveRecord } from "../Constants";
 import "../css/Board.css";
 
@@ -86,6 +87,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+  const [tooltipPiece, setTooltipPiece] = React.useState<Piece | null>(null);
   
   // Disable transitions after first render cycle to prevent "flying pieces" on resize
   React.useEffect(() => {
@@ -302,6 +304,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           pieces={pieces}
           isBoardRotated={isBoardRotated}
           onPieceClick={handlePieceClick}
+          onPieceRightClick={(piece) => setTooltipPiece(piece === tooltipPiece ? null : piece)}
           resizeVersion={resizeVersion}
           layout={initialLayout}
         />
@@ -348,6 +351,14 @@ const GameBoard: React.FC<GameBoardProps> = ({
                   />
               ) : null;
           })()
+      )}
+
+      {/* Piece info tooltip (middle-click on a piece) */}
+      {tooltipPiece && (
+        <PieceTooltip 
+          piece={tooltipPiece} 
+          position={mousePosition} 
+        />
       )}
     </>
   );

@@ -12,6 +12,7 @@ interface PieceRendererProps {
   pieces: Piece[];
   isBoardRotated: boolean;
   onPieceClick: (piece: Piece) => void;
+  onPieceRightClick?: (piece: Piece | null) => void;
   resizeVersion: number;
   layout: LayoutService;
   /** When true, clicks pass through pieces to hexes below (for board editor placement mode) */
@@ -27,6 +28,7 @@ const PieceRenderer = React.memo(({
   pieces,
   isBoardRotated,
   onPieceClick,
+  onPieceRightClick,
   layout,
   editorPlacementMode = false
 }: PieceRendererProps) => {
@@ -46,6 +48,12 @@ const PieceRenderer = React.memo(({
             className="piece"
             style={{ pointerEvents: editorPlacementMode ? 'none' : 'auto' }}
             onClick={() => onPieceClick(piece)}
+            onContextMenu={(e) => {
+              if (onPieceRightClick) {
+                e.preventDefault();
+                onPieceRightClick(piece);
+              }
+            }}
           />
         );
       })}
