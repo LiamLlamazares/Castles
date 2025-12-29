@@ -272,13 +272,7 @@ body {
   gap: 8px;
 }
 
-.player-section.black {
-  /* Black at top */
-}
-
-.player-section.white {
-  /* White at bottom */
-}
+/* Player section styling is handled by the base .player-section class */
 
 /* Notation section takes remaining space */
 .notation-section {

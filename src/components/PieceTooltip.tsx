@@ -44,15 +44,15 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
     left: 20,
     bottom: 20,
     zIndex: 1000,
-    backgroundColor: 'rgba(20, 20, 20, 0.95)',
+    backgroundColor: 'rgba(20, 20, 20, 0.75)',
     color: '#eee',
     padding: '16px',
     borderRadius: '8px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-    border: `2px solid ${piece.color === 'w' ? '#ddd' : '#555'}`,
+    border: `2px solid ${piece.color === 'w' ? 'rgba(221, 221, 221, 0.4)' : 'rgba(85, 85, 85, 0.4)'}`,
     minWidth: '220px',
     maxWidth: '280px',
-    backdropFilter: 'blur(4px)',
+    backdropFilter: 'blur(2px)',
   };
 
   const titleAreaStyle: React.CSSProperties = {
@@ -67,6 +67,9 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
   const titleStyle: React.CSSProperties = {
     margin: 0,
     flex: 1,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   };
 
   const rowStyle: React.CSSProperties = {
@@ -94,17 +97,26 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
   return (
     <div style={style}>
       <div style={titleAreaStyle}>
-        <div style={{ width: '40px', height: '40px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ width: '32px', height: '32px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <img 
             src={getImageByPieceType(piece.type, piece.color)} 
             alt={piece.type} 
-            style={{ width: '32px', height: '32px' }} 
+            style={{ width: '24px', height: '24px' }} 
           />
         </div>
         <div style={titleStyle}>
-           <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff' }}>{piece.type}</h3>
-           <span style={{ fontSize: '0.8rem', color: piece.color === 'w' ? '#aaa' : '#888' }}>
-             {piece.color === 'w' ? 'White' : 'Black'} Team
+           <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#fff' }}>{piece.type}</h3>
+           <span style={{ 
+             fontSize: '0.65rem', 
+             fontWeight: 'bold', 
+             backgroundColor: piece.color === 'w' ? '#00fbff' : '#8000ff',
+             color: '#fff',
+             padding: '2px 6px',
+             borderRadius: '4px',
+             textTransform: 'uppercase',
+             marginLeft: '8px'
+           }}>
+             {piece.color === 'w' ? 'White' : 'Black'}
            </span>
         </div>
       </div>

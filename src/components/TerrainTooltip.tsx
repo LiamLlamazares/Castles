@@ -22,15 +22,15 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
     left: 20,
     bottom: 20,
     zIndex: 1000,
-    backgroundColor: 'rgba(20, 20, 20, 0.95)',
+    backgroundColor: 'rgba(20, 20, 20, 0.75)',
     color: '#eee',
     padding: '16px',
     borderRadius: '8px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-    border: '2px solid #555',
+    border: '2px solid rgba(85, 85, 85, 0.5)',
     minWidth: '240px',
     maxWidth: '300px',
-    backdropFilter: 'blur(4px)',
+    backdropFilter: 'blur(8px)',
   };
 
   const titleAreaStyle: React.CSSProperties = {
@@ -105,29 +105,35 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
     nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
     
     // Castle gets its own distinct icon, but NO piece icon here
-    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #f1c40f', background: 'rgba(241, 196, 15, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🏰</div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #f1c40f', background: 'rgba(241, 196, 15, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1rem' }}>🏰</div>;
   } else if (isHighGround) {
     title = "High Ground";
     badgeText = "Tactical Advantage";
     color = "#e67e22";
     description = "Elevated terrain. Ranged and Long-Ranged units attacking FROM high ground gain +1 Range.";
-    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #e67e22', background: 'rgba(230, 126, 34, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🏔️</div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #e67e22', background: 'rgba(230, 126, 34, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1rem' }}>🏔️</div>;
   } else if (isRiver) {
     title = "River";
     badgeText = "Hazard";
     color = "#3498db";
     description = "Deep waters. Impassable for all ground units. Only Flying units can cross.";
-    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #3498db', background: 'rgba(52, 152, 219, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🌊</div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #3498db', background: 'rgba(52, 152, 219, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1rem' }}>🌊</div>;
   } else {
-    icon = <div style={{ width: '40px', height: '40px', borderRadius: '4px', border: '2px solid #7f8c8d', background: 'rgba(127, 140, 141, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.2rem' }}>🌱</div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #7f8c8d', background: 'rgba(127, 140, 141, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1rem' }}>🌱</div>;
   }
 
   return (
     <div style={style}>
-      <span style={badgeStyle(color)}>{badgeText}</span>
       <div style={titleAreaStyle}>
         {icon}
-        <h3 style={titleStyle}>{title}</h3>
+        <h3 style={{ ...titleStyle, fontSize: '1.1rem' }}>{title}</h3>
+        
+        <div style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '6px', alignItems: 'center' }}>
+          <span style={{ ...badgeStyle(color), marginBottom: 0, marginLeft: 0 }}>{badgeText}</span>
+          <span style={{ fontSize: '0.7rem', color: '#666', whiteSpace: 'nowrap' }}>
+            [{hex.q}, {hex.r}, {hex.s}]
+          </span>
+        </div>
       </div>
       
       <div style={descStyle}>
@@ -143,11 +149,11 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
               <div style={infoRowStyle}>
                   <span>Next Recruitment:</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '28px', height: '28px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ width: '24px', height: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <img 
                             src={getImageByPieceType(nextPieceType, castle.owner)} 
                             alt={nextPieceType} 
-                            style={{ width: '22px', height: '22px' }} 
+                            style={{ width: '18px', height: '18px' }} 
                         />
                       </div>
                       <span style={{ color: castle.owner === 'w' ? '#eee' : '#bbb', fontWeight: 'bold' }}>
@@ -157,10 +163,6 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
               </div>
           </div>
       )}
-      
-      <div style={{ position: 'absolute', top: '16px', right: '16px', fontSize: '0.75rem', color: '#666' }}>
-        Hex [{hex.q}, {hex.r}, {hex.s}]
-      </div>
     </div>
   );
 };
