@@ -26,6 +26,7 @@ interface HexGridProps {
   board: Board;
   isPledgeTarget?: (hex: Hex) => boolean;
   pledgingSanctuary?: Hex | null;
+  showCastleRecruitment?: boolean;
 }
 
 /** Get the polygon points for a hex */
@@ -70,7 +71,8 @@ const HexGrid = React.memo(({
   layout,
   board,
   isPledgeTarget,
-  pledgingSanctuary
+  pledgingSanctuary,
+  showCastleRecruitment = true
 }: HexGridProps) => {
 
   // Sort hexagons by render priority: Standard < Sanctuary < Castle
@@ -130,6 +132,8 @@ const HexGrid = React.memo(({
             
             {/* Castle Recruitment Preview - always visible */}
             {(() => {
+              if (!showCastleRecruitment) return null;
+              
               const castle = castles.find(c => c.hex.equals(hex));
               if (castle) {
                 const center = getHexCenter(hex, isBoardRotated, layout);

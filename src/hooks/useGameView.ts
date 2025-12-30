@@ -14,12 +14,16 @@ export interface GameViewState {
   showCoordinates: boolean;
   isBoardRotated: boolean;
   resizeVersion: number;
+  showShields: boolean;
+  showCastleRecruitment: boolean;
 }
 
 export interface GameViewActions {
   toggleCoordinates: () => void;
   handleFlipBoard: () => void;
   incrementResizeVersion: () => void;
+  toggleShields: () => void;
+  toggleCastleRecruitment: () => void;
 }
 
 export const useGameView = (): GameViewState & GameViewActions => {
@@ -27,6 +31,8 @@ export const useGameView = (): GameViewState & GameViewActions => {
     showCoordinates: false,
     isBoardRotated: false,
     resizeVersion: 0,
+    showShields: true,
+    showCastleRecruitment: true,
   });
 
   const toggleCoordinates = useCallback(() => {
@@ -41,12 +47,24 @@ export const useGameView = (): GameViewState & GameViewActions => {
     setState(prev => ({ ...prev, resizeVersion: prev.resizeVersion + 1 }));
   }, []);
 
+  const toggleShields = useCallback(() => {
+    setState(prev => ({ ...prev, showShields: !prev.showShields }));
+  }, []);
+
+  const toggleCastleRecruitment = useCallback(() => {
+    setState(prev => ({ ...prev, showCastleRecruitment: !prev.showCastleRecruitment }));
+  }, []);
+
   return {
     showCoordinates: state.showCoordinates,
     isBoardRotated: state.isBoardRotated,
     resizeVersion: state.resizeVersion,
+    showShields: state.showShields,
+    showCastleRecruitment: state.showCastleRecruitment,
     toggleCoordinates,
     handleFlipBoard,
-    incrementResizeVersion
+    incrementResizeVersion,
+    toggleShields,
+    toggleCastleRecruitment
   };
 };

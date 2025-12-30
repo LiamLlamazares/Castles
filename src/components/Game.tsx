@@ -175,9 +175,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
     showCoordinates, 
     isBoardRotated, 
     resizeVersion, 
+    showShields,
+    showCastleRecruitment,
     toggleCoordinates, 
     handleFlipBoard, 
-    incrementResizeVersion 
+    incrementResizeVersion,
+    toggleShields,
+    toggleCastleRecruitment
   } = useGameView();
 
   // Reset overlay when game restarts (victory message clears or changes)
@@ -303,6 +307,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onEnableAnalysis={handleEnterAnalysis}
         onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
         isAnalysisMode={isAnalysisMode}
+        onToggleShields={toggleShields}
+        onToggleCastleRecruitment={toggleCastleRecruitment}
+        showShields={showShields}
+        showCastleRecruitment={showCastleRecruitment}
+        showCoordinates={showCoordinates}
       />
 
       <RulesModal 
@@ -374,6 +383,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           board={board}
           isPledgeTarget={isPledgeTarget}
           pledgingSanctuary={pledgingSanctuary}
+          showCastleRecruitment={showCastleRecruitment}
         />
         <PieceRenderer
           pieces={pieces}
@@ -386,6 +396,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           resizeVersion={resizeVersion}
           layout={initialLayout}
           board={board}
+          showShields={showShields}
         />
         {/* Legal move/attack dots rendered AFTER pieces so they appear on top */}
         <LegalMoveOverlay

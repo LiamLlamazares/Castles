@@ -13,6 +13,11 @@ interface HamburgerMenuProps {
   onEnableAnalysis?: () => void;
   onEditPosition?: () => void;
   isAnalysisMode?: boolean;
+  onToggleShields?: () => void;
+  onToggleCastleRecruitment?: () => void;
+  showShields?: boolean;
+  showCastleRecruitment?: boolean;
+  showCoordinates?: boolean;
 }
 
 const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
@@ -24,6 +29,11 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onEnableAnalysis,
   onEditPosition,
   isAnalysisMode = false,
+  onToggleShields,
+  onToggleCastleRecruitment,
+  showShields = true,
+  showCastleRecruitment = true,
+  showCoordinates = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -62,7 +72,15 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
 
   const handleMenuItemClick = (action: () => void) => {
     action();
-    setIsOpen(false);
+    // Keep menu open for toggles if desired, but standard behavior is close. 
+    // For toggles, it might be annoying to reopen. Let's keep it closing for now unless user complains.
+    // Actually, for checkboxes, users often want to toggle multiple things. 
+    // Let's NOT close for the toggle items.
+  };
+
+  const handleToggleClick = (action: () => void) => {
+    action();
+    // Do not close menu
   };
 
   return (
@@ -113,11 +131,31 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
           
           <button 
             className="menu-item" 
-            onClick={() => handleMenuItemClick(onToggleCoordinates)}
+            onClick={() => handleToggleClick(onToggleCoordinates)}
           >
-            <span className="menu-icon">#</span>
-            Toggle Coordinates
+            <span className="menu-icon">{showCoordinates ? '☑️' : '⬜'}</span>
+            Show Coordinates
           </button>
+
+          {onToggleShields && (
+            <button 
+              className="menu-item" 
+              onClick={() => handleToggleClick(onToggleShields)}
+            >
+              <span className="menu-icon">{showShields ? '☑️' : '⬜'}</span>
+              Show Protected Shields
+            </button>
+          )}
+
+          {onToggleCastleRecruitment && (
+            <button 
+              className="menu-item" 
+              onClick={() => handleToggleClick(onToggleCastleRecruitment)}
+            >
+              <span className="menu-icon">{showCastleRecruitment ? '☑️' : '⬜'}</span>
+              Show Castle Icons
+            </button>
+          )}
           
           <div className="menu-divider" />
           

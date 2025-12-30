@@ -22,6 +22,7 @@ interface PieceRendererProps {
   editorPlacementMode?: boolean;
   /** Board reference for defense checking */
   board?: Board;
+  showShields?: boolean;
 }
 
 /** Get the pixel center of a piece */
@@ -36,7 +37,8 @@ const PieceRenderer = React.memo(({
   onPieceRightClick,
   layout,
   editorPlacementMode = false,
-  board
+  board,
+  showShields = true
 }: PieceRendererProps) => {
   const pieceSize = layout.size_image;
   const pieceMap = createPieceMap(pieces);
@@ -84,7 +86,7 @@ const PieceRenderer = React.memo(({
             />
             
             {/* Shield icon overlay for defended pieces - Middle-Left */}
-            {isDefended && (
+            {showShields && isDefended && (
               <g style={{ pointerEvents: 'none' }}>
                 {/* Shield background */}
                 <circle
