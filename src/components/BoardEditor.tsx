@@ -14,6 +14,7 @@ import HexGrid from './HexGrid';
 import PieceRenderer from './PieceRenderer';
 import BoardEditorToolbar from './BoardEditorToolbar';
 import CooldownPopup from './CooldownPopup';
+import PieceTooltip from './PieceTooltip';
 import { getStartingPieces, getStartingBoard, getStartingLayout } from '../ConstantImports';
 import { Board } from '../Classes/Core/Board';
 import { Piece } from '../Classes/Entities/Piece';
@@ -68,6 +69,9 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
   const [draggedPiece, setDraggedPiece] = useState<Piece | null>(null);
   const [cooldownSanctuary, setCooldownSanctuary] = useState<Sanctuary | null>(null);
   const [showCoordinates, setShowCoordinates] = useState<boolean>(true);
+  
+  // Tooltip state
+  const [tooltipData, setTooltipData] = useState<{ piece: Piece, position: {x: number, y: number} } | null>(null);
 
   // Computed board and layout
   const { board, layout, viewBox } = useMemo(() => {
@@ -287,6 +291,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
         isInitialBoard={!!initialBoard}
         showCoordinates={showCoordinates}
         onShowCoordinatesChange={setShowCoordinates}
+        onTooltip={setTooltipData}
       />
 
       {/* Main editor area */}
@@ -353,6 +358,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
         </div>
       </div>
 
+
       {/* Cooldown popup */}
       {cooldownSanctuary && (
         <CooldownPopup
@@ -360,6 +366,15 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
           onSave={handleCooldownUpdate}
           onClose={() => setCooldownSanctuary(null)}
         />
+      )}
+
+      {/* Piece Tooltip for sidebar hover */}
+      {tooltipData && (
+          <PieceTooltip 
+              piece={tooltipData.piece} 
+              position={tooltipData.position} 
+              style={{ bottom: '20px' }}
+          />
       )}
 
       {/* Editor-specific styles */}

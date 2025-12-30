@@ -6,6 +6,9 @@ import React from 'react';
 import { PieceType, SanctuaryType, Color, SanctuaryConfig } from '../Constants';
 import { getImageByPieceType } from './PieceImages';
 import { EditorTool } from './BoardEditor';
+import { PieceFactory } from '../Classes/Entities/PieceFactory';
+import { Hex } from '../Classes/Entities/Hex';
+import { Piece } from '../Classes/Entities/Piece';
 
 interface BoardEditorToolbarProps {
   selectedTool: EditorTool;
@@ -15,6 +18,7 @@ interface BoardEditorToolbarProps {
   isInitialBoard: boolean;
   showCoordinates: boolean;
   onShowCoordinatesChange: (show: boolean) => void;
+  onTooltip: (data: { piece: Piece, position: {x: number, y: number} } | null) => void;
 }
 
 // All piece types (excluding special ones that come from sanctuaries for clarity)
@@ -66,6 +70,7 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
   isInitialBoard,
   showCoordinates,
   onShowCoordinatesChange,
+  onTooltip,
 }) => {
   const [selectedColor, setSelectedColor] = React.useState<Color>('w');
 
@@ -249,6 +254,11 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
                 key={pieceType}
                 onClick={() => handlePieceClick(pieceType)}
                 title={pieceType}
+                onMouseEnter={() => {
+                   const dummy = PieceFactory.create(pieceType, new Hex(0,0,0), selectedColor);
+                   onTooltip({ piece: dummy, position: { x: 280, y: 0 } });
+                }}
+                onMouseLeave={() => onTooltip(null)}
                 style={{
                   aspectRatio: '1',
                   padding: '6px',
@@ -289,6 +299,12 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
                 key={sanctuaryType}
                 onClick={() => handleSanctuaryClick(sanctuaryType)}
                 title={`${display.name} Shrine (Tier ${tier})`}
+                onMouseEnter={() => {
+                   const pieceType = SanctuaryConfig[sanctuaryType].pieceType;
+                   const dummy = PieceFactory.create(pieceType, new Hex(0,0,0), 'w');
+                   onTooltip({ piece: dummy, position: { x: 280, y: 0 } });
+                }}
+                onMouseLeave={() => onTooltip(null)}
                 style={{
                   padding: '10px 8px',
                   background: isSelected ? 'rgba(74, 144, 226, 0.4)' : 'rgba(255,255,255,0.1)',
@@ -303,15 +319,15 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
                 }}
               >
                 <span style={{ fontSize: '1.5rem' }}>{display.icon}</span>
-                <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>{display.name}</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>{display.name}</span>
                 <span style={{ 
-                  fontSize: '0.6rem', 
-                  opacity: 0.5,
-                  background: 'rgba(255,255,255,0.1)',
+                  fontSize: '0.7rem', 
+                  color: '#ddd',
+                  /*background: 'rgba(255,255,255,0.1)',*/
                   padding: '2px 6px',
                   borderRadius: '4px'
                 }}>
-                  T{tier}
+                  Tier {tier}
                 </span>
               </button>
             );
