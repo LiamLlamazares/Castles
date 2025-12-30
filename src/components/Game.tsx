@@ -324,26 +324,28 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onClose={() => setShowRulesModal(false)} 
       />
 
-      {/* Game Panel (Right Side - Lichess Style) */}
-      <ControlPanel
-        currentPlayer={currentPlayer}
-        turnPhase={turnPhase}
-        turnCounter={turnCounter}
-        onPass={handlePass}
-        onResign={() => {
-            handleResign(currentPlayer);
-            onResign();
-        }}
-        onNewGame={handleNewGame}
-        moveHistory={moveHistory || []}
-        moveTree={moveTree}
-        onJumpToNode={jumpToNode}
-        hasGameStarted={hasGameStarted}
-        winner={winner}
-        timeControl={timeControl}
-        viewNodeId={viewNodeId}
-        victoryPoints={victoryPoints}
-      />
+      {/* Game Panel (Right Side) - Hidden in tutorial mode */}
+      {!isTutorialMode && (
+        <ControlPanel
+          currentPlayer={currentPlayer}
+          turnPhase={turnPhase}
+          turnCounter={turnCounter}
+          onPass={handlePass}
+          onResign={() => {
+              handleResign(currentPlayer);
+              onResign();
+          }}
+          onNewGame={handleNewGame}
+          moveHistory={moveHistory || []}
+          moveTree={moveTree}
+          onJumpToNode={jumpToNode}
+          hasGameStarted={hasGameStarted}
+          winner={winner}
+          timeControl={timeControl}
+          viewNodeId={viewNodeId}
+          victoryPoints={victoryPoints}
+        />
+      )}
       
       <svg className={`board ${isInitialLoad ? 'no-transition' : ''}`} height="100%" width="100%">
         {/* ... SVG Content ... */}
