@@ -41,8 +41,9 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
 
   const style: React.CSSProperties = {
     position: 'fixed',
-    left: 20,
-    bottom: 20,
+    left: position.x || 20,
+    top: position.y || undefined, // Use top if provided (e.g. mouse y)
+    bottom: position.y ? undefined : 20, // Default to bottom 20 if no y provided
     zIndex: 1000,
     backgroundColor: 'rgba(20, 20, 20, 0.75)',
     color: '#eee',
@@ -53,6 +54,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
     minWidth: '220px',
     maxWidth: '280px',
     backdropFilter: 'blur(2px)',
+    pointerEvents: 'none', // Prevent tooltip from capturing mouse events (fixes flickering)
   };
 
   const titleAreaStyle: React.CSSProperties = {

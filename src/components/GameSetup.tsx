@@ -1,10 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import HexGrid from './HexGrid';
+import { PieceTooltip } from './PieceTooltip';
 import { getStartingPieces, getStartingBoard, getStartingLayout } from '../ConstantImports';
 import { Board } from '../Classes/Core/Board';
 import { Piece } from '../Classes/Entities/Piece';
+import { Hex } from '../Classes/Entities/Hex';
+import { PieceFactory } from '../Classes/Entities/PieceFactory';
 import { CastleGenerator } from '../Classes/Systems/CastleGenerator';
-import { SanctuaryType, SanctuaryConfig, PieceType } from '../Constants';
+import { SanctuaryGenerator } from '../Classes/Systems/SanctuaryGenerator';
+import { SanctuaryType, SanctuaryConfig, PieceType, Color } from '../Constants';
 import '../css/Board.css';
 
 interface GameSetupProps {
@@ -28,7 +32,7 @@ const SANCTUARY_INFO: Record<SanctuaryType, { name: string; piece: string; tier:
 };
 
 // Game Mode Presets
-type GameMode = 'quick' | 'standard' | 'full' | 'custom';
+type GameMode = 'quick' | 'standard' | 'full';
 
 interface ModeConfig {
     boardRadius: number;
@@ -38,34 +42,40 @@ interface ModeConfig {
     sanctuaryCooldown: number;
 }
 
-const MODE_PRESETS: Record<Exclude<GameMode, 'custom'>, ModeConfig> = {
+const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     quick: {
         boardRadius: 6,
-        timeInitial: 5,
-        timeIncrement: 5,
+        timeInitial: 20,
+        timeIncrement: 20,
         sanctuaries: [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
         sanctuaryCooldown: 5
     },
     standard: {
-        boardRadius: 8,
+        boardRadius: 7,
         timeInitial: 20,
         timeIncrement: 20,
-        sanctuaries: [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
+        sanctuaries: [
+            SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring,
+            SanctuaryType.WardensWatch, SanctuaryType.ArcaneRefuge
+        ],
         sanctuaryCooldown: 10
     },
     full: {
-        boardRadius: 10,
-        timeInitial: 30,
-        timeIncrement: 30,
+        boardRadius: 8,
+        timeInitial: 20,
+        timeIncrement: 20,
         sanctuaries: Object.keys(SANCTUARY_INFO) as SanctuaryType[],
         sanctuaryCooldown: 15
     }
 };
 
 const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
+    // Game Mode State
+    const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
+    
     // Setup State
     const [boardRadius, setBoardRadius] = useState<number>(8);
-    const [useRandomCastles, setUseRandomCastles] = useState<boolean>(false);
+    const [useRandomCastles, setUseRandomCastles] = useState<boolean>(true);
     const [timeInitial, setTimeInitial] = useState<number>(20); // Minutes
     const [timeIncrement, setTimeIncrement] = useState<number>(20); // Seconds
     
@@ -77,6 +87,20 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     // Sanctuary Configuration
     const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(0);  // Always unlocked
     const [sanctuaryCooldown, setSanctuaryCooldown] = useState<number>(10);
+    
+    // Tooltip state for sanctuary piece preview
+    const [tooltipPiece, setTooltipPiece] = useState<Piece | null>(null);
+
+    // Apply a mode preset
+    const applyMode = (mode: GameMode) => {
+        setSelectedMode(mode);
+        const preset = MODE_PRESETS[mode];
+        setBoardRadius(preset.boardRadius);
+        setTimeInitial(preset.timeInitial);
+        setTimeIncrement(preset.timeIncrement);
+        setSelectedSanctuaries(new Set(preset.sanctuaries));
+        setSanctuaryCooldown(preset.sanctuaryCooldown);
+    };
 
     const toggleSanctuary = (type: SanctuaryType) => {
         setSelectedSanctuaries(prev => {
@@ -90,8 +114,17 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         });
     };
 
-    // Derived state for preview
-    const { board, layout, pieces, viewBox } = useMemo(() => {
+    // Tooltip state
+    const [tooltipData, setTooltipData] = useState<{ piece: Piece, position: {x: number, y: number} } | null>(null);
+    const mousePosRef = React.useRef({ x: 0, y: 0 });
+
+    // Track mouse position for right-click tooltips
+    const handleMouseMove = (e: React.MouseEvent) => {
+        mousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    // Derived state for preview - move destructuring up to be accessible
+    const previewState = useMemo(() => {
         // 1. Create Base Board
         let b = getStartingBoard(boardRadius);
         
@@ -99,14 +132,16 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         if (useRandomCastles) {
             // Generate random castles (e.g., 3 per side)
             const randomCastles = CastleGenerator.generateRandomCastles(b, 3);
-            // Re-create board with these castles
             b = new Board({ nSquares: boardRadius - 1 }, randomCastles);
         }
 
         const l = getStartingLayout(b);
         const p = getStartingPieces(boardRadius);
+        
+        // 3. Generate sanctuaries for preview
+        const s = SanctuaryGenerator.generateRandomSanctuaries(b, Array.from(selectedSanctuaries));
 
-        // Calculate bounding box for viewBox
+        // Calculate bounding box
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         b.hexes.forEach(hex => {
             const corners = l.layout.polygonCorners(hex);
@@ -124,8 +159,27 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         const yOffset = 50; 
         const vb = `${minX - padding} ${minY - padding + yOffset} ${width + padding * 2} ${height + padding * 2}`;
 
-        return { board: b, layout: l, pieces: p, viewBox: vb };
-    }, [boardRadius, useRandomCastles]);
+        return { board: b, layout: l, pieces: p, sanctuaries: s, viewBox: vb };
+    }, [boardRadius, useRandomCastles, selectedSanctuaries]);
+
+    const { board, layout, pieces, sanctuaries, viewBox } = previewState;
+
+    // Right-click handler
+    const onHexRightClick = (hex: Hex) => {
+        // Check pieces
+        const piece = pieces.find(p => p.hex.q === hex.q && p.hex.r === hex.r && p.hex.s === hex.s);
+        if (piece) {
+            setTooltipData({ piece, position: mousePosRef.current });
+            return;
+        }
+        // Check sanctuaries
+        const sanctuary = sanctuaries.find(s => s.hex.q === hex.q && s.hex.r === hex.r && s.hex.s === hex.s);
+        if (sanctuary) {
+             const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
+             const dummy = PieceFactory.create(pieceType, hex, sanctuary.territorySide || 'w');
+             setTooltipData({ piece: dummy, position: mousePosRef.current });
+        }
+    };
 
     const handlePlay = () => {
         onPlay(
@@ -138,14 +192,14 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     };
 
     return (
-
-        <div className="game-setup" style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: '#333', color: '#eee', overflow: 'hidden' }}>
-            {/* Sidebar Controls */}
-            <div className="setup-sidebar" style={{ 
-                width: '380px',
-                height: '100%',
-                padding: '20px', 
-                background: '#222', 
+        <>
+            <div className="game-setup" style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: '#333', color: '#eee', overflow: 'hidden' }}>
+                {/* Sidebar Controls */}
+                <div className="setup-sidebar" style={{ 
+                    width: '380px',
+                    height: '100%',
+                    padding: '20px', 
+                    background: '#222', 
                 display: 'flex', 
                 flexDirection: 'column', 
                 gap: '20px', 
@@ -155,6 +209,31 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                 flexShrink: 0
             }}>
                 <h2 style={{ margin: '0 0 10px 0', fontSize: '1.5rem', textAlign: 'center', color: '#fff' }}>Game Setup</h2>
+
+                {/* Game Mode Selector */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                    {(['quick', 'standard', 'full'] as GameMode[]).map((mode) => (
+                        <button
+                            key={mode}
+                            onClick={() => applyMode(mode)}
+                            style={{
+                                flex: 1,
+                                padding: '10px 8px',
+                                fontSize: '0.85rem',
+                                cursor: 'pointer',
+                                borderRadius: '6px',
+                                border: selectedMode === mode ? '2px solid #fff' : '1px solid #555',
+                                background: selectedMode === mode ? '#4a90d9' : '#444',
+                                color: 'white',
+                                fontWeight: selectedMode === mode ? 'bold' : 'normal',
+                                textTransform: 'capitalize',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            {mode}
+                        </button>
+                    ))}
+                </div>
 
                 {/* Play Button (Top for easy access, or Bottom?) - Let's keep it prominent */}
                 <button 
@@ -267,6 +346,12 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                                         height: '60px'
                                     }}
                                     title={`Tier ${info.tier} - Spawns ${info.piece}`}
+                                    onMouseEnter={() => {
+                                        const pieceType = SanctuaryConfig[sanctuaryType].pieceType;
+                                        const dummyPiece = PieceFactory.create(pieceType, new Hex(0, 0, 0), 'w');
+                                        setTooltipData({ piece: dummyPiece, position: { x: 420, y: 0 } });
+                                    }}
+                                    onMouseLeave={() => setTooltipData(null)}
                                 >
                                     <span style={{ fontWeight: 'bold' }}>{info.piece}</span>
                                     <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>Tier {info.tier}</span>
@@ -285,18 +370,23 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             </div>
 
             {/* Preview Area */}
-            <div className="editor-preview" style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1a1a1a', height: '100%' }}>
+            <div 
+                className="editor-preview" 
+                style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1a1a1a', height: '100%' }}
+                onMouseMove={handleMouseMove}
+            >
                  <svg className="board" height="100%" width="100%" viewBox={viewBox}>
                     <HexGrid
                         hexagons={board.hexes}
                         castles={board.castles}
-                        sanctuaries={[]}
+                        sanctuaries={sanctuaries}
                         legalMoveSet={new Set()}
                         legalAttackSet={new Set()}
                         showCoordinates={true}
                         isBoardRotated={false}
                         isAdjacentToControlledCastle={() => false}
-                        onHexClick={() => {}}
+                        onHexClick={() => setTooltipData(null)}
+                        onHexRightClick={onHexRightClick}
                         resizeVersion={0}
                         layout={layout}
                         board={board}
@@ -307,6 +397,12 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                  </div>
             </div>
         </div>
+        
+        {/* Piece Tooltip for sanctuary hover / right click */}
+        {tooltipData && (
+            <PieceTooltip piece={tooltipData.piece} position={tooltipData.position} />
+        )}
+        </>
     );
 };
 
