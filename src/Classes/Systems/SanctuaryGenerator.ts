@@ -26,10 +26,23 @@ export class SanctuaryGenerator {
     types: SanctuaryType[] = [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring]
   ): Sanctuary[] {
     const sanctuaries: Sanctuary[] = [];
+    // Initialize usedKeys with Castles AND their neighbors (Exclusion Zone)
+    // This prevents any sanctuary from being generated adjacent to a castle.
     const usedKeys = new Set<string>();
+    
+    // Add all castles and their neighbors to exclusion list
+    board.castleHexes.forEach(cHex => {
+      usedKeys.add(cHex.getKey());
+      // Add all 6 neighbors
+      for (let i = 0; i < 6; i++) {
+        const neighbor = cHex.neighbor(i);
+        usedKeys.add(neighbor.getKey());
+      }
+    });
 
     for (const type of types) {
       const tier = SanctuaryConfig[type].tier;
+      // validHexes will now exclude keys in usedKeys (including exclusion zones)
       const validHexes = this.getValidHexesForTier(board, tier, usedKeys);
 
       if (validHexes.length === 0) {
@@ -37,26 +50,42 @@ export class SanctuaryGenerator {
         continue;
       }
 
-      // Pick a random hex from valid options (on White's territory side for Tier 2/3)
-      const randomIndex = Math.floor(Math.random() * validHexes.length);
-      const hex = validHexes[randomIndex];
+      // Since we trust validHexes to be excluded from obstacles, we just need to ensure symmetry validity.
+      // But validHexes is based on 'usedKeys'. 'usedKeys' contains symmetric exclusions if we add them.
+      
+      // We need to pick a hex such that its MIRROR is also valid.
+      // Filter candidates where mirror is also in validHexes (or at least not in usedKeys).
+      const symmetricCandidates = validHexes.filter(h => {
+        const mirroredH = new Hex(-h.q, -h.r, -h.s);
+        // Ensure mirrored position is not used/excluded
+        return !usedKeys.has(mirroredH.getKey());
+      });
+
+      if (symmetricCandidates.length === 0) {
+          console.warn(`No symmetric candidates for type: ${type}`);
+          continue;
+      }
+
+            // Pick a random hex from valid OPTIONS
+      const randomIndex = Math.floor(Math.random() * symmetricCandidates.length);
+      const hex = symmetricCandidates[randomIndex];
       const mirroredHex = new Hex(-hex.q, -hex.r, -hex.s);
 
-      // Mark both as used
-      usedKeys.add(hex.getKey());
-      usedKeys.add(mirroredHex.getKey());
-
+      // Add selection AND its neighbors to exclusion list (for NEXT iteration)
+      // This prevents next sanctuary from spawning adjacent to this one.
+      [hex, mirroredHex].forEach(h => {
+          usedKeys.add(h.getKey());
+          for (let i = 0; i < 6; i++) {
+              usedKeys.add(h.neighbor(i).getKey());
+          }
+      });
+      
       if (tier === 1) {
-        // Tier 1: Neutral zone - both players can access equally
-        // Create one sanctuary, territory is neutral (use 'w' as placeholder)
         sanctuaries.push(new Sanctuary(hex, type, 'w'));
         sanctuaries.push(new Sanctuary(mirroredHex, type, 'b'));
       } else {
-        // Tier 2/3: In opponent's territory
-        // hex is in White's target zone (Black's territory) → White must reach it
-        // mirroredHex is in Black's target zone (White's territory) → Black must reach it
-        sanctuaries.push(new Sanctuary(hex, type, 'b')); // On Black's side, for White to capture
-        sanctuaries.push(new Sanctuary(mirroredHex, type, 'w')); // On White's side, for Black to capture
+        sanctuaries.push(new Sanctuary(hex, type, 'b'));
+        sanctuaries.push(new Sanctuary(mirroredHex, type, 'w'));
       }
     }
 

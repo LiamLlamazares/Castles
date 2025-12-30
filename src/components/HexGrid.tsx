@@ -73,10 +73,22 @@ const HexGrid = React.memo(({
   pledgingSanctuary
 }: HexGridProps) => {
 
+  // Sort hexagons by render priority: Standard < Sanctuary < Castle
+  const sortedHexagons = React.useMemo(() => {
+    return [...hexagons].sort((a, b) => {
+      const getPriority = (h: Hex) => {
+        if (castles.some(c => c.hex.equals(h))) return 2;
+        if (sanctuaries.some(s => s.hex.equals(h))) return 1;
+        return 0;
+      };
+      return getPriority(a) - getPriority(b);
+    });
+  }, [hexagons, castles, sanctuaries]);
+
   return (
     <>
-      {/* Render all hexagons */}
-      {hexagons.map((hex: Hex) => {
+      {/* Render all hexagons in sorted order */}
+      {sortedHexagons.map((hex: Hex) => {
         // Compute classes
         const visualClass = getHexVisualClass(hex, board);
         const sanctuaryClass = getSanctuaryVisualClass(hex, sanctuaries);

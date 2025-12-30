@@ -40,9 +40,19 @@ const PieceRenderer = React.memo(({
 }: PieceRendererProps) => {
   const pieceSize = layout.size_image;
   const pieceMap = createPieceMap(pieces);
+
+  // Sort pieces by Y-coordinate for correct rendering order
+  const sortedPieces = React.useMemo(() => {
+    return [...pieces].sort((a, b) => {
+      const ca = getPieceCenter(a, isBoardRotated, layout);
+      const cb = getPieceCenter(b, isBoardRotated, layout);
+      return ca.y - cb.y;
+    });
+  }, [pieces, isBoardRotated, layout]);
+
   return (
     <>
-      {pieces.map((piece: Piece) => {
+      {sortedPieces.map((piece: Piece) => {
         const center = getPieceCenter(piece, isBoardRotated, layout);
         
         // Check if this piece is defended (adjacent to friendly melee)
@@ -73,23 +83,23 @@ const PieceRenderer = React.memo(({
               }}
             />
             
-            {/* Shield icon overlay for defended pieces - bottom-left corner */}
+            {/* Shield icon overlay for defended pieces - Top-Right corner (less intrusive) */}
             {isDefended && (
               <g style={{ pointerEvents: 'none' }}>
-                {/* Shield background - smaller and in bottom-left */}
+                {/* Shield background - smaller */}
                 <circle
-                  cx={center.x - pieceSize * 0.30}
-                  cy={center.y + pieceSize * 0.40}
-                  r={pieceSize * 0.14}
+                  cx={center.x - pieceSize * 0.275}
+                  cy={center.y - pieceSize * 0.35}
+                  r={pieceSize * 0.12}
                   fill="rgba(255, 215, 0, 0.90)"
                   stroke="rgba(0, 0, 0, 0.7)"
-                  strokeWidth={1.2}
+                  strokeWidth={1.0}
                 />
                 {/* Shield symbol - smaller */}
                 <text
-                  x={center.x - pieceSize * 0.30}
-                  y={center.y + pieceSize * 0.40 + 2}
-                  fontSize={pieceSize * 0.16}
+                  x={center.x - pieceSize * 0.275}
+                  y={center.y - pieceSize * 0.35 + 1}
+                  fontSize={pieceSize * 0.14}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fill="#000"

@@ -71,7 +71,7 @@ body {
   stroke-width: 4; /* Border width for the hexagon */
 }
 .hexagon-black-castle {
-  fill: indigo; /* Fill color for the hexagon */
+  fill: #a29bfe; /* Lighter soft purple for contrast */
   stroke: #aaa; /* Border color for the hexagon */
   stroke-width: 4; /* Border width for the hexagon */
 }
@@ -183,11 +183,11 @@ body {
     filter: drop-shadow(0 0 8px #2ecc71);
 }
 
-/* 4. Arcane Refuge (Tier 2) - Purple/Blue */
+/* 4. Arcane Refuge (Tier 2) - Blue (Magic) */
 .hexagon-sanctuary-wizard {
-    fill: #9b59b6;
-    stroke: #8e44ad !important;
-    filter: drop-shadow(0 0 8px #9b59b6);
+    fill: #3498db;
+    stroke: #2980b9 !important;
+    filter: drop-shadow(0 0 8px #3498db);
 }
 
 /* 5. Forsaken Grounds (Tier 3) - Dark Grey/Green (Necrotic) */
@@ -227,8 +227,8 @@ body {
 }
 
 .hexagon-sanctuary-wizard-cooldown {
-    fill: #5c3d6e !important;
-    stroke: #4a2f58 !important;
+    fill: #2c3e50 !important; /* Blue-grey */
+    stroke: #34495e !important;
     filter: none;
     opacity: 0.75;
 }
