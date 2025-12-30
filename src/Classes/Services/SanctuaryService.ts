@@ -100,9 +100,9 @@ export class SanctuaryService {
       sanctuary.tier
     );
 
-    // Also find the mirrored sanctuary (for fairness, both evolve together)
-    const mirroredHex = new Hex(-sanctuary.hex.q, -sanctuary.hex.r, -sanctuary.hex.s);
-    const mirroredSanctuary = gameState.sanctuaries.find(s => s.hex.equals(mirroredHex));
+    // Also find the mirrored sanctuary (for fairness, both evolve together) -- REMOVED AS PER REQUEST
+    // const mirroredHex = new Hex(-sanctuary.hex.q, -sanctuary.hex.r, -sanctuary.hex.s);
+    // const mirroredSanctuary = gameState.sanctuaries.find(s => s.hex.equals(mirroredHex));
 
     // Get cooldown from settings or use default
     const cooldownTurns = gameState.sanctuarySettings?.cooldown ?? SANCTUARY_EVOLUTION_COOLDOWN;
@@ -123,18 +123,8 @@ export class SanctuaryService {
           return s.with({ hasPledgedThisGame: true, cooldown: 0 });
         }
       }
-      // Also evolve the mirrored sanctuary (both sides stay in sync)
-      if (mirroredSanctuary && s.hex.equals(mirroredHex)) {
-        if (evolvedType) {
-          return s.with({ 
-            type: evolvedType, 
-            cooldown: cooldownTurns, 
-            hasPledgedThisGame: false 
-          });
-        } else {
-          return s.with({ hasPledgedThisGame: true, cooldown: 0 });
-        }
-      }
+      // Mirrored sanctuary update logic removed
+
       return s;
     });
 

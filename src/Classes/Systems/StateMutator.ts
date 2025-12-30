@@ -431,13 +431,52 @@ export class StateMutator {
           newState = DeathSystem.processPhoenixRespawns(newState);
       }
 
-      // 1. Decrement sanctuary cooldowns ONLY at the start of a FULL turn (both players)
-      // PHASES_PER_TURN = 10 (White sub-phases + Black sub-phases)
-      if (newState.turnCounter % PHASES_PER_TURN === 0) {
+      // 1. Decrement sanctuary cooldowns at the start of EACH player's turn (faster feedback)
+      // PHASES_PER_TURN = 10, PHASE_CYCLE_LENGTH = 5
+      // Runs at 0 (White start) and 5 (Black start)
+      if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
+          // Identify whose turn just started
+          const currentPhaseStartPlayer = (newState.turnCounter % 10) < 5 ? 'w' : 'b';
+
           if (newState.sanctuaries && newState.sanctuaries.length > 0) {
-              const updatedSanctuaries = newState.sanctuaries.map(s => 
-                  s.cooldown > 0 ? s.with({ cooldown: s.cooldown - 1 }) : s
-              );
+              
+              // Count "Invaders" for cooldown reduction bonus
+              // An invader is a NON-SWORDSMAN piece on the enemy side of the river
+              let whiteInvaders = 0;
+              let blackInvaders = 0;
+              
+              newState.pieces.forEach(p => {
+                  if (p.type === PieceType.Swordsman) return;
+                  
+                  // White piece (starts bottom, r>0) invading Top (r<0)
+                  if (p.color === 'w' && p.hex.r < 0) {
+                      whiteInvaders++;
+                  }
+                  // Black piece (starts top, r<0) invading Bottom (r>0)
+                  if (p.color === 'b' && p.hex.r > 0) {
+                      blackInvaders++;
+                  }
+              });
+
+              const updatedSanctuaries = newState.sanctuaries.map(s => {
+                  // Only update cooldowns for the player whose turn it is
+                  if (s.territorySide !== currentPhaseStartPlayer) return s;
+
+                  if (s.cooldown <= 0) return s;
+                  
+                  // Standard reduction is 1
+                  let reduction = 1;
+                  
+                  // Add bonus for invaders
+                  if (s.territorySide === 'w') {
+                      reduction += whiteInvaders;
+                  } else if (s.territorySide === 'b') {
+                      reduction += blackInvaders;
+                  }
+                  
+                  const newCooldown = Math.max(0, s.cooldown - reduction);
+                  return s.with({ cooldown: newCooldown });
+              });
               newState = { ...newState, sanctuaries: updatedSanctuaries };
           }
       }

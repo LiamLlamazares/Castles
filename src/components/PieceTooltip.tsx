@@ -140,7 +140,12 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
 
       <div style={rowStyle}>
         <span>Strength:</span>
-        <span style={valueStyle}>{piece.Strength}</span>
+        <span style={valueStyle}>
+          {piece.Strength}
+          {piece.type === PieceType.Swordsman && piece.Strength > 1 && (
+            <span style={{ fontSize: '0.7em', color: '#00ff00', marginLeft: '4px' }}>(River Bonus)</span>
+          )}
+        </span>
       </div>
 
       <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>

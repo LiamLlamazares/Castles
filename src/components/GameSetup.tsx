@@ -391,9 +391,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         }}>
                             4 castles = +1 VP/round, 5 castles = +3 VP/round. First to 10 VP wins!
                         </div>
-                    )}
-                    
-    /* BREAKTHROUGH REMOVED */         
+                    )}   
                 </div>
 
                 {/* Sanctuary Selection */}

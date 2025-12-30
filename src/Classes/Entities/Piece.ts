@@ -64,7 +64,21 @@ export class Piece {
 
   /** Combat strength - must exceed defender's strength to capture */
   get Strength(): number {
-    return getPieceStrength(this.type);
+    const baseStrength = getPieceStrength(this.type);
+    
+    // Swordsmen get +1 Strength when crossing the river into enemy territory
+    if (this.type === PieceType.Swordsman) {
+        // White (starts bottom, r>0) crossing to r<0
+        if (this.color === 'w' && this.hex.r < 0) {
+            return 2;
+        }
+        // Black (starts top, r<0) crossing to r>0
+        if (this.color === 'b' && this.hex.r > 0) {
+            return 2;
+        }
+    }
+    
+    return baseStrength;
   }
 
   /** 
