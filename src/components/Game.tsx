@@ -33,6 +33,7 @@ import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { Hex } from "../Classes/Entities/Hex";
 import { RuleEngine } from "../Classes/Systems/RuleEngine";
+import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
@@ -115,6 +116,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
     gameRules?.vpModeEnabled ? { w: 0, b: 0 } : undefined
   );
   
+  // Track previous turn counter for VP calculation
+  const prevTurnCounterRef = React.useRef(0);
+  
   // Disable transitions after first render cycle to prevent "flying pieces" on resize
   React.useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoad(false), 100);
@@ -182,6 +186,30 @@ const GameBoard: React.FC<GameBoardProps> = ({
         setOverlayDismissed(false);
     }
   }, [victoryMessage]);
+
+  // VP Accumulation: Award VP at the end of each round based on castle control
+  React.useEffect(() => {
+    if (!victoryPoints || !gameRules?.vpModeEnabled) return;
+    
+    // A round ends every 10 turn counter steps (both players complete their turns)
+    const currentRound = Math.floor(turnCounter / 10);
+    const prevRound = Math.floor(prevTurnCounterRef.current / 10);
+    
+    // Only accumulate VP when entering a new round
+    if (currentRound > prevRound && currentRound > 0) {
+      const whiteGain = WinCondition.calculateVPGain(castles, 'w');
+      const blackGain = WinCondition.calculateVPGain(castles, 'b');
+      
+      if (whiteGain > 0 || blackGain > 0) {
+        setVictoryPoints(prev => prev ? {
+          w: prev.w + whiteGain,
+          b: prev.b + blackGain
+        } : undefined);
+      }
+    }
+    
+    prevTurnCounterRef.current = turnCounter;
+  }, [turnCounter, castles, victoryPoints, gameRules?.vpModeEnabled]);
 
   // Handle New Game - only allow if game hasn't started or someone won
   const handleNewGame = () => {
