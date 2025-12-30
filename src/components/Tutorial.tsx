@@ -14,7 +14,7 @@ import { TerrainTooltip } from './TerrainTooltip';
 import { Board } from '../Classes/Core/Board';
 import { Piece } from '../Classes/Entities/Piece';
 import { Hex } from '../Classes/Entities/Hex';
-import { TurnPhase, Color } from '../Constants';
+import { TurnPhase, Color, N_SQUARES } from '../Constants';
 import { RuleEngine } from '../Classes/Systems/RuleEngine';
 import { createPieceMap } from '../utils/PieceMap';
 import { getStartingLayout, getStartingPieces, getStartingBoard } from '../ConstantImports';
@@ -25,13 +25,12 @@ interface TutorialProps {
 }
 
 /**
- * Create the tutorial board using standard starting position.
- * Uses a smaller board size (radius 4 = 7x7) for easier learning.
+ * Create the tutorial board using the standard starting position.
+ * Uses the same board size as the normal game (N_SQUARES = 8).
  */
 const createTutorialBoard = () => {
-  const boardRadius = 4; // 7x7 board (smaller than standard 8)
-  const board = getStartingBoard(boardRadius);
-  const pieces = getStartingPieces(boardRadius);
+  const board = getStartingBoard(N_SQUARES-1);
+  const pieces = getStartingPieces(N_SQUARES-1);
   const castles = board.castles;
   
   return { board, pieces, castles };
