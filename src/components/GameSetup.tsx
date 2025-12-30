@@ -116,12 +116,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
 
     // Tooltip state
     const [tooltipData, setTooltipData] = useState<{ piece: Piece, position: {x: number, y: number} } | null>(null);
-    const mousePosRef = React.useRef({ x: 0, y: 0 });
 
-    // Track mouse position for right-click tooltips
-    const handleMouseMove = (e: React.MouseEvent) => {
-        mousePosRef.current = { x: e.clientX, y: e.clientY };
-    };
+    // Derived state for preview - move destructuring up to be accessible
 
     // Derived state for preview - move destructuring up to be accessible
     const previewState = useMemo(() => {
@@ -169,7 +165,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         // Check pieces
         const piece = pieces.find(p => p.hex.q === hex.q && p.hex.r === hex.r && p.hex.s === hex.s);
         if (piece) {
-            setTooltipData({ piece, position: mousePosRef.current });
+            setTooltipData({ piece, position: { x: 420, y: 0 } });
             return;
         }
         // Check sanctuaries
@@ -177,7 +173,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         if (sanctuary) {
              const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
              const dummy = PieceFactory.create(pieceType, hex, sanctuary.territorySide || 'w');
-             setTooltipData({ piece: dummy, position: mousePosRef.current });
+             setTooltipData({ piece: dummy, position: { x: 420, y: 0 } });
         }
     };
 
@@ -373,7 +369,6 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             <div 
                 className="editor-preview" 
                 style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1a1a1a', height: '100%' }}
-                onMouseMove={handleMouseMove}
             >
                  <svg className="board" height="100%" width="100%" viewBox={viewBox}>
                     <HexGrid
@@ -400,7 +395,11 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         
         {/* Piece Tooltip for sanctuary hover / right click */}
         {tooltipData && (
-            <PieceTooltip piece={tooltipData.piece} position={tooltipData.position} />
+            <PieceTooltip 
+                piece={tooltipData.piece} 
+                position={tooltipData.position} 
+                style={{ bottom: '60px' }} // Lift tooltip above "Preview Mode" text
+            />
         )}
         </>
     );

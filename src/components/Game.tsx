@@ -395,7 +395,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
       {tooltipPiece && (
         <PieceTooltip 
           piece={tooltipPiece} 
-          position={mousePosition} 
           isDefended={RuleEngine.isHexDefended(
             tooltipPiece.hex, 
             tooltipPiece.color === 'w' ? 'b' : 'w', 

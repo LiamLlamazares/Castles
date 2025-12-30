@@ -5,8 +5,9 @@ import { getImageByPieceType } from './PieceImages';
 
 interface PieceTooltipProps {
   piece: Piece;
-  position: { x: number, y: number };
+  position?: { x: number, y: number };
   isDefended?: boolean;
+  style?: React.CSSProperties;
 }
 
 // Piece info data based on rules.md
@@ -35,35 +36,36 @@ const PIECE_INFO: Record<PieceType, {
   [PieceType.Phoenix]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true, special: 'Rebirth after 3 turns' },
 };
 
-export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended }) => {
+export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended, style }) => {
   const info = PIECE_INFO[piece.type];
   if (!info) return null;
 
-  const style: React.CSSProperties = {
+  const baseStyle: React.CSSProperties = {
     position: 'fixed',
-    left: position.x || 20,
-    top: position.y || undefined, // Use top if provided (e.g. mouse y)
-    bottom: position.y ? undefined : 20, // Default to bottom 20 if no y provided
+    left: position?.x ?? 20,
+    top: position?.y || undefined, // Use top if provided (0 treated as undefined)
+    bottom: position?.y ? undefined : 20, // Default to bottom 20 if no y provided
     zIndex: 1000,
     backgroundColor: 'rgba(20, 20, 20, 0.75)',
     color: '#eee',
-    padding: '16px',
-    borderRadius: '8px',
+    padding: '10px',
+    borderRadius: '4px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
     border: `2px solid ${piece.color === 'w' ? 'rgba(221, 221, 221, 0.4)' : 'rgba(85, 85, 85, 0.4)'}`,
     minWidth: '220px',
     maxWidth: '280px',
     backdropFilter: 'blur(2px)',
     pointerEvents: 'none', // Prevent tooltip from capturing mouse events (fixes flickering)
+    ...style, // Merge custom styles
   };
 
   const titleAreaStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
-    marginBottom: '12px',
+    gap: '8px',
+    marginBottom: '8px',
     borderBottom: '2px solid #4a90e2',
-    paddingBottom: '8px',
+    paddingBottom: '4px',
   };
 
   const titleStyle: React.CSSProperties = {
@@ -77,8 +79,8 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
   const rowStyle: React.CSSProperties = {
     display: 'flex',
     justifyContent: 'space-between',
-    fontSize: '0.9rem',
-    marginBottom: '6px',
+    fontSize: '0.85rem',
+    marginBottom: '2px',
     color: '#aaa',
   };
 
@@ -97,17 +99,17 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
   });
 
   return (
-    <div style={style}>
+    <div style={baseStyle}>
       <div style={titleAreaStyle}>
-        <div style={{ width: '32px', height: '32px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ width: '24px', height: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <img 
             src={getImageByPieceType(piece.type, piece.color)} 
             alt={piece.type} 
-            style={{ width: '24px', height: '24px' }} 
+            style={{ width: '20px', height: '20px' }} 
           />
         </div>
         <div style={titleStyle}>
-           <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#fff' }}>{piece.type}</h3>
+           <h3 style={{ margin: 0, fontSize: '1.0rem', color: '#fff' }}>{piece.type}</h3>
            <span style={{ 
              fontSize: '0.65rem', 
              fontWeight: 'bold', 
