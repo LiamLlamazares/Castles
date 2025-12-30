@@ -80,8 +80,11 @@ export class SanctuaryGenerator {
       // Skip river hexes
       if (board.isRiver(h)) return false;
       
-      // Skip castle hexes (check if any castle occupies this hex)
-      // Note: Castles aren't available here, so we skip hexes at extreme corners
+      // Skip castle hexes
+      if (board.isCastle(h, board.NSquares)) return false;
+
+      // Skip high ground hexes (avoid placing sanctuaries on strategic terrain)
+      if (board.highGroundHexSet.has(key)) return false;
       
       // Zone filtering based on tier
       // Board Size N=8. R-coordinates range roughly -8 to +8.
