@@ -48,7 +48,8 @@ export const useGameLogic = (
   isAnalysisMode: boolean = false, // When false, blocks moves during analysis mode (Play Mode)
   initialMoveTree?: MoveTree, // Optional, use this tree if provided (e.g., from PGN import with snapshots)
   sanctuarySettings?: { unlockTurn: number, cooldown: number }, // Configurable sanctuary settings
-  gameRules?: { vpModeEnabled: boolean }
+  gameRules?: { vpModeEnabled: boolean },
+  isTutorialMode: boolean = false // When true, skip victory checks
 ) => {
   // Create game engine instance (stable reference)
   // =========== CORE GAME STATE ===========
@@ -183,7 +184,6 @@ export const useGameLogic = (
       }));
   }, [state.moveTree, setState]);
 
-  // =========== COMPUTED VALUES (Delegated to useComputedGame) ===========
   const {
     turnPhase,
     currentPlayer,
@@ -202,7 +202,8 @@ export const useGameLogic = (
     movingPiece,
     turnCounter,
     isAnalysisMode,
-    isViewingHistory
+    isViewingHistory,
+    isTutorialMode
   });
 
   const hexagons = useMemo(() => initialBoard.hexes, [initialBoard]);

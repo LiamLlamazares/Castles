@@ -61,9 +61,11 @@ interface GameBoardProps {
   onRestart?: () => void;
   onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: import('../Classes/Core/MoveTree').MoveTree) => void;
   onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
+  onTutorial?: () => void;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
   onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
+  isTutorialMode?: boolean;
 }
 
 /**
@@ -86,9 +88,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onRestart = () => {},
   onLoadGame = () => {},
   onEditPosition,
+  onTutorial,
   timeControl,
   isAnalysisMode = false,
-  onEnableAnalysis = () => {}
+  onEnableAnalysis = () => {},
+  isTutorialMode = false
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
@@ -168,7 +172,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules, isTutorialMode);
 
   // Decoupled View State
   const { 
@@ -306,6 +310,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         onShowRules={() => setShowRulesModal(true)}
         onEnableAnalysis={handleEnterAnalysis}
         onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
+        onTutorial={onTutorial}
         isAnalysisMode={isAnalysisMode}
         onToggleShields={toggleShields}
         onToggleCastleRecruitment={toggleCastleRecruitment}

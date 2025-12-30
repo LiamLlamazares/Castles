@@ -12,6 +12,7 @@ interface HamburgerMenuProps {
   onShowRules: () => void;
   onEnableAnalysis?: () => void;
   onEditPosition?: () => void;
+  onTutorial?: () => void;
   isAnalysisMode?: boolean;
   onToggleShields?: () => void;
   onToggleCastleRecruitment?: () => void;
@@ -28,6 +29,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onShowRules,
   onEnableAnalysis,
   onEditPosition,
+  onTutorial,
   isAnalysisMode = false,
   onToggleShields,
   onToggleCastleRecruitment,
@@ -166,6 +168,16 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             <span className="menu-icon">📖</span>
             Rules
           </button>
+
+          {onTutorial && (
+            <button 
+              className="menu-item" 
+              onClick={() => handleMenuItemClick(onTutorial)}
+            >
+              <span className="menu-icon">🎓</span>
+              Tutorial
+            </button>
+          )}
           
           {onEnableAnalysis && !isAnalysisMode && (
             <>

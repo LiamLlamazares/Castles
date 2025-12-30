@@ -24,6 +24,7 @@ export interface ComputedGameProps {
   turnCounter: number;
   isAnalysisMode: boolean;
   isViewingHistory: boolean;
+  isTutorialMode?: boolean;
 }
 
 export interface ComputedGameResult {
@@ -64,6 +65,7 @@ export const useComputedGame = ({
   turnCounter,
   isAnalysisMode,
   isViewingHistory,
+  isTutorialMode = false,
 }: ComputedGameProps): ComputedGameResult => {
   // Turn phase and current player
   const turnPhase = useMemo<TurnPhase>(
@@ -87,15 +89,15 @@ export const useComputedGame = ({
     [gameEngine, viewState, movingPiece]
   );
 
-  // Win conditions
+  // Win conditions - skip in tutorial mode
   const victoryMessage = useMemo(
-    () => gameEngine.getVictoryMessage(pieces, castles),
-    [gameEngine, pieces, castles]
+    () => isTutorialMode ? null : gameEngine.getVictoryMessage(pieces, castles),
+    [gameEngine, pieces, castles, isTutorialMode]
   );
 
   const winner = useMemo(
-    () => gameEngine.getWinner(pieces, castles),
-    [gameEngine, pieces, castles]
+    () => isTutorialMode ? null : gameEngine.getWinner(pieces, castles),
+    [gameEngine, pieces, castles, isTutorialMode]
   );
 
   // Recruitment positions

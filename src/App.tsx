@@ -3,6 +3,7 @@ import GameBoard from './components/Game';
 import MainMenu from './components/MainMenu';
 import GameSetup from './components/GameSetup';
 import BoardEditor from './components/BoardEditor';
+import Tutorial from './components/Tutorial';
 import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
@@ -12,7 +13,7 @@ import { SanctuaryType } from './Constants';
 import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
 
-type ViewState = 'menu' | 'setup' | 'game' | 'editor';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial';
 
 interface GameConfig {
   board?: Board;
@@ -43,6 +44,10 @@ function App() {
 
   const handleNewGameClick = () => {
     setView('setup');
+  };
+
+  const handleTutorialClick = () => {
+    setView('tutorial');
   };
 
   const handleStartGame = (
@@ -141,6 +146,7 @@ function App() {
               onRestart={handleRestartGame}
               onLoadGame={handleLoadGame}
               onEditPosition={handleEditPosition}
+              onTutorial={handleTutorialClick}
             />
         </div>
       )}
@@ -152,6 +158,12 @@ function App() {
           initialSanctuaries={editorConfig.sanctuaries}
           onPlay={handlePlayFromEditor}
           onBack={handleEditorBack}
+        />
+      )}
+
+      {view === 'tutorial' && (
+        <Tutorial
+          onBack={() => setView('game')}
         />
       )}
     </div>
