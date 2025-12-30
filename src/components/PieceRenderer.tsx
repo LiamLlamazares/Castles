@@ -83,23 +83,23 @@ const PieceRenderer = React.memo(({
               }}
             />
             
-            {/* Shield icon overlay for defended pieces - Top-Right corner (less intrusive) */}
+            {/* Shield icon overlay for defended pieces - Middle-Left */}
             {isDefended && (
               <g style={{ pointerEvents: 'none' }}>
-                {/* Shield background - smaller */}
+                {/* Shield background */}
                 <circle
-                  cx={center.x - pieceSize * 0.275}
-                  cy={center.y - pieceSize * 0.35}
-                  r={pieceSize * 0.12}
+                  cx={center.x - pieceSize * 0.45}
+                  cy={center.y}
+                  r={pieceSize * 0.15}
                   fill="rgba(255, 215, 0, 0.90)"
                   stroke="rgba(0, 0, 0, 0.7)"
                   strokeWidth={1.0}
                 />
-                {/* Shield symbol - smaller */}
+                {/* Shield symbol */}
                 <text
-                  x={center.x - pieceSize * 0.275}
-                  y={center.y - pieceSize * 0.35 + 1}
-                  fontSize={pieceSize * 0.14}
+                  x={center.x - pieceSize * 0.45}
+                  y={center.y + 1}
+                  fontSize={pieceSize * 0.18}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fill="#000"

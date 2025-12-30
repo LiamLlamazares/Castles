@@ -134,9 +134,10 @@ const HexGrid = React.memo(({
               if (castle) {
                 const center = getHexCenter(hex, isBoardRotated, layout);
                 const nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
-                const iconSize = 18; // Slightly smaller
-                const offsetX = 14;  // Closer to center
-                const offsetY = -14; // Closer to center
+                const pieceSize = layout.size_image;
+                const iconSize = pieceSize * 0.35; 
+                const offsetX = pieceSize * 0.45;  // Middle Right
+                const offsetY = 0; // Vertically centered
                 
                 return (
                   <g style={{ pointerEvents: 'none' }}>
@@ -144,7 +145,7 @@ const HexGrid = React.memo(({
                     <circle
                       cx={center.x + offsetX}
                       cy={center.y + offsetY}
-                      r={10}
+                      r={iconSize * 0.55}
                       fill={castle.owner === 'w' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.85)'}
                       stroke={castle.owner === 'w' ? '#00fbff' : '#8000ff'}
                       strokeWidth={1.5}
