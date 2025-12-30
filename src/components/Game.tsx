@@ -55,7 +55,7 @@ interface GameBoardProps {
   initialTurnCounter?: number;
   initialSanctuaries?: Sanctuary[];
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
-  gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean };
+  gameRules?: { vpModeEnabled: boolean };
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
@@ -168,7 +168,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules);
 
   // Decoupled View State
   const { 

@@ -158,7 +158,7 @@ export const useMoveExecution = ({
       }
 
       // Handle Movement
-      if ((turnPhase === "Movement" || movingPiece?.isBreakthroughActive) && movingPiece?.canMove) {
+      if (turnPhase === "Movement" && movingPiece?.canMove) {
         if (isLegalMove(hex)) {
           const stateWithHistory = prepareStateForAction();
           const command = new MoveCommand(movingPiece, hex, commandContext);

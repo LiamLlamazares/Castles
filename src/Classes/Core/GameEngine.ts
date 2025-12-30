@@ -59,8 +59,7 @@ export interface GameState {
   graveyard: Piece[]; // Captured pieces eligible for revival
   phoenixRecords: PhoenixRecord[]; // Active rebirth timers
   victoryPoints?: { w: number, b: number }; // VP for castle control (optional, for VP mode)
-  gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean }; // Active rules
-  breakthroughUsed?: boolean; // Whether breakthrough bonus has been used this turn
+  gameRules?: { vpModeEnabled: boolean }; // Active rules
 }
 
 /**

@@ -18,7 +18,7 @@ interface GameSetupProps {
         timeControl?: { initial: number, increment: number },
         selectedSanctuaryTypes?: SanctuaryType[],
         sanctuarySettings?: { unlockTurn: number, cooldown: number },
-        gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean }
+        gameRules?: { vpModeEnabled: boolean }
     ) => void;
 }
 
@@ -91,7 +91,6 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     
     // Game Rules - Optional modes
     const [vpModeEnabled, setVpModeEnabled] = useState<boolean>(false);
-    const [breakthroughBonus, setBreakthroughBonus] = useState<boolean>(false);
     
     // Tooltip state for sanctuary piece preview
     const [tooltipPiece, setTooltipPiece] = useState<Piece | null>(null);
@@ -192,7 +191,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             { initial: timeInitial, increment: timeIncrement },
             Array.from(selectedSanctuaries),
             { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
-            { vpModeEnabled, breakthroughBonus }
+            { vpModeEnabled }
         );
     };
 
@@ -394,36 +393,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         </div>
                     )}
                     
-                    {/* Breakthrough Bonus Toggle */}
-                    <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '10px'
-                    }}>
-                        <input 
-                            type="checkbox" 
-                            id="breakthrough"
-                            checked={breakthroughBonus}
-                            onChange={(e) => setBreakthroughBonus(e.target.checked)}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                        />
-                        <label htmlFor="breakthrough" style={{ 
-                            fontSize: '0.85rem', 
-                            cursor: 'pointer',
-                            color: breakthroughBonus ? '#e74c3c' : '#aaa'
-                        }}>
-                            ⚔️ Breakthrough Bonus
-                        </label>
-                    </div>
-                    {breakthroughBonus && (
-                        <div style={{ 
-                            fontSize: '0.7rem', 
-                            color: '#888', 
-                            marginLeft: '28px'
-                        }}>
-                            First melee kill each turn grants +1 movement to the attacker.
-                        </div>
-                    )}
+    /* BREAKTHROUGH REMOVED */         
                 </div>
 
                 {/* Sanctuary Selection */}

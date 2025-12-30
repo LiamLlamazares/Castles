@@ -25,7 +25,7 @@ interface GameConfig {
   sanctuaries?: Sanctuary[];
   timeControl?: { initial: number, increment: number };
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
-  gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean };
+  gameRules?: { vpModeEnabled: boolean };
   isAnalysisMode?: boolean;
 }
 
@@ -51,7 +51,7 @@ function App() {
     timeControl?: { initial: number, increment: number },
     selectedSanctuaryTypes?: SanctuaryType[],
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean }
+    gameRules?: { vpModeEnabled: boolean }
   ) => {
     const layout = getStartingLayout(board);
     

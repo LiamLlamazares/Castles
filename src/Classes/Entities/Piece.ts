@@ -55,9 +55,7 @@ export class Piece {
     /** Number of souls collected by Necromancer */
     public readonly souls: number = 0,
     /** Whether this piece was revived by a Necromancer (if killed again, it is exiled) */
-    public readonly isRevived: boolean = false,
-    /** Whether this piece has a breakthrough bonus active (can move 1 hex after attacking) */
-    public readonly isBreakthroughActive: boolean = false
+    public readonly isRevived: boolean = false
   ) {
     if (!hex || !color || !type) {
       throw new Error("Invalid arguments for Piece constructor");
@@ -96,8 +94,7 @@ export class Piece {
         updates.damage !== undefined ? updates.damage : this.damage,
         updates.abilityUsed !== undefined ? updates.abilityUsed : this.abilityUsed,
         updates.souls !== undefined ? updates.souls : this.souls,
-        updates.isRevived !== undefined ? updates.isRevived : this.isRevived,
-        updates.isBreakthroughActive !== undefined ? updates.isBreakthroughActive : this.isBreakthroughActive
+        updates.isRevived !== undefined ? updates.isRevived : this.isRevived
     );
   }
 
