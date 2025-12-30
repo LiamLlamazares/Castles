@@ -119,6 +119,9 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
 
     // Derived state for preview - move destructuring up to be accessible
 
+    // Reroll state for random generation
+    const [rerollKey, setRerollKey] = useState(0);
+
     // Derived state for preview - move destructuring up to be accessible
     const previewState = useMemo(() => {
         // 1. Create Base Board
@@ -156,7 +159,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         const vb = `${minX - padding} ${minY - padding + yOffset} ${width + padding * 2} ${height + padding * 2}`;
 
         return { board: b, layout: l, pieces: p, sanctuaries: s, viewBox: vb };
-    }, [boardRadius, useRandomCastles, selectedSanctuaries]);
+    }, [boardRadius, useRandomCastles, selectedSanctuaries, rerollKey]);
 
     const { board, layout, pieces, sanctuaries, viewBox } = previewState;
 
@@ -267,12 +270,32 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                 {/* Castles */}
                 <div style={controlGroupStyle}>
                     <label style={labelStyle}>Random Castles</label>
-                    <input 
-                        type="checkbox" 
-                        checked={useRandomCastles}
-                        onChange={(e) => setUseRandomCastles(e.target.checked)}
-                        style={{ width: '20px', height: '20px' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input 
+                            type="checkbox" 
+                            checked={useRandomCastles}
+                            onChange={(e) => setUseRandomCastles(e.target.checked)}
+                            style={{ width: '20px', height: '20px' }}
+                        />
+                        {useRandomCastles && (
+                            <button
+                                onClick={() => setRerollKey(k => k + 1)}
+                                title="Reroll Map"
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '1.5rem',
+                                    padding: '0 5px',
+                                    transition: 'transform 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2) rotate(180deg)'}
+                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) rotate(0deg)'}
+                            >
+                                🎲
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Time Controls */}
