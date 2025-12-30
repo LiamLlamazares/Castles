@@ -37,6 +37,7 @@ import {
   PHASE_CYCLE_LENGTH,
   PHASES_PER_TURN,
   AbilityType,
+  AttackType,
 } from "../../Constants";
 
 export class StateMutator {
@@ -84,21 +85,33 @@ export class StateMutator {
     const newPieces = state.pieces.map(p => {
         if (p.hex.equals(piece.hex)) {
             // Use immutable update via 'with'
-            return p.with({ hex: targetHex, canMove: false });
+            return p.with({ 
+                hex: targetHex, 
+                canMove: false, 
+                isBreakthroughActive: false // Consume bonus move
+            });
         }
         return p;
     });
 
     const newPieceMap = createPieceMap(newPieces);
     
+    // Check if we're moving onto a castle - if so, capture it
+    const targetCastle = state.castles.find(c => c.hex.equals(targetHex));
+    const mover = TurnManager.getCurrentPlayer(state.turnCounter);
+    const newCastles = targetCastle && targetCastle.owner !== mover
+      ? state.castles.map(c => c.hex.equals(targetHex) ? c.with({ owner: mover }) : c)
+      : state.castles;
+    
     // Create temp state for rule check
-    const tempState: GameState = { ...state, pieces: newPieces, pieceMap: newPieceMap };
+    const tempState: GameState = { ...state, pieces: newPieces, pieceMap: newPieceMap, castles: newCastles };
     const newTurnCounter = state.turnCounter + RuleEngine.getTurnCounterIncrement(tempState, board);
     
     let nextState: GameState = {
         ...state,
         pieces: newPieces,
         pieceMap: newPieceMap,
+        castles: newCastles,
         movingPiece: null,
         turnCounter: newTurnCounter,
         moveHistory: newMoveHistory
@@ -170,9 +183,45 @@ export class StateMutator {
      // Use CombatSystem to resolve the logic
      const result = CombatSystem.resolveAttack(state.pieces, attacker, targetHex, state.pieceMap);
 
-     const newPieceMap = createPieceMap(result.pieces);
+     let resultPieces = result.pieces;
+     let breakthroughUsed = state.breakthroughUsed || false;
      
-     const tempState: GameState = { ...state, pieces: result.pieces, pieceMap: newPieceMap };
+     // BREAKTHROUGH BONUS LOGIC
+     // If first melee kill in a turn, attacker gets +1 movement
+     if (state.gameRules?.breakthroughBonus && !breakthroughUsed && result.deadPiece) {
+         // Check if it was a melee attack (range 1)
+         if (attacker.AttackType === AttackType.Melee || 
+             attacker.AttackType === AttackType.Swordsman) {
+             
+             // Attacker is at targetHex now (CombatSystem moved it for Melee)
+             // We need to find the attacker in the new pieces list
+             resultPieces = resultPieces.map(p => {
+                 if (p.hex.equals(targetHex)) {
+                     // Grant bonus move
+                     return p.with({ 
+                         canMove: true, 
+                         isBreakthroughActive: true 
+                     });
+                 }
+                 return p;
+             });
+             breakthroughUsed = true;
+         }
+     }
+
+     const newPieceMap = createPieceMap(resultPieces);
+     
+     // Check if attacker captured the target AND target was on a castle
+     // If so, transfer castle ownership to the attacker's owner
+     const targetCastle = state.castles.find(c => c.hex.equals(targetHex));
+     const attackerColor = TurnManager.getCurrentPlayer(state.turnCounter);
+     const capturedPiece = result.deadPiece && result.deadPiece.color !== attackerColor;
+     
+     const newCastles = (capturedPiece && targetCastle && targetCastle.owner !== attackerColor)
+       ? state.castles.map(c => c.hex.equals(targetHex) ? c.with({ owner: attackerColor }) : c)
+       : state.castles;
+     
+     const tempState: GameState = { ...state, pieces: resultPieces, pieceMap: newPieceMap, castles: newCastles };
      const increment = RuleEngine.getTurnCounterIncrement(tempState, board);
      
      // Delegate Death Processing to DeathSystem
@@ -187,13 +236,15 @@ export class StateMutator {
       
      const resultState = StateMutator.checkTurnTransitions({
           ...state,
-          pieces: result.pieces,
+          pieces: resultPieces,
           pieceMap: newPieceMap,
+          castles: newCastles,
           movingPiece: null,
           turnCounter: state.turnCounter + increment,
           moveHistory: newMoveHistory,
           graveyard: newGraveyard,
-          phoenixRecords: newPhoenixRecords
+          phoenixRecords: newPhoenixRecords,
+          breakthroughUsed: breakthroughUsed
      });
 
      return {
@@ -366,7 +417,7 @@ export class StateMutator {
       const newPieces = [...state.pieces, newPiece];
       
       const newCastles = state.castles.map(c => {
-          if (c === castle) {
+          if (c.hex.equals(castle.hex)) {
               return c.with({ 
                   turns_controlled: c.turns_controlled + 1,
                   used_this_turn: true
@@ -433,7 +484,8 @@ export class StateMutator {
           return p.with({ 
               canMove: true, 
               canAttack: true, 
-              damage: 0 
+              damage: 0,
+              isBreakthroughActive: false
           });
       });
       const newCastles = state.castles.map(c => {
@@ -446,7 +498,8 @@ export class StateMutator {
           ...state,
           pieces: newPieces,
           pieceMap: newPieceMap,
-          castles: newCastles
+          castles: newCastles,
+          breakthroughUsed: false
       };
   }
 }
