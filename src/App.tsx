@@ -25,6 +25,7 @@ interface GameConfig {
   sanctuaries?: Sanctuary[];
   timeControl?: { initial: number, increment: number };
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
+  gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean };
   isAnalysisMode?: boolean;
 }
 
@@ -49,7 +50,8 @@ function App() {
     pieces: Piece[], 
     timeControl?: { initial: number, increment: number },
     selectedSanctuaryTypes?: SanctuaryType[],
-    sanctuarySettings?: { unlockTurn: number, cooldown: number }
+    sanctuarySettings?: { unlockTurn: number, cooldown: number },
+    gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean }
   ) => {
     const layout = getStartingLayout(board);
     
@@ -60,7 +62,7 @@ function App() {
     
     const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, typesToGenerate);
     
-    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, isAnalysisMode: false });
+    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, isAnalysisMode: false });
     setView('game');
   };
 
@@ -131,6 +133,7 @@ function App() {
               initialSanctuaries={gameConfig.sanctuaries}
               timeControl={gameConfig.timeControl}
               sanctuarySettings={gameConfig.sanctuarySettings}
+              gameRules={gameConfig.gameRules}
               isAnalysisMode={gameConfig.isAnalysisMode}
               onEnableAnalysis={handleEnableAnalysis}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up

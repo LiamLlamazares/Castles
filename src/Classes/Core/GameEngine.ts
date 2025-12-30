@@ -58,6 +58,7 @@ export interface GameState {
   moveTree: MoveTree; // Mandatory for history and variation tracking
   graveyard: Piece[]; // Captured pieces eligible for revival
   phoenixRecords: PhoenixRecord[]; // Active rebirth timers
+  victoryPoints?: { w: number, b: number }; // VP for castle control (optional, for VP mode)
 }
 
 /**
@@ -124,12 +125,12 @@ export class GameEngine {
     return TurnManager.getCurrentPlayer(turnCounter);
   }
 
-  public getWinner(pieces: Piece[], castles: Castle[]): Color | null {
-    return WinCondition.getWinner(pieces, castles);
+  public getWinner(pieces: Piece[], castles: Castle[], victoryPoints?: { w: number, b: number }): Color | null {
+    return WinCondition.getWinner(pieces, castles, victoryPoints);
   }
 
-  public getVictoryMessage(pieces: Piece[], castles: Castle[]): string | null {
-    return WinCondition.getVictoryMessage(pieces, castles);
+  public getVictoryMessage(pieces: Piece[], castles: Castle[], victoryPoints?: { w: number, b: number }): string | null {
+    return WinCondition.getVictoryMessage(pieces, castles, victoryPoints);
   }
 
   // ================= BOARD QUERIES (Delegated to RuleEngine) =================

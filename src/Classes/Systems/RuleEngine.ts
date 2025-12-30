@@ -38,20 +38,30 @@ export class RuleEngine {
 
   /**
    * Returns all hexes that block ground movement.
-   * Includes: rivers, castles, and occupied hexes.
+   * Includes: rivers, enemy/neutral castles, and occupied hexes.
+   * Friendly castles are passable (pieceColor determines friendship).
    */
-  public static getBlockedHexes(gameState: GameState, board: Board): Hex[] {
+  public static getBlockedHexes(gameState: GameState, board: Board, pieceColor?: Color): Hex[] {
     const occupied = RuleEngine.getOccupiedHexes(gameState);
+    
+    // Filter castles: only block if not owned by the moving piece's player
+    const blockingCastleHexes = pieceColor
+      ? board.castleHexes.filter(hex => {
+          const castle = gameState.castles.find(c => c.hex.equals(hex));
+          return !castle || castle.owner !== pieceColor;
+        })
+      : board.castleHexes; // If no color specified, all castles block
+    
     return [
         ...board.riverHexes, 
-        ...board.castleHexes, 
+        ...blockingCastleHexes, 
         ...occupied
     ];
   }
 
   /** Returns a Set of hex keys for O(1) blocked hex lookups */
-  public static getBlockedHexSet(gameState: GameState, board: Board): Set<string> {
-    const blockedHexes = RuleEngine.getBlockedHexes(gameState, board);
+  public static getBlockedHexSet(gameState: GameState, board: Board, pieceColor?: Color): Set<string> {
+    const blockedHexes = RuleEngine.getBlockedHexes(gameState, board, pieceColor);
     return new Set(blockedHexes.map(hex => hex.getKey()));
   }
   
@@ -99,7 +109,8 @@ export class RuleEngine {
   public static getLegalMoves(piece: Piece | null, gameState: GameState, board: Board): Hex[] {
     const phase = TurnManager.getTurnPhase(gameState.turnCounter);
     if (piece && phase === "Movement" && piece.canMove) {
-        const blockedSet = RuleEngine.getBlockedHexSet(gameState, board);
+        // Pass piece.color so friendly castles are passable
+        const blockedSet = RuleEngine.getBlockedHexSet(gameState, board, piece.color);
         return piece.getLegalMoves(blockedSet, piece.color, board.hexSet);
     }
     return [];

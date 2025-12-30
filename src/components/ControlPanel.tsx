@@ -6,8 +6,9 @@ import React from "react";
 import ChessClock from "./Clock";
 import TurnBanner from "./Turn_banner";
 import HistoryTable from "./HistoryTable";
-import { TurnPhase, Color, MoveRecord, STARTING_TIME, PHASE_CYCLE_LENGTH } from "../Constants";
+import { TurnPhase, Color, MoveRecord, PHASE_CYCLE_LENGTH } from "../Constants";
 import { MoveTree } from "../Classes/Core/MoveTree";
+import { VP_VICTORY_THRESHOLD } from "../Classes/Systems/WinCondition";
 
 interface ControlPanelProps {
   currentPlayer: Color;
@@ -23,7 +24,26 @@ interface ControlPanelProps {
   winner: Color | null;
   timeControl?: { initial: number, increment: number };
   viewNodeId?: string | null;
+  victoryPoints?: { w: number, b: number };
 }
+
+// VP Badge component for displaying victory points
+const VPBadge: React.FC<{ vp: number, player: Color }> = ({ vp, player }) => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '4px 10px',
+    background: player === 'w' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.3)',
+    borderRadius: '8px',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    color: vp >= VP_VICTORY_THRESHOLD ? '#27ae60' : '#ffd700'
+  }}>
+    <span>🏆</span>
+    <span>{vp}/{VP_VICTORY_THRESHOLD} VP</span>
+  </div>
+);
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
   currentPlayer,
@@ -39,6 +59,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   winner,
   timeControl,
   viewNodeId,
+  victoryPoints,
 }) => {
   // New Game should only be enabled before game starts OR after someone wins
   const isNewGameDisabled = hasGameStarted && !winner;
@@ -53,12 +74,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         {currentPlayer === "b" && !winner && (
           <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
         )}
-        <ChessClock
-          initialTime={(timeControl?.initial ?? 20) * 60}
-          increment={timeControl?.increment ?? 0}
-          isActive={hasGameStarted && currentPlayer === "b" && !winner}
-          player="b"
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+          <ChessClock
+            initialTime={(timeControl?.initial ?? 20) * 60}
+            increment={timeControl?.increment ?? 0}
+            isActive={hasGameStarted && currentPlayer === "b" && !winner}
+            player="b"
+          />
+          {victoryPoints && (
+            <VPBadge vp={victoryPoints.b} player="b" />
+          )}
+        </div>
       </div>
 
       {/* Move History (Middle) */}
@@ -74,12 +100,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
       {/* White Player Section (Bottom) */}
       <div className="player-section white">
-        <ChessClock
-          initialTime={(timeControl?.initial ?? 20) * 60}
-          increment={timeControl?.increment ?? 0}
-          isActive={hasGameStarted && currentPlayer === "w" && !winner}
-          player="w"
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+          <ChessClock
+            initialTime={(timeControl?.initial ?? 20) * 60}
+            increment={timeControl?.increment ?? 0}
+            isActive={hasGameStarted && currentPlayer === "w" && !winner}
+            player="w"
+          />
+          {victoryPoints && (
+            <VPBadge vp={victoryPoints.w} player="w" />
+          )}
+        </div>
         {currentPlayer === "w" && !winner && (
           <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
         )}

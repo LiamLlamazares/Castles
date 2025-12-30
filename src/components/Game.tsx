@@ -54,6 +54,7 @@ interface GameBoardProps {
   initialTurnCounter?: number;
   initialSanctuaries?: Sanctuary[];
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
+  gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean };
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
@@ -78,6 +79,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   initialTurnCounter,
   initialSanctuaries,
   sanctuarySettings,
+  gameRules,
   onResign = () => {},
   onSetup = () => {},
   onRestart = () => {},
@@ -107,6 +109,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
   
   // Quick Start modal for first-time users
   const [showQuickStart, dismissQuickStart] = useQuickStart();
+  
+  // Victory Points state (only used when VP mode is enabled)
+  const [victoryPoints, setVictoryPoints] = React.useState<{ w: number, b: number } | undefined>(
+    gameRules?.vpModeEnabled ? { w: 0, b: 0 } : undefined
+  );
   
   // Disable transitions after first render cycle to prevent "flying pieces" on resize
   React.useEffect(() => {
@@ -293,6 +300,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         winner={winner}
         timeControl={timeControl}
         viewNodeId={viewNodeId}
+        victoryPoints={victoryPoints}
       />
       
       <svg className={`board ${isInitialLoad ? 'no-transition' : ''}`} height="100%" width="100%">

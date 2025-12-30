@@ -4,62 +4,39 @@
 
 ---
 
-## 🔴 Sanctuary System (In Development)
+## 🔴 Sanctuary System ✅ (Implemented)
 
 Special map locations where players can pledge powerful fantasy creatures to their cause.
-
-### Sanctuary Types & Placement Zones
-
-| Sanctuary | Piece | Tier | Activation | Placement Zone |
-|-----------|-------|------|------------|----------------|
-| Wolf Covenant | Wolf | 1 | Occupy (Str 1+) | Neutral (near river) |
-| Sacred Spring | Healer | 1 | Occupy (Str 1+) | Neutral (near river) |
-| Warden's Watch | Ranger | 2 | Str 3+ surrounding | Opponent's shallow |
-| Arcane Refuge | Wizard | 2 | Str 3+ surrounding | Opponent's shallow |
-| Forsaken Grounds | Necromancer | 3 | Str 4+ + sacrifice | Opponent's deep |
-| Pyre Eternal | Phoenix | 3 | Str 4+ + sacrifice | Opponent's deep |
-
-Spy (dissapears every 2 turns)
-
-### Special Pieces
-
-| Piece | Move | Attack | Str | Ability |
-|-------|------|--------|-----|---------|
-| **Wolf** | 3 (ground) | Melee | 1 | Pack Tactics: +1 str per adjacent Wolf |
-| **Healer** | 1 | None | 1 | Bolster: Adjacent allies +1 str |
-| **Ranger** | 2 | Long-Range (3) | 1 | Snipe: Ignore supporting defenders |
-| **Wizard** | 1 | Range (2) | 1 | One-time: Fireball OR Teleport |
-| **Necromancer** | 1 | Melee | 1 | Soul Harvest: Kill → Soul → Raise Dead |
-| **Phoenix** | Flying 3 | Melee | 2 | Rebirth: Respawn after 3 turns |
-
-### Mechanics
-- **Placement**: Random + mirrored (like castles)
-- **Cooldown**: 5 turns after pledging
-- **Sacrifice** (Tier 3): Remove a piece to unlock Necromancer/Phoenix
-- **Exile**: Revived pieces are exiled (removed permanently) when killed again
+See `rules.md` for full documentation.
 
 ---
 
 ## 🔴 Drafting System
 
-**Status:** Designed, awaiting implementation
+**Status:** Designed, needs balancing work
+
+### Design Considerations
+- Self-balancing through point costs per piece
+- Placement constraints (where pieces can start)
+- Adds pre-game decision delay (tradeoff with immediate play)
 
 ### Tiered Drafting
-| Tier | Options |
-|------|---------|
-| 1 | Swordsman or Archer |
-| 2 | Knight or Eagle |
-| 3 | Giant, Trebuchet, or Assassin |
-| 4 | Dragon or Monarch |
+| Tier | Options | Draft Points |
+|------|---------|--------------|
+| 1 | Swordsman, Archer | 1, 2 |
+| 2 | Knight, Eagle | 3, 4 |
+| 3 | Giant, Trebuchet, Assassin | 5, 5, 7 |
+| 4 | Dragon, Monarch | 10, - |
 
 ---
 
 ## 🟡 Game Analysis & Storage
 
 ### PGN Export/Import ✅ (Implemented)
-### History Navigation (Planned)
-- Left/Right arrow keys to cycle through moves
-### Analysis Mode (Planned)
+### History Navigation ✅ (Implemented)
+- Arrow keys cycle through moves
+
+### Analysis Mode (Partial)
 - Post-game review with annotations
 
 ---
@@ -72,31 +49,6 @@ Spy (dissapears every 2 turns)
 | **Ruins** | +1 defensive strength |
 | **High Ground** ✅ | +1 range for ranged units |
 
-**Design Note**: Start with 2-3 terrain features per map.
-
----
-
-## 🟡 Training Camps
-
-**Location**: Near river, in enemy territory
-
-**Mechanic**: Occupy to upgrade piece to next tier (Swordsman → Archer → Knight...)
-
----
-
-## 🟡 New Game Modes
-
-### Asymmetric Siege Mode
-- Defender: Fortified position, reinforcements every N turns
-- Attacker: Larger army, must capture Throne within time limit
-
-### King of the Hill
-- Central hexes grant VP each turn
-- First to X VP wins
-
-### Capture the Flag
-- Carrying flag reduces movement
-
 ---
 
 ## 🟡 Asymmetric Factions
@@ -108,6 +60,77 @@ Spy (dissapears every 2 turns)
 | Lord Arken's Host | 2 Knights replace Archers; Assassin +1 move |
 | Siege Masters | 3 Trebuchets replace 2 Giants; non-heavy |
 | The Horde | +4 Swordsmen; no Assassin |
+
+---
+
+## 🟡 New Game Modes
+
+### Victory Points Mode ✅ (Implemented)
+- Score VP each round based on castle control
+- 4 castles = +1 VP, 5 castles = +3 VP
+- First to 10 VP wins
+
+### Breakthrough Mode (Testing)
+- First melee kill each turn grants +1 movement to attacker
+- Rewards aggressive play
+
+### Asymmetric Siege Mode
+- Defender: Fortified position, reinforcements every N turns
+- Attacker: Larger army, must capture Throne within time limit
+
+### King of the Hill
+- Central hexes grant VP each turn
+- First to X VP wins
+
+---
+
+## 🟡 Economy/Market System (Inspired by Dune Imperium)
+
+**Design Challenge**: Avoid "win more" mechanics where leading players get more pieces.
+
+### Brandon Sanderson Principle
+> "Weaknesses are always more interesting than strengths"
+
+**Design Ideas**:
+- Spending gold should have opportunity cost (forgo something else)
+- Stronger pieces have movement/placement restrictions
+- Gold earned through risky plays (deep territory, sacrifices) not just winning
+
+### Current Thinking
+- Gold from sanctuaries (risky to pledge) not kills
+- Or: Gold from pieces that survive in enemy territory
+- Creates: Risk/reward tension rather than snowball
+
+---
+
+## 🟢 Legacy/Veteran System
+
+Pieces gain experience and abilities through gameplay.
+
+### Option A: Session-Based Veterans
+Within a single game:
+- **1 kill** → "Blooded" - +1 movement OR attack range
+- **3 kills** → "Veteran" - Choose: +1 strength OR special ability
+- **5 kills** → "Legend" - Named, unique power
+
+**Complexity**: Requires per-piece kill tracking UI
+
+### Option B: Equipment Drops
+Certain hexes or events grant buffs:
+- Capture a **Shrine** → Next piece gains buff
+- Kill **Assassin** → Killer gains instant-kill ability
+- Simpler to implement than per-piece tracking
+
+---
+
+## 🟢 Fog of War Mode (Requires Online)
+
+Hidden information game mode:
+- Only see your pieces + enemies within 3 hexes
+- Scouts (Eagles, Wolves) become essential
+- Assassin becomes terrifying
+
+**Status**: Needs multiplayer first (local hotseat reveals positions)
 
 ---
 
@@ -128,6 +151,7 @@ Spy (dissapears every 2 turns)
 - Ranked seasons
 - Spectator mode
 - Replay sharing
+- Fog of War mode
 
 ---
 
@@ -141,6 +165,12 @@ Spy (dissapears every 2 turns)
 - Resource hexes (Mines, Shrines)
 - Occupy for resources, defend position
 
-### Victory Points
-- First to 10 VP wins
-- VP from battles, castle control, secret objectives
+---
+
+## Recently Implemented (Archive)
+
+- ✅ Phase counter showing remaining moves/attacks
+- ✅ Quick Start modal for first-time users
+- ✅ Defended piece badges (shield icons)
+- ✅ Friendly castle passability (pieces can move through owned castles)
+- ✅ VP for castle control system

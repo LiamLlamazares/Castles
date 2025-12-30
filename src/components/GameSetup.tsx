@@ -17,7 +17,8 @@ interface GameSetupProps {
         pieces: Piece[], 
         timeControl?: { initial: number, increment: number },
         selectedSanctuaryTypes?: SanctuaryType[],
-        sanctuarySettings?: { unlockTurn: number, cooldown: number }
+        sanctuarySettings?: { unlockTurn: number, cooldown: number },
+        gameRules?: { vpModeEnabled: boolean, breakthroughBonus: boolean }
     ) => void;
 }
 
@@ -73,11 +74,11 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     // Game Mode State
     const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
     
-    // Setup State
-    const [boardRadius, setBoardRadius] = useState<number>(8);
+    // Setup State - defaults match 'standard' mode preset
+    const [boardRadius, setBoardRadius] = useState<number>(MODE_PRESETS.standard.boardRadius); // 7
     const [useRandomCastles, setUseRandomCastles] = useState<boolean>(true);
-    const [timeInitial, setTimeInitial] = useState<number>(20); // Minutes
-    const [timeIncrement, setTimeIncrement] = useState<number>(20); // Seconds
+    const [timeInitial, setTimeInitial] = useState<number>(MODE_PRESETS.standard.timeInitial); // 20
+    const [timeIncrement, setTimeIncrement] = useState<number>(MODE_PRESETS.standard.timeIncrement); // 20
     
     // Sanctuary Selection - Default: Wolf + Healer (Tier 1)
     const [selectedSanctuaries, setSelectedSanctuaries] = useState<Set<SanctuaryType>>(
@@ -87,6 +88,10 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     // Sanctuary Configuration
     const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(0);  // Always unlocked
     const [sanctuaryCooldown, setSanctuaryCooldown] = useState<number>(10);
+    
+    // Game Rules - Optional modes
+    const [vpModeEnabled, setVpModeEnabled] = useState<boolean>(false);
+    const [breakthroughBonus, setBreakthroughBonus] = useState<boolean>(false);
     
     // Tooltip state for sanctuary piece preview
     const [tooltipPiece, setTooltipPiece] = useState<Piece | null>(null);
@@ -186,7 +191,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             pieces, 
             { initial: timeInitial, increment: timeIncrement },
             Array.from(selectedSanctuaries),
-            { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown }
+            { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
+            { vpModeEnabled, breakthroughBonus }
         );
     };
 
@@ -323,7 +329,6 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                     </div>
                 </div>
 
-                {/* Sanctuary Settings */}
                 <div style={{ ...controlGroupStyle, alignItems: 'center' }}>
                     <label style={labelStyle}>Sanctuary Cooldown</label>
                     <input 
@@ -335,6 +340,90 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         style={inputNumberStyle}
                         title="Cooldown turns after pledging"
                     />
+                </div>
+
+                {/* Game Rules Section */}
+                <div style={{ 
+                    ...controlGroupStyle, 
+                    flexDirection: 'column', 
+                    alignItems: 'stretch',
+                    background: 'rgba(102, 126, 234, 0.1)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    border: '1px solid rgba(102, 126, 234, 0.3)'
+                }}>
+                    <label style={{ 
+                        ...labelStyle, 
+                        marginBottom: '10px', 
+                        color: '#667eea',
+                        fontSize: '0.9rem'
+                    }}>
+                        🎮 Game Rules (Experimental)
+                    </label>
+                    
+                    {/* VP Mode Toggle */}
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '10px',
+                        marginBottom: '8px'
+                    }}>
+                        <input 
+                            type="checkbox" 
+                            id="vpMode"
+                            checked={vpModeEnabled}
+                            onChange={(e) => setVpModeEnabled(e.target.checked)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="vpMode" style={{ 
+                            fontSize: '0.85rem', 
+                            cursor: 'pointer',
+                            color: vpModeEnabled ? '#27ae60' : '#aaa'
+                        }}>
+                            🏆 Victory Points Mode
+                        </label>
+                    </div>
+                    {vpModeEnabled && (
+                        <div style={{ 
+                            fontSize: '0.7rem', 
+                            color: '#888', 
+                            marginLeft: '28px',
+                            marginBottom: '8px'
+                        }}>
+                            4 castles = +1 VP/round, 5 castles = +3 VP/round. First to 10 VP wins!
+                        </div>
+                    )}
+                    
+                    {/* Breakthrough Bonus Toggle */}
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '10px'
+                    }}>
+                        <input 
+                            type="checkbox" 
+                            id="breakthrough"
+                            checked={breakthroughBonus}
+                            onChange={(e) => setBreakthroughBonus(e.target.checked)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <label htmlFor="breakthrough" style={{ 
+                            fontSize: '0.85rem', 
+                            cursor: 'pointer',
+                            color: breakthroughBonus ? '#e74c3c' : '#aaa'
+                        }}>
+                            ⚔️ Breakthrough Bonus
+                        </label>
+                    </div>
+                    {breakthroughBonus && (
+                        <div style={{ 
+                            fontSize: '0.7rem', 
+                            color: '#888', 
+                            marginLeft: '28px'
+                        }}>
+                            First melee kill each turn grants +1 movement to the attacker.
+                        </div>
+                    )}
                 </div>
 
                 {/* Sanctuary Selection */}
