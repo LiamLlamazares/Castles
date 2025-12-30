@@ -6,12 +6,13 @@ import React from "react";
 import ChessClock from "./Clock";
 import TurnBanner from "./Turn_banner";
 import HistoryTable from "./HistoryTable";
-import { TurnPhase, Color, MoveRecord, STARTING_TIME } from "../Constants";
+import { TurnPhase, Color, MoveRecord, STARTING_TIME, PHASE_CYCLE_LENGTH } from "../Constants";
 import { MoveTree } from "../Classes/Core/MoveTree";
 
 interface ControlPanelProps {
   currentPlayer: Color;
   turnPhase: TurnPhase;
+  turnCounter: number;
   onPass: () => void;
   onResign: () => void;
   onNewGame: () => void;
@@ -27,6 +28,7 @@ interface ControlPanelProps {
 const ControlPanel: React.FC<ControlPanelProps> = ({
   currentPlayer,
   turnPhase,
+  turnCounter,
   onPass,
   onResign,
   onNewGame,
@@ -40,13 +42,16 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 }) => {
   // New Game should only be enabled before game starts OR after someone wins
   const isNewGameDisabled = hasGameStarted && !winner;
+  
+  // Calculate phase index within current player's turn (0-4)
+  const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
 
   return (
     <div className="game-panel">
       {/* Black Player Section (Top) */}
       <div className="player-section black">
         {currentPlayer === "b" && !winner && (
-          <TurnBanner color={currentPlayer} phase={turnPhase} />
+          <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
         )}
         <ChessClock
           initialTime={(timeControl?.initial ?? 20) * 60}
@@ -76,7 +81,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           player="w"
         />
         {currentPlayer === "w" && !winner && (
-          <TurnBanner color={currentPlayer} phase={turnPhase} />
+          <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
         )}
       </div>
 

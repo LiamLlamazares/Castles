@@ -38,6 +38,7 @@ import AbilityBar from "./AbilityBar";
 import { SanctuaryTooltip } from "./SanctuaryTooltip";
 import { PieceTooltip } from "./PieceTooltip";
 import { TerrainTooltip } from "./TerrainTooltip";
+import QuickStartModal, { useQuickStart } from "./QuickStartModal";
 import { PieceFactory } from "../Classes/Entities/PieceFactory";
 import { HistoryEntry, MoveRecord, SanctuaryConfig } from "../Constants";
 import { createPieceMap } from "../utils/PieceMap";
@@ -103,6 +104,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
     localStorage.setItem('hasSeenTooltipHint', 'true');
     setShowTooltipHint(false);
   };
+  
+  // Quick Start modal for first-time users
+  const [showQuickStart, dismissQuickStart] = useQuickStart();
   
   // Disable transitions after first render cycle to prevent "flying pieces" on resize
   React.useEffect(() => {
@@ -275,6 +279,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
       <ControlPanel
         currentPlayer={currentPlayer}
         turnPhase={turnPhase}
+        turnCounter={turnCounter}
         onPass={handlePass}
         onResign={() => {
             handleResign(currentPlayer);
@@ -422,6 +427,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
             Got it
           </button>
         </div>
+      )}
+      
+      {/* Quick Start Modal for first-time users */}
+      {showQuickStart && (
+        <QuickStartModal onClose={dismissQuickStart} />
       )}
     </>
   );
