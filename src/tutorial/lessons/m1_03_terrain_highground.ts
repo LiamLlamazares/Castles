@@ -1,50 +1,40 @@
 /**
  * MODULE 1: Board Basics
- * Lesson 1.3: Terrain - High Ground
+ * Lesson 1.3: Terrain: High Ground
  * 
- * Objective: Position on high ground
+ * Overview of the game - no interaction required.
  */
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
-import { Hex } from '../../Classes/Entities/Hex';
-import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { Piece } from '../../Classes/Entities/Piece';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
+import { TUTORIAL_BOARD_STANDARD_R, TUTORIAL_CASTLES_STANDARD } from '../constants';
 
 export function createM1L3(): TutorialLesson {
-  const boardRadius = 3; // Small + highlands
+  const boardRadius = TUTORIAL_BOARD_STANDARD_R; // Standard board
   
-  const castles: Castle[] = [
-    new Castle(new Hex(-3, 3, 0), 'w', 0),
-    new Castle(new Hex(3, -3, 0), 'b', 0),
-  ];
-  
-  const boardConfig: BoardConfig = { nSquares: boardRadius };
+  const castles: Castle[] = [...TUTORIAL_CASTLES_STANDARD];
+  const boardConfig: BoardConfig = { nSquares: boardRadius,riverCrossingLength: 2,
+  hasHighGround: false };
   const board = new Board(boardConfig, castles);
   
-  const pieces = [
-    // TODO: Piece near high ground
-    PieceFactory.create(PieceType.Archer, new Hex(-1, 1, 0), 'w'),
-  ];
+  // TODO: Standard starting positions
+  const pieces: Piece[] = [];
   
   const layout = getStartingLayout(board);
   
   return {
-    id: 'm1_l5_terrain_highground',
-    title: '1.5 Terrain: High Ground',
-    description: 'Learn the defensive advantage of high ground.',
+    id: 'm1_l3_terrain_highground',
+    title: '1.3 Terrain: High Ground',
+    description: 'The landscape includes',
     board,
     pieces,
+    sanctuaries: [],
     layout,
     objectives: [
-      'Move your piece onto high ground',
+      // No objectives - overview only
     ],
-    hints: [
-      '⛰️ High ground gives defensive bonuses',
-      '🛡️ Pieces on high ground are harder to attack',
-      '👁️ Great position for Archers',
-    ],
-    instructions: 'TODO: Position your Archer on the high ground.',
+    instructions: 'Right click on a river for additional information.',
   };
 }
