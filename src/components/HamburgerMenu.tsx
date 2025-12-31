@@ -191,7 +191,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
                   >
                     <span className="menu-icon">{showTerrainIcons ? '☑️' : '⬜'}</span>
-                    Terrain (Waves/Mountains)
+                    Terrain
                  </button>
                )}
                
