@@ -71,6 +71,7 @@ export function getAllLessons(): TutorialLesson[] {
     createM1L1(), // 1.1 Terrain: Castles
     createM1L2(), // 1.2 Terrain: Rivers
     createM1L3(), // 1.3 Terrain: High Ground
+    createM1L4(), // 1.4 Terrain: Sanctuaries
     
     // Module 2: Your Army
     createM2L1(), // 2.1 Game Phases

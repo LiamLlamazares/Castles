@@ -101,6 +101,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
   const [tooltipPiece, setTooltipPiece] = React.useState<Piece | null>(null);
   const [tooltipHex, setTooltipHex] = React.useState<Hex | null>(null);
+  const [isSanctuaryPreview, setIsSanctuaryPreview] = React.useState(false);
   
   // Tooltip discovery hint (show once per browser)
   const [showTooltipHint, setShowTooltipHint] = React.useState(() => {
@@ -398,11 +399,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
           onHexClick={handleBoardClick}
           onHexRightClick={(hex) => {
             setTooltipPiece(null);
+            setIsSanctuaryPreview(false);
             const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
             if (sanctuary) {
               const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
               const dummyPiece = PieceFactory.create(pieceType, hex, currentPlayer);
               setTooltipPiece(dummyPiece);
+              setIsSanctuaryPreview(true);
               setTooltipHex(null);
             } else {
               setTooltipHex(hex === tooltipHex ? null : hex);
@@ -485,6 +488,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
             { pieces, pieceMap: createPieceMap(pieces) } as any, 
             board
           )}
+          isPreview={isSanctuaryPreview}
         />
       )}
 

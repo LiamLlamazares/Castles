@@ -2,7 +2,8 @@ import { Board, BoardConfig } from '../Classes/Core/Board';
 import { Castle } from '../Classes/Entities/Castle';
 import { Hex } from '../Classes/Entities/Hex';
 import { PieceFactory } from '../Classes/Entities/PieceFactory';
-import { PieceType } from '../Constants';
+import { Sanctuary } from '../Classes/Entities/Sanctuary';
+import { PieceType, SanctuaryType } from '../Constants';
 import { getStartingLayout } from '../ConstantImports';
 // Board sizes
 export const TUTORIAL_BOARD_MINI_R = 2;      // 7-hex cluster
@@ -25,4 +26,10 @@ export const TUTORIAL_CASTLES_SMALL = [
 export const TUTORIAL_CASTLES_MINI = [
   new Castle(new Hex(-2, 2, 0), 'w', 0),
   new Castle(new Hex(2, -2, 0), 'b', 0),
+] as const;
+
+export const TUTORIAL_SANCTUARIES_STANDARD = [
+  new Sanctuary(new Hex(0, 0, 0), SanctuaryType.WolfCovenant, 'w', null, 0, false),
+  new Sanctuary(new Hex(-2, -2, 4), SanctuaryType.ArcaneRefuge, 'b', null, 0, false),  // Wizard
+  new Sanctuary(new Hex(2, 2, -4), SanctuaryType.PyreEternal, 'w', null, 0, false),   // Phoenix
 ] as const;

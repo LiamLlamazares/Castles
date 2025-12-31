@@ -1,52 +1,39 @@
 /**
  * MODULE 1: Board Basics
- * Lesson 1.5: Terrain - Sanctuaries
+ * Lesson 1.4: Terrain: Sanctuaries
  * 
- * Objective: Approach a sanctuary
+ * Overview of the game - no interaction required.
  */
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
-import { Hex } from '../../Classes/Entities/Hex';
-import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { Piece } from '../../Classes/Entities/Piece';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
+import { TUTORIAL_BOARD_STANDARD_R, TUTORIAL_CASTLES_STANDARD, TUTORIAL_SANCTUARIES_STANDARD } from '../constants';
 
 export function createM1L4(): TutorialLesson {
-  const boardRadius = 6; // Full board
+  const boardRadius = TUTORIAL_BOARD_STANDARD_R; // Standard board
   
-  const castles: Castle[] = [
-    new Castle(new Hex(-6, 6, 0), 'w', 0),
-    new Castle(new Hex(6, -6, 0), 'b', 0),
-    new Castle(new Hex(0, -6, 6), 'w', 0),
-    new Castle(new Hex(0, 6, -6), 'b', 0),
-  ];
-  
-  const boardConfig: BoardConfig = { nSquares: boardRadius };
+  const castles: Castle[] = [...TUTORIAL_CASTLES_STANDARD];
+  const boardConfig: BoardConfig = { nSquares: boardRadius,riverCrossingLength: 2 };
   const board = new Board(boardConfig, castles);
   
-  // TODO: Add sanctuary to board
-  const pieces = [
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
-  ];
+  // TODO: Standard starting positions
+  const pieces: Piece[] = [];
   
   const layout = getStartingLayout(board);
   
   return {
-    id: 'm1_l6_terrain_sanctuaries',
-    title: '1.6 Terrain: Sanctuaries',
-    description: 'Learn about sanctuary hexes.',
+    id: 'm1_l4_terrain_sanctuaries',
+    title: '1.4 Terrain: Sanctuaries',
+    description: 'Interspersed across the battlefield are sanctuaries. Control of them allows for the recruitment of special units such as wolves, mages, and other mystical creatures.',
     board,
     pieces,
+    sanctuaries: [...TUTORIAL_SANCTUARIES_STANDARD],
     layout,
     objectives: [
-      'Move adjacent to a sanctuary',
+      // No objectives - overview only
     ],
-    hints: [
-      '🏛️ Sanctuaries grant special units',
-      '🙏 Pledge pieces to activate them',
-      '⏳ They have cooldowns after use',
-    ],
-    instructions: 'TODO: Get your piece adjacent to the sanctuary.',
+    instructions: 'Hover and right click on a sanctuary for additional information.',
   };
 }

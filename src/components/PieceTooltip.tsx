@@ -7,6 +7,7 @@ interface PieceTooltipProps {
   piece: Piece;
   position?: { x: number, y: number };
   isDefended?: boolean;
+  isPreview?: boolean;  // True when showing generic piece info (e.g., from sanctuary)
   style?: React.CSSProperties;
 }
 
@@ -36,7 +37,7 @@ const PIECE_INFO: Record<PieceType, {
   [PieceType.Phoenix]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true, special: 'Rebirth after 3 turns' },
 };
 
-export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended, style }) => {
+export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended, isPreview, style }) => {
   const info = PIECE_INFO[piece.type];
   if (!info) return null;
 
@@ -110,18 +111,20 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
         </div>
         <div style={titleStyle}>
            <h3 style={{ margin: 0, fontSize: '1.0rem', color: '#fff' }}>{piece.type}</h3>
-           <span style={{ 
-             fontSize: '0.65rem', 
-             fontWeight: 'bold', 
-             backgroundColor: piece.color === 'w' ? '#00fbff' : '#8000ff',
-             color: '#fff',
-             padding: '2px 6px',
-             borderRadius: '4px',
-             textTransform: 'uppercase',
-             marginLeft: '8px'
-           }}>
-             {piece.color === 'w' ? 'White' : 'Black'}
-           </span>
+           {!isPreview && (
+             <span style={{ 
+               fontSize: '0.65rem', 
+               fontWeight: 'bold', 
+               backgroundColor: piece.color === 'w' ? '#00fbff' : '#8000ff',
+               color: '#fff',
+               padding: '2px 6px',
+               borderRadius: '4px',
+               textTransform: 'uppercase',
+               marginLeft: '8px'
+             }}>
+               {piece.color === 'w' ? 'White' : 'Black'}
+             </span>
+           )}
         </div>
       </div>
 
@@ -151,8 +154,8 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
       <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
         {info.heavy && <span style={badgeStyle('#8e44ad')}>Heavy</span>}
         {info.flying && <span style={badgeStyle('#3498db')}>Flying</span>}
-        {piece.canMove && <span style={badgeStyle('#27ae60')}>Can Move</span>}
-        {piece.canAttack && <span style={badgeStyle('#e74c3c')}>Can Attack</span>}
+        {!isPreview && piece.canMove && <span style={badgeStyle('#27ae60')}>Can Move</span>}
+        {!isPreview && piece.canAttack && <span style={badgeStyle('#e74c3c')}>Can Attack</span>}
         {isDefended && <span style={badgeStyle('#f39c12')}>Defended 🛡️</span>}
       </div>
 
@@ -169,7 +172,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
         </div>
       )}
 
-      {piece.damage > 0 && (
+      {!isPreview && piece.damage > 0 && (
         <div style={{ 
           marginTop: '8px', 
           color: '#e74c3c',

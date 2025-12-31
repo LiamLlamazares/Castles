@@ -4,7 +4,7 @@ import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { Board } from "../Classes/Core/Board";
 import { LayoutService } from "../Classes/Systems/LayoutService";
-import { PieceType } from "../Constants";
+import { PieceType, SanctuaryConfig } from "../Constants";
 import { getImageByPieceType } from "./PieceImages";
 import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from "../utils/HexRenderUtils";
 
@@ -129,6 +129,75 @@ const HexGrid = React.memo(({
                 {`${-hex.q}, ${-hex.s}`}
               </text>
             )}
+            
+            {/* Accessibility: Terrain Icons */}
+            {(() => {
+              const center = getHexCenter(hex, isBoardRotated, layout);
+              const isRiver = board.riverHexSet.has(hex.getKey());
+              const isHighGround = board.highGroundHexSet.has(hex.getKey());
+              const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
+              const iconSize = layout.size_image * 0.35;
+              const offsetX = iconSize * 1.1; // Center-right
+              const offsetY = 0; // Vertically centered
+              
+              // River icon (center-right)
+              if (isRiver) {
+                return (
+                  <text
+                    x={center.x + offsetX}
+                    y={center.y + offsetY + iconSize * 0.3}
+                    textAnchor="middle"
+                    style={{ fontSize: iconSize * 0.9, pointerEvents: 'none', filter: 'drop-shadow(1px 1px 1px rgba(0,0,0,0.5))' }}
+                  >
+                    🌊
+                  </text>
+                );
+              }
+              
+              // High ground icon (center-right)
+              if (isHighGround && !castles.some(c => c.hex.equals(hex))) {
+                return (
+                  <text
+                    x={center.x + offsetX}
+                    y={center.y + offsetY + iconSize * 0.3}
+                    textAnchor="middle"
+                    style={{ fontSize: iconSize * 0.9, pointerEvents: 'none', filter: 'drop-shadow(1px 1px 1px rgba(0,0,0,0.5))' }}
+                  >
+                    ⛰️
+                  </text>
+                );
+              }
+              
+              // Sanctuary icon - show the piece SVG (center-right)
+              if (sanctuary) {
+                const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
+                
+                return (
+                  <g style={{ pointerEvents: 'none' }}>
+                    {/* Background circle */}
+                    <circle
+                      cx={center.x + offsetX}
+                      cy={center.y + offsetY}
+                      r={iconSize * 0.55}
+                      fill="rgba(0, 0, 0, 0.6)"
+                      stroke="rgba(255, 215, 0, 0.8)"
+                      strokeWidth={1.5}
+                    />
+                    {/* Piece icon - use white color for visibility */}
+                    <image
+                      href={getImageByPieceType(pieceType, 'w')}
+                      x={center.x + offsetX - iconSize/2}
+                      y={center.y + offsetY - iconSize/2}
+                      width={iconSize}
+                      height={iconSize}
+                      opacity={0.95}
+                    />
+                  </g>
+                );
+              }
+              
+              return null;
+            })()}
             
             {/* Castle Recruitment Preview - always visible */}
             {(() => {
