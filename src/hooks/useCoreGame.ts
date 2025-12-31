@@ -41,8 +41,9 @@ export const useCoreGame = (
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
   
   // Use provided sanctuaries or generate default set (random)
+  // If initialSanctuaries is explicitly an array (even empty), use it; otherwise generate defaults
   const startingSanctuaries = useMemo(() => {
-      if (initialSanctuaries && initialSanctuaries.length > 0) {
+      if (initialSanctuaries !== undefined) {
           return initialSanctuaries;
       }
       return SanctuaryGenerator.generateDefaultSanctuaries(initialBoard);

@@ -29,6 +29,7 @@ export function createM1L1(): TutorialLesson {
     description: 'Welcome to Castles - a hex-based strategy game.',
     board,
     pieces,
+    sanctuaries: [],
     layout,
     objectives: [
       // No objectives - overview only
