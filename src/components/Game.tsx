@@ -277,8 +277,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
     onNavigate: stepHistory,
     onNewGame: handleNewGame,
     isNewGameEnabled: !hasGameStarted || !!winner,
-    layout: initialLayout
   });
+
+  // Calculate viewBox for auto-scaling (always enabled for consistent sizing)
+  const viewBox = React.useMemo(() => {
+    return initialLayout.calculateViewBox();
+  }, [initialLayout]);
 
   // =========== RENDER ===========
 
@@ -346,8 +350,22 @@ const GameBoard: React.FC<GameBoardProps> = ({
           victoryPoints={victoryPoints}
         />
       )}
-      
-      <svg className={`board ${isInitialLoad ? 'no-transition' : ''}`} height="100%" width="100%">
+      {/* Board Container - takes remaining space after control panel */}
+      <div style={{ 
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: isTutorialMode ? '100%' : 'calc(100vw - 300px)',
+        height: '100vh',
+        overflow: 'hidden'
+      }}>
+        <svg 
+          className={`board ${isInitialLoad ? 'no-transition' : ''}`} 
+          width="100%"
+          height="100%"
+          viewBox={viewBox}
+          preserveAspectRatio="xMidYMid meet"
+        >
         {/* ... SVG Content ... */}
         <defs>
           <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
@@ -414,7 +432,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
           onHexClick={handleBoardClick}
           layout={initialLayout}
         />
-      </svg>
+        </svg>
+      </div>
 
       {!isOverlayDismissed && (
           <VictoryOverlay 

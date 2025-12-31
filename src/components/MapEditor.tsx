@@ -18,27 +18,8 @@ const MapEditor: React.FC<MapEditorProps> = ({ onPlay }) => {
         const l = getStartingLayout(b);
         const p = getStartingPieces(boardRadius);
 
-        // Calculate bounding box for viewBox
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        b.hexes.forEach(hex => {
-            const corners = l.layout.polygonCorners(hex);
-            corners.forEach(corner => {
-                if (corner.x < minX) minX = corner.x;
-                if (corner.x > maxX) maxX = corner.x;
-                if (corner.y < minY) minY = corner.y;
-                if (corner.y > maxY) maxY = corner.y;
-            });
-        });
-
-        const width = maxX - minX;
-        const height = maxY - minY;
-        const padding = 80; // Increased padding
-        const yOffset = 50; // Shift board up by moving viewBox down (positive y is down)
-        
-        // viewBox: min-x, min-y, width, height
-        // To move board UP, we add to min-y (camera moves down).
-        // To reveal more at bottom, we ensure height covers it.
-        const vb = `${minX - padding} ${minY - padding + yOffset} ${width + padding * 2} ${height + padding * 2}`;
+        // Calculate viewBox using LayoutService method
+        const vb = l.calculateViewBox();
 
         return { board: b, layout: l, pieces: p, viewBox: vb };
     }, [boardRadius]);
@@ -81,7 +62,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ onPlay }) => {
             </div>
 
             <div className="editor-preview" style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-                 <svg className="board" height="100%" width="100%" viewBox={viewBox}>
+                 <svg className="board" height="100%" width="100%" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
                     <HexGrid
                         hexagons={board.hexes}
                         castles={[]} // No castles for now or generate them too?

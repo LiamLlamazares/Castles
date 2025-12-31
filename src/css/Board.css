@@ -5,13 +5,13 @@ body {
 }
 
 .board {
+    /* ViewBox handles all scaling and centering - just fill container */
+    width: 100%;
+    height: 100%;
     position: relative;
-    width: calc(100vw - 300px); /* Subtract right panel width (280px + padding) */
-    height: 100vh; /* Use viewport height for full height */
-    margin-left: 0; /* No left sidebar anymore */
+    margin: 0;
     padding: 0;
-    overflow: hidden; /* Prevent scrollbars from appearing */
-    /* Background moved to body */
+    overflow: hidden;
   }
   
   

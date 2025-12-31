@@ -3,13 +3,25 @@ import { Board } from '../Core/Board';
 import { HEX_SIZE_FACTOR, X_OFFSET, Y_OFFSET, LAYOUT_TYPE, PIECE_SCALE_FACTOR } from '../../Constants';
 
 /**
+ * Virtual canvas size - all layout calculations use this fixed size.
+ * SVG viewBox scales this to fit the actual container.
+ */
+export const VIRTUAL_CANVAS_SIZE = 1000;
+
+/**
  * Manages the visual layout and coordinate transformations for the board.
- * Separate from the logical Board model.
+ * 
+ * Uses a "virtual canvas" approach:
+ * - All calculations use fixed VIRTUAL_CANVAS_SIZE dimensions
+ * - SVG viewBox auto-scales to fit actual container
+ * - Guarantees consistent proportions regardless of window size
  */
 export class LayoutService {
   public layout: Layout;
-  public pixelWidth: number = 800; // Default
-  public pixelHeight: number = 600; // Default
+  
+  // Virtual canvas dimensions (fixed size for consistent proportions)
+  public pixelWidth: number = VIRTUAL_CANVAS_SIZE;
+  public pixelHeight: number = VIRTUAL_CANVAS_SIZE;
   
   public hexCornerString: { [key: string]: string } = {};
   public hexCenters: { [key: string]: Point } = {};
@@ -21,13 +33,6 @@ export class LayoutService {
     public Y_OFFSET_ARG: number = Y_OFFSET,
     public layoutType: "flat" | "pointy" = LAYOUT_TYPE as "flat" | "pointy"
   ) {
-    this.layout = this.getLayout();
-    this.updateCache();
-  }
-
-  public updateDimensions(width: number, height: number): void {
-    this.pixelWidth = width;
-    this.pixelHeight = height;
     this.layout = this.getLayout();
     this.updateCache();
   }
@@ -65,4 +70,31 @@ export class LayoutService {
   getHexCenter(hex: Hex): Point {
     return this.layout.hexToPixel(hex);
   }
+
+  /**
+   * Calculates the SVG viewBox string for this board.
+   * Uses the bounding box of all hex corners plus minimal padding.
+   * 
+   * @param padding - Extra padding around the board (default 10)
+   * @returns ViewBox string like "minX minY width height"
+   */
+  public calculateViewBox(padding: number = 10): string {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    
+    this.board.hexes.forEach(hex => {
+      const corners = this.layout.polygonCorners(hex);
+      corners.forEach(corner => {
+        if (corner.x < minX) minX = corner.x;
+        if (corner.x > maxX) maxX = corner.x;
+        if (corner.y < minY) minY = corner.y;
+        if (corner.y > maxY) maxY = corner.y;
+      });
+    });
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+    
+    return `${minX - padding} ${minY - padding} ${width + padding * 2} ${height + padding * 2}`;
+  }
 }
+

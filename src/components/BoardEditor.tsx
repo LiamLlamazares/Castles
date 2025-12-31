@@ -78,23 +78,8 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
     const b = initialBoard ?? getStartingBoard(boardRadius);
     const l = getStartingLayout(b);
 
-    // Calculate bounding box for viewBox
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    b.hexes.forEach(hex => {
-      const corners = l.layout.polygonCorners(hex);
-      corners.forEach(corner => {
-        if (corner.x < minX) minX = corner.x;
-        if (corner.x > maxX) maxX = corner.x;
-        if (corner.y < minY) minY = corner.y;
-        if (corner.y > maxY) maxY = corner.y;
-      });
-    });
-
-    const width = maxX - minX;
-    const height = maxY - minY;
-    const padding = 80;
-    const yOffset = 50;
-    const vb = `${minX - padding} ${minY - padding + yOffset} ${width + padding * 2} ${height + padding * 2}`;
+    // Calculate viewBox using LayoutService method
+    const vb = l.calculateViewBox();
 
     return { board: b, layout: l, viewBox: vb };
   }, [boardRadius, initialBoard]);
@@ -331,7 +316,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
           overflow: 'hidden',
           cursor: draggedPiece ? 'grabbing' : (selectedTool ? 'crosshair' : 'default')
         }}>
-          <svg className="board" height="100%" width="100%" viewBox={viewBox}>
+          <svg className="board" height="100%" width="100%" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
             <HexGrid
               hexagons={board.hexes}
               castles={board.castles}
