@@ -358,7 +358,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
         width: isTutorialMode ? '100%' : 'calc(100vw - 300px)',
         height: '100vh',
         overflow: 'hidden'
-      }}>
+      }}
+      onClick={() => {
+        // Dismiss tooltips when clicking anywhere on the board
+        if (tooltipPiece) setTooltipPiece(null);
+        if (tooltipHex) setTooltipHex(null);
+      }}
+      >
         <svg 
           className={`board ${isInitialLoad ? 'no-transition' : ''}`} 
           width="100%"
