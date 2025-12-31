@@ -19,21 +19,17 @@ export function createLesson00(): TutorialLesson {
   
   return {
     id: 'lesson00_sandbox',
-    title: 'Sandbox Mode',
-    description: 'Full game board for free exploration.',
+    title: 'Welcome',
+    description: 'Castles is a hex-based strategy game. Each player controls a Monarch and their army. Victory is achieved by capturing the other player\'s Monarch or castles.',
     board,
     pieces,
     layout,
-    objectives: [
-      'Explore the board freely',
-      'Practice movement and attacks',
-      'No victory conditions - experiment!',
-    ],
     hints: [
       'Right-click any piece for detailed info',
       'Right-click terrain to learn about it',
       'Press Space or click Pass to skip phases',
+      'Press Next when ready',
     ],
-    instructions: 'This is a full game board. Play freely to explore all the mechanics!',
+    instructions: 'All boards are interactive, click to move freely',
   };
 }

@@ -1,6 +1,6 @@
 /**
  * MODULE 1: Board Basics
- * Lesson 1.4: Terrain - Rivers
+ * Lesson 1.3: Terrain - Rivers
  * 
  * Objective: Learn river restrictions
  */
@@ -12,7 +12,7 @@ import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
-export function createM1L4(): TutorialLesson {
+export function createM1L3(): TutorialLesson {
   const boardRadius = 3; // Small + river
   
   const castles: Castle[] = [
@@ -32,8 +32,8 @@ export function createM1L4(): TutorialLesson {
   const layout = getStartingLayout(board);
   
   return {
-    id: 'm1_l4_terrain_rivers',
-    title: '1.4 Terrain: Rivers',
+    id: 'm1_l3_terrain_rivers',
+    title: '1.3 Terrain: Rivers',
     description: 'Learn how rivers affect movement.',
     board,
     pieces,

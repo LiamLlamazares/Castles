@@ -421,6 +421,7 @@ export class StateMutator {
   /**
    * Checks if we need to reset turn flags based on phase transitions.
    * - Resets at start of new Player Turn (turnCounter % 5 === 0)
+   * - Auto-skips Movement phase if current player has no moveable pieces
    * - Helper to centralize this logic
    */
   private static checkTurnTransitions(state: GameState): GameState {
@@ -484,7 +485,28 @@ export class StateMutator {
       // 2. Global Reset (canMove, canAttack, damage) at the start of EACH player's turn
       // PHASE_CYCLE_LENGTH = 5 (indices 0 and 5)
       if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
-          return StateMutator.resetTurnFlags(newState);
+          newState = StateMutator.resetTurnFlags(newState);
+      }
+      
+      // 3. Auto-skip Movement phase if current player has no moveable pieces
+      // This handles the case where a player has only 1 piece and it already moved
+      const currentPhase = TurnManager.getTurnPhase(newState.turnCounter);
+      if (currentPhase === "Movement") {
+          const currentPlayer = TurnManager.getCurrentPlayer(newState.turnCounter);
+          const moveablePieces = newState.pieces.filter(
+              p => p.color === currentPlayer && p.canMove
+          );
+          
+          if (moveablePieces.length === 0) {
+              // Skip remaining movement actions by advancing to Attack phase
+              // Movement phase uses indices 0-1, so we need to get to index 2
+              const phaseIndex = newState.turnCounter % PHASE_CYCLE_LENGTH;
+              if (phaseIndex < 2) {
+                  // Jump to Attack phase (index 2)
+                  const skipAmount = 2 - phaseIndex;
+                  newState = { ...newState, turnCounter: newState.turnCounter + skipAmount };
+              }
+          }
       }
       
       return newState;

@@ -1,8 +1,8 @@
 /**
  * MODULE 1: Board Basics
- * Lesson 1.3: Terrain - Castles
+ * Lesson 1.4: Terrain - High Ground
  * 
- * Objective: Stand on a castle
+ * Objective: Position on high ground
  */
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
@@ -12,12 +12,11 @@ import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
-export function createM1L3(): TutorialLesson {
-  const boardRadius = 3; // Small + 3 castles
+export function createM1L4(): TutorialLesson {
+  const boardRadius = 3; // Small + highlands
   
   const castles: Castle[] = [
     new Castle(new Hex(-3, 3, 0), 'w', 0),
-    new Castle(new Hex(0, 0, 0), 'w', 0),  // Center castle
     new Castle(new Hex(3, -3, 0), 'b', 0),
   ];
   
@@ -25,27 +24,27 @@ export function createM1L3(): TutorialLesson {
   const board = new Board(boardConfig, castles);
   
   const pieces = [
-    // TODO: Piece near castle to capture
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
+    // TODO: Piece near high ground
+    PieceFactory.create(PieceType.Archer, new Hex(-1, 1, 0), 'w'),
   ];
   
   const layout = getStartingLayout(board);
   
   return {
-    id: 'm1_l3_terrain_castles',
-    title: '1.3 Terrain: Castles',
-    description: 'Learn about castle hexes and how to capture them.',
+    id: 'm1_l5_terrain_highground',
+    title: '1.5 Terrain: High Ground',
+    description: 'Learn the defensive advantage of high ground.',
     board,
     pieces,
     layout,
     objectives: [
-      'Move your piece onto a castle',
+      'Move your piece onto high ground',
     ],
     hints: [
-      '🏰 Castles are special hexes with strategic value',
-      '🚶 Move onto a castle to control it',
-      '📍 Controlled castles let you recruit new pieces',
+      '⛰️ High ground gives defensive bonuses',
+      '🛡️ Pieces on high ground are harder to attack',
+      '👁️ Great position for Archers',
     ],
-    instructions: 'TODO: Move your Swordsman onto the center castle.',
+    instructions: 'TODO: Position your Archer on the high ground.',
   };
 }

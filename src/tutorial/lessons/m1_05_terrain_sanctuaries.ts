@@ -1,6 +1,6 @@
 /**
  * MODULE 1: Board Basics
- * Lesson 1.6: Terrain - Sanctuaries
+ * Lesson 1.5: Terrain - Sanctuaries
  * 
  * Objective: Approach a sanctuary
  */
@@ -12,7 +12,7 @@ import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
-export function createM1L6(): TutorialLesson {
+export function createM1L5(): TutorialLesson {
   const boardRadius = 3; // Small + sanctuary
   
   const castles: Castle[] = [
