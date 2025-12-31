@@ -13,11 +13,15 @@ import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
 export function createM1L1(): TutorialLesson {
-  const boardRadius = 7; // Full board
+  const boardRadius = 6; // Standard board
   
   const castles: Castle[] = [
-    new Castle(new Hex(-7, 7, 0), 'w', 0),
-    new Castle(new Hex(7, -7, 0), 'b', 0),
+    new Castle(new Hex(-6, 6, 0), 'w', 0),
+    new Castle(new Hex(6, -6, 0), 'b', 0),
+    new Castle(new Hex(0, 6, -6), 'w', 0),
+    new Castle(new Hex(0, -6, 6), 'b', 0),
+    new Castle(new Hex(6, 0, -6), 'w', 0),
+    new Castle(new Hex(-6, 0, 6), 'b', 0),
   ];
   
   const boardConfig: BoardConfig = { nSquares: boardRadius };
