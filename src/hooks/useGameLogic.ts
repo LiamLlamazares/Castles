@@ -26,6 +26,8 @@ import {
   Color,
   HistoryEntry,
   MoveRecord,
+  SanctuaryConfig,
+  SanctuaryType
 } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
 
@@ -49,7 +51,8 @@ export const useGameLogic = (
   initialMoveTree?: MoveTree, // Optional, use this tree if provided (e.g., from PGN import with snapshots)
   sanctuarySettings?: { unlockTurn: number, cooldown: number }, // Configurable sanctuary settings
   gameRules?: { vpModeEnabled: boolean },
-  isTutorialMode: boolean = false // When true, skip victory checks
+  isTutorialMode: boolean = false, // When true, skip victory checks
+  initialPoolTypes?: import("../Constants").SanctuaryType[]
 ) => {
   // Create game engine instance (stable reference)
   // =========== CORE GAME STATE ===========
@@ -62,7 +65,8 @@ export const useGameLogic = (
     initialSanctuaries, 
     initialMoveTree,
     sanctuarySettings,
-    gameRules
+    gameRules,
+    initialPoolTypes
   );
 
   // =========== COMPOSED HOOKS ===========
@@ -266,27 +270,61 @@ export const useGameLogic = (
 
   // =========== INTERACTION HANDLERS ===========
   const handlePieceClick = useCallback((pieceClicked: Piece) => {
-    if (movingPiece === pieceClicked) {
-      setState(prev => ({ ...prev, movingPiece: null }));
-      return;
-    }
+    setState(prev => {
+        // 1. Unlocking Logic: "Once a square e.g. ranger is clicked it makes it available in the upgrade pool"
+        let newPool = prev.sanctuaryPool;
+        
+        // Find if this piece type corresponds to a sanctuary
+        const configEntry = Object.entries(SanctuaryConfig).find(
+            ([_, conf]: any) => conf.pieceType === pieceClicked.type
+        );
+        
+        if (configEntry) {
+            const sanctuaryType = configEntry[0] as SanctuaryType;
+            // Check if it is currently "locked" (not in pool and not on board)
+            const isOnBoard = prev.sanctuaries.some(s => s.type === sanctuaryType);
+            const isInPool = prev.sanctuaryPool.includes(sanctuaryType);
+            
+            if (!isInPool && !isOnBoard) {
+                // Unlock it!
+                newPool = [...prev.sanctuaryPool, sanctuaryType];
+                // Note: We could add a visual notification here if we had a toast system
+                console.log(`Unlocked Sanctuary Type: ${sanctuaryType}`);
+            }
+        }
 
-    if (movingPiece && pieceClicked.color === currentPlayer) {
-      setState(prev => ({ ...prev, movingPiece: pieceClicked }));
-      return;
-    }
+        // 2. Selection Logic
+        let newMovingPiece = prev.movingPiece; // Default to current
 
-    const canSelectForMovement = turnPhase === "Movement" && pieceClicked.canMove;
-    const canSelectForAttack = turnPhase === "Attack" && pieceClicked.canAttack;
-    const isOwnPiece = pieceClicked.color === currentPlayer;
+        // Standard selection rules
+        if (prev.movingPiece === pieceClicked) {
+            newMovingPiece = null;
+        } else if (prev.movingPiece && pieceClicked.color === currentPlayer) {
+            newMovingPiece = pieceClicked;
+        } else {
+            const canSelectForMovement = turnPhase === "Movement" && pieceClicked.canMove;
+            const canSelectForAttack = turnPhase === "Attack" && pieceClicked.canAttack;
+            const isOwnPiece = pieceClicked.color === currentPlayer;
+            
+            if (isOwnPiece && (canSelectForMovement || canSelectForAttack)) {
+                newMovingPiece = pieceClicked;
+            } else {
+                newMovingPiece = null;
+            }
+        }
 
-    if (isOwnPiece && (canSelectForMovement || canSelectForAttack)) {
-      setState(prev => ({ ...prev, movingPiece: pieceClicked }));
-      return;
-    }
+        // Optimization: return prev if no changes
+        if (newPool === prev.sanctuaryPool && newMovingPiece === prev.movingPiece) {
+            return prev;
+        }
 
-    setState(prev => ({ ...prev, movingPiece: null }));
-  }, [movingPiece, currentPlayer, turnPhase]);
+        return {
+            ...prev,
+            sanctuaryPool: newPool,
+            movingPiece: newMovingPiece
+        };
+    });
+  }, [currentPlayer, turnPhase, setState]);
 
   const handleResign = useCallback((player: Color) => {
     // Reset to live game state before resigning (in case viewing history)

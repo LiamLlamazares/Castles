@@ -10,13 +10,13 @@ import {
 export class TurnManager {
   /**
    * Determines the current turn phase based on the turn counter.
-   * Each player's turn consists of 5 sub-turns: Movement(0,1), Attack(2,3), Castles(4)
+   * Each player's turn consists of 5 sub-turns: Movement(0,1), Attack(2,3), Recruitment(4)
    */
   public static getTurnPhase(turnCounter: number): TurnPhase {
     const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
     if (phaseIndex < MOVEMENT_PHASE_END) return "Movement";
     if (phaseIndex < ATTACK_PHASE_END) return "Attack";
-    return "Castles";
+    return "Recruitment";
   }
 
   /**
@@ -33,7 +33,7 @@ export class TurnManager {
    * The turn counter cycles through phases (0-4 per player):
    * - 0,1 = Movement (two sub-turns)
    * - 2,3 = Attack (two sub-turns)
-   * - 4   = Castles (one sub-turn)
+   * - 4   = Recruitment (one sub-turn)
    *
    * @param turnCounter Current turn number
    * @param hasFutureAttacks Whether the current player has any valid attacks remaining
@@ -55,11 +55,11 @@ export class TurnManager {
     // Position 1 is the last movement turn.
     if (phasePosition === 1) {
       if (!hasFutureAttacks && !hasFutureControlledCastles) {
-        // Skip Attack (2 turns) + Castles (1 turn) = +4 to next player
+        // Skip Attack (2 turns) + Recruitment (1 turn) = +4 to next player
         return 4;
       }
       if (!hasFutureAttacks && hasFutureControlledCastles) {
-        // Skip Attack phase only = +3 to Castles
+        // Skip Attack phase only = +3 to Recruitment
         return 3;
       }
     }
@@ -67,28 +67,28 @@ export class TurnManager {
     // ATTACK PHASE: After first attack turn (position 2)
     if (phasePosition === 2) {
       if (!hasFutureAttacks && !hasFutureControlledCastles) {
-        // Skip second attack + Castles = +3 to next player
+        // Skip second attack + Recruitment = +3 to next player
         return 3;
       }
       if (!hasFutureAttacks && hasFutureControlledCastles) {
-        // Skip second attack only = +2 to Castles
+        // Skip second attack only = +2 to Recruitment
         return 2;
       }
     }
 
     // ATTACK PHASE: After second attack turn (position 3)
     if (phasePosition === 3 && !hasFutureControlledCastles) {
-      // Skip Castles phase = +2 to next player
+      // Skip Recruitment phase = +2 to next player
       return 2;
     }
 
-    // CASTLES PHASE: Check if any controlled castles remain usable
-    if (phase === "Castles") {
+    // RECRUITMENT PHASE: Check if any controlled castles remain usable
+    if (phase === "Recruitment") {
       if (!areCastlesUsableInPhase) {
         // All castles used or none controlled - advance to next player
         return 1;
       }
-      // Still have castles to use - stay in Castles phase
+      // Still have castles to use - stay in Recruitment phase
       return 0;
     }
 

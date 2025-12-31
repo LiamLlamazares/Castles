@@ -79,7 +79,7 @@ export class GameEngine {
   }
 
   public pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex): GameState {
-    return SanctuaryService.pledge(gameState, sanctuaryHex, spawnHex);
+    return SanctuaryService.pledge(gameState, sanctuaryHex, spawnHex, this.board);
   }
 
   public activateAbility(gameState: GameState, sourceHex: Hex, targetHex: Hex, ability: AbilityType): GameState {

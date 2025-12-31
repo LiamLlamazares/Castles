@@ -37,6 +37,7 @@ describe('Pledge Mechanics', () => {
     moveTree: new MoveTree(),
     graveyard: [],
     phoenixRecords: [],
+    sanctuarySettings: { unlockTurn: 0, cooldown: 5 }, // Unlock immediately for tests
   });
   
   // Helper to place a piece

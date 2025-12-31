@@ -44,7 +44,7 @@ export function createM2L1(): TutorialLesson {
     hints: [
       '🚶 Movement Phase: Move up to 2 pieces',
       '⚔️ Attack Phase: Attack up to 2 times',
-      '🏰 Castles Phase: Recruit from castles',
+      '🏰 Recruitment Phase: Recruit from castles',
     ],
     instructions: 'TODO: Move your piece, then attack the enemy.',
   };

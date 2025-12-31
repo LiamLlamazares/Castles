@@ -27,6 +27,7 @@ interface GameConfig {
   timeControl?: { initial: number, increment: number };
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };
+  initialPoolTypes?: SanctuaryType[];
   isAnalysisMode?: boolean;
 }
 
@@ -56,7 +57,8 @@ function App() {
     timeControl?: { initial: number, increment: number },
     selectedSanctuaryTypes?: SanctuaryType[],
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    gameRules?: { vpModeEnabled: boolean }
+    gameRules?: { vpModeEnabled: boolean },
+    initialPoolTypes?: SanctuaryType[]
   ) => {
     const layout = getStartingLayout(board);
     
@@ -67,7 +69,7 @@ function App() {
     
     const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, typesToGenerate);
     
-    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, isAnalysisMode: false });
+    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, isAnalysisMode: false });
     setView('game');
   };
 

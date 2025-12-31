@@ -240,7 +240,7 @@ export class RuleEngine {
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     const phase = TurnManager.getTurnPhase(gameState.turnCounter);
     return gameState.castles.filter((castle) => {
-      if (phase !== "Castles") return false;
+      if (phase !== "Recruitment") return false;
       return (
         RuleEngine.castleIsControlledByActivePlayer(castle, currentPlayer) &&
         castle.color !== currentPlayer
@@ -325,11 +325,15 @@ export class RuleEngine {
         hasUsableCastles = unusedControlledCastles.length > 0;
     }
 
+    const { SanctuaryService } = require("../Services/SanctuaryService");
+    // Pass ignorePhase=true because we want to know if it WOULD be valid in the Recruitment phase
+    const hasUsableSanctuaries = gameState.sanctuaries.some(s => SanctuaryService.canPledge(gameState, s.hex, true));
+
     return TurnManager.getTurnCounterIncrement(
         gameState.turnCounter,
         hasFutureAttacks,
-        hasFutureControlledCastles,
-        hasUsableCastles
+        hasFutureControlledCastles || hasUsableSanctuaries,
+        hasUsableCastles || hasUsableSanctuaries
     );
   }
 }

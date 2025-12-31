@@ -52,8 +52,8 @@ describe('GameEngine', () => {
       expect(gameEngine.getTurnPhase(3)).toBe('Attack');
     });
 
-    it('returns Castles for turn 4', () => {
-      expect(gameEngine.getTurnPhase(4)).toBe('Castles');
+    it('returns Recruitment for turn 4', () => {
+      expect(gameEngine.getTurnPhase(4)).toBe('Recruitment');
     });
 
     it('cycles correctly after turn 5', () => {
@@ -61,7 +61,7 @@ describe('GameEngine', () => {
       expect(gameEngine.getTurnPhase(6)).toBe('Movement');
       expect(gameEngine.getTurnPhase(7)).toBe('Attack');
       expect(gameEngine.getTurnPhase(8)).toBe('Attack');
-      expect(gameEngine.getTurnPhase(9)).toBe('Castles');
+      expect(gameEngine.getTurnPhase(9)).toBe('Recruitment');
     });
   });
 

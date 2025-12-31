@@ -89,13 +89,14 @@ export const SanctuaryConfig: Record<SanctuaryType, {
   tier: 1 | 2 | 3;
   requiredStrength: number;
   requiresSacrifice: boolean;
+  startAvailable?: boolean;
 }> = {
-  [SanctuaryType.WolfCovenant]: { pieceType: PieceType.Wolf, tier: 1, requiredStrength: 1, requiresSacrifice: false },
-  [SanctuaryType.SacredSpring]: { pieceType: PieceType.Healer, tier: 1, requiredStrength: 1, requiresSacrifice: false },
-  [SanctuaryType.WardensWatch]: { pieceType: PieceType.Ranger, tier: 2, requiredStrength: 3, requiresSacrifice: false },
-  [SanctuaryType.ArcaneRefuge]: { pieceType: PieceType.Wizard, tier: 2, requiredStrength: 3, requiresSacrifice: false },
-  [SanctuaryType.ForsakenGrounds]: { pieceType: PieceType.Necromancer, tier: 3, requiredStrength: 4, requiresSacrifice: true },
-  [SanctuaryType.PyreEternal]: { pieceType: PieceType.Phoenix, tier: 3, requiredStrength: 4, requiresSacrifice: true },
+  [SanctuaryType.WolfCovenant]: { pieceType: PieceType.Wolf, tier: 1, requiredStrength: 1, requiresSacrifice: false, startAvailable: true },
+  [SanctuaryType.SacredSpring]: { pieceType: PieceType.Healer, tier: 1, requiredStrength: 1, requiresSacrifice: false, startAvailable: true },
+  [SanctuaryType.WardensWatch]: { pieceType: PieceType.Ranger, tier: 2, requiredStrength: 3, requiresSacrifice: false, startAvailable: false },
+  [SanctuaryType.ArcaneRefuge]: { pieceType: PieceType.Wizard, tier: 2, requiredStrength: 3, requiresSacrifice: false, startAvailable: false },
+  [SanctuaryType.ForsakenGrounds]: { pieceType: PieceType.Necromancer, tier: 3, requiredStrength: 4, requiresSacrifice: true, startAvailable: false },
+  [SanctuaryType.PyreEternal]: { pieceType: PieceType.Phoenix, tier: 3, requiredStrength: 4, requiresSacrifice: true, startAvailable: false },
 };
 
 /**
@@ -104,7 +105,7 @@ export const SanctuaryConfig: Record<SanctuaryType, {
  */
 export const SANCTUARY_EVOLUTION_COOLDOWN = 10;
 
-export type TurnPhase = "Movement" | "Attack" | "Castles";
+export type TurnPhase = "Movement" | "Attack" | "Recruitment";
 export type Color = "w" | "b";
 export const STARTING_TIME = 20 * 60;
 export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended piece is protected from ranged attacks
@@ -125,7 +126,7 @@ export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended pi
  * Where:
  *   M = Movement phase (piece can move)
  *   A = Attack phase (piece can attack)
- *   C = Castles phase (can recruit from controlled castles)
+ *   C = Recruitment phase (can recruit from controlled castles or pledge to sanctuaries)
  * 
  * Formula Reference:
  *   - Current Player: (turnCounter % 10) < 5 ? 'w' : 'b'
@@ -136,7 +137,7 @@ export const PHASE_CYCLE_LENGTH = 5;    // One player's turn = 5 sub-phases
 export const PLAYER_CYCLE_LENGTH = 10;  // Full round = both players = 10 sub-phases
 export const PHASES_PER_TURN = PHASE_CYCLE_LENGTH * 2; // Total phases in a full turn (both players)
 export const MOVEMENT_PHASE_END = 2;    // Indices 0-1 are Movement
-export const ATTACK_PHASE_END = 4;      // Indices 2-3 are Attack (index 4 is Castles)
+export const ATTACK_PHASE_END = 4;      // Indices 2-3 are Attack (index 4 is Recruitment)
 
 /**
  * PHOENIX RESPAWN TIMING

@@ -26,7 +26,7 @@ const getRemainingActions = (phase: TurnPhase, phaseIndex?: number): string => {
     const remaining = 4 - phaseIndex; // 2→2, 3→1
     return `${remaining}/2`;
   } else {
-    // Castles phase - can use multiple castles
+    // Recruitment phase - can use multiple castles/sanctuaries
     return "∞";
   }
 };

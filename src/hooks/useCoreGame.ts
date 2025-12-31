@@ -35,7 +35,8 @@ export const useCoreGame = (
   initialSanctuaries?: Sanctuary[],
   initialMoveTree?: MoveTree,
   sanctuarySettings?: { unlockTurn: number, cooldown: number },
-  gameRules?: { vpModeEnabled: boolean }
+  gameRules?: { vpModeEnabled: boolean },
+  initialPoolTypes?: import("../Constants").SanctuaryType[]
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -86,12 +87,18 @@ export const useCoreGame = (
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
     sanctuaries: startingSanctuaries,
-    // Initialize sanctuary pool with types not already on the board
-    sanctuaryPool: Object.values(
-      require("../Constants").SanctuaryType
-    ).filter((t): t is import("../Constants").SanctuaryType => 
-      !startingSanctuaries.some(s => s.type === t)
-    ),
+    // Initialize sanctuary pool
+    sanctuaryPool: (initialPoolTypes || Object.values(require("../Constants").SanctuaryType)).filter((t): t is import("../Constants").SanctuaryType => {
+      // 1. Exclude types already on board
+      if (startingSanctuaries.some(s => s.type === t)) return false;
+      
+      // 2. If explicit pool provided, use it (already trusted)
+      if (initialPoolTypes) return true;
+
+      // 3. Otherwise use defaults from config
+      const config = require("../Constants").SanctuaryConfig[t];
+      return config.startAvailable === true; // Default to blocked if undefined, though we set defaults
+    }),
     sanctuarySettings, // Include configurable sanctuary settings
     gameRules, // Include active game rules
     moveTree: startingMoveTree,

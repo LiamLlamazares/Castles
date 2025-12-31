@@ -28,6 +28,8 @@ import { NotationService } from "../Systems/NotationService";
 import { createPieceMap } from "../../utils/PieceMap";
 import { createHistorySnapshot } from "../../utils/GameStateUtils";
 import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, MoveRecord, PHASE_CYCLE_LENGTH, PHASES_PER_TURN } from "../../Constants";
+import { Board } from "../Core/Board";
+import { RuleEngine } from "../Systems/RuleEngine";
 
 export class SanctuaryService {
   /**
@@ -38,30 +40,56 @@ export class SanctuaryService {
    * 2. Current player has a piece on the sanctuary hex
    * 3. Total strength (occupant + friendly neighbors) meets requirement
    */
-  public static canPledge(gameState: GameState, sanctuaryHex: Hex): boolean {
+  public static canPledge(gameState: GameState, sanctuaryHex: Hex, ignorePhase: boolean = false): boolean {
     const sanctuary = gameState.sanctuaries.find(s => s.hex.equals(sanctuaryHex));
     if (!sanctuary) return false;
 
     // 1. Basic Availability Check
-    if (!sanctuary.isReady) return false;
+    if (!sanctuary.isReady) {
+      console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Not Ready`);
+      return false;
+    }
 
     // 1b. Turn Requirement (Sanctuaries dormant until configured unlock turn)
-    // One turn = PHASES_PER_TURN sub-phases (usually 10)
-    const TURN_UNLOCK = gameState.sanctuarySettings?.unlockTurn ?? 10;
-    if (gameState.turnCounter < TURN_UNLOCK * PHASES_PER_TURN) return false;
+    // Check if configuration allows early availability
+    const config = SanctuaryConfig[sanctuary.type];
+    const isAlwaysAvailable = config?.startAvailable === true;
+
+    if (!isAlwaysAvailable) {
+        const TURN_UNLOCK = gameState.sanctuarySettings?.unlockTurn ?? 10;
+        // One turn = PHASES_PER_TURN sub-phases (usually 10)
+        if (gameState.turnCounter < TURN_UNLOCK * PHASES_PER_TURN) {
+           console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Turn Timer (Counter: ${gameState.turnCounter} < Unlock: ${TURN_UNLOCK * PHASES_PER_TURN})`);
+           return false;
+        }
+    }
+
+    // 1c. Phase Requirement (Recruitment Phase Only)
+    // We explicitly skip this check if ignorePhase is true (used by RuleEngine for lookahead)
+    if (!ignorePhase && TurnManager.getTurnPhase(gameState.turnCounter) !== "Recruitment") {
+      // Don't log this one, it's too spammy during Move/Attack phases
+      return false;
+    }
 
     // 2. Control Check (Must have CURRENT PLAYER's piece on it)
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());
-    if (!occupant || occupant.color !== currentPlayer) return false;
+    if (!occupant || occupant.color !== currentPlayer) {
+       console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Not Controlled (Occupant: ${occupant?.color} vs Player: ${currentPlayer})`);
+       return false;
+    }
 
     // 3. Strength Calculation (Occupant + Neighbors)
     const friendlyPieces = [occupant, ...this.getFriendlyNeighbors(gameState, sanctuaryHex, occupant.color)];
     const totalStrength = friendlyPieces.reduce((sum, p) => sum + p.Strength, 0);
 
     // 4. Requirement Check
-    if (totalStrength < sanctuary.requiredStrength) return false;
+    if (totalStrength < sanctuary.requiredStrength) {
+       console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Insufficient Strength (${totalStrength} < ${sanctuary.requiredStrength})`);
+       return false;
+    }
 
+    console.log(`[SanctuaryDebug] Accepting ${sanctuary.type}: Pledge Valid!`);
     return true;
   }
 
@@ -72,7 +100,7 @@ export class SanctuaryService {
    *
    * @throws Error if pledge is invalid (should call canPledge first)
    */
-  public static pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex): GameState {
+  public static pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex, board: Board): GameState {
     const sanctuary = gameState.sanctuaries.find(s => s.hex.equals(sanctuaryHex));
     if (!sanctuary || !this.canPledge(gameState, sanctuaryHex)) {
       throw new Error("Invalid pledge action");
@@ -152,9 +180,16 @@ export class SanctuaryService {
     const newTree = gameState.moveTree.clone();
     newTree.addMove(record, createHistorySnapshot(intermediateState));
 
-    return {
+    // Calculate turn counter increment and advance the turn
+    const stateWithTree: GameState = {
       ...intermediateState,
       moveTree: newTree,
+    };
+    const increment = RuleEngine.getTurnCounterIncrement(stateWithTree, board);
+
+    return {
+      ...stateWithTree,
+      turnCounter: stateWithTree.turnCounter + increment,
     };
   }
 

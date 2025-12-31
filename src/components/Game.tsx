@@ -66,6 +66,7 @@ interface GameBoardProps {
   isAnalysisMode?: boolean;
   onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
   isTutorialMode?: boolean;
+  initialPoolTypes?: import('../Constants').SanctuaryType[];
 }
 
 /**
@@ -92,7 +93,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   timeControl,
   isAnalysisMode = false,
   onEnableAnalysis = () => {},
-  isTutorialMode = false
+  isTutorialMode = false,
+  initialPoolTypes
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
@@ -173,7 +175,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules, isTutorialMode);
+  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules, isTutorialMode, initialPoolTypes);
 
   // Decoupled View State
   const { 

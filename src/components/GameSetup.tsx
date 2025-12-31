@@ -18,9 +18,11 @@ interface GameSetupProps {
         timeControl?: { initial: number, increment: number },
         selectedSanctuaryTypes?: SanctuaryType[],
         sanctuarySettings?: { unlockTurn: number, cooldown: number },
-        gameRules?: { vpModeEnabled: boolean }
+        gameRules?: { vpModeEnabled: boolean },
+        initialPoolTypes?: SanctuaryType[]
     ) => void;
 }
+
 
 // Sanctuary display info
 const SANCTUARY_INFO: Record<SanctuaryType, { name: string; piece: string; tier: number; color: string }> = {
@@ -89,6 +91,17 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     const [sanctuaryUnlockTurn, setSanctuaryUnlockTurn] = useState<number>(0);  // Always unlocked
     const [sanctuaryCooldown, setSanctuaryCooldown] = useState<number>(10);
     
+    // Pool Selection - Default based on SanctuaryConfig.startAvailable
+    const [selectedPoolTypes, setSelectedPoolTypes] = useState<Set<SanctuaryType>>(() => {
+        const defaults = new Set<SanctuaryType>();
+        (Object.keys(SanctuaryConfig) as SanctuaryType[]).forEach(t => {
+            if (SanctuaryConfig[t].startAvailable) {
+                defaults.add(t);
+            }
+        });
+        return defaults;
+    });
+
     // Game Rules - Optional modes
     const [vpModeEnabled, setVpModeEnabled] = useState<boolean>(false);
     
@@ -108,6 +121,18 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
 
     const toggleSanctuary = (type: SanctuaryType) => {
         setSelectedSanctuaries(prev => {
+            const next = new Set(prev);
+            if (next.has(type)) {
+                next.delete(type);
+            } else {
+                next.add(type);
+            }
+            return next;
+        });
+    };
+
+    const togglePoolType = (type: SanctuaryType) => {
+        setSelectedPoolTypes(prev => {
             const next = new Set(prev);
             if (next.has(type)) {
                 next.delete(type);
@@ -176,7 +201,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             { initial: timeInitial, increment: timeIncrement },
             Array.from(selectedSanctuaries),
             { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
-            { vpModeEnabled }
+            { vpModeEnabled },
+            Array.from(selectedPoolTypes)
         );
     };
 
@@ -423,6 +449,43 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                     <div style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '8px', textAlign: 'center' }}>
                         {selectedSanctuaries.size === 0 ? 'Select start sanctuaries' : 
                          `${selectedSanctuaries.size} selected for start`}
+                    </div>
+                </div>
+
+                {/* Pool Availability Selection */}
+                <div style={{ ...controlGroupStyle, flexDirection: 'column', alignItems: 'stretch' }}>
+                    <label style={{ ...labelStyle, marginBottom: '8px', alignSelf: 'flex-start' }}>Available Upgrades</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px', width: '100%' }}>
+                        {Object.entries(SANCTUARY_INFO).map(([type, info]) => {
+                            const sanctuaryType = type as SanctuaryType;
+                            const isSelected = selectedPoolTypes.has(sanctuaryType);
+                            // Only show Tier 2+ here? Or all? User said "each type... should have a tick".
+                            // Let's show all.
+                            return (
+                                <button
+                                    key={type}
+                                    onClick={() => togglePoolType(sanctuaryType)}
+                                    style={{
+                                        padding: '8px 4px',
+                                        fontSize: '0.8rem',
+                                        cursor: 'pointer',
+                                        borderRadius: '4px',
+                                        border: isSelected ? '2px solid #fff' : '1px solid #444',
+                                        background: isSelected ? '#555' : '#333', // Different color for pool?
+                                        color: isSelected ? 'white' : '#888',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.2s',
+                                        height: '40px'
+                                    }}
+                                    title={`Allow evolving into ${info.piece}`}
+                                >
+                                    <span style={{ fontWeight: 'bold' }}>{info.piece}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
                 
