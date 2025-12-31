@@ -14,11 +14,10 @@ import { TutorialLesson, LessonCategory } from './types';
 import { createLesson00 } from './lessons/lesson00_sandbox';
 
 // Module 1: Board Basics
-import { createM1L1 } from './lessons/m1_01_introduction';
-import { createM1L2 } from './lessons/m1_02_terrain_castles';
-import { createM1L3 } from './lessons/m1_03_terrain_rivers';
-import { createM1L4 } from './lessons/m1_04_terrain_highground';
-import { createM1L5 } from './lessons/m1_05_terrain_sanctuaries';
+import { createM1L1 } from './lessons/m1_01_terrain_castles';
+import { createM1L2 } from './lessons/m1_02_terrain_rivers';
+import { createM1L3 } from './lessons/m1_03_terrain_highground';
+import { createM1L4 } from './lessons/m1_04_terrain_sanctuaries';
 
 // Module 2: Your Army (Basic Pieces)
 import { createM2L1 } from './lessons/m2_01_game_phases';
@@ -51,7 +50,7 @@ export type { TutorialLesson, LessonCategory };
 // Re-export lesson creators
 export {
   // Module 1
-  createM1L1, createM1L2, createM1L3, createM1L4, createM1L5,
+  createM1L1, createM1L2, createM1L3, createM1L4,
   // Module 2
   createM2L1, createM2L2, createM2L3, createM2L4, createM2L5, createM2L6, createM2L7,
   // Module 3
@@ -69,11 +68,9 @@ export function getAllLessons(): TutorialLesson[] {
   return [
     createLesson00(), // 0.0 Sandbox
     // Module 1: Board Basics
-    createM1L1(), // 1.1 Introduction
-    createM1L2(), // 1.2 Terrain: Castles
-    createM1L3(), // 1.3 Terrain: Rivers
-    createM1L4(), // 1.4 Terrain: High Ground
-    createM1L5(), // 1.5 Terrain: Sanctuaries
+    createM1L1(), // 1.1 Terrain: Castles
+    createM1L2(), // 1.2 Terrain: Rivers
+    createM1L3(), // 1.3 Terrain: High Ground
     
     // Module 2: Your Army
     createM2L1(), // 2.1 Game Phases

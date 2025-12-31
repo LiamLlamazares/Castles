@@ -12,7 +12,7 @@ import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
-export function createM1L5(): TutorialLesson {
+export function createM1L4(): TutorialLesson {
   const boardRadius = 6; // Full board
   
   const castles: Castle[] = [

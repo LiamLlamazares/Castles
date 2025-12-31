@@ -9,6 +9,7 @@ export interface BoardConfig {
   nSquares: number;
   riverCrossingLength?: number;
   riverSegmentLength?: number;
+  hasHighGround?: boolean;  // Default: true - set to false to disable high ground hexes
 }
 
 /**
@@ -106,7 +107,9 @@ export class Board {
     this.whiteCastleHexes = this.castleHexes.filter((hex) => this.isWhiteCastle(hex));
     this.blackCastleHexes = this.castleHexes.filter((hex) => this.isBlackCastle(hex));
     
-    this.highGroundHexes = this.hexes.filter((hex) => this.isDefaultCastleLocation(hex, this.NSquares - 2));
+    this.highGroundHexes = (this.config.hasHighGround !== false) 
+      ? this.hexes.filter((hex) => this.isDefaultCastleLocation(hex, this.NSquares - 2))
+      : [];
 
     // Precompute Sets for O(1) lookups
     this.riverHexSet = new Set(this.riverHexes.map(h => h.getKey()));

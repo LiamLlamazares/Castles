@@ -1,6 +1,6 @@
 /**
  * MODULE 1: Board Basics
- * Lesson 1.1: Introduction
+ * Lesson 1.1: Terrain: Castles
  * 
  * Overview of the game - no interaction required.
  */
@@ -15,7 +15,8 @@ export function createM1L1(): TutorialLesson {
   const boardRadius = TUTORIAL_BOARD_STANDARD_R; // Standard board
   
   const castles: Castle[] = [...TUTORIAL_CASTLES_STANDARD];
-  const boardConfig: BoardConfig = { nSquares: boardRadius,riverCrossingLength: 100 };
+  const boardConfig: BoardConfig = { nSquares: boardRadius,riverCrossingLength: 100,
+  hasHighGround: false };
   const board = new Board(boardConfig, castles);
   
   // TODO: Standard starting positions
