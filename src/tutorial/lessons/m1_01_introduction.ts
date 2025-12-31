@@ -15,7 +15,7 @@ export function createM1L1(): TutorialLesson {
   const boardRadius = TUTORIAL_BOARD_STANDARD_R; // Standard board
   
   const castles: Castle[] = [...TUTORIAL_CASTLES_STANDARD];
-  const boardConfig: BoardConfig = { nSquares: boardRadius };
+  const boardConfig: BoardConfig = { nSquares: boardRadius,riverCrossingLength: 100 };
   const board = new Board(boardConfig, castles);
   
   // TODO: Standard starting positions
@@ -25,8 +25,8 @@ export function createM1L1(): TutorialLesson {
   
   return {
     id: 'm1_l1_introduction',
-    title: '1.1 Introduction',
-    description: 'Welcome to Castles - a hex-based strategy game.',
+    title: '1.1 The board: Castles',
+    description: 'Each army has three castles under their control. Controlling enemy casatles allows for recruitment of new pieces and provides a path of victory.',
     board,
     pieces,
     sanctuaries: [],
@@ -34,11 +34,6 @@ export function createM1L1(): TutorialLesson {
     objectives: [
       // No objectives - overview only
     ],
-    hints: [
-      '🎮 This is a turn-based strategy game on a hexagonal board',
-      '👑 Each player has a Monarch - protect yours, capture theirs',
-      '🏰 Control castles to recruit new pieces',
-    ],
-    instructions: 'Welcome! Explore the board freely. Click Next when ready.',
+    instructions: 'Right click on a castle for additional information.',
   };
 }
