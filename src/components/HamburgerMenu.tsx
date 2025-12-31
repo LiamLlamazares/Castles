@@ -14,8 +14,13 @@ interface HamburgerMenuProps {
   onEditPosition?: () => void;
   onTutorial?: () => void;
   isAnalysisMode?: boolean;
+  onToggleTerrainIcons?: () => void;
+  onToggleSanctuaryIcons?: () => void;
+  onSetAllIcons?: (visible: boolean) => void;
   onToggleShields?: () => void;
   onToggleCastleRecruitment?: () => void;
+  showTerrainIcons?: boolean;
+  showSanctuaryIcons?: boolean;
   showShields?: boolean;
   showCastleRecruitment?: boolean;
   showCoordinates?: boolean;
@@ -33,11 +38,17 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   isAnalysisMode = false,
   onToggleShields,
   onToggleCastleRecruitment,
+  onToggleTerrainIcons,
+  onToggleSanctuaryIcons,
+  onSetAllIcons,
   showShields = true,
   showCastleRecruitment = true,
+  showTerrainIcons = true,
+  showSanctuaryIcons = true,
   showCoordinates = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isIconsMenuOpen, setIsIconsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
@@ -131,32 +142,92 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             Flip Board
           </button>
           
+          {/* Icon Settings Collapsible */}
           <button 
-            className="menu-item" 
-            onClick={() => handleToggleClick(onToggleCoordinates)}
+             className="menu-item"
+             onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
+             style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
           >
-            <span className="menu-icon">{showCoordinates ? '☑️' : '⬜'}</span>
-            Show Coordinates
+             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+               <span className="menu-icon">👁️</span>
+               Icon Settings
+             </span>
+             <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '▲' : '▼'}</span>
           </button>
 
-          {onToggleShields && (
-            <button 
-              className="menu-item" 
-              onClick={() => handleToggleClick(onToggleShields)}
-            >
-              <span className="menu-icon">{showShields ? '☑️' : '⬜'}</span>
-              Show Protected Shields
-            </button>
-          )}
+          {isIconsMenuOpen && (
+            <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+               {/* Show All / Hide All */}
+               {onSetAllIcons && (
+                 <div style={{ display: 'flex', gap: '8px', padding: '8px 12px 8px 12px' }}>
+                    <button 
+                      onClick={() => onSetAllIcons(true)}
+                      style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
+                    > 
+                      Show All
+                    </button>
+                    <button 
+                      onClick={() => onSetAllIcons(false)}
+                      style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
+                    > 
+                      Hide All
+                    </button>
+                 </div>
+               )}
 
-          {onToggleCastleRecruitment && (
-            <button 
-              className="menu-item" 
-              onClick={() => handleToggleClick(onToggleCastleRecruitment)}
-            >
-              <span className="menu-icon">{showCastleRecruitment ? '☑️' : '⬜'}</span>
-              Show Castle Icons
-            </button>
+               <button 
+                  className="menu-item" 
+                  onClick={() => handleToggleClick(onToggleCoordinates)}
+                  style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
+                >
+                  <span className="menu-icon">{showCoordinates ? '☑️' : '⬜'}</span>
+                  Coordinates
+                </button>
+
+               {onToggleTerrainIcons && (
+                 <button 
+                    className="menu-item" 
+                    onClick={() => handleToggleClick(onToggleTerrainIcons)}
+                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
+                  >
+                    <span className="menu-icon">{showTerrainIcons ? '☑️' : '⬜'}</span>
+                    Terrain (Waves/Mountains)
+                 </button>
+               )}
+               
+               {onToggleSanctuaryIcons && (
+                 <button 
+                    className="menu-item" 
+                    onClick={() => handleToggleClick(onToggleSanctuaryIcons)}
+                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
+                  >
+                    <span className="menu-icon">{showSanctuaryIcons ? '☑️' : '⬜'}</span>
+                    Sanctuary Icons
+                 </button>
+               )}
+               
+               {onToggleShields && (
+                 <button 
+                    className="menu-item" 
+                    onClick={() => handleToggleClick(onToggleShields)}
+                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
+                  >
+                    <span className="menu-icon">{showShields ? '☑️' : '⬜'}</span>
+                    Protected Shields
+                 </button>
+               )}
+
+               {onToggleCastleRecruitment && (
+                 <button 
+                    className="menu-item" 
+                    onClick={() => handleToggleClick(onToggleCastleRecruitment)}
+                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
+                  >
+                    <span className="menu-icon">{showCastleRecruitment ? '☑️' : '⬜'}</span>
+                    Castle Recruitment
+                 </button>
+               )}
+            </div>
           )}
           
           <div className="menu-divider" />

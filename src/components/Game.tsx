@@ -182,11 +182,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
     resizeVersion, 
     showShields,
     showCastleRecruitment,
+    showTerrainIcons,
+    showSanctuaryIcons,
     toggleCoordinates, 
     handleFlipBoard, 
     incrementResizeVersion,
     toggleShields,
-    toggleCastleRecruitment
+    toggleCastleRecruitment,
+    toggleTerrainIcons,
+    toggleSanctuaryIcons,
+    setAllIcons
   } = useGameView();
 
   // Reset overlay when game restarts (victory message clears or changes)
@@ -319,8 +324,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
         isAnalysisMode={isAnalysisMode}
         onToggleShields={toggleShields}
         onToggleCastleRecruitment={toggleCastleRecruitment}
+        onToggleTerrainIcons={toggleTerrainIcons}
+        onToggleSanctuaryIcons={toggleSanctuaryIcons}
+        onSetAllIcons={setAllIcons}
         showShields={showShields}
         showCastleRecruitment={showCastleRecruitment}
+        showTerrainIcons={showTerrainIcons}
+        showSanctuaryIcons={showSanctuaryIcons}
         showCoordinates={showCoordinates}
       />
 
@@ -418,6 +428,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
           isPledgeTarget={isPledgeTarget}
           pledgingSanctuary={pledgingSanctuary}
           showCastleRecruitment={showCastleRecruitment}
+          showTerrainIcons={showTerrainIcons}
+          showSanctuaryIcons={showSanctuaryIcons}
         />
         <PieceRenderer
           pieces={pieces}

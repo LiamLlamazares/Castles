@@ -16,6 +16,8 @@ export interface GameViewState {
   resizeVersion: number;
   showShields: boolean;
   showCastleRecruitment: boolean;
+  showTerrainIcons: boolean;
+  showSanctuaryIcons: boolean;
 }
 
 export interface GameViewActions {
@@ -24,6 +26,9 @@ export interface GameViewActions {
   incrementResizeVersion: () => void;
   toggleShields: () => void;
   toggleCastleRecruitment: () => void;
+  toggleTerrainIcons: () => void;
+  toggleSanctuaryIcons: () => void;
+  setAllIcons: (visible: boolean) => void;
 }
 
 export const useGameView = (): GameViewState & GameViewActions => {
@@ -33,6 +38,8 @@ export const useGameView = (): GameViewState & GameViewActions => {
     resizeVersion: 0,
     showShields: true,
     showCastleRecruitment: true,
+    showTerrainIcons: true,
+    showSanctuaryIcons: true,
   });
 
   const toggleCoordinates = useCallback(() => {
@@ -55,16 +62,40 @@ export const useGameView = (): GameViewState & GameViewActions => {
     setState(prev => ({ ...prev, showCastleRecruitment: !prev.showCastleRecruitment }));
   }, []);
 
+  const toggleTerrainIcons = useCallback(() => {
+    setState(prev => ({ ...prev, showTerrainIcons: !prev.showTerrainIcons }));
+  }, []);
+
+  const toggleSanctuaryIcons = useCallback(() => {
+    setState(prev => ({ ...prev, showSanctuaryIcons: !prev.showSanctuaryIcons }));
+  }, []);
+
+  const setAllIcons = useCallback((visible: boolean) => {
+    setState(prev => ({
+      ...prev,
+      showShields: visible,
+      showCastleRecruitment: visible,
+      showTerrainIcons: visible,
+      showSanctuaryIcons: visible
+    }));
+  }, []);
+
   return {
     showCoordinates: state.showCoordinates,
     isBoardRotated: state.isBoardRotated,
     resizeVersion: state.resizeVersion,
     showShields: state.showShields,
     showCastleRecruitment: state.showCastleRecruitment,
+    showTerrainIcons: state.showTerrainIcons,
+    showSanctuaryIcons: state.showSanctuaryIcons,
     toggleCoordinates,
     handleFlipBoard,
     incrementResizeVersion,
     toggleShields,
-    toggleCastleRecruitment
+    toggleCastleRecruitment,
+    toggleTerrainIcons,
+    toggleSanctuaryIcons,
+    setAllIcons
+
   };
 };

@@ -27,6 +27,8 @@ interface HexGridProps {
   isPledgeTarget?: (hex: Hex) => boolean;
   pledgingSanctuary?: Hex | null;
   showCastleRecruitment?: boolean;
+  showTerrainIcons?: boolean;
+  showSanctuaryIcons?: boolean;
 }
 
 /** Get the polygon points for a hex */
@@ -72,7 +74,9 @@ const HexGrid = React.memo(({
   board,
   isPledgeTarget,
   pledgingSanctuary,
-  showCastleRecruitment = true
+  showCastleRecruitment = true,
+  showTerrainIcons = true,
+  showSanctuaryIcons = true
 }: HexGridProps) => {
 
   // Sort hexagons by render priority: Standard < Sanctuary < Castle
@@ -141,7 +145,7 @@ const HexGrid = React.memo(({
               const offsetY = 0; // Vertically centered
               
               // River icon (center-right)
-              if (isRiver) {
+              if (isRiver && showTerrainIcons) {
                 return (
                   <text
                     x={center.x + offsetX}
@@ -155,7 +159,7 @@ const HexGrid = React.memo(({
               }
               
               // High ground icon (center-right)
-              if (isHighGround && !castles.some(c => c.hex.equals(hex))) {
+              if (isHighGround && !castles.some(c => c.hex.equals(hex)) && showTerrainIcons) {
                 return (
                   <text
                     x={center.x + offsetX}
@@ -169,7 +173,7 @@ const HexGrid = React.memo(({
               }
               
               // Sanctuary icon - show the piece SVG (center-right)
-              if (sanctuary) {
+              if (sanctuary && showSanctuaryIcons) {
                 const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
                 
                 return (
