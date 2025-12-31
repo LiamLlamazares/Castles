@@ -6,34 +6,20 @@
  */
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
-import { Hex } from '../../Classes/Entities/Hex';
-import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { Piece } from '../../Classes/Entities/Piece';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
+import { TUTORIAL_BOARD_STANDARD_R, TUTORIAL_CASTLES_STANDARD } from '../constants';
 
 export function createM1L1(): TutorialLesson {
-  const boardRadius = 6; // Standard board
+  const boardRadius = TUTORIAL_BOARD_STANDARD_R; // Standard board
   
-  const castles: Castle[] = [
-    new Castle(new Hex(-6, 6, 0), 'w', 0),
-    new Castle(new Hex(6, -6, 0), 'b', 0),
-    new Castle(new Hex(0, 6, -6), 'w', 0),
-    new Castle(new Hex(0, -6, 6), 'b', 0),
-    new Castle(new Hex(6, 0, -6), 'w', 0),
-    new Castle(new Hex(-6, 0, 6), 'b', 0),
-  ];
-  
+  const castles: Castle[] = [...TUTORIAL_CASTLES_STANDARD];
   const boardConfig: BoardConfig = { nSquares: boardRadius };
   const board = new Board(boardConfig, castles);
   
   // TODO: Standard starting positions
-  const pieces = [
-    PieceFactory.create(PieceType.Monarch, new Hex(-5, 5, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(-4, 4, 0), 'w'),
-    PieceFactory.create(PieceType.Monarch, new Hex(5, -5, 0), 'b'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(4, -4, 0), 'b'),
-  ];
+  const pieces: Piece[] = [];
   
   const layout = getStartingLayout(board);
   
