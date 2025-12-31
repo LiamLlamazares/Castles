@@ -130,7 +130,7 @@ const HexGrid = React.memo(({
                 textAnchor="middle"
                 style={{ fontSize: "15px", fill: "black", pointerEvents: "none" }}
               >
-                {`${-hex.q}, ${-hex.s}`}
+                {`${hex.q}, ${hex.r}`}
               </text>
             )}
             

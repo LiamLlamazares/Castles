@@ -12,12 +12,12 @@ export const TUTORIAL_BOARD_MEDIUM_R = 4;    // Medium scenarios
 export const TUTORIAL_BOARD_STANDARD_R = 6;  // Full game
 // Reusable castle configurations
 export const TUTORIAL_CASTLES_STANDARD = [
-  new Castle(new Hex(-6, 6, 0), 'w', 0),
-  new Castle(new Hex(6, -6, 0), 'b', 0),
-  new Castle(new Hex(0, 6, -6), 'w', 0),
-  new Castle(new Hex(0, -6, 6), 'b', 0),
-  new Castle(new Hex(6, 0, -6), 'w', 0),
-  new Castle(new Hex(-6, 0, 6), 'b', 0),
+  new Castle(new Hex(-4, 2, 2), 'w', 0),
+  new Castle(new Hex(4, -2, -2), 'b', 0),
+  new Castle(new Hex(-1,2, -1), 'w', 0),
+  new Castle(new Hex(-1, -2, 3), 'b', 0),
+  new Castle(new Hex(3, 2, -5), 'w', 0),
+  new Castle(new Hex(-3, -2, 5), 'b', 0),
 ] as const;
 export const TUTORIAL_CASTLES_SMALL = [
   new Castle(new Hex(-3, 3, 0), 'w', 0),
