@@ -8,7 +8,7 @@ import { Hex } from '../Classes/Entities/Hex';
 import { PieceFactory } from '../Classes/Entities/PieceFactory';
 import { CastleGenerator } from '../Classes/Systems/CastleGenerator';
 import { SanctuaryGenerator } from '../Classes/Systems/SanctuaryGenerator';
-import { SanctuaryType, SanctuaryConfig, PieceType, Color } from '../Constants';
+import { SanctuaryType, SanctuaryConfig, PieceType, Color, PieceTheme } from '../Constants';
 import '../css/Board.css';
 
 interface GameSetupProps {
@@ -19,7 +19,8 @@ interface GameSetupProps {
         selectedSanctuaryTypes?: SanctuaryType[],
         sanctuarySettings?: { unlockTurn: number, cooldown: number },
         gameRules?: { vpModeEnabled: boolean },
-        initialPoolTypes?: SanctuaryType[]
+        initialPoolTypes?: SanctuaryType[],
+        pieceTheme?: PieceTheme
     ) => void;
 }
 
@@ -104,6 +105,9 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
 
     // Game Rules - Optional modes
     const [vpModeEnabled, setVpModeEnabled] = useState<boolean>(false);
+    
+    // Piece Theme Selection - Default to Castles
+    const [pieceTheme, setPieceTheme] = useState<PieceTheme>("Castles");
     
     // Tooltip state for sanctuary piece preview
     const [tooltipPiece, setTooltipPiece] = useState<Piece | null>(null);
@@ -202,7 +206,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             Array.from(selectedSanctuaries),
             { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
             { vpModeEnabled },
-            Array.from(selectedPoolTypes)
+            Array.from(selectedPoolTypes),
+            pieceTheme
         );
     };
 
@@ -281,6 +286,27 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         onChange={(e) => setBoardRadius(parseInt(e.target.value))}
                         style={{ width: '150px' }}
                     />
+                </div>
+
+                {/* Piece Style */}
+                <div style={controlGroupStyle}>
+                    <label style={labelStyle}>Piece Style</label>
+                    <select
+                        value={pieceTheme}
+                        onChange={(e) => setPieceTheme(e.target.value as PieceTheme)}
+                        style={{
+                            padding: '8px 12px',
+                            fontSize: '1rem',
+                            borderRadius: '4px',
+                            border: '1px solid #555',
+                            background: '#444',
+                            color: 'white',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <option value="Castles">Castles (Default)</option>
+                        <option value="Chess">Chess</option>
+                    </select>
                 </div>
 
                 {/* Castles */}

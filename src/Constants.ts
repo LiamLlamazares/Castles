@@ -106,6 +106,7 @@ export const SanctuaryConfig: Record<SanctuaryType, {
 export const SANCTUARY_EVOLUTION_COOLDOWN = 10;
 
 export type TurnPhase = "Movement" | "Attack" | "Recruitment";
+export type PieceTheme = "Chess" | "Castles";
 export type Color = "w" | "b";
 export const STARTING_TIME = 20 * 60;
 export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended piece is protected from ranged attacks

@@ -41,7 +41,7 @@ import { PieceTooltip } from "./PieceTooltip";
 import { TerrainTooltip } from "./TerrainTooltip";
 import QuickStartModal, { useQuickStart } from "./QuickStartModal";
 import { PieceFactory } from "../Classes/Entities/PieceFactory";
-import { HistoryEntry, MoveRecord, SanctuaryConfig } from "../Constants";
+import { HistoryEntry, MoveRecord, SanctuaryConfig, PieceTheme } from "../Constants";
 import { createPieceMap } from "../utils/PieceMap";
 import "../css/Board.css";
 
@@ -67,6 +67,7 @@ interface GameBoardProps {
   onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
   isTutorialMode?: boolean;
   initialPoolTypes?: import('../Constants').SanctuaryType[];
+  pieceTheme?: PieceTheme;
 }
 
 /**
@@ -94,7 +95,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   isAnalysisMode = false,
   onEnableAnalysis = () => {},
   isTutorialMode = false,
-  initialPoolTypes
+  initialPoolTypes,
+  pieceTheme = "Castles"
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
@@ -445,6 +447,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
           layout={initialLayout}
           board={board}
           showShields={showShields}
+          pieceTheme={pieceTheme}
         />
         {/* Legal move/attack dots rendered AFTER pieces so they appear on top */}
         <LegalMoveOverlay

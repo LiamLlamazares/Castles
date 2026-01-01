@@ -9,7 +9,7 @@ import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
 import { MoveTree } from './Classes/Core/MoveTree';
 import { SanctuaryGenerator } from './Classes/Systems/SanctuaryGenerator';
-import { SanctuaryType } from './Constants';
+import { SanctuaryType, PieceTheme } from './Constants';
 import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
 
@@ -28,6 +28,7 @@ interface GameConfig {
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };
   initialPoolTypes?: SanctuaryType[];
+  pieceTheme?: PieceTheme;
   isAnalysisMode?: boolean;
 }
 
@@ -58,7 +59,8 @@ function App() {
     selectedSanctuaryTypes?: SanctuaryType[],
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     gameRules?: { vpModeEnabled: boolean },
-    initialPoolTypes?: SanctuaryType[]
+    initialPoolTypes?: SanctuaryType[],
+    pieceTheme?: PieceTheme
   ) => {
     const layout = getStartingLayout(board);
     
@@ -69,7 +71,7 @@ function App() {
     
     const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, typesToGenerate);
     
-    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, isAnalysisMode: false });
+    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false });
     setView('game');
   };
 
@@ -149,6 +151,7 @@ function App() {
               onLoadGame={handleLoadGame}
               onEditPosition={handleEditPosition}
               onTutorial={handleTutorialClick}
+              pieceTheme={gameConfig.pieceTheme}
             />
         </div>
       )}

@@ -10,6 +10,7 @@ import { Board } from "../Classes/Core/Board";
 import { RuleEngine } from "../Classes/Systems/RuleEngine";
 import { createPieceMap } from "../utils/PieceMap";
 import { getImageByPieceType } from "./PieceImages";
+import { PieceTheme } from "../Constants";
 
 interface PieceRendererProps {
   pieces: Piece[];
@@ -23,6 +24,8 @@ interface PieceRendererProps {
   /** Board reference for defense checking */
   board?: Board;
   showShields?: boolean;
+  /** Piece theme for image selection */
+  pieceTheme?: PieceTheme;
 }
 
 /** Get the pixel center of a piece */
@@ -38,7 +41,8 @@ const PieceRenderer = React.memo(({
   layout,
   editorPlacementMode = false,
   board,
-  showShields = true
+  showShields = true,
+  pieceTheme = "Castles"
 }: PieceRendererProps) => {
   const pieceSize = layout.size_image;
   const pieceMap = createPieceMap(pieces);
@@ -69,7 +73,7 @@ const PieceRenderer = React.memo(({
           <g key={piece.hex.getKey()}>
             {/* Piece image */}
             <image
-              href={getImageByPieceType(piece.type, piece.color)}
+              href={getImageByPieceType(piece.type, piece.color, pieceTheme)}
               x={center.x - pieceSize / 2}
               y={center.y - pieceSize / 2}
               height={pieceSize}
