@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+                <!-- Solid Black Silhouette -->
+                <g style="stroke:#000000; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
+                    <g style="fill:#000000">
+                         <!-- Hood and Body merged -->
+                        <path d="M 22.5,8 C 17,8 16,13 16,17 L 13,38 L 32,38 L 29,17 C 29,13 28,8 22.5,8 Z" />
+                    </g>
+                    <!-- Black Bow Stave -->
+                    <path d="M 34,4 Q 30,22 34,40" fill="none" />
+                </g>
+
+                <!-- White Details -->
+                <g style="fill:none; stroke:#ffffff; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
+                     <!-- Bow String -->
+                    <path d="M 34,4 L 34,40" stroke-width="1"/>
+                    <!-- Knives & Belt (Crucial for detail against black) -->
+                    <path d="M 18,24 L 23,29" /> <!-- Sax -->
+                    <path d="M 20,24 L 16,28" /> <!-- Scramasax -->
+                    <path d="M 16,23 L 26,23" stroke-width="1" /> <!-- Belt -->
+                    <!-- Cowl/Shoulder definition line -->
+                    <path d="M 16,17 L 18,17 C 18,15 19,14 22.5,14 C 26,14 27,15 27,17 L 29,17" stroke-width="1"/>
+                </g>
+
+                <!-- Highlights -->
+                <g style="fill:none; stroke:#ffffff; stroke-width:1; stroke-linecap:round">
+                    <!-- Hood Shine -->
+                    <path d="M 19,10 Q 21,8 24,9" />
+                    <!-- Bow Top Shine -->
+                    <path d="M 33,5 Q 32,8 32,10" />
+                </g>
+            </svg>

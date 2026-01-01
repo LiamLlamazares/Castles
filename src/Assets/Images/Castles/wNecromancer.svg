@@ -1,0 +1,23 @@
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+                <g style="fill:#ffffff; stroke:#000000; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
+                    <!-- Head with Bone Crown -->
+                    <path d="M 18,16 L 27,16 L 27,12 L 25,8 L 22.5,12 L 20,8 L 18,12 Z" />
+                    <!-- Face Outline -->
+                    <path d="M 18,16 L 20,22 L 25,22 L 27,16" fill="none"/>
+                    
+                    <!-- Body with Ribs -->
+                    <path d="M 18,22 L 15,38 L 30,38 L 27,22" />
+                    <path d="M 19,26 L 26,26" /> <!-- Rib line -->
+                    <path d="M 20,30 L 25,30" /> <!-- Lower Rib line -->
+                    
+                    <!-- Staff with Skull Top -->
+                    <path d="M 33,12 L 33,38" />
+                    <!-- Skull Head -->
+                    <path d="M 31.5,10 C 31.5,8 32.5,7 33,7 C 33.5,7 34.5,8 34.5,10 L 34.5,11 L 31.5,11 Z" />
+                    <!-- Jaw -->
+                    <path d="M 32,11 L 32,13 L 34,13 L 34,11" />
+                    
+                    <!-- Hand holding staff -->
+                    <circle cx="33" cy="24" r="1.5" fill="white"/>
+                </g>
+            </svg>

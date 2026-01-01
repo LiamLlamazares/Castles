@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+                <g style="fill:#ffffff; stroke:#000000; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
+                    <!-- Hood -->
+                    <path d="M 22.5,8 C 17,8 16,13 16,17 L 18,17 C 18,15 19,14 22.5,14 C 26,14 27,15 27,17 L 29,17 C 29,13 28,8 22.5,8 Z" />
+                    <!-- Body -->
+                    <path d="M 16,17 L 13,38 L 32,38 L 29,17" />
+                    <!-- Grounded Longbow -->
+                    <path d="M 34,4 Q 30,22 34,40" fill="none" />
+                    <path d="M 34,4 L 34,40" fill="none" stroke-width="1"/>
+                    <!-- Knives -->
+                    <path d="M 18,24 L 23,29" /> 
+                    <path d="M 20,24 L 16,28" /> 
+                    <path d="M 16,23 L 26,23" stroke-width="1" />
+                </g>
+            </svg>

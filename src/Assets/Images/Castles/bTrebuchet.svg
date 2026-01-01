@@ -1,0 +1,32 @@
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+                    <g style="fill:#000000; stroke:#000000; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round;">
+                        <!-- Solid Black Silhouette -->
+                        <path d="M 10,38 L 35,38 L 35,34 L 10,34 Z" /> <!-- Base -->
+                        <path d="M 17,34 L 20,16 L 25,16 L 28,34" /> <!-- Frame -->
+                        <path d="M 36,9 L 39,11 L 11,30 L 8,28 Z" /> <!-- Arm -->
+                        <path d="M 35,8 L 42,8 L 41,16 L 34,16 Z" /> <!-- Weight -->
+                        <circle cx="14" cy="40" r="2" /> <!-- Wheels -->
+                        <circle cx="31" cy="40" r="2" /> <!-- Wheels -->
+
+                        <!-- White Details -->
+                        <circle cx="22.5" cy="19" r="1.5" style="fill:#ffffff; stroke:none;" /> <!-- Pivot -->
+                        
+                        <!-- Wheel Centers (Eyes) -->
+                        <circle cx="14" cy="40" r="0.8" style="fill:#ffffff; stroke:none;" />
+                        <circle cx="31" cy="40" r="0.8" style="fill:#ffffff; stroke:none;" />
+
+                        <!-- Internal Lines -->
+                        <path d="M 17,34 L 20,16 M 25,16 L 28,34" style="stroke:#000000; fill:none;" /> 
+                        <path d="M 36,9 L 36,15 L 41,15" style="stroke:#ffffff; fill:none; stroke-width:1;" />
+                        <path d="M 12,36 L 33,36" style="stroke:#ffffff; fill:none; stroke-width:1;" />
+
+                        <!-- Sling (Moved Left to x=4) -->
+                        <path d="M 9,29 Q 2,32 4,36" style="stroke:#000000; fill:none;" />
+                        
+                        <!-- Stone: Solid Black (Moved Left to x=4) -->
+                        <circle cx="4" cy="36" r="3.5" style="fill:#000000; stroke:none;" />
+                        
+                        <!-- Stone Highlight: Adjusted for new position (x=2 to x=5) -->
+                        <path d="M 2,37.5 A 3,3 0 0 0 5,39" style="stroke:#ffffff; fill:none; stroke-width:1.5; stroke-linecap:round;" />
+                    </g>
+                </svg>

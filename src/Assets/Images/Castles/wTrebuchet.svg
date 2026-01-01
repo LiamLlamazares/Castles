@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="45" height="45">
+  <g style="fill:#ffffff; stroke:#000000; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round;">
+    <!-- Base Platform -->
+    <path d="M 10,38 L 35,38 L 35,34 L 10,34 Z" />
+    <!-- Wheels -->
+    <circle cx="14" cy="40" r="2" fill="#fff" />
+    <circle cx="31" cy="40" r="2" fill="#fff" />
+    <!-- Main Structure -->
+    <path d="M 17,34 L 20,16 L 25,16 L 28,34" fill="#fff" />
+    <!-- Throwing Arm -->
+    <path d="M 36,9 L 39,11 L 11,30 L 8,28 Z" fill="#fff" />
+    <!-- Counterweight -->
+    <path d="M 35,8 L 42,8 L 41,16 L 34,16 Z" />
+    <!-- Pivot -->
+    <circle cx="22.5" cy="19" r="1.5" fill="#000" stroke="none" />
+    <!-- Sling & Heavy Stone (Increased Size) -->
+    <path d="M 9,29 Q 5,33 7,36" style="fill:none" />
+    <circle cx="7" cy="36" r="3.5" fill="#fff" />
+  </g>
+</svg>

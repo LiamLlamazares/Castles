@@ -1,0 +1,38 @@
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 45 45">
+                
+                <!-- 1. SOLID BLACK SILHOUETTE -->
+                <g style="stroke:#000000; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
+                    <g style="fill:#000000">
+                        <!-- Hat & Body merged -->
+                        <path d="M 16,14 L 16,10 L 22.5,4 L 29,10 L 29,14 L 28,14 L 31,38 L 14,38 L 17,14 Z" />
+                        <!-- Hat Brim extension -->
+                        <path d="M 14,14 L 31,14" stroke="none" /> 
+                    </g>
+                    <!-- Staff is black line -->
+                    <path d="M 33,6 L 33,38" fill="none" />
+                </g>
+
+                <!-- 2. WHITE INTERNAL DETAILS -->
+                <g style="fill:none; stroke:#ffffff; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round">
+                    <!-- Miter Split -->
+                    <path d="M 22.5,4 L 22.5,14" stroke-width="1"/>
+                    <!-- Hat Brim Definition -->
+                    <path d="M 14,14 L 31,14" />
+                    
+                    <!-- Stole/Vestment (Y shape) -->
+                    <path d="M 17,14 L 22.5,22 L 28,14" stroke-width="1" />
+                    <path d="M 22.5,22 L 22.5,38" stroke-width="1" />
+
+                    <!-- Snake (White for visibility) -->
+                    <path d="M 33,34 Q 29,30 33,26 Q 37,22 33,18 Q 31,16 33,14" />
+                    <path d="M 33,14 L 34,12" stroke-width="1" /> <!-- Head -->
+                </g>
+
+                <!-- 3. HIGHLIGHTS -->
+                <g style="fill:none; stroke:#ffffff; stroke-width:1; stroke-linecap:round">
+                    <!-- Miter Shine -->
+                    <path d="M 18,10 L 18,12" />
+                    <!-- Snake Scale Shine -->
+                    <path d="M 34,26 L 34,27" stroke-width="0.8" />
+                </g>
+            </svg>
