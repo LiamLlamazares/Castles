@@ -21,9 +21,12 @@ export class PieceFactory {
   /**
    * Creates a piece of any type.
    * Pieces start fresh (can move, can attack, no damage).
+   * Necromancer starts with 1 soul to allow immediate use of Raise Dead.
    */
   static create(type: PieceType, hex: Hex, color: Color): Piece {
-    return new Piece(hex, color, type, true, true, 0);
+    // Necromancer starts with 1 soul
+    const startingSouls = type === PieceType.Necromancer ? 1 : 0;
+    return new Piece(hex, color, type, true, true, 0, false, startingSouls);
   }
 
   /**

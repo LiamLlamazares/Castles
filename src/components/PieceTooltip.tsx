@@ -20,21 +20,21 @@ const PIECE_INFO: Record<PieceType, {
   flying: boolean;
   special?: string;
 }> = {
-  [PieceType.Swordsman]: { movement: '1 (forward diag)', attackType: 'Diagonal', heavy: false, flying: false },
-  [PieceType.Archer]: { movement: '1 (any)', attackType: 'Ranged', range: '2 hexes', heavy: false, flying: false },
+  [PieceType.Swordsman]: { movement: '1 (forward diag)', attackType: 'Diagonal', heavy: false, flying: false, special: '+1 STR when on enemy side of board' },
+  [PieceType.Archer]: { movement: '1 (any)', attackType: 'Ranged', range: '2 hexes', heavy: false, flying: false, special: 'Cannot attack defended pieces' },
   [PieceType.Knight]: { movement: '∞ diagonal', attackType: 'Melee', heavy: false, flying: false },
-  [PieceType.Trebuchet]: { movement: '1 (any)', attackType: 'Long-Range', range: '3 hexes', heavy: true, flying: false },
+  [PieceType.Trebuchet]: { movement: '1 (any)', attackType: 'Long-Range', range: '3 hexes', heavy: true, flying: false, special: 'Cannot attack defended pieces' },
   [PieceType.Eagle]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true },
   [PieceType.Giant]: { movement: '∞ orthogonal', attackType: 'Melee', heavy: true, flying: false },
-  [PieceType.Assassin]: { movement: '∞ any direction', attackType: 'Melee', heavy: false, flying: false, special: 'Instant kill on Monarch' },
+  [PieceType.Assassin]: { movement: '∞ any direction', attackType: 'Melee', heavy: false, flying: false, special: 'Instant kill on Monarch (ignores strength)' },
   [PieceType.Dragon]: { movement: 'L-jump', attackType: 'Melee', heavy: true, flying: true },
-  [PieceType.Monarch]: { movement: '1 (any)', attackType: 'Melee', heavy: true, flying: false, special: 'Must protect!' },
-  [PieceType.Wolf]: { movement: '3 (walk)', attackType: 'Melee', heavy: false, flying: false, special: '+1 STR per adjacent Wolf' },
-  [PieceType.Healer]: { movement: '1 (any)', attackType: 'None', heavy: false, flying: false, special: '+1 STR to adjacent allies' },
-  [PieceType.Ranger]: { movement: '2 (walk)', attackType: 'Long-Range', range: '3 hexes', heavy: false, flying: false },
-  [PieceType.Wizard]: { movement: '1 (any)', attackType: 'Ranged', range: '2 hexes', heavy: false, flying: false, special: 'Fireball (AoE damage)' },
-  [PieceType.Necromancer]: { movement: '1 (any)', attackType: 'Melee', heavy: false, flying: false, special: 'Raise Dead (revive ally)' },
-  [PieceType.Phoenix]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true, special: 'Rebirth after 3 turns' },
+  [PieceType.Monarch]: { movement: '1 (any)', attackType: 'Melee', heavy: true, flying: false, special: 'Capture loses the game!' },
+  [PieceType.Wolf]: { movement: '3 (walk)', attackType: 'Melee', heavy: false, flying: false, special: '+1 STR per adjacent ally Wolf' },
+  [PieceType.Healer]: { movement: '1 (any)', attackType: 'None', heavy: false, flying: false, special: '+1 STR to all adjacent allies' },
+  [PieceType.Ranger]: { movement: '2 (walk)', attackType: 'Long-Range', range: '3 hexes', heavy: false, flying: false, special: 'Cannot attack defended pieces' },
+  [PieceType.Wizard]: { movement: '1 (any)', attackType: 'Ranged', range: '2 hexes', heavy: false, flying: false, special: 'Fireball: deals 1 damage to target + neighbors. Teleport: move anywhere.' },
+  [PieceType.Necromancer]: { movement: '1 (any)', attackType: 'Melee', heavy: false, flying: false, special: 'Starts with 1 soul. Gains +1 soul per capture. Raise Dead: spend 1 soul to revive a dead ally.' },
+  [PieceType.Phoenix]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true, special: 'Rebirth: respawns at your castle 3 rounds after death' },
 };
 
 export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended, isPreview, style }) => {
@@ -179,6 +179,21 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
           fontSize: '0.85rem'
         }}>
           Damage: {piece.damage}/{piece.Strength}
+        </div>
+      )}
+
+      {/* Necromancer souls display */}
+      {!isPreview && piece.type === PieceType.Necromancer && (
+        <div style={{ 
+          marginTop: '8px', 
+          color: '#9b59b6',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px'
+        }}>
+          <span>💀 Souls:</span>
+          <span style={{ fontWeight: 'bold', color: '#e74c3c' }}>{piece.souls}</span>
         </div>
       )}
 
