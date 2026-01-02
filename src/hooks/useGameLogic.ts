@@ -14,7 +14,7 @@
  * @see GameEngine - Core game logic facade
  * @see Game.tsx - Component that consumes this hook
  */
-import { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
 import { GameState } from "../Classes/Core/GameEngine";
 import { Piece } from "../Classes/Entities/Piece";
@@ -388,6 +388,11 @@ export const useGameLogic = (
     
     // Helpers
     canPledge,
-    triggerAbility
+    triggerAbility,
+    
+    // AI Integration - expose internals needed by useAIOpponent
+    gameEngine,
+    state: state as unknown as GameState,
+    setState: setState as React.Dispatch<React.SetStateAction<GameState>>
   };
 };

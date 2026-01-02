@@ -9,6 +9,8 @@ import { PieceFactory } from '../Classes/Entities/PieceFactory';
 import { CastleGenerator } from '../Classes/Systems/CastleGenerator';
 import { SanctuaryGenerator } from '../Classes/Systems/SanctuaryGenerator';
 import { SanctuaryType, SanctuaryConfig, PieceType, Color, PieceTheme } from '../Constants';
+import { OpponentType, AIOpponentConfig } from '../hooks/useAIOpponent';
+import { getImageByPieceType } from './PieceImages';
 import '../css/Board.css';
 
 interface GameSetupProps {
@@ -20,9 +22,17 @@ interface GameSetupProps {
         sanctuarySettings?: { unlockTurn: number, cooldown: number },
         gameRules?: { vpModeEnabled: boolean },
         initialPoolTypes?: SanctuaryType[],
-        pieceTheme?: PieceTheme
+        pieceTheme?: PieceTheme,
+        opponentConfig?: AIOpponentConfig
     ) => void;
 }
+
+// Opponent options for card-based selection
+const OPPONENT_OPTIONS: { id: OpponentType; name: string; icon: string; description: string }[] = [
+    { id: 'human', name: 'Human', icon: '👤', description: 'Local 2-player' },
+    { id: 'random-ai', name: 'Random Bot', icon: '🤖', description: 'Easy difficulty' },
+    // Future: { id: 'heuristic-ai', name: 'Smart Bot', icon: '🧠', description: 'Medium' },
+];
 
 
 // Sanctuary display info
@@ -108,6 +118,12 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     
     // Piece Theme Selection - Default to Castles
     const [pieceTheme, setPieceTheme] = useState<PieceTheme>("Castles");
+    
+    // Opponent Selection - Default to Human (local 2-player)
+    const [opponentType, setOpponentType] = useState<OpponentType>('human');
+    
+    // Player Color Selection - Only relevant when playing vs AI (default: human plays white)
+    const [playerColor, setPlayerColor] = useState<Color>('w');
     
     // Tooltip state for sanctuary piece preview
     const [tooltipPiece, setTooltipPiece] = useState<Piece | null>(null);
@@ -199,6 +215,14 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
     };
 
     const handlePlay = () => {
+        // Build opponent config (only if not human)
+        // AI plays the opposite color of what human selected
+        const aiColor: Color = playerColor === 'w' ? 'b' : 'w';
+        const opponentConfig: AIOpponentConfig | undefined = 
+            opponentType !== 'human' 
+                ? { type: opponentType, aiColor }
+                : undefined;
+                
         onPlay(
             board, 
             pieces, 
@@ -207,7 +231,8 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
             { vpModeEnabled },
             Array.from(selectedPoolTypes),
-            pieceTheme
+            pieceTheme,
+            opponentConfig
         );
     };
 
@@ -254,6 +279,99 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         </button>
                     ))}
                 </div>
+
+                {/* Opponent Selection - Card-based */}
+                <div style={controlGroupStyle}>
+                    <label style={labelStyle}>Opponent</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {OPPONENT_OPTIONS.map(opt => {
+                            const isSelected = opponentType === opt.id;
+                            return (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => setOpponentType(opt.id)}
+                                    style={{
+                                        padding: '8px 12px',
+                                        fontSize: '0.85rem',
+                                        cursor: 'pointer',
+                                        borderRadius: '8px',
+                                        border: isSelected ? '2px solid #4a90d9' : '1px solid #555',
+                                        background: isSelected ? 'rgba(74, 144, 217, 0.2)' : '#444',
+                                        color: isSelected ? '#fff' : '#aaa',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        transition: 'all 0.2s',
+                                        minWidth: '80px'
+                                    }}
+                                    title={opt.description}
+                                >
+                                    <span style={{ fontSize: '1.3rem' }}>{opt.icon}</span>
+                                    <span style={{ fontWeight: isSelected ? 'bold' : 'normal' }}>{opt.name}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Color Selection - Only show when playing vs AI */}
+                {opponentType !== 'human' && (
+                    <div style={{ ...controlGroupStyle, flexDirection: 'column', alignItems: 'stretch' }}>
+                        <label style={{ ...labelStyle, marginBottom: '8px' }}>Play as</label>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                            {(['w', 'b'] as Color[]).map(color => {
+                                const isSelected = playerColor === color;
+                                const colorName = color === 'w' ? 'White' : 'Black';
+                                return (
+                                    <button
+                                        key={color}
+                                        onClick={() => setPlayerColor(color)}
+                                        style={{
+                                            padding: '12px',
+                                            cursor: 'pointer',
+                                            borderRadius: '8px',
+                                            border: isSelected ? '3px solid #4a90d9' : '2px solid #555',
+                                            background: isSelected 
+                                                ? (color === 'w' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.3)')
+                                                : '#333',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            transition: 'all 0.2s',
+                                            minWidth: '100px',
+                                            opacity: isSelected ? 1 : 0.6,
+                                            transform: isSelected ? 'scale(1.05)' : 'scale(1)'
+                                        }}
+                                        title={`Play as ${colorName}`}
+                                    >
+                                        <img 
+                                            src={getImageByPieceType(PieceType.Monarch, color, pieceTheme)}
+                                            alt={`${colorName} Monarch`}
+                                            style={{ width: '48px', height: '48px' }}
+                                        />
+                                        <span style={{ 
+                                            color: isSelected ? '#fff' : '#888',
+                                            fontWeight: isSelected ? 'bold' : 'normal',
+                                            fontSize: '0.9rem'
+                                        }}>
+                                            {colorName}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div style={{ 
+                            fontSize: '0.75rem', 
+                            color: '#888', 
+                            textAlign: 'center', 
+                            marginTop: '8px' 
+                        }}>
+                            Bot plays as {playerColor === 'w' ? 'Black' : 'White'}
+                        </div>
+                    </div>
+                )}
 
                 {/* Play Button (Top for easy access, or Bottom?) - Let's keep it prominent */}
                 <button 

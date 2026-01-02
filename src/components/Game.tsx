@@ -20,6 +20,7 @@ import { useSoundEffects } from "../hooks/useSoundEffects";
 import { useInputHandler } from "../hooks/useInputHandler";
 import { useClickHandler } from "../hooks/useClickHandler";
 import { useGameView } from "../hooks/useGameView";
+import { useAIOpponent, AIOpponentConfig } from "../hooks/useAIOpponent";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import LegalMoveOverlay from "./LegalMoveOverlay";
@@ -68,6 +69,7 @@ interface GameBoardProps {
   isTutorialMode?: boolean;
   initialPoolTypes?: import('../Constants').SanctuaryType[];
   pieceTheme?: PieceTheme;
+  opponentConfig?: AIOpponentConfig;
 }
 
 /**
@@ -96,7 +98,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onEnableAnalysis = () => {},
   isTutorialMode = false,
   initialPoolTypes,
-  pieceTheme = "Castles"
+  pieceTheme = "Castles",
+  opponentConfig
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
@@ -136,7 +139,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   
   // Sound effects hook - subscribes to game events
   useSoundEffects();
-    
+  
+  // Get game logic first so we have gameEngine and state for AI hook
   const {
     // State
     pieces,
@@ -176,7 +180,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
     stepHistory,
     getPGN,
     loadPGN,
-    triggerAbility
+    triggerAbility,
+    
+    // AI Integration
+    gameEngine,
+    state,
+    setState
   } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules, isTutorialMode, initialPoolTypes);
 
   // Decoupled View State
@@ -197,6 +206,18 @@ const GameBoard: React.FC<GameBoardProps> = ({
     toggleSanctuaryIcons,
     setAllIcons
   } = useGameView();
+
+  // AI Opponent Integration
+  const { isAITurn } = useAIOpponent({
+    enabled: opponentConfig?.type !== 'human' && opponentConfig?.type != null,
+    opponentType: opponentConfig?.type ?? 'human',
+    aiColor: opponentConfig?.aiColor ?? 'b',
+    gameEngine,
+    board: initialBoard,
+    gameState: state,
+    onStateChange: (newState) => setState(newState),
+    isViewingHistory,
+  });
 
   // Reset overlay when game restarts (victory message clears or changes)
   React.useEffect(() => {

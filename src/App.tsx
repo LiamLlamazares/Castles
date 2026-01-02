@@ -12,6 +12,7 @@ import { SanctuaryGenerator } from './Classes/Systems/SanctuaryGenerator';
 import { SanctuaryType, PieceTheme } from './Constants';
 import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
+import { AIOpponentConfig } from './hooks/useAIOpponent';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial';
 
@@ -30,6 +31,7 @@ interface GameConfig {
   initialPoolTypes?: SanctuaryType[];
   pieceTheme?: PieceTheme;
   isAnalysisMode?: boolean;
+  opponentConfig?: AIOpponentConfig;
 }
 
 interface EditorConfig {
@@ -60,7 +62,8 @@ function App() {
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     gameRules?: { vpModeEnabled: boolean },
     initialPoolTypes?: SanctuaryType[],
-    pieceTheme?: PieceTheme
+    pieceTheme?: PieceTheme,
+    opponentConfig?: AIOpponentConfig
   ) => {
     const layout = getStartingLayout(board);
     
@@ -71,7 +74,7 @@ function App() {
     
     const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, typesToGenerate);
     
-    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false });
+    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
     setView('game');
   };
 
@@ -152,6 +155,7 @@ function App() {
               onEditPosition={handleEditPosition}
               onTutorial={handleTutorialClick}
               pieceTheme={gameConfig.pieceTheme}
+              opponentConfig={gameConfig.opponentConfig}
             />
         </div>
       )}
