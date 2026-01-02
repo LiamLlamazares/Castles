@@ -390,9 +390,14 @@ export const useGameLogic = (
     canPledge,
     triggerAbility,
     
-    // AI Integration - expose internals needed by useAIOpponent
-    gameEngine,
-    state: state as unknown as GameState,
-    setState: setState as React.Dispatch<React.SetStateAction<GameState>>
+    // AI Integration - controlled interface for AI opponent
+    // Instead of exposing raw state/setState, provide a callback that handles AI state updates
+    aiIntegration: {
+      gameEngine,
+      board: gameEngine.board,
+      getState: () => state as unknown as GameState,
+      applyAIState: (newState: GameState) => setState(newState as any),
+      isViewingHistory,
+    }
   };
 };

@@ -113,28 +113,30 @@ export interface AbilityOption {
 /**
  * Pre-computed context of all legal actions for the current player.
  * Built once per turn phase to avoid redundant RuleEngine queries.
+ * 
+ * Note: All collections are Readonly to prevent accidental mutation by AI.
  */
 export interface AIContext {
   /** Current turn phase */
-  phase: TurnPhase;
+  readonly phase: TurnPhase;
 
   /** Color of the AI player */
-  myColor: Color;
+  readonly myColor: Color;
 
   /** All legal moves indexed by piece hex key */
-  legalMoves: Map<string, Hex[]>;
+  readonly legalMoves: ReadonlyMap<string, readonly Hex[]>;
 
   /** All legal attacks indexed by piece hex key */
-  legalAttacks: Map<string, Hex[]>;
+  readonly legalAttacks: ReadonlyMap<string, readonly Hex[]>;
 
   /** Available recruitment options from captured castles */
-  recruitOptions: RecruitOption[];
+  readonly recruitOptions: readonly RecruitOption[];
 
   /** Available pledge options from ready sanctuaries */
-  pledgeOptions: PledgeOption[];
+  readonly pledgeOptions: readonly PledgeOption[];
 
   /** Available ability activations */
-  abilityOptions: AbilityOption[];
+  readonly abilityOptions: readonly AbilityOption[];
 }
 
 // =============================================================================

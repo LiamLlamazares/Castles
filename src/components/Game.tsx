@@ -182,10 +182,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     loadPGN,
     triggerAbility,
     
-    // AI Integration
-    gameEngine,
-    state,
-    setState
+    // AI Integration - controlled interface
+    aiIntegration
   } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules, isTutorialMode, initialPoolTypes);
 
   // Decoupled View State
@@ -207,16 +205,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
     setAllIcons
   } = useGameView();
 
-  // AI Opponent Integration
+  // AI Opponent Integration - using controlled aiIntegration interface
   const { isAITurn } = useAIOpponent({
     enabled: opponentConfig?.type !== 'human' && opponentConfig?.type != null,
     opponentType: opponentConfig?.type ?? 'human',
     aiColor: opponentConfig?.aiColor ?? 'b',
-    gameEngine,
-    board: initialBoard,
-    gameState: state,
-    onStateChange: (newState) => setState(newState),
-    isViewingHistory,
+    gameEngine: aiIntegration.gameEngine,
+    board: aiIntegration.board,
+    gameState: aiIntegration.getState(),
+    onStateChange: aiIntegration.applyAIState,
+    isViewingHistory: aiIntegration.isViewingHistory,
   });
 
   // Reset overlay when game restarts (victory message clears or changes)
