@@ -20,6 +20,7 @@ describe('Necromancer Mechanics', () => {
             pieceMap: new PieceMap([]),
             castles: [],
             sanctuaries: [],
+            sanctuaryPool: [],
             turnCounter: 0,
             movingPiece: null,
             history: [],

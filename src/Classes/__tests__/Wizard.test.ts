@@ -19,6 +19,7 @@ describe('Wizard Active Abilities', () => {
             pieceMap: new PieceMap([]),
             castles: [],
             sanctuaries: [],
+            sanctuaryPool: [],
             turnCounter: 0,
             movingPiece: null,
             history: [],

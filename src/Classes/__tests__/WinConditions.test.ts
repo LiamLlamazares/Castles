@@ -144,6 +144,7 @@ describe('GameEngine - Win Conditions', () => {
         pieceMap: createPieceMap(pieces),
         castles: castles,
         sanctuaries: [],
+        sanctuaryPool: [],
         turnCounter: 7, // Black's turn (attack phase)
         movingPiece: pieces[0],
         history: [],
