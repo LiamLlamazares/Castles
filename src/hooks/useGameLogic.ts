@@ -270,6 +270,14 @@ export const useGameLogic = (
 
   // =========== INTERACTION HANDLERS ===========
   const handlePieceClick = useCallback((pieceClicked: Piece) => {
+    // Check if clicking an enemy piece during Attack phase - delegate to handleHexClick for attack
+    const isEnemyPiece = pieceClicked.color !== currentPlayer;
+    if (turnPhase === "Attack" && isEnemyPiece && movingPiece?.canAttack) {
+      // Delegate to hex click handler which will process the attack
+      handleHexClick(pieceClicked.hex);
+      return;
+    }
+
     setState(prev => {
         // 1. Unlocking Logic: "Once a square e.g. ranger is clicked it makes it available in the upgrade pool"
         let newPool = prev.sanctuaryPool;
@@ -324,7 +332,7 @@ export const useGameLogic = (
             movingPiece: newMovingPiece
         };
     });
-  }, [currentPlayer, turnPhase, setState]);
+  }, [currentPlayer, turnPhase, movingPiece, handleHexClick, setState]);
 
   const handleResign = useCallback((player: Color) => {
     // Reset to live game state before resigning (in case viewing history)

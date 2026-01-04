@@ -178,7 +178,8 @@ export const useMoveExecution = ({
         return;
       }
 
-      // Handle Attack
+      // Handle Attack - triggers if clicking on a valid attack target hex
+      // This works whether clicking the red attack indicator OR the enemy piece/hex directly
       if (turnPhase === "Attack" && movingPiece?.canAttack) {
         if (isLegalAttack(hex)) {
           const stateWithHistory = prepareStateForAction();
@@ -202,6 +203,7 @@ export const useMoveExecution = ({
           }
           return;
         }
+        // Don't deselect if clicking elsewhere - allow retrying
         setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
         return;
       }
