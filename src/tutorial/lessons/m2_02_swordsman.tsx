@@ -33,7 +33,7 @@ export function createM2L2(): TutorialLesson {
   
   return {
     id: 'm2_l2_swordsman',
-    title: '2.1 Swordsman',
+    title: '3.1 Swordsman',
     description: (
       <div>
         <p style={{ marginTop: 0 }}>The Swordsman is the basic melee unit (units that attack adjacent hexes and capture by moving onto the enemy hex).</p>

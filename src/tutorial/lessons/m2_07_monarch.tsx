@@ -1,9 +1,10 @@
 /**
  * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.7: Monarch
+ * Lesson 2.5: Monarch
  * 
  * Objective: Understanding the VIP
  */
+import React from 'react';
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
@@ -32,20 +33,38 @@ export function createM2L7(): TutorialLesson {
   
   return {
     id: 'm2_l7_monarch',
-    title: '2.7 Monarch',
-    description: 'Your most important piece - protect it!',
+    title: '3.5 Monarch',
+    description: (
+      <div>
+        <p style={{ marginTop: 0 }}>The Monarch is your most important piece. Lose it, and you lose the game!</p>
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Type:</strong> Melee
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Movement:</strong> 1 hex in any direction
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Attack:</strong> Adjacent hex (standard melee)
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Strength:</strong> 2
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Special:</strong> If captured, you lose the game instantly
+          </div>
+        </div>
+      </div>
+    ),
     board,
     pieces,
     layout,
     objectives: [
-      'Move your Monarch safely',
-      'Keep it protected',
+      'Keep your Monarch protected',
     ],
     hints: [
-      '👑 Monarch: Moves 1 hex any direction',
-      '💀 Lose your Monarch = lose the game',
-      '🛡️ Keep defenders nearby',
+      'Always keep defenders near your Monarch',
     ],
-    instructions: 'TODO: Practice keeping your Monarch safe.',
+    instructions: 'Practice keeping your Monarch safe.',
   };
 }

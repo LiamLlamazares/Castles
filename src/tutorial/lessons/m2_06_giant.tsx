@@ -1,9 +1,10 @@
 /**
  * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.6: Giant
+ * Lesson 2.4: Giant
  * 
  * Objective: High strength capture
  */
+import React from 'react';
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
@@ -32,8 +33,29 @@ export function createM2L6(): TutorialLesson {
   
   return {
     id: 'm2_l6_giant',
-    title: '2.6 Giant',
-    description: 'The Giant has high strength.',
+    title: '3.4 Giant',
+    description: (
+      <div>
+        <p style={{ marginTop: 0 }}>The Giant is a slow but powerful melee unit with the highest base strength.</p>
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Type:</strong> Melee
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Movement:</strong> 1 hex in any direction
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Attack:</strong> Adjacent hex (standard melee)
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Strength:</strong> 3
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Special:</strong> Highest base strength; can overpower most units
+          </div>
+        </div>
+      </div>
+    ),
     board,
     pieces,
     layout,
@@ -41,10 +63,8 @@ export function createM2L6(): TutorialLesson {
       'Use Giant to overpower the enemy',
     ],
     hints: [
-      '🦣 Giant: Moves 1 hex only',
-      '💪 Strength 3 - very powerful',
-      '🐢 Slow but strong',
+      'Giants are powerful but slow - position them carefully',
     ],
-    instructions: 'TODO: Advance and capture with your Giant.',
+    instructions: 'Advance and capture with your Giant.',
   };
 }

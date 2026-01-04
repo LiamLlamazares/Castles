@@ -1,9 +1,10 @@
 /**
  * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.5: Knight (Cavalry)
+ * Lesson 2.3: Knight (Cavalry)
  * 
  * Objective: Extended movement capture
  */
+import React from 'react';
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
@@ -32,19 +33,38 @@ export function createM2L5(): TutorialLesson {
   
   return {
     id: 'm2_l5_knight',
-    title: '2.5 Knight',
-    description: 'Learn the Knight extended movement.',
+    title: '3.3 Knight',
+    description: (
+      <div>
+        <p style={{ marginTop: 0 }}>The Knight is a mobile melee unit that can leap over other pieces.</p>
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Type:</strong> Melee
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Movement:</strong> Exactly 2 hexes in any direction (can jump over pieces)
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Attack:</strong> Adjacent hex (standard melee)
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Strength:</strong> 2
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Special:</strong> Leaps over pieces; great for surprise attacks
+          </div>
+        </div>
+      </div>
+    ),
     board,
     pieces,
     layout,
     objectives: [
-      'Use Knight to reach and capture distant enemy',
+      'Use Knight to reach and capture the enemy',
     ],
     hints: [
-      '🐴 Knight: Jumps exactly 2 hexes',
-      '➡️ Can jump over other pieces',
-      '⚔️ Great for surprise attacks',
+      'Knights can jump over other pieces to reach their target',
     ],
-    instructions: 'TODO: Jump to the enemy and capture.',
+    instructions: 'Jump to the enemy and capture.',
   };
 }

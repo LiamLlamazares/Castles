@@ -1,9 +1,10 @@
 /**
  * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.4: Archer
+ * Lesson 2.2: Archer
  * 
  * Objective: Ranged attack demonstration
  */
+import React from 'react';
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
@@ -32,8 +33,29 @@ export function createM2L4(): TutorialLesson {
   
   return {
     id: 'm2_l4_archer',
-    title: '2.4 Archer',
-    description: 'Learn ranged attacks with the Archer.',
+    title: '3.2 Archer',
+    description: (
+      <div>
+        <p style={{ marginTop: 0 }}>The Archer is a ranged unit that attacks from a distance without moving.</p>
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Type:</strong> Ranged
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Movement:</strong> 1 hex forward in any direction
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Attack:</strong> 2-3 hexes away (cannot attack adjacent)
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Strength:</strong> 1
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Special:</strong> Attacks without moving; cannot attack adjacent enemies
+          </div>
+        </div>
+      </div>
+    ),
     board,
     pieces,
     layout,
@@ -41,10 +63,8 @@ export function createM2L4(): TutorialLesson {
       'Attack the enemy from range',
     ],
     hints: [
-      '🏹 Archer: Attacks at range 2-3',
-      '❌ Cannot attack adjacent enemies',
-      '🎯 Select Archer, click red dot to attack',
+      'Select the Archer, then click the red attack indicator',
     ],
-    instructions: 'TODO: Use your Archer to attack at range.',
+    instructions: 'Use your Archer to attack at range.',
   };
 }
