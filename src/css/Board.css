@@ -60,11 +60,6 @@ body {
   filter: url(#shadow)
 }
 
-.hexagon-castles {
-  fill: var(--castle-neutral);
-  stroke: #aaa;
-  stroke-width: 4;
-}
 .hexagon-white-castle {
   fill: var(--castle-white);
   stroke: #aaa;
