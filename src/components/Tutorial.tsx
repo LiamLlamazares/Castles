@@ -35,6 +35,14 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
     { id: 'm2_l7_monarch', piece: PieceType.Monarch, label: 'Monarch' },
   ];
   
+  // Module 1 terrain lessons for quick navigation (uses CSS classes from Board.css)
+  const MODULE_1_TERRAINS = [
+    { id: 'm1_l1_terrain_castles', label: 'Castles', hexClass: 'hexagon-castles' },
+    { id: 'm1_l2_terrain_rivers', label: 'Rivers', hexClass: 'hexagon-river' },
+    { id: 'm1_l3_terrain_highground', label: 'High Ground', hexClass: 'hexagon-light hexagon-high-ground' },
+    { id: 'm1_l4_terrain_sanctuaries', label: 'Sanctuaries', hexClass: 'hexagon-sanctuary hexagon-sanctuary-phoenix' },
+  ];
+  
   // Navigation handlers
   const goToNextLesson = () => {
     if (currentLessonIndex < lessons.length - 1) {
@@ -89,7 +97,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         </div>
         
         {/* Lesson Title */}
-        <h2 style={{ margin: 0, color: '#ffd700' }}>{lesson.title}</h2>
+        <h2 className="tutorial-title" style={{ margin: 0 }}>{lesson.title}</h2>
         
         {/* Piece Quick Nav - only for Module 2 lessons */}
         {lesson.id.startsWith('m2_l') && (
@@ -107,20 +115,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
                   key={id}
                   onClick={() => jumpToLesson(id)}
                   title={label}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '2px',
-                    padding: '6px 8px',
-                    backgroundColor: isActive ? '#ffd700' : '#2a2a4e',
-                    color: isActive ? '#1a1a2e' : '#e0e0e0',
-                    border: isActive ? '2px solid #ffd700' : '2px solid transparent',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    minWidth: '50px'
-                  }}
+                  className={`tutorial-nav-btn ${isActive ? 'active' : ''}`}
                 >
                   <img 
                     src={getImageByPieceType(piece, 'w')} 
@@ -131,6 +126,38 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
                       filter: isActive ? 'brightness(0.3)' : 'none'
                     }} 
                   />
+                  <span style={{ fontSize: '9px', fontWeight: 'bold' }}>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        
+        {/* Terrain Quick Nav - only for Module 1 lessons */}
+        {lesson.id.startsWith('m1_l') && (
+          <div style={{ 
+            display: 'flex', 
+            gap: '6px', 
+            flexWrap: 'wrap',
+            padding: '8px 0',
+            borderBottom: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            {MODULE_1_TERRAINS.map(({ id, label, hexClass }) => {
+              const isActive = lesson.id === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => jumpToLesson(id)}
+                  title={label}
+                  className={`tutorial-nav-btn ${isActive ? 'active' : ''}`}
+                >
+                  <svg viewBox="0 0 110 110" style={{ width: 28, height: 28 }}>
+                    <polygon 
+                      points="55 5, 98 27.5, 98 72.5, 55 95, 12 72.5, 12 27.5" 
+                      className={hexClass}
+                      style={{ strokeWidth: 3 }}
+                    />
+                  </svg>
                   <span style={{ fontSize: '9px', fontWeight: 'bold' }}>{label}</span>
                 </button>
               );

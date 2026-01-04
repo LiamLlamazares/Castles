@@ -38,42 +38,42 @@ body {
       stroke-width: 4; /* Border width for the hexagon */
   }
   .hexagon-river {
-    fill: RGB(56,175,205); /* Fill color for the hexagon */
-    stroke: #aaa; /* Border color for the hexagon */
-    stroke-width: 4; /* Border width for the hexagon */
+    fill: var(--river-color);
+    stroke: #aaa;
+    stroke-width: 4;
 }
 .hexagon-dark.hexagon-high-ground {
-  fill: rgb(139, 69, 19); /* Darker shade for dark high ground */
+  fill: var(--high-ground-dark);
   stroke-width: 4;
   filter: url(#shadow)
 }
 
 .hexagon-mid.hexagon-high-ground {
-  fill: rgb(157, 78, 21); /* Darker shade for mid high ground */
+  fill: var(--high-ground-mid);
   stroke-width: 4;
   filter: url(#shadow)
 }
 
 .hexagon-light.hexagon-high-ground {
-  fill: rgb(175, 87, 24); /* Darker shade for light high ground */
+  fill: var(--high-ground-light);
   stroke-width: 4;
   filter: url(#shadow)
 }
 
 .hexagon-castles {
-  fill: purple; /* Fill color for the hexagon */
-  stroke: #aaa; /* Border color for the hexagon */
-  stroke-width: 4; /* Border width for the hexagon */
+  fill: var(--castle-neutral);
+  stroke: #aaa;
+  stroke-width: 4;
 }
 .hexagon-white-castle {
-  fill: aquamarine; /* Fill color for the hexagon */;
-  stroke: #aaa; /* Border color for the hexagon */
-  stroke-width: 4; /* Border width for the hexagon */
+  fill: var(--castle-white);
+  stroke: #aaa;
+  stroke-width: 4;
 }
 .hexagon-black-castle {
-  fill: #a29bfe; /* Lighter soft purple for contrast */
-  stroke: #aaa; /* Border color for the hexagon */
-  stroke-width: 4; /* Border width for the hexagon */
+  fill: var(--castle-black);
+  stroke: #aaa;
+  stroke-width: 4;
 }
 
 /* Castle ownership indicators - show who currently controls the castle */
@@ -143,6 +143,35 @@ body {
   --colorShadeC: rgb(150, 232, 195);
   --colorShadeD: rgb(187, 232, 211);
   --colorShadeE: rgb(205, 255, 232);
+  
+  /* Terrain Colors */
+  --river-color: RGB(56, 175, 205);
+  --high-ground-dark: rgb(139, 69, 19);
+  --high-ground-mid: rgb(157, 78, 21);
+  --high-ground-light: rgb(175, 87, 24);
+  
+  /* Castle Colors */
+  --castle-neutral: purple;
+  --castle-white: #50fa7b;      /* Bright green - distinct from river cyan */
+  --castle-black: #a29bfe;      /* Soft purple */
+  --castle-white-stroke: #00ff00;
+  --castle-black-stroke: #8000ff;
+  
+  /* Sanctuary Colors */
+  --sanctuary-wolf: #95a5a6;
+  --sanctuary-healer: #1abc9c;
+  --sanctuary-ranger: #2ecc71;
+  --sanctuary-wizard: #3498db;
+  --sanctuary-necromancer: #34495e;
+  --sanctuary-phoenix: #e74c3c;
+  
+  /* Tutorial UI Colors */
+  --tutorial-sidebar-bg: #1a1a2e;
+  --tutorial-button-bg: #2a2a4e;
+  --tutorial-button-active: #ffd700;
+  --tutorial-text-light: #e0e0e0;
+  --tutorial-text-dark: #1a1a2e;
+  --tutorial-title-color: #ffd700;
 }
 
 /* =========== SANCTUARIES =========== */
@@ -164,44 +193,44 @@ body {
 
 /* 1. Wolf Covenant (Tier 1) - Grey/Silver */
 .hexagon-sanctuary-wolf {
-    fill: #95a5a6;
+    fill: var(--sanctuary-wolf);
     stroke: #bdc3c7 !important;
     filter: drop-shadow(0 0 8px #bdc3c7);
 }
 
 /* 2. Sacred Spring (Tier 1) - Teal/Green */
 .hexagon-sanctuary-healer {
-    fill: #1abc9c;
+    fill: var(--sanctuary-healer);
     stroke: #16a085 !important;
-    filter: drop-shadow(0 0 8px #1abc9c);
+    filter: drop-shadow(0 0 8px var(--sanctuary-healer));
 }
 
 /* 3. Warden's Watch (Tier 2) - Forest Green/Brown */
 .hexagon-sanctuary-ranger {
-    fill: #2ecc71;
+    fill: var(--sanctuary-ranger);
     stroke: #27ae60 !important;
-    filter: drop-shadow(0 0 8px #2ecc71);
+    filter: drop-shadow(0 0 8px var(--sanctuary-ranger));
 }
 
 /* 4. Arcane Refuge (Tier 2) - Blue (Magic) */
 .hexagon-sanctuary-wizard {
-    fill: #3498db;
+    fill: var(--sanctuary-wizard);
     stroke: #2980b9 !important;
-    filter: drop-shadow(0 0 8px #3498db);
+    filter: drop-shadow(0 0 8px var(--sanctuary-wizard));
 }
 
 /* 5. Forsaken Grounds (Tier 3) - Dark Grey/Green (Necrotic) */
 .hexagon-sanctuary-necromancer {
-    fill: #34495e;
+    fill: var(--sanctuary-necromancer);
     stroke: #2c3e50 !important;
     filter: drop-shadow(0 0 8px #2c3e50);
 }
 
 /* 6. Pyre Eternal (Tier 3) - Red/Orange/Gold */
 .hexagon-sanctuary-phoenix {
-    fill: #e74c3c;
+    fill: var(--sanctuary-phoenix);
     stroke: #c0392b !important;
-    filter: drop-shadow(0 0 8px #e74c3c);
+    filter: drop-shadow(0 0 8px var(--sanctuary-phoenix));
 }
 
 /* Cooldown states (dormant) - Desaturated versions of each type */
@@ -803,4 +832,40 @@ body {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.5);
   transform: scale(1.05);
+}
+
+/* =========== TUTORIAL NAVIGATION =========== */
+
+.tutorial-sidebar {
+  background-color: var(--tutorial-sidebar-bg);
+  color: var(--tutorial-text-light);
+}
+
+.tutorial-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  background-color: var(--tutorial-button-bg);
+  color: var(--tutorial-text-light);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 50px;
+}
+
+.tutorial-nav-btn.active {
+  background-color: var(--tutorial-button-active);
+  color: var(--tutorial-text-dark);
+  border-color: var(--tutorial-button-active);
+}
+
+.tutorial-nav-btn:hover:not(.active) {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.tutorial-title {
+  color: var(--tutorial-title-color);
 }
