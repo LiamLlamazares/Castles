@@ -2,6 +2,7 @@
  * @file types.ts
  * @description Type definitions for the tutorial lesson system.
  */
+import React from 'react';
 import { Board } from '../Classes/Core/Board';
 import { Piece } from '../Classes/Entities/Piece';
 import { Sanctuary } from '../Classes/Entities/Sanctuary';
@@ -18,7 +19,7 @@ export interface TutorialLesson {
   title: string;
   
   /** Short description of what this lesson teaches */
-  description: string;
+  description: string | React.ReactNode;
   
   /** The game board for this lesson */
   board: Board;
@@ -39,7 +40,7 @@ export interface TutorialLesson {
   hints?: string[];
   
   /** Optional custom instructions shown at the top */
-  instructions?: string;
+  instructions?: string | React.ReactNode;
 }
 
 /**
