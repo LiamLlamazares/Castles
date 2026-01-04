@@ -37,7 +37,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
   
   // Module 1 terrain lessons for quick navigation (uses CSS classes from Board.css)
   const MODULE_1_TERRAINS = [
-    { id: 'm1_l1_terrain_castles', label: 'Castles', hexClass: 'hexagon-castles' },
+    { id: 'm1_l1_introduction', label: 'Castles', hexClass: 'hexagon-white-castle' },
     { id: 'm1_l2_terrain_rivers', label: 'Rivers', hexClass: 'hexagon-river' },
     { id: 'm1_l3_terrain_highground', label: 'High Ground', hexClass: 'hexagon-light hexagon-high-ground' },
     { id: 'm1_l4_terrain_sanctuaries', label: 'Sanctuaries', hexClass: 'hexagon-sanctuary hexagon-sanctuary-phoenix' },
