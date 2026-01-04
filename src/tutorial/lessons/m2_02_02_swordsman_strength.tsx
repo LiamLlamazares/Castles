@@ -25,8 +25,9 @@ export function createM2L2_01(): TutorialLesson {
   const board = new Board(boardConfig, castles);
   
   const pieces = [
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'), // Target
+    PieceFactory.create(PieceType.Swordsman, new Hex(-1,2, -1), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(1, 1, -2), 'w'), 
+    PieceFactory.create(PieceType.Giant, new Hex(0, 0, 0), 'b'),
   ];
   
   const layout = getStartingLayout(board);
@@ -36,35 +37,16 @@ export function createM2L2_01(): TutorialLesson {
     title: '3.1.1 Swordsman: Strength',
     description: (
       <div>
-        <p style={{ marginTop: 0 }}>The strength of a piece determines what piices it can capture. A piece can only be captured when it is attacked by pieces whose strength is greater than or equal to its own strength.</p>
-            <div style={{ marginTop: '12px' }}>
-             <div style={{ marginBottom: '6px' }}>
-            <strong>Type:</strong> Melee
-          </div>   
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Movement:</strong> 1 hex forward in any direction
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Attack:</strong> An adjacent hex forward diagonally
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Strength:</strong> 1
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Special:</strong> +1 STR when on enemy side of board
-          </div>
-        </div>
+        <p style={{ marginTop: 0 }}>The strength of a piece determines what pieces it can capture. A piece can only be captured when it is attacked by pieces whose strength is greater than or equal to its own strength.</p>
+        <p>Enemy pieces heal at the end of turn, so don't waste your attacks if you can't capture the piece!</p>
       </div>
     ),
     board,
     pieces,
     layout,
     objectives: [
-      'Capture the enemy Swordsman',
+      'Capture the enemy giant',
     ],
-    hints: [
-      'You need to move first.',
-    ],
-    instructions: 'TODO: Capture the enemy piece with your Swordsman.',
+    instructions: 'The giant has strength 2, so you need two swordmen to attack it. Fortunately, you have two attacks available each turn.',
   };
 }

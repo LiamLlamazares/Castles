@@ -64,7 +64,6 @@ export function createM2L2(): TutorialLesson {
     ],
     hints: [
       'You need to move first.',
-    ],
-    instructions: 'TODO: Capture the enemy piece with your Swordsman.',
+    ]
   };
 }
