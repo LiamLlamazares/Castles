@@ -8,6 +8,8 @@
 import React, { useState, useMemo } from 'react';
 import GameBoard from './Game';
 import { getAllLessons, TutorialLesson } from '../tutorial';
+import { getImageByPieceType } from './PieceImages';
+import { PieceType } from '../Constants';
 import '../css/Board.css';
 
 interface TutorialProps {
@@ -24,6 +26,15 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
   // Get the current lesson
   const lesson: TutorialLesson = lessons[currentLessonIndex];
   
+  // Module 2 piece lessons for quick navigation
+  const MODULE_2_PIECES = [
+    { id: 'm2_l2_swordsman', piece: PieceType.Swordsman, label: 'Swordsman' },
+    { id: 'm2_l4_archer', piece: PieceType.Archer, label: 'Archer' },
+    { id: 'm2_l5_knight', piece: PieceType.Knight, label: 'Knight' },
+    { id: 'm2_l6_giant', piece: PieceType.Giant, label: 'Giant' },
+    { id: 'm2_l7_monarch', piece: PieceType.Monarch, label: 'Monarch' },
+  ];
+  
   // Navigation handlers
   const goToNextLesson = () => {
     if (currentLessonIndex < lessons.length - 1) {
@@ -35,6 +46,11 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
     if (currentLessonIndex > 0) {
       setCurrentLessonIndex(prev => prev - 1);
     }
+  };
+  
+  const jumpToLesson = (lessonId: string) => {
+    const idx = lessons.findIndex(l => l.id === lessonId);
+    if (idx !== -1) setCurrentLessonIndex(idx);
   };
   
   return (
@@ -74,6 +90,53 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         
         {/* Lesson Title */}
         <h2 style={{ margin: 0, color: '#ffd700' }}>{lesson.title}</h2>
+        
+        {/* Piece Quick Nav - only for Module 2 lessons */}
+        {lesson.id.startsWith('m2_l') && (
+          <div style={{ 
+            display: 'flex', 
+            gap: '6px', 
+            flexWrap: 'wrap',
+            padding: '8px 0',
+            borderBottom: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            {MODULE_2_PIECES.map(({ id, piece, label }) => {
+              const isActive = lesson.id === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => jumpToLesson(id)}
+                  title={label}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '2px',
+                    padding: '6px 8px',
+                    backgroundColor: isActive ? '#ffd700' : '#2a2a4e',
+                    color: isActive ? '#1a1a2e' : '#e0e0e0',
+                    border: isActive ? '2px solid #ffd700' : '2px solid transparent',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    minWidth: '50px'
+                  }}
+                >
+                  <img 
+                    src={getImageByPieceType(piece, 'w')} 
+                    alt={label}
+                    style={{ 
+                      width: '28px', 
+                      height: '28px',
+                      filter: isActive ? 'brightness(0.3)' : 'none'
+                    }} 
+                  />
+                  <span style={{ fontSize: '9px', fontWeight: 'bold' }}>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         
         {/* Lesson Description */}
         <div style={{ margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{lesson.description}</div>

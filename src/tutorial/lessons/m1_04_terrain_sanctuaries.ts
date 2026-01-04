@@ -25,7 +25,7 @@ export function createM1L4(): TutorialLesson {
   
   return {
     id: 'm1_l4_terrain_sanctuaries',
-    title: '1.4 Terrain: Sanctuaries',
+    title: '1.4 The board: Sanctuaries',
     description: 'Interspersed across the battlefield are sanctuaries. Control of them allows for the recruitment of special units such as wolves, mages, and other mystical creatures.',
     board,
     pieces,

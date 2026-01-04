@@ -25,7 +25,7 @@ export function createM1L3(): TutorialLesson {
   
   return {
     id: 'm1_l3_terrain_highground',
-    title: '1.3 Terrain: High Ground',
+    title: '1.3 The board: High Ground',
     description: 'High ground on the battlefield gives ranged pieces a strategic advantage, allowing them to reach further with their attacks.',
     board,
     pieces,

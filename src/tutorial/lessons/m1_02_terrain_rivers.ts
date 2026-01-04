@@ -26,7 +26,7 @@ export function createM1L2(): TutorialLesson {
   
   return {
     id: 'm1_l2_terrain_rivers',
-    title: '1.2 Terrain: Rivers',
+    title: '1.2 The board: Rivers',
     description: 'The board is cut in two by a river. Fords in it allow units to pass.',
     board,
     pieces,
