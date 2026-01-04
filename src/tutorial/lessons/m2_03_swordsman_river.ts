@@ -1,6 +1,6 @@
 /**
- * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.3: Swordsman River Bonus
+ * MODULE 3: Your Army (Basic Pieces)
+ * Lesson 3.1.2: Swordsman River Bonus
  * 
  * Objective: Capture Giant after crossing river
  */
@@ -25,28 +25,22 @@ export function createM2L3(): TutorialLesson {
   
   // TODO: Position swordsman to cross river and attack Giant
   const pieces = [
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
-    PieceFactory.create(PieceType.Giant, new Hex(1, -1, 0), 'b'), // Target
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'w'),
+    PieceFactory.create(PieceType.Giant, new Hex(2, -2, 0), 'b'), // Target
   ];
   
   const layout = getStartingLayout(board);
   
   return {
     id: 'm2_l3_swordsman_river',
-    title: '2.3 Swordsman River Bonus',
-    description: 'Swordsmen get strength bonus when crossing rivers.',
+    title: '3.1.2 Swordsman River Bonus',
+    description: 'Swordsmen get a strength bonus of +1 when on the other side of the river, becoming a powerful menace.',
     board,
     pieces,
     layout,
     objectives: [
-      'Cross the river as Swordsman',
-      'Capture the Giant with river bonus',
-    ],
-    hints: [
-      '🌊 Swordsmen can cross rivers',
-      '💪 +1 Strength when crossing river',
-      '🎯 Use this to beat stronger enemies',
-    ],
-    instructions: 'TODO: Cross the river and capture the Giant.',
+      'Cross the river with your Swordsman',
+      'Capture the Giant',
+    ]
   };
 }
