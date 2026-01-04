@@ -30,6 +30,6 @@ export function createLesson00(): TutorialLesson {
       'Press Space or click Pass to skip phases',
       'Press Next when ready',
     ],
-    instructions: 'All boards are interactive, click to move freely',
+    instructions: 'All boards are interactive, click to move freely. If you make a mistake you can navigate backwards and forwards with the arrow keys.',
   };
 }

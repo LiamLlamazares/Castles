@@ -23,6 +23,7 @@ import { createM1L4 } from './lessons/m1_04_terrain_sanctuaries';
 import { createM2 } from './lessons/m2_game_phases';
 import {createM2L1} from './lessons/m2_01_the_basic_pieces';
 import { createM2L2 } from './lessons/m2_02_swordsman';
+import { createM2L2_01 } from './lessons/m2_02_02_swordsman_strength';
 import { createM2L3 } from './lessons/m2_03_swordsman_river';
 import { createM2L4 } from './lessons/m2_04_archer';
 import { createM2L5 } from './lessons/m2_05_knight';
@@ -53,7 +54,7 @@ export {
   // Module 1
   createM1L1, createM1L2, createM1L3, createM1L4,
   // Module 2
-  createM2L1, createM2L2, createM2L3, createM2L4, createM2L5, createM2L6, createM2L7,
+  createM2L1, createM2L2, createM2L2_01, createM2L3, createM2L4, createM2L5, createM2L6, createM2L7,
   // Module 3
   createM3L1, createM3L2, createM3L3,
   // Module 4
@@ -78,6 +79,7 @@ export function getAllLessons(): TutorialLesson[] {
     // Module 2: Your Army
     createM2L1(), // 2.1 Game Phases
     createM2L2(), // 2.2 Swordsman
+    createM2L2_01(), // 2.2.1 Swordsman: Strength
     createM2L3(), // 2.3 Swordsman River Bonus
     createM2L4(), // 2.4 Archer
     createM2L5(), // 2.5 Knight

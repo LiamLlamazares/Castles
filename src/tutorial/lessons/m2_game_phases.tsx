@@ -55,7 +55,7 @@ export function createM2(): TutorialLesson {
           </div>
           <div style={{ marginBottom: '8px' }}>
             <img src={swordIcon} alt="Attack" style={iconStyle} />
-            <strong>Attack Phase:</strong> Attack up to 2 times
+            <strong>Attack Phase:</strong> Attack up to 2 times 
           </div>
           <div style={{ marginBottom: '8px' }}>
             <img src={castleIcon} alt="Recruitment" style={iconStyle} />
@@ -69,7 +69,7 @@ export function createM2(): TutorialLesson {
     layout,
     objectives: [
       'Move the swordsmen forward',
-      'Capture the enemy swordsman and castle',
+      'Capture the enemy swordsman and castle (swordsmen attack diagonally)',
       'Recruit a new swordsman from the captured castle',
     ],
     hints: [],
