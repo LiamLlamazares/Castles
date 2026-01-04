@@ -76,7 +76,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         <h2 style={{ margin: 0, color: '#ffd700' }}>{lesson.title}</h2>
         
         {/* Lesson Description */}
-        <p style={{ margin: 0, lineHeight: 1.6 }}>{lesson.description}</p>
+        <p style={{ margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{lesson.description}</p>
         
         {/* Instructions */}
         {lesson.instructions && (
@@ -85,7 +85,8 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
             backgroundColor: '#2a2a4e',
             borderRadius: '8px',
             fontSize: '14px',
-            lineHeight: 1.6
+            lineHeight: 1.6,
+            whiteSpace: 'pre-wrap'
           }}>
             {lesson.instructions}
           </div>

@@ -32,7 +32,10 @@ export function createM2L1(): TutorialLesson {
   return {
     id: 'm2_l1_game_phases',
     title: '2.1 Game Phases',
-    description: 'The game is split into three phases: Movement, Attack, and Recruitment.',
+    description: `The game is split into three phases:
+🚶 Movement Phase: Move up to 2 pieces
+⚔️ Attack Phase: Attack up to 2 times
+🏰 Recruitment Phase: Recruit from captured castles and available sanctuaries`,
     board,
     pieces,
     layout,
@@ -41,11 +44,7 @@ export function createM2L1(): TutorialLesson {
       'Capture the enemy swordsman and castle',
       'Recruit a new swordsman from the captured castle',
     ],
-    hints: [
-      '🚶 Movement Phase: Move up to 2 pieces',
-      '⚔️ Attack Phase: Attack up to 2 times',
-      '🏰 Recruitment Phase: Recruit from captured castles and available sanctuaries',
-    ],
+    hints: [],
     instructions: 'TODO: Move your piece, then attack the enemy.',
   };
 }
