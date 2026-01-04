@@ -27,7 +27,7 @@ export function createM1L1(): TutorialLesson {
   return {
     id: 'm1_l1_introduction',
     title: '1.1 The board: Castles',
-    description: 'Each army has three castles under their control. Controlling enemy casatles allows for recruitment of new pieces and provides a path of victory.',
+    description: 'Each army has three castles under their control. Controlling enemy castles allows recruitment of new pieces and provides a path to victory.',
     board,
     pieces,
     sanctuaries: [],

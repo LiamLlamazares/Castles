@@ -11,21 +11,20 @@ import { PieceFactory } from '../../Classes/Entities/PieceFactory';
 import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
+import { TUTORIAL_BOARD_STANDARD_R, TUTORIAL_CASTLES_STANDARD } from '../constants';
 
 export function createM2L1(): TutorialLesson {
-  const boardRadius = 2; // Mini
+  const boardRadius = TUTORIAL_BOARD_STANDARD_R; // Standard board
   
-  const castles: Castle[] = [
-    new Castle(new Hex(-2, 2, 0), 'w', 0),
-    new Castle(new Hex(2, -2, 0), 'b', 0),
-  ];
-  
-  const boardConfig: BoardConfig = { nSquares: boardRadius };
+  const castles: Castle[] = [...TUTORIAL_CASTLES_STANDARD];
+  const boardConfig: BoardConfig = { nSquares: boardRadius,riverCrossingLength: 2 };
   const board = new Board(boardConfig, castles);
   
+  // TODO: Standard starting positions
   const pieces = [
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(1, -1, 0), 'b'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(5, 0, -5), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(-2, 1, 1), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, -1, 1), 'b'), // Target
   ];
   
   const layout = getStartingLayout(board);
@@ -33,18 +32,19 @@ export function createM2L1(): TutorialLesson {
   return {
     id: 'm2_l1_game_phases',
     title: '2.1 Game Phases',
-    description: 'Learn the Movement and Attack phases.',
+    description: 'The game is split into three phases: Movement, Attack, and Recruitment.',
     board,
     pieces,
     layout,
     objectives: [
-      'Complete a movement action',
-      'Complete an attack action',
+      'Move the swordsmen forward',
+      'Capture the enemy swordsman and castle',
+      'Recruit a new swordsman from the captured castle',
     ],
     hints: [
       '🚶 Movement Phase: Move up to 2 pieces',
       '⚔️ Attack Phase: Attack up to 2 times',
-      '🏰 Recruitment Phase: Recruit from castles',
+      '🏰 Recruitment Phase: Recruit from captured castles and available sanctuaries',
     ],
     instructions: 'TODO: Move your piece, then attack the enemy.',
   };
