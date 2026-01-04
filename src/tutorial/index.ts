@@ -20,7 +20,8 @@ import { createM1L3 } from './lessons/m1_03_terrain_highground';
 import { createM1L4 } from './lessons/m1_04_terrain_sanctuaries';
 
 // Module 2: Your Army (Basic Pieces)
-import { createM2L1 } from './lessons/m2_01_game_phases';
+import { createM2 } from './lessons/m2_game_phases';
+import {createM2L1} from './lessons/m2_01_the_basic_pieces';
 import { createM2L2 } from './lessons/m2_02_swordsman';
 import { createM2L3 } from './lessons/m2_03_swordsman_river';
 import { createM2L4 } from './lessons/m2_04_archer';
@@ -72,7 +73,8 @@ export function getAllLessons(): TutorialLesson[] {
     createM1L2(), // 1.2 Terrain: Rivers
     createM1L3(), // 1.3 Terrain: High Ground
     createM1L4(), // 1.4 Terrain: Sanctuaries
-    
+    //Module 2: Game phases intro
+    createM2(), // 2.0 Game Phases (intro)
     // Module 2: Your Army
     createM2L1(), // 2.1 Game Phases
     createM2L2(), // 2.2 Swordsman

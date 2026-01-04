@@ -19,7 +19,7 @@ import bootsIcon from '../../Assets/Images/Banner/boots.svg';
 import swordIcon from '../../Assets/Images/Banner/sword.svg';
 import castleIcon from '../../Assets/Images/Banner/castle.svg';
 
-export function createM2L1(): TutorialLesson {
+export function createM2(): TutorialLesson {
   const boardRadius = TUTORIAL_BOARD_STANDARD_R; // Standard board
   
   const castles: Castle[] = [...TUTORIAL_CASTLES_STANDARD];
@@ -44,7 +44,7 @@ export function createM2L1(): TutorialLesson {
 
   return {
     id: 'm2_l1_game_phases',
-    title: '2.1 Game Phases',
+    title: '2 Game Phases (overview)',
     description: (
       <div>
         The game is split into three phases:

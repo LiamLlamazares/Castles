@@ -34,4 +34,4 @@ I have successfully refactored the game phase structure to unify Castle and Sanc
 - `src/Classes/Services/SanctuaryService.ts`: Added phase check validation and `startAvailable` support.
 - `src/Classes/Systems/RuleEngine.ts`: Added check for usable sanctuaries to prevent phase skipping.
 - `src/components/Turn_banner.tsx`: Updated UI label.
-- `src/tutorial/lessons/m2_01_game_phases.ts`: Updated tutorial text.
+- `src/tutorial/lessons/m2_game_phases.ts`: Updated tutorial text.
