@@ -1,9 +1,10 @@
 /**
  * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.2: Swordsman
+ * Lesson 2.1: Swordsman
  * 
  * Objective: Capture target piece
  */
+import React from 'react';
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
@@ -25,7 +26,7 @@ export function createM2L2(): TutorialLesson {
   
   const pieces = [
     PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, -1, 1), 'b'), // Target
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'), // Target
   ];
   
   const layout = getStartingLayout(board);
@@ -33,9 +34,28 @@ export function createM2L2(): TutorialLesson {
   return {
     id: 'm2_l2_swordsman',
     title: '2.1 Swordsman',
-    description: 'The Swordsman is the most basic unit in the game.
-    Movement: 
-    ',
+    description: (
+      <div>
+        <p style={{ marginTop: 0 }}>The Swordsman is the basic melee unit (units that attack adjacent hexes and capture by moving onto the enemy hex).</p>
+            <div style={{ marginTop: '12px' }}>
+             <div style={{ marginBottom: '6px' }}>
+            <strong>Type:</strong> Melee
+          </div>   
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Movement:</strong> 1 hex forward in any direction
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Attack:</strong> An adjacent hex forward diagonally
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Strength:</strong> 1
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <strong>Special:</strong> +1 STR when on enemy side of board
+          </div>
+        </div>
+      </div>
+    ),
     board,
     pieces,
     layout,
@@ -43,9 +63,7 @@ export function createM2L2(): TutorialLesson {
       'Capture the enemy Swordsman',
     ],
     hints: [
-      '⚔️ Swordsman: Moves diagonally forward',
-      '🎯 Attack by moving onto enemy hex',
-      '💪 Strength 1 - basic infantry unit',
+      'You need to move first.',
     ],
     instructions: 'TODO: Capture the enemy piece with your Swordsman.',
   };
