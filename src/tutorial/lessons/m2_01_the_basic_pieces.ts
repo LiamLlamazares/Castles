@@ -7,8 +7,7 @@
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
-import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { Piece } from '../../Classes/Entities/Piece';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
@@ -23,28 +22,16 @@ export function createM2L1(): TutorialLesson {
   const boardConfig: BoardConfig = { nSquares: boardRadius };
   const board = new Board(boardConfig, castles);
   
-  const pieces = [
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, -1, 1), 'b'), // Target
-  ];
+  const pieces: Piece[] = [];
   
   const layout = getStartingLayout(board);
   
   return {
     id: 'm2_l1_basic_pieces',
-    title: '2.1 The Basic Pieces',
-    description: 'Learn how the Swordsman moves and attacks.',
+    title: '3 The Basic Pieces',
+    description: 'Each army is made up of 7 basic pieces. Each piece is characterised by their strength, movement and special abilities.',
     board,
     pieces,
     layout,
-    objectives: [
-      'Capture the enemy Swordsman',
-    ],
-    hints: [
-      '⚔️ Swordsman: Moves diagonally forward',
-      '🎯 Attack by moving onto enemy hex',
-      '💪 Strength 1 - basic infantry unit',
-    ],
-    instructions: 'TODO: Capture the enemy piece with your Swordsman.',
   };
 }

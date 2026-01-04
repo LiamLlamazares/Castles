@@ -32,8 +32,10 @@ export function createM2L2(): TutorialLesson {
   
   return {
     id: 'm2_l2_swordsman',
-    title: '2.2 Swordsman',
-    description: 'Learn how the Swordsman moves and attacks.',
+    title: '2.1 Swordsman',
+    description: 'The Swordsman is the most basic unit in the game.
+    Movement: 
+    ',
     board,
     pieces,
     layout,

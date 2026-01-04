@@ -43,7 +43,7 @@ export function createM2(): TutorialLesson {
   };
 
   return {
-    id: 'm2_l1_game_phases',
+    id: 'm2_game_phases',
     title: '2 Game Phases (overview)',
     description: (
       <div>
