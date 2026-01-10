@@ -128,7 +128,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             className="menu-item" 
             onClick={() => handleMenuItemClick(onExportPGN)}
           >
-            <span className="menu-icon"><img src={scrollIcon} alt="" style={menuIconStyle} /></span>
             Export PGN
           </button>
           
@@ -136,7 +135,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             className="menu-item" 
             onClick={() => handleMenuItemClick(onImportPGN)}
           >
-            <span className="menu-icon"><img src={scrollsIcon} alt="" style={menuIconStyle} /></span>
             Import PGN
           </button>
           
@@ -146,7 +144,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             className="menu-item" 
             onClick={() => handleMenuItemClick(onFlipBoard)}
           >
-            <span className="menu-icon"><img src={rotateIcon} alt="" style={menuIconStyle} /></span>
             Flip Board
           </button>
           
@@ -156,11 +153,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
              onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
              style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
           >
-             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-               <span className="menu-icon">⚙️</span>
-               Icon Settings
-             </span>
-             <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '▲' : '▼'}</span>
+             <span>Icon Settings</span>
+             <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
           </button>
 
           {isIconsMenuOpen && (
@@ -188,7 +182,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   onClick={() => handleToggleClick(onToggleCoordinates)}
                   style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
                 >
-                  <span className="menu-icon">{showCoordinates ? '☑️' : '⬜'}</span>
+                  <input type="checkbox" checked={showCoordinates} readOnly style={{ marginRight: '8px' }} />
                   Coordinates
                 </button>
 
@@ -198,7 +192,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     onClick={() => handleToggleClick(onToggleTerrainIcons)}
                     style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
                   >
-                    <span className="menu-icon">{showTerrainIcons ? '☑️' : '⬜'}</span>
+                    <input type="checkbox" checked={showTerrainIcons} readOnly style={{ marginRight: '8px' }} />
                     Terrain
                  </button>
                )}
@@ -209,7 +203,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     onClick={() => handleToggleClick(onToggleSanctuaryIcons)}
                     style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
                   >
-                    <span className="menu-icon">{showSanctuaryIcons ? '☑️' : '⬜'}</span>
+                    <input type="checkbox" checked={showSanctuaryIcons} readOnly style={{ marginRight: '8px' }} />
                     Sanctuary Icons
                  </button>
                )}
@@ -220,7 +214,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     onClick={() => handleToggleClick(onToggleShields)}
                     style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
                   >
-                    <span className="menu-icon">{showShields ? '☑️' : '⬜'}</span>
+                    <input type="checkbox" checked={showShields} readOnly style={{ marginRight: '8px' }} />
                     Protected Shields
                  </button>
                )}
@@ -231,7 +225,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     onClick={() => handleToggleClick(onToggleCastleRecruitment)}
                     style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
                   >
-                    <span className="menu-icon">{showCastleRecruitment ? '☑️' : '⬜'}</span>
+                    <input type="checkbox" checked={showCastleRecruitment} readOnly style={{ marginRight: '8px' }} />
                     Castle Recruitment
                  </button>
                )}
@@ -244,7 +238,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             className="menu-item" 
             onClick={() => handleMenuItemClick(onShowRules)}
           >
-            <span className="menu-icon"><img src={scrollsIcon} alt="" style={menuIconStyle} /></span>
             Rules
           </button>
 
@@ -253,7 +246,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               className="menu-item" 
               onClick={() => handleMenuItemClick(onTutorial)}
             >
-              <span className="menu-icon"><img src={flagIcon} alt="" style={menuIconStyle} /></span>
               Tutorial
             </button>
           )}
@@ -265,7 +257,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item" 
                 onClick={() => handleMenuItemClick(onEnableAnalysis)}
               >
-                <span className="menu-icon">⌕</span>
                 Analysis Board
               </button>
             </>
@@ -278,7 +269,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item" 
                 onClick={() => handleMenuItemClick(onEditPosition)}
               >
-                <span className="menu-icon">⚙</span>
                 Edit Position
               </button>
             </>
