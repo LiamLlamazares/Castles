@@ -16,8 +16,9 @@
  * }
  */
 
-import { GameState } from "../Core/GameEngine";
 import { Board } from "../Core/Board";
+import { GameState } from "../Core/GameState";
+import { RuleEngine } from "./RuleEngine";
 import { Piece } from "../Entities/Piece";
 import { Color } from "../../Constants";
 

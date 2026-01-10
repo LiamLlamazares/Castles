@@ -1,5 +1,6 @@
 import { Board } from '../Core/Board';
-import { GameEngine, GameState } from '../Core/GameEngine';
+import { GameEngine } from '../Core/GameEngine';
+import { GameState } from '../Core/GameState';
 import { Piece } from '../Entities/Piece';
 import { Hex } from '../Entities/Hex';
 import { PieceType, Color } from '../../Constants';

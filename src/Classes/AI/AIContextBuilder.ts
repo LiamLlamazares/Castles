@@ -9,7 +9,8 @@
  * @see RuleEngine - Source of legal move/attack data
  */
 
-import { GameState, GameEngine } from "../Core/GameEngine";
+import { GameEngine } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { Board } from "../Core/Board";
 import { RuleEngine } from "../Systems/RuleEngine";
 import { SanctuaryService } from "../Services/SanctuaryService";

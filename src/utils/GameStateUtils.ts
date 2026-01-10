@@ -7,7 +7,7 @@
  * - State cloning helpers
  */
 import { HistoryEntry, MoveRecord } from "../Constants";
-import { GameState } from "../Classes/Core/GameEngine";
+import { GameState } from "../Classes/Core/GameState";
 
 /**
  * Creates a snapshot of the current game state for history tracking.

@@ -2,7 +2,8 @@
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { StateMutator } from "../Systems/StateMutator";
-import { GameState } from "../Core/GameEngine";
+import { GameEngine } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { Board } from "../Core/Board";
 import { PieceType, AbilityType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";

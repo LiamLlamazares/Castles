@@ -10,9 +10,11 @@
  * @see AIController - Orchestrates AI turns
  */
 
-import { GameState } from "../Core/GameEngine";
 import { Board } from "../Core/Board";
+import { GameEngine } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { GameCommand } from "../Commands/GameCommand";
+import { MoveCommand } from "../Commands/MoveCommand";
 import { Hex } from "../Entities/Hex";
 import { Color, TurnPhase, PieceType, AbilityType } from "../../Constants";
 

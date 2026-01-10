@@ -6,8 +6,8 @@
  * Uses GameEngine for state mutation and emits events after execution.
  */
 
-import { GameCommand, CommandResult, CommandType, CommandContext } from "./GameCommand";
-import { GameState } from "../Core/GameEngine";
+import { GameCommand, CommandContext, CommandResult, CommandType } from "./GameCommand";
+import { GameState } from "../Core/GameState";
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { NotationService } from "../Systems/NotationService";

@@ -12,7 +12,9 @@
  * @see StateMutator - Underlying state mutation layer
  */
 
-import { GameState } from "../Core/GameEngine";
+import { GameEngine } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
+import { Board } from "../Core/Board";
 import { Hex } from "../Entities/Hex";
 import { Piece } from "../Entities/Piece";
 import { MoveRecord } from "../../Constants";

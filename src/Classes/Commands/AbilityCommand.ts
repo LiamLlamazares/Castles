@@ -10,7 +10,7 @@
  */
 
 import { GameCommand, CommandResult, CommandType, CommandContext } from "./GameCommand";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { Hex } from "../Entities/Hex";
 import { Piece } from "../Entities/Piece";
 import { AbilityType } from "../../Constants";

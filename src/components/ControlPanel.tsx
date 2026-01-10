@@ -64,9 +64,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   viewNodeId,
   victoryPoints,
 }) => {
-  // New Game should only be enabled before game starts OR after someone wins
-  const isNewGameDisabled = hasGameStarted && !winner;
-  
   // Calculate phase index within current player's turn (0-4)
   const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
 
@@ -130,8 +127,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <button 
           className="control-button new-game" 
           onClick={onNewGame}
-          disabled={isNewGameDisabled}
-          title={isNewGameDisabled ? "Game in progress" : "Start new game (N)"}
+          title="Start new game (N)"
         >
           New Game
         </button>

@@ -21,7 +21,8 @@ import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
 import { Board } from "../Core/Board";
 import { TurnManager } from "../Core/TurnManager";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
+import { SanctuaryService } from "../Services/SanctuaryService";
 import {
   Color,
   AttackType,
@@ -325,7 +326,6 @@ export class RuleEngine {
         hasUsableCastles = unusedControlledCastles.length > 0;
     }
 
-    const { SanctuaryService } = require("../Services/SanctuaryService");
     // Pass ignorePhase=true because we want to know if it WOULD be valid in the Recruitment phase
     const hasUsableSanctuaries = gameState.sanctuaries.some(s => SanctuaryService.canPledge(gameState, s.hex, true));
 

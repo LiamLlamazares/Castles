@@ -7,7 +7,7 @@
  */
 
 import { GameCommand, CommandResult, CommandType, CommandContext } from "./GameCommand";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
 import { NotationService } from "../Systems/NotationService";

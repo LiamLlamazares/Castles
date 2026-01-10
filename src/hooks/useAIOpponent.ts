@@ -11,7 +11,8 @@
  */
 
 import { useEffect, useMemo, useCallback, useRef } from "react";
-import { GameState, GameEngine } from "../Classes/Core/GameEngine";
+import { GameEngine } from "../Classes/Core/GameEngine";
+import { GameState } from "../Classes/Core/GameState";
 import { Board } from "../Classes/Core/Board";
 import { TurnManager } from "../Classes/Core/TurnManager";
 import { RandomAgent, AIController } from "../Classes/AI";

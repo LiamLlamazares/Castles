@@ -25,7 +25,9 @@ import { PieceMap } from "../../utils/PieceMap";
 import { RuleEngine } from "../Systems/RuleEngine";
 import { StateMutator } from "../Systems/StateMutator";
 import { SanctuaryService } from "../Services/SanctuaryService";
+import { AbilitySystem } from "../Systems/AbilitySystem";
 import { MoveTree } from "./MoveTree";
+import { GameState, PhoenixRecord } from "./GameState";
 import {
   Color,
   TurnPhase,
@@ -33,34 +35,6 @@ import {
   HistoryEntry,
   AbilityType,
 } from "../../Constants";
-
-// Phoenix Rebirth Record
-export interface PhoenixRecord {
-    respawnTurn: number;
-    owner: Color;
-}
-
-/**
- * Represents the complete state of a game at any point.
- * Used for state transitions and history tracking.
- */
-export interface GameState {
-  pieces: Piece[];
-  pieceMap: PieceMap; // O(1) lookup
-  castles: Castle[];
-  sanctuaries: Sanctuary[]; // Special piece sanctuaries
-  sanctuaryPool: import("../../Constants").SanctuaryType[]; // Available types for evolution
-  sanctuarySettings?: { unlockTurn: number, cooldown: number }; // Configurable sanctuary settings
-  turnCounter: number;
-  movingPiece: Piece | null;
-  history: HistoryEntry[];
-  moveHistory: MoveRecord[];
-  moveTree: MoveTree; // Mandatory for history and variation tracking
-  graveyard: Piece[]; // Captured pieces eligible for revival
-  phoenixRecords: PhoenixRecord[]; // Active rebirth timers
-  victoryPoints?: { w: number, b: number }; // VP for castle control (optional, for VP mode)
-  gameRules?: { vpModeEnabled: boolean }; // Active rules
-}
 
 /**
  * GameEngine: Central state machine for the Castles game.
@@ -88,7 +62,6 @@ export class GameEngine {
       if (!source) throw new Error("No piece at source hex");
       
       // Use AbilitySystem for comprehensive validation
-      const { AbilitySystem } = require("../Systems/AbilitySystem");
       const validation = AbilitySystem.validate(source, targetHex, ability, gameState);
       
       if (!validation.valid) {
@@ -103,7 +76,6 @@ export class GameEngine {
    * Delegates to AbilitySystem for consistent validation.
    */
   public getAbilityTargets(gameState: GameState, piece: Piece, ability: AbilityType): Hex[] {
-    const { AbilitySystem } = require("../Systems/AbilitySystem");
     return AbilitySystem.getValidTargets(piece, ability, gameState);
   }
 
@@ -111,7 +83,6 @@ export class GameEngine {
    * Gets ability information for a piece (for UI display).
    */
   public getAbilitiesForPiece(gameState: GameState, piece: Piece): any[] {
-    const { AbilitySystem } = require("../Systems/AbilitySystem");
     return AbilitySystem.getAbilitiesForPiece(piece, gameState);
   }
 

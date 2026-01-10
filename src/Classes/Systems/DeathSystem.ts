@@ -13,7 +13,7 @@
 import { Piece } from "../Entities/Piece";
 import { PieceFactory } from "../Entities/PieceFactory";
 import { Castle } from "../Entities/Castle";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { createPieceMap } from "../../utils/PieceMap";
 import {
   PieceType,

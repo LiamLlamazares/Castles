@@ -7,7 +7,8 @@
  */
 
 import { GameCommand, CommandResult, CommandType, CommandContext } from "./GameCommand";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
+import { TurnManager } from "../Core/TurnManager";
 
 /**
  * Command for passing the current turn phase.

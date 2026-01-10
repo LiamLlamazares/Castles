@@ -2,8 +2,8 @@
  * @file StateValidator.test.ts
  * @description Tests for game state validation invariants.
  */
-import { StateValidator } from "../StateValidator";
-import { GameState } from "../../Core/GameEngine";
+import { StateValidator, StateValidationResult } from "../StateValidator";
+import { GameState } from "../../Core/GameState";
 import { Board } from "../../Core/Board";
 import { Piece } from "../../Entities/Piece";
 import { Hex } from "../../Entities/Hex";

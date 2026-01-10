@@ -10,7 +10,8 @@
 
 import { RandomAgent } from "../Agents/RandomAgent";
 import { AIContextBuilder } from "../AIContextBuilder";
-import { GameEngine, GameState } from "../../Core/GameEngine";
+import { GameEngine } from "../../Core/GameEngine";
+import { GameState } from "../../Core/GameState";
 import { Board } from "../../Core/Board";
 import { Piece } from "../../Entities/Piece";
 import { Hex } from "../../Entities/Hex";

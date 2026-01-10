@@ -8,7 +8,7 @@ import { PieceMap } from "../../utils/PieceMap";
 describe('Healer Strength Buff', () => {
     test('Healer provides +1 STR to adjacent friendly piece', () => {
         const healer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
-        const ally = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman);
+        const ally = new Piece(new Hex(1, 0, -1), 'w', PieceType.Swordsman);
         
         const pieces = [healer, ally];
         const pieceMap = new PieceMap(pieces);
@@ -41,7 +41,7 @@ describe('Healer Strength Buff', () => {
     test('Multiple Healers stack buffs', () => {
         const h1 = new Piece(new Hex(0, 0, 0), 'w', PieceType.Healer);
         const h2 = new Piece(new Hex(2, -2, 0), 'w', PieceType.Healer);
-        const ally = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman);
+        const ally = new Piece(new Hex(1, 0, -1), 'w', PieceType.Swordsman);
         
         const pieces = [h1, h2, ally];
         const pieceMap = new PieceMap(pieces);

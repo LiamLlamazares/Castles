@@ -18,10 +18,10 @@ import { PGNGenerator } from "./PGNGenerator";
 import { PGNImporter } from "./PGNImporter";
 import { Board } from "../Core/Board";
 import { Piece } from "../Entities/Piece";
-import { MoveRecord } from "../../Constants";
+import { MoveRecord, HistoryEntry, TurnPhase, GameResult } from "../../Constants";
 import { MoveTree } from "../Core/MoveTree";
 import { Sanctuary } from "../Entities/Sanctuary";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { GameSetup } from "./PGNTypes"; // Also re-import locally needed type if necessary, or just rely on the export? GameSetup is used in the class.
 
 // Re-export types

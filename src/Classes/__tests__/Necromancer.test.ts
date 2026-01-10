@@ -1,8 +1,8 @@
-
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { StateMutator } from "../Systems/StateMutator";
-import { GameState } from "../Core/GameEngine";
+import { GameEngine } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { Board } from "../Core/Board";
 import { PieceType, AbilityType } from "../../Constants";
 import { PieceMap } from "../../utils/PieceMap";
@@ -34,7 +34,7 @@ describe('Necromancer Mechanics', () => {
 
     test('Soul Harvest: Necromancer gains soul upon capturing', () => {
         const necro = new Piece(new Hex(0, 0, 0), 'w', PieceType.Necromancer);
-        const victim = new Piece(new Hex(0, 1, -1), 'b', PieceType.Swordsman); // Adjacent
+        const victim = new Piece(new Hex(0, 1, -1), 'b', PieceType.Archer); // Adjacent, Strength 1
 
         // CombatSystem handles attack resolution. 
         // We need to verify if CombatSystem or StateMutator updates the Necromancer's soul count.

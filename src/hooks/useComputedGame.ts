@@ -9,7 +9,8 @@
  * @see GameEngine - Source of computed values
  */
 import { useMemo } from "react";
-import { GameEngine, GameState } from "../Classes/Core/GameEngine";
+import { GameEngine } from "../Classes/Core/GameEngine";
+import { GameState } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Hex } from "../Classes/Entities/Hex";

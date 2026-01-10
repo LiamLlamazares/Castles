@@ -10,9 +10,11 @@
  * @see AIContextBuilder - Provides legal action context
  */
 
+// ActionType removed as it is unused
 import { IAgent, AIContext } from "../IAgent";
 import { AIContextBuilder } from "../AIContextBuilder";
-import { GameState, GameEngine } from "../../Core/GameEngine";
+import { GameEngine } from "../../Core/GameEngine";
+import { GameState } from "../../Core/GameState";
 import { Board } from "../../Core/Board";
 import { GameCommand, CommandContext } from "../../Commands/GameCommand";
 import { MoveCommand } from "../../Commands/MoveCommand";

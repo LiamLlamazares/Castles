@@ -1,6 +1,7 @@
 import { LayoutService, VIRTUAL_CANVAS_SIZE } from '../Systems/LayoutService';
 import { Board } from '../Core/Board';
 import { Hex } from '../Entities/Hex';
+import { HEX_SIZE_FACTOR } from '../../Constants';
 import { N_SQUARES } from '../../Constants';
 
 describe('LayoutService', () => {
@@ -21,7 +22,7 @@ describe('LayoutService', () => {
         const hexSize = layoutService.size_hexes;
         expect(hexSize).toBeGreaterThan(0);
         // Hex size should be consistent since we use fixed virtual canvas
-        expect(hexSize).toBeCloseTo(VIRTUAL_CANVAS_SIZE / (1.77 * board.NSquares), 1);
+        expect(hexSize).toBeCloseTo(VIRTUAL_CANVAS_SIZE / (HEX_SIZE_FACTOR * board.NSquares), 1);
     });
 
     test('should return correct pixel center for 0,0,0', () => {

@@ -18,7 +18,7 @@
  */
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { PieceMap } from "../../utils/PieceMap";
 import { AbilityType, PieceType, Color } from "../../Constants";
 import {

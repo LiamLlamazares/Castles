@@ -15,7 +15,8 @@
  */
 
 import { IAgent } from "./IAgent";
-import { GameState, GameEngine } from "../Core/GameEngine";
+import { GameEngine } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { Board } from "../Core/Board";
 import { TurnManager } from "../Core/TurnManager";
 import { PassCommand } from "../Commands/PassCommand";

@@ -22,7 +22,7 @@ import { PieceFactory } from "../Entities/PieceFactory";
 import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
 import { MoveTree } from "../Core/MoveTree";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { NotationService } from "./NotationService";
 import { TurnManager } from "../Core/TurnManager";
 import { RuleEngine } from "./RuleEngine";

@@ -22,7 +22,7 @@ import { Piece } from "../Entities/Piece";
 import { PieceFactory } from "../Entities/PieceFactory";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { Hex } from "../Entities/Hex";
-import { GameState } from "../Core/GameEngine";
+import { GameState } from "../Core/GameState";
 import { TurnManager } from "../Core/TurnManager";
 import { NotationService } from "../Systems/NotationService";
 import { createPieceMap } from "../../utils/PieceMap";

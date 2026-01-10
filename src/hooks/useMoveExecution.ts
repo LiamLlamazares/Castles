@@ -11,7 +11,8 @@
  * @see GameCommand - Base command interface
  */
 import { useCallback, useMemo } from "react";
-import { GameEngine, GameState } from "../Classes/Core/GameEngine";
+import { GameEngine } from "../Classes/Core/GameEngine";
+import { GameState, PhoenixRecord } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Hex } from "../Classes/Entities/Hex";
@@ -45,7 +46,7 @@ export interface MoveExecutionState {
   sanctuaries: import("../Classes/Entities/Sanctuary").Sanctuary[];
   pieceMap: PieceMap;
   graveyard: Piece[];
-  phoenixRecords: import("../Classes/Core/GameEngine").PhoenixRecord[];
+  phoenixRecords: PhoenixRecord[];
 }
 
 export interface MoveExecutionProps {

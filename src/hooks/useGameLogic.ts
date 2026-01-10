@@ -16,7 +16,8 @@
  */
 import React, { useMemo, useCallback } from "react";
 import { createPieceMap } from "../utils/PieceMap";
-import { GameState } from "../Classes/Core/GameEngine";
+import { GameEngine } from "../Classes/Core/GameEngine";
+import { GameState } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";

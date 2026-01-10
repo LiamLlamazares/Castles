@@ -20,7 +20,7 @@ describe('Pledge Mechanics', () => {
     
     // Create a Tier 1 Sanctuary (Wolf Covenant) at 0,-5,5 (near bottom)
     sanctuaries = [
-        new Sanctuary(new Hex(0, -5, 5), SanctuaryType.WolfCovenant, 'w')
+        new Sanctuary(new Hex(0, -5, 5), SanctuaryType.WolfCovenant, 'w', null, 0)
     ];
   });
 
@@ -145,7 +145,7 @@ describe('Pledge Mechanics', () => {
   });
 
   test('Tier 2 pledge requires surrounding strength >= 3', () => {
-    const t2Sanctuary = new Sanctuary(new Hex(0, 0, 0), SanctuaryType.WardensWatch, 'w'); // Tier 2
+    const t2Sanctuary = new Sanctuary(new Hex(0, 0, 0), SanctuaryType.WardensWatch, 'w', null, 0); // Tier 2
     
     // 1. Occupied but no support -> False
     placePiece(t2Sanctuary.hex, PieceType.Swordsman, 'w'); // Str 1
@@ -159,7 +159,7 @@ describe('Pledge Mechanics', () => {
   });
 
   test('Tier 3 pledge requires sacrifice', () => {
-    const t3Sanctuary = new Sanctuary(new Hex(0, 0, 0), SanctuaryType.PyreEternal, 'w'); // Tier 3
+    const t3Sanctuary = new Sanctuary(new Hex(0, 0, 0), SanctuaryType.PyreEternal, 'w', null, 0); // Tier 3
     
     // Setup Strength 4+ (Swordsman(1) + Dragon(4) = 5)
     placePiece(t3Sanctuary.hex, PieceType.Swordsman, 'w'); // The one on the hex

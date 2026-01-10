@@ -251,10 +251,21 @@ const GameBoard: React.FC<GameBoardProps> = ({
     prevTurnCounterRef.current = turnCounter;
   }, [turnCounter, castles, victoryPoints, gameRules?.vpModeEnabled]);
 
-  // Handle New Game - only allow if game hasn't started or someone won
+  // Handle New Game
+  // If game is in progress (and not in analysis/finished), ask for confirmation
   const handleNewGame = () => {
-    if (!hasGameStarted || winner) {
+    // Conditions where we can instantly reset:
+    // 1. Game hasn't started
+    // 2. Someone has won
+    // 3. We are in analysis mode
+    const safeToReset = !hasGameStarted || winner || isAnalysisMode;
+
+    if (safeToReset) {
       onSetup();
+    } else {
+      if (window.confirm("Current game is in progress. Abandon and start a new game?")) {
+        onSetup();
+      }
     }
   };
 
