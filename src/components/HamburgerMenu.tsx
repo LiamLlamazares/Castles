@@ -3,6 +3,7 @@
  * Contains Export/Import PGN, Flip Board, Toggle Coordinates.
  */
 import React, { useState, useRef, useEffect } from "react";
+import { useTheme } from "../contexts/ThemeContext";
 
 // SVG icon imports
 import scrollIcon from "../Assets/Images/misc/scroll.svg";
@@ -58,6 +59,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isIconsMenuOpen, setIsIconsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { toggleTheme, isDark } = useTheme();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -124,6 +126,17 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
         </div>
         
         <div className="menu-items">
+          {/* Theme Toggle */}
+          <button 
+            className="menu-item" 
+            onClick={() => toggleTheme()}
+            style={{ justifyContent: 'space-between' }}
+          >
+            <span>{isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}</span>
+          </button>
+          
+          <div className="menu-divider" />
+          
           <button 
             className="menu-item" 
             onClick={() => handleMenuItemClick(onExportPGN)}

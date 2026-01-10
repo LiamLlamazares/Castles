@@ -167,6 +167,28 @@ body {
   --tutorial-text-light: #e0e0e0;
   --tutorial-text-dark: #1a1a2e;
   --tutorial-title-color: #ffd700;
+  
+  /* Theme-aware colors (dark mode defaults) */
+  --panel-bg: rgba(30, 30, 30, 0.98);
+  --panel-text: #ffffff;
+  --panel-text-muted: #aaaaaa;
+  --panel-border: rgba(255, 255, 255, 0.1);
+  --button-bg: rgba(40, 40, 40, 0.9);
+  --button-hover-bg: rgba(60, 60, 60, 0.95);
+  --modal-bg: linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%);
+  --icon-filter: invert(1);
+}
+
+/* Light theme overrides */
+[data-theme="light"] {
+  --panel-bg: rgba(255, 255, 255, 0.98);
+  --panel-text: #1a1a1a;
+  --panel-text-muted: #666666;
+  --panel-border: rgba(0, 0, 0, 0.1);
+  --button-bg: rgba(240, 240, 240, 0.95);
+  --button-hover-bg: rgba(220, 220, 220, 0.95);
+  --modal-bg: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+  --icon-filter: none;
 }
 
 /* =========== SANCTUARIES =========== */
@@ -642,7 +664,7 @@ body {
   left: -280px;
   width: 260px;
   height: 100vh;
-  background: rgba(30, 30, 30, 0.98);
+  background: var(--panel-bg);
   box-shadow: 4px 0 20px rgba(0,0,0,0.5);
   transition: left 0.3s ease;
   z-index: 301;
@@ -659,8 +681,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
-  color: #fff;
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--panel-text);
   font-size: 1.2rem;
   font-weight: 600;
 }
@@ -694,7 +716,7 @@ body {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: #ddd;
+  color: var(--panel-text);
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -702,8 +724,8 @@ body {
 }
 
 .menu-item:hover {
-  background: rgba(255,255,255,0.1);
-  color: #fff;
+  background: var(--panel-border);
+  color: var(--panel-text);
 }
 
 .menu-icon {
@@ -714,7 +736,7 @@ body {
 
 .menu-divider {
   height: 1px;
-  background: rgba(255,255,255,0.1);
+  background: var(--panel-border);
   margin: 8px 0;
 }
 

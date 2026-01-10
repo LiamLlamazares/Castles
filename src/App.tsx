@@ -13,6 +13,7 @@ import { SanctuaryType, PieceTheme } from './Constants';
 import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
 import { AIOpponentConfig } from './hooks/useAIOpponent';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial';
 
@@ -118,6 +119,7 @@ function App() {
   };
 
   return (
+    <ThemeProvider>
     <div className="App">
       {view === 'menu' && (
         <MainMenu 
@@ -176,6 +178,7 @@ function App() {
         />
       )}
     </div>
+    </ThemeProvider>
   );
 }
 

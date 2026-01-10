@@ -15,15 +15,16 @@
 }
 
 .quickstart-modal {
-  background: linear-gradient(145deg, #1a1a2e, #16213e);
+  background: var(--modal-bg);
   border-radius: 20px;
   padding: 0;
   max-width: 480px;
   width: 90%;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(102, 126, 234, 0.2);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--panel-border);
   overflow: hidden;
+  color: var(--panel-text);
 }
 
 @keyframes slideUp {
@@ -98,7 +99,7 @@
 }
 
 .goal-text {
-  color: #fff;
+  color: var(--panel-text);
   font-size: 1.05rem;
   line-height: 1.4;
 }
@@ -110,7 +111,7 @@
 
 /* Turn Phases */
 .quickstart-turns h3 {
-  color: #ccc;
+  color: var(--panel-text-muted);
   font-size: 0.9rem;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -162,12 +163,12 @@
 }
 
 .phase-desc strong {
-  color: #fff;
+  color: var(--panel-text);
   font-size: 1rem;
 }
 
 .phase-desc span {
-  color: #999;
+  color: var(--panel-text-muted);
   font-size: 0.85rem;
 }
 
@@ -177,14 +178,14 @@
   flex-direction: column;
   gap: 10px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--panel-border);
 }
 
 .tip-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #bbb;
+  color: var(--panel-text-muted);
   font-size: 0.9rem;
 }
 
@@ -193,7 +194,7 @@
 }
 
 .tip-item strong {
-  color: #fff;
+  color: var(--panel-text);
 }
 
 /* Footer */
