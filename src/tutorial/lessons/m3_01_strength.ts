@@ -42,9 +42,9 @@ export function createM3L1(): TutorialLesson {
       'Compare attack outcomes with different strength',
     ],
     hints: [
-      '💪 Higher strength wins combat',
-      '⚖️ Equal strength = attacker wins',
-      '📊 Check piece stats with right-click',
+      ' Higher strength wins combat',
+      ' Equal strength = attacker wins',
+      ' Check piece stats with right-click',
     ],
     instructions: 'TODO: Try attacking with different pieces.',
   };

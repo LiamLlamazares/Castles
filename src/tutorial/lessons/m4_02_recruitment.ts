@@ -41,9 +41,9 @@ export function createM4L2(): TutorialLesson {
       'See the cycle indicator change',
     ],
     hints: [
-      '🔄 Cycle: Swordsman → Archer → Knight → ...',
-      '📍 Click empty hex adjacent to castle',
-      '🏰 Only during Castles phase',
+      ' Cycle: Swordsman → Archer → Knight → ...',
+      ' Click empty hex adjacent to castle',
+      'Only during Castles phase',
     ],
     instructions: 'TODO: Recruit during the Castles phase.',
   };

@@ -512,7 +512,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         color: '#667eea',
                         fontSize: '0.9rem'
                     }}>
-                        🎮 Game Rules (Experimental)
+                        Game Rules (Experimental)
                     </label>
                     
                     {/* VP Mode Toggle */}

@@ -54,7 +54,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           {/* Game Overview */}
           <section id="game-overview">
-            <h2>🎮 Game Overview</h2>
+            <h2>Game Overview</h2>
             <h3>The Board</h3>
             <div className="rules-grid">
               <div className="rule-tile">
