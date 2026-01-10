@@ -178,6 +178,7 @@ body {
   --modal-bg: linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%);
   --icon-filter: invert(1);
   --hint-banner-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --accent-color: #ffd700; /* Gold for dark mode */
 }
 
 /* Light theme overrides */
@@ -190,7 +191,7 @@ body {
   --button-hover-bg: rgba(220, 220, 220, 0.95);
   --modal-bg: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
   --icon-filter: none;
-  
+  --accent-color: #702cf0; /* Royal Purple for light mode */  
   /* Tutorial light theme */
   --tutorial-sidebar-bg: #f5f5f5;
   --tutorial-button-bg: #e0e0e0;

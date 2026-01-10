@@ -189,7 +189,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         {/* Objectives */}
         {lesson.objectives && lesson.objectives.length > 0 && (
           <div>
-            <h3 style={{ color: '#ffd700', marginTop: 0, marginBottom: '8px' }}>Objectives:</h3>
+            <h3 style={{ color: isDark ? '#ffd700' : '#702cf0', marginTop: 0, marginBottom: '8px' }}>Objectives:</h3>
             <ul style={{ paddingLeft: '20px', margin: 0 }}>
               {lesson.objectives.map((obj, i) => (
                 <li key={i} style={{ marginBottom: '4px' }}>{obj}</li>
@@ -201,7 +201,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         {/* Hints */}
         {lesson.hints && lesson.hints.length > 0 && (
           <div>
-            <h3 style={{ color: '#ffd700', marginTop: '16px', marginBottom: '8px' }}>Hints:</h3>
+            <h3 style={{ color: isDark ? '#ffd700' : '#702cf0', marginTop: '16px', marginBottom: '8px' }}>Hints:</h3>
             <ul style={{ paddingLeft: '20px', margin: 0 }}>
               {lesson.hints.map((hint, i) => (
                 <li key={i} style={{ marginBottom: '4px' }}>{hint}</li>
