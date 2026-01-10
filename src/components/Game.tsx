@@ -347,6 +347,14 @@ const GameBoard: React.FC<GameBoardProps> = ({
     navigator.clipboard.writeText(pgn).then(() => alert("PGN copied to clipboard!"));
   };
 
+  const handlePieceClickWrapper = (piece: Piece) => {
+    if (activeAbility) {
+        handleBoardClick(piece.hex);
+    } else {
+        handlePieceClick(piece);
+    }
+  };
+
   return (
     <>
       {/* Hamburger Menu (Top Left) */}
@@ -472,7 +480,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
         <PieceRenderer
           pieces={pieces}
           isBoardRotated={isBoardRotated}
-          onPieceClick={handlePieceClick}
+          onPieceClick={handlePieceClickWrapper}
           onPieceRightClick={(piece) => {
             setTooltipHex(null);
             setTooltipPiece(piece === tooltipPiece ? null : piece);

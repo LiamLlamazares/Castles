@@ -119,4 +119,23 @@ export class NotationService {
         const pieceCode = NotationService.getPieceCode(pieceType);
         return `P:${pieceCode}${spawnCoord}`;
     }
+    /**
+     * Generates notation for ability usage.
+     * Format: "Code:SourceTarget" (e.g. "T:J10K11" for Teleport)
+     * Codes: T=Teleport, F=Fireball, R=RaiseDead
+     */
+    public static getAbilityNotation(ability: AbilityType, source: Hex, target: Hex): string {
+        const sourceCoord = NotationService.toCoordinate(source);
+        const targetCoord = NotationService.toCoordinate(target);
+        
+        let code = "";
+        switch (ability) {
+            case AbilityType.Teleport: code = "T"; break;
+            case AbilityType.Fireball: code = "F"; break;
+            case AbilityType.RaiseDead: code = "R"; break;
+            default: code = "A"; break; // Generic Ability
+        }
+        
+        return `${code}:${sourceCoord}${targetCoord}`;
+    }
 }

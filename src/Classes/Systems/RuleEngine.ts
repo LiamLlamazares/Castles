@@ -340,8 +340,14 @@ export class RuleEngine {
     
     // Check if castles are usable in the current Castles phase
     // If we are passing, we explicitly give up remaining castle usages
+    // Check if castles/sanctuaries are usable.
+    // IMPORTANT: If we are Passing, we only want to ignore these IF we are currently IN the Recruitment phase.
+    // If we are passing Movement or Attack, we still want to report that Recruitment is possible so we don't skip it.
+    const phase = TurnManager.getTurnPhase(gameState.turnCounter);
+    const passingRecruitment = isPassing && phase === "Recruitment";
+
     let hasUsableCastles = false;
-    if (!isPassing) {
+    if (!passingRecruitment) {
         // Only count castles that are DIFFERENT color (Start-castles cannot recruit)
         const unusedControlledCastles = gameState.castles.filter(
             (castle) =>
@@ -354,7 +360,7 @@ export class RuleEngine {
 
     // Pass ignorePhase=true because we want to know if it WOULD be valid in the Recruitment phase
     let hasUsableSanctuaries = false;
-    if (!isPassing) {
+    if (!passingRecruitment) {
         hasUsableSanctuaries = gameState.sanctuaries.some(s => SanctuaryService.canPledge(gameState, board, s.hex, true));
     }
 
