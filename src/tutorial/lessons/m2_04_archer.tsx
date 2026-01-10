@@ -36,7 +36,7 @@ export function createM2L4(): TutorialLesson {
     title: '3.2 Archer',
     description: (
       <div>
-        <p style={{ marginTop: 0 }}>The Archer is a ranged unit that attacks from a distance without moving.</p>
+        <p style={{ marginTop: 0 }}>The Archer is the basic ranged unit (a unit that attacks from a distance without moving).</p>
         <div style={{ marginTop: '12px' }}>
           <div style={{ marginBottom: '6px' }}>
             <strong>Type:</strong> Ranged
@@ -45,7 +45,7 @@ export function createM2L4(): TutorialLesson {
             <strong>Movement:</strong> 1 hex forward in any direction
           </div>
           <div style={{ marginBottom: '6px' }}>
-            <strong>Attack:</strong> 2-3 hexes away (cannot attack adjacent)
+            <strong>Attack:</strong> 2 hexes away (cannot attack adjacent)
           </div>
           <div style={{ marginBottom: '6px' }}>
             <strong>Strength:</strong> 1
@@ -60,11 +60,7 @@ export function createM2L4(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      'Attack the enemy from range',
-    ],
-    hints: [
-      'Select the Archer, then click the red attack indicator',
-    ],
-    instructions: 'Use your Archer to attack at range.',
+      'Capture the enemy Swordsman before he gets any closer ',
+    ]
   };
 }
