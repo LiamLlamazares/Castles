@@ -27,19 +27,19 @@ describe("useGameLogic Nested Variations Integration", () => {
         
         expect(result.current.moveHistory.length).toBe(1);
 
-        // 1b. Ensure it's Black's turn (Pass if still White - e.g. in Attack Phase)
-        if (result.current.currentPlayer === 'w') {
+        // 1b. Ensure it's Black's turn (Pass until turn effectively ends)
+        let passAttempts = 0;
+        // Increase limit to 10 to clear a full player turn if needed
+        while (result.current.currentPlayer === 'w' && passAttempts < 10) {
             act(() => {
                 result.current.handlePass();
             });
+            passAttempts++;
         }
         
         // Verify turn switched
         if (result.current.currentPlayer !== 'b') {
-             // If pass failed, try one more time or just throw (to debug)
-             // But usually one pass is enough.
-             // throw new Error(`Failed to switch to Black turn. State: ${result.current.turnPhase}`);
-             // Let's rely on the next block to catch it.
+             throw new Error(`Failed to switch to Black turn after ${passAttempts} passes. Current: ${result.current.currentPlayer}, Phase: ${result.current.turnPhase}, Counter: ${result.current.turnCounter}`);
         }
         
         // 2. Play Black Move - Robustly find a piece with moves

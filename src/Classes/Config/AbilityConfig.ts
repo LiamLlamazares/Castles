@@ -24,6 +24,9 @@ import { AbilityType, PieceType } from "../../Constants";
  * Contains all metadata needed to validate and describe an ability.
  */
 export interface AbilityConfig {
+  /** Display name of the ability */
+  name: string;
+
   /** Maximum range in hexes from source */
   range: number;
 
@@ -32,9 +35,6 @@ export interface AbilityConfig {
 
   /** Human-readable description for rules/UI */
   description: string;
-
-  /** Which piece types can use this ability */
-  usableBy: PieceType[];
 
   /** Whether this ability can only be used once per game */
   oneTimeUse: boolean;
@@ -45,40 +45,34 @@ export interface AbilityConfig {
 
 /**
  * Comprehensive configuration for all ability types.
- *
- * ## Adding a New Ability:
- * 1. Add to `AbilityType` enum in Constants.ts
- * 2. Add entry here with range, description, and usableBy
- * 3. Implement execution logic in StateMutator.activateAbility()
- * 4. Update useClickHandler if targeting behavior differs
  */
 export const AbilityTypeConfig: Record<AbilityType, AbilityConfig> = {
   [AbilityType.Fireball]: {
+    name: "Fireball",
     range: 2,
     minRange: 1,
     description:
       "Deals 1 damage to target hex and all adjacent hexes (7 hexes total). Cannot self-target.",
-    usableBy: [PieceType.Wizard],
     oneTimeUse: true,
     aoeRadius: 1,
   },
 
   [AbilityType.Teleport]: {
+    name: "Teleport",
     range: 3,
     minRange: 1,
     description:
       "Instantly move to any unoccupied hex within range. Cannot teleport onto other pieces.",
-    usableBy: [PieceType.Wizard],
     oneTimeUse: true,
     aoeRadius: 0,
   },
 
   [AbilityType.RaiseDead]: {
+    name: "Raise Dead",
     range: 1,
     minRange: 1,
     description:
       "Spend 1 soul to revive a friendly piece from the graveyard at an adjacent hex. Revived pieces are exiled if killed again.",
-    usableBy: [PieceType.Necromancer],
     oneTimeUse: false, // Can use multiple times if enough souls
     aoeRadius: 0,
   },
@@ -121,20 +115,7 @@ export function getAbilityMinRange(type: AbilityType): number {
   return getAbilityConfig(type).minRange;
 }
 
-/**
- * Checks if a piece type can use a specific ability.
- *
- * @param abilityType - The ability to check
- * @param pieceType - The piece type attempting to use it
- * @returns True if the piece can use this ability
- */
-export function canPieceUseAbility(
-  abilityType: AbilityType,
-  pieceType: PieceType
-): boolean {
-  const config = getAbilityConfig(abilityType);
-  return config.usableBy.includes(pieceType);
-}
+// canPieceUseAbility removed - Use PieceTypeConfig.abilities instead
 
 /**
  * Validates if a target is within valid range for an ability.

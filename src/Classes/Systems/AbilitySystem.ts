@@ -24,8 +24,8 @@ import { AbilityType, PieceType, Color } from "../../Constants";
 import {
   getAbilityConfig,
   isValidAbilityTarget,
-  canPieceUseAbility,
 } from "../Config/AbilityConfig";
+import { getPieceConfig } from "../Config/PieceTypeConfig";
 
 /**
  * Result of ability validation check.
@@ -66,8 +66,9 @@ export class AbilitySystem {
     ability: AbilityType,
     gameState: GameState
   ): AbilityValidationResult {
-    // Check if piece type can use this ability
-    if (!canPieceUseAbility(ability, piece.type)) {
+    // Check if piece type can use this ability (via config)
+    const pieceConfig = getPieceConfig(piece.type);
+    if (!pieceConfig.abilities || !pieceConfig.abilities.includes(ability)) {
       return {
         valid: false,
         error: `${piece.type} cannot use ${ability}`,
@@ -226,52 +227,23 @@ export class AbilitySystem {
   ): AbilityInfo[] {
     const abilities: AbilityInfo[] = [];
 
-    // Check Wizard abilities
-    if (piece.type === PieceType.Wizard) {
-      const fireballValidation = this.canUseAbility(
-        piece,
-        AbilityType.Fireball,
-        gameState
-      );
-      abilities.push({
-        type: AbilityType.Fireball,
-        name: "Fireball",
-        description: getAbilityConfig(AbilityType.Fireball).description,
-        range: getAbilityConfig(AbilityType.Fireball).range,
-        available: fireballValidation.valid,
-        reason: fireballValidation.error,
-      });
-
-      const teleportValidation = this.canUseAbility(
-        piece,
-        AbilityType.Teleport,
-        gameState
-      );
-      abilities.push({
-        type: AbilityType.Teleport,
-        name: "Teleport",
-        description: getAbilityConfig(AbilityType.Teleport).description,
-        range: getAbilityConfig(AbilityType.Teleport).range,
-        available: teleportValidation.valid,
-        reason: teleportValidation.error,
-      });
-    }
-
-    // Check Necromancer abilities
-    if (piece.type === PieceType.Necromancer) {
-      const raiseDeadValidation = this.canUseAbility(
-        piece,
-        AbilityType.RaiseDead,
-        gameState
-      );
-      abilities.push({
-        type: AbilityType.RaiseDead,
-        name: "Raise Dead",
-        description: getAbilityConfig(AbilityType.RaiseDead).description,
-        range: getAbilityConfig(AbilityType.RaiseDead).range,
-        available: raiseDeadValidation.valid,
-        reason: raiseDeadValidation.error,
-      });
+    // Check abilities defined in config
+    const pieceConfig = getPieceConfig(piece.type);
+    
+    if (pieceConfig.abilities) {
+        pieceConfig.abilities.forEach(abilityType => {
+            const validation = this.canUseAbility(piece, abilityType, gameState);
+            const abilityConfig = getAbilityConfig(abilityType);
+            
+            abilities.push({
+                type: abilityType,
+                name: abilityConfig.name,
+                description: abilityConfig.description,
+                range: abilityConfig.range,
+                available: validation.valid,
+                reason: validation.error,
+            });
+        });
     }
 
     return abilities;

@@ -13,7 +13,7 @@
  * ```
  */
 
-import { PieceType, AttackType, Color, N_SQUARES } from "../../Constants";
+import { PieceType, AttackType, Color, N_SQUARES, AbilityType } from "../../Constants";
 import { Hex } from "../Entities/Hex";
 
 // Import Strategies
@@ -76,7 +76,7 @@ export interface PieceContext {
 export interface PieceConfig {
   /** Base combat strength */
   strength: number;
-  
+
   /** Attack type determines range and capture behavior (metadata) */
   attackType: AttackType;
   
@@ -94,6 +94,9 @@ export interface PieceConfig {
 
   /** Optional: Compute dynamic strength based on context (overrides base level strength) */
   strengthCompute?: (piece: PieceContext) => number;
+
+  /** Abilities available to this piece type */
+  abilities?: AbilityType[];
 }
 
 // ============================================================================
@@ -239,6 +242,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
     description: "Moves 1 hex, attacks at range 2. Ability (once per game): Fireball deals 1 damage to target hex + ring 1 (7 hexes total).",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: rangedAttackStrategy,
+    abilities: [AbilityType.Fireball, AbilityType.Teleport],
   },
   
   [PieceType.Necromancer]: {
@@ -247,6 +251,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
     description: "Moves 1 hex, attacks adjacent. Collects souls from nearby deaths. Ability: Spend 1 soul to raise a dead friendly piece.",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
+    abilities: [AbilityType.RaiseDead],
   },
   
   [PieceType.Phoenix]: {
