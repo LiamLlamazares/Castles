@@ -23,15 +23,12 @@ import {
 } from "../../Constants";
 
 // Registry pattern for strategies - adding new piece types doesn't require modifying this file
-import { getMoveStrategy } from "../Strategies/MoveStrategyRegistry";
-import { getAttackStrategy } from "../Strategies/AttackStrategyRegistry";
-import { getPieceStrength, getPieceAttackType } from "../Config/PieceTypeConfig";
+import { getPieceConfig, getPieceAttackType } from "../Config/PieceTypeConfig";
 
 /**
  * A piece on the game board.
  * 
- * Movement and attack patterns are determined by the piece type via registries.
- * See MoveStrategyRegistry.ts and AttackStrategyRegistry.ts for configurations.
+ * Movement and attack patterns are determined by the piece type via PieceTypeConfig.
  * 
  * IMMUTABILITY:
  * All properties are readonly. Use the `with()` method to create updated copies.
@@ -64,29 +61,15 @@ export class Piece {
 
   /** Combat strength - must exceed defender's strength to capture */
   get Strength(): number {
-    const baseStrength = getPieceStrength(this.type);
-    
-    // Swordsmen get +1 Strength when crossing the river into enemy territory
-    if (this.type === PieceType.Swordsman) {
-        // White (starts bottom, r>0) crossing to r<0
-        if (this.color === 'w' && this.hex.r < 0) {
-            return 2;
-        }
-        // Black (starts top, r<0) crossing to r>0
-        if (this.color === 'b' && this.hex.r > 0) {
-            return 2;
-        }
+    const config = getPieceConfig(this.type);
+    if (config.strengthCompute) {
+        return config.strengthCompute(this);
     }
-    
-    return baseStrength;
+    return config.strength;
   }
 
   /** 
    * Attack type determines attack range and capture behavior:
-   * - Melee: adjacent hexes, moves onto target when capturing
-   * - Ranged: exactly 2 hexes away (3 from high ground), doesn't move
-   * - LongRanged: exactly 3 hexes away (4 from high ground), doesn't move
-   * - Swordsman: diagonal-forward only, moves onto target
    * 
    * Uses centralized config - see PieceTypeConfig.ts.
    */
@@ -120,24 +103,24 @@ export class Piece {
    * @param color - Color of the moving piece (affects swordsman direction)
    * @param validHexSet - Set of hex keys representing valid board positions
    * 
-   * Uses registry lookup - see MoveStrategyRegistry.ts.
+   * Uses registry lookup - see PieceTypeConfig.ts.
    */
   public getLegalMoves(blockedHexSet: Set<string>, color: Color, validHexSet: Set<string>): Hex[] {
-    const strategy = getMoveStrategy(this.type);
-    return strategy(this.hex, blockedHexSet, validHexSet, color, N_SQUARES);
+    const config = getPieceConfig(this.type);
+    return config.moveStrategy(this.hex, blockedHexSet, validHexSet, color, N_SQUARES);
   }
 
   /**
    * Returns all legal attacks based on attack type.
    * Delegates to the registered attack strategy for this piece type.
    * 
-   * Uses registry lookup - see AttackStrategyRegistry.ts.
+   * Uses registry lookup - see PieceTypeConfig.ts.
    */
   public legalAttacks(attackableHexSet: Set<string>, highGroundHexSet?: Set<string>): Hex[] {
     if (this.AttackType === AttackType.None) return [];
     
-    const strategy = getAttackStrategy(this.type);
-    return strategy(this.hex, attackableHexSet, this.color, highGroundHexSet);
+    const config = getPieceConfig(this.type);
+    return config.attackStrategy(this.hex, attackableHexSet, this.color, highGroundHexSet);
   }
 
   /** Creates a deep copy of this piece (for immutable state updates) */

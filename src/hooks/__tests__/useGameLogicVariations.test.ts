@@ -27,34 +27,40 @@ describe("useGameLogic Nested Variations Integration", () => {
         
         expect(result.current.moveHistory.length).toBe(1);
 
-        // 1b. Play White Move 2 (if it's still White's turn)
+        // 1b. Ensure it's Black's turn (Pass if still White - e.g. in Attack Phase)
         if (result.current.currentPlayer === 'w') {
-            const whitePiece2 = result.current.pieces.find(p => p.color === 'w' && p.canMove); // Find piece again as state changed
-            if (!whitePiece2) throw new Error("No white piece for 2nd move");
-            
             act(() => {
-                result.current.handlePieceClick(whitePiece2);
+                result.current.handlePass();
             });
-            
-            const whiteMoves2 = Array.from(result.current.legalMoveSet);
-            if (whiteMoves2.length > 0) {
-                 const targetHex2 = result.current.hexagons.find(h => h.getKey() === whiteMoves2[0])!;
-                 act(() => {
-                    result.current.handleHexClick(targetHex2);
-                 });
+        }
+        
+        // Verify turn switched
+        if (result.current.currentPlayer !== 'b') {
+             // If pass failed, try one more time or just throw (to debug)
+             // But usually one pass is enough.
+             // throw new Error(`Failed to switch to Black turn. State: ${result.current.turnPhase}`);
+             // Let's rely on the next block to catch it.
+        }
+        
+        // 2. Play Black Move - Robustly find a piece with moves
+        const allBlack = result.current.pieces.filter(p => p.color === 'b' && p.canMove);
+        let blackPiece = null;
+        let blackMovesArr: string[] = [];
+        
+        for (const p of allBlack) {
+            act(() => result.current.handlePieceClick(p));
+            /* @ts-ignore Set iteration compatibility */
+            const moves = Array.from(result.current.legalMoveSet);
+            if (moves.length > 0) {
+                blackPiece = p;
+                blackMovesArr = moves;
+                break;
             }
         }
         
-        // 2. Play Black Move
-        const blackPiece = result.current.pieces.find(p => p.color === 'b' && p.canMove);
-        if (!blackPiece) throw new Error(`No black piece found. Current Player: ${result.current.currentPlayer}`);
+        if (!blackPiece) throw new Error(`No black piece found with valid moves. Current Player: ${result.current.currentPlayer}`);
         
-        act(() => {
-            result.current.handlePieceClick(blackPiece);
-        });
-        
-        const blackMoves = Array.from(result.current.legalMoveSet);
-        if (blackMoves.length === 0) throw new Error("Black piece has no moves");
+        const blackMoves = blackMovesArr;
         const targetBlackHex = result.current.hexagons.find(h => h.getKey() === blackMoves[0]);
         if (!targetBlackHex) throw new Error("Black target hex not found");
         
