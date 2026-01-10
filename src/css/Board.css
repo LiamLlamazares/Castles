@@ -177,6 +177,7 @@ body {
   --button-hover-bg: rgba(60, 60, 60, 0.95);
   --modal-bg: linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%);
   --icon-filter: invert(1);
+  --hint-banner-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 /* Light theme overrides */
@@ -189,6 +190,17 @@ body {
   --button-hover-bg: rgba(220, 220, 220, 0.95);
   --modal-bg: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
   --icon-filter: none;
+  
+  /* Tutorial light theme */
+  --tutorial-sidebar-bg: #f5f5f5;
+  --tutorial-button-bg: #e0e0e0;
+  --tutorial-button-active: #3498db;
+  --tutorial-text-light: #1a1a1a;
+  --tutorial-text-dark: #ffffff;
+  --tutorial-title-color: #2980b9;
+  
+  /* Hint banner light theme */
+  --hint-banner-bg: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
 }
 
 /* =========== SANCTUARIES =========== */
@@ -808,7 +820,7 @@ body {
   top: 70px;
   left: 50%;
   transform: translateX(-50%);
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--hint-banner-bg);
   color: white;
   padding: 14px 24px;
   border-radius: 8px;
