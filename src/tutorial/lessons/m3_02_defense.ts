@@ -45,9 +45,9 @@ export function createM3L2(): TutorialLesson {
       'Try to attack defended vs undefended',
     ],
     hints: [
-      '🛡️ Adjacent ally = defended',
-      '🏹 Archers cannot attack defended pieces',
-      '⚔️ Melee can still attack defended pieces',
+      'Adjacent ally = defended',
+      'Archers cannot attack defended pieces',
+      'Melee can still attack defended pieces',
     ],
     instructions: 'TODO: Observe how defense blocks ranged attacks.',
   };

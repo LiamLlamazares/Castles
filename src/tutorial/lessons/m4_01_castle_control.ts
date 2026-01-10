@@ -40,9 +40,9 @@ export function createM4L1(): TutorialLesson {
       'Capture the enemy castle',
     ],
     hints: [
-      '🏰 Move onto castle to capture',
-      '⏱️ Hold for 1 turn to recruit',
-      '🎯 Castles are strategic victory points',
+      'Move onto castle to capture',
+      'Hold for 1 turn to recruit',
+      'Castles are strategic victory points',
     ],
     instructions: 'TODO: Capture the enemy castle.',
   };

@@ -43,9 +43,9 @@ export function createM5L2(): TutorialLesson {
       'Capture the enemy Monarch',
     ],
     hints: [
-      '👑 Capture enemy Monarch = instant win',
-      '🎯 Coordinate your pieces',
-      '🛡️ Watch for defenders',
+      'Capture enemy Monarch = instant win',
+      'Coordinate your pieces',
+      'Watch for defenders',
     ],
     instructions: 'TODO: Eliminate the enemy Monarch.',
   };

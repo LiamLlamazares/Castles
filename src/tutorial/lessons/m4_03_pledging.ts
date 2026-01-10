@@ -43,9 +43,9 @@ export function createM4L3(): TutorialLesson {
       'Pledge a piece',
     ],
     hints: [
-      '🏛️ Stand adjacent to sanctuary',
-      '🙏 Click sanctuary → select piece to pledge',
-      '✨ Evolves sanctuary, grants special unit',
+      'Stand adjacent to sanctuary',
+      'Click sanctuary → select piece to pledge',
+      'Evolves sanctuary, grants special unit',
     ],
     instructions: 'TODO: Pledge a piece to the sanctuary.',
   };

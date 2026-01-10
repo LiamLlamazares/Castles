@@ -43,9 +43,9 @@ export function createM5L1(): TutorialLesson {
       'Hold for victory',
     ],
     hints: [
-      '🏰 Control all castles = victory',
-      '⏱️ Must hold for required turns',
-      '⚔️ Defend your castles!',
+      'Control all castles = victory',
+      'Must hold for required turns',
+      'Defend your castles!',
     ],
     instructions: 'TODO: Capture and hold all castles.',
   };

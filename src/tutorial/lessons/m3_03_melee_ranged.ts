@@ -44,9 +44,9 @@ export function createM3L3(): TutorialLesson {
       'Attack with ranged piece',
     ],
     hints: [
-      '⚔️ Melee: Attack adjacent enemies',
-      '🏹 Ranged: Attack at distance 2-3',
-      '🎯 Long Range: Attack at distance 3-5',
+      'Melee: Attack adjacent enemies',
+      'Ranged: Attack at distance 2-3',
+      'Long Range: Attack at distance 3-5',
     ],
     instructions: 'TODO: Try attacking from different ranges.',
   };

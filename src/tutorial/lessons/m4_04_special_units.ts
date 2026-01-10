@@ -42,9 +42,9 @@ export function createM4L4(): TutorialLesson {
       'Use Wizard ability',
     ],
     hints: [
-      '🧙 Wizard: Fireball (AoE) or Teleport',
-      '🔥 Click ability bar to activate',
-      '✨ Each special unit has unique powers',
+      'Wizard: Fireball (AoE) or Teleport',
+      'Click ability bar to activate',
+      'Each special unit has unique powers',
     ],
     instructions: 'TODO: Use the Wizard Fireball ability.',
   };

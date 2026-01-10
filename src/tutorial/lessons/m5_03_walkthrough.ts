@@ -53,10 +53,10 @@ export function createM5L3(): TutorialLesson {
       'Use all skills learned',
     ],
     hints: [
-      ' Use all phases each turn',
-      '🏰 Control castles for advantage',
-      '👑 Protect your Monarch!',
-      '⚔️ Aim for enemy Monarch',
+      'Use all phases each turn',
+      'Control castles for advantage',
+      'Protect your Monarch!',
+      'Aim for enemy Monarch',
     ],
     instructions: 'Play a complete guided game using all your skills!',
   };
