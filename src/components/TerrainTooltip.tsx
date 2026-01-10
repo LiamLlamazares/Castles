@@ -6,7 +6,7 @@ import { PieceType } from '../Constants';
 import { getImageByPieceType } from './PieceImages';
 
 // SVG icons for terrain types
-import castleSvg from '../Assets/Images/misc/castle.svg';
+import castleSvg from '../Assets/Images/misc/wcastle.svg';
 import mountainSvg from '../Assets/Images/Board/mountain.svg';
 import riverSvg from '../Assets/Images/Board/river.svg';
 import grassSvg from '../Assets/Images/Board/grass.svg';

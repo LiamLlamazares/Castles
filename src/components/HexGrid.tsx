@@ -11,7 +11,8 @@ import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from 
 // SVG imports for terrain icons
 import riverSvg from "../Assets/Images/Board/river.svg";
 import mountainSvg from "../Assets/Images/Board/mountain.svg";
-import castleSvg from "../Assets/Images/misc/castle.svg";
+import wcastleSvg from "../Assets/Images/misc/wcastle.svg";
+import bcastleSvg from "../Assets/Images/misc/bcastle.svg";
 
 interface HexGridProps {
   hexagons: Hex[];
@@ -246,17 +247,16 @@ const HexGrid = React.memo(({
                       cx={center.x + rightOffsetX}
                       cy={center.y + offsetY}
                       r={iconSize * 0.55}
-                      fill={castle.owner === 'w' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.85)'}
+                      fill={'rgba(255, 255, 255, 0.9)'}
                       stroke={castle.owner === 'w' ? '#00fbff' : '#8000ff'}
                       strokeWidth={1.5}
                     />
                     <image
-                      href={castleSvg}
+                      href={castle.owner === 'w' ? wcastleSvg : bcastleSvg}
                       x={center.x + rightOffsetX - iconSize/2}
                       y={center.y + offsetY - iconSize/2}
                       width={iconSize}
                       height={iconSize}
-                      style={{ filter: castle.owner === 'w' ? 'invert(1)' : 'none' }}
                       opacity={0.90}
                     />
                   </g>

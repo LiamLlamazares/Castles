@@ -6,7 +6,7 @@ import React, { useState, useEffect } from "react";
 import "../css/QuickStartModal.css";
 
 // SVG imports
-import castleIcon from "../Assets/Images/misc/castle.svg";
+import castleIcon from "../Assets/Images/misc/wcastle.svg";
 import flagIcon from "../Assets/Images/misc/flag.svg";
 import bootsIcon from "../Assets/Images/Banner/boots.svg";
 import swordsIcon from "../Assets/Images/misc/swords-crossed.svg";

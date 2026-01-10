@@ -14,7 +14,7 @@ import swordsIcon from "../Assets/Images/misc/swords-crossed.svg";
 import starIcon from "../Assets/Images/misc/star.svg";
 import trophyIcon from "../Assets/Images/misc/trophy.svg";
 import crownIcon from "../Assets/Images/misc/crown.svg";
-import castleIcon from "../Assets/Images/misc/castle.svg";
+import castleIcon from "../Assets/Images/misc/wcastle.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
 import flagIcon from "../Assets/Images/misc/flag.svg";
 
