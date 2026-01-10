@@ -23,7 +23,7 @@ import { MoveTree, MoveNode } from "../Core/MoveTree";
 import { PGNParser } from "../Systems/PGNParser";
 import { createPieceMap } from "../../utils/PieceMap";
 import { NotationService } from "../Systems/NotationService";
-import { PieceType } from "../../Constants";
+import { PieceType, AbilityType } from "../../Constants";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { GameSetup, CompactSetup } from "./PGNTypes";
 
@@ -275,23 +275,53 @@ export class PGNImporter {
                        nextState = engine.passTurn(nextState);
                    }
                }
-               // Movement: J10K11
-               else {
-                   const moveMatch = token.match(/^([A-Z]\d+)([A-Z]\d+)$/);
-                   if (moveMatch) {
-                       const startHex = NotationService.fromCoordinate(moveMatch[1]);
-                       const endHex = NotationService.fromCoordinate(moveMatch[2]);
-                       
-                       // DEBUG: Uncomment these logs if piece lookup issues occur
-                       // console.log('[Hydrate] Looking for piece at', moveMatch[1], '-> Hex:', startHex.q, startHex.r, startHex.s);
-                       // console.log('[Hydrate] Available pieces:', currentState.pieces.map(p => `${p.type}@(${p.hex.q},${p.hex.r},${p.hex.s})`).join(', '));
-                       
-                       const mover = currentState.pieces.find(p => p.hex.equals(startHex));
-                       if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
-    
-                       nextState = engine.applyMove(currentState, mover, endHex);
-                   }
-               }
+                // Movement: J10K11
+                else {
+                    // Check for Ability Notation (e.g. WT:J10K11)
+                    if (token.includes(':') && !token.startsWith('P:')) {
+                        const [fullCode, coords] = token.split(':');
+                        const coordMatch = coords.match(/^([A-Z]\d+)([A-Z]\d+)$/);
+                        
+                        if (coordMatch) {
+                            const startHex = NotationService.fromCoordinate(coordMatch[1]);
+                            const targetHex = NotationService.fromCoordinate(coordMatch[2]);
+                            
+                            // Extract ability char (last char of prefix, e.g. 'T' from 'WT')
+                            // This supports both 'WT' and legacy 'T' if valid
+                            const aChar = fullCode.charAt(fullCode.length - 1);
+                            
+                            let ability: AbilityType | undefined;
+                            switch (aChar) {
+                                case "T": ability = AbilityType.Teleport; break;
+                                case "F": ability = AbilityType.Fireball; break;
+                                case "R": ability = AbilityType.RaiseDead; break;
+                            }
+                            
+                            if (ability) {
+                                nextState = engine.activateAbility(currentState, startHex, targetHex, ability);
+                            } else {
+                                console.warn(`Unknown ability code in PGN: ${fullCode}`);
+                            }
+                        }
+                    } 
+                    // Standard Move
+                    else {
+                        const moveMatch = token.match(/^([A-Z]\d+)([A-Z]\d+)$/);
+                        if (moveMatch) {
+                            const startHex = NotationService.fromCoordinate(moveMatch[1]);
+                            const endHex = NotationService.fromCoordinate(moveMatch[2]);
+                            
+                            // DEBUG: Uncomment these logs if piece lookup issues occur
+                            // console.log('[Hydrate] Looking for piece at', moveMatch[1], '-> Hex:', startHex.q, startHex.r, startHex.s);
+                            // console.log('[Hydrate] Available pieces:', currentState.pieces.map(p => `${p.type}@(${p.hex.q},${p.hex.r},${p.hex.s})`).join(', '));
+                            
+                            const mover = currentState.pieces.find(p => p.hex.equals(startHex));
+                            if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
+        
+                            nextState = engine.applyMove(currentState, mover, endHex);
+                        }
+                    }
+                }
 
                // 1. Capture snapshot for this child
                // We need a snapshot of the state AFTER the move

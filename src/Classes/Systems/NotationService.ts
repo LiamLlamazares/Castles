@@ -1,7 +1,7 @@
 import { Hex, OffsetCoord } from "../Entities/Hex";
 import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
-import { PieceType } from "../../Constants";
+import { PieceType, AbilityType } from "../../Constants";
 
 export class NotationService {
     /**
@@ -124,18 +124,30 @@ export class NotationService {
      * Format: "Code:SourceTarget" (e.g. "T:J10K11" for Teleport)
      * Codes: T=Teleport, F=Fireball, R=RaiseDead
      */
-    public static getAbilityNotation(ability: AbilityType, source: Hex, target: Hex): string {
+    /**
+     * Generates notation for ability usage.
+     * Format: "Code:SourceTarget" (e.g. "WT:J10K11" for Wizard Teleport)
+     * Codes: 
+     *  W (Wizard), N (Necromancer)
+     *  T (Teleport), F (Fireball), R (RaiseDead)
+     */
+    public static getAbilityNotation(ability: AbilityType, pieceType: PieceType, source: Hex, target: Hex): string {
         const sourceCoord = NotationService.toCoordinate(source);
         const targetCoord = NotationService.toCoordinate(target);
         
-        let code = "";
+        let pChar = "";
+        if (pieceType === PieceType.Wizard) pChar = "W";
+        else if (pieceType === PieceType.Necromancer) pChar = "N";
+        else pChar = NotationService.getPieceCode(pieceType).charAt(0); // Fallback
+
+        let aChar = "";
         switch (ability) {
-            case AbilityType.Teleport: code = "T"; break;
-            case AbilityType.Fireball: code = "F"; break;
-            case AbilityType.RaiseDead: code = "R"; break;
-            default: code = "A"; break; // Generic Ability
+            case AbilityType.Teleport: aChar = "T"; break;
+            case AbilityType.Fireball: aChar = "F"; break;
+            case AbilityType.RaiseDead: aChar = "R"; break;
+            default: aChar = "A"; break;
         }
         
-        return `${code}:${sourceCoord}${targetCoord}`;
+        return `${pChar}${aChar}:${sourceCoord}${targetCoord}`;
     }
 }

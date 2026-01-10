@@ -15,6 +15,7 @@ import { Hex } from "../Entities/Hex";
 import { Piece } from "../Entities/Piece";
 import { AbilityType } from "../../Constants";
 import { gameEvents } from "../Events";
+import { NotationService } from "../Systems/NotationService";
 
 /**
  * Command for activating a special ability.
@@ -65,6 +66,6 @@ export class AbilityCommand implements GameCommand {
   }
 
   getNotation(): string {
-    return `${this.caster.type} ${this.ability} -> ${this.targetHex.toString()}`;
+    return NotationService.getAbilityNotation(this.ability, this.caster.type, this.caster.hex, this.targetHex);
   }
 }

@@ -262,7 +262,6 @@ export class StateMutator {
        let newPhoenixRecords = state.phoenixRecords || [];
 
        if (ability === AbilityType.Fireball) {
-           notation = `Fireball -> ${targetHex.toString()}`;
            const impactedHexes = [targetHex, ...targetHex.cubeRing(1)];
            const impactedKeys = new Set(impactedHexes.map(h => h.getKey()));
            
@@ -298,7 +297,6 @@ export class StateMutator {
            newPieces = piecesBeforeDeath.filter(p => p.damage < p.Strength);
 
        } else if (ability === AbilityType.Teleport) {
-           notation = `Teleport -> ${targetHex.toString()}`;
            if (state.pieceMap.has(targetHex)) throw new Error("Teleport target blocked");
            
            newPieces = newPieces.map(p => p.hex.getKey() === source.hex.getKey() 
@@ -306,7 +304,6 @@ export class StateMutator {
                 : p
            );
        } else if (ability === AbilityType.RaiseDead) {
-           notation = `RaiseDead -> ${targetHex.toString()}`;
            
            // Validation
            if (source.souls < 1) throw new Error("Not enough souls");
@@ -342,7 +339,7 @@ export class StateMutator {
        const tempState: GameState = { ...state, pieces: newPieces, pieceMap: newPieceMap };
        const increment = RuleEngine.getTurnCounterIncrement(tempState, board); 
 
-       const abilityNotation = `${source.type} ${notation}`;
+       const abilityNotation = NotationService.getAbilityNotation(ability, source.type, source.hex, targetHex);
        const record = this.createMoveRecord(abilityNotation, state);
        const newMoveHistory = this.appendHistory(state, record);
 
