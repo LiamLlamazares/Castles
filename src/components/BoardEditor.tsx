@@ -25,6 +25,9 @@ import { PGNGenerator } from '../Classes/Services/PGNGenerator';
 import { MoveTree } from '../Classes/Core/MoveTree';
 import '../css/Board.css';
 
+// SVG import
+import scrollIcon from '../Assets/Images/misc/scroll.svg';
+
 export type EditorTool = 
   | { type: 'piece'; pieceType: PieceType; color: Color }
   | { type: 'sanctuary'; sanctuaryType: SanctuaryType }
@@ -301,7 +304,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             <button onClick={handleExport} className="editor-btn primary">
-              📋 Export PGN
+              <img src={scrollIcon} alt="" style={{ width: '16px', height: '16px', marginRight: '6px', verticalAlign: 'middle' }} /> Export PGN
             </button>
             <button onClick={handlePlay} className="editor-btn success">
               ▶ Play Position

@@ -6,6 +6,20 @@ import castleImage from "../Assets/Images/Banner/castle.svg";
 import bootsImage from "../Assets/Images/Banner/boots.svg";
 import swordImage from "../Assets/Images/Banner/sword.svg";
 
+// SVG icons for section headers
+import rotateIcon from "../Assets/Images/Board/rotate.svg";
+import glitterIcon from "../Assets/Images/misc/glitter.svg";
+import pawnIcon from "../Assets/Images/misc/pawn.svg";
+import swordsIcon from "../Assets/Images/misc/swords-crossed.svg";
+import starIcon from "../Assets/Images/misc/star.svg";
+import trophyIcon from "../Assets/Images/misc/trophy.svg";
+import crownIcon from "../Assets/Images/misc/crown.svg";
+import castleIcon from "../Assets/Images/misc/castle.svg";
+import shieldIcon from "../Assets/Images/Board/shield.svg";
+import flagIcon from "../Assets/Images/misc/flag.svg";
+
+const headerIconStyle: React.CSSProperties = { width: '24px', height: '24px', verticalAlign: 'middle', marginRight: '8px' };
+
 interface RulesModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -33,21 +47,21 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
     <div className="rules-modal-backdrop" onClick={onClose}>
       <div className="rules-modal" onClick={(e) => e.stopPropagation()}>
         <div className="rules-header">
-          <h1>🏰 Castles: Game Rules</h1>
+          <h1><img src={castleIcon} alt="" style={headerIconStyle} /> Castles: Game Rules</h1>
           <button className="rules-close" onClick={onClose}>×</button>
         </div>
         
         <div className="rules-content">
           {/* Quick Start */}
           <section id="quick-start">
-            <h2>⚡ Quick Start</h2>
+            <h2><img src={flagIcon} alt="" style={headerIconStyle} />Quick Start</h2>
             <div className="rules-box highlight">
               <p><strong>Objective:</strong> Capture your opponent's Monarch OR control all 6 castles.</p>
               <p><strong>Each Turn:</strong></p>
               <ol>
-                <li>🥾 <strong>Movement</strong> – Move up to 2 pieces</li>
-                <li>⚔️ <strong>Attack</strong> – Attack with up to 2 pieces</li>
-                <li>🏰 <strong>Castles</strong> – Recruit from controlled castles</li>
+                <li><img src={bootsImage} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px'}} /><strong>Movement</strong> – Move up to 2 pieces</li>
+                <li><img src={swordsIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px'}} /><strong>Attack</strong> – Attack with up to 2 pieces</li>
+                <li><img src={castleIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px'}} /><strong>Castles</strong> – Recruit from controlled castles</li>
               </ol>
             </div>
           </section>
@@ -112,7 +126,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           {/* Turn Phases */}
           <section id="turn-phases">
-            <h2>🔄 Turn Phases</h2>
+            <h2><img src={rotateIcon} alt="" style={headerIconStyle} />Turn Phases</h2>
             <div className="phase-cards">
               <div className="phase-card">
                 <h4><img src={bootsImage} alt="" className="phase-icon"/> 1. Movement</h4>
@@ -134,7 +148,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           {/* Special Pieces */}
           <section id="special-pieces">
-            <h2>✨ Special Pieces</h2>
+            <h2><img src={glitterIcon} alt="" style={headerIconStyle} />Special Pieces</h2>
             <p>Summoned from <strong>Sanctuaries</strong> across the board.</p>
             <table className="rules-table pieces-table">
               <thead>
@@ -158,7 +172,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           {/* Standard Pieces */}
           <section id="pieces">
-            <h2>♟️ Standard Pieces</h2>
+            <h2><img src={pawnIcon} alt="" style={headerIconStyle} />Standard Pieces</h2>
             <table className="rules-table pieces-table">
               <thead>
                 <tr>
@@ -212,7 +226,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           {/* Combat */}
           <section id="combat">
-            <h2>⚔️ Combat</h2>
+            <h2><img src={swordsIcon} alt="" style={headerIconStyle} />Combat</h2>
             <div className="rules-box">
               <h4>Damage Calculation</h4>
               <p>Attacker deals damage equal to their <strong>Strength</strong>. Damage accumulates on the defender.</p>
@@ -220,7 +234,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <p><small>(Note: Strength acts as both Attack Power and Max HP)</small></p>
             </div>
             
-            <h4>🛡️ Ranged Protection</h4>
+            <h4><img src={shieldIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px'}} />Ranged Protection</h4>
             <div className="rules-note">
               <p><strong>Defended Pieces:</strong> Any piece adjacent to a friendly unit is "Defended".</p>
               <p><strong>Benefit:</strong> Defended pieces CANNOT be targeted by Ranged (Archer) or Long-Ranged (Trebuchet/Ranger) attacks. They must be attacked in Melee.</p>
@@ -236,7 +250,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           {/* Sanctuaries */}
           <section id="sanctuaries">
-            <h2>🌟 Sanctuaries</h2>
+            <h2><img src={starIcon} alt="" style={headerIconStyle} />Sanctuaries</h2>
             <p>Sanctuaries allow you to pledge loyalty to powerful entities to receive special units.</p>
             
             <div className="rules-box">
@@ -321,21 +335,21 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
 
           {/* Victory */}
           <section id="victory">
-            <h2>🏆 Victory Conditions</h2>
+            <h2><img src={trophyIcon} alt="" style={headerIconStyle} />Victory Conditions</h2>
             <div className="victory-cards">
               <div className="victory-card">
-                <h4>👑 Monarch Capture</h4>
+                <h4><img src={crownIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px'}} />Monarch Capture</h4>
                 <p>Capture all opponent Monarchs</p>
               </div>
               <div className="victory-card">
-                <h4>🏰 Castle Control</h4>
+                <h4><img src={castleIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px'}} />Castle Control</h4>
                 <p>Control all 6 castles</p>
               </div>
             </div>
           </section>
 
           <div className="rules-footer">
-            <em>Good luck, commander! 🎯</em>
+            <em>Good luck, commander! <img src={flagIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle'}} /></em>
           </div>
         </div>
       </div>

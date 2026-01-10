@@ -3,6 +3,10 @@ import { Piece } from '../Classes/Entities/Piece';
 import { PieceType, AttackType } from '../Constants';
 import { getImageByPieceType } from './PieceImages';
 
+// SVG icons
+import shieldSvg from '../Assets/Images/Board/shield.svg';
+import skullSvg from '../Assets/Images/misc/skull.svg';
+
 interface PieceTooltipProps {
   piece: Piece;
   position?: { x: number, y: number };
@@ -156,7 +160,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
         {info.flying && <span style={badgeStyle('#3498db')}>Flying</span>}
         {!isPreview && piece.canMove && <span style={badgeStyle('#27ae60')}>Can Move</span>}
         {!isPreview && piece.canAttack && <span style={badgeStyle('#e74c3c')}>Can Attack</span>}
-        {isDefended && <span style={badgeStyle('#f39c12')}>Defended 🛡️</span>}
+        {isDefended && <span style={badgeStyle('#f39c12')}>Defended <img src={shieldSvg} alt="" style={{ width: '12px', height: '12px', verticalAlign: 'middle' }} /></span>}
       </div>
 
       {info.special && (
@@ -192,7 +196,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
           alignItems: 'center',
           gap: '4px'
         }}>
-          <span>💀 Souls:</span>
+          <span><img src={skullSvg} alt="" style={{ width: '14px', height: '14px', verticalAlign: 'middle', marginRight: '4px' }} />Souls:</span>
           <span style={{ fontWeight: 'bold', color: '#e74c3c' }}>{piece.souls}</span>
         </div>
       )}

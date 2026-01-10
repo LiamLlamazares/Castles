@@ -46,6 +46,9 @@ import { HistoryEntry, MoveRecord, SanctuaryConfig, PieceTheme } from "../Consta
 import { createPieceMap } from "../utils/PieceMap";
 import "../css/Board.css";
 
+// SVG import for lightbulb
+import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
+
 interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
@@ -541,7 +544,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
       {/* Tooltip Discovery Hint Banner */}
       {showTooltipHint && (
         <div className="tooltip-hint-banner">
-          💡 Tip: Right-click any piece or hex for detailed information!
+          <img src={lightbulbIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px' }} /> Tip: Right-click any piece or hex for detailed information!
           <button className="hint-dismiss-btn" onClick={dismissTooltipHint}>
             Got it
           </button>

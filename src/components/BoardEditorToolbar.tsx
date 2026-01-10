@@ -52,14 +52,14 @@ const ALL_SANCTUARY_TYPES: SanctuaryType[] = [
   SanctuaryType.PyreEternal,
 ];
 
-// Sanctuary display names and icons
-const SANCTUARY_DISPLAY: Record<SanctuaryType, { name: string; icon: string }> = {
-  [SanctuaryType.WolfCovenant]: { name: 'Wolf', icon: '🐺' },
-  [SanctuaryType.SacredSpring]: { name: 'Healer', icon: '💧' },
-  [SanctuaryType.WardensWatch]: { name: 'Ranger', icon: '🏹' },
-  [SanctuaryType.ArcaneRefuge]: { name: 'Wizard', icon: '🔮' },
-  [SanctuaryType.ForsakenGrounds]: { name: 'Necro', icon: '💀' },
-  [SanctuaryType.PyreEternal]: { name: 'Phoenix', icon: '🔥' },
+// Sanctuary display names - use piece images instead of emoji icons
+const SANCTUARY_DISPLAY: Record<SanctuaryType, { name: string }> = {
+  [SanctuaryType.WolfCovenant]: { name: 'Wolf' },
+  [SanctuaryType.SacredSpring]: { name: 'Healer' },
+  [SanctuaryType.WardensWatch]: { name: 'Ranger' },
+  [SanctuaryType.ArcaneRefuge]: { name: 'Wizard' },
+  [SanctuaryType.ForsakenGrounds]: { name: 'Necro' },
+  [SanctuaryType.PyreEternal]: { name: 'Phoenix' },
 };
 
 const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
@@ -318,7 +318,11 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
                   transition: 'all 0.2s ease',
                 }}
               >
-                <span style={{ fontSize: '1.5rem' }}>{display.icon}</span>
+                <img 
+                  src={getImageByPieceType(SanctuaryConfig[sanctuaryType].pieceType, 'w')}
+                  alt={display.name}
+                  style={{ width: '28px', height: '28px' }}
+                />
                 <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fff' }}>{display.name}</span>
                 <span style={{ 
                   fontSize: '0.7rem', 

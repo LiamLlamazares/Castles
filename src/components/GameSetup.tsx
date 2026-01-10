@@ -13,6 +13,10 @@ import { OpponentType, AIOpponentConfig } from '../hooks/useAIOpponent';
 import { getImageByPieceType } from './PieceImages';
 import '../css/Board.css';
 
+// SVG imports
+import trophyIcon from '../Assets/Images/misc/trophy.svg';
+import rotateIcon from '../Assets/Images/Board/rotate.svg';
+
 interface GameSetupProps {
     onPlay: (
         board: Board, 
@@ -29,9 +33,9 @@ interface GameSetupProps {
 
 // Opponent options for card-based selection
 const OPPONENT_OPTIONS: { id: OpponentType; name: string; icon: string; description: string }[] = [
-    { id: 'human', name: 'Human', icon: '👤', description: 'Local 2-player' },
-    { id: 'random-ai', name: 'Random Bot', icon: '🤖', description: 'Easy difficulty' },
-    // Future: { id: 'heuristic-ai', name: 'Smart Bot', icon: '🧠', description: 'Medium' },
+    { id: 'human', name: 'Human', icon: '☺', description: 'Local 2-player' },
+    { id: 'random-ai', name: 'Random Bot', icon: '⚙', description: 'Easy difficulty' },
+    // Future: { id: 'heuristic-ai', name: 'Smart Bot', icon: '☃', description: 'Medium' },
 ];
 
 
@@ -452,7 +456,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                                 onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2) rotate(180deg)'}
                                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) rotate(0deg)'}
                             >
-                                🎲
+                                <img src={rotateIcon} alt="Reroll" style={{ width: '24px', height: '24px' }} />
                             </button>
                         )}
                     </div>
@@ -534,7 +538,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                             cursor: 'pointer',
                             color: vpModeEnabled ? '#27ae60' : '#aaa'
                         }}>
-                            🏆 Victory Points Mode
+                            <img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '6px' }} />Victory Points Mode
                         </label>
                     </div>
                     {vpModeEnabled && (

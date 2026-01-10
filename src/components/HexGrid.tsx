@@ -8,6 +8,10 @@ import { PieceType, SanctuaryConfig } from "../Constants";
 import { getImageByPieceType } from "./PieceImages";
 import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from "../utils/HexRenderUtils";
 
+// SVG imports for terrain icons
+import riverSvg from "../Assets/Images/Board/river.svg";
+import mountainSvg from "../Assets/Images/Board/mountain.svg";
+
 interface HexGridProps {
   hexagons: Hex[];
   castles: Castle[];
@@ -147,28 +151,28 @@ const HexGrid = React.memo(({
               // River icon (center-right)
               if (isRiver && showTerrainIcons) {
                 return (
-                  <text
-                    x={center.x + offsetX}
-                    y={center.y + offsetY + iconSize * 0.3}
-                    textAnchor="middle"
-                    style={{ fontSize: iconSize * 0.9, pointerEvents: 'none', filter: 'drop-shadow(1px 1px 1px rgba(0,0,0,0.5))' }}
-                  >
-                    🌊
-                  </text>
+                  <image
+                    href={riverSvg}
+                    x={center.x + offsetX - iconSize/2}
+                    y={center.y + offsetY - iconSize/2}
+                    width={iconSize}
+                    height={iconSize}
+                    style={{ pointerEvents: 'none' }}
+                  />
                 );
               }
               
               // High ground icon (center-right)
               if (isHighGround && !castles.some(c => c.hex.equals(hex)) && showTerrainIcons) {
                 return (
-                  <text
-                    x={center.x + offsetX}
-                    y={center.y + offsetY + iconSize * 0.3}
-                    textAnchor="middle"
-                    style={{ fontSize: iconSize * 0.9, pointerEvents: 'none', filter: 'drop-shadow(1px 1px 1px rgba(0,0,0,0.5))' }}
-                  >
-                    ⛰️
-                  </text>
+                  <image
+                    href={mountainSvg}
+                    x={center.x + offsetX - iconSize/2}
+                    y={center.y + offsetY - iconSize/2}
+                    width={iconSize}
+                    height={iconSize}
+                    style={{ pointerEvents: 'none' }}
+                  />
                 );
               }
               

@@ -12,6 +12,9 @@ import { createPieceMap } from "../utils/PieceMap";
 import { getImageByPieceType } from "./PieceImages";
 import { PieceTheme } from "../Constants";
 
+// SVG import for shield icon
+import shieldSvg from "../Assets/Images/Board/shield.svg";
+
 interface PieceRendererProps {
   pieces: Piece[];
   isBoardRotated: boolean;
@@ -101,18 +104,14 @@ const PieceRenderer = React.memo(({
                   stroke="rgba(0, 0, 0, 0.7)"
                   strokeWidth={1.0}
                 />
-                {/* Shield symbol */}
-                <text
-                  x={center.x - pieceSize * 0.45}
-                  y={center.y + 1}
-                  fontSize={pieceSize * 0.18}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill="#000"
-                  fontWeight="bold"
-                >
-                  🛡️
-                </text>
+                {/* Shield symbol - use SVG image */}
+                <image
+                  href={shieldSvg}
+                  x={center.x - pieceSize * 0.45 - pieceSize * 0.08}
+                  y={center.y - pieceSize * 0.08}
+                  width={pieceSize * 0.16}
+                  height={pieceSize * 0.16}
+                />
               </g>
             )}
           </g>

@@ -10,6 +10,9 @@ import { TurnPhase, Color, MoveRecord, PHASE_CYCLE_LENGTH } from "../Constants";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { VP_VICTORY_THRESHOLD } from "../Classes/Systems/WinCondition";
 
+// SVG import
+import trophyIcon from "../Assets/Images/misc/trophy.svg";
+
 interface ControlPanelProps {
   currentPlayer: Color;
   turnPhase: TurnPhase;
@@ -40,7 +43,7 @@ const VPBadge: React.FC<{ vp: number, player: Color }> = ({ vp, player }) => (
     fontWeight: 600,
     color: vp >= VP_VICTORY_THRESHOLD ? '#27ae60' : '#ffd700'
   }}>
-    <span>🏆</span>
+    <span><img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle' }} /></span>
     <span>{vp}/{VP_VICTORY_THRESHOLD} VP</span>
   </div>
 );
