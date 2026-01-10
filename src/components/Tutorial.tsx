@@ -10,6 +10,7 @@ import GameBoard from './Game';
 import { getAllLessons, TutorialLesson } from '../tutorial';
 import { getImageByPieceType } from './PieceImages';
 import { PieceType } from '../Constants';
+import { useTheme } from '../contexts/ThemeContext';
 import '../css/Board.css';
 
 interface TutorialProps {
@@ -17,6 +18,9 @@ interface TutorialProps {
 }
 
 const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
+  // Theme hook
+  const { isDark } = useTheme();
+  
   // Load all available lessons
   const lessons = useMemo(() => getAllLessons(), []);
   
@@ -68,8 +72,8 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         width: '300px',
         minWidth: '300px',
         padding: '20px',
-        backgroundColor: '#1a1a2e',
-        color: '#e0e0e0',
+        backgroundColor: isDark ? '#1a1a2e' : '#f5f5f5',
+        color: isDark ? '#e0e0e0' : '#1a1a1a',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
@@ -82,8 +86,8 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
             onClick={onBack}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#333',
-              color: '#fff',
+              backgroundColor: isDark ? '#333' : '#e0e0e0',
+              color: isDark ? '#fff' : '#1a1a1a',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -172,7 +176,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         {lesson.instructions && (
           <div style={{
             padding: '12px',
-            backgroundColor: '#2a2a4e',
+            backgroundColor: isDark ? '#2a2a4e' : '#e8e8f0',
             borderRadius: '8px',
             fontSize: '14px',
             lineHeight: 1.6,

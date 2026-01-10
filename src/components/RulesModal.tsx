@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import "../css/RulesModal.css";
 import { PieceType } from "../Constants";
 import { getImageByPieceType } from "./PieceImages";
+import { useTheme } from "../contexts/ThemeContext";
 import castleImage from "../Assets/Images/Banner/castle.svg";
 import bootsImage from "../Assets/Images/Banner/boots.svg";
 import swordImage from "../Assets/Images/Banner/sword.svg";
@@ -18,14 +19,40 @@ import castleIcon from "../Assets/Images/misc/wcastle.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
 import flagIcon from "../Assets/Images/misc/flag.svg";
 
-const headerIconStyle: React.CSSProperties = { width: '24px', height: '24px', verticalAlign: 'middle', marginRight: '8px', filter: 'invert(1)' };
-
 interface RulesModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
 const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
+  // Theme hook for conditional icon styling
+  const { isDark } = useTheme();
+  
+  // Icon styles - invert only in dark mode
+  const headerIconStyle: React.CSSProperties = { 
+    width: '24px', 
+    height: '24px', 
+    verticalAlign: 'middle', 
+    marginRight: '8px', 
+    filter: isDark ? 'invert(1)' : 'none' 
+  };
+  
+  const smallIconStyle: React.CSSProperties = {
+    width: '16px',
+    height: '16px',
+    verticalAlign: 'middle',
+    marginRight: '4px',
+    filter: isDark ? 'invert(1)' : 'none'
+  };
+  
+  const mediumIconStyle: React.CSSProperties = {
+    width: '18px',
+    height: '18px',
+    verticalAlign: 'middle',
+    marginRight: '6px',
+    filter: isDark ? 'invert(1)' : 'none'
+  };
+
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -59,9 +86,9 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <p><strong>Objective:</strong> Capture your opponent's Monarch OR control all 6 castles.</p>
               <p><strong>Each Turn:</strong></p>
               <ol>
-                <li><img src={bootsImage} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)'}} /><strong>Movement</strong> – Move up to 2 pieces</li>
-                <li><img src={swordsIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)'}} /><strong>Attack</strong> – Attack with up to 2 pieces</li>
-                <li><img src={castleIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)'}} /><strong>Castles</strong> – Recruit from controlled castles</li>
+                <li><img src={bootsImage} alt="" style={smallIconStyle} /><strong>Movement</strong> – Move up to 2 pieces</li>
+                <li><img src={swordsIcon} alt="" style={smallIconStyle} /><strong>Attack</strong> – Attack with up to 2 pieces</li>
+                <li><img src={castleIcon} alt="" style={smallIconStyle} /><strong>Castles</strong> – Recruit from controlled castles</li>
               </ol>
             </div>
           </section>
@@ -234,7 +261,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <p><small>(Note: Strength acts as both Attack Power and Max HP)</small></p>
             </div>
             
-            <h4><img src={shieldIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)'}} />Ranged Protection</h4>
+            <h4><img src={shieldIcon} alt="" style={mediumIconStyle} />Ranged Protection</h4>
             <div className="rules-note">
               <p><strong>Defended Pieces:</strong> Any piece adjacent to a friendly unit is "Defended".</p>
               <p><strong>Benefit:</strong> Defended pieces CANNOT be targeted by Ranged (Archer) or Long-Ranged (Trebuchet/Ranger) attacks. They must be attacked in Melee.</p>
@@ -338,18 +365,18 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
             <h2><img src={trophyIcon} alt="" style={headerIconStyle} />Victory Conditions</h2>
             <div className="victory-cards">
               <div className="victory-card">
-                <h4><img src={crownIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)'}} />Monarch Capture</h4>
+                <h4><img src={crownIcon} alt="" style={mediumIconStyle} />Monarch Capture</h4>
                 <p>Capture all opponent Monarchs</p>
               </div>
               <div className="victory-card">
-                <h4><img src={castleIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)'}} />Castle Control</h4>
+                <h4><img src={castleIcon} alt="" style={mediumIconStyle} />Castle Control</h4>
                 <p>Control all 6 castles</p>
               </div>
             </div>
           </section>
 
           <div className="rules-footer">
-            <em>Good luck, commander! <img src={flagIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', filter: 'invert(1)'}} /></em>
+            <em>Good luck, commander! <img src={flagIcon} alt="" style={{...smallIconStyle, marginRight: 0}} /></em>
           </div>
         </div>
       </div>

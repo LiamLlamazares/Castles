@@ -13,15 +13,28 @@ import swordsIcon from "../Assets/Images/misc/swords-crossed.svg";
 import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
 import starIcon from "../Assets/Images/misc/star.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
+import { useTheme } from "../contexts/ThemeContext";
 
 interface QuickStartModalProps {
   onClose: () => void;
 }
 
-const iconStyle: React.CSSProperties = { width: '24px', height: '24px', verticalAlign: 'middle', filter: 'invert(1)' };
-const smallIconStyle: React.CSSProperties = { width: '20px', height: '20px', verticalAlign: 'middle', filter: 'invert(1)' };
-
 const QuickStartModal: React.FC<QuickStartModalProps> = ({ onClose }) => {
+  const { isDark } = useTheme();
+  
+  const iconStyle: React.CSSProperties = { 
+    width: '24px', 
+    height: '24px', 
+    verticalAlign: 'middle', 
+    filter: isDark ? 'invert(1)' : 'none' 
+  };
+  const smallIconStyle: React.CSSProperties = { 
+    width: '20px', 
+    height: '20px', 
+    verticalAlign: 'middle', 
+    filter: isDark ? 'invert(1)' : 'none' 
+  };
+
   return (
     <div className="quickstart-backdrop" onClick={onClose}>
       <div className="quickstart-modal" onClick={(e) => e.stopPropagation()}>
