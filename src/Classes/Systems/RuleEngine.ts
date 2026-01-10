@@ -138,6 +138,25 @@ export class RuleEngine {
   }
 
   /**
+   * Optimized check if ANY piece can move.
+   * Used for turn skipping logic in TurnManager (skip Movement phase if stuck).
+   */
+  public static hasAnyLegalMoves(gameState: GameState, board: Board): boolean {
+      const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
+      
+      const potentialMovers = gameState.pieces.filter(
+          p => p.color === currentPlayer && p.canMove
+      );
+
+      // Lazy check: return true as soon as one legal move is found
+      const blockedSet = RuleEngine.getBlockedHexSet(gameState, board, currentPlayer);
+      return potentialMovers.some(piece => {
+           const moves = piece.getLegalMoves(blockedSet, currentPlayer, board.hexSet);
+           return moves.length > 0;
+      });
+  }
+
+  /**
    * Returns all hexes that the current player could attack with any of their pieces.
    * Used for turn skip logic (skip attack phase if no legal attacks exist).
    */
@@ -309,6 +328,13 @@ export class RuleEngine {
     // Optimization Phase 3: Use early-exit checks instead of full list generation
     const hasFutureAttacks = RuleEngine.hasAnyFutureLegalAttacks(gameState, board);
     const hasFutureControlledCastles = RuleEngine.hasAnyFutureControlledCastles(gameState);
+    
+    // Check legal moves (for skipping Movement phase)
+    let hasFutureMoves = false;
+    if (!isPassing && TurnManager.getTurnPhase(gameState.turnCounter) === "Movement") {
+        hasFutureMoves = RuleEngine.hasAnyLegalMoves(gameState, board);
+    }
+    // If not in Movement phase, hasFutureMoves is irrelevant (pass false)
 
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     
@@ -327,10 +353,14 @@ export class RuleEngine {
     }
 
     // Pass ignorePhase=true because we want to know if it WOULD be valid in the Recruitment phase
-    const hasUsableSanctuaries = gameState.sanctuaries.some(s => SanctuaryService.canPledge(gameState, s.hex, true));
+    let hasUsableSanctuaries = false;
+    if (!isPassing) {
+        hasUsableSanctuaries = gameState.sanctuaries.some(s => SanctuaryService.canPledge(gameState, board, s.hex, true));
+    }
 
     return TurnManager.getTurnCounterIncrement(
         gameState.turnCounter,
+        hasFutureMoves,
         hasFutureAttacks,
         hasFutureControlledCastles || hasUsableSanctuaries,
         hasUsableCastles || hasUsableSanctuaries

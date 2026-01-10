@@ -49,7 +49,7 @@ export class GameEngine {
   // ================= SANCTUARY (Delegated to SanctuaryService) =================
 
   public canPledge(gameState: GameState, sanctuaryHex: Hex): boolean {
-    return SanctuaryService.canPledge(gameState, sanctuaryHex);
+    return SanctuaryService.canPledge(gameState, this.board, sanctuaryHex);
   }
 
   public pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex): GameState {

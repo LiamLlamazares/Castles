@@ -40,7 +40,7 @@ export class SanctuaryService {
    * 2. Current player has a piece on the sanctuary hex
    * 3. Total strength (occupant + friendly neighbors) meets requirement
    */
-  public static canPledge(gameState: GameState, sanctuaryHex: Hex, ignorePhase: boolean = false): boolean {
+  public static canPledge(gameState: GameState, board: Board, sanctuaryHex: Hex, ignorePhase: boolean = false): boolean {
     const sanctuary = gameState.sanctuaries.find(s => s.hex.equals(sanctuaryHex));
     if (!sanctuary) return false;
 
@@ -85,8 +85,22 @@ export class SanctuaryService {
 
     // 4. Requirement Check
     if (totalStrength < sanctuary.requiredStrength) {
-       console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Insufficient Strength (${totalStrength} < ${sanctuary.requiredStrength})`);
-       return false;
+        console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Insufficient Strength (${totalStrength} < ${sanctuary.requiredStrength})`);
+        return false;
+    }
+
+    // 5. Valid Spawn Location Check
+    // Must have at least one valid spawn hex (Empty + Not River + Not Castle)
+    const adjacentHexes = sanctuaryHex.cubeRing(1);
+    const hasValidNeighbor = adjacentHexes.some(hex => 
+        !gameState.pieceMap.has(hex) && 
+        !board.isRiver(hex) && 
+        !board.isCastle(hex, board.NSquares)
+    );
+    
+    if (!hasValidNeighbor) {
+        console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: No valid spawn location`);
+        return false;
     }
 
     console.log(`[SanctuaryDebug] Accepting ${sanctuary.type}: Pledge Valid!`);
@@ -102,12 +116,17 @@ export class SanctuaryService {
    */
   public static pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex, board: Board): GameState {
     const sanctuary = gameState.sanctuaries.find(s => s.hex.equals(sanctuaryHex));
-    if (!sanctuary || !this.canPledge(gameState, sanctuaryHex)) {
+    if (!sanctuary || !this.canPledge(gameState, board, sanctuaryHex)) {
       throw new Error("Invalid pledge action");
     }
 
     const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());
     if (!occupant) throw new Error("Sanctuary empty during pledge"); // Should be caught by canPledge
+
+    // Validate Spawn Location specific to this pledge action
+    if (gameState.pieceMap.has(spawnHex)) throw new Error("Invalid spawn location: Occupied");
+    if (board.isRiver(spawnHex)) throw new Error("Invalid spawn location: River");
+    if (board.isCastle(spawnHex, board.NSquares)) throw new Error("Invalid spawn location: Castle");
 
     let newPieces = [...gameState.pieces];
 

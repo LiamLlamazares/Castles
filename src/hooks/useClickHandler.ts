@@ -32,7 +32,10 @@ interface UseClickHandlerProps {
   /** Execute an ability (Wizard/Necromancer) */
   triggerAbility: (sourceHex: Hex, targetHex: Hex, ability: AbilityType) => void;
   /** Normal hex click handler from game engine */
+  /** Normal hex click handler from game engine */
   onEngineHexClick: (hex: Hex) => void;
+  /** Board instance for terrain checks */
+  board: import("../Classes/Core/Board").Board;
 }
 
 interface UseClickHandlerResult {
@@ -64,6 +67,7 @@ export function useClickHandler({
   pledge,
   triggerAbility,
   onEngineHexClick,
+  board,
 }: UseClickHandlerProps): UseClickHandlerResult {
   const [activeAbility, setActiveAbility] = useState<AbilityType | null>(null);
   const [pledgingSanctuary, setPledgingSanctuary] = useState<Hex | null>(null);
@@ -104,11 +108,17 @@ export function useClickHandler({
         }
 
         // Attempt pledge if valid spawn hex
-        const isSpawnHexEmpty = !pieces.find((p) => p.hex.equals(hex));
+        // Re-use logic from SanctuaryService/AIContextBuilder implicitly
+        const isSpawnHexEmpty = !pieces.some((p) => p.hex.equals(hex));
+        const isRiver = board.isRiver(hex);
+        const isCastle = board.isCastle(hex, board.NSquares);
+        
         if (
           canPledge(pledgingSanctuary) &&
           hex.distance(pledgingSanctuary) === 1 &&
-          isSpawnHexEmpty
+          isSpawnHexEmpty &&
+          !isRiver &&
+          !isCastle
         ) {
           try {
             pledge(pledgingSanctuary, hex);
@@ -147,6 +157,7 @@ export function useClickHandler({
       pledge,
       triggerAbility,
       onEngineHexClick,
+      board
     ]
   );
 
@@ -156,9 +167,21 @@ export function useClickHandler({
   const isPledgeTarget = useCallback(
     (hex: Hex) => {
       if (!pledgingSanctuary) return false;
-      return hex.distance(pledgingSanctuary) === 1;
+      
+      const isNeighbor = hex.distance(pledgingSanctuary) === 1;
+      if (!isNeighbor) return false;
+
+      // Validate topology
+      if (board.isRiver(hex)) return false;
+      if (board.isCastle(hex, board.NSquares)) return false;
+      
+      // Validate occupancy
+      // Note: We use the pieces array passed in props which should be current
+      if (pieces.some(p => p.hex.equals(hex))) return false;
+
+      return true;
     },
-    [pledgingSanctuary]
+    [pledgingSanctuary, board, pieces]
   );
 
   return {

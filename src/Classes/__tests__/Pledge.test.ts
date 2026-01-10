@@ -190,4 +190,62 @@ describe('Pledge Mechanics', () => {
     expect(phoenix?.type).toBe(PieceType.Phoenix);
   });
 
+  test('Cannot pledge onto a river or blocked hex', () => {
+    // Setup sanctuary next to a river (e.g., at 0, -2, 2 ? Rivers are usually at r=0... wait, let's just mock the board having a river there)
+    // Board defaults: simple river at r=0 usually?
+    // Let's rely on Board's riverSet.
+    // Standard board: q + r + s = 0.
+    // River at r=0 (horizontal center).
+    
+    // River is at r=0. Pattern: Crossing (q 0,1), River (q 2,3).
+    // So Hex(2, 0, -2) is a valid River hex.
+    
+    // Valid sanctuary at (2, -1, -1), adjacent to (2, 0, -2)
+    const riverSanctuary = new Sanctuary(new Hex(2, -1, -1), SanctuaryType.WolfCovenant, 'w', null, 0);
+    placePiece(riverSanctuary.hex, PieceType.Swordsman, 'w');
+    
+    const state = createGameState(pieces, [riverSanctuary]);
+    
+    // Attempt to pledge onto (2, 0, -2) which is a River hex
+    const riverHex = new Hex(2, 0, -2);
+    
+    // Check canPledge first (should be TRUE if there are OTHER valid spots, but FALSE if ONLY river exists? 
+    // canPledge currently only checks for EMPTY. River is EMPTY. So canPledge likely returns true.
+    // But pledge() should fail.
+    
+    expect(board.isRiver(riverHex)).toBe(true);
+    
+    // canPledge logic update: Should ensure at least one NON-BLOCKED neighbor exists. (0,0,0) is blocked.
+    // If (0, -1, 1) has other neighbors, canPledge might be true.
+    // But pledge() specifically onto riverHex should throw error.
+    
+    expect(() => {
+        gameEngine.pledge(state, riverSanctuary.hex, riverHex);
+    }).toThrow("Invalid spawn location");
+  });
+
+  test('Auto-passes Recruitment phase if sanctuary is completely surrounded/blocked', () => {
+      // Setup: Tier 1 Sanctuary at (0,0,0) - wait, (0,0,0) is river crossing maybe?
+      // Let's use a normal hex (0, -5, 5) from before.
+      // We will surround it completely with "Rivers" or Occupied pieces.
+      
+      const sanctuaryHex = new Hex(0, -5, 5);
+      const sanctuary = new Sanctuary(sanctuaryHex, SanctuaryType.WolfCovenant, 'w', null, 0);
+      placePiece(sanctuaryHex, PieceType.Swordsman, 'w');
+      
+      // Surround it!
+      const neighbors = sanctuaryHex.cubeRing(1);
+      neighbors.forEach(n => {
+          placePiece(n, PieceType.Swordsman, 'w'); // Use valid type and args
+      });
+      
+      const state = createGameState(pieces, [sanctuary]);
+      
+      // Verify canPledge is FALSE because no valid spawn
+      expect(gameEngine.canPledge(state, sanctuaryHex)).toBe(false);
+      
+      // Verify Turn Increment is > 0 (should skip Recruitment)
+      const increment = gameEngine.getTurnCounterIncrement(state);
+      expect(increment).toBeGreaterThan(0);
+  });
 });

@@ -36,6 +36,7 @@ export class TurnManager {
    * - 4   = Recruitment (one sub-turn)
    *
    * @param turnCounter Current turn number
+   * @param hasFutureMoves Whether the current player has any valid moves remaining (Movement sub-phase)
    * @param hasFutureAttacks Whether the current player has any valid attacks remaining
    * @param hasFutureControlledCastles Whether the current player can use any castles
    * @param areCastlesUsableInPhase Specific check if castles are usable in the current Castles phase
@@ -43,6 +44,7 @@ export class TurnManager {
    */
   public static getTurnCounterIncrement(
     turnCounter: number,
+    hasFutureMoves: boolean,
     hasFutureAttacks: boolean,
     hasFutureControlledCastles: boolean,
     areCastlesUsableInPhase: boolean
@@ -50,9 +52,58 @@ export class TurnManager {
     const phase = this.getTurnPhase(turnCounter);
     const phasePosition = turnCounter % PHASE_CYCLE_LENGTH; // 0-4 within current player's turn
 
+    // MOVEMENT PHASE (Positions 0, 1)
+    if (phase === "Movement") {
+        if (!hasFutureMoves) {
+            // Cannot move any piece (or finished moving last piece)
+            // Skip remaining movement turns and jump to Attack phase?
+            // Wait, logic check:
+            // Pos 0: First movement. If no moves, jump to 2 (Attack).
+            // Pos 1: Second movement. If no moves, jump to 2 (Attack).
+            // Distance: (2 - currentPos)
+            // PLUS: If no attacks either, we have to skip those too.
+            // Simplified: Treat "No Moves" as "Phase Complete".
+            
+            // Calculate distance to end of Movement Phase (which ends at index 1, jumps to 2)
+            const stepsToAttack = (MOVEMENT_PHASE_END - phasePosition); 
+            
+            // Now, we must ALSO check Attack availability if we are arriving at Attack phase.
+            // But getTurnCounterIncrement is called recursively or we handle it here.
+            // Let's handle it by cascading.
+            
+            if (stepsToAttack > 0) {
+                // If we skip to Attack, check if we need to skip Attack too?
+                // The current signature receives flags for CURRENT state.
+                // Assuming hasFutureAttacks is valid even if we are currently in Movement.
+                
+                if (!hasFutureAttacks && !hasFutureControlledCastles) {
+                    // Skip Moves -> Skip Attack -> Skip Recruit -> Next Player
+                    // Steps: ToAttack + 2(Attack) + 1(Recruit) = ToAttack + 3
+                    return stepsToAttack + 3; 
+                }
+                
+                if (!hasFutureAttacks && hasFutureControlledCastles) {
+                     // Skip Moves -> Skip Attack -> Recruit
+                     // Steps: ToAttack + 2(Attack) = ToAttack + 2
+                     return stepsToAttack + 2;
+                }
+                
+                // Just skip to Attack
+                return stepsToAttack;
+            }
+        }
+    }
+
+    // MOVEMENT PHASE: After first movement turn (position 1) - Natural progression
+    // (This block handles the case where hasFutureMoves might be TRUE but we passed?)
+    // Wait, if isPassing=true, getTurnCounterIncrement only cares about "can I do more?"
+    // If we passed, hasFutureMoves irrelevant?
+    // Usually passing implies "I am done with this phase".
+    // So if isPassing, we treat as !hasFutureMoves? Yes.
+    // RuleEngine passes booleans to us.
+    
+    // Legacy logic for position 1 transition
     // MOVEMENT PHASE: After first movement turn (position 1)
-    // Position 0 is the first movement turn, simple +1 usually.
-    // Position 1 is the last movement turn.
     if (phasePosition === 1) {
       if (!hasFutureAttacks && !hasFutureControlledCastles) {
         // Skip Attack (2 turns) + Recruitment (1 turn) = +4 to next player

@@ -304,6 +304,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
     pledge,
     triggerAbility,
     onEngineHexClick,
+    board,
   });
 
   const handleBoardClick = (hex: Hex) => {

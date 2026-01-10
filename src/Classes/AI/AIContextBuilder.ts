@@ -203,7 +203,7 @@ export class AIContextBuilder {
       // - Sanctuary exists and is ready (not on cooldown)
       // - Current player owns a piece on it
       // - Strength requirement is met
-      const canPledge = SanctuaryService.canPledge(gameState, sanctuary.hex);
+      const canPledge = SanctuaryService.canPledge(gameState, board, sanctuary.hex);
       if (!canPledge) continue;
 
       // Get valid spawn hexes (adjacent to sanctuary, unoccupied, on board)
