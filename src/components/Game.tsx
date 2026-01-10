@@ -544,7 +544,7 @@ const GameBoard: React.FC<GameBoardProps> = ({
       {/* Tooltip Discovery Hint Banner */}
       {showTooltipHint && (
         <div className="tooltip-hint-banner">
-          <img src={lightbulbIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px' }} /> Tip: Right-click any piece or hex for detailed information!
+          <img src={lightbulbIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)' }} /> Tip: Right-click any piece or hex for detailed information!
           <button className="hint-dismiss-btn" onClick={dismissTooltipHint}>
             Got it
           </button>

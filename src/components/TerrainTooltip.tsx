@@ -111,21 +111,21 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
     nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
     
     // Castle gets its own distinct icon, but NO piece icon here
-    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #f1c40f', background: 'rgba(241, 196, 15, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={castleSvg} alt="" style={{ width: '20px', height: '20px' }} /></div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #f1c40f', background: 'rgba(241, 196, 15, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={castleSvg} alt="" style={{ width: '20px', height: '20px', filter: 'invert(1)' }} /></div>;
   } else if (isHighGround) {
     title = "High Ground";
     badgeText = "Tactical Advantage";
     color = "#e67e22";
     description = "Elevated terrain. Ranged and Long-Ranged units attacking FROM high ground gain +1 Range.";
-    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #e67e22', background: 'rgba(230, 126, 34, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={mountainSvg} alt="" style={{ width: '20px', height: '20px' }} /></div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #e67e22', background: 'rgba(230, 126, 34, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={mountainSvg} alt="" style={{ width: '20px', height: '20px', filter: 'invert(1)' }} /></div>;
   } else if (isRiver) {
     title = "River";
     badgeText = "Hazard";
     color = "#3498db";
     description = "Deep waters. Impassable for all ground units. Only Flying units can cross.";
-    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #3498db', background: 'rgba(52, 152, 219, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={riverSvg} alt="" style={{ width: '20px', height: '20px' }} /></div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #3498db', background: 'rgba(52, 152, 219, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={riverSvg} alt="" style={{ width: '20px', height: '20px', filter: 'invert(1)' }} /></div>;
   } else {
-    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #7f8c8d', background: 'rgba(127, 140, 141, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={grassSvg} alt="" style={{ width: '20px', height: '20px' }} /></div>;
+    icon = <div style={{ width: '32px', height: '32px', borderRadius: '4px', border: '2px solid #7f8c8d', background: 'rgba(127, 140, 141, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><img src={grassSvg} alt="" style={{ width: '20px', height: '20px', filter: 'invert(1)' }} /></div>;
   }
 
   return (

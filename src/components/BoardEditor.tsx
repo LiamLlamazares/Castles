@@ -304,7 +304,7 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             <button onClick={handleExport} className="editor-btn primary">
-              <img src={scrollIcon} alt="" style={{ width: '16px', height: '16px', marginRight: '6px', verticalAlign: 'middle' }} /> Export PGN
+              <img src={scrollIcon} alt="" style={{ width: '16px', height: '16px', marginRight: '6px', verticalAlign: 'middle', filter: 'invert(1)' }} /> Export PGN
             </button>
             <button onClick={handlePlay} className="editor-btn success">
               ▶ Play Position

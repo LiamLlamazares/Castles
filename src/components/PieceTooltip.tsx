@@ -160,7 +160,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
         {info.flying && <span style={badgeStyle('#3498db')}>Flying</span>}
         {!isPreview && piece.canMove && <span style={badgeStyle('#27ae60')}>Can Move</span>}
         {!isPreview && piece.canAttack && <span style={badgeStyle('#e74c3c')}>Can Attack</span>}
-        {isDefended && <span style={badgeStyle('#f39c12')}>Defended <img src={shieldSvg} alt="" style={{ width: '12px', height: '12px', verticalAlign: 'middle' }} /></span>}
+        {isDefended && <span style={badgeStyle('#f39c12')}>Defended <img src={shieldSvg} alt="" style={{ width: '12px', height: '12px', verticalAlign: 'middle', filter: 'invert(1)' }} /></span>}
       </div>
 
       {info.special && (
@@ -196,7 +196,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
           alignItems: 'center',
           gap: '4px'
         }}>
-          <span><img src={skullSvg} alt="" style={{ width: '14px', height: '14px', verticalAlign: 'middle', marginRight: '4px' }} />Souls:</span>
+          <span><img src={skullSvg} alt="" style={{ width: '14px', height: '14px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)' }} />Souls:</span>
           <span style={{ fontWeight: 'bold', color: '#e74c3c' }}>{piece.souls}</span>
         </div>
       )}

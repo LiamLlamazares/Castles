@@ -18,7 +18,7 @@ import castleIcon from "../Assets/Images/misc/castle.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
 import flagIcon from "../Assets/Images/misc/flag.svg";
 
-const headerIconStyle: React.CSSProperties = { width: '24px', height: '24px', verticalAlign: 'middle', marginRight: '8px' };
+const headerIconStyle: React.CSSProperties = { width: '24px', height: '24px', verticalAlign: 'middle', marginRight: '8px', filter: 'invert(1)' };
 
 interface RulesModalProps {
   isOpen: boolean;
@@ -59,9 +59,9 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <p><strong>Objective:</strong> Capture your opponent's Monarch OR control all 6 castles.</p>
               <p><strong>Each Turn:</strong></p>
               <ol>
-                <li><img src={bootsImage} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px'}} /><strong>Movement</strong> – Move up to 2 pieces</li>
-                <li><img src={swordsIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px'}} /><strong>Attack</strong> – Attack with up to 2 pieces</li>
-                <li><img src={castleIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px'}} /><strong>Castles</strong> – Recruit from controlled castles</li>
+                <li><img src={bootsImage} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)'}} /><strong>Movement</strong> – Move up to 2 pieces</li>
+                <li><img src={swordsIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)'}} /><strong>Attack</strong> – Attack with up to 2 pieces</li>
+                <li><img src={castleIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)'}} /><strong>Castles</strong> – Recruit from controlled castles</li>
               </ol>
             </div>
           </section>
@@ -234,7 +234,7 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
               <p><small>(Note: Strength acts as both Attack Power and Max HP)</small></p>
             </div>
             
-            <h4><img src={shieldIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px'}} />Ranged Protection</h4>
+            <h4><img src={shieldIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)'}} />Ranged Protection</h4>
             <div className="rules-note">
               <p><strong>Defended Pieces:</strong> Any piece adjacent to a friendly unit is "Defended".</p>
               <p><strong>Benefit:</strong> Defended pieces CANNOT be targeted by Ranged (Archer) or Long-Ranged (Trebuchet/Ranger) attacks. They must be attacked in Melee.</p>
@@ -338,18 +338,18 @@ const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose }) => {
             <h2><img src={trophyIcon} alt="" style={headerIconStyle} />Victory Conditions</h2>
             <div className="victory-cards">
               <div className="victory-card">
-                <h4><img src={crownIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px'}} />Monarch Capture</h4>
+                <h4><img src={crownIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)'}} />Monarch Capture</h4>
                 <p>Capture all opponent Monarchs</p>
               </div>
               <div className="victory-card">
-                <h4><img src={castleIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px'}} />Castle Control</h4>
+                <h4><img src={castleIcon} alt="" style={{width: '18px', height: '18px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)'}} />Castle Control</h4>
                 <p>Control all 6 castles</p>
               </div>
             </div>
           </section>
 
           <div className="rules-footer">
-            <em>Good luck, commander! <img src={flagIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle'}} /></em>
+            <em>Good luck, commander! <img src={flagIcon} alt="" style={{width: '16px', height: '16px', verticalAlign: 'middle', filter: 'invert(1)'}} /></em>
           </div>
         </div>
       </div>

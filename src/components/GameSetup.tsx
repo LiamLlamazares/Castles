@@ -456,7 +456,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                                 onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2) rotate(180deg)'}
                                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) rotate(0deg)'}
                             >
-                                <img src={rotateIcon} alt="Reroll" style={{ width: '24px', height: '24px' }} />
+                                <img src={rotateIcon} alt="Reroll" style={{ width: '24px', height: '24px', filter: 'invert(1)' }} />
                             </button>
                         )}
                     </div>
@@ -538,7 +538,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                             cursor: 'pointer',
                             color: vpModeEnabled ? '#27ae60' : '#aaa'
                         }}>
-                            <img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '6px' }} />Victory Points Mode
+                            <img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)' }} />Victory Points Mode
                         </label>
                     </div>
                     {vpModeEnabled && (

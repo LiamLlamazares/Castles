@@ -18,8 +18,8 @@ interface QuickStartModalProps {
   onClose: () => void;
 }
 
-const iconStyle: React.CSSProperties = { width: '24px', height: '24px', verticalAlign: 'middle' };
-const smallIconStyle: React.CSSProperties = { width: '20px', height: '20px', verticalAlign: 'middle' };
+const iconStyle: React.CSSProperties = { width: '24px', height: '24px', verticalAlign: 'middle', filter: 'invert(1)' };
+const smallIconStyle: React.CSSProperties = { width: '20px', height: '20px', verticalAlign: 'middle', filter: 'invert(1)' };
 
 const QuickStartModal: React.FC<QuickStartModalProps> = ({ onClose }) => {
   return (

@@ -43,7 +43,7 @@ const VPBadge: React.FC<{ vp: number, player: Color }> = ({ vp, player }) => (
     fontWeight: 600,
     color: vp >= VP_VICTORY_THRESHOLD ? '#27ae60' : '#ffd700'
   }}>
-    <span><img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle' }} /></span>
+    <span><img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', filter: 'invert(1)' }} /></span>
     <span>{vp}/{VP_VICTORY_THRESHOLD} VP</span>
   </div>
 );

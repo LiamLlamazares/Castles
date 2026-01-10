@@ -11,6 +11,7 @@ import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from 
 // SVG imports for terrain icons
 import riverSvg from "../Assets/Images/Board/river.svg";
 import mountainSvg from "../Assets/Images/Board/mountain.svg";
+import castleSvg from "../Assets/Images/misc/castle.svg";
 
 interface HexGridProps {
   hexagons: Hex[];
@@ -217,30 +218,47 @@ const HexGrid = React.memo(({
                 const nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
                 const pieceSize = layout.size_image;
                 const iconSize = pieceSize * 0.35; 
-                const offsetX = pieceSize * 0.45;  // Middle Right
+                const leftOffsetX = -pieceSize * 0.45;  // Left side for piece
+                const rightOffsetX = pieceSize * 0.45;  // Right side for castle
                 const offsetY = 0; // Vertically centered
                 
                 return (
                   <g style={{ pointerEvents: 'none' }}>
-                    {/* Icon background - use contrasting color based on piece color */}
+                    {/* Piece icon on LEFT */}
                     <circle
-                      cx={center.x + offsetX}
+                      cx={center.x + leftOffsetX}
                       cy={center.y + offsetY}
                       r={iconSize * 0.55}
                       fill={castle.owner === 'w' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.85)'}
                       stroke={castle.owner === 'w' ? '#00fbff' : '#8000ff'}
                       strokeWidth={1.5}
                     />
-                    {/* Next piece icon */}
                     <image
                       href={getImageByPieceType(nextPieceType, castle.owner)}
-                      x={center.x + offsetX - iconSize/2}
+                      x={center.x + leftOffsetX - iconSize/2}
                       y={center.y + offsetY - iconSize/2}
                       width={iconSize}
                       height={iconSize}
                       opacity={0.90}
                     />
-                    {/* "Next" label - removed to reduce clutter */}
+                    {/* Castle icon on RIGHT */}
+                    <circle
+                      cx={center.x + rightOffsetX}
+                      cy={center.y + offsetY}
+                      r={iconSize * 0.55}
+                      fill={castle.owner === 'w' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.85)'}
+                      stroke={castle.owner === 'w' ? '#00fbff' : '#8000ff'}
+                      strokeWidth={1.5}
+                    />
+                    <image
+                      href={castleSvg}
+                      x={center.x + rightOffsetX - iconSize/2}
+                      y={center.y + offsetY - iconSize/2}
+                      width={iconSize}
+                      height={iconSize}
+                      style={{ filter: castle.owner === 'w' ? 'invert(1)' : 'none' }}
+                      opacity={0.90}
+                    />
                   </g>
                 );
               }
