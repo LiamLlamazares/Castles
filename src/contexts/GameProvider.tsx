@@ -26,37 +26,52 @@ import { useGameAnalysisController } from "../hooks/useGameAnalysisController";
 import { useGameInteraction } from "../hooks/useGameInteraction";
 
 // Contexts
-import { GameStateContext, GameDispatchContext, IGameState, IGameActions } from "./GameContext";
+import { 
+  GameStateContext, 
+  GameDispatchContext, 
+  IGameState, 
+  IGameActions,
+  GameConfig,
+  GameRules,
+  GameModeFlags 
+} from "./GameContext";
 
+/**
+ * GameProvider Props - uses bundled configuration interfaces.
+ */
 interface GameProviderProps {
   children: ReactNode;
-  
-  // Initial Configuration
-  initialBoard?: Board;
-  initialPieces?: Piece[];
-  initialTurnCounter?: number;
-  initialSanctuaries?: Sanctuary[];
-  isAnalysisMode?: boolean;
-  initialMoveTree?: MoveTree;
-  sanctuarySettings?: { unlockTurn: number, cooldown: number };
-  gameRules?: { vpModeEnabled: boolean };
-  isTutorialMode?: boolean;
-  initialPoolTypes?: SanctuaryType[];
+  /** Initial game configuration (board, pieces, sanctuaries) */
+  config?: GameConfig;
+  /** Game rule settings */
+  rules?: GameRules;
+  /** Mode flags */
+  mode?: GameModeFlags;
 }
 
 export const GameProvider: React.FC<GameProviderProps> = ({
   children,
-  initialBoard = startingBoard,
-  initialPieces = allPieces,
-  initialTurnCounter = 0,
-  initialSanctuaries,
-  isAnalysisMode = false,
-  initialMoveTree,
-  sanctuarySettings,
-  gameRules,
-  isTutorialMode = false,
-  initialPoolTypes
+  config,
+  rules,
+  mode,
 }) => {
+  // Extract config values with defaults
+  const initialBoard = config?.board ?? startingBoard;
+  const initialPieces = config?.pieces ?? allPieces;
+  const initialTurnCounter = config?.turnCounter ?? 0;
+  const initialSanctuaries = config?.sanctuaries;
+  const initialMoveTree = config?.moveTree;
+  const initialPoolTypes = config?.poolTypes;
+  
+  // Extract rules
+  const sanctuarySettings = rules?.sanctuarySettings;
+  const gameRules = rules?.vpModeEnabled !== undefined 
+    ? { vpModeEnabled: rules.vpModeEnabled } 
+    : undefined;
+  
+  // Extract mode flags
+  const isAnalysisMode = mode?.isAnalysisMode ?? false;
+  const isTutorialMode = mode?.isTutorialMode ?? false;
   
   // =========== CORE GAME STATE ===========
   const { state, setState, gameEngine, startingSanctuaries } = useCoreGame(

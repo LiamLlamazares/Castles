@@ -17,6 +17,40 @@ import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
 import { GameState, PositionSnapshot } from "../Classes/Core/GameState";
 
+// ============================================================================
+// CONFIGURATION INTERFACES
+// These bundle related props for cleaner GameProvider API
+// ============================================================================
+
+/**
+ * Initial game configuration - board state and pieces.
+ * Used when starting a new game or loading from PGN.
+ */
+export interface GameConfig {
+  board?: Board;
+  pieces?: Piece[];
+  sanctuaries?: Sanctuary[];
+  turnCounter?: number;
+  moveTree?: MoveTree;
+  poolTypes?: SanctuaryType[];
+}
+
+/**
+ * Game rule settings that remain constant during a game.
+ */
+export interface GameRules {
+  sanctuarySettings?: { unlockTurn: number; cooldown: number };
+  vpModeEnabled?: boolean;
+}
+
+/**
+ * Game mode flags controlling behavior.
+ */
+export interface GameModeFlags {
+  isAnalysisMode?: boolean;
+  isTutorialMode?: boolean;
+}
+
 export interface IGameState extends Omit<GameState, 'moveTree'> {
   // Computed State
   turnPhase: TurnPhase;

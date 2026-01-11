@@ -29,6 +29,7 @@ import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, PHASE_CYC
 import { Board } from "../Core/Board";
 import { ActionOrchestrator } from "../Systems/Mutators/ActionOrchestrator";
 import { isValidSpawnHex } from "../../utils/HexValidation";
+import { GameError, GameErrorCode, GameErrors } from "../Core/GameError";
 
 export class SanctuaryService {
   /**
@@ -114,15 +115,17 @@ export class SanctuaryService {
   public static pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex, board: Board): GameState {
     const sanctuary = gameState.sanctuaries.find(s => s.hex.equals(sanctuaryHex));
     if (!sanctuary || !this.canPledge(gameState, board, sanctuaryHex)) {
-      throw new Error("Invalid pledge action");
+      throw new GameError("Invalid pledge action", GameErrorCode.SANCTUARY_ERROR);
     }
 
     const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());
-    if (!occupant) throw new Error("Sanctuary empty during pledge"); // Should be caught by canPledge
+    if (!occupant) {
+      throw GameErrors.stateCorrupted("Sanctuary empty during pledge");
+    }
 
     // Validate Spawn Location using centralized helper
     if (!isValidSpawnHex(spawnHex, board, gameState.pieceMap)) {
-      throw new Error("Invalid spawn location");
+      throw GameErrors.invalidSpawn();
     }
 
     let newPieces = [...gameState.pieces];

@@ -679,16 +679,22 @@ const InnerGame: React.FC<GameBoardProps> = ({
 const GameBoard: React.FC<GameBoardProps> = (props) => {
   return (
     <GameProvider
-      initialBoard={props.initialBoard}
-      initialPieces={props.initialPieces}
-      initialTurnCounter={props.initialTurnCounter}
-      initialSanctuaries={props.initialSanctuaries}
-      isAnalysisMode={props.isAnalysisMode}
-      initialMoveTree={props.initialMoveTree}
-      sanctuarySettings={props.sanctuarySettings}
-      gameRules={props.gameRules}
-      isTutorialMode={props.isTutorialMode}
-      initialPoolTypes={props.initialPoolTypes}
+      config={{
+        board: props.initialBoard,
+        pieces: props.initialPieces,
+        turnCounter: props.initialTurnCounter,
+        sanctuaries: props.initialSanctuaries,
+        moveTree: props.initialMoveTree,
+        poolTypes: props.initialPoolTypes,
+      }}
+      rules={{
+        sanctuarySettings: props.sanctuarySettings,
+        vpModeEnabled: props.gameRules?.vpModeEnabled,
+      }}
+      mode={{
+        isAnalysisMode: props.isAnalysisMode,
+        isTutorialMode: props.isTutorialMode,
+      }}
     >
       <InnerGame {...props} />
     </GameProvider>

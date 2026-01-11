@@ -1,6 +1,6 @@
 /**
  * @file TestGameProvider.tsx
- * @description Test wrapper for GameProvider to support legacy hook tests.
+ * @description Test wrapper for GameProvider to support hook tests.
  */
 import React from 'react';
 import { render, renderHook } from '@testing-library/react';
@@ -16,19 +16,31 @@ export const useGameLogicShim = () => {
   return { ...state, ...actions };
 };
 
+// Test props interface for convenience
+interface TestGameProps {
+  isAnalysisMode?: boolean;
+  isTutorialMode?: boolean;
+  // Add more as needed for tests
+}
+
 // Wrapper component for tests
-export const TestGameWrapper = ({ children, props }: { children: React.ReactNode, props?: any }) => (
+export const TestGameWrapper = ({ children, props }: { children: React.ReactNode, props?: TestGameProps }) => (
   <GameProvider
-    initialBoard={startingBoard}
-    initialPieces={allPieces}
-    {...props}
+    config={{
+      board: startingBoard,
+      pieces: allPieces,
+    }}
+    mode={{
+      isAnalysisMode: props?.isAnalysisMode,
+      isTutorialMode: props?.isTutorialMode,
+    }}
   >
     {children}
   </GameProvider>
 );
 
 // Helper to render the shimmed hook within the provider
-export const renderGameLogicHook = (initialProps: any = {}) => {
+export const renderGameLogicHook = (initialProps: TestGameProps = {}) => {
   return renderHook(() => useGameLogicShim(), {
     wrapper: ({ children }) => <TestGameWrapper props={initialProps}>{children}</TestGameWrapper>
   });

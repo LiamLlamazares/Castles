@@ -121,7 +121,8 @@ export function useClickHandler({
             setPledgingSanctuary(null);
             return;
           } catch (e) {
-            console.warn("Pledge failed:", e);
+            // GameError provides structured error info for debugging
+            console.warn("Pledge failed:", e instanceof Error ? e.message : e);
           }
         }
         setPledgingSanctuary(null); // Cancel if clicking elsewhere
