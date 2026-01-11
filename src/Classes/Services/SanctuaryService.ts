@@ -238,6 +238,39 @@ export class SanctuaryService {
   }
 
   /**
+   * Attempts to unlock a sanctuary type in the pool based on a clicked piece.
+   * If the piece corresponds to a sanctuary type that is not yet in the pool or on the board,
+   * it adds it to the pool.
+   * 
+   * @returns The updated pool (or the original if no change)
+   */
+  public static tryUnlockSanctuary(
+    currentPool: SanctuaryType[],
+    pieceType: import("../../Constants").PieceType,
+    currentSanctuaries: Sanctuary[]
+  ): SanctuaryType[] {
+      // Find if this piece type corresponds to a sanctuary
+      const configEntry = Object.entries(SanctuaryConfig).find(
+          ([_, conf]: any) => conf.pieceType === pieceType
+      );
+      
+      if (configEntry) {
+          const sanctuaryType = configEntry[0] as SanctuaryType;
+          // Check if it is currently "locked" (not in pool and not on board)
+          const isOnBoard = currentSanctuaries.some(s => s.type === sanctuaryType);
+          const isInPool = currentPool.includes(sanctuaryType);
+          
+          if (!isInPool && !isOnBoard) {
+              // Unlock it!
+              console.log(`[SanctuaryService] Unlocked Sanctuary Type: ${sanctuaryType}`);
+              return [...currentPool, sanctuaryType];
+          }
+      }
+      
+      return currentPool;
+  }
+
+  /**
    * Gets all friendly pieces adjacent to a given hex.
    * Used for strength calculation during pledge validation.
    */

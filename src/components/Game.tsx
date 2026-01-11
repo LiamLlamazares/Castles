@@ -33,7 +33,6 @@ import { Piece } from "../Classes/Entities/Piece";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { Hex } from "../Classes/Entities/Hex";
-import { RuleEngine } from "../Classes/Systems/RuleEngine";
 import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import AbilityBar from "./AbilityBar";
@@ -184,6 +183,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
     getPGN,
     loadPGN,
     triggerAbility,
+    isHexDefended,
+    pieceMap,
     
     // AI Integration - controlled interface
     aiIntegration
@@ -541,11 +542,9 @@ const GameBoard: React.FC<GameBoardProps> = ({
       {tooltipPiece && (
         <PieceTooltip 
           piece={tooltipPiece} 
-          isDefended={RuleEngine.isHexDefended(
+          isDefended={isHexDefended(
             tooltipPiece.hex, 
-            tooltipPiece.color === 'w' ? 'b' : 'w', 
-            { pieces, pieceMap: createPieceMap(pieces) } as any, 
-            board
+            tooltipPiece.color === 'w' ? 'b' : 'w'
           )}
           isPreview={isSanctuaryPreview}
         />

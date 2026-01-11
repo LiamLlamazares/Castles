@@ -280,27 +280,8 @@ export const useGameLogic = (
     }
 
     setState(prev => {
-        // 1. Unlocking Logic: "Once a square e.g. ranger is clicked it makes it available in the upgrade pool"
-        let newPool = prev.sanctuaryPool;
-        
-        // Find if this piece type corresponds to a sanctuary
-        const configEntry = Object.entries(SanctuaryConfig).find(
-            ([_, conf]: any) => conf.pieceType === pieceClicked.type
-        );
-        
-        if (configEntry) {
-            const sanctuaryType = configEntry[0] as SanctuaryType;
-            // Check if it is currently "locked" (not in pool and not on board)
-            const isOnBoard = prev.sanctuaries.some(s => s.type === sanctuaryType);
-            const isInPool = prev.sanctuaryPool.includes(sanctuaryType);
-            
-            if (!isInPool && !isOnBoard) {
-                // Unlock it!
-                newPool = [...prev.sanctuaryPool, sanctuaryType];
-                // Note: We could add a visual notification here if we had a toast system
-                console.log(`Unlocked Sanctuary Type: ${sanctuaryType}`);
-            }
-        }
+        // 1. Unlocking Logic: Delegate to GameEngine
+        const newPool = gameEngine.tryUnlockSanctuary(prev as unknown as GameState, pieceClicked);
 
         // 2. Selection Logic
         let newMovingPiece = prev.movingPiece; // Default to current
@@ -361,6 +342,8 @@ export const useGameLogic = (
     castles,
     sanctuaries: state.sanctuaries || [],
     turnCounter,
+    // Expose optimized map to avoid re-creation in render loops
+    pieceMap: viewState.pieceMap,
     movingPiece,
     
     // Computed
@@ -398,6 +381,8 @@ export const useGameLogic = (
     // Helpers
     canPledge,
     triggerAbility,
+    // Helper to avoid UI logic depending on RuleEngine
+    isHexDefended: (hex: Hex, color: Color) => gameEngine.isHexDefended(hex, color, viewState),
     
     // AI Integration - controlled interface for AI opponent
     // Instead of exposing raw state/setState, provide a callback that handles AI state updates

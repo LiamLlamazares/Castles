@@ -86,6 +86,10 @@ export class GameEngine {
     return AbilitySystem.getAbilitiesForPiece(piece, gameState);
   }
 
+  public tryUnlockSanctuary(gameState: GameState, piece: Piece): import("../../Constants").SanctuaryType[] {
+    return SanctuaryService.tryUnlockSanctuary(gameState.sanctuaryPool, piece.type, gameState.sanctuaries);
+  }
+
 
   // ================= DELEGATED METHODS =================
 
@@ -133,6 +137,10 @@ export class GameEngine {
 
   public getDefendedHexes(gameState: GameState, currentPlayer: Color): Hex[] {
     return RuleEngine.getDefendedHexes(gameState, currentPlayer, this.board);
+  }
+
+  public isHexDefended(hex: Hex, attackerColor: Color, gameState: GameState): boolean {
+    return RuleEngine.isHexDefended(hex, attackerColor, gameState, this.board);
   }
 
   // ================= LEGAL ACTIONS (Delegated to RuleEngine) =================
