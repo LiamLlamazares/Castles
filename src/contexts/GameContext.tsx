@@ -12,10 +12,10 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { Hex } from "../Classes/Entities/Hex";
 import { Board } from "../Classes/Core/Board";
 import { MoveTree } from "../Classes/Core/MoveTree";
-import { HistoryEntry, MoveRecord, TurnPhase, Color, SanctuaryType } from "../Constants";
+import { MoveRecord, TurnPhase, Color, SanctuaryType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState } from "../Classes/Core/GameState";
+import { GameState, HistoryEntry } from "../Classes/Core/GameState";
 
 export interface IGameState extends Omit<GameState, 'moveTree'> {
   // Computed State

@@ -175,11 +175,3 @@ export interface MoveRecord {
   color: Color;
   phase: TurnPhase;
 }
-
-export interface HistoryEntry {
-  pieces: import('./Classes/Entities/Piece').Piece[];
-  castles: import('./Classes/Entities/Castle').Castle[];
-  sanctuaries: import('./Classes/Entities/Sanctuary').Sanctuary[];
-  turnCounter: number;
-  moveNotation: MoveRecord[]; // List of all moves made so far
-}

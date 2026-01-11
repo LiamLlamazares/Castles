@@ -3,7 +3,7 @@
  * @description Manages the view state projection (Live vs History) and analysis controls.
  */
 import { useMemo, useCallback } from "react";
-import { GameState } from "../Classes/Core/GameState";
+import { GameState, PositionSnapshot } from "../Classes/Core/GameState";
 import { GameBoardState } from "./useCoreGame";
 import { createPieceMap } from "../utils/PieceMap";
 import { Castle } from "../Classes/Entities/Castle";
@@ -18,7 +18,7 @@ interface UseGameAnalysisControllerProps {
   startingSanctuaries: Sanctuary[];
   initialTurnCounter: number;
   isViewingHistory: boolean;
-  analysisState: any; // Using any for now to match useAnalysisMode return type signature, should be typed properly
+  analysisState: PositionSnapshot | null;
 }
 
 export const useGameAnalysisController = ({
@@ -40,12 +40,14 @@ export const useGameAnalysisController = ({
   const getEffectiveState = useCallback((): GameState => {
     if (isViewingHistory && analysisState) {
       return {
-        ...(state as unknown as GameState),
         pieces: analysisState.pieces.map((p: Piece) => p.clone()),
-        pieceMap: createPieceMap(analysisState.pieces.map((p: Piece) => p.clone())),
-        castles: analysisState.castles.map((c: Castle) => c.clone()) as Castle[],
+        pieceMap: analysisState.pieceMap,
+        castles: analysisState.castles.map((c: Castle) => c.clone()),
         sanctuaries: analysisState.sanctuaries.map((s: Sanctuary) => s.clone()),
+        sanctuaryPool: [...analysisState.sanctuaryPool],
         turnCounter: analysisState.turnCounter,
+        graveyard: analysisState.graveyard.map((p: Piece) => p.clone()),
+        phoenixRecords: [...analysisState.phoenixRecords],
         movingPiece: null,
         moveTree: state.moveTree,
         viewNodeId: state.viewNodeId
@@ -75,15 +77,15 @@ export const useGameAnalysisController = ({
       if (isViewingHistory && analysisState) {
           return {
               pieces: analysisState.pieces,
-              pieceMap: createPieceMap(analysisState.pieces),
+              pieceMap: analysisState.pieceMap,
               castles: analysisState.castles,
-              sanctuaries: analysisState.sanctuaries || state.sanctuaries,
-              sanctuaryPool: state.sanctuaryPool,
+              sanctuaries: analysisState.sanctuaries,
+              sanctuaryPool: analysisState.sanctuaryPool,
               turnCounter: analysisState.turnCounter,
+              graveyard: analysisState.graveyard,
+              phoenixRecords: analysisState.phoenixRecords,
               movingPiece: null,
               moveTree: state.moveTree,
-              graveyard: [],
-              phoenixRecords: [],
               viewNodeId: state.viewNodeId
           };
       }

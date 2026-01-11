@@ -12,9 +12,9 @@ import { Piece } from "../Classes/Entities/Piece";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
-import { HistoryEntry, MoveRecord, Color, SanctuaryType } from "../Constants";
+import { MoveRecord, Color, SanctuaryType } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
-import { GameState } from "../Classes/Core/GameState";
+import { GameState, HistoryEntry } from "../Classes/Core/GameState";
 
 // Hooks
 import { useCoreGame } from "../hooks/useCoreGame";

@@ -15,7 +15,7 @@
  * @see MoveTree.getViewNode - Gets node by ID
  */
 import { useCallback } from "react";
-import { HistoryEntry } from "../Constants";
+import { PositionSnapshot } from "../Classes/Core/GameState";
 import { MoveTree } from "../Classes/Core/MoveTree";
 
 export interface AnalysisModeState {
@@ -30,7 +30,7 @@ export interface AnalysisModeActions {
 
 export interface AnalysisModeResult extends AnalysisModeActions {
   isAnalysisMode: boolean;
-  analysisState: HistoryEntry | null;
+  analysisState: PositionSnapshot | null;
   isViewingHistory: boolean;
 }
 

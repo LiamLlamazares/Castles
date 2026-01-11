@@ -12,14 +12,14 @@
  */
 import { useCallback, useMemo } from "react";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState, PhoenixRecord } from "../Classes/Core/GameState";
+import { GameState, PhoenixRecord, HistoryEntry } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Hex } from "../Classes/Entities/Hex";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { NotationService } from "../Classes/Systems/NotationService";
 import { createHistorySnapshot } from "../utils/GameStateUtils";
-import { TurnPhase, Color, HistoryEntry, MoveRecord, AbilityType } from "../Constants";
+import { TurnPhase, Color, MoveRecord, AbilityType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { useInputController } from "./useInputController";
 

@@ -18,7 +18,7 @@ import { Castle } from "../Entities/Castle";
 import { Color } from "../../Constants";
 import { Hex } from "../Entities/Hex";
 import { GameEngine } from "../Core/GameEngine";
-import { GameState } from "../Core/GameState";
+import { GameState, PositionSnapshot } from "../Core/GameState";
 import { MoveTree, MoveNode } from "../Core/MoveTree";
 import { PGNParser } from "../Systems/PGNParser";
 import { createPieceMap } from "../../utils/PieceMap";
@@ -345,12 +345,15 @@ export class PGNImporter {
 
                // 1. Capture snapshot for this child
                // We need a snapshot of the state AFTER the move
-               const snapshot = {
+               const snapshot: PositionSnapshot = {
                    pieces: nextState.pieces.map(p => p.clone()),
+                   pieceMap: createPieceMap(nextState.pieces),
                    castles: nextState.castles.map(c => c.clone()),
                    sanctuaries: nextState.sanctuaries.map(s => s.clone()),
                    turnCounter: nextState.turnCounter,
-                   moveNotation: [] as any[] // Will be derived from tree on access
+                   sanctuaryPool: [...nextState.sanctuaryPool],
+                   graveyard: nextState.graveyard.map(p => p.clone()),
+                   phoenixRecords: [...nextState.phoenixRecords],
                };
                
                // 2. Update child node with HYDRATED data
@@ -419,10 +422,13 @@ export class PGNImporter {
       // Set Root Snapshot (Initial State)
       moveTree.rootNode.snapshot = {
           pieces: initialState.pieces.map(p => p.clone()),
+          pieceMap: initialState.pieceMap,
           castles: initialState.castles.map(c => c.clone()),
           sanctuaries: initialState.sanctuaries.map(s => s.clone()),
           turnCounter: initialState.turnCounter,
-          moveNotation: []
+          sanctuaryPool: [...initialState.sanctuaryPool],
+          graveyard: [],
+          phoenixRecords: []
       };
 
       // Recursive Hydration
@@ -442,11 +448,14 @@ export class PGNImporter {
          
          return {
              ...initialState,
-             pieces: snap.pieces.map(p => p.clone()),
-             castles: snap.castles.map(c => c.clone()),
-             sanctuaries: snap.sanctuaries.map(s => s.clone()),
+             pieces: snap.pieces.map((p: Piece) => p.clone()),
+             castles: snap.castles.map((c: Castle) => c.clone()),
+             sanctuaries: snap.sanctuaries.map((s: Sanctuary) => s.clone()),
              turnCounter: snap.turnCounter,
              pieceMap: createPieceMap(snap.pieces),
+             sanctuaryPool: [...snap.sanctuaryPool],
+             graveyard: snap.graveyard.map((p: Piece) => p.clone()),
+             phoenixRecords: [...snap.phoenixRecords],
              moveTree: moveTree
          };
       }

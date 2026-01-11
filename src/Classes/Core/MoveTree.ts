@@ -1,4 +1,5 @@
-import { MoveRecord, HistoryEntry } from "../../Constants";
+import { MoveRecord } from "../../Constants";
+import { PositionSnapshot } from "./GameState";
 
 
 export interface MoveNode {
@@ -9,7 +10,7 @@ export interface MoveNode {
     selectedChildIndex: number; // For "main line" navigation
     
     // For stable re-navigation / state reconstruction
-    snapshot?: HistoryEntry; 
+    snapshot?: PositionSnapshot; 
     
     // Annotations or comments could go here
     comment?: string;
@@ -27,7 +28,7 @@ export class MoveTree {
     private _root: MoveNode;
     private _currentNode: MoveNode;
 
-    private createNode(move: MoveRecord, parent: MoveNode | null, snapshot?: HistoryEntry): MoveNode {
+    private createNode(move: MoveRecord, parent: MoveNode | null, snapshot?: PositionSnapshot): MoveNode {
         return {
             id: Math.random().toString(36).substr(2, 9),
             move,
@@ -61,7 +62,7 @@ export class MoveTree {
      * If the move already exists as a child (same notation), navigates to it.
      * If other children exist but not this one, adds it as a new variation.
      */
-    public addMove(move: MoveRecord, snapshot?: HistoryEntry): void {
+    public addMove(move: MoveRecord, snapshot?: PositionSnapshot): void {
         const existingChildIndex = this._currentNode.children.findIndex(
             child => child.move.notation === move.notation
         );
@@ -237,7 +238,7 @@ export class MoveTree {
      * const snapshot = moveTree.getViewState(viewNodeId);
      * if (snapshot) displayBoard(snapshot.pieces);
      */
-    public getViewState(viewNodeId: string | null): HistoryEntry | null {
+    public getViewState(viewNodeId: string | null): PositionSnapshot | null {
         if (viewNodeId === null) {
             // Live position - return current node's snapshot
             return this._currentNode.snapshot || null;

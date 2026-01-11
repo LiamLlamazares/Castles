@@ -18,10 +18,10 @@ import { PGNGenerator } from "./PGNGenerator";
 import { PGNImporter } from "./PGNImporter";
 import { Board } from "../Core/Board";
 import { Piece } from "../Entities/Piece";
-import { MoveRecord, HistoryEntry, TurnPhase, GameResult } from "../../Constants";
+import { MoveRecord, TurnPhase, GameResult } from "../../Constants";
 import { MoveTree } from "../Core/MoveTree";
 import { Sanctuary } from "../Entities/Sanctuary";
-import { GameState } from "../Core/GameState";
+import { GameState, HistoryEntry } from "../Core/GameState";
 import { GameSetup, GameSettings } from "./PGNTypes";
 
 // Re-export types

@@ -11,12 +11,12 @@
  */
 import { useState, useMemo } from "react";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState } from "../Classes/Core/GameState";
+import { GameState, HistoryEntry } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveTree } from "../Classes/Core/MoveTree";
-import { HistoryEntry, MoveRecord, SanctuaryType, SanctuaryConfig } from "../Constants";
+import { MoveRecord, SanctuaryType, SanctuaryConfig } from "../Constants";
 import { createPieceMap } from "../utils/PieceMap";
 import { startingBoard, allPieces } from "../ConstantImports";
 import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
@@ -60,12 +60,21 @@ export const useCoreGame = (
     
     // CRITICAL: Set root snapshot with starting pieces
     // This ensures PGN export uses correct initial pieces, not current pieces
+    const initialPool = (initialPoolTypes || Object.values(SanctuaryType)).filter((t): t is SanctuaryType => {
+      if (startingSanctuaries.some(s => s.type === t)) return false;
+      if (initialPoolTypes) return true;
+      return SanctuaryConfig[t].startAvailable === true;
+    });
+
     tree.rootNode.snapshot = {
       pieces: initialPieces.map(p => p.clone()),
+      pieceMap: createPieceMap(initialPieces),
       castles: initialBoard.castles.map(c => c.clone()),
       sanctuaries: startingSanctuaries.map(s => s.clone()),
       turnCounter: 0,
-      moveNotation: []
+      sanctuaryPool: initialPool,
+      graveyard: [],
+      phoenixRecords: []
     };
     
     return tree;
