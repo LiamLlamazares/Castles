@@ -221,6 +221,9 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     moveTree: state.moveTree,
     moveHistory,
     history: state.history,
+    sanctuaryPool: state.sanctuaryPool,
+    graveyard: state.graveyard,
+    phoenixRecords: state.phoenixRecords,
     hasGameStarted,
     isAnalysisMode,
     isViewingHistory,
@@ -235,8 +238,9 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   }), [
     pieces, castles, state.sanctuaries, turnCounter, viewState.pieceMap, movingPiece,
     turnPhase, currentPlayer, hexagons, legalMoveSet, legalAttackSet, victoryMessage, winner,
-    isRecruitmentSpot, gameEngine, state.moveTree, moveHistory, state.history, hasGameStarted,
-    isAnalysisMode, isViewingHistory, state.viewNodeId, state, setState
+    isRecruitmentSpot, gameEngine, state.moveTree, moveHistory, state.history,
+    state.sanctuaryPool, state.graveyard, state.phoenixRecords,
+    hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state, setState
   ]);
 
   const gameActionsValue: IGameActions = useMemo(() => ({

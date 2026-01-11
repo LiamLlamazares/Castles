@@ -48,7 +48,8 @@ export const useGameAnalysisController = ({
         turnCounter: analysisState.turnCounter,
         movingPiece: null,
         moveHistory: analysisState.moveNotation,
-        moveTree: state.moveTree
+        moveTree: state.moveTree,
+        viewNodeId: state.viewNodeId
       } as unknown as GameState;
     }
     // If viewing history but at root node (no snapshot), return initial state
@@ -65,7 +66,8 @@ export const useGameAnalysisController = ({
         moveHistory: [],
         moveTree: state.moveTree,
         graveyard: [],
-        phoenixRecords: []
+        phoenixRecords: [],
+        viewNodeId: null,
       } as unknown as GameState;
     }
     return state as unknown as GameState;
@@ -86,7 +88,8 @@ export const useGameAnalysisController = ({
               moveHistory: analysisState.moveNotation,
               moveTree: state.moveTree,
               graveyard: [],
-              phoenixRecords: []
+              phoenixRecords: [],
+              viewNodeId: state.viewNodeId
           };
       }
       // At root node (start of game)
@@ -103,7 +106,8 @@ export const useGameAnalysisController = ({
               moveHistory: [],
               moveTree: state.moveTree,
               graveyard: [],
-              phoenixRecords: []
+              phoenixRecords: [],
+              viewNodeId: state.viewNodeId
           };
       }
       return state as unknown as GameState;

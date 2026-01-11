@@ -416,7 +416,8 @@ export class PGNImporter {
           history: [],
           moveHistory: [],
           graveyard: [],
-          phoenixRecords: []
+          phoenixRecords: [],
+          viewNodeId: null
       };
 
       // Set Root Snapshot (Initial State)

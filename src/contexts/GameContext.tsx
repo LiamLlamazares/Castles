@@ -17,15 +17,7 @@ import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
 import { GameState } from "../Classes/Core/GameState";
 
-export interface IGameState {
-  // Core State
-  pieces: Piece[];
-  castles: Castle[];
-  sanctuaries: Sanctuary[];
-  turnCounter: number;
-  pieceMap: PieceMap;
-  movingPiece: Piece | null;
-  
+export interface IGameState extends Omit<GameState, 'moveTree'> {
   // Computed State
   turnPhase: TurnPhase;
   currentPlayer: Color;
@@ -36,15 +28,13 @@ export interface IGameState {
   winner: Color | null;
   isRecruitmentSpot: (hex: Hex) => boolean;
   board: Board;
-  moveTree: MoveTree | undefined;
-  moveHistory: MoveRecord[];
-  history: HistoryEntry[];
+  moveTree: MoveTree | undefined; // Override to allow undefined explicitly
   hasGameStarted: boolean;
 
   // Analysis State
   isAnalysisMode: boolean;
   isViewingHistory: boolean;
-  viewNodeId: string | null;
+  // viewNodeId is inherited from GameState
   
   // AI Integration (Optional to expose here, but useful for components that might need it)
   aiIntegration?: {

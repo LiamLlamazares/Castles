@@ -25,6 +25,7 @@ function createMinimalState(pieces: Piece[]): GameState {
     moveTree: new MoveTree(),
     graveyard: [],
     phoenixRecords: [],
+    viewNodeId: null,
   };
 }
 

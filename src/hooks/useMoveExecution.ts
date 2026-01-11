@@ -35,24 +35,11 @@ import {
   AbilityCommand,
 } from "../Classes/Commands";
 
-export interface MoveExecutionState {
-  pieces: Piece[];
-  castles: Castle[];
-  turnCounter: number;
-  movingPiece: Piece | null;
-  moveTree: MoveTree;
-  viewNodeId: string | null;
-  history: HistoryEntry[];
-  moveHistory: MoveRecord[];
-  sanctuaries: import("../Classes/Entities/Sanctuary").Sanctuary[];
-  pieceMap: PieceMap;
-  graveyard: Piece[];
-  phoenixRecords: PhoenixRecord[];
-}
+// MoveExecutionState removed in favor of strict GameState usage
 
 export interface MoveExecutionProps {
   gameEngine: GameEngine;
-  state: MoveExecutionState;
+  state: GameState;
   setState: React.Dispatch<React.SetStateAction<any>>;
   isAnalysisMode: boolean;
   isViewingHistory: boolean;
@@ -140,7 +127,7 @@ export const useMoveExecution = ({
       const result = command.execute(stateWithHistory);
 
       if (result.success) {
-        setState((prev: MoveExecutionState) => ({
+        setState((prev: GameState) => ({
           ...prev,
           ...result.newState,
           viewNodeId: null,
@@ -182,7 +169,7 @@ export const useMoveExecution = ({
     (hex: Hex) => {
       // 1. Guard: Read-Only History Viewing
       if (!isAnalysisMode && isViewingHistory) {
-        setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
+        setState((prev: GameState) => ({ ...prev, movingPiece: null }));
         return;
       }
 
@@ -197,7 +184,7 @@ export const useMoveExecution = ({
 
       // 4. Cleanup: If no action was performed, deselect the piece
       if (!actionTaken) {
-        setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
+        setState((prev: GameState) => ({ ...prev, movingPiece: null }));
       }
     },
     [

@@ -36,6 +36,7 @@ export interface GameState {
   moveTree: MoveTree; // Mandatory for history and variation tracking
   graveyard: Piece[]; // Captured pieces eligible for revival
   phoenixRecords: PhoenixRecord[]; // Active rebirth timers
+  viewNodeId: string | null; // Node ID for history navigation (null = live)
   victoryPoints?: { w: number, b: number }; // VP for castle control (optional, for VP mode)
   gameRules?: { vpModeEnabled: boolean }; // Active rules
 }

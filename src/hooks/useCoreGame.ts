@@ -23,8 +23,8 @@ import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
 import { AnalysisModeState } from "./useAnalysisMode";
 
 // GameBoardState combines GameState and Analysis state
-export interface GameBoardState extends Omit<GameState, 'moveHistory'>, Omit<AnalysisModeState, 'moveTree'> {
-  moveHistory: MoveRecord[];
+export interface GameBoardState extends GameState, Omit<AnalysisModeState, 'moveTree'> {
+  // Overrides if necessary, or just composition
 }
 
 export const useCoreGame = (
