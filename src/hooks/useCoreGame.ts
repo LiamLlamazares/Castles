@@ -16,7 +16,7 @@ import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveTree } from "../Classes/Core/MoveTree";
-import { HistoryEntry, MoveRecord } from "../Constants";
+import { HistoryEntry, MoveRecord, SanctuaryType, SanctuaryConfig } from "../Constants";
 import { createPieceMap } from "../utils/PieceMap";
 import { startingBoard, allPieces } from "../ConstantImports";
 import { SanctuaryGenerator } from "../Classes/Systems/SanctuaryGenerator";
@@ -89,7 +89,7 @@ export const useCoreGame = (
     castles: initialBoard.castles as Castle[], 
     sanctuaries: startingSanctuaries,
     // Initialize sanctuary pool
-    sanctuaryPool: (initialPoolTypes || Object.values(require("../Constants").SanctuaryType)).filter((t): t is import("../Constants").SanctuaryType => {
+    sanctuaryPool: (initialPoolTypes || Object.values(SanctuaryType)).filter((t): t is SanctuaryType => {
       // 1. Exclude types already on board
       if (startingSanctuaries.some(s => s.type === t)) return false;
       
@@ -97,7 +97,7 @@ export const useCoreGame = (
       if (initialPoolTypes) return true;
 
       // 3. Otherwise use defaults from config
-      const config = require("../Constants").SanctuaryConfig[t];
+      const config = SanctuaryConfig[t];
       return config.startAvailable === true; // Default to blocked if undefined, though we set defaults
     }),
     sanctuarySettings, // Include configurable sanctuary settings

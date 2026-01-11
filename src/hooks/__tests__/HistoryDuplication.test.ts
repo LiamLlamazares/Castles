@@ -3,7 +3,7 @@ import { renderGameLogicHook } from "../test-utils/TestGameProviderUtils";
 
 import { Hex } from "../../Classes/Entities/Hex";
 
-describe("useGameLogic History Duplication", () => {
+describe("Game Integration: History Duplication", () => {
     it("should NOT duplicate moves in history when making a regular move", () => {
         const { result } = renderGameLogicHook();
         

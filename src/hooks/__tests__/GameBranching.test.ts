@@ -9,7 +9,7 @@ import { Piece } from "../../Classes/Entities/Piece";
 // Mock board setup or use real one? Real one is fine but maybe slow or unpredictable if random?
 // startingBoard is imported.
 
-describe("useGameLogic Variants (Interactive Branching)", () => {
+describe("Game Integration: Interactive Branching", () => {
     it("should allow making a new move after stepping back in history", () => {
         // 1. Setup - Enable analysis mode via props
         const { result } = renderGameLogicHook({ isAnalysisMode: true });

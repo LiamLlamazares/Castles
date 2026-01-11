@@ -197,8 +197,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const hasGameStarted = turnCounter > 0;
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
-      // Use explicit cast if generic state has incompatible details, though it matches interface structure
-      return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex); 
+      return gameEngine.canPledge(state, sanctuaryHex); 
   }, [gameEngine, state]);
 
   // =========== CONTEXT VALUES ===========
@@ -229,8 +228,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     aiIntegration: {
       gameEngine,
       board: gameEngine.board,
-      getState: () => state as unknown as GameState,
-      applyAIState: (newState: GameState) => setState(newState as any),
+      getState: () => state,
+      applyAIState: (newState: GameState) => setState(prev => ({ ...prev, ...newState })),
       isViewingHistory,
     }
   }), [

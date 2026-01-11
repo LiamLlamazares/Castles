@@ -3,7 +3,7 @@ import { renderGameLogicHook } from "../test-utils/TestGameProviderUtils";
 
 import { Hex } from "../../Classes/Entities/Hex";
 
-describe("useGameLogic Nested Variations Integration", () => {
+describe("Game Integration: Nested Variations", () => {
     it("should correctly create nested variations when navigating back in history", () => {
         // Enable analysis mode for variant creation via props
         const { result } = renderGameLogicHook({ isAnalysisMode: true });
