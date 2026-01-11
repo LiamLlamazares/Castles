@@ -79,7 +79,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
     },
     onEngineHexClick,
     board,
-    gameState: useGameState() as unknown as import("../../Classes/Core/GameState").GameState // Context state is compatible enough for Policy needs
+    gameState: useGameState() // Context state aligns with GameState interface
   });
 
   // Notify parent of active ability changes if needed (for AbilityBar)
@@ -87,22 +87,22 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
     onActiveAbilityChange?.(activeAbility);
   }, [activeAbility, onActiveAbilityChange]);
 
-  const handleBoardClick = (hex: Hex) => {
+  const handleBoardClick = React.useCallback((hex: Hex) => {
     tooltip.clearAll();
     onEngineBoardClick(hex);
-  };
+  }, [tooltip, onEngineBoardClick]);
 
   const handleHexHover = React.useCallback((hex: Hex | null, event?: React.MouseEvent) => {
     tooltip.setHovered(hex, event);
   }, [tooltip]);
 
-  const handlePieceClickWrapper = (piece: Piece) => {
+  const handlePieceClickWrapper = React.useCallback((piece: Piece) => {
     if (activeAbility) {
         handleBoardClick(piece.hex);
     } else {
         handlePieceClick(piece);
     }
-  };
+  }, [activeAbility, handleBoardClick, handlePieceClick]);
 
   const viewBox = useMemo(() => {
     return layout.calculateViewBox();

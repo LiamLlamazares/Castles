@@ -62,7 +62,7 @@ export interface IGameState extends Omit<GameState, 'moveTree'> {
   winner: Color | null;
   isRecruitmentSpot: (hex: Hex) => boolean;
   board: Board;
-  moveTree: MoveTree | undefined; // Override to allow undefined explicitly
+  moveTree: MoveTree; // Strict typing: MoveTree must always be present
   moveHistory: MoveRecord[]; // Derived list for UI display
   history: PositionSnapshot[]; // Snapshots array for history
   hasGameStarted: boolean;
