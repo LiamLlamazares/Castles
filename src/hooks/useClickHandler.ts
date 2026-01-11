@@ -17,6 +17,8 @@ import { Piece } from "../Classes/Entities/Piece";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { AbilityType } from "../Constants";
 import { isValidAbilityTarget } from "../Classes/Config/AbilityConfig";
+import { isValidAdjacentSpawn } from "../utils/HexValidation";
+import { createPieceMap } from "../utils/PieceMap";
 
 interface UseClickHandlerProps {
   /** Currently selected piece (from game engine) */
@@ -108,17 +110,11 @@ export function useClickHandler({
         }
 
         // Attempt pledge if valid spawn hex
-        // Re-use logic from SanctuaryService/AIContextBuilder implicitly
-        const isSpawnHexEmpty = !pieces.some((p) => p.hex.equals(hex));
-        const isRiver = board.isRiver(hex);
-        const isCastle = board.isCastle(hex, board.NSquares);
-        
+        // Uses centralized validation from HexValidation.ts
+        const pieceMap = createPieceMap(pieces);
         if (
           canPledge(pledgingSanctuary) &&
-          hex.distance(pledgingSanctuary) === 1 &&
-          isSpawnHexEmpty &&
-          !isRiver &&
-          !isCastle
+          isValidAdjacentSpawn(hex, pledgingSanctuary, board, pieceMap)
         ) {
           try {
             pledge(pledgingSanctuary, hex);
@@ -171,13 +167,9 @@ export function useClickHandler({
       const isNeighbor = hex.distance(pledgingSanctuary) === 1;
       if (!isNeighbor) return false;
 
-      // Validate topology
-      if (board.isRiver(hex)) return false;
-      if (board.isCastle(hex, board.NSquares)) return false;
-      
-      // Validate occupancy
-      // Note: We use the pieces array passed in props which should be current
-      if (pieces.some(p => p.hex.equals(hex))) return false;
+      // Use centralized validation
+      const pieceMap = createPieceMap(pieces);
+      if (!isValidAdjacentSpawn(hex, pledgingSanctuary, board, pieceMap)) return false;
 
       return true;
     },

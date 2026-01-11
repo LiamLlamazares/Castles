@@ -28,6 +28,7 @@ import { NotationService } from "../Systems/NotationService";
 import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, PHASE_CYCLE_LENGTH, PHASES_PER_TURN, PLAYER_CYCLE_LENGTH } from "../../Constants";
 import { Board } from "../Core/Board";
 import { ActionOrchestrator } from "../Systems/Mutators/ActionOrchestrator";
+import { isValidSpawnHex } from "../../utils/HexValidation";
 
 export class SanctuaryService {
   /**
@@ -88,12 +89,10 @@ export class SanctuaryService {
     }
 
     // 5. Valid Spawn Location Check
-    // Must have at least one valid spawn hex (Empty + Not River + Not Castle)
+    // Must have at least one valid spawn hex (uses centralized validation)
     const adjacentHexes = sanctuaryHex.cubeRing(1);
     const hasValidNeighbor = adjacentHexes.some(hex => 
-        !gameState.pieceMap.has(hex) && 
-        !board.isRiver(hex) && 
-        !board.isCastle(hex, board.NSquares)
+        isValidSpawnHex(hex, board, gameState.pieceMap)
     );
     
     if (!hasValidNeighbor) {
@@ -121,10 +120,10 @@ export class SanctuaryService {
     const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());
     if (!occupant) throw new Error("Sanctuary empty during pledge"); // Should be caught by canPledge
 
-    // Validate Spawn Location specific to this pledge action
-    if (gameState.pieceMap.has(spawnHex)) throw new Error("Invalid spawn location: Occupied");
-    if (board.isRiver(spawnHex)) throw new Error("Invalid spawn location: River");
-    if (board.isCastle(spawnHex, board.NSquares)) throw new Error("Invalid spawn location: Castle");
+    // Validate Spawn Location using centralized helper
+    if (!isValidSpawnHex(spawnHex, board, gameState.pieceMap)) {
+      throw new Error("Invalid spawn location");
+    }
 
     let newPieces = [...gameState.pieces];
 
