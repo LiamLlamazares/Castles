@@ -79,6 +79,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
     },
     onEngineHexClick,
     board,
+    gameState: useGameState() as unknown as import("../../Classes/Core/GameState").GameState // Context state is compatible enough for Policy needs
   });
 
   // Notify parent of active ability changes if needed (for AbilityBar)

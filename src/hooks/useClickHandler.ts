@@ -11,13 +11,12 @@
  * @see Game.tsx - Uses this hook for click handling
  * @see useGameLogic - Provides underlying game state and actions
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Hex } from "../Classes/Entities/Hex";
 import { Piece } from "../Classes/Entities/Piece";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { AbilityType } from "../Constants";
-import { isValidAbilityTarget } from "../Classes/Config/AbilityConfig";
-import { isValidAdjacentSpawn } from "../utils/HexValidation";
+import { InteractionPolicy } from "../Classes/Systems/InteractionPolicy";
 import { createPieceMap } from "../utils/PieceMap";
 
 interface UseClickHandlerProps {
@@ -34,10 +33,11 @@ interface UseClickHandlerProps {
   /** Execute an ability (Wizard/Necromancer) */
   triggerAbility: (sourceHex: Hex, targetHex: Hex, ability: AbilityType) => void;
   /** Normal hex click handler from game engine */
-  /** Normal hex click handler from game engine */
   onEngineHexClick: (hex: Hex) => void;
   /** Board instance for terrain checks */
   board: import("../Classes/Core/Board").Board;
+  /** Full Game State access for Policy Context */
+  gameState: import("../Classes/Core/GameState").GameState;
 }
 
 interface UseClickHandlerResult {
@@ -65,18 +65,26 @@ export function useClickHandler({
   movingPiece,
   sanctuaries,
   pieces,
-  canPledge,
+  canPledge, // Kept for API compatibility, but logic delegated to Policy if needed
   pledge,
   triggerAbility,
   onEngineHexClick,
   board,
+  gameState
 }: UseClickHandlerProps): UseClickHandlerResult {
   const [activeAbility, setActiveAbility] = useState<AbilityType | null>(null);
   const [pledgingSanctuary, setPledgingSanctuary] = useState<Hex | null>(null);
 
-  // Reset active ability when moving piece changes
+  // Policy Context
+  const interactionCtx = useMemo(() => ({
+    board,
+    gameState
+  }), [board, gameState]);
+
+  // Reset active ability/pledge when moving piece changes
   useEffect(() => {
     setActiveAbility(null);
+    setPledgingSanctuary(null);
   }, [movingPiece]);
 
   /**
@@ -86,12 +94,7 @@ export function useClickHandler({
     (hex: Hex) => {
       // 1. Ability Targeting Mode
       if (activeAbility && movingPiece) {
-        const distance = movingPiece.hex.distance(hex);
-        
-        // Use centralized config for range validation (no magic numbers)
-        const valid = isValidAbilityTarget(activeAbility, distance);
-
-        if (valid) {
+        if (InteractionPolicy.isValidAbilityTarget(movingPiece.hex, hex, activeAbility)) {
           triggerAbility(movingPiece.hex, hex, activeAbility);
           setActiveAbility(null);
         } else {
@@ -110,23 +113,19 @@ export function useClickHandler({
         }
 
         // Attempt pledge if valid spawn hex
-        // Uses centralized validation from HexValidation.ts
-        const pieceMap = createPieceMap(pieces);
-        if (
-          canPledge(pledgingSanctuary) &&
-          isValidAdjacentSpawn(hex, pledgingSanctuary, board, pieceMap)
-        ) {
+        if (InteractionPolicy.isValidPledgeSpawn(interactionCtx, pledgingSanctuary, hex)) {
           try {
             pledge(pledgingSanctuary, hex);
             setPledgingSanctuary(null);
             return;
           } catch (e) {
-            // GameError provides structured error info for debugging
             console.warn("Pledge failed:", e instanceof Error ? e.message : e);
           }
         }
+        
         setPledgingSanctuary(null); // Cancel if clicking elsewhere
-        // Fall through to normal handling
+        // Fall through to normal handling? Or separate flow?
+        // Original logic fell through for "clicking elsewhere"
       }
 
       // 3. Sanctuary Selection (Enter Pledge Mode)
@@ -135,7 +134,8 @@ export function useClickHandler({
         const clickedSanctuary = sanctuaries?.find((s: Sanctuary) =>
           s.hex.equals(hex)
         );
-        if (clickedSanctuary && canPledge(hex)) {
+        
+        if (clickedSanctuary && InteractionPolicy.canEnterPledgeMode(interactionCtx, hex)) {
           setPledgingSanctuary(hex);
           return;
         }
@@ -148,13 +148,11 @@ export function useClickHandler({
       activeAbility,
       movingPiece,
       pledgingSanctuary,
-      pieces,
       sanctuaries,
-      canPledge,
       pledge,
       triggerAbility,
       onEngineHexClick,
-      board
+      interactionCtx 
     ]
   );
 
@@ -164,17 +162,9 @@ export function useClickHandler({
   const isPledgeTarget = useCallback(
     (hex: Hex) => {
       if (!pledgingSanctuary) return false;
-      
-      const isNeighbor = hex.distance(pledgingSanctuary) === 1;
-      if (!isNeighbor) return false;
-
-      // Use centralized validation
-      const pieceMap = createPieceMap(pieces);
-      if (!isValidAdjacentSpawn(hex, pledgingSanctuary, board, pieceMap)) return false;
-
-      return true;
+      return InteractionPolicy.isPledgeTarget(interactionCtx, pledgingSanctuary, hex);
     },
-    [pledgingSanctuary, board, pieces]
+    [pledgingSanctuary, interactionCtx]
   );
 
   return {
@@ -185,3 +175,4 @@ export function useClickHandler({
     pledgingSanctuary,
   };
 }
+
