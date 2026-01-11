@@ -1,164 +1,133 @@
 # Castles Architecture Analysis
 
-> **Version**: 4.1 (January 2026)
-> **Purpose**: Technical reference and mental map for the Castles codebase.
+> **Version**: 5.0 (January 2026)
+> **Purpose**: "Living Documentation" and Refactoring Roadmap.
+> **Status**: Deep Audit Complete.
 
 ---
 
-## 1. System Overview
+## 1. System Map & Control Flow
 
-Castles is a fantasy-themed hexagonal chess variant built with React and TypeScript. The architecture follows a layered design:
+### A. High-Level Architecture
+The system uses a **React Host + Logic Core** architecture. The React layer acts as a "View Controller" that subscribes to a mostly pure "Game Core".
 
-```
-┌─────────────────────────────────────────────────┐
-│                  UI Layer                       │
-│   (Game.tsx, HexGrid.tsx, PieceRenderer.tsx)    │
-│            [Visuals & User Input]               │
-├─────────────────────────────────────────────────┤
-│                 Hook Layer                      │
-│   (useGameLogic, useMoveExecution, usePGN)      │
-│      [State Management & Controller Logic]      │
-├─────────────────────────────────────────────────┤
-│               Command Layer                     │
-│   (MoveCommand, AttackCommand, PledgeCommand)   │
-│         [Encapsulated User Actions]             │
-├─────────────────────────────────────────────────┤
-│                Core Logic                       │
-│   GameEngine (Facade) ──► RuleEngine (Pure)     │
-│       │                 ► StateMutator (Pure)   │
-│       └──────────────── ► SanctuaryService      │
-├─────────────────────────────────────────────────┤
-│               Domain Entities                   │
-│   (Piece, Hex, Castle, Sanctuary, Board)        │
-│          [Data Structures & Models]             │
-└─────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    User((User)) -->|Clicks Hex| UI[HexGrid / HexCell]
+    UI -->|onClick| Hook[useClickHandler]
+    Hook -->|Delegate| Logic[useGameLogic (God Hook)]
+    Logic -->|Action| Facade[GameEngine (Facade)]
+    Facade -->|Query| Rule[RuleEngine (Pure)]
+    Facade -->|Mutate| State[StateMutator (Pure)]
+    Facade -->|Service| Sanc[SanctuaryService]
+    State -->|New State| Store[React State]
+    Store -->|Render| UI
 ```
 
-### The "God Object" Check
-*   **GameEngine**: Is **NOT** a God Object. It acts as a clean Facade (approx. 200 lines), delegating actual logic to specialized systems (`RuleEngine`, `StateMutator`, `SanctuaryService`).
-*   **Game.tsx**: Large (~600 lines) but typical for a main orchestration component. However, it does leak some logic (direct calls to `RuleEngine` for tooltips).
-*   **Recommendation**: Move tooltip logic into `GameEngine` or a specialized hook.
+### B. Control Flow Trace (Detailed)
+**Scenario: Player Moves a Piece**
+1.  **Input**: User clicks a `HexCell`. `HexGrid` passes the click to `useClickHandler`.
+2.  **Discernment**: `useClickHandler` checks:
+    *   Is an Ability active? (e.g., Fireball target selection).
+    *   Is Pledging active? (Sanctuary logic).
+    *   Else: Calls `onEngineHexClick`.
+3.  **Coordination**: `useMoveExecution` (inside `useGameLogic`):
+    *   Checks `movingPiece` selection state.
+    *   Calls `isLegalMove(targetHex)` (validated against `legalMoves`).
+    *   Calls `gameEngine.applyMove(state, piece, targetHex)`.
+4.  **Execution**: `GameEngine` delegates to `StateMutator.applyMove`:
+    *   Clones state.
+    *   Updates `pieceMap`.
+    *   Records `MoveRecord`.
+    *   Returns **New Immutable State**.
+5.  **Render Cycle**:
+    *   `useCoreGame` updates internal state.
+    *   `useComputedGame` recalculates `legalMoves`.
+    *   `Game` renders `HexGrid` (board) and `LegalMoveOverlay` (dots).
+
+### C. Data Serialization
+*   **PGN Format**: Custom format mixing standard chess notation with Fantasy headers.
+    *   `[SanctuarySettings "10|5"]`
+    *   `[CustomSetup "...compressed_json..."]`
+*   **State <-> PGN**: Handled by `PGNService` (Generator) and `PGNParser` (Importer).
+*   **Risk**: Sanctuary setup data is complex and relies on perfect JSON reconstruction in the `CustomSetup` tag.
 
 ---
 
-## 2. Control Flow Mapping
+## 2. The "God Object" Check
 
-### Trace: User Logic Flow
-**Example: Player Clicks a Hex**
-
-1.  **Input Layer**: User clicks a hex on `HexGrid`.
-2.  **Handler Layer**: `useClickHandler.ts` receives the click.
-    *   Determines context: Is it a move? An ability target? A sanctuary pledge?
-3.  **Controller Layer**: `useMoveExecution.ts` prepares the action.
-    *   Example: Creates a `MoveCommand` or calls `pledge`.
-4.  **Core Logic**:
-    *   `GameEngine` validates the action via `RuleEngine` (e.g., `getLegalMoves`).
-    *   `GameEngine` executes the action via `StateMutator` or `SanctuaryService`.
-5.  **State Update**:
-    *   A **new** immutable `GameState` is created.
-    *   React `setState` is called.
-6.  **Render**:
-    *   `Game.tsx` re-renders with new state.
-    *   `useComputedGame` recalculates derived values (e.g., new legal moves).
-
-### Trace: Sanctuary Pledge (Specific)
-1.  **User**: Clicks a Sanctuary hex.
-2.  **SanctuaryService**: `canPledge` checks:
-    *   Is sanctuary ready (cooldown/phase)?
-    *   Is insufficient strength?
-3.  **Action**: User confirms pledge target.
-4.  **SanctuaryService**: `pledge` executed.
-    *   Spawns new piece.
-    *   **Evolves** sanctuary to next tier (or deactivates).
-    *   Updates `sanctuaries` array immutably.
-    *   Records move in `MoveTree` (for PGN).
+| Component | Status | Analysis |
+| :--- | :--- | :--- |
+| **useGameLogic.ts** | 🚨 **GOD OBJECT** | Combines State Management, View Logic, Analysis Controller, PGN handling, and Sound. It is the tangled knot of the application. |
+| **GameEngine.ts** | ✅ **CLEAN** | Proper Facade. Delegates work effectively. Low cyclomatic complexity. |
+| **HexGrid.tsx** | ⚠️ **MINOR** | Receives `legalMoveSet` but ignores it (dead prop). Render logic is efficient, but prop interface is misleading. |
+| **PieceTypeConfig.ts**| ✅ **CLEAN** | Single Source of Truth for piece definitions. |
 
 ---
 
-## 3. Data Serialization (PGN)
+## 3. The "Extension Test"
+**Scenario**: Adding a new piece "Gryphon".
 
-The game uses a custom PGN format to support standard moves + specific "Fantasy" setup data.
+1.  **Constants.ts**: Add `PieceType.Gryphon`.
+2.  **PieceTypeConfig.ts**: Add stats, move/attack strategies.
+3.  **PieceImages.ts**: Import SVG and add to `themeImages` map.
+4.  **Assets**: Add SVGs.
 
-### Export Flow
-`Game State` -> `PGNService` -> `PGNGenerator` -> **PGN String**
-
-### Import Flow
-**PGN String** -> `PGNParser` -> `PGNImporter` -> `Game State` (Hydrated)
-
-### Custom Setup Format (JSON)
-The `[CustomSetup "..."]` tag compresses the board state.
-
-```json
-{
-  "pieces": [ ... ],
-  "sanctuaries": [ 
-    {
-      "q": -2, "r": 0, "s": 2, 
-      "type": "Wolf", 
-      "territorySide": "w", 
-      "cooldown": 2,           // Turns until ready
-      "hasPledgedThisGame": 0  // 0 = false, 1 = true
-    }
-  ],
-  "gameSettings": [10, 5]      // [Unlock Turn, Recharge Time]
-}
-```
+**Verdict**: **Pass (B+)**. The logic is decoupled, but Asset management requires manual wiring in `PieceImages.ts`. No core logic shifts required.
 
 ---
 
-## 4. Extension Test (Adding a New Piece)
+## 4. Deep-Deep Code Review (6 Dimensions)
 
-How easy is it to add a "Gryphon"?
+### 1. Correctness & Logic
+*   **Logic**: Generally solid. RuleEngine uses pure functions effectively.
+*   **Correction**: Originally flagged `HexGrid` for ignoring `legalMoveSet`. Further investigation reveals this is intentional; `LegalMoveOverlay` handles the dots. This is a good Separation of Concerns.
+*   **Redundancy**: `useClickHandler` partially duplicates "can pledge" logic found in `SanctuaryService` (checking `isRiver`, `isCastle`).
 
-1.  **Define**: Add `Gryphon` to `PieceType` enum in `Constants.ts`.
-2.  **Configure**: Add entry to `PieceTypeConfig.ts`.
-    *   Define stats: `Strength: 2`.
-    *   Define behavior: `moveStrategy: eagleMoves` (reuse existing or write new).
-3.  **Assets**: Add SVG to public folder.
-4.  **Done**: No changes needed in `Piece.ts`, `GameEngine`, or `RuleEngine`.
+### 2. Architecture & Modularity
+*   **Strengths**: `GameEngine` is a textbook Facade. `AbilitySystem` is well isolated. `LegalMoveOverlay` successfully decouples move visualization from board rendering.
+*   **Weaknesses**: `useGameLogic` is a leaky abstraction. It exposes internal helpers like `isHexDefended` to the UI, bypassing the ViewModel.
 
-**Status**: The system passes the Extension Test with high marks for modularity.
+### 3. Efficiency & Data Structures
+*   **Bottleneck**: `HexGrid.tsx` lines 76-85 sorts the entire board (91 hexes) every render to handle Z-indexing.
+*   **Optimization**: This sorting should be computed only when the board layout changes, or handled via CSS `z-index`.
+*   **Computed State**: `useComputedGame` runs heavy logic (legal moves for ALL pieces) on every state update.
 
----
+### 4. Readability
+*   **Naming**: Excellent. `WolfCovenant`, `StateMutator`, `PhoenixRecord` are evocative and clear.
+*   **Complexity**: `useMoveExecution` is hard to follow—it handles too many "modes" (Pledge, Ability, Move, Attack).
 
-## 5. Architectural Findings (Preliminary Audit)
+### 5. Documentation
+*   `PieceTypeConfig` is exemplary documentation-as-code.
+*   `GameEngine` comments clearly explain the Facade pattern.
 
-### Strengths
-*   **Facade Pattern**: `GameEngine` hides complexity well.
-*   **Immutability**: `StateMutator` ensures predictable state changes.
-*   **Config-Driven**: `PieceTypeConfig` makes balancing and extension easy.
-
-### Weaknesses (Refactoring Targets)
-*   **UI Logic Leak**: `Game.tsx` calls `RuleEngine.isHexDefended` directly during render. This causes unnecessary recalculation.
-*   **Logic Leak**: `useGameLogic` contains business logic for "unlocking" sanctuary pools inside `handlePieceClick`.
-*   **Performance**: `createPieceMap` (O(N)) is called inside render loops in some places (`PieceTooltip`).
-
----
-
-## 6. Implementation Plan Recommendation (Preview)
-1.  **Refactor UI Leaks**: Move `isHexDefended` behind a memoized hook or `GameEngine` method.
-2.  **Centralize Logic**: Move "Unlocking" logic from `useGameLogic` to `SanctuaryService`.
-3.  **Optimize Render**: Ensure `pieceMap` is passed down, not recreated in children.
+### 6. Refactoring
+*   **Immediate Fix**: Remove unused `legalMoveSet` prop from `HexGrid` to avoid confusion.
+*   **Long-term**: Break apart `useGameLogic` into `useGameCore` (State), `useGameController` (Actions), and `useGameViewModel` (Derived Data).
 
 ---
 
-## 7. Deep-Dive Code Review Actions (Phase 2 Checklist)
+## 5. Refactoring Roadmap (Phase 3)
 
-### Correctness & Logic
-*   **StateMutator**: Verified as a clean Facade (Adapter Pattern). Complex logic is correctly delegated to specialized mutators (`CombatMutator`, `RecruitmentMutator`) which handle immutability correctly.
-*   **RuleEngine**: Logic is pure and stateless. "Fail Fast" optimizations (`hasAnyFutureLegalAttacks`) prevent unnecessary O(N^2) calculations during turn transitions.
+### Milestone 1: Visual Correctness & Performance (The "Quick Wins")
+*   **Task 1.1**: Clean up `HexGrid` props (remove unused `legalMoveSet`).
+*   **Task 1.2**: Optimize `HexGrid` sorting. Memoize the sorted list or use CSS.
 
-### Efficiency & Rendering
-*   **HexGrid**: Identifies as a potential bottleneck.
-    *   **Problem**: Renders 91+ hexes using inline JSX map. No memoization for individual hexes.
-    *   **Impact**: Any prop change to `HexGrid` (e.g., `legalMoveSet` changing) causes re-rendering of ALL hex DOM nodes.
-    *   **Solution**: Extract `<HexCell>` component and use `React.memo`.
+### Milestone 2: Deconstruct the God Hook
+*   **Task 2.1**: Extract `SanctuaryLogic` out of `useGameLogic` and `useClickHandler` into a pure logic hook.
+*   **Task 2.2**: Split `useGameLogic` into `useGameModel` (State only) and `useGameController` (Callbacks).
 
-### Architecture & Modularity
-*   **GameSetup**: Successfully verified as modular. Sub-components (`ModeSelector`, `TimeControls`) are well-separated.
-*   **Hooks**: `useComputedGame` effectively separates derived state calculation from state management (`useGameLogic`), reacting only to `viewState` changes.
+### Milestone 3: Asset Pipeline
+*   **Task 3.1**: Create a dynamic `PieceAssetRegistry` to automate the `PieceImages.ts` manual mapping.
 
-### Recommendations for Phase 3 (Part 2)
-1.  **rendering**: Extract `HexCell` from `HexGrid.tsx` to prevent full-board DOM diffing on minor state changes.
-2.  **cleanup**: Remove deprecated comments in `StateMutator`.
+---
 
+## 6. Official Rating
+
+| Category | Score | Notes |
+| :--- | :--- | :--- |
+| **Correctness** | 4/5 | Logic is rigorous; Render bug is the only major deduce. |
+| **Architecture** | 3/5 | Facade is great; Hooks are messy. |
+| **Maintainability** | 4/5 | Easy to add pieces; Hard to change core state flow. |
+| **Aesthetics** | ? | Cannot judge code, but themes system is robust. |
+| **Overall** | **3.5/5** | **"Solid Core, Messy Wiring"** |

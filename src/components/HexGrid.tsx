@@ -16,8 +16,6 @@ interface HexGridProps {
   hexagons: Hex[];
   castles: Castle[];
   sanctuaries: Sanctuary[];
-  legalMoveSet: Set<string>;
-  legalAttackSet: Set<string>;
   showCoordinates: boolean;
   isBoardRotated: boolean;
   /** Returns CSS class indicating if hex is adjacent to controlled castle */
@@ -55,8 +53,6 @@ const HexGrid = React.memo(({
   hexagons,
   castles,
   sanctuaries,
-  legalMoveSet,
-  legalAttackSet,
   showCoordinates,
   isBoardRotated,
   isAdjacentToControlledCastle,
@@ -72,17 +68,27 @@ const HexGrid = React.memo(({
   showSanctuaryIcons = true
 }: HexGridProps) => {
 
+  // Optimize: Pre-calculate Castle and Sanctuary lookups avoiding O(N*M) inside sort
+  // Use Sets for O(1) existence checks.
+  const { castleSet, sanctuarySet } = React.useMemo(() => {
+    return {
+      castleSet: new Set(castles.map(c => c.hex.getKey())),
+      sanctuarySet: new Set(sanctuaries.map(s => s.hex.getKey()))
+    };
+  }, [castles, sanctuaries]);
+
   // Sort hexagons by render priority: Standard < Sanctuary < Castle
   const sortedHexagons = React.useMemo(() => {
     return [...hexagons].sort((a, b) => {
       const getPriority = (h: Hex) => {
-        if (castles.some(c => c.hex.equals(h))) return 2;
-        if (sanctuaries.some(s => s.hex.equals(h))) return 1;
+        const key = h.getKey();
+        if (castleSet.has(key)) return 2;
+        if (sanctuarySet.has(key)) return 1;
         return 0;
       };
       return getPriority(a) - getPriority(b);
     });
-  }, [hexagons, castles, sanctuaries]);
+  }, [hexagons, castleSet, sanctuarySet]);
 
   return (
     <>

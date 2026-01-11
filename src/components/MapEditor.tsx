@@ -67,8 +67,6 @@ const MapEditor: React.FC<MapEditorProps> = ({ onPlay }) => {
                         hexagons={board.hexes}
                         castles={[]} // No castles for now or generate them too?
                         sanctuaries={[]}
-                        legalMoveSet={new Set()}
-                        legalAttackSet={new Set()}
                         showCoordinates={true}
                         isBoardRotated={false}
                         isAdjacentToControlledCastle={() => false}

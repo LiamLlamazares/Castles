@@ -5,6 +5,7 @@
  * Using this ensures consistency across the UI and Board rendering.
  */
 
+// Colors used for static elements (pieces, special highlights) that don't change with theme
 export const Colors = {
     // Brand & Accents
     Primary: '#4a90d9',    // Blue: Selected states, Highlights
@@ -12,47 +13,35 @@ export const Colors = {
     Warning: '#f39c12',    // Orange: Alerts (unused but reserved)
     Danger: '#e74c3c',     // Red: Errors, attacks
     
-    // Castle & Player Colors
+    // Castle & Player Colors (Fixed identity colors)
     WhitePlayer: '#00fbff', // Cyan
     BlackPlayer: '#8000ff', // Purple
     SanctuaryGold: 'rgba(255, 215, 0, 0.8)',
     
-    // Grayscale / UI Backgrounds
-    Gray50: '#ffffff',
-    Gray100: '#eee',
-    Gray200: '#ddd',
-    Gray300: '#ccc',
-    Gray400: '#aaa',
-    Gray500: '#888',
-    Gray600: '#555',
-    Gray700: '#444',
-    Gray800: '#333',
-    Gray900: '#222',
-    Black: '#000000',
-
-    // Transparencies
+    // Transparencies for overlays (Fixed)
     OverlayDark: 'rgba(0, 0, 0, 0.6)',
     OverlayLight: 'rgba(255, 255, 255, 0.85)',
     SelectionBackground: 'rgba(74, 144, 217, 0.2)',
 };
 
+// Semantic Palette using CSS Variables for Theming
 export const Palette = {
     // UI Panels
-    PanelBackground: Colors.Gray800,
-    SidebarBackground: Colors.Gray900,
-    Border: Colors.Gray600,
-    BorderLight: Colors.Gray700,
+    PanelBackground: 'var(--panel-bg)',
+    SidebarBackground: 'var(--tutorial-sidebar-bg)', // Using existing variable for consistent sidebar
+    Border: 'var(--panel-border)',
+    BorderLight: 'rgba(255, 255, 255, 0.1)', // Fallback or specific border var if needed
     
     // Text
-    TextPrimary: Colors.Gray100,
-    TextSecondary: Colors.Gray200,
-    TextMuted: Colors.Gray400,
-    TextInverted: Colors.WhitePlayer, // For dark backgrounds if needed
+    TextPrimary: 'var(--panel-text)',
+    TextSecondary: 'var(--panel-text-muted)',
+    TextMuted: '#888', // Fallback
+    TextInverted: Colors.WhitePlayer, 
     
     // Interactive Elements
-    ButtonPrimary: Colors.Success,
-    ButtonSelected: Colors.Primary,
-    InputBackground: Colors.Gray700,
+    ButtonPrimary: 'var(--tutorial-button-active)', // Reusing active button color
+    ButtonSelected: 'var(--accent-color)',
+    InputBackground: 'var(--button-bg)',
     
     // Board Elements
     CastleWhite: Colors.WhitePlayer,

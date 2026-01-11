@@ -424,8 +424,6 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                         hexagons={board.hexes}
                         castles={board.castles}
                         sanctuaries={sanctuaries}
-                        legalMoveSet={new Set()}
-                        legalAttackSet={new Set()}
                         showCoordinates={true}
                         isBoardRotated={false}
                         isAdjacentToControlledCastle={() => false}

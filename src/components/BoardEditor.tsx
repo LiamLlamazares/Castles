@@ -324,8 +324,6 @@ const BoardEditor: React.FC<BoardEditorProps> = ({
               hexagons={board.hexes}
               castles={board.castles}
               sanctuaries={sanctuaries}
-              legalMoveSet={new Set()}
-              legalAttackSet={new Set()}
               showCoordinates={showCoordinates}
               isBoardRotated={false}
               isAdjacentToControlledCastle={() => false}
