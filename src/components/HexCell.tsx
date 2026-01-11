@@ -2,6 +2,7 @@ import React from 'react';
 import { Hex, Point } from '../Classes/Entities/Hex';
 import { SanctuaryConfig, PieceType, Color, SanctuaryType } from '../Constants';
 import { getImageByPieceType } from './PieceImages';
+import { Colors, Palette } from '../Theme';
 
 // SVG imports
 import riverSvg from "../Assets/Images/Board/river.svg";
@@ -145,8 +146,8 @@ const HexCell = React.memo(({
                   cx={center.x + offsetX}
                   cy={center.y + offsetY}
                   r={iconSize * 0.55}
-                  fill="rgba(0, 0, 0, 0.6)"
-                  stroke="rgba(255, 215, 0, 0.8)"
+                  fill={Colors.OverlayDark}
+                  stroke={Palette.Sanctuary}
                   strokeWidth={1.5}
                 />
                 <image
@@ -181,8 +182,8 @@ const HexCell = React.memo(({
               cx={center.x + leftOffsetX}
               cy={center.y + offsetY}
               r={iconSize * 0.55}
-              fill={castleOwner === 'w' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.85)'}
-              stroke={castleOwner === 'w' ? '#00fbff' : '#8000ff'}
+              fill={castleOwner === 'w' ? Colors.OverlayDark : Colors.OverlayLight}
+              stroke={castleOwner === 'w' ? Palette.CastleWhite : Palette.CastleBlack}
               strokeWidth={1.5}
             />
             <image
@@ -198,8 +199,8 @@ const HexCell = React.memo(({
               cx={center.x + rightOffsetX}
               cy={center.y + offsetY}
               r={iconSize * 0.55}
-              fill={'rgba(255, 255, 255, 0.9)'}
-              stroke={castleOwner === 'w' ? '#00fbff' : '#8000ff'}
+              fill={Colors.OverlayLight}
+              stroke={castleOwner === 'w' ? Palette.CastleWhite : Palette.CastleBlack}
               strokeWidth={1.5}
             />
             <image

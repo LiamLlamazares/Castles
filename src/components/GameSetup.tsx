@@ -13,6 +13,7 @@ import { OpponentType, AIOpponentConfig } from '../hooks/useAIOpponent';
 import { getImageByPieceType } from './PieceImages';
 import { controlGroupStyle, labelStyle } from '../css/styles';
 import { ModeSelector, TimeControls, SanctuarySelector, BoardConfig, GameRulesSection, type GameMode } from './Setup';
+import { Palette, Colors } from '../Theme';
 import '../css/Board.css';
 
 interface GameSetupProps {
@@ -234,18 +235,18 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
 
     return (
         <>
-            <div className="game-setup" style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: '#333', color: '#eee', overflow: 'hidden' }}>
+            <div className="game-setup" style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: Palette.PanelBackground, color: Palette.TextPrimary, overflow: 'hidden' }}>
                 {/* Sidebar Controls */}
                 <div className="setup-sidebar" style={{ 
                     width: '380px',
                     height: '100%',
                     padding: '20px', 
-                    background: '#222', 
+                    background: Palette.SidebarBackground, 
                 display: 'flex', 
                 flexDirection: 'column', 
                 gap: '20px', 
                 overflowY: 'auto',
-                borderRight: '1px solid #444',
+                borderRight: `1px solid ${Palette.BorderLight}`,
                 boxSizing: 'border-box',
                 flexShrink: 0
             }}>
@@ -269,9 +270,9 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                                         fontSize: '0.85rem',
                                         cursor: 'pointer',
                                         borderRadius: '8px',
-                                        border: isSelected ? '2px solid #4a90d9' : '1px solid #555',
-                                        background: isSelected ? 'rgba(74, 144, 217, 0.2)' : '#444',
-                                        color: isSelected ? '#fff' : '#aaa',
+                                        border: isSelected ? `2px solid ${Colors.Primary}` : `1px solid ${Palette.Border}`,
+                                        background: isSelected ? Colors.SelectionBackground : Palette.InputBackground,
+                                        color: isSelected ? 'white' : Palette.TextMuted,
                                         display: 'flex',
                                         flexDirection: 'column',
                                         alignItems: 'center',
@@ -305,10 +306,10 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                                             padding: '12px',
                                             cursor: 'pointer',
                                             borderRadius: '8px',
-                                            border: isSelected ? '3px solid #4a90d9' : '2px solid #555',
+                                            border: isSelected ? `3px solid ${Colors.Primary}` : `2px solid ${Palette.Border}`,
                                             background: isSelected 
                                                 ? (color === 'w' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.3)')
-                                                : '#333',
+                                                : Palette.PanelBackground,
                                             display: 'flex',
                                             flexDirection: 'column',
                                             alignItems: 'center',

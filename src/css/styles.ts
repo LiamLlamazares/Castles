@@ -6,6 +6,7 @@
  * All styles use React.CSSProperties for type safety.
  */
 import React from 'react';
+import { Palette, Colors } from '../Theme';
 
 // ============================================================================
 // LAYOUT & CONTAINERS
@@ -19,7 +20,7 @@ export const controlGroupStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    background: '#333',
+    background: Palette.PanelBackground,
     padding: '12px',
     borderRadius: '8px',
     width: '100%',
@@ -46,7 +47,7 @@ export const controlGroupVerticalStyle: React.CSSProperties = {
 export const labelStyle: React.CSSProperties = {
     fontSize: '1rem',
     fontWeight: 'bold',
-    color: '#ddd'
+    color: Palette.TextSecondary
 };
 
 /**
@@ -54,7 +55,7 @@ export const labelStyle: React.CSSProperties = {
  */
 export const labelSmallStyle: React.CSSProperties = {
     fontSize: '0.75rem',
-    color: '#aaa',
+    color: Palette.TextMuted,
 };
 
 // ============================================================================
@@ -69,8 +70,8 @@ export const inputNumberStyle: React.CSSProperties = {
     padding: '5px',
     fontSize: '1rem',
     borderRadius: '4px',
-    border: '1px solid #555',
-    background: '#444',
+    border: `1px solid ${Palette.Border}`,
+    background: Palette.InputBackground,
     color: 'white'
 };
 
@@ -81,8 +82,8 @@ export const selectStyle: React.CSSProperties = {
     padding: '8px 12px',
     fontSize: '1rem',
     borderRadius: '4px',
-    border: '1px solid #555',
-    background: '#444',
+    border: `1px solid ${Palette.Border}`,
+    background: Palette.InputBackground,
     color: 'white',
     cursor: 'pointer'
 };
@@ -100,7 +101,7 @@ export const primaryButtonStyle: React.CSSProperties = {
     cursor: 'pointer',
     borderRadius: '8px',
     border: 'none',
-    background: '#27ae60',
+    background: Palette.ButtonPrimary,
     color: 'white',
     fontWeight: 'bold',
     boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
@@ -116,8 +117,8 @@ export const modeButtonStyle = (isSelected: boolean): React.CSSProperties => ({
     fontSize: '0.85rem',
     cursor: 'pointer',
     borderRadius: '6px',
-    border: isSelected ? '2px solid #fff' : '1px solid #555',
-    background: isSelected ? '#4a90d9' : '#444',
+    border: isSelected ? '2px solid #fff' : `1px solid ${Palette.Border}`,
+    background: isSelected ? Palette.ButtonSelected : Palette.InputBackground,
     color: 'white',
     fontWeight: isSelected ? 'bold' : 'normal',
     textTransform: 'capitalize',
@@ -132,8 +133,8 @@ export const cardButtonStyle = (isSelected: boolean, color?: string): React.CSSP
     fontSize: '0.8rem',
     cursor: 'pointer',
     borderRadius: '4px',
-    border: isSelected ? '2px solid #fff' : '1px solid #444',
-    background: isSelected ? (color || '#4a90d9') : '#444',
+    border: isSelected ? '2px solid #fff' : `1px solid ${Palette.BorderLight}`,
+    background: isSelected ? (color || Palette.ButtonSelected) : Palette.InputBackground,
     color: 'white',
     opacity: isSelected ? 1 : 0.7,
     display: 'flex',
@@ -154,12 +155,12 @@ export const sidebarStyle: React.CSSProperties = {
     width: '380px',
     height: '100%',
     padding: '20px',
-    background: '#222',
+    background: Palette.SidebarBackground,
     display: 'flex',
     flexDirection: 'column',
     gap: '20px',
     overflowY: 'auto',
-    borderRight: '1px solid #444',
+    borderRight: `1px solid ${Palette.BorderLight}`,
     boxSizing: 'border-box',
     flexShrink: 0
 };
