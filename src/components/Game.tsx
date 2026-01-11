@@ -21,6 +21,7 @@ import { useClickHandler } from "../hooks/useClickHandler";
 import { useGameView } from "../hooks/useGameView";
 import { useAIOpponent, AIOpponentConfig } from "../hooks/useAIOpponent";
 import { usePersistence } from "../hooks/usePersistence";
+import { useTooltip } from "../hooks/useTooltip";
 import HexGrid from "./HexGrid";
 import PieceRenderer from "./PieceRenderer";
 import LegalMoveOverlay from "./LegalMoveOverlay";
@@ -109,13 +110,11 @@ const InnerGame: React.FC<GameBoardProps> = ({
 }) => {
   const hasAttemptedAutoLoad = React.useRef(false);
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
-  const [hoveredHex, setHoveredHex] = React.useState<Hex | null>(null);
-  const [mousePosition, setMousePosition] = React.useState({ x: 0, y: 0 });
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
-  const [tooltipPiece, setTooltipPiece] = React.useState<Piece | null>(null);
-  const [tooltipHex, setTooltipHex] = React.useState<Hex | null>(null);
-  const [isSanctuaryPreview, setIsSanctuaryPreview] = React.useState(false);
+
+  // Consolidated tooltip state
+  const tooltip = useTooltip();
 
   // Consume Contexts
   const {
@@ -363,11 +362,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   }, [getPGN, loadPGN, onLoadGame]);
 
   const handleHexHover = React.useCallback((hex: Hex | null, event?: React.MouseEvent) => {
-    setHoveredHex(hex);
-    if (event) {
-        setMousePosition({ x: event.clientX, y: event.clientY });
-    }
-  }, []);
+    tooltip.setHovered(hex, event);
+  }, [tooltip]);
 
   // Click handler hook - manages abilities, pledging, and delegation
   const {
@@ -394,8 +390,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   });
 
   const handleBoardClick = (hex: Hex) => {
-    if (tooltipPiece) setTooltipPiece(null);
-    if (tooltipHex) setTooltipHex(null);
+    tooltip.clearAll();
     onEngineBoardClick(hex);
   };
 
@@ -513,8 +508,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
       }}
       onClick={() => {
         // Dismiss tooltips when clicking anywhere on the board
-        if (tooltipPiece) setTooltipPiece(null);
-        if (tooltipHex) setTooltipHex(null);
+        tooltip.clearAll();
       }}
       >
         <svg 
@@ -549,17 +543,14 @@ const InnerGame: React.FC<GameBoardProps> = ({
           isAdjacentToControlledCastle={isRecruitmentSpot}
           onHexClick={handleBoardClick}
           onHexRightClick={(hex) => {
-            setTooltipPiece(null);
-            setIsSanctuaryPreview(false);
+            tooltip.clearPiece();
             const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
             if (sanctuary) {
               const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
               const dummyPiece = PieceFactory.create(pieceType, hex, currentPlayer);
-              setTooltipPiece(dummyPiece);
-              setIsSanctuaryPreview(true);
-              setTooltipHex(null);
+              tooltip.showPieceTooltip(dummyPiece, true);
             } else {
-              setTooltipHex(hex === tooltipHex ? null : hex);
+              tooltip.toggleHexTooltip(hex);
             }
           }}
           onHexHover={handleHexHover}
@@ -577,8 +568,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           isBoardRotated={isBoardRotated}
           onPieceClick={handlePieceClickWrapper}
           onPieceRightClick={(piece) => {
-            setTooltipHex(null);
-            setTooltipPiece(piece === tooltipPiece ? null : piece);
+            if (piece) tooltip.togglePieceTooltip(piece);
           }}
           resizeVersion={resizeVersion}
           layout={initialLayout}
@@ -618,13 +608,13 @@ const InnerGame: React.FC<GameBoardProps> = ({
           />
       )}
       
-      {hoveredHex && sanctuaries && (
+      {tooltip.hoveredHex && sanctuaries && (
           (() => {
-              const sanctuary = sanctuaries.find((s: Sanctuary) => s.hex.equals(hoveredHex));
+              const sanctuary = sanctuaries.find((s: Sanctuary) => s.hex.equals(tooltip.hoveredHex!));
               return sanctuary ? (
                   <SanctuaryTooltip 
                     sanctuary={sanctuary} 
-                    position={mousePosition} 
+                    position={tooltip.mousePosition} 
                     turnCounter={turnCounter}
                     sanctuarySettings={sanctuarySettings}
                   />
@@ -633,24 +623,24 @@ const InnerGame: React.FC<GameBoardProps> = ({
       )}
 
       {/* Piece info tooltip (right-click on a piece) */}
-      {tooltipPiece && (
+      {tooltip.piece && (
         <PieceTooltip 
-          piece={tooltipPiece} 
+          piece={tooltip.piece} 
           isDefended={isHexDefended(
-            tooltipPiece.hex, 
-            tooltipPiece.color === 'w' ? 'b' : 'w'
+            tooltip.piece.hex, 
+            tooltip.piece.color === 'w' ? 'b' : 'w'
           )}
-          isPreview={isSanctuaryPreview}
+          isPreview={tooltip.isSanctuaryPreview}
         />
       )}
 
       {/* Terrain info tooltip (right-click on empty hex) */}
-      {tooltipHex && (
+      {tooltip.hex && (
         <TerrainTooltip 
-          hex={tooltipHex} 
+          hex={tooltip.hex} 
           board={board} 
-          castle={castles.find(c => c.hex.equals(tooltipHex))}
-          position={mousePosition} 
+          castle={castles.find(c => c.hex.equals(tooltip.hex!))}
+          position={tooltip.mousePosition} 
         />
       )}
       
