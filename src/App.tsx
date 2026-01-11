@@ -45,7 +45,12 @@ function App() {
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
   const [previousView, setPreviousView] = useState<ViewState>('game');
 
+  const clearAutosave = () => {
+    localStorage.removeItem('castles_autosave');
+  };
+
   const handleNewGameClick = () => {
+    clearAutosave();
     setView('setup');
   };
 
@@ -73,19 +78,30 @@ function App() {
     
     const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, typesToGenerate);
     
+    
+    clearAutosave();
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
     setView('game');
   };
 
   const handleRestartGame = () => {
+    clearAutosave();
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: MoveTree) => {
+  const handleLoadGame = (
+    board: Board, 
+    pieces: Piece[], 
+    turnCounter: number, 
+    sanctuaries: Sanctuary[], 
+    moveTree?: MoveTree,
+    sanctuarySettings?: { unlockTurn: number, cooldown: number },
+    initialPoolTypes?: SanctuaryType[]
+  ) => {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
-    setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, isAnalysisMode: true });
+    setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, sanctuarySettings, initialPoolTypes, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
   };

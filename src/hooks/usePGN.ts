@@ -24,6 +24,7 @@ export interface PGNLoadResult {
   sanctuaries: Sanctuary[];
   castles: import("../Classes/Entities/Castle").Castle[];
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
+  sanctuaryPool?: import("../Constants").SanctuaryType[];
 }
 
 export interface PGNHookResult {
@@ -92,7 +93,8 @@ export const usePGN = (
         sanctuaries: finalState.sanctuaries,
         moveTree: finalState.moveTree!,
         turnCounter: finalState.turnCounter,
-        sanctuarySettings: importedSettings
+        sanctuarySettings: importedSettings,
+        sanctuaryPool: finalState.sanctuaryPool
       };
     } catch (e) {
       console.error("Failed to replay moves:", e);

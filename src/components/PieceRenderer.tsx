@@ -11,6 +11,7 @@ import { RuleEngine } from "../Classes/Systems/RuleEngine";
 import { createPieceMap } from "../utils/PieceMap";
 import { getImageByPieceType } from "./PieceImages";
 import { PieceTheme } from "../Constants";
+import PieceItem from "./PieceItem";
 
 // SVG import for shield icon
 import shieldSvg from "../Assets/Images/Board/shield.svg";
@@ -48,7 +49,21 @@ const PieceRenderer = React.memo(({
   pieceTheme = "Castles"
 }: PieceRendererProps) => {
   const pieceSize = layout.size_image;
-  const pieceMap = createPieceMap(pieces);
+
+  // Pre-calculate defended hexes for all players in one pass
+  const defendedHexSet = React.useMemo(() => {
+    if (!board) return new Set<string>();
+    
+    // Get defended hexes for both white and black
+    // Note: RuleEngine.getDefendedHexes returns hexes that are PROTECTED by friendly melee pieces
+    const whiteDefended = RuleEngine.getDefendedHexes({ pieces } as any, 'b', board); // Defended FROM black = white's defended hexes
+    const blackDefended = RuleEngine.getDefendedHexes({ pieces } as any, 'w', board); // Defended FROM white = black's defended hexes
+    
+    return new Set([
+      ...whiteDefended.map(h => h.getKey()),
+      ...blackDefended.map(h => h.getKey())
+    ]);
+  }, [pieces, board]);
 
   // Sort pieces by Y-coordinate for correct rendering order
   const sortedPieces = React.useMemo(() => {
@@ -63,58 +78,21 @@ const PieceRenderer = React.memo(({
     <>
       {sortedPieces.map((piece: Piece) => {
         const center = getPieceCenter(piece, isBoardRotated, layout);
-        
-        // Check if this piece is defended (adjacent to friendly melee)
-        const isDefended = board ? RuleEngine.isHexDefended(
-          piece.hex,
-          piece.color === 'w' ? 'b' : 'w',  // enemy color
-          { pieces, pieceMap } as any,
-          board
-        ) : false;
+        const isDefended = defendedHexSet.has(piece.hex.getKey());
         
         return (
-          <g key={piece.hex.getKey()}>
-            {/* Piece image */}
-            <image
-              href={getImageByPieceType(piece.type, piece.color, pieceTheme)}
-              x={center.x - pieceSize / 2}
-              y={center.y - pieceSize / 2}
-              height={pieceSize}
-              width={pieceSize}
-              className="piece"
-              style={{ pointerEvents: editorPlacementMode ? 'none' : 'auto' }}
-              onClick={() => onPieceClick(piece)}
-              onContextMenu={(e) => {
-                if (onPieceRightClick) {
-                  e.preventDefault();
-                  onPieceRightClick(piece);
-                }
-              }}
-            />
-            
-            {/* Shield icon overlay for defended pieces - Middle-Left */}
-            {showShields && isDefended && (
-              <g style={{ pointerEvents: 'none' }}>
-                {/* Shield background */}
-                <circle
-                  cx={center.x - pieceSize * 0.45}
-                  cy={center.y}
-                  r={pieceSize * 0.15}
-                  fill="rgba(255, 215, 0, 0.90)"
-                  stroke="rgba(0, 0, 0, 0.7)"
-                  strokeWidth={1.0}
-                />
-                {/* Shield symbol - use SVG image */}
-                <image
-                  href={shieldSvg}
-                  x={center.x - pieceSize * 0.45 - pieceSize * 0.08}
-                  y={center.y - pieceSize * 0.08}
-                  width={pieceSize * 0.16}
-                  height={pieceSize * 0.16}
-                />
-              </g>
-            )}
-          </g>
+          <PieceItem
+            key={piece.hex.getKey()} // Stable key based on position
+            piece={piece}
+            center={center}
+            pieceSize={pieceSize}
+            isDefended={isDefended}
+            showShields={showShields}
+            pieceTheme={pieceTheme}
+            onClick={onPieceClick}
+            onRightClick={onPieceRightClick}
+            editorPlacementMode={editorPlacementMode}
+          />
         );
       })}
     </>

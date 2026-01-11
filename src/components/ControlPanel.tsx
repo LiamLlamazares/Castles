@@ -20,6 +20,7 @@ interface ControlPanelProps {
   onPass: () => void;
   onResign: () => void;
   onNewGame: () => void;
+  onShare?: () => void;
   moveHistory: MoveRecord[];
   moveTree?: MoveTree;
   onJumpToNode?: (nodeId: string) => void;
@@ -55,6 +56,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onPass,
   onResign,
   onNewGame,
+  onShare,
   moveHistory,
   moveTree,
   onJumpToNode,
@@ -123,6 +125,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         </button>
         <button className="control-button resign" onClick={onResign}>
           Resign
+        </button>
+        <button className="control-button share" onClick={onShare} title="Share Game URL">
+          Share
         </button>
         <button 
           className="control-button new-game" 

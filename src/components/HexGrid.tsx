@@ -69,11 +69,19 @@ const HexGrid = React.memo(({
 }: HexGridProps) => {
 
   // Optimize: Pre-calculate Castle and Sanctuary lookups avoiding O(N*M) inside sort
-  // Use Sets for O(1) existence checks.
-  const { castleSet, sanctuarySet } = React.useMemo(() => {
+  // Use Maps for O(1) lookup.
+  const { castleMap, sanctuaryMap, castleSet, sanctuarySet } = React.useMemo(() => {
+    const cMap = new Map<string, Castle>();
+    const sMap = new Map<string, Sanctuary>();
+    
+    castles.forEach(c => cMap.set(c.hex.getKey(), c));
+    sanctuaries.forEach(s => sMap.set(s.hex.getKey(), s));
+    
     return {
-      castleSet: new Set(castles.map(c => c.hex.getKey())),
-      sanctuarySet: new Set(sanctuaries.map(s => s.hex.getKey()))
+      castleMap: cMap,
+      sanctuaryMap: sMap,
+      castleSet: new Set(cMap.keys()),
+      sanctuarySet: new Set(sMap.keys())
     };
   }, [castles, sanctuaries]);
 
@@ -94,11 +102,15 @@ const HexGrid = React.memo(({
     <>
       {/* Render all hexagons in sorted order */}
       {sortedHexagons.map((hex: Hex) => {
+        const key = hex.getKey();
+        const castle = castleMap.get(key);
+        const sanctuary = sanctuaryMap.get(key);
+
         // Compute classes
         const visualClass = getHexVisualClass(hex, board);
-        const sanctuaryClass = getSanctuaryVisualClass(hex, sanctuaries);
+        const sanctuaryClass = sanctuary ? getSanctuaryVisualClass(hex, [sanctuary]) : "";
         const adjacencyClass = isAdjacentToControlledCastle(hex) ? "hexagon-castle-adjacent" : "";
-        const castleOwnerClass = getCastleOwnerClass(hex, castles);
+        const castleOwnerClass = castle ? getCastleOwnerClass(hex, [castle]) : "";
         const pledgeClass = isPledgeTarget && isPledgeTarget(hex) ? "hexagon-pledge-target" : "";
         const pledgingSourceClass = pledgingSanctuary && hex.equals(pledgingSanctuary) ? "hexagon-pledging-source" : "";
         const combinedClass = `${visualClass} ${sanctuaryClass} ${adjacencyClass} ${castleOwnerClass} ${pledgeClass} ${pledgingSourceClass}`;
@@ -106,19 +118,17 @@ const HexGrid = React.memo(({
         // Data prep
         const points = getPolygonPoints(hex, isBoardRotated, layout);
         const center = getHexCenter(hex, isBoardRotated, layout);
-        const castle = castles.find(c => c.hex.equals(hex));
-        const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
         
         return (
           <HexCell
-            key={hex.getKey()}
+            key={key}
             hex={hex}
             points={points}
             center={center}
             className={combinedClass}
             
-            isRiver={board.riverHexSet.has(hex.getKey())}
-            isHighGround={board.highGroundHexSet.has(hex.getKey())}
+            isRiver={board.riverHexSet.has(key)}
+            isHighGround={board.highGroundHexSet.has(key)}
             
             isCastle={!!castle}
             castleOwner={castle?.owner || null}
@@ -139,7 +149,6 @@ const HexGrid = React.memo(({
           />
         );
       })}
-
     </>
   );
 });

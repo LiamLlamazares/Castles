@@ -105,7 +105,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     legalAttackSet,
     victoryMessage,
     winner,
-    recruitmentHexes
+    recruitmentHexes,
+    recruitmentHexSet
   } = useComputedGame({
     gameEngine,
     viewState,
@@ -122,20 +123,18 @@ export const GameProvider: React.FC<GameProviderProps> = ({
 
   // =========== HELPER FUNCTIONS ===========
   const isLegalMove = useCallback(
-    (hex: Hex): boolean => legalMoves.some((move) => move.equals(hex)),
-    [legalMoves]
+    (hex: Hex): boolean => legalMoveSet.has(hex.getKey()),
+    [legalMoveSet]
   );
   
   const isLegalAttack = useCallback(
-    (hex: Hex): boolean => legalAttacks.some((attack) => attack.equals(hex)),
-    [legalAttacks]
+    (hex: Hex): boolean => legalAttackSet.has(hex.getKey()),
+    [legalAttackSet]
   );
 
   const isRecruitmentSpot = useCallback(
-    (hex: Hex): boolean => recruitmentHexes.some(
-      (adjacentHex) => hex.equals(adjacentHex)
-    ),
-    [recruitmentHexes]
+    (hex: Hex): boolean => recruitmentHexSet.has(hex.getKey()),
+    [recruitmentHexSet]
   );
 
   // =========== MOVE EXECUTION HOOK ===========

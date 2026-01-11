@@ -80,6 +80,15 @@ export class Hex {
     return `${this.q},${this.r},${this.s}`;
   }
 
+  /** Reconstructs a hex from its unique string key */
+  public static fromKey(key: string): Hex {
+    const parts = key.split(',').map(Number);
+    if (parts.length < 3 || parts.some(isNaN)) {
+      throw new Error(`Invalid hex key: ${key}`);
+    }
+    return new Hex(parts[0], parts[1], parts[2]);
+  }
+
   /** Vector addition: returns a new hex at position (this + b) */
   public add(b: Hex): Hex {
     return new Hex(this.q + b.q, this.r + b.r, this.s + b.s);

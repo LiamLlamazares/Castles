@@ -55,14 +55,13 @@ const LegalMoveOverlay = React.memo(({
 }: LegalMoveOverlayProps) => {
   return (
     <>
-      {hexagons.map((hex: Hex) => {
-        const key = hex.getKey();
-        if (legalMoveSet.has(key)) {
-          return renderCircle(hex, "legalMoveDot", isBoardRotated, onHexClick, layout);
-        } else if (legalAttackSet.has(key)) {
-          return renderCircle(hex, "legalAttackDot", isBoardRotated, onHexClick, layout);
-        }
-        return null;
+      {Array.from(legalMoveSet).map((key) => {
+        const hex = Hex.fromKey(key);
+        return renderCircle(hex, "legalMoveDot", isBoardRotated, onHexClick, layout);
+      })}
+      {Array.from(legalAttackSet).map((key) => {
+        const hex = Hex.fromKey(key);
+        return renderCircle(hex, "legalAttackDot", isBoardRotated, onHexClick, layout);
       })}
     </>
   );
