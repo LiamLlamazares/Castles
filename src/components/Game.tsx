@@ -2,51 +2,28 @@
  * @file Game.tsx
  * @description Main game board component for the Castles game.
  *
- * Renders the hex grid, pieces, and handles all user interactions.
- * Orchestrates child components:
- * - **HexGrid** - Renders the hex board with visual states
- * - **PieceRenderer** - Renders all pieces on the board
- * - **ControlPanel** - Clocks, move history, game controls
- * - **VictoryOverlay** - End-game overlay
- *
- * @usage Mounted by App.tsx when in game view.
- * @see GameProvider - Encapsulates game state and actions
- * @see HexGrid - Board rendering component
- * @see ControlPanel - Right panel with controls
+ * Refactored to compose focused sub-components.
  */
 import React from 'react';
 import { useSoundEffects } from "../hooks/useSoundEffects";
 import { useInputHandler } from "../hooks/useInputHandler";
-import { useClickHandler } from "../hooks/useClickHandler";
 import { useGameView } from "../hooks/useGameView";
 import { useAIOpponent, AIOpponentConfig } from "../hooks/useAIOpponent";
 import { usePersistence } from "../hooks/usePersistence";
 import { useTooltip } from "../hooks/useTooltip";
-import HexGrid from "./HexGrid";
-import PieceRenderer from "./PieceRenderer";
-import LegalMoveOverlay from "./LegalMoveOverlay";
 import ControlPanel from "./ControlPanel";
 import HamburgerMenu from "./HamburgerMenu";
-import RulesModal from "./RulesModal";
-import VictoryOverlay from "./VictoryOverlay";
+import { BoardContainer } from "./Board/BoardContainer";
+import { GameHUD } from "./HUD/GameHUD";
+import { GameOverlays } from "./Overlays/GameOverlays";
 import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
-import { Hex } from "../Classes/Entities/Hex";
 import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
-import AbilityBar from "./AbilityBar";
-import { SanctuaryTooltip } from "./SanctuaryTooltip";
-import { PieceTooltip } from "./PieceTooltip";
-import { TerrainTooltip } from "./TerrainTooltip";
-import QuickStartModal, { useQuickStart } from "./QuickStartModal";
-import { PieceFactory } from "../Classes/Entities/PieceFactory";
-import { MoveRecord, SanctuaryConfig, PieceTheme } from "../Constants";
+import { PieceTheme } from "../Constants";
 import "../css/Board.css";
-
-// SVG import for lightbulb
-import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
 
 // Context
 import { GameProvider } from "../contexts/GameProvider";
@@ -61,7 +38,7 @@ interface GameBoardProps {
   initialSanctuaries?: Sanctuary[];
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };
-  onResign?: () => void; // Optional callback to parent (e.g. log event)
+  onResign?: () => void; 
   onSetup?: () => void;
   onRestart?: () => void;
   onLoadGame?: (data: {
@@ -86,7 +63,6 @@ interface GameBoardProps {
 
 /**
  * Inner Game Component that consumes the GameContext.
- * This separates the Provider setup from the component logic.
  */
 const InnerGame: React.FC<GameBoardProps> = ({
   initialBoard = startingBoard,
@@ -108,10 +84,11 @@ const InnerGame: React.FC<GameBoardProps> = ({
   pieceTheme = "Castles",
   opponentConfig
 }) => {
-  const hasAttemptedAutoLoad = React.useRef(false);
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+  const [showQuickStart, setShowQuickStart] = React.useState(false);
+  const [showTooltipHint, setShowTooltipHint] = React.useState(false);
 
   // Consolidated tooltip state
   const tooltip = useTooltip();
@@ -122,46 +99,32 @@ const InnerGame: React.FC<GameBoardProps> = ({
       castles,
       sanctuaries,
       turnCounter,
-      pieceMap,
-      movingPiece,
       turnPhase,
       currentPlayer,
-      hexagons,
-      legalMoveSet,
-      legalAttackSet,
-      victoryMessage,
-      winner,
-      isRecruitmentSpot,
-      board,
       moveHistory,
       moveTree,
-      history,
       hasGameStarted,
       isAnalysisMode,
       viewNodeId,
       aiIntegration,
-      isViewingHistory
+      victoryMessage,
+      winner
   } = useGameState();
 
   const {
       handlePass,
       handleTakeback,
-      handlePieceClick,
-      handleHexClick: onEngineHexClick,
       handleResign,
-      pledge,
-      canPledge,
-      triggerAbility,
-      isHexDefended,
       jumpToNode,
       stepHistory,
       getPGN,
       loadPGN
   } = useGameActions();
 
+  // Persistence Hooks
   const { shareGame, getGameFromUrl, loadFromLocalStorage, clearUrlParams, clearSave } = usePersistence(getPGN, loadPGN, moveTree);
 
-  // Restore game from URL or LocalStorage on mount
+  // Restore game logic from old Game.tsx
   React.useEffect(() => {
     // 1. Check URL for shared game
     const urlPgn = getGameFromUrl();
@@ -216,21 +179,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
       }
     }
   }, []); // Run once on mount
-  
-  // Tooltip discovery hint (show once per browser)
-  const [showTooltipHint, setShowTooltipHint] = React.useState(() => {
-    return !localStorage.getItem('hasSeenTooltipHint');
-  });
-  
-  const dismissTooltipHint = () => {
-    localStorage.setItem('hasSeenTooltipHint', 'true');
-    setShowTooltipHint(false);
-  };
-  
-  // Quick Start modal for first-time users
-  const [showQuickStart, dismissQuickStart] = useQuickStart();
-  
-  // Victory Points state (only used when VP mode is enabled)
+
+  // Victory Points (only used when VP mode is enabled)
   const [victoryPoints, setVictoryPoints] = React.useState<{ w: number, b: number } | undefined>(
     gameRules?.vpModeEnabled ? { w: 0, b: 0 } : undefined
   );
@@ -238,37 +188,18 @@ const InnerGame: React.FC<GameBoardProps> = ({
   // Track previous turn counter for VP calculation
   const prevTurnCounterRef = React.useRef(0);
   
-  // Disable transitions after first render cycle to prevent "flying pieces" on resize
+  // Disable transitions after first render cycle
   React.useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoad(false), 100);
     return () => clearTimeout(timer);
   }, []);
   
-  // Sound effects hook - subscribes to game events
   useSoundEffects();
-
+  
   // Decoupled View State
-  const { 
-    showCoordinates, 
-    isBoardRotated, 
-    resizeVersion, 
-    showShields,
-    showCastleRecruitment,
-    showTerrainIcons,
-    showSanctuaryIcons,
-    toggleCoordinates, 
-    handleFlipBoard, 
-    incrementResizeVersion,
-    toggleShields,
-    toggleCastleRecruitment,
-    toggleTerrainIcons,
-    toggleSanctuaryIcons,
-    setAllIcons
-  } = useGameView();
+  const viewState = useGameView();
 
-  // AI Integration: Only pass if all required properties are present
-  // If no AI is active (Human vs Human), aiIntegration will be undefined in context,
-  // and useAIOpponent will gracefully disable itself via enabled: false.
+  // AI Integration
   const aiIntegrationSafe = aiIntegration ? {
     gameEngine: aiIntegration.gameEngine,
     board: aiIntegration.board,
@@ -277,7 +208,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     isViewingHistory: aiIntegration.isViewingHistory,
   } : undefined;
 
-  const { isAITurn } = useAIOpponent({
+  useAIOpponent({
     enabled: opponentConfig?.type !== 'human' && opponentConfig?.type != null,
     opponentType: opponentConfig?.type ?? 'human',
     aiColor: opponentConfig?.aiColor ?? 'b',
@@ -288,22 +219,19 @@ const InnerGame: React.FC<GameBoardProps> = ({
     isViewingHistory: aiIntegrationSafe?.isViewingHistory,
   });
 
-  // Reset overlay when game restarts (victory message clears or changes)
+  // Reset overlay when game restarts
   React.useEffect(() => {
     if (!victoryMessage) {
         setOverlayDismissed(false);
     }
   }, [victoryMessage]);
 
-  // VP Accumulation: Award VP at the end of each round based on castle control
+  // VP Accumulation
   React.useEffect(() => {
     if (!victoryPoints || !gameRules?.vpModeEnabled) return;
-    
-    // A round ends every 10 turn counter steps (both players complete their turns)
     const currentRound = Math.floor(turnCounter / 10);
     const prevRound = Math.floor(prevTurnCounterRef.current / 10);
     
-    // Only accumulate VP when entering a new round
     if (currentRound > prevRound && currentRound > 0) {
       const whiteGain = WinCondition.calculateVPGain(castles, 'w');
       const blackGain = WinCondition.calculateVPGain(castles, 'b');
@@ -315,17 +243,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
         } : undefined);
       }
     }
-    
     prevTurnCounterRef.current = turnCounter;
   }, [turnCounter, castles, victoryPoints, gameRules?.vpModeEnabled]);
 
-  // Handle New Game
-  // If game is in progress (and not in analysis/finished), ask for confirmation
   const handleNewGame = () => {
-    // Conditions where we can instantly reset:
-    // 1. Game hasn't started
-    // 2. Someone has won
-    // 3. We are in analysis mode
     const safeToReset = !hasGameStarted || winner || isAnalysisMode;
 
     if (safeToReset) {
@@ -341,10 +262,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
     }
   };
 
-  // Handle entering analysis mode - captures current state
-  // Use last history entry for pieces (handles resign case where monarch was removed)
-  // Handle entering analysis mode - export current game as PGN and re-import it
-  // This reuses the PGN flow which handles all edge cases (resign, etc.)
   const handleEnterAnalysis = React.useCallback(() => {
     const pgn = getPGN();
     const result = loadPGN(pgn);
@@ -361,55 +278,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
     }
   }, [getPGN, loadPGN, onLoadGame]);
 
-  const handleHexHover = React.useCallback((hex: Hex | null, event?: React.MouseEvent) => {
-    tooltip.setHovered(hex, event);
-  }, [tooltip]);
-
-  // Click handler hook - manages abilities, pledging, and delegation
-  const {
-    handleBoardClick: onEngineBoardClick,
-    isPledgeTarget,
-    activeAbility,
-    setActiveAbility,
-    pledgingSanctuary,
-  } = useClickHandler({
-    movingPiece,
-    sanctuaries,
-    pieces,
-    canPledge,
-    pledge,
-    triggerAbility: (sourceHex, targetHex, ability) => {
-        // Find the piece at the source hex to pass to the action
-        const piece = pieces.find(p => p.hex.equals(sourceHex));
-        if (piece) {
-            triggerAbility(piece, targetHex, ability);
-        }
-    },
-    onEngineHexClick,
-    board,
-  });
-
-  const handleBoardClick = (hex: Hex) => {
-    tooltip.clearAll();
-    onEngineBoardClick(hex);
-  };
-
   useInputHandler({
     onPass: handlePass,
-    onFlipBoard: handleFlipBoard,
+    onFlipBoard: viewState.handleFlipBoard,
     onTakeback: handleTakeback,
-    onResize: incrementResizeVersion,
+    onResize: viewState.incrementResizeVersion,
     onNavigate: stepHistory,
     onNewGame: handleNewGame,
     isNewGameEnabled: !hasGameStarted || !!winner,
   });
-
-  // Calculate viewBox for auto-scaling (always enabled for consistent sizing)
-  const viewBox = React.useMemo(() => {
-    return initialLayout.calculateViewBox();
-  }, [initialLayout]);
-
-  // =========== RENDER ===========
 
   const handleImportPGN = () => {
     const pgn = prompt("Paste PGN here:");
@@ -436,44 +313,51 @@ const InnerGame: React.FC<GameBoardProps> = ({
     navigator.clipboard.writeText(pgn).then(() => alert("PGN copied to clipboard!"));
   };
 
-  const handlePieceClickWrapper = (piece: Piece) => {
-    if (activeAbility) {
-        handleBoardClick(piece.hex);
-    } else {
-        handlePieceClick(piece);
-    }
-  };
+  const dismissQuickStart = () => setShowQuickStart(false);
+  const dismissTooltipHint = () => setShowTooltipHint(false);
+
+  const [activeAbility, setActiveAbility] = React.useState<import('../Constants').AbilityType | null>(null);
 
   return (
     <>
-      {/* Hamburger Menu (Top Left) */}
       <HamburgerMenu
         onExportPGN={handleExportPGN}
         onImportPGN={handleImportPGN}
-        onFlipBoard={handleFlipBoard}
-        onToggleCoordinates={toggleCoordinates}
+        onFlipBoard={viewState.handleFlipBoard}
+        onToggleCoordinates={viewState.toggleCoordinates}
         onShowRules={() => setShowRulesModal(true)}
         onEnableAnalysis={handleEnterAnalysis}
         onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
         onTutorial={onTutorial}
         isAnalysisMode={isAnalysisMode}
-        onToggleShields={toggleShields}
-        onToggleCastleRecruitment={toggleCastleRecruitment}
-        onToggleTerrainIcons={toggleTerrainIcons}
-        onToggleSanctuaryIcons={toggleSanctuaryIcons}
-        onSetAllIcons={setAllIcons}
-        showShields={showShields}
-        showCastleRecruitment={showCastleRecruitment}
-        showTerrainIcons={showTerrainIcons}
-        showSanctuaryIcons={showSanctuaryIcons}
-        showCoordinates={showCoordinates}
+        onToggleShields={viewState.toggleShields}
+        onToggleCastleRecruitment={viewState.toggleCastleRecruitment}
+        onToggleTerrainIcons={viewState.toggleTerrainIcons}
+        onToggleSanctuaryIcons={viewState.toggleSanctuaryIcons}
+        onSetAllIcons={viewState.setAllIcons}
+        showShields={viewState.showShields}
+        showCastleRecruitment={viewState.showCastleRecruitment}
+        showTerrainIcons={viewState.showTerrainIcons}
+        showSanctuaryIcons={viewState.showSanctuaryIcons}
+        showCoordinates={viewState.showCoordinates}
       />
 
-      <RulesModal 
-        isOpen={showRulesModal} 
-        onClose={() => setShowRulesModal(false)} 
+      <GameOverlays 
+        showRules={showRulesModal}
+        onCloseRules={() => setShowRulesModal(false)}
+        victoryMessage={victoryMessage}
+        winner={winner}
+        isOverlayDismissed={isOverlayDismissed}
+        onDismissOverlay={() => setOverlayDismissed(true)}
+        onRestart={onRestart}
+        onSetup={onSetup}
+        onEnableAnalysis={handleEnterAnalysis}
+        showQuickStart={showQuickStart}
+        onCloseQuickStart={dismissQuickStart}
+        showTooltipHint={showTooltipHint}
+        onDismissTooltipHint={dismissTooltipHint}
       />
-
+      
       {/* Game Panel (Right Side) - Hidden in tutorial mode */}
       {!isTutorialMode && (
         <ControlPanel
@@ -497,175 +381,32 @@ const InnerGame: React.FC<GameBoardProps> = ({
           victoryPoints={victoryPoints}
         />
       )}
-      {/* Board Container - takes remaining space after control panel */}
-      <div style={{ 
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: isTutorialMode ? '100%' : 'calc(100vw - 300px)',
-        height: '100vh',
-        overflow: 'hidden'
-      }}
-      onClick={() => {
-        // Dismiss tooltips when clicking anywhere on the board
-        tooltip.clearAll();
-      }}
-      >
-        <svg 
-          className={`board ${isInitialLoad ? 'no-transition' : ''}`} 
-          width="100%"
-          height="100%"
-          viewBox={viewBox}
-          preserveAspectRatio="xMidYMid meet"
-        >
-        {/* ... SVG Content ... */}
-        <defs>
-          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur in="SourceAlpha" stdDeviation="5" />
-            <feOffset dx="-2" dy="-2" result="offsetblur" />
-            <feFlood floodColor="rgba(0,0,0,0.5)" />
-            <feComposite in2="offsetblur" operator="in" />
-            <feMerge>
-              <feMergeNode />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        
-        <HexGrid
-          hexagons={hexagons}
-          castles={castles}
-          sanctuaries={sanctuaries}
-          // legalMoveSet={legalMoveSet} // Removed as it's not on HexGrid props
-          // legalAttackSet={legalAttackSet} // Removed as it's not on HexGrid props
-          showCoordinates={showCoordinates}
-          isBoardRotated={isBoardRotated}
-          isAdjacentToControlledCastle={isRecruitmentSpot}
-          onHexClick={handleBoardClick}
-          onHexRightClick={(hex) => {
-            tooltip.clearPiece();
-            const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
-            if (sanctuary) {
-              const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
-              const dummyPiece = PieceFactory.create(pieceType, hex, currentPlayer);
-              tooltip.showPieceTooltip(dummyPiece, true);
-            } else {
-              tooltip.toggleHexTooltip(hex);
-            }
-          }}
-          onHexHover={handleHexHover}
-          resizeVersion={resizeVersion}
-          layout={initialLayout}
-          board={board}
-          isPledgeTarget={isPledgeTarget}
-          pledgingSanctuary={pledgingSanctuary}
-          showCastleRecruitment={showCastleRecruitment}
-          showTerrainIcons={showTerrainIcons}
-          showSanctuaryIcons={showSanctuaryIcons}
-        />
-        <PieceRenderer
-          pieces={pieces}
-          isBoardRotated={isBoardRotated}
-          onPieceClick={handlePieceClickWrapper}
-          onPieceRightClick={(piece) => {
-            if (piece) tooltip.togglePieceTooltip(piece);
-          }}
-          resizeVersion={resizeVersion}
-          layout={initialLayout}
-          board={board}
-          showShields={showShields}
-          pieceTheme={pieceTheme}
-        />
-        {/* Legal move/attack dots rendered AFTER pieces so they appear on top */}
-        <LegalMoveOverlay
-          hexagons={hexagons}
-          legalMoveSet={legalMoveSet}
-          legalAttackSet={legalAttackSet}
-          isBoardRotated={isBoardRotated}
-          onHexClick={handleBoardClick}
-          layout={initialLayout}
-        />
-        </svg>
-      </div>
-
-      {!isOverlayDismissed && (
-          <VictoryOverlay 
-            victoryMessage={victoryMessage} 
-            winner={winner} 
-            onRestart={onRestart}
-            onSetup={onSetup}
-            onAnalyze={() => setOverlayDismissed(true)}
-            onEnableAnalysis={handleEnterAnalysis}
-          />
-      )}
-
-      {/* Ability Bar */}
-      {movingPiece && !victoryMessage && (
-          <AbilityBar
-            movingPiece={movingPiece}
-            activeAbility={activeAbility}
-            onAbilitySelect={setActiveAbility}
-          />
-      )}
       
-      {tooltip.hoveredHex && sanctuaries && (
-          (() => {
-              const sanctuary = sanctuaries.find((s: Sanctuary) => s.hex.equals(tooltip.hoveredHex!));
-              return sanctuary ? (
-                  <SanctuaryTooltip 
-                    sanctuary={sanctuary} 
-                    position={tooltip.mousePosition} 
-                    turnCounter={turnCounter}
-                    sanctuarySettings={sanctuarySettings}
-                  />
-              ) : null;
-          })()
-      )}
+      {/* Board Container */}
+      <BoardContainer 
+        layout={initialLayout}
+        pieceTheme={pieceTheme || "Castles"}
+        isInitialLoad={isInitialLoad}
+        tooltip={tooltip}
+        viewState={viewState}
+        onActiveAbilityChange={setActiveAbility}
+        containerStyle={{
+          position: 'relative', // Override absolute
+          float: 'left',
+          width: isTutorialMode ? '100%' : 'calc(100vw - 300px)',
+        }}
+      />
 
-      {/* Piece info tooltip (right-click on a piece) */}
-      {tooltip.piece && (
-        <PieceTooltip 
-          piece={tooltip.piece} 
-          isDefended={isHexDefended(
-            tooltip.piece.hex, 
-            tooltip.piece.color === 'w' ? 'b' : 'w'
-          )}
-          isPreview={tooltip.isSanctuaryPreview}
-        />
-      )}
-
-      {/* Terrain info tooltip (right-click on empty hex) */}
-      {tooltip.hex && (
-        <TerrainTooltip 
-          hex={tooltip.hex} 
-          board={board} 
-          castle={castles.find(c => c.hex.equals(tooltip.hex!))}
-          position={tooltip.mousePosition} 
-        />
-      )}
-      
-      {/* Tooltip Discovery Hint Banner */}
-      {showTooltipHint && (
-        <div className="tooltip-hint-banner">
-          <img src={lightbulbIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)' }} /> Tip: Right-click any piece or hex for detailed information!
-          <button className="hint-dismiss-btn" onClick={dismissTooltipHint}>
-            Got it
-          </button>
-        </div>
-      )}
-      
-      {/* Quick Start Modal for first-time users */}
-      {showQuickStart && (
-        <QuickStartModal onClose={dismissQuickStart} />
-      )}
+      <GameHUD 
+        tooltip={tooltip}
+        activeAbility={activeAbility}
+        onAbilitySelect={setActiveAbility}
+        sanctuarySettings={sanctuarySettings}
+      />
     </>
   );
 };
 
-/**
- * Main Game Component Wrapper.
- * Provides the GameContext through GameProvider.
- */
 const GameBoard: React.FC<GameBoardProps> = (props) => {
   return (
     <GameProvider
