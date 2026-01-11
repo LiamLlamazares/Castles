@@ -83,20 +83,22 @@ export enum AbilityType {
   RaiseDead = "RaiseDead",   // Necromancer: Revive dead piece
 }
 
-// Sanctuary configuration
+// Sanctuary configuration - single source of truth for sanctuary metadata
 export const SanctuaryConfig: Record<SanctuaryType, {
   pieceType: PieceType;
   tier: 1 | 2 | 3;
   requiredStrength: number;
   requiresSacrifice: boolean;
   startAvailable?: boolean;
+  displayName: string;  // Human-readable name for UI
+  themeColor: string;   // Hex color for UI styling
 }> = {
-  [SanctuaryType.WolfCovenant]: { pieceType: PieceType.Wolf, tier: 1, requiredStrength: 1, requiresSacrifice: false, startAvailable: true },
-  [SanctuaryType.SacredSpring]: { pieceType: PieceType.Healer, tier: 1, requiredStrength: 1, requiresSacrifice: false, startAvailable: true },
-  [SanctuaryType.WardensWatch]: { pieceType: PieceType.Ranger, tier: 2, requiredStrength: 3, requiresSacrifice: false, startAvailable: false },
-  [SanctuaryType.ArcaneRefuge]: { pieceType: PieceType.Wizard, tier: 2, requiredStrength: 3, requiresSacrifice: false, startAvailable: false },
-  [SanctuaryType.ForsakenGrounds]: { pieceType: PieceType.Necromancer, tier: 3, requiredStrength: 4, requiresSacrifice: true, startAvailable: false },
-  [SanctuaryType.PyreEternal]: { pieceType: PieceType.Phoenix, tier: 3, requiredStrength: 4, requiresSacrifice: true, startAvailable: false },
+  [SanctuaryType.WolfCovenant]: { pieceType: PieceType.Wolf, tier: 1, requiredStrength: 1, requiresSacrifice: false, startAvailable: true, displayName: 'Wolf Covenant', themeColor: '#8b5a2b' },
+  [SanctuaryType.SacredSpring]: { pieceType: PieceType.Healer, tier: 1, requiredStrength: 1, requiresSacrifice: false, startAvailable: true, displayName: 'Sacred Spring', themeColor: '#3cb371' },
+  [SanctuaryType.WardensWatch]: { pieceType: PieceType.Ranger, tier: 2, requiredStrength: 3, requiresSacrifice: false, startAvailable: false, displayName: "Warden's Watch", themeColor: '#228b22' },
+  [SanctuaryType.ArcaneRefuge]: { pieceType: PieceType.Wizard, tier: 2, requiredStrength: 3, requiresSacrifice: false, startAvailable: false, displayName: 'Arcane Refuge', themeColor: '#6a5acd' },
+  [SanctuaryType.ForsakenGrounds]: { pieceType: PieceType.Necromancer, tier: 3, requiredStrength: 4, requiresSacrifice: true, startAvailable: false, displayName: 'Forsaken Grounds', themeColor: '#4a0e4e' },
+  [SanctuaryType.PyreEternal]: { pieceType: PieceType.Phoenix, tier: 3, requiredStrength: 4, requiresSacrifice: true, startAvailable: false, displayName: 'Pyre Eternal', themeColor: '#ff4500' },
 };
 
 /**
@@ -135,10 +137,13 @@ export const DEFENDED_PIECE_IS_PROTECTED_RANGED = true; //if true, a defended pi
  *   - Turn Number:    Math.floor(turnCounter / 10) + 1
  */
 export const PHASE_CYCLE_LENGTH = 5;    // One player's turn = 5 sub-phases
-export const PLAYER_CYCLE_LENGTH = 10;  // Full round = both players = 10 sub-phases
+export const PLAYER_CYCLE_LENGTH = PHASE_CYCLE_LENGTH * 2;  // Full round = both players (derived)
 export const PHASES_PER_TURN = PHASE_CYCLE_LENGTH * 2; // Total phases in a full turn (both players)
 export const MOVEMENT_PHASE_END = 2;    // Indices 0-1 are Movement
 export const ATTACK_PHASE_END = 4;      // Indices 2-3 are Attack (index 4 is Recruitment)
+
+// Castle generation default
+export const DEFAULT_CASTLES_PER_SIDE = 3;
 export enum GameResult {
   WhiteWins = "1-0",
   BlackWins = "0-1",

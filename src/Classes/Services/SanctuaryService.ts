@@ -27,7 +27,7 @@ import { TurnManager } from "../Core/TurnManager";
 import { NotationService } from "../Systems/NotationService";
 import { createPieceMap } from "../../utils/PieceMap";
 import { createHistorySnapshot } from "../../utils/GameStateUtils";
-import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, MoveRecord, PHASE_CYCLE_LENGTH, PHASES_PER_TURN } from "../../Constants";
+import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, MoveRecord, PHASE_CYCLE_LENGTH, PHASES_PER_TURN, PLAYER_CYCLE_LENGTH } from "../../Constants";
 import { Board } from "../Core/Board";
 import { RuleEngine } from "../Systems/RuleEngine";
 
@@ -179,7 +179,7 @@ export class SanctuaryService {
     const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
     const record: MoveRecord = {
       notation,
-      turnNumber: Math.floor(gameState.turnCounter / 10) + 1,
+      turnNumber: Math.floor(gameState.turnCounter / PLAYER_CYCLE_LENGTH) + 1,
       color: TurnManager.getCurrentPlayer(gameState.turnCounter),
       phase: TurnManager.getTurnPhase(gameState.turnCounter)
     };
