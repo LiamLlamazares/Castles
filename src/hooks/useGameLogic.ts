@@ -74,7 +74,7 @@ export const useGameLogic = (
   // isAnalysisMode is true when user explicitly entered Analysis Mode
   // This enables variant creation and shows move indicators
   const { isViewingHistory, analysisState, stepHistory } = useAnalysisMode(state, setState, isAnalysisMode);
-  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree);
+  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree, sanctuarySettings);
 
   // Destructure for convenience
   const {

@@ -27,6 +27,7 @@ export interface PGNHookResult {
     turnCounter: number;
     sanctuaries: import("../Classes/Entities/Sanctuary").Sanctuary[];
     castles: import("../Classes/Entities/Castle").Castle[];
+    sanctuarySettings?: { unlockTurn: number, cooldown: number };
   } | null;
 }
 
@@ -38,7 +39,8 @@ export const usePGN = (
   initialPieces: Piece[],
   initialSanctuaries: Sanctuary[],
   moveHistory: MoveRecord[],
-  moveTree: MoveTree | undefined
+  moveTree: MoveTree | undefined,
+  sanctuarySettings?: { unlockTurn: number, cooldown: number }
 ): PGNHookResult => {
   
   const getPGN = useCallback(() => {
@@ -51,8 +53,14 @@ export const usePGN = (
     const startPieces = rootSnapshot?.pieces ?? initialPieces;
     const startSanctuaries = rootSnapshot?.sanctuaries ?? initialSanctuaries;
     
-    return PGNService.generatePGN(initialBoard, startPieces, moveHistory, startSanctuaries, {}, moveTree);
-  }, [initialBoard, initialPieces, moveHistory, initialSanctuaries, moveTree]);
+    // Convert to GameSettings format for PGN export
+    const gameSettings = sanctuarySettings ? {
+      sanctuaryUnlockTurn: sanctuarySettings.unlockTurn,
+      sanctuaryRechargeTurns: sanctuarySettings.cooldown
+    } : undefined;
+    
+    return PGNService.generatePGN(initialBoard, startPieces, moveHistory, startSanctuaries, {}, moveTree, gameSettings);
+  }, [initialBoard, initialPieces, moveHistory, initialSanctuaries, moveTree, sanctuarySettings]);
 
   const loadPGN = useCallback((pgn: string) => {
     // DEBUG: Uncomment these logs if PGN import issues occur
@@ -67,8 +75,14 @@ export const usePGN = (
     
     const { board, pieces: startPieces, sanctuaries: startSanctuaries } = PGNService.reconstructState(setup);
     
+    // Extract gameSettings from setup
+    const importedSettings = setup.gameSettings ? {
+      unlockTurn: setup.gameSettings.sanctuaryUnlockTurn,
+      cooldown: setup.gameSettings.sanctuaryRechargeTurns
+    } : undefined;
+    
     try {
-      const finalState = PGNService.replayMoveHistory(board, startPieces, moveTree, startSanctuaries);
+      const finalState = PGNService.replayMoveHistory(board, startPieces, moveTree, startSanctuaries, setup.gameSettings);
       
       return { 
         board, 
@@ -78,7 +92,8 @@ export const usePGN = (
         history: finalState.history,
         moveHistory: finalState.moveHistory,
         moveTree: finalState.moveTree!,
-        turnCounter: finalState.turnCounter
+        turnCounter: finalState.turnCounter,
+        sanctuarySettings: importedSettings
       };
     } catch (e) {
       console.error("Failed to replay moves:", e);

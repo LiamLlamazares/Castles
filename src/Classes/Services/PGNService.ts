@@ -22,10 +22,10 @@ import { MoveRecord, HistoryEntry, TurnPhase, GameResult } from "../../Constants
 import { MoveTree } from "../Core/MoveTree";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { GameState } from "../Core/GameState";
-import { GameSetup } from "./PGNTypes"; // Also re-import locally needed type if necessary, or just rely on the export? GameSetup is used in the class.
+import { GameSetup, GameSettings } from "./PGNTypes";
 
 // Re-export types
-export type { GameSetup, CompactSetup } from "./PGNTypes";
+export type { GameSetup, CompactSetup, GameSettings } from "./PGNTypes";
 
 /**
  * Facade class for PGN operations.
@@ -51,9 +51,10 @@ export class PGNService {
     history: MoveRecord[],
     sanctuaries: Sanctuary[] = [],
     gameTags: { [key: string]: string } = {},
-    moveTree?: MoveTree
+    moveTree?: MoveTree,
+    gameSettings?: GameSettings
   ): string {
-    return PGNGenerator.generatePGN(board, pieces, history, sanctuaries, gameTags, moveTree);
+    return PGNGenerator.generatePGN(board, pieces, history, sanctuaries, gameTags, moveTree, gameSettings);
   }
 
   // ============ PARSING (delegated to PGNImporter) ============
@@ -82,8 +83,9 @@ export class PGNService {
     board: Board,
     initialPieces: Piece[],
     input: MoveTree,
-    initialSanctuaries: Sanctuary[] = []
+    initialSanctuaries: Sanctuary[] = [],
+    gameSettings?: { sanctuaryUnlockTurn: number, sanctuaryRechargeTurns: number }
   ): GameState {
-    return PGNImporter.replayMoveHistory(board, initialPieces, input, initialSanctuaries);
+    return PGNImporter.replayMoveHistory(board, initialPieces, input, initialSanctuaries, gameSettings);
   }
 }

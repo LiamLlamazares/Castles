@@ -17,7 +17,7 @@ import { MoveRecord, Color } from "../../Constants";
 import { MoveTree, MoveNode } from "../Core/MoveTree";
 import { SanctuaryType } from "../../Constants";
 import { Sanctuary } from "../Entities/Sanctuary";
-import { GameSetup, CompactSetup, CastleSetup, PieceSetup, SanctuarySetup } from "./PGNTypes";
+import { GameSetup, CompactSetup, CastleSetup, PieceSetup, SanctuarySetup, GameSettings } from "./PGNTypes";
 
 export class PGNGenerator {
   /**
@@ -29,7 +29,8 @@ export class PGNGenerator {
     history: MoveRecord[],
     sanctuaries: Sanctuary[] = [],
     gameTags: { [key: string]: string } = {},
-    moveTree?: MoveTree
+    moveTree?: MoveTree,
+    gameSettings?: GameSettings
   ): string {
     const setup: GameSetup = {
       boardConfig: board.config,
@@ -55,6 +56,7 @@ export class PGNGenerator {
         cooldown: s.cooldown,
         hasPledgedThisGame: s.hasPledgedThisGame,
       })),
+      gameSettings: gameSettings,
     };
 
     const compactSetup = PGNGenerator.compressSetup(setup);
@@ -180,6 +182,13 @@ export class PGNGenerator {
               s.cooldown, 
               s.hasPledgedThisGame ? 1 : 0
           ]);
+      }
+      // Include game settings if present
+      if (setup.gameSettings) {
+          result.g = [
+              setup.gameSettings.sanctuaryUnlockTurn,
+              setup.gameSettings.sanctuaryRechargeTurns
+          ];
       }
       return result;
   }

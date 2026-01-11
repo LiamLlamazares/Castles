@@ -114,6 +114,13 @@ export class PGNImporter {
               hasPledgedThisGame: s[6] === 1
           }));
       }
+      // Decompress game settings if present
+      if (compact.g) {
+          result.gameSettings = {
+              sanctuaryUnlockTurn: compact.g[0],
+              sanctuaryRechargeTurns: compact.g[1]
+          };
+      }
       return result;
   }
 
@@ -235,46 +242,59 @@ export class PGNImporter {
                        }
                    }
                }
-               // Pledge: P:WlfK11
-               else if (token.startsWith('P:')) {
-                   const pledgeData = token.substring(2); 
-                   const pieceCode = pledgeData.substring(0, 3);
-                   const spawnCoord = pledgeData.substring(3);
-                   const spawnHex = NotationService.fromCoordinate(spawnCoord);
-                   
-                   let pieceType: PieceType | undefined;
-                   switch(pieceCode) {
-                       case "Wlf": pieceType = PieceType.Wolf; break;
-                       case "Hea": pieceType = PieceType.Healer; break;
-                       case "Rng": pieceType = PieceType.Ranger; break;
-                       case "Wiz": pieceType = PieceType.Wizard; break;
-                       case "Nec": pieceType = PieceType.Necromancer; break;
-                       case "Phx": pieceType = PieceType.Phoenix; break;
-                   }
-                   
-                   if (!pieceType) throw new Error(`Unknown pledge piece code ${pieceCode}`);
-                   
-                   // Find the sanctuary that produced this piece type
-                   const sanctuary = currentState.sanctuaries.find(s => 
-                       s.pieceType === pieceType && s.isReady
-                   );
-                   
-                   if (sanctuary) {
-                       // Use the engine's pledge method for full evolution logic
-                       nextState = engine.pledge(currentState, sanctuary.hex, spawnHex);
-                   } else {
-                       // Fallback: Just spawn the piece (legacy PGN compatibility)
-                       const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
-                       const newPieces = [...nextState.pieces, newPiece];
-                       
-                       nextState = {
-                           ...nextState,
-                           pieces: newPieces,
-                           pieceMap: createPieceMap(newPieces)
-                       };
-                       nextState = engine.passTurn(nextState);
-                   }
-               }
+                // Pledge: P:WlfK11
+                else if (token.startsWith('P:')) {
+                    const pledgeData = token.substring(2); 
+                    const pieceCode = pledgeData.substring(0, 3);
+                    const spawnCoord = pledgeData.substring(3);
+                    const spawnHex = NotationService.fromCoordinate(spawnCoord);
+                    
+                    let pieceType: PieceType | undefined;
+                    switch(pieceCode) {
+                        case "Wlf": pieceType = PieceType.Wolf; break;
+                        case "Hea": pieceType = PieceType.Healer; break;
+                        case "Rng": pieceType = PieceType.Ranger; break;
+                        case "Wiz": pieceType = PieceType.Wizard; break;
+                        case "Nec": pieceType = PieceType.Necromancer; break;
+                        case "Phx": pieceType = PieceType.Phoenix; break;
+                    }
+                    
+                    if (!pieceType) throw new Error(`Unknown pledge piece code ${pieceCode}`);
+                    
+                    // Find the sanctuary that produced this piece type
+                    const sanctuary = currentState.sanctuaries.find(s => 
+                        s.pieceType === pieceType && s.isReady
+                    );
+                    
+                    if (sanctuary) {
+                        try {
+                            // Use the engine's pledge method for full evolution logic
+                            nextState = engine.pledge(currentState, sanctuary.hex, spawnHex);
+                        } catch (pledgeError) {
+                            // Fallback to manual spawn on pledge failure
+                            const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
+                            const newPieces = [...currentState.pieces, newPiece];
+                            
+                            nextState = {
+                                ...currentState,
+                                pieces: newPieces,
+                                pieceMap: createPieceMap(newPieces)
+                            };
+                            nextState = engine.passTurn(nextState);
+                        }
+                    } else {
+                        // Fallback: Just spawn the piece (legacy PGN compatibility)
+                        const newPiece = new Piece(spawnHex, currentPlayer, pieceType);
+                        const newPieces = [...nextState.pieces, newPiece];
+                        
+                        nextState = {
+                            ...nextState,
+                            pieces: newPieces,
+                            pieceMap: createPieceMap(newPieces)
+                        };
+                        nextState = engine.passTurn(nextState);
+                    }
+                }
                 // Movement: J10K11
                 else {
                     // Check for Ability Notation (e.g. WT:J10K11)
@@ -362,7 +382,8 @@ export class PGNImporter {
       board: Board, 
       initialPieces: Piece[], 
       moveTree: MoveTree,
-      initialSanctuaries: Sanctuary[] = []
+      initialSanctuaries: Sanctuary[] = [],
+      gameSettings?: { sanctuaryUnlockTurn: number, sanctuaryRechargeTurns: number }
   ): GameState {
       // Initialize fresh engine and state
       const engine = new GameEngine(board);
@@ -376,12 +397,19 @@ export class PGNImporter {
         (t): t is import("../../Constants").SanctuaryType => !usedTypes.includes(t as any)
       );
 
+      // Map gameSettings to sanctuarySettings format used by GameState
+      const sanctuarySettings = gameSettings ? {
+          unlockTurn: gameSettings.sanctuaryUnlockTurn,
+          cooldown: gameSettings.sanctuaryRechargeTurns
+      } : undefined;
+
       const initialState: GameState = {
           pieces: initialPieces.map(p => p.clone()), 
           pieceMap: createPieceMap(initialPieces),
           castles: castles.map(c => c.clone()),
           sanctuaries: initialSanctuaries.map(s => s.clone()),
           sanctuaryPool,
+          sanctuarySettings, // Include imported game settings
           moveTree: moveTree, 
           turnCounter: 0, 
           movingPiece: null,

@@ -24,6 +24,16 @@ export type SanctuarySetup = {
   hasPledgedThisGame: boolean 
 };
 
+/** 
+ * Game settings for sanctuary mechanics.
+ * - sanctuaryUnlockTurn: Turns from game start before sanctuaries become usable
+ * - sanctuaryRechargeTurns: Turns after pledging before sanctuary can be used again
+ */
+export type GameSettings = {
+  sanctuaryUnlockTurn: number;
+  sanctuaryRechargeTurns: number;
+};
+
 /**
  * Full game setup data for serialization/deserialization.
  * Contains all information needed to reconstruct initial game state.
@@ -33,6 +43,7 @@ export interface GameSetup {
   castles: CastleSetup[];
   pieces: PieceSetup[];
   sanctuaries?: SanctuarySetup[];
+  gameSettings?: GameSettings;
 }
 
 /**
@@ -44,4 +55,6 @@ export interface CompactSetup {
   c: [number, number, number, 0 | 1][]; // q, r, s, color (0=w, 1=b)
   p: [PieceType, number, number, number, 0 | 1][]; // type, q, r, s, color
   s?: [SanctuaryType, number, number, number, 0 | 1, number, 0 | 1][]; // type, q, r, s, territorySide, cooldown, hasPledgedThisGame
+  g?: [number, number]; // [sanctuaryUnlockTurn, sanctuaryRechargeTurns]
 }
+
