@@ -34,6 +34,7 @@ import {
   MoveRecord,
   AbilityType,
 } from "../../Constants";
+import { GameError, GameErrorCode } from "./GameError";
 
 /**
  * GameEngine: Central state machine for the Castles game.
@@ -58,13 +59,18 @@ export class GameEngine {
   public activateAbility(gameState: GameState, sourceHex: Hex, targetHex: Hex, ability: AbilityType): GameState {
       // Find source piece
       const source = gameState.pieceMap.getByKey(sourceHex.getKey());
-      if (!source) throw new Error("No piece at source hex");
+      if (!source) {
+          throw new GameError("No piece at source hex", GameErrorCode.ABILITY_ERROR);
+      }
       
       // Use AbilitySystem for comprehensive validation
       const validation = AbilitySystem.validate(source, targetHex, ability, gameState);
       
       if (!validation.valid) {
-        throw new Error(validation.error || "Invalid ability usage");
+        throw new GameError(
+            validation.error || "Invalid ability usage",
+            GameErrorCode.ABILITY_ERROR
+        );
       }
 
       return StateMutator.activateAbility(gameState, source, targetHex, ability, this.board);

@@ -10,6 +10,7 @@ import { NotationService } from "../NotationService";
 import { DeathSystem } from "../DeathSystem";
 import { AbilityType, PieceType } from "../../../Constants";
 import { ActionOrchestrator } from "./ActionOrchestrator";
+import { GameError, GameErrorCode } from "../../Core/GameError";
 
 export class AbilityMutator {
 
@@ -59,18 +60,26 @@ export class AbilityMutator {
            newPieces = piecesBeforeDeath.filter(p => p.damage < p.Strength);
 
        } else if (ability === AbilityType.Teleport) {
-           if (state.pieceMap.has(targetHex)) throw new Error("Teleport target blocked");
+           if (state.pieceMap.has(targetHex)) {
+               throw new GameError("Teleport target blocked", GameErrorCode.ABILITY_ERROR);
+           }
            
            newPieces = newPieces.map(p => p.hex.getKey() === source.hex.getKey() 
                 ? p.with({ hex: targetHex })
                 : p
            );
        } else if (ability === AbilityType.RaiseDead) {
-           if (source.souls < 1) throw new Error("Not enough souls");
-           if (state.pieceMap.has(targetHex)) throw new Error("Target hex occupied");
+           if (source.souls < 1) {
+               throw new GameError("Not enough souls", GameErrorCode.ABILITY_ERROR);
+           }
+           if (state.pieceMap.has(targetHex)) {
+               throw new GameError("Target hex occupied", GameErrorCode.ABILITY_ERROR);
+           }
 
            const friendliesInGraveyard = newGraveyard.filter(p => p.color === source.color);
-           if (friendliesInGraveyard.length === 0) throw new Error("No friendly bodies to raise");
+           if (friendliesInGraveyard.length === 0) {
+               throw new GameError("No friendly bodies to raise", GameErrorCode.ABILITY_ERROR);
+           }
 
            const bodyToRaise = friendliesInGraveyard[friendliesInGraveyard.length - 1];
 
