@@ -22,6 +22,7 @@ import { createHistorySnapshot } from "../utils/GameStateUtils";
 import { TurnPhase, Color, MoveRecord, AbilityType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { useInputController } from "./useInputController";
+import { gameEvents } from "../Classes/Events";
 
 // Command Pattern imports
 import {
@@ -119,6 +120,23 @@ export const useMoveExecution = ({
       const result = command.execute(stateToExecute);
 
       if (result.success) {
+        // Check for Game Over condition
+        const winner = gameEngine.getWinner(
+            result.newState.pieces, 
+            result.newState.castles, 
+            result.newState.victoryPoints
+        );
+
+        if (winner) {
+            gameEvents.emit({
+                type: "GAME_ENDED",
+                winner,
+                reason: "monarch_captured", // Valid reason type
+                timestamp: Date.now(),
+                turnNumber: Math.floor(result.newState.turnCounter / 10) + 1
+            });
+        }
+
         setState((prev: GameState) => ({
           ...prev,
           ...result.newState,
@@ -130,7 +148,7 @@ export const useMoveExecution = ({
         return false;
       }
     },
-    [isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, setState]
+    [isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, setState, gameEngine] // Added gameEngine dependency
   );
 
   /**
