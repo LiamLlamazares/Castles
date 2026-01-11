@@ -38,11 +38,10 @@ const createMockState = (
   sanctuaryPool: [],
   turnCounter,
   movingPiece: null,
-  history: [],
-  moveHistory: [],
   moveTree: new MoveTree(),
   graveyard: [],
   phoenixRecords: [],
+  viewNodeId: null
 });
 
 describe("RandomAgent", () => {

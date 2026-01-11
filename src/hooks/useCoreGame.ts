@@ -30,8 +30,6 @@ export interface GameBoardState extends GameState, Omit<AnalysisModeState, 'move
 export const useCoreGame = (
   initialBoard: import("../Classes/Core/Board").Board = startingBoard,
   initialPieces: Piece[] = allPieces,
-  initialHistory: HistoryEntry[] = [],
-  initialMoveHistory: MoveRecord[] = [],
   initialTurnCounter: number = 0,
   initialSanctuaries?: Sanctuary[],
   initialMoveTree?: MoveTree,
@@ -70,18 +68,11 @@ export const useCoreGame = (
       moveNotation: []
     };
     
-    if (initialMoveHistory && initialMoveHistory.length > 0) {
-      tree.goToRoot();
-      for (const move of initialMoveHistory) {
-        tree.addMove(move);
-      }
-    }
     return tree;
-  }, [initialMoveHistory, initialMoveTree, initialPieces, initialBoard, startingSanctuaries]);
+  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries]);
 
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>({
-    history: initialHistory,
     pieces: initialPieces,
     pieceMap: createPieceMap(initialPieces),
     movingPiece: null,
@@ -95,7 +86,7 @@ export const useCoreGame = (
       
       // 2. If explicit pool provided, use it (already trusted)
       if (initialPoolTypes) return true;
-
+ 
       // 3. Otherwise use defaults from config
       const config = SanctuaryConfig[t];
       return config.startAvailable === true; // Default to blocked if undefined, though we set defaults
@@ -105,7 +96,6 @@ export const useCoreGame = (
     moveTree: startingMoveTree,
     
     // History Navigation (node-based)
-    moveHistory: initialMoveHistory,
     viewNodeId: null,  // Node ID for tree navigation (null = live)
     graveyard: [],
     phoenixRecords: []

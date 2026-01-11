@@ -34,8 +34,6 @@ interface GameProviderProps {
   // Initial Configuration
   initialBoard?: Board;
   initialPieces?: Piece[];
-  initialHistory?: HistoryEntry[];
-  initialMoveHistory?: MoveRecord[];
   initialTurnCounter?: number;
   initialSanctuaries?: Sanctuary[];
   isAnalysisMode?: boolean;
@@ -50,8 +48,6 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   children,
   initialBoard = startingBoard,
   initialPieces = allPieces,
-  initialHistory = [],
-  initialMoveHistory = [],
   initialTurnCounter = 0,
   initialSanctuaries,
   isAnalysisMode = false,
@@ -66,10 +62,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const { state, setState, gameEngine, startingSanctuaries } = useCoreGame(
     initialBoard, 
     initialPieces, 
-    initialHistory, 
-    initialMoveHistory, 
-    initialTurnCounter, 
-    initialSanctuaries, 
+    initialTurnCounter,
+    initialSanctuaries,
     initialMoveTree,
     sanctuarySettings,
     gameRules,
@@ -78,12 +72,10 @@ export const GameProvider: React.FC<GameProviderProps> = ({
 
   // =========== COMPOSED HOOKS ===========
   const { isViewingHistory, analysisState, stepHistory } = useAnalysisMode(state, setState, isAnalysisMode);
-  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree, sanctuarySettings);
+  const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveTree, sanctuarySettings);
 
   const {
-    movingPiece, 
-    history, 
-    moveHistory 
+    movingPiece 
   } = state;
 
   // =========== VIEW STATE CONTROLLER ===========
@@ -177,22 +169,23 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   });
 
   const handleTakeback = useCallback(() => {
-    if (history.length > 0) {
-      const newHistory = [...history];
-      const previousState = newHistory.pop();
-      if (previousState) {
+    const newTree = state.moveTree.clone();
+    if (newTree.navigateBack()) {
+      const parentNode = newTree.current;
+      const snapshot = parentNode.snapshot;
+      if (snapshot) {
         setState(prev => ({
           ...prev,
-          pieces: previousState.pieces,
-          castles: previousState.castles,
-          sanctuaries: previousState.sanctuaries,
-          turnCounter: previousState.turnCounter,
-          history: newHistory,
+          pieces: snapshot.pieces,
+          castles: snapshot.castles,
+          sanctuaries: snapshot.sanctuaries,
+          turnCounter: snapshot.turnCounter,
+          moveTree: newTree,
           movingPiece: null
         }));
       }
     }
-  }, [history, setState]);
+  }, [state.moveTree, setState]);
 
   const hasGameStarted = turnCounter > 0;
 
@@ -202,43 +195,47 @@ export const GameProvider: React.FC<GameProviderProps> = ({
 
   // =========== CONTEXT VALUES ===========
   
-  const gameStateValue: IGameState = useMemo(() => ({
-    pieces,
-    castles,
-    sanctuaries: state.sanctuaries || [],
-    turnCounter,
-    pieceMap: viewState.pieceMap,
-    movingPiece,
-    turnPhase,
-    currentPlayer,
-    hexagons,
-    legalMoveSet,
-    legalAttackSet,
-    victoryMessage,
-    winner,
-    isRecruitmentSpot,
-    board: gameEngine.board,
-    moveTree: state.moveTree,
-    moveHistory,
-    history: state.history,
-    sanctuaryPool: state.sanctuaryPool,
-    graveyard: state.graveyard,
-    phoenixRecords: state.phoenixRecords,
-    hasGameStarted,
-    isAnalysisMode,
-    isViewingHistory,
-    viewNodeId: state.viewNodeId,
-    aiIntegration: {
-      gameEngine,
+  const gameStateValue: IGameState = useMemo(() => {
+    const currentLine = state.moveTree.getHistoryLine();
+    
+    return {
+      pieces,
+      castles,
+      sanctuaries: state.sanctuaries || [],
+      turnCounter,
+      pieceMap: viewState.pieceMap,
+      movingPiece,
+      turnPhase,
+      currentPlayer,
+      hexagons,
+      legalMoveSet,
+      legalAttackSet,
+      victoryMessage,
+      winner,
+      isRecruitmentSpot,
       board: gameEngine.board,
-      getState: () => state,
-      applyAIState: (newState: GameState) => setState(prev => ({ ...prev, ...newState })),
+      moveTree: state.moveTree,
+      moveHistory: currentLine,
+      history: [], // History object array now legacy or empty
+      sanctuaryPool: state.sanctuaryPool,
+      graveyard: state.graveyard,
+      phoenixRecords: state.phoenixRecords,
+      hasGameStarted,
+      isAnalysisMode,
       isViewingHistory,
-    }
-  }), [
+      viewNodeId: state.viewNodeId,
+      aiIntegration: {
+        gameEngine,
+        board: gameEngine.board,
+        getState: () => state,
+        applyAIState: (newState: GameState) => setState(prev => ({ ...prev, ...newState })),
+        isViewingHistory,
+      }
+    };
+  }, [
     pieces, castles, state.sanctuaries, turnCounter, viewState.pieceMap, movingPiece,
     turnPhase, currentPlayer, hexagons, legalMoveSet, legalAttackSet, victoryMessage, winner,
-    isRecruitmentSpot, gameEngine, state.moveTree, moveHistory, state.history,
+    isRecruitmentSpot, gameEngine, state.moveTree,
     state.sanctuaryPool, state.graveyard, state.phoenixRecords,
     hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state, setState
   ]);

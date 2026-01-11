@@ -22,11 +22,10 @@ const createMockState = (pieces: Piece[], castles: Castle[] = [], turnCounter: n
     sanctuaryPool: [],
     turnCounter,
     movingPiece: null,
-    history: [],
-    moveHistory: [],
     moveTree: new MoveTree(),
     graveyard: [],
-    phoenixRecords: []
+    phoenixRecords: [],
+    viewNodeId: null
 });
 
 describe('GameEngine', () => {

@@ -21,6 +21,10 @@ export interface PhoenixRecord {
 /**
  * Represents the complete state of a game at any point.
  * Used for state transitions and history tracking.
+ * 
+ * History/Variation Tracking:
+ * - All historical snapshots are stored within the MoveTree nodes.
+ * - Current position is defined by moveTree.current.
  */
 export interface GameState {
   pieces: Piece[];
@@ -31,9 +35,7 @@ export interface GameState {
   sanctuarySettings?: { unlockTurn: number, cooldown: number }; // Configurable sanctuary settings
   turnCounter: number;
   movingPiece: Piece | null;
-  history: HistoryEntry[];
-  moveHistory: MoveRecord[];
-  moveTree: MoveTree; // Mandatory for history and variation tracking
+  moveTree: MoveTree; // SINGLE SOURCE OF TRUTH for history and variations
   graveyard: Piece[]; // Captured pieces eligible for revival
   phoenixRecords: PhoenixRecord[]; // Active rebirth timers
   viewNodeId: string | null; // Node ID for history navigation (null = live)

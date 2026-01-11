@@ -32,8 +32,8 @@ describe("PGNService", () => {
     // Replay
     const finalState = PGNService.replayMoveHistory(board, pieces, moveTree);
     
-    // Should have history entries for the replayed moves (at least one per move)
-    expect(finalState.history.length).toBeGreaterThanOrEqual(3);
+    // Should have history entries for the replayed moves in the tree
+    expect(finalState.moveTree.getHistoryLine().length).toBeGreaterThanOrEqual(3);
     
     // Castle at M11 (3,-1,-2) should be captured by white
     const m11Castle = finalState.castles.find(c => 

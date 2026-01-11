@@ -7,13 +7,10 @@ import { Piece } from "../../Entities/Piece";
 import { Hex } from "../../Entities/Hex";
 import { Board } from "../../Core/Board";
 import { NotationService } from "../NotationService";
-import { MutatorUtils } from "./MutatorUtils";
 import { TurnManager } from "../../Core/TurnManager";
-import { RuleEngine } from "../RuleEngine";
 import { CombatSystem } from "../CombatSystem";
 import { DeathSystem } from "../DeathSystem";
-import { createPieceMap } from "../../../utils/PieceMap";
-import { TurnMutator } from "./TurnMutator";
+import { ActionOrchestrator } from "./ActionOrchestrator";
 
 export class CombatMutator {
 
@@ -23,8 +20,6 @@ export class CombatMutator {
         ? NotationService.getCastleCaptureNotation(piece, castle)
         : NotationService.getMoveNotation(piece, targetHex);
     
-    const record = MutatorUtils.createMoveRecord(notation, state);
-    const newMoveHistory = MutatorUtils.appendHistory(state, record);
     const capturer = TurnManager.getCurrentPlayer(state.turnCounter);
     
     // Move the piece onto the castle AND consume attack
@@ -43,36 +38,19 @@ export class CombatMutator {
         return c;
     });
 
-    const newPieceMap = createPieceMap(newPieces);
-    
-    const tempState: GameState = { ...state, pieces: newPieces, pieceMap: newPieceMap, castles: newCastles };
-    const newTurnCounter = state.turnCounter + RuleEngine.getTurnCounterIncrement(tempState, board);
-    
-    const result = TurnMutator.checkTurnTransitions({
-        ...state,
-        pieces: newPieces,
-        pieceMap: newPieceMap,
-        castles: newCastles,
-        movingPiece: null,
-        turnCounter: newTurnCounter,
-        moveHistory: newMoveHistory
-    });
-
-    return {
-        ...result,
-        moveTree: MutatorUtils.recordMoveInTree(result, record)
-    };
+    return ActionOrchestrator.finalizeAction(
+        state,
+        { pieces: newPieces, castles: newCastles },
+        notation,
+        board
+    );
   }
 
   public static applyAttack(state: GameState, attacker: Piece, targetHex: Hex, board: Board): GameState {
      const notation = NotationService.getAttackNotation(attacker, targetHex);
-     const record = MutatorUtils.createMoveRecord(notation, state);
-     const newMoveHistory = MutatorUtils.appendHistory(state, record);
 
      // Use CombatSystem to resolve the logic
      const result = CombatSystem.resolveAttack(state.pieces, attacker, targetHex, state.pieceMap);
-
-     const newPieceMap = createPieceMap(result.pieces);
      
      // Check if attacker captured the target AND target was on a castle
      // If so, transfer castle ownership to the attacker's owner
@@ -84,9 +62,6 @@ export class CombatMutator {
        ? state.castles.map(c => c.hex.equals(targetHex) ? c.with({ owner: attackerColor }) : c)
        : state.castles;
      
-     const tempState: GameState = { ...state, pieces: result.pieces, pieceMap: newPieceMap, castles: newCastles };
-     const increment = RuleEngine.getTurnCounterIncrement(tempState, board);
-     
      // Delegate Death Processing to DeathSystem
      let newGraveyard = state.graveyard || [];
      let newPhoenixRecords = state.phoenixRecords || [];
@@ -97,21 +72,16 @@ export class CombatMutator {
          if (updates.phoenixRecords) newPhoenixRecords = updates.phoenixRecords;
      }
       
-     const resultState = TurnMutator.checkTurnTransitions({
-          ...state,
-          pieces: result.pieces,
-          pieceMap: newPieceMap,
-          castles: newCastles,
-          movingPiece: null,
-          turnCounter: state.turnCounter + increment,
-          moveHistory: newMoveHistory,
-          graveyard: newGraveyard,
-          phoenixRecords: newPhoenixRecords
-     });
-
-     return {
-         ...resultState,
-         moveTree: MutatorUtils.recordMoveInTree(resultState, record)
-     };
+     return ActionOrchestrator.finalizeAction(
+        state,
+        { 
+            pieces: result.pieces, 
+            castles: newCastles, 
+            graveyard: newGraveyard, 
+            phoenixRecords: newPhoenixRecords 
+        },
+        notation,
+        board
+     );
   }
 }

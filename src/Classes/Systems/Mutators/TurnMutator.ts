@@ -1,41 +1,27 @@
-/**
- * @file TurnMutator.ts
- * @description Handles turn management and phase transitions.
- */
 import { GameState } from "../../Core/GameState";
 import { Board } from "../../Core/Board";
-import { StateMutator } from "../StateMutator"; // Circular dependency note: eventually this will replace StateMutator
-import { RuleEngine } from "../RuleEngine";
 import { NotationService } from "../NotationService";
-import { MutatorUtils } from "./MutatorUtils";
 import { DeathSystem } from "../DeathSystem";
 import { PieceType, PHASE_CYCLE_LENGTH } from "../../../Constants";
 import { createPieceMap } from "../../../utils/PieceMap";
+import { ActionOrchestrator } from "./ActionOrchestrator";
 
 export class TurnMutator {
 
   public static passTurn(state: GameState, board: Board): GameState {
       const notation = NotationService.getPassNotation();
-      const record = MutatorUtils.createMoveRecord(notation, state);
-      const newMoveHistory = MutatorUtils.appendHistory(state, record);
-      
-      const increment = RuleEngine.getTurnCounterIncrement(state, board, true);
-      
-      const result = TurnMutator.checkTurnTransitions({
-          ...state,
-          movingPiece: null,
-          turnCounter: state.turnCounter + increment,
-          moveHistory: newMoveHistory
-      });
-
-      return {
-          ...result,
-          moveTree: MutatorUtils.recordMoveInTree(result, record)
-      };
+      return ActionOrchestrator.finalizeAction(
+          state,
+          {},
+          notation,
+          board,
+          true // isPassing
+      );
   }
 
   /**
    * Checks if we need to reset turn flags based on phase transitions.
+   * Called by ActionOrchestrator during every action finalization.
    */
   public static checkTurnTransitions(state: GameState): GameState {
       let newState = state;
@@ -47,7 +33,6 @@ export class TurnMutator {
 
       // 1. Decrement sanctuary cooldowns at the start of EACH player's turn
       if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
-          // Identify whose turn just started
           const currentPhaseStartPlayer = (newState.turnCounter % 10) < 5 ? 'w' : 'b';
 
           if (newState.sanctuaries && newState.sanctuaries.length > 0) {
@@ -76,7 +61,7 @@ export class TurnMutator {
           }
       }
 
-      // 2. Global Reset at the start of EACH player's turn
+      // 2. Global Reset at the start of EACH player's turn (Reset piece/castle action flags)
       if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
           newState = TurnMutator.resetTurnFlags(newState);
       }

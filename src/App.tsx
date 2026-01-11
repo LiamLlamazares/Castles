@@ -21,8 +21,6 @@ interface GameConfig {
   board?: Board;
   pieces?: Piece[];
   layout?: LayoutService;
-  history?: any[];
-  moveHistory?: any[];
   moveTree?: MoveTree;
   turnCounter?: number;
   sanctuaries?: Sanctuary[];
@@ -83,20 +81,20 @@ function App() {
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: MoveTree) => {
+  const handleLoadGame = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: MoveTree) => {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
-    setGameConfig({ board, pieces, layout, history, moveHistory, moveTree, turnCounter, sanctuaries, isAnalysisMode: true });
+    setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
   };
   
   const [gameKey, setGameKey] = useState(0);
 
-  const handleEnableAnalysis = (board: Board, pieces: Piece[], history: any[], moveHistory: any[], turnCounter: number, sanctuaries: Sanctuary[]) => {
+  const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, history, moveHistory, turnCounter, sanctuaries, isAnalysisMode: true });
+    setGameConfig({ board, pieces, layout, turnCounter, sanctuaries, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount with new setting
   };
 
@@ -140,8 +138,6 @@ function App() {
               initialBoard={gameConfig.board}
               initialPieces={gameConfig.pieces}
               initialLayout={gameConfig.layout}
-              initialHistory={gameConfig.history}
-              initialMoveHistory={gameConfig.moveHistory}
               initialMoveTree={gameConfig.moveTree}
               initialTurnCounter={gameConfig.turnCounter}
               initialSanctuaries={gameConfig.sanctuaries}

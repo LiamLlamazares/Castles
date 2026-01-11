@@ -350,21 +350,21 @@ export class PGNImporter {
                    castles: nextState.castles.map(c => c.clone()),
                    sanctuaries: nextState.sanctuaries.map(s => s.clone()),
                    turnCounter: nextState.turnCounter,
-                   moveNotation: [...nextState.moveHistory]
+                   moveNotation: [] as any[] // Will be derived from tree on access
                };
                
                // 2. Update child node with HYDRATED data
                child.snapshot = snapshot;
                child.move = {
                    ...child.move,
-                   turnNumber: Math.floor(nextState.turnCounter / 10) + 1, // Approximation or use previous
+                   turnNumber: Math.floor(nextState.turnCounter / 10) + 1,
                    color: currentPlayer,
-                   phase: engine.getTurnPhase(nextState.turnCounter) // Actually is this Phase AFTER move? Or before?
-                   // MoveRecord usually records the phase the move happened IN. 
-                   // Engine updates turnCounter inside applyMove.
-                   // So nextState.turnCounter is related to NEXT turn.
-                   // Should use currentState info for the record.
+                   phase: engine.getTurnPhase(nextState.turnCounter)
                };
+
+               // Important: The snapshot needs the current history line
+               // Since we are hydrating, we can just let createHistorySnapshot handle it 
+               // if we were using it, but here we manually build it.
                
                // 3. Recurse
                PGNImporter.hydrateRecursive(child, engine, nextState);
@@ -390,14 +390,12 @@ export class PGNImporter {
       const castles = board.castles as Castle[]; 
 
       // Initial State
-      // Initialize pool with types NOT already on board
       const { SanctuaryType } = require("../../Constants");
       const usedTypes = initialSanctuaries.map(s => s.type);
       const sanctuaryPool = Object.values(SanctuaryType).filter(
         (t): t is import("../../Constants").SanctuaryType => !usedTypes.includes(t as any)
       );
 
-      // Map gameSettings to sanctuarySettings format used by GameState
       const sanctuarySettings = gameSettings ? {
           unlockTurn: gameSettings.sanctuaryUnlockTurn,
           cooldown: gameSettings.sanctuaryRechargeTurns
@@ -409,12 +407,10 @@ export class PGNImporter {
           castles: castles.map(c => c.clone()),
           sanctuaries: initialSanctuaries.map(s => s.clone()),
           sanctuaryPool,
-          sanctuarySettings, // Include imported game settings
+          sanctuarySettings,
           moveTree: moveTree, 
           turnCounter: 0, 
           movingPiece: null,
-          history: [],
-          moveHistory: [],
           graveyard: [],
           phoenixRecords: [],
           viewNodeId: null
@@ -444,50 +440,17 @@ export class PGNImporter {
       if (moveTree.current.snapshot) {
          const snap = moveTree.current.snapshot;
          
-         // Reconstruct history stack from tree path for compatibility
-         // (Contains all snapshots from root up to current.parent)
-         const history: GameState['history'] = [];
-         let ptr: MoveNode | null = moveTree.current.parent;
-         while (ptr) {
-             if (ptr.snapshot) {
-                 history.unshift(ptr.snapshot);
-             }
-             ptr = ptr.parent;
-         }
-
          return {
              ...initialState,
              pieces: snap.pieces.map(p => p.clone()),
              castles: snap.castles.map(c => c.clone()),
              sanctuaries: snap.sanctuaries.map(s => s.clone()),
              turnCounter: snap.turnCounter,
-             moveHistory: snap.moveNotation,
              pieceMap: createPieceMap(snap.pieces),
-             history: history, 
              moveTree: moveTree
          };
       }
       
       return initialState;
-  }
-
-  /**
-   * Saves a snapshot of the current state to the history array.
-   * DOES NOT update moveHistory or add to MoveTree (that is handled by StateMutator or the caller).
-   * This is purely for timeline navigation.
-   */
-  private static saveSnapshot(state: GameState): GameState {
-      const historyEntry = {
-          pieces: state.pieces.map(p => p.clone()),
-          castles: state.castles.map(c => c.clone()),
-          sanctuaries: state.sanctuaries.map(s => s.clone()),
-          turnCounter: state.turnCounter,
-          moveNotation: [...state.moveHistory], // Snapshot the history at this point
-      };
-      
-      return {
-          ...state,
-          history: [...state.history, historyEntry]
-      };
   }
 }

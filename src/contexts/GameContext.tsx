@@ -29,6 +29,8 @@ export interface IGameState extends Omit<GameState, 'moveTree'> {
   isRecruitmentSpot: (hex: Hex) => boolean;
   board: Board;
   moveTree: MoveTree | undefined; // Override to allow undefined explicitly
+  moveHistory: MoveRecord[]; // Derived list for UI display
+  history: HistoryEntry[]; // Legacy snapshots array
   hasGameStarted: boolean;
 
   // Analysis State

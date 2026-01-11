@@ -147,11 +147,10 @@ describe('GameEngine - Win Conditions', () => {
         sanctuaryPool: [],
         turnCounter: 7, // Black's turn (attack phase)
         movingPiece: pieces[0],
-        history: [],
-        moveHistory: [],
         moveTree: new MoveTree(),
         graveyard: [],
         phoenixRecords: [],
+        viewNodeId: null
       };
       
       const newState = gameEngine.applyCastleAttack(state, pieces[0], castleHex);

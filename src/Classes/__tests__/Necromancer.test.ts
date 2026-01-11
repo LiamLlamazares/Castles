@@ -23,11 +23,10 @@ describe('Necromancer Mechanics', () => {
             sanctuaryPool: [],
             turnCounter: 0,
             movingPiece: null,
-            history: [],
-            moveHistory: [],
             moveTree: new MoveTree(),
             graveyard: [],
             phoenixRecords: [],
+            viewNodeId: null
         };
     });
 

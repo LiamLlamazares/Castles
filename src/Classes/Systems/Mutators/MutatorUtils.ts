@@ -22,13 +22,6 @@ export class MutatorUtils {
   }
 
   /**
-   * Appends a move record to the history.
-   */
-  public static appendHistory(state: GameState, record: MoveRecord): MoveRecord[] {
-    return [...(state.moveHistory || []), record];
-  }
-
-  /**
    * Updates the MoveTree with a new move and a snapshot of the resulting state.
    */
   public static recordMoveInTree(state: GameState, record: MoveRecord): MoveTree {

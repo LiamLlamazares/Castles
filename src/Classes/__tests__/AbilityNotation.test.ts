@@ -48,12 +48,11 @@ describe("Ability Notation & Hydration", () => {
             turnCounter: 0,
             castles: [],
             sanctuaries: [],
-            history: [],
-            moveHistory: [],
             moveTree: { rootNode: { children: [] } } as any,
             pieceMap: { getByKey: () => wizard } as any,
             graveyard: [],
-            phoenixRecords: []
+            phoenixRecords: [],
+            viewNodeId: null
         } as any;
         
         // Simulate Hydration loop

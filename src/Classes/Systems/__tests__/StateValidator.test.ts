@@ -20,8 +20,6 @@ function createMinimalState(pieces: Piece[]): GameState {
     sanctuaryPool: [],
     turnCounter: 0,
     movingPiece: null,
-    history: [],
-    moveHistory: [],
     moveTree: new MoveTree(),
     graveyard: [],
     phoenixRecords: [],

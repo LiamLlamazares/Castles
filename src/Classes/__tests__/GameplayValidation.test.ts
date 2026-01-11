@@ -26,11 +26,10 @@ describe('Gameplay Adjustments Validation', () => {
         sanctuaryPool: [SanctuaryType.WardensWatch], // Use Tier 2 in pool
         turnCounter,
         movingPiece: null,
-        history: [],
-        moveHistory: [],
         moveTree: new MoveTree(),
         graveyard: [], // Add required properties
-        phoenixRecords: []
+        phoenixRecords: [],
+        viewNodeId: null
     });
 
     // 1. SWORDSMAN STRENGTH

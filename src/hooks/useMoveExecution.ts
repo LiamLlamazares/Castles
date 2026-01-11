@@ -98,40 +98,31 @@ export const useMoveExecution = ({
   }, [state.moveTree, state.viewNodeId, isViewingHistory]);
 
   /**
-   * Prepares state with history snapshot and tree for mutation.
-   */
-  const prepareStateForAction = useCallback((): GameState => {
-    const effectiveState = getEffectiveState();
-    const snapshot = createHistorySnapshot(effectiveState);
-    const treeForMutation = prepareTreeForMutation();
-    return {
-      ...effectiveState,
-      history: [...effectiveState.history, snapshot],
-      moveTree: treeForMutation,
-    };
-  }, [getEffectiveState, prepareTreeForMutation]);
-
-  /**
    * Unified Helper: Executes a command and updates state on success.
    */
   const executeCommand = useCallback(
     (command: import("../Classes/Commands").GameCommand): boolean => {
       // 1. Guard for Read-Only History Mode
       if (!isAnalysisMode && isViewingHistory) {
-        // If it's a "silent" fail, we might return false.
-        // But callers usually check this guard too if they have specific UI logic.
         return false;
       }
 
-      const stateWithHistory = prepareStateForAction();
-      const result = command.execute(stateWithHistory);
+      const effectiveState = getEffectiveState();
+      // Ensure the tree is ready for mutation if we are viewing history
+      const treeForMutation = prepareTreeForMutation();
+      
+      const stateToExecute: GameState = {
+          ...effectiveState,
+          moveTree: treeForMutation
+      };
+
+      const result = command.execute(stateToExecute);
 
       if (result.success) {
         setState((prev: GameState) => ({
           ...prev,
           ...result.newState,
-          viewNodeId: null,
-          history: result.newState.history,
+          viewNodeId: null
         }));
         return true;
       } else {
@@ -139,7 +130,7 @@ export const useMoveExecution = ({
         return false;
       }
     },
-    [isAnalysisMode, isViewingHistory, prepareStateForAction, setState]
+    [isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, setState]
   );
 
   /**

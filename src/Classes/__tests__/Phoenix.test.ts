@@ -23,11 +23,10 @@ describe('Phoenix Rebirth Logic', () => {
             sanctuaryPool: [],
             turnCounter: 0,
             movingPiece: null,
-            history: [],
-            moveHistory: [],
             moveTree: new MoveTree(),
             graveyard: [],
-            phoenixRecords: []
+            phoenixRecords: [],
+            viewNodeId: null
         };
     });
 

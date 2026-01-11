@@ -32,11 +32,10 @@ describe('Pledge Mechanics', () => {
     sanctuaryPool: [], // Empty pool for basic tests
     turnCounter: overrideTurnCounter ?? 14, // White's Castles phase, Turn 10+ (turnCounter % 10 = 4)
     movingPiece: null,
-    history: [],
-    moveHistory: [],
     moveTree: new MoveTree(),
     graveyard: [],
     phoenixRecords: [],
+    viewNodeId: null,
     sanctuarySettings: { unlockTurn: 0, cooldown: 5 }, // Unlock immediately for tests
   });
   

@@ -16,11 +16,10 @@ const createMockState = (pieces: Piece[], turnCounter: number = 0): GameState =>
     sanctuaryPool: [],
     turnCounter,
     movingPiece: null,
-    history: [],
-    moveHistory: [],
     moveTree: new MoveTree(),
     graveyard: [],
-    phoenixRecords: []
+    phoenixRecords: [],
+    viewNodeId: null
 });
 
 describe('Board Boundary Constraints', () => {

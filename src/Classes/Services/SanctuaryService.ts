@@ -25,11 +25,9 @@ import { Hex } from "../Entities/Hex";
 import { GameState } from "../Core/GameState";
 import { TurnManager } from "../Core/TurnManager";
 import { NotationService } from "../Systems/NotationService";
-import { createPieceMap } from "../../utils/PieceMap";
-import { createHistorySnapshot } from "../../utils/GameStateUtils";
-import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, MoveRecord, PHASE_CYCLE_LENGTH, PHASES_PER_TURN, PLAYER_CYCLE_LENGTH } from "../../Constants";
+import { SanctuaryType, SanctuaryConfig, SANCTUARY_EVOLUTION_COOLDOWN, PHASE_CYCLE_LENGTH, PHASES_PER_TURN, PLAYER_CYCLE_LENGTH } from "../../Constants";
 import { Board } from "../Core/Board";
-import { RuleEngine } from "../Systems/RuleEngine";
+import { ActionOrchestrator } from "../Systems/Mutators/ActionOrchestrator";
 
 export class SanctuaryService {
   /**
@@ -110,7 +108,7 @@ export class SanctuaryService {
   /**
    * Executes a pledge action, spawning a new piece from the sanctuary.
    * After pledging, the sanctuary evolves to the next higher-tier type.
-   * Records the pledge in moveHistory and moveTree for PGN export.
+   * Records the pledge in the MoveTree for history and PGN export.
    *
    * @throws Error if pledge is invalid (should call canPledge first)
    */
@@ -154,7 +152,7 @@ export class SanctuaryService {
     // Get cooldown from settings or use default
     const cooldownTurns = gameState.sanctuarySettings?.cooldown ?? SANCTUARY_EVOLUTION_COOLDOWN;
 
-    // Update ALL sanctuaries (including mirrored one if it exists)
+    // Update ALL sanctuaries
     const newSanctuaries = gameState.sanctuaries.map(s => {
       // Update the pledged sanctuary
       if (s.hex.equals(sanctuaryHex)) {
@@ -170,46 +168,21 @@ export class SanctuaryService {
           return s.with({ hasPledgedThisGame: true, cooldown: 0 });
         }
       }
-      // Mirrored sanctuary update logic removed
-
       return s;
     });
 
-    // ===== RECORD MOVE IN HISTORY & TREE =====
     const notation = NotationService.getPledgeNotation(sanctuary.pieceType, spawnHex);
-    const record: MoveRecord = {
-      notation,
-      turnNumber: Math.floor(gameState.turnCounter / PLAYER_CYCLE_LENGTH) + 1,
-      color: TurnManager.getCurrentPlayer(gameState.turnCounter),
-      phase: TurnManager.getTurnPhase(gameState.turnCounter)
-    };
-    const newMoveHistory = [...(gameState.moveHistory || []), record];
 
-    // Build intermediate state for snapshot
-    const intermediateState: GameState = {
-      ...gameState,
-      pieces: newPieces,
-      pieceMap: createPieceMap(newPieces),
-      sanctuaries: newSanctuaries,
-      sanctuaryPool: newPool,
-      moveHistory: newMoveHistory,
-    };
-
-    // Update moveTree with the pledge record and snapshot
-    const newTree = gameState.moveTree.clone();
-    newTree.addMove(record, createHistorySnapshot(intermediateState));
-
-    // Calculate turn counter increment and advance the turn
-    const stateWithTree: GameState = {
-      ...intermediateState,
-      moveTree: newTree,
-    };
-    const increment = RuleEngine.getTurnCounterIncrement(stateWithTree, board);
-
-    return {
-      ...stateWithTree,
-      turnCounter: stateWithTree.turnCounter + increment,
-    };
+    return ActionOrchestrator.finalizeAction(
+        gameState,
+        {
+            pieces: newPieces,
+            sanctuaries: newSanctuaries,
+            sanctuaryPool: newPool
+        },
+        notation,
+        board
+    );
   }
 
   /**

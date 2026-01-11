@@ -54,8 +54,6 @@ interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
   initialLayout?: LayoutService;
-  initialHistory?: HistoryEntry[]; 
-  initialMoveHistory?: MoveRecord[];
   initialMoveTree?: import('../Classes/Core/MoveTree').MoveTree;
   initialTurnCounter?: number;
   initialSanctuaries?: Sanctuary[];
@@ -64,12 +62,12 @@ interface GameBoardProps {
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
-  onLoadGame?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: import('../Classes/Core/MoveTree').MoveTree) => void;
+  onLoadGame?: (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[], moveTree?: import('../Classes/Core/MoveTree').MoveTree) => void;
   onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
   onTutorial?: () => void;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
-  onEnableAnalysis?: (board: Board, pieces: Piece[], history: HistoryEntry[], moveHistory: MoveRecord[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
+  onEnableAnalysis?: (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
   isTutorialMode?: boolean;
   initialPoolTypes?: import('../Constants').SanctuaryType[];
   pieceTheme?: PieceTheme;
@@ -278,7 +276,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     const result = loadPGN(pgn);
     if (result && onLoadGame) {
       // loadPGN returns a clean state with the tree containing snapshots
-      onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter, result.sanctuaries, result.moveTree);
+      onLoadGame(result.board, result.pieces, result.turnCounter, result.sanctuaries, result.moveTree);
     }
   }, [getPGN, loadPGN, onLoadGame]);
 
@@ -341,7 +339,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     if (pgn) {
         const result = loadPGN(pgn);
         if (result && onLoadGame) {
-            onLoadGame(result.board, result.pieces, result.history, result.moveHistory, result.turnCounter, result.sanctuaries, result.moveTree);
+            onLoadGame(result.board, result.pieces, result.turnCounter, result.sanctuaries, result.moveTree);
         } else {
             alert("Failed to load PGN. Check console for details.");
         }
@@ -592,8 +590,6 @@ const GameBoard: React.FC<GameBoardProps> = (props) => {
     <GameProvider
       initialBoard={props.initialBoard}
       initialPieces={props.initialPieces}
-      initialHistory={props.initialHistory}
-      initialMoveHistory={props.initialMoveHistory}
       initialTurnCounter={props.initialTurnCounter}
       initialSanctuaries={props.initialSanctuaries}
       isAnalysisMode={props.isAnalysisMode}
