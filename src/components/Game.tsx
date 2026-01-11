@@ -63,7 +63,7 @@ interface GameBoardProps {
   onResign?: () => void; // Optional callback to parent (e.g. log event)
   onSetup?: () => void;
   onRestart?: () => void;
-  onLoadGame?: (
+  onLoadGame?: (data: {
     board: Board, 
     pieces: Piece[], 
     turnCounter: number, 
@@ -71,7 +71,7 @@ interface GameBoardProps {
     moveTree?: import('../Classes/Core/MoveTree').MoveTree,
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     initialPoolTypes?: import('../Constants').SanctuaryType[]
-  ) => void;
+  }) => void;
   onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
   onTutorial?: () => void;
   timeControl?: { initial: number, increment: number };
@@ -170,14 +170,20 @@ const InnerGame: React.FC<GameBoardProps> = ({
       try {
         const result = loadPGN(urlPgn);
         if (result && onLoadGame) {
-          // If the loaded PGN is practically the same as our current setup, don't trigger remount
           if (urlPgn === getPGN()) {
             clearUrlParams();
             return;
           }
-          console.log("Auto-loading game from URL");
           clearUrlParams();
-          onLoadGame(result.board, result.pieces, result.turnCounter, result.sanctuaries, result.moveTree, result.sanctuarySettings, result.sanctuaryPool);
+          onLoadGame({
+            board: result.board,
+            pieces: result.pieces,
+            turnCounter: result.turnCounter,
+            sanctuaries: result.sanctuaries,
+            moveTree: result.moveTree,
+            sanctuarySettings: result.sanctuarySettings,
+            initialPoolTypes: result.sanctuaryPool
+          });
           return; 
         }
       } catch (e) {
@@ -185,7 +191,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
       }
     }
 
-    // 2. Check LocalStorage if this is a fresh game (turnCounter 0)
     const isBeginning = turnCounter === 0 && (!moveTree || moveTree.getHistoryLine().length === 0);
     
     if (isBeginning) {
@@ -196,8 +201,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
         try {
           const result = loadPGN(savedPgn);
           if (result && onLoadGame) {
-            console.log("Auto-loading game from LocalStorage");
-            onLoadGame(result.board, result.pieces, result.turnCounter, result.sanctuaries, result.moveTree, result.sanctuarySettings, result.sanctuaryPool);
+            onLoadGame({
+              board: result.board,
+              pieces: result.pieces,
+              turnCounter: result.turnCounter,
+              sanctuaries: result.sanctuaries,
+              moveTree: result.moveTree,
+              sanctuarySettings: result.sanctuarySettings,
+              initialPoolTypes: result.sanctuaryPool
+            });
           }
         } catch (e) {
           console.warn("Failed to load saved game from localStorage", e);
@@ -338,8 +350,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
     const pgn = getPGN();
     const result = loadPGN(pgn);
     if (result && onLoadGame) {
-      // loadPGN returns a clean state with the tree containing snapshots
-      onLoadGame(result.board, result.pieces, result.turnCounter, result.sanctuaries, result.moveTree, result.sanctuarySettings, result.sanctuaryPool);
+      onLoadGame({
+        board: result.board,
+        pieces: result.pieces,
+        turnCounter: result.turnCounter,
+        sanctuaries: result.sanctuaries,
+        moveTree: result.moveTree,
+        sanctuarySettings: result.sanctuarySettings,
+        initialPoolTypes: result.sanctuaryPool
+      });
     }
   }, [getPGN, loadPGN, onLoadGame]);
 
@@ -402,7 +421,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
     if (pgn) {
         const result = loadPGN(pgn);
         if (result && onLoadGame) {
-            onLoadGame(result.board, result.pieces, result.turnCounter, result.sanctuaries, result.moveTree, result.sanctuarySettings, result.sanctuaryPool);
+            onLoadGame({
+              board: result.board,
+              pieces: result.pieces,
+              turnCounter: result.turnCounter,
+              sanctuaries: result.sanctuaries,
+              moveTree: result.moveTree,
+              sanctuarySettings: result.sanctuarySettings,
+              initialPoolTypes: result.sanctuaryPool
+            });
         } else {
             alert("Failed to load PGN. Check console for details.");
         }

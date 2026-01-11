@@ -89,7 +89,7 @@ function App() {
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (
+  const handleLoadGame = (data: {
     board: Board, 
     pieces: Piece[], 
     turnCounter: number, 
@@ -97,7 +97,8 @@ function App() {
     moveTree?: MoveTree,
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     initialPoolTypes?: SanctuaryType[]
-  ) => {
+  }) => {
+    const { board, pieces, turnCounter, sanctuaries, moveTree, sanctuarySettings, initialPoolTypes } = data;
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
@@ -116,6 +117,7 @@ function App() {
 
   // Editor handlers
   const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
+    clearAutosave();
     setPreviousView(view);
     setEditorConfig({ board, pieces, sanctuaries });
     setView('editor');
@@ -126,6 +128,7 @@ function App() {
   };
 
   const handlePlayFromEditor = (board: Board, pieces: Piece[], sanctuaries: Sanctuary[]) => {
+    clearAutosave();
     const layout = getStartingLayout(board);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
     setGameKey(prev => prev + 1);
