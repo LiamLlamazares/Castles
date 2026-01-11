@@ -21,6 +21,7 @@ import { NotationService } from "../Classes/Systems/NotationService";
 import { createHistorySnapshot } from "../utils/GameStateUtils";
 import { TurnPhase, Color, HistoryEntry, MoveRecord, AbilityType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
+import { useInputController } from "./useInputController";
 
 // Command Pattern imports
 import {
@@ -162,6 +163,18 @@ export const useMoveExecution = ({
     executeCommand(new PassCommand(commandContext));
   }, [isAnalysisMode, isViewingHistory, executeCommand, commandContext]);
 
+  // Initialize Input Controller
+  const { resolveCommand } = useInputController({
+      gameEngine,
+      turnPhase,
+      movingPiece,
+      castles,
+      isLegalMove,
+      isLegalAttack,
+      isRecruitmentSpot,
+      getPieces: () => state.pieces // Getter to access current pieces
+  });
+
   /**
    * Handles clicking on a hex for movement, attack, or recruitment.
    */
@@ -173,51 +186,25 @@ export const useMoveExecution = ({
         return;
       }
 
-      // 2. Try Actions based on Phase
+      // 2. Resolve Command via Controller
+      const command = resolveCommand(hex);
+
+      // 3. Execute or Cleanup
       let actionTaken = false;
-
-      // MOVEMENT
-      if (turnPhase === "Movement" && movingPiece?.canMove && isLegalMove(hex)) {
-        actionTaken = executeCommand(new MoveCommand(movingPiece, hex, commandContext));
-      }
-      // ATTACK
-      else if (turnPhase === "Attack" && movingPiece?.canAttack && isLegalAttack(hex)) {
-        const effectiveState = getEffectiveState();
-        const targetPiece = effectiveState.pieces.find((p) => p.hex.equals(hex));
-        
-        // Determine if attacking a piece or a castle
-        const command = targetPiece
-          ? new AttackCommand(movingPiece, hex, commandContext)
-          : new CastleAttackCommand(movingPiece, hex, commandContext);
-          
-        actionTaken = executeCommand(command);
-      }
-      // RECRUITMENT
-      else if (isRecruitmentSpot(hex)) {
-        const castle = castles.find((c) => c.isAdjacent(hex));
-        if (castle) {
-          actionTaken = executeCommand(new RecruitCommand(castle, hex, commandContext));
-        }
+      if (command) {
+          actionTaken = executeCommand(command);
       }
 
-      // 3. Cleanup: If no action was performed, deselect the piece
-      // This is crucial for UI responsiveness (clicking empty hex deselects)
+      // 4. Cleanup: If no action was performed, deselect the piece
       if (!actionTaken) {
         setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
       }
     },
     [
-      turnPhase,
-      movingPiece,
-      isLegalMove,
-      isLegalAttack,
-      isRecruitmentSpot,
-      castles,
-      executeCommand,
-      commandContext,
-      getEffectiveState,
-      isAnalysisMode,
-      isViewingHistory,
+      isAnalysisMode, 
+      isViewingHistory, 
+      resolveCommand, 
+      executeCommand, 
       setState
     ]
   );
