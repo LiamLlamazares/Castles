@@ -139,3 +139,26 @@ How easy is it to add a "Gryphon"?
 1.  **Refactor UI Leaks**: Move `isHexDefended` behind a memoized hook or `GameEngine` method.
 2.  **Centralize Logic**: Move "Unlocking" logic from `useGameLogic` to `SanctuaryService`.
 3.  **Optimize Render**: Ensure `pieceMap` is passed down, not recreated in children.
+
+---
+
+## 7. Deep-Dive Code Review Actions (Phase 2 Checklist)
+
+### Correctness & Logic
+*   **StateMutator**: Verified as a clean Facade (Adapter Pattern). Complex logic is correctly delegated to specialized mutators (`CombatMutator`, `RecruitmentMutator`) which handle immutability correctly.
+*   **RuleEngine**: Logic is pure and stateless. "Fail Fast" optimizations (`hasAnyFutureLegalAttacks`) prevent unnecessary O(N^2) calculations during turn transitions.
+
+### Efficiency & Rendering
+*   **HexGrid**: Identifies as a potential bottleneck.
+    *   **Problem**: Renders 91+ hexes using inline JSX map. No memoization for individual hexes.
+    *   **Impact**: Any prop change to `HexGrid` (e.g., `legalMoveSet` changing) causes re-rendering of ALL hex DOM nodes.
+    *   **Solution**: Extract `<HexCell>` component and use `React.memo`.
+
+### Architecture & Modularity
+*   **GameSetup**: Successfully verified as modular. Sub-components (`ModeSelector`, `TimeControls`) are well-separated.
+*   **Hooks**: `useComputedGame` effectively separates derived state calculation from state management (`useGameLogic`), reacting only to `viewState` changes.
+
+### Recommendations for Phase 3 (Part 2)
+1.  **rendering**: Extract `HexCell` from `HexGrid.tsx` to prevent full-board DOM diffing on minor state changes.
+2.  **cleanup**: Remove deprecated comments in `StateMutator`.
+

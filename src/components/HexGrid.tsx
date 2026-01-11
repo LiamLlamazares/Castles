@@ -1,4 +1,5 @@
 import React from "react";
+import HexCell from "./HexCell";
 import { Hex, Point } from "../Classes/Entities/Hex";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
@@ -9,10 +10,7 @@ import { getImageByPieceType } from "./PieceImages";
 import { getHexVisualClass, getCastleOwnerClass, getSanctuaryVisualClass } from "../utils/HexRenderUtils";
 
 // SVG imports for terrain icons
-import riverSvg from "../Assets/Images/Board/river.svg";
-import mountainSvg from "../Assets/Images/Board/mountain.svg";
-import wcastleSvg from "../Assets/Images/misc/wcastle.svg";
-import bcastleSvg from "../Assets/Images/misc/bcastle.svg";
+// SVG imports removed (delegated to HexCell)
 
 interface HexGridProps {
   hexagons: Hex[];
@@ -49,18 +47,7 @@ const getHexCenter = (hex: Hex, isBoardRotated: boolean, layout: LayoutService):
   return layout.layout.hexToPixelReflected(hex, isBoardRotated);
 };
 
-// Recruitment cycle matching rules.md
-const RECRUITMENT_CYCLE = [
-  PieceType.Swordsman,
-  PieceType.Archer,
-  PieceType.Knight,
-  PieceType.Eagle,
-  PieceType.Giant,
-  PieceType.Trebuchet,
-  PieceType.Assassin,
-  PieceType.Dragon,
-  PieceType.Monarch
-];
+// Helper functions removed (delegated to HexCell)
 
 
 
@@ -108,163 +95,42 @@ const HexGrid = React.memo(({
         const castleOwnerClass = getCastleOwnerClass(hex, castles);
         const pledgeClass = isPledgeTarget && isPledgeTarget(hex) ? "hexagon-pledge-target" : "";
         const pledgingSourceClass = pledgingSanctuary && hex.equals(pledgingSanctuary) ? "hexagon-pledging-source" : "";
+        const combinedClass = `${visualClass} ${sanctuaryClass} ${adjacencyClass} ${castleOwnerClass} ${pledgeClass} ${pledgingSourceClass}`;
+        
+        // Data prep
+        const points = getPolygonPoints(hex, isBoardRotated, layout);
+        const center = getHexCenter(hex, isBoardRotated, layout);
+        const castle = castles.find(c => c.hex.equals(hex));
+        const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
         
         return (
-          <g key={hex.getKey()}>
-            <polygon
-              points={getPolygonPoints(hex, isBoardRotated, layout)}
-              className={`${visualClass} ${sanctuaryClass} ${adjacencyClass} ${castleOwnerClass} ${pledgeClass} ${pledgingSourceClass}`}
-              onClick={() => onHexClick(hex)}
-              onContextMenu={(e) => {
-                if (onHexRightClick) {
-                  e.preventDefault();
-                  onHexRightClick(hex);
-                }
-              }}
-              onMouseEnter={(e) => onHexHover && onHexHover(hex, e)}
-              onMouseLeave={() => onHexHover && onHexHover(null)}
-              filter={
-                visualClass.includes("hexagon-high-ground")
-                  ? "url(#shadow)"
-                  : ""
-              }
-            />
-            {showCoordinates && (
-              <text
-                x={getHexCenter(hex, isBoardRotated, layout).x}
-                y={getHexCenter(hex, isBoardRotated, layout).y + 5}
-                textAnchor="middle"
-                style={{ fontSize: "15px", fill: "black", pointerEvents: "none" }}
-              >
-                {`${hex.q}, ${hex.r}`}
-              </text>
-            )}
+          <HexCell
+            key={hex.getKey()}
+            hex={hex}
+            points={points}
+            center={center}
+            className={combinedClass}
             
-            {/* Accessibility: Terrain Icons */}
-            {(() => {
-              const center = getHexCenter(hex, isBoardRotated, layout);
-              const isRiver = board.riverHexSet.has(hex.getKey());
-              const isHighGround = board.highGroundHexSet.has(hex.getKey());
-              const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
-              const iconSize = layout.size_image * 0.35;
-              const offsetX = iconSize * 1.1; // Center-right
-              const offsetY = 0; // Vertically centered
-              
-              // River icon (center-right)
-              if (isRiver && showTerrainIcons) {
-                return (
-                  <image
-                    href={riverSvg}
-                    x={center.x + offsetX - iconSize/2}
-                    y={center.y + offsetY - iconSize/2}
-                    width={iconSize}
-                    height={iconSize}
-                    style={{ pointerEvents: 'none' }}
-                  />
-                );
-              }
-              
-              // High ground icon (center-right)
-              if (isHighGround && !castles.some(c => c.hex.equals(hex)) && showTerrainIcons) {
-                return (
-                  <image
-                    href={mountainSvg}
-                    x={center.x + offsetX - iconSize/2}
-                    y={center.y + offsetY - iconSize/2}
-                    width={iconSize}
-                    height={iconSize}
-                    style={{ pointerEvents: 'none' }}
-                  />
-                );
-              }
-              
-              // Sanctuary icon - show the piece SVG (center-right)
-              if (sanctuary && showSanctuaryIcons) {
-                const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
-                
-                return (
-                  <g style={{ pointerEvents: 'none' }}>
-                    {/* Background circle */}
-                    <circle
-                      cx={center.x + offsetX}
-                      cy={center.y + offsetY}
-                      r={iconSize * 0.55}
-                      fill="rgba(0, 0, 0, 0.6)"
-                      stroke="rgba(255, 215, 0, 0.8)"
-                      strokeWidth={1.5}
-                    />
-                    {/* Piece icon - use white color for visibility */}
-                    <image
-                      href={getImageByPieceType(pieceType, 'w')}
-                      x={center.x + offsetX - iconSize/2}
-                      y={center.y + offsetY - iconSize/2}
-                      width={iconSize}
-                      height={iconSize}
-                      opacity={0.95}
-                    />
-                  </g>
-                );
-              }
-              
-              return null;
-            })()}
+            isRiver={board.riverHexSet.has(hex.getKey())}
+            isHighGround={board.highGroundHexSet.has(hex.getKey())}
             
-            {/* Castle Recruitment Preview - always visible */}
-            {(() => {
-              if (!showCastleRecruitment) return null;
-              
-              const castle = castles.find(c => c.hex.equals(hex));
-              if (castle) {
-                const center = getHexCenter(hex, isBoardRotated, layout);
-                const nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
-                const pieceSize = layout.size_image;
-                const iconSize = pieceSize * 0.35; 
-                const leftOffsetX = -pieceSize * 0.45;  // Left side for piece
-                const rightOffsetX = pieceSize * 0.45;  // Right side for castle
-                const offsetY = 0; // Vertically centered
-                
-                return (
-                  <g style={{ pointerEvents: 'none' }}>
-                    {/* Piece icon on LEFT */}
-                    <circle
-                      cx={center.x + leftOffsetX}
-                      cy={center.y + offsetY}
-                      r={iconSize * 0.55}
-                      fill={castle.owner === 'w' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.85)'}
-                      stroke={castle.owner === 'w' ? '#00fbff' : '#8000ff'}
-                      strokeWidth={1.5}
-                    />
-                    <image
-                      href={getImageByPieceType(nextPieceType, castle.owner)}
-                      x={center.x + leftOffsetX - iconSize/2}
-                      y={center.y + offsetY - iconSize/2}
-                      width={iconSize}
-                      height={iconSize}
-                      opacity={0.90}
-                    />
-                    {/* Castle icon on RIGHT */}
-                    <circle
-                      cx={center.x + rightOffsetX}
-                      cy={center.y + offsetY}
-                      r={iconSize * 0.55}
-                      fill={'rgba(255, 255, 255, 0.9)'}
-                      stroke={castle.owner === 'w' ? '#00fbff' : '#8000ff'}
-                      strokeWidth={1.5}
-                    />
-                    <image
-                      href={castle.owner === 'w' ? wcastleSvg : bcastleSvg}
-                      x={center.x + rightOffsetX - iconSize/2}
-                      y={center.y + offsetY - iconSize/2}
-                      width={iconSize}
-                      height={iconSize}
-                      opacity={0.90}
-                    />
-                  </g>
-                );
-              }
-              return null;
-            })()}
-          </g>
+            isCastle={!!castle}
+            castleOwner={castle?.owner || null}
+            castleTurnsControlled={castle?.turns_controlled || 0}
+            
+            sanctuaryType={sanctuary ? sanctuary.type : null}
+            
+            showCoordinates={showCoordinates}
+            showTerrainIcons={showTerrainIcons}
+            showSanctuaryIcons={showSanctuaryIcons}
+            showCastleRecruitment={showCastleRecruitment}
+            
+            onClick={onHexClick}
+            onRightClick={onHexRightClick}
+            onHover={onHexHover}
+            
+            layoutSize={layout.size_image}
+          />
         );
       })}
 

@@ -38,6 +38,8 @@ import { useAnalysisMode } from "./useAnalysisMode";
 import { usePGN } from "./usePGN";
 import { useMoveExecution } from "./useMoveExecution";
 import { useComputedGame } from "./useComputedGame";
+import { useGameAnalysisController } from "./useGameAnalysisController";
+import { useGameInteraction } from "./useGameInteraction";
 
 
 
@@ -83,112 +85,24 @@ export const useGameLogic = (
     moveHistory 
   } = state;
 
-  /**
-   * Returns the "effective" game state for actions.
-   * When viewing history, this uses the node's snapshot.
-   * When live, returns the current state as-is.
-   */
-  const getEffectiveState = useCallback((): GameState => {
-    if (isViewingHistory && analysisState) {
-      return {
-        ...(state as unknown as GameState),
-        pieces: analysisState.pieces.map(p => p.clone()),
-        pieceMap: createPieceMap(analysisState.pieces.map(p => p.clone())),
-        castles: analysisState.castles.map(c => c.clone()) as Castle[],
-        sanctuaries: analysisState.sanctuaries.map(s => s.clone()),
-        turnCounter: analysisState.turnCounter,
-        movingPiece: null,
-        moveHistory: analysisState.moveNotation,
-        moveTree: state.moveTree
-      } as unknown as GameState;
-    }
-    // If viewing history but at root node (no snapshot), return initial state
-    if (isViewingHistory && !analysisState) {
-      return {
-        pieces: initialPieces.map(p => p.clone()),
-        pieceMap: createPieceMap(initialPieces.map(p => p.clone())),
-        castles: initialBoard.castles.map(c => c.clone()) as Castle[],
-        sanctuaries: startingSanctuaries.map(s => s.clone()),
-        sanctuaryPool: state.sanctuaryPool,
-        turnCounter: initialTurnCounter,
-        movingPiece: null,
-        history: [],
-        moveHistory: [],
-        moveTree: state.moveTree,
-        graveyard: [],
-        phoenixRecords: []
-      } as unknown as GameState;
-    }
-    return state as unknown as GameState;
-  }, [isViewingHistory, analysisState, state, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
-
-  // Constructed View State (GameState compatible)
-  const viewState = useMemo<GameState>(() => {
-      if (isViewingHistory && analysisState) {
-          return {
-              pieces: analysisState.pieces,
-              pieceMap: createPieceMap(analysisState.pieces),
-              castles: analysisState.castles,
-              sanctuaries: analysisState.sanctuaries || state.sanctuaries,
-              sanctuaryPool: state.sanctuaryPool,
-              turnCounter: analysisState.turnCounter,
-              movingPiece: null,
-              history: [],
-              moveHistory: analysisState.moveNotation,
-              moveTree: state.moveTree,
-              graveyard: [],
-              phoenixRecords: []
-          };
-      }
-      // At root node (start of game)
-      if (isViewingHistory && !analysisState) {
-          return {
-              pieces: initialPieces,
-              pieceMap: createPieceMap(initialPieces),
-              castles: initialBoard.castles as Castle[],
-              sanctuaries: startingSanctuaries,
-              sanctuaryPool: state.sanctuaryPool,
-              turnCounter: initialTurnCounter,
-              movingPiece: null,
-              history: [],
-              moveHistory: [],
-              moveTree: state.moveTree,
-              graveyard: [],
-              phoenixRecords: []
-          };
-      }
-      return state as unknown as GameState;
-  }, [state, isViewingHistory, analysisState, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
+  // =========== VIEW STATE CONTROLLER ===========
+  const { viewState, getEffectiveState, jumpToNode } = useGameAnalysisController({
+    state,
+    setState,
+    initialPieces,
+    initialBoard,
+    startingSanctuaries,
+    initialTurnCounter,
+    isViewingHistory,
+    analysisState
+  });
 
   // Derived state to use for rendering
   const pieces = viewState.pieces;
   const castles = viewState.castles;
   const turnCounter = viewState.turnCounter;
 
-  /**
-   * Jumps to a specific node in the move tree, potentially switching variations.
-   * Now simplified - just sets viewNodeId and updates tree cursor.
-   */
-  const jumpToNode = useCallback((nodeId: string) => {
-      // Must clone first to treat state as immutable
-      const newTree = state.moveTree!.clone();
-      
-      // Find the node in the NEW tree (ensure we don't mix references)
-      const targetNode = newTree.findNodeById(nodeId);
-      
-      if (!targetNode) return;
-
-      // Update tree cursor and set view to this node
-      newTree.setCurrentNode(targetNode);
-      
-      setState(prev => ({
-          ...prev,
-          viewNodeId: nodeId,
-          movingPiece: null,
-          moveTree: newTree
-      }));
-  }, [state.moveTree, setState]);
-
+  // =========== COMPUTED STATE ===========
   const {
     turnPhase,
     currentPlayer,
@@ -218,7 +132,7 @@ export const useGameLogic = (
     (hex: Hex): boolean => legalMoves.some((move) => move.equals(hex)),
     [legalMoves]
   );
-
+  
   const isLegalAttack = useCallback(
     (hex: Hex): boolean => legalAttacks.some((attack) => attack.equals(hex)),
     [legalAttacks]
@@ -250,7 +164,17 @@ export const useGameLogic = (
     initialTurnCounter,
   });
 
-  // =========== REMAINING ACTIONS ===========
+  // =========== INTERACTION HOOK ===========
+  const { handlePieceClick, handleResign } = useGameInteraction({
+    state,
+    setState,
+    gameEngine,
+    turnPhase,
+    currentPlayer,
+    handleHexClick,
+    movingPiece
+  });
+
   const handleTakeback = useCallback(() => {
     if (history.length > 0) {
       const newHistory = [...history];
@@ -267,68 +191,7 @@ export const useGameLogic = (
         }));
       }
     }
-  }, [history]);
-
-  // =========== INTERACTION HANDLERS ===========
-  const handlePieceClick = useCallback((pieceClicked: Piece) => {
-    // Check if clicking an enemy piece during Attack phase - delegate to handleHexClick for attack
-    const isEnemyPiece = pieceClicked.color !== currentPlayer;
-    if (turnPhase === "Attack" && isEnemyPiece && movingPiece?.canAttack) {
-      // Delegate to hex click handler which will process the attack
-      handleHexClick(pieceClicked.hex);
-      return;
-    }
-
-    setState(prev => {
-        // 1. Unlocking Logic: Delegate to GameEngine
-        const newPool = gameEngine.tryUnlockSanctuary(prev as unknown as GameState, pieceClicked);
-
-        // 2. Selection Logic
-        let newMovingPiece = prev.movingPiece; // Default to current
-
-        // Standard selection rules
-        if (prev.movingPiece === pieceClicked) {
-            newMovingPiece = null;
-        } else if (prev.movingPiece && pieceClicked.color === currentPlayer) {
-            newMovingPiece = pieceClicked;
-        } else {
-            const canSelectForMovement = turnPhase === "Movement" && pieceClicked.canMove;
-            const canSelectForAttack = turnPhase === "Attack" && pieceClicked.canAttack;
-            const isOwnPiece = pieceClicked.color === currentPlayer;
-            
-            if (isOwnPiece && (canSelectForMovement || canSelectForAttack)) {
-                newMovingPiece = pieceClicked;
-            } else {
-                newMovingPiece = null;
-            }
-        }
-
-        // Optimization: return prev if no changes
-        if (newPool === prev.sanctuaryPool && newMovingPiece === prev.movingPiece) {
-            return prev;
-        }
-
-        return {
-            ...prev,
-            sanctuaryPool: newPool,
-            movingPiece: newMovingPiece
-        };
-    });
-  }, [currentPlayer, turnPhase, movingPiece, handleHexClick, setState]);
-
-  const handleResign = useCallback((player: Color) => {
-    // Reset to live game state before resigning (in case viewing history)
-    setState(prev => {
-        // First reset viewNodeId to exit history view
-        // Then find and remove the resigning player's monarch from the ACTUAL state
-        const myMonarch = prev.pieces.find(p => p.type === "Monarch" && p.color === player);
-        if (myMonarch) {
-            const newPieces = prev.pieces.filter(p => p !== myMonarch);
-            return { ...prev, pieces: newPieces, viewNodeId: null, movingPiece: null };
-        }
-        return { ...prev, viewNodeId: null, movingPiece: null };
-    });
-  }, []);
+  }, [history, setState]);
 
   const hasGameStarted = turnCounter > 0;
 
@@ -342,7 +205,6 @@ export const useGameLogic = (
     castles,
     sanctuaries: state.sanctuaries || [],
     turnCounter,
-    // Expose optimized map to avoid re-creation in render loops
     pieceMap: viewState.pieceMap,
     movingPiece,
     
@@ -381,11 +243,9 @@ export const useGameLogic = (
     // Helpers
     canPledge,
     triggerAbility,
-    // Helper to avoid UI logic depending on RuleEngine
     isHexDefended: (hex: Hex, color: Color) => gameEngine.isHexDefended(hex, color, viewState),
     
-    // AI Integration - controlled interface for AI opponent
-    // Instead of exposing raw state/setState, provide a callback that handles AI state updates
+    // AI Integration
     aiIntegration: {
       gameEngine,
       board: gameEngine.board,
