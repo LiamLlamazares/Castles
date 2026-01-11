@@ -27,13 +27,6 @@ export interface PositionSnapshot {
   victoryPoints?: { w: number, b: number };
 }
 
-/**
- * Legacy/PGN snapshot format.
- * Includes move notation for the full game path to this position.
- */
-export interface HistoryEntry extends PositionSnapshot {
-  moveNotation: MoveRecord[]; // List of all moves made so far
-}
 
 /**
  * Represents the complete runtime state of the game application.

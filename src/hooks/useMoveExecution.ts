@@ -12,7 +12,7 @@
  */
 import { useCallback, useMemo } from "react";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState, PhoenixRecord, HistoryEntry } from "../Classes/Core/GameState";
+import { GameState, PhoenixRecord } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Hex } from "../Classes/Entities/Hex";

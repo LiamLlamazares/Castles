@@ -15,7 +15,7 @@ import { MoveTree } from "../Classes/Core/MoveTree";
 import { MoveRecord, TurnPhase, Color, SanctuaryType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState, HistoryEntry } from "../Classes/Core/GameState";
+import { GameState, PositionSnapshot } from "../Classes/Core/GameState";
 
 export interface IGameState extends Omit<GameState, 'moveTree'> {
   // Computed State
@@ -30,7 +30,7 @@ export interface IGameState extends Omit<GameState, 'moveTree'> {
   board: Board;
   moveTree: MoveTree | undefined; // Override to allow undefined explicitly
   moveHistory: MoveRecord[]; // Derived list for UI display
-  history: HistoryEntry[]; // Legacy snapshots array
+  history: PositionSnapshot[]; // Snapshots array for history
   hasGameStarted: boolean;
 
   // Analysis State

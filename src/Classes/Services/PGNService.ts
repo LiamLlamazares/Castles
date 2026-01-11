@@ -21,7 +21,7 @@ import { Piece } from "../Entities/Piece";
 import { MoveRecord, TurnPhase, GameResult } from "../../Constants";
 import { MoveTree } from "../Core/MoveTree";
 import { Sanctuary } from "../Entities/Sanctuary";
-import { GameState, HistoryEntry } from "../Core/GameState";
+import { GameState, PositionSnapshot } from "../Core/GameState";
 import { GameSetup, GameSettings } from "./PGNTypes";
 
 // Re-export types

@@ -27,7 +27,7 @@ import { StateMutator } from "../Systems/StateMutator";
 import { SanctuaryService } from "../Services/SanctuaryService";
 import { AbilitySystem } from "../Systems/AbilitySystem";
 import { MoveTree } from "./MoveTree";
-import { GameState, PositionSnapshot, HistoryEntry, PhoenixRecord } from "./GameState";
+import { GameState, PositionSnapshot, PhoenixRecord } from "./GameState";
 import {
   Color,
   TurnPhase,

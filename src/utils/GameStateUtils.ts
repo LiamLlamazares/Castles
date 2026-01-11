@@ -7,7 +7,7 @@
  * - State cloning helpers
  */
 import { MoveRecord } from "../Constants";
-import { GameState, HistoryEntry } from "../Classes/Core/GameState";
+import { GameState, PositionSnapshot } from "../Classes/Core/GameState";
 import { createPieceMap } from "./PieceMap";
 
 /**
@@ -15,9 +15,9 @@ import { createPieceMap } from "./PieceMap";
  * This is used within the MoveTree nodes to enable navigation/variations.
  * 
  * @param state - The current game state to snapshot
- * @returns A cloned HistoryEntry representing the state at this point
+ * @returns A cloned PositionSnapshot representing the state at this point
  */
-export function createHistorySnapshot(state: GameState): HistoryEntry {
+export function createHistorySnapshot(state: GameState): PositionSnapshot {
     const pieces = state.pieces.map(p => p.clone());
     return {
         pieces: pieces,
@@ -27,7 +27,6 @@ export function createHistorySnapshot(state: GameState): HistoryEntry {
         turnCounter: state.turnCounter,
         sanctuaryPool: [...state.sanctuaryPool],
         graveyard: state.graveyard.map(p => p.clone()),
-        phoenixRecords: [...state.phoenixRecords],
-        moveNotation: state.moveTree ? state.moveTree.getHistoryLine() : []
+        phoenixRecords: [...state.phoenixRecords]
     };
 }

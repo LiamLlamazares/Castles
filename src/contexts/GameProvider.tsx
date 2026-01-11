@@ -14,7 +14,7 @@ import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
 import { MoveRecord, Color, SanctuaryType } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
-import { GameState, HistoryEntry } from "../Classes/Core/GameState";
+import { GameState } from "../Classes/Core/GameState";
 
 // Hooks
 import { useCoreGame } from "../hooks/useCoreGame";

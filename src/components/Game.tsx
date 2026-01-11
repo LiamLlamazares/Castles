@@ -42,7 +42,6 @@ import { TerrainTooltip } from "./TerrainTooltip";
 import QuickStartModal, { useQuickStart } from "./QuickStartModal";
 import { PieceFactory } from "../Classes/Entities/PieceFactory";
 import { MoveRecord, SanctuaryConfig, PieceTheme } from "../Constants";
-import { HistoryEntry } from "../Classes/Core/GameState";
 import "../css/Board.css";
 
 // SVG import for lightbulb

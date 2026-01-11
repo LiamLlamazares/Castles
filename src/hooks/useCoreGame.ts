@@ -11,7 +11,7 @@
  */
 import { useState, useMemo } from "react";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState, HistoryEntry } from "../Classes/Core/GameState";
+import { GameState } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
