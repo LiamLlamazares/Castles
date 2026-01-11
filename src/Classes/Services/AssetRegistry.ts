@@ -5,51 +5,36 @@ import { PieceType, Color, PieceTheme } from "../../Constants";
  * Removes the need for manual static imports for every piece.
  */
 export class AssetRegistry {
-  /**
-   * Generates the path for a piece asset based on theme, type, and color.
-   * 
-   * Convention:
-   * - Files are located in `src/Assets/Images/<Theme>/`
-   * - Filenames follow pattern: `<color><Type>.svg` (e.g., `wArcher.svg`)
-   * 
-   * @param type - The piece type (e.g., "Archer")
-   * @param color - The piece color ('w' or 'b')
-   * @param theme - The theme folder name (default: "Castles")
-   */
-  public static getPieceImagePath(
-    type: PieceType, 
-    color: Color, 
-    theme: PieceTheme
-  ): string {
-    // Note: In Vite/Webpack, dynamic requires often need a context. 
-    // However, since we are moving towards standard URLs or relying on the bundler's static asset handling,
-    // we might need to use `new URL` or a glob import if we want to ensure files exist.
-    // purely standard path construction for now.
-    
-    // Using global glob import pattern to register all images
-    // This part relies on Vite's import.meta.glob feature which is standard in this project stack.
-    const path = `../../Assets/Images/${theme}/${color}${type}.svg`;
-    return path;
-  }
+  // We don't need static methods if we export the helper function below
 }
 
-// Glob import for all SVG assets in Assets/Images
-// This creates a map of all available assets at build time.
-const modules = import.meta.glob('../../Assets/Images/**/*.svg', { as: 'url', eager: true });
+// Webpack require.context to load all SVG files from Assets/Images
+// The arguments must be literals!
+// Context covers all subdirectories (true) and matches .svg files
+const imagesContext = require.context('../../Assets/Images', true, /\.svg$/);
+
+const assetMap: Record<string, string> = {};
+
+imagesContext.keys().forEach((key: string) => {
+  // key is something like "./Castles/wArcher.svg" or "./Chess/bKing.svg"
+  // The value returned by imagesContext(key) is the resolved URL/path (thanks to file-loader in CRA)
+  assetMap[key] = imagesContext(key) as string;
+});
 
 /**
  * Registry to look up resolved asset URLs.
  */
 export const getAssetUrl = (theme: PieceTheme, color: Color, type: PieceType): string => {
-   // Construct the lookup key matching the glob pattern
-   // Example: "../../Assets/Images/Castles/wArcher.svg"
-   const key = `../../Assets/Images/${theme}/${color}${type}.svg`;
+   // Construct the lookup key matching the require.context format
+   // Current format uses local paths: "./<Theme>/<color><Type>.svg"
+   const key = `./${theme}/${color}${type}.svg`;
    
-   const asset = modules[key];
+   const asset = assetMap[key];
    
    if (!asset) {
-     console.warn(`Asset not found: ${key}. Fallback to placeholder or default.`);
-     return ""; // Or some placeholder
+     console.warn(`Asset not found for key: "${key}" (Theme: ${theme}, Piece: ${color}${type})`);
+     console.log('Available keys:', Object.keys(assetMap)); // Debug helper
+     return ""; 
    }
    
    return asset;
