@@ -46,7 +46,6 @@ export class SanctuaryService {
 
     // 1. Basic Availability Check
     if (!sanctuary.isReady) {
-      console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Not Ready`);
       return false;
     }
 
@@ -59,7 +58,6 @@ export class SanctuaryService {
         const TURN_UNLOCK = gameState.sanctuarySettings?.unlockTurn ?? 10;
         // One turn = PHASES_PER_TURN sub-phases (usually 10)
         if (gameState.turnCounter < TURN_UNLOCK * PHASES_PER_TURN) {
-           console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Turn Timer (Counter: ${gameState.turnCounter} < Unlock: ${TURN_UNLOCK * PHASES_PER_TURN})`);
            return false;
         }
     }
@@ -75,7 +73,6 @@ export class SanctuaryService {
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     const occupant = gameState.pieceMap.getByKey(sanctuaryHex.getKey());
     if (!occupant || occupant.color !== currentPlayer) {
-       console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Not Controlled (Occupant: ${occupant?.color} vs Player: ${currentPlayer})`);
        return false;
     }
 
@@ -85,7 +82,6 @@ export class SanctuaryService {
 
     // 4. Requirement Check
     if (totalStrength < sanctuary.requiredStrength) {
-        console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: Insufficient Strength (${totalStrength} < ${sanctuary.requiredStrength})`);
         return false;
     }
 
@@ -97,11 +93,9 @@ export class SanctuaryService {
     );
     
     if (!hasValidNeighbor) {
-        console.log(`[SanctuaryDebug] Rejecting ${sanctuary.type}: No valid spawn location`);
         return false;
     }
 
-    console.log(`[SanctuaryDebug] Accepting ${sanctuary.type}: Pledge Valid!`);
     return true;
   }
 
