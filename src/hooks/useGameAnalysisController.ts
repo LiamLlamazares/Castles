@@ -113,7 +113,19 @@ export const useGameAnalysisController = ({
    * Jumps to a specific node in the move tree, potentially switching variations.
    * Now simplified - just sets viewNodeId and updates tree cursor.
    */
-  const jumpToNode = useCallback((nodeId: string) => {
+  const jumpToNode = useCallback((nodeId: string | null) => {
+      // If null, we might be exiting analysis or jumping to root? 
+      // Current implementation in GameProvider implies null is valid.
+      // If null is passed and we want to exit view or go to root:
+      if (!nodeId) {
+           setState(prev => ({
+              ...prev,
+              viewNodeId: null, // Exit view mode or go to live
+              movingPiece: null
+          }));
+          return;
+      }
+
       // Must clone first to treat state as immutable
       const newTree = state.moveTree!.clone();
       

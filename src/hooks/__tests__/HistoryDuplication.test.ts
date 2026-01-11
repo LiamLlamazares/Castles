@@ -1,10 +1,11 @@
 import { renderHook, act } from "@testing-library/react";
-import { useGameLogic } from "../useGameLogic";
+import { renderGameLogicHook } from "../test-utils/TestGameProviderUtils";
+
 import { Hex } from "../../Classes/Entities/Hex";
 
 describe("useGameLogic History Duplication", () => {
     it("should NOT duplicate moves in history when making a regular move", () => {
-        const { result } = renderHook(() => useGameLogic());
+        const { result } = renderGameLogicHook();
         
         // 1. Make a Movement
         const whitePiece = result.current.pieces.find(p => p.color === 'w' && p.canMove);
@@ -35,7 +36,7 @@ describe("useGameLogic History Duplication", () => {
     });
 
     it("should NOT duplicate moves in MoveTree when logic is called twice (Strict Mode simulation)", () => {
-        const { result } = renderHook(() => useGameLogic());
+        const { result } = renderGameLogicHook();
         
         const whitePiece = result.current.pieces.find(p => p.color === 'w' && p.canMove);
         expect(whitePiece).toBeDefined();

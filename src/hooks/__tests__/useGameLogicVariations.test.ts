@@ -1,11 +1,12 @@
 import { renderHook, act } from "@testing-library/react";
-import { useGameLogic } from "../useGameLogic";
+import { renderGameLogicHook } from "../test-utils/TestGameProviderUtils";
+
 import { Hex } from "../../Classes/Entities/Hex";
 
 describe("useGameLogic Nested Variations Integration", () => {
     it("should correctly create nested variations when navigating back in history", () => {
-        // Enable analysis mode for variant creation
-        const { result } = renderHook(() => useGameLogic(undefined, undefined, undefined, undefined, undefined, undefined, true));
+        // Enable analysis mode for variant creation via props
+        const { result } = renderGameLogicHook({ isAnalysisMode: true });
         
         // 1. Play White Move
         const whitePiece = result.current.pieces.find(p => p.color === 'w' && p.canMove);

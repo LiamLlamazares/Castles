@@ -16,19 +16,21 @@ import { MoveTree } from "../Classes/Core/MoveTree";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveRecord } from "../Constants";
 
+export interface PGNLoadResult {
+  board: Board;
+  pieces: Piece[];
+  history: any[];
+  moveHistory: MoveRecord[];
+  moveTree: MoveTree;
+  turnCounter: number;
+  sanctuaries: Sanctuary[];
+  castles: import("../Classes/Entities/Castle").Castle[];
+  sanctuarySettings?: { unlockTurn: number, cooldown: number };
+}
+
 export interface PGNHookResult {
   getPGN: () => string;
-  loadPGN: (pgn: string) => {
-    board: Board;
-    pieces: Piece[];
-    history: any[];
-    moveHistory: MoveRecord[];
-    moveTree: MoveTree;
-    turnCounter: number;
-    sanctuaries: import("../Classes/Entities/Sanctuary").Sanctuary[];
-    castles: import("../Classes/Entities/Castle").Castle[];
-    sanctuarySettings?: { unlockTurn: number, cooldown: number };
-  } | null;
+  loadPGN: (pgn: string) => PGNLoadResult | null;
 }
 
 /**

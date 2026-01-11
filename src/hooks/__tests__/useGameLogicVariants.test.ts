@@ -1,5 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
-import { useGameLogic } from "../useGameLogic";
+import { renderGameLogicHook } from "../test-utils/TestGameProviderUtils";
+
 import { startingBoard } from "../../ConstantImports";
 import { Hex } from "../../Classes/Entities/Hex";
 import { PieceType } from "../../Constants";
@@ -10,8 +11,8 @@ import { Piece } from "../../Classes/Entities/Piece";
 
 describe("useGameLogic Variants (Interactive Branching)", () => {
     it("should allow making a new move after stepping back in history", () => {
-        // 1. Setup - Enable analysis mode for variant creation
-        const { result } = renderHook(() => useGameLogic(undefined, undefined, undefined, undefined, undefined, undefined, true));
+        // 1. Setup - Enable analysis mode via props
+        const { result } = renderGameLogicHook({ isAnalysisMode: true });
         
         // Ensure starting state
         expect(result.current.turnCounter).toBe(0);

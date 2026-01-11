@@ -1,63 +1,67 @@
 /**
- * @file useGameLogic.ts
- * @description Central React hook for game state management.
+ * @file GameProvider.tsx
+ * @description Provider component that encapsulates the game logic and state.
  *
- * Composes specialized hooks:
- * - **useAnalysisMode**: History navigation
- * - **useUISettings**: Board display toggles
- * - **usePGN**: Import/export functionality
- * - **useMoveExecution**: Move/attack/recruit/ability execution
- *
- * Provides all game state and actions to the Game component.
- *
- * @usage Called by Game.tsx to power the game UI.
- * @see GameEngine - Core game logic facade
- * @see Game.tsx - Component that consumes this hook
+ * This component effectively replaces the direct usage of `useGameLogic` in `Game.tsx`.
+ * It instantiates the core hooks and provides the state and actions down the tree
+ * via `GameContext`.
  */
-import React, { useMemo, useCallback } from "react";
-import { createPieceMap } from "../utils/PieceMap";
-import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState } from "../Classes/Core/GameState";
+import React, { useMemo, useCallback, ReactNode } from "react";
+import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
-import { Castle } from "../Classes/Entities/Castle";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
-import {
-  Color,
-  HistoryEntry,
-  MoveRecord,
-  SanctuaryConfig,
-  SanctuaryType
-} from "../Constants";
+import { HistoryEntry, MoveRecord, Color, SanctuaryType } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
+import { GameState } from "../Classes/Core/GameState";
 
-// Composed hooks
-import { useCoreGame} from "./useCoreGame";
-import { useAnalysisMode } from "./useAnalysisMode";
-import { usePGN } from "./usePGN";
-import { useMoveExecution } from "./useMoveExecution";
-import { useComputedGame } from "./useComputedGame";
-import { useGameAnalysisController } from "./useGameAnalysisController";
-import { useGameInteraction } from "./useGameInteraction";
+// Hooks
+import { useCoreGame } from "../hooks/useCoreGame";
+import { useAnalysisMode } from "../hooks/useAnalysisMode";
+import { usePGN } from "../hooks/usePGN";
+import { useMoveExecution } from "../hooks/useMoveExecution";
+import { useComputedGame } from "../hooks/useComputedGame";
+import { useGameAnalysisController } from "../hooks/useGameAnalysisController";
+import { useGameInteraction } from "../hooks/useGameInteraction";
 
+// Contexts
+import { GameStateContext, GameDispatchContext, IGameState, IGameActions } from "./GameContext";
 
+interface GameProviderProps {
+  children: ReactNode;
+  
+  // Initial Configuration
+  initialBoard?: Board;
+  initialPieces?: Piece[];
+  initialHistory?: HistoryEntry[];
+  initialMoveHistory?: MoveRecord[];
+  initialTurnCounter?: number;
+  initialSanctuaries?: Sanctuary[];
+  isAnalysisMode?: boolean;
+  initialMoveTree?: MoveTree;
+  sanctuarySettings?: { unlockTurn: number, cooldown: number };
+  gameRules?: { vpModeEnabled: boolean };
+  isTutorialMode?: boolean;
+  initialPoolTypes?: SanctuaryType[];
+}
 
-export const useGameLogic = (
-  initialBoard: import("../Classes/Core/Board").Board = startingBoard,
-  initialPieces: Piece[] = allPieces,
-  initialHistory: HistoryEntry[] = [],
-  initialMoveHistory: MoveRecord[] = [],
-  initialTurnCounter: number = 0,
-  initialSanctuaries?: Sanctuary[], // Optional, uses default generator if missing
-  isAnalysisMode: boolean = false, // When false, blocks moves during analysis mode (Play Mode)
-  initialMoveTree?: MoveTree, // Optional, use this tree if provided (e.g., from PGN import with snapshots)
-  sanctuarySettings?: { unlockTurn: number, cooldown: number }, // Configurable sanctuary settings
-  gameRules?: { vpModeEnabled: boolean },
-  isTutorialMode: boolean = false, // When true, skip victory checks
-  initialPoolTypes?: import("../Constants").SanctuaryType[]
-) => {
-  // Create game engine instance (stable reference)
+export const GameProvider: React.FC<GameProviderProps> = ({
+  children,
+  initialBoard = startingBoard,
+  initialPieces = allPieces,
+  initialHistory = [],
+  initialMoveHistory = [],
+  initialTurnCounter = 0,
+  initialSanctuaries,
+  isAnalysisMode = false,
+  initialMoveTree,
+  sanctuarySettings,
+  gameRules,
+  isTutorialMode = false,
+  initialPoolTypes
+}) => {
+  
   // =========== CORE GAME STATE ===========
   const { state, setState, gameEngine, startingSanctuaries } = useCoreGame(
     initialBoard, 
@@ -73,12 +77,9 @@ export const useGameLogic = (
   );
 
   // =========== COMPOSED HOOKS ===========
-  // isAnalysisMode is true when user explicitly entered Analysis Mode
-  // This enables variant creation and shows move indicators
   const { isViewingHistory, analysisState, stepHistory } = useAnalysisMode(state, setState, isAnalysisMode);
   const { getPGN, loadPGN } = usePGN(initialBoard, initialPieces, startingSanctuaries, state.moveHistory, state.moveTree, sanctuarySettings);
 
-  // Destructure for convenience
   const {
     movingPiece, 
     history, 
@@ -196,19 +197,19 @@ export const useGameLogic = (
   const hasGameStarted = turnCounter > 0;
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
-      return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex);
+      // Use explicit cast if generic state has incompatible details, though it matches interface structure
+      return gameEngine.canPledge(state as unknown as GameState, sanctuaryHex); 
   }, [gameEngine, state]);
 
-  return {
-    // State
+  // =========== CONTEXT VALUES ===========
+  
+  const gameStateValue: IGameState = useMemo(() => ({
     pieces,
     castles,
     sanctuaries: state.sanctuaries || [],
     turnCounter,
     pieceMap: viewState.pieceMap,
     movingPiece,
-    
-    // Computed
     turnPhase,
     currentPlayer,
     hexagons,
@@ -219,33 +220,12 @@ export const useGameLogic = (
     isRecruitmentSpot,
     board: gameEngine.board,
     moveTree: state.moveTree,
-    moveHistory: moveHistory,
+    moveHistory,
     history: state.history,
     hasGameStarted,
-
-    // Actions
-    handlePass,
-    handleTakeback,
-    handlePieceClick,
-    handleHexClick,
-    handleResign,
-    pledge,
-    
-    // Analysis & PGN
     isAnalysisMode,
     isViewingHistory,
     viewNodeId: state.viewNodeId,
-    jumpToNode,
-    stepHistory,
-    getPGN,
-    loadPGN,
-    
-    // Helpers
-    canPledge,
-    triggerAbility,
-    isHexDefended: (hex: Hex, color: Color) => gameEngine.isHexDefended(hex, color, viewState),
-    
-    // AI Integration
     aiIntegration: {
       gameEngine,
       board: gameEngine.board,
@@ -253,5 +233,37 @@ export const useGameLogic = (
       applyAIState: (newState: GameState) => setState(newState as any),
       isViewingHistory,
     }
-  };
+  }), [
+    pieces, castles, state.sanctuaries, turnCounter, viewState.pieceMap, movingPiece,
+    turnPhase, currentPlayer, hexagons, legalMoveSet, legalAttackSet, victoryMessage, winner,
+    isRecruitmentSpot, gameEngine, state.moveTree, moveHistory, state.history, hasGameStarted,
+    isAnalysisMode, isViewingHistory, state.viewNodeId, state, setState
+  ]);
+
+  const gameActionsValue: IGameActions = useMemo(() => ({
+    handlePass,
+    handleTakeback,
+    handlePieceClick,
+    handleHexClick,
+    handleResign: (forColor?: Color) => handleResign(forColor || currentPlayer),
+    pledge,
+    canPledge,
+    triggerAbility: (source, targetHex, ability) => triggerAbility(source.hex, targetHex, ability),
+    isHexDefended: (hex: Hex, color: Color) => gameEngine.isHexDefended(hex, color, viewState),
+    jumpToNode,
+    stepHistory,
+    getPGN,
+    loadPGN
+  }), [
+    handlePass, handleTakeback, handlePieceClick, handleHexClick, handleResign, pledge, canPledge,
+    triggerAbility, gameEngine, viewState, jumpToNode, stepHistory, getPGN, loadPGN
+  ]);
+
+  return (
+    <GameDispatchContext.Provider value={gameActionsValue}>
+      <GameStateContext.Provider value={gameStateValue}>
+        {children}
+      </GameStateContext.Provider>
+    </GameDispatchContext.Provider>
+  );
 };

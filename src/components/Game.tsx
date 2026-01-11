@@ -10,12 +10,11 @@
  * - **VictoryOverlay** - End-game overlay
  *
  * @usage Mounted by App.tsx when in game view.
- * @see useGameLogic - Hook providing all game state and actions
+ * @see GameProvider - Encapsulates game state and actions
  * @see HexGrid - Board rendering component
  * @see ControlPanel - Right panel with controls
  */
 import React from 'react';
-import { useGameLogic } from "../hooks/useGameLogic";
 import { useSoundEffects } from "../hooks/useSoundEffects";
 import { useInputHandler } from "../hooks/useInputHandler";
 import { useClickHandler } from "../hooks/useClickHandler";
@@ -42,11 +41,14 @@ import { TerrainTooltip } from "./TerrainTooltip";
 import QuickStartModal, { useQuickStart } from "./QuickStartModal";
 import { PieceFactory } from "../Classes/Entities/PieceFactory";
 import { HistoryEntry, MoveRecord, SanctuaryConfig, PieceTheme } from "../Constants";
-import { createPieceMap } from "../utils/PieceMap";
 import "../css/Board.css";
 
 // SVG import for lightbulb
 import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
+
+// Context
+import { GameProvider } from "../contexts/GameProvider";
+import { useGameState, useGameActions } from "../contexts/GameContext";
 
 interface GameBoardProps {
   initialBoard?: Board;
@@ -75,18 +77,12 @@ interface GameBoardProps {
 }
 
 /**
- * Main game board component.
- * Renders the hex grid, pieces, and handles user interactions.
+ * Inner Game Component that consumes the GameContext.
+ * This separates the Provider setup from the component logic.
  */
-const GameBoard: React.FC<GameBoardProps> = ({ 
-  initialBoard = startingBoard, 
-  initialPieces = allPieces, 
+const InnerGame: React.FC<GameBoardProps> = ({
+  initialBoard = startingBoard,
   initialLayout = startingLayout,
-  initialHistory,
-  initialMoveHistory,
-  initialMoveTree,
-  initialTurnCounter,
-  initialSanctuaries,
   sanctuarySettings,
   gameRules,
   onResign = () => {},
@@ -96,10 +92,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
   onEditPosition,
   onTutorial,
   timeControl,
-  isAnalysisMode = false,
   onEnableAnalysis = () => {},
   isTutorialMode = false,
-  initialPoolTypes,
   pieceTheme = "Castles",
   opponentConfig
 }) => {
@@ -111,6 +105,49 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [tooltipPiece, setTooltipPiece] = React.useState<Piece | null>(null);
   const [tooltipHex, setTooltipHex] = React.useState<Hex | null>(null);
   const [isSanctuaryPreview, setIsSanctuaryPreview] = React.useState(false);
+
+  // Consume Contexts
+  const {
+      pieces,
+      castles,
+      sanctuaries,
+      turnCounter,
+      pieceMap,
+      movingPiece,
+      turnPhase,
+      currentPlayer,
+      hexagons,
+      legalMoveSet,
+      legalAttackSet,
+      victoryMessage,
+      winner,
+      isRecruitmentSpot,
+      board,
+      moveHistory,
+      moveTree,
+      history,
+      hasGameStarted,
+      isAnalysisMode,
+      viewNodeId,
+      aiIntegration,
+      isViewingHistory
+  } = useGameState();
+
+  const {
+      handlePass,
+      handleTakeback,
+      handlePieceClick,
+      handleHexClick: onEngineHexClick,
+      handleResign,
+      pledge,
+      canPledge,
+      triggerAbility,
+      isHexDefended,
+      jumpToNode,
+      stepHistory,
+      getPGN,
+      loadPGN
+  } = useGameActions();
   
   // Tooltip discovery hint (show once per browser)
   const [showTooltipHint, setShowTooltipHint] = React.useState(() => {
@@ -141,54 +178,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
   
   // Sound effects hook - subscribes to game events
   useSoundEffects();
-  
-  // Get game logic first so we have gameEngine and state for AI hook
-  const {
-    // State
-    pieces,
-    castles,
-    sanctuaries,
-    turnCounter,
-    
-    // Computed
-    turnPhase,
-    currentPlayer,
-    hexagons,
-    legalMoveSet,
-    legalAttackSet,
-    victoryMessage,
-    winner,
-    isRecruitmentSpot,
-    board,
-    moveHistory,
-    moveTree,
-    movingPiece,
-    jumpToNode,
-    history,
-    
-    // Actions
-    handlePass,
-    handleTakeback,
-    handlePieceClick,
-    handleHexClick: onEngineHexClick,
-    handleResign,
-    hasGameStarted,
-    pledge,
-    canPledge,
-    
-    // Analysis
-    isViewingHistory,
-    viewNodeId,
-    stepHistory,
-    getPGN,
-    loadPGN,
-    triggerAbility,
-    isHexDefended,
-    pieceMap,
-    
-    // AI Integration - controlled interface
-    aiIntegration
-  } = useGameLogic(initialBoard, initialPieces, initialHistory, initialMoveHistory, initialTurnCounter, initialSanctuaries, isAnalysisMode, initialMoveTree, sanctuarySettings, gameRules, isTutorialMode, initialPoolTypes);
 
   // Decoupled View State
   const { 
@@ -209,16 +198,26 @@ const GameBoard: React.FC<GameBoardProps> = ({
     setAllIcons
   } = useGameView();
 
-  // AI Opponent Integration - using controlled aiIntegration interface
-  const { isAITurn } = useAIOpponent({
-    enabled: opponentConfig?.type !== 'human' && opponentConfig?.type != null,
-    opponentType: opponentConfig?.type ?? 'human',
-    aiColor: opponentConfig?.aiColor ?? 'b',
+  // AI Integration: Only pass if all required properties are present
+  // If no AI is active (Human vs Human), aiIntegration will be undefined in context,
+  // and useAIOpponent will gracefully disable itself via enabled: false.
+  const aiIntegrationSafe = aiIntegration ? {
     gameEngine: aiIntegration.gameEngine,
     board: aiIntegration.board,
     gameState: aiIntegration.getState(),
     onStateChange: aiIntegration.applyAIState,
     isViewingHistory: aiIntegration.isViewingHistory,
+  } : undefined;
+
+  const { isAITurn } = useAIOpponent({
+    enabled: opponentConfig?.type !== 'human' && opponentConfig?.type != null,
+    opponentType: opponentConfig?.type ?? 'human',
+    aiColor: opponentConfig?.aiColor ?? 'b',
+    gameEngine: aiIntegrationSafe?.gameEngine!, 
+    board: aiIntegrationSafe?.board!,
+    gameState: aiIntegrationSafe?.gameState!,
+    onStateChange: aiIntegrationSafe?.onStateChange!,
+    isViewingHistory: aiIntegrationSafe?.isViewingHistory,
   });
 
   // Reset overlay when game restarts (victory message clears or changes)
@@ -303,7 +302,13 @@ const GameBoard: React.FC<GameBoardProps> = ({
     pieces,
     canPledge,
     pledge,
-    triggerAbility,
+    triggerAbility: (sourceHex, targetHex, ability) => {
+        // Find the piece at the source hex to pass to the action
+        const piece = pieces.find(p => p.hex.equals(sourceHex));
+        if (piece) {
+            triggerAbility(piece, targetHex, ability);
+        }
+    },
     onEngineHexClick,
     board,
   });
@@ -448,6 +453,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
           hexagons={hexagons}
           castles={castles}
           sanctuaries={sanctuaries}
+          // legalMoveSet={legalMoveSet} // Removed as it's not on HexGrid props
+          // legalAttackSet={legalAttackSet} // Removed as it's not on HexGrid props
           showCoordinates={showCoordinates}
           isBoardRotated={isBoardRotated}
           isAdjacentToControlledCastle={isRecruitmentSpot}
@@ -573,6 +580,31 @@ const GameBoard: React.FC<GameBoardProps> = ({
         <QuickStartModal onClose={dismissQuickStart} />
       )}
     </>
+  );
+};
+
+/**
+ * Main Game Component Wrapper.
+ * Provides the GameContext through GameProvider.
+ */
+const GameBoard: React.FC<GameBoardProps> = (props) => {
+  return (
+    <GameProvider
+      initialBoard={props.initialBoard}
+      initialPieces={props.initialPieces}
+      initialHistory={props.initialHistory}
+      initialMoveHistory={props.initialMoveHistory}
+      initialTurnCounter={props.initialTurnCounter}
+      initialSanctuaries={props.initialSanctuaries}
+      isAnalysisMode={props.isAnalysisMode}
+      initialMoveTree={props.initialMoveTree}
+      sanctuarySettings={props.sanctuarySettings}
+      gameRules={props.gameRules}
+      isTutorialMode={props.isTutorialMode}
+      initialPoolTypes={props.initialPoolTypes}
+    >
+      <InnerGame {...props} />
+    </GameProvider>
   );
 };
 
