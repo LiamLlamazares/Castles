@@ -124,126 +124,101 @@ export const useMoveExecution = ({
   }, [getEffectiveState, prepareTreeForMutation]);
 
   /**
+   * Unified Helper: Executes a command and updates state on success.
+   */
+  const executeCommand = useCallback(
+    (command: import("../Classes/Commands").GameCommand): boolean => {
+      // 1. Guard for Read-Only History Mode
+      if (!isAnalysisMode && isViewingHistory) {
+        // If it's a "silent" fail, we might return false.
+        // But callers usually check this guard too if they have specific UI logic.
+        return false;
+      }
+
+      const stateWithHistory = prepareStateForAction();
+      const result = command.execute(stateWithHistory);
+
+      if (result.success) {
+        setState((prev: MoveExecutionState) => ({
+          ...prev,
+          ...result.newState,
+          viewNodeId: null,
+          history: result.newState.history,
+        }));
+        return true;
+      } else {
+        if (result.error) console.error("Command failed:", result.error);
+        return false;
+      }
+    },
+    [isAnalysisMode, isViewingHistory, prepareStateForAction, setState]
+  );
+
+  /**
    * Handles passing the turn using PassCommand.
    */
   const handlePass = useCallback(() => {
-    // Block moves in Play Mode (Read-Only) when viewing history
-    if (!isAnalysisMode && isViewingHistory) {
-      return;
-    }
-
-    const stateWithHistory = prepareStateForAction();
-    const command = new PassCommand(commandContext);
-    const result = command.execute(stateWithHistory);
-
-    if (result.success) {
-      setState((prev: MoveExecutionState) => ({
-        ...prev,
-        ...result.newState,
-        viewNodeId: null,
-        history: result.newState.history,
-      }));
-    }
-  }, [commandContext, isAnalysisMode, isViewingHistory, prepareStateForAction, setState]);
+    if (!isAnalysisMode && isViewingHistory) return;
+    executeCommand(new PassCommand(commandContext));
+  }, [isAnalysisMode, isViewingHistory, executeCommand, commandContext]);
 
   /**
    * Handles clicking on a hex for movement, attack, or recruitment.
-   * Uses MoveCommand, AttackCommand, CastleAttackCommand, or RecruitCommand.
    */
   const handleHexClick = useCallback(
     (hex: Hex) => {
-      // Block moves in Play Mode (Read-Only) when viewing history
+      // 1. Guard: Read-Only History Viewing
       if (!isAnalysisMode && isViewingHistory) {
         setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
         return;
       }
 
-      // Handle Movement
-      if (turnPhase === "Movement" && movingPiece?.canMove) {
-        if (isLegalMove(hex)) {
-          const stateWithHistory = prepareStateForAction();
-          const command = new MoveCommand(movingPiece, hex, commandContext);
-          const result = command.execute(stateWithHistory);
+      // 2. Try Actions based on Phase
+      let actionTaken = false;
 
-          if (result.success) {
-            setState((prev: MoveExecutionState) => ({
-              ...prev,
-              ...result.newState,
-              viewNodeId: null,
-              history: result.newState.history,
-            }));
-          }
-          return;
-        }
-        setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
-        return;
+      // MOVEMENT
+      if (turnPhase === "Movement" && movingPiece?.canMove && isLegalMove(hex)) {
+        actionTaken = executeCommand(new MoveCommand(movingPiece, hex, commandContext));
       }
-
-      // Handle Attack - triggers if clicking on a valid attack target hex
-      // This works whether clicking the red attack indicator OR the enemy piece/hex directly
-      if (turnPhase === "Attack" && movingPiece?.canAttack) {
-        if (isLegalAttack(hex)) {
-          const stateWithHistory = prepareStateForAction();
-          const effectiveState = getEffectiveState();
-          const targetPiece = effectiveState.pieces.find((p) => p.hex.equals(hex));
-
-          // Use AttackCommand for pieces, CastleAttackCommand for castles
-          const command = targetPiece
-            ? new AttackCommand(movingPiece, hex, commandContext)
-            : new CastleAttackCommand(movingPiece, hex, commandContext);
-
-          const result = command.execute(stateWithHistory);
-
-          if (result.success) {
-            setState((prev: MoveExecutionState) => ({
-              ...prev,
-              ...result.newState,
-              viewNodeId: null,
-              history: result.newState.history,
-            }));
-          }
-          return;
-        }
-        // Don't deselect if clicking elsewhere - allow retrying
-        setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
-        return;
+      // ATTACK
+      else if (turnPhase === "Attack" && movingPiece?.canAttack && isLegalAttack(hex)) {
+        const effectiveState = getEffectiveState();
+        const targetPiece = effectiveState.pieces.find((p) => p.hex.equals(hex));
+        
+        // Determine if attacking a piece or a castle
+        const command = targetPiece
+          ? new AttackCommand(movingPiece, hex, commandContext)
+          : new CastleAttackCommand(movingPiece, hex, commandContext);
+          
+        actionTaken = executeCommand(command);
       }
-
-      // Handle Recruitment
-      if (isRecruitmentSpot(hex)) {
+      // RECRUITMENT
+      else if (isRecruitmentSpot(hex)) {
         const castle = castles.find((c) => c.isAdjacent(hex));
         if (castle) {
-          const stateWithHistory = prepareStateForAction();
-          const command = new RecruitCommand(castle, hex, commandContext);
-          const result = command.execute(stateWithHistory);
-
-          if (result.success) {
-            setState((prev: MoveExecutionState) => ({
-              ...prev,
-              ...result.newState,
-              viewNodeId: null,
-              history: result.newState.history,
-            }));
-          }
-          return;
+          actionTaken = executeCommand(new RecruitCommand(castle, hex, commandContext));
         }
       }
 
-      setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
+      // 3. Cleanup: If no action was performed, deselect the piece
+      // This is crucial for UI responsiveness (clicking empty hex deselects)
+      if (!actionTaken) {
+        setState((prev: MoveExecutionState) => ({ ...prev, movingPiece: null }));
+      }
     },
     [
-      commandContext,
       turnPhase,
       movingPiece,
-      castles,
       isLegalMove,
       isLegalAttack,
       isRecruitmentSpot,
+      castles,
+      executeCommand,
+      commandContext,
+      getEffectiveState,
       isAnalysisMode,
       isViewingHistory,
-      getEffectiveState,
-      prepareStateForAction,
-      setState,
+      setState
     ]
   );
 
@@ -252,34 +227,17 @@ export const useMoveExecution = ({
    */
   const pledge = useCallback(
     (sanctuaryHex: Hex, spawnHex: Hex) => {
-      // Block pledge in Play Mode (Read-Only) when viewing history
-      if (!isAnalysisMode && isViewingHistory) {
-        return;
-      }
-
       const effectiveState = getEffectiveState();
       const sanctuary = effectiveState.sanctuaries?.find((s) => s.hex.equals(sanctuaryHex));
+      
       if (!sanctuary) {
         console.error("Sanctuary not found");
         return;
       }
 
-      const stateWithHistory = prepareStateForAction();
-      const command = new PledgeCommand(sanctuary, spawnHex, commandContext);
-      const result = command.execute(stateWithHistory);
-
-      if (result.success) {
-        setState((prev: MoveExecutionState) => ({
-          ...prev,
-          ...result.newState,
-          viewNodeId: null,
-          history: result.newState.history,
-        }));
-      } else {
-        console.error("Pledge failed:", result.error);
-      }
+      executeCommand(new PledgeCommand(sanctuary, spawnHex, commandContext));
     },
-    [commandContext, isAnalysisMode, isViewingHistory, getEffectiveState, prepareStateForAction, setState]
+    [executeCommand, getEffectiveState, commandContext]
   );
 
   /**
@@ -287,34 +245,17 @@ export const useMoveExecution = ({
    */
   const triggerAbility = useCallback(
     (sourceHex: Hex, targetHex: Hex, ability: AbilityType) => {
-      // Block abilities in Play Mode (Read-Only) when viewing history
-      if (!isAnalysisMode && isViewingHistory) {
-        return;
-      }
-
       const effectiveState = getEffectiveState();
       const caster = effectiveState.pieceMap.getByKey(sourceHex.getKey());
+      
       if (!caster) {
         console.error("Caster not found");
         return;
       }
 
-      const stateWithHistory = prepareStateForAction();
-      const command = new AbilityCommand(caster, targetHex, ability, commandContext);
-      const result = command.execute(stateWithHistory);
-
-      if (result.success) {
-        setState((prev: MoveExecutionState) => ({
-          ...prev,
-          ...result.newState,
-          viewNodeId: null,
-          history: result.newState.history,
-        }));
-      } else {
-        console.error("Ability failed:", result.error);
-      }
+      executeCommand(new AbilityCommand(caster, targetHex, ability, commandContext));
     },
-    [commandContext, isAnalysisMode, isViewingHistory, getEffectiveState, prepareStateForAction, setState]
+    [executeCommand, getEffectiveState, commandContext]
   );
 
   return {

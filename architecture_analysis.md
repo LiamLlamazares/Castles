@@ -122,8 +122,12 @@ graph TD
 *   **[x] Task 2.2**: Decompose logic into `useCoreGame`, `useComputedGame`, etc. (Done via Provider).
 *   **[ ] Task 2.3**: Clean up legacy `useGameLogic.ts` usage in tests.
 
-### Milestone 3: Asset Pipeline
-*   **Task 3.1**: Create a dynamic `PieceAssetRegistry` to automate the `PieceImages.ts` manual mapping.
+### Milestone 3: Asset Pipeline (COMPLETED)
+*   **[x] Task 3.1**: Create a dynamic `PieceAssetRegistry` to automate the `PieceImages.ts` manual mapping. (Implemented `AssetRegistry.ts` with `require.context`).
+
+### Milestone 4: Code Cleanliness (In Progress)
+*   **[x] Task 4.1**: Refactor `useMoveExecution` to use a Command Dispatcher pattern. (Reduced state machine complexity).
+*   **[ ] Task 4.2**: Clean up legacy `useGameLogic.ts` usage in tests.
 
 ---
 
