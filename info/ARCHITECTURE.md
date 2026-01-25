@@ -23,6 +23,64 @@ const GameBoard: React.FC<GameBoardProps> = (inputs) => {
     )
 }
 ```
+Typical 4 piece structure of a component
+```typescript
+import React, { useState, useMemo } from 'react';
+
+// 1. THE INPUTS (Interface)
+// This is the "Contract". It tells you what data this component NEEDS.
+interface PieceCounterProps {
+  pieces: Piece[];        // An array of piece objects
+  teamColor: 'w' | 'b';   // Either 'w' or 'b'
+  onReset: () => void;    // A function to call when resetting
+}
+
+// 2. COMPONENT DEFINITION
+// First pass input props
+export const PieceCounter: React.FC<PieceCounterProps> = ({ pieces, teamColor, onReset }) => {
+  
+  // 3. THE "BRAIN" (Hooks & Logic)
+  
+  // Local state: Is the detailed list open or closed?
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Memoized math: Only recalculates if 'pieces' or 'teamColor' changes.
+  const teamCount = useMemo(() => {
+    return pieces.filter(p => p.color === teamColor).length;
+  }, [pieces, teamColor]);
+
+  // Internal Logic function
+  const toggleView = () => setIsOpen(!isOpen);
+
+  // 4. THE "DRAWING" (Return Statement)
+  return (
+    <div className="counter-box">
+      {/* Dynamic Text using { } */}
+      <h2>{teamColor === 'w' ? 'White' : 'Black'} Team</h2>
+      <p>Total Pieces: {teamCount}</p>
+
+      {/* Event Handler */}
+      <button onClick={toggleView}>
+        {isOpen ? "Hide List" : "Show List"}
+      </button>
+
+      {/* Conditional Rendering: Only show the <ul> if isOpen is true */}
+      {isOpen && (
+        <ul>
+          {/* Mapping: Transform the data list into a visual list */}
+          {pieces.map((p) => (
+            <li key={p.id}>{p.type} at {p.hex.q},{p.hex.r}</li>
+          ))}
+        </ul>
+      )}
+
+      <button onClick={onReset} className="danger-btn">Reset Team</button>
+    </div>
+  );
+};
+
+```
+
 
 ### Props (the input)
 Piece of data passed from parent to child component. Cannot be changed by component.  In example above `hexagons`.
