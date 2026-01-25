@@ -34,10 +34,44 @@ A function that starts with "use".
 const [thing, f] = useState<typeof_thing>(x);
 f(y) // Triggers a re-render and sets thing to y
 ```
+Example
+```typescript
+const [count, setCount] = useState<number>(0);
+const increment = () => {
+    setCount(count + 1); // "Change count to 1 and re-draw the screen"
+};
+// Use it in UI
+return <button onClick={increment}>You clicked {count} times</button>;
+```
+
 - `useMemo`: hook that returns a memoized value. Only re-computes if [dependencies] change
 ```typescript
 const memoizedValue = useMemo<typeof_value>(() => computeExpensiveValue(a, b), [a, b]);
 ```
+
+Example:
+```typescript
+const Game = () => {
+    const [search, setSearch] = useState("");
+    const [allPieces, setAllPieces] = useState([]);
+    
+    // Some OTHER state that has nothing to do with pieces
+    const [isMenuOpen, setIsMenuOpen] = useState(false); 
+
+    const filteredPieces = useMemo(() => {
+        // ... hard math ...
+    }, [allPieces, search]);
+//  If you click this, the WHOLE 'Game' function runs again! When it reaches useMemo, React checks: "Did allPieces or search change? No? Then I will skip the hard math and just return the result I have in memory
+    return (
+        <div>
+"           <button onClick={() => setIsMenuOpen(!isMenuOpen)}>Toggle Menu</button>
+           
+           <Board pieces={filteredPieces} />
+        </div>
+    );
+}
+```
+
 
 - `useEffect`: hook that runs a function when dependencies change
 ```typescript
