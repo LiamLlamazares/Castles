@@ -1,6 +1,6 @@
 # Castles Architecture Overview
 
-> **Version**: 4.0 (December 2025)  
+> **Version**: 5.0 (January 2026)  
 > **Purpose**: Technical reference for understanding and maintaining the Castles codebase.
 
 ---
@@ -28,7 +28,7 @@ Castles is a fantasy-themed hexagonal chess variant built with React and TypeScr
 │   (React Components: Game.tsx, HexGrid.tsx)     │
 ├─────────────────────────────────────────────────┤
 │                 Hook Layer                      │
-│   (useGameLogic, useMoveExecution, usePGN)      │
+│   (GameProvider, useMoveExecution, usePGN)      │
 ├─────────────────────────────────────────────────┤
 │               Command Layer                     │
 │   (MoveCommand, AttackCommand, RecruitCommand)  │
@@ -265,8 +265,8 @@ Phase:        M   M   A   A   C       M   M   A   A   C       M   M
 
 ```mermaid
 graph TD
-    subgraph "Central Controller"
-        UGL[useGameLogic.ts]
+    subgraph "Context Provider"
+        GP[GameProvider.tsx]
     end
     
     subgraph "State Hooks"
@@ -276,18 +276,20 @@ graph TD
     end
     
     subgraph "Feature Hooks"
-        UAM[useAnalysisMode.ts<br/>History Navigation]
+        UGAC[useGameAnalysisController.ts<br/>History Navigation]
+        UGI[useGameInteraction.ts<br/>Click/Selection]
         UPG[usePGN.ts<br/>Import/Export]
         UCH[useClickHandler.ts<br/>Click Processing]
         USF[useSoundEffects.ts<br/>Audio Feedback]
     end
     
-    UGL --> UCG
-    UGL --> UME
-    UGL --> UCM
-    UGL --> UAM
-    UGL --> UPG
-    UCH -.-> UGL
+    GP --> UCG
+    GP --> UME
+    GP --> UCM
+    GP --> UGAC
+    GP --> UGI
+    GP --> UPG
+    UCH -.-> GP
     USF -.->|subscribes to| Events[GameEvents]
 ```
 
@@ -295,14 +297,18 @@ graph TD
 
 | Hook | Purpose | Lines |
 |------|---------|-------|
-| [useGameLogic](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useGameLogic.ts) | Central controller, composes all other hooks | 354 |
+| [GameProvider](file:///c:/Users/liaml/Documents/GitHub/Castles/src/contexts/GameProvider.tsx) | Context provider, replaces useGameLogic | 284 |
 | [useCoreGame](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useCoreGame.ts) | State initialization from props | 103 |
 | [useComputedGame](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useComputedGame.ts) | Derived values (turn phase, legal moves) | 140 |
-| [useMoveExecution](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useMoveExecution.ts) | Executes commands, updates state | 324 |
+| [useMoveExecution](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useMoveExecution.ts) | Executes commands, updates state | 251 |
+| [useGameAnalysisController](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useGameAnalysisController.ts) | History navigation & analysis mode | 150 |
+| [useGameInteraction](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useGameInteraction.ts) | Piece selection, click handling | 95 |
 | [useClickHandler](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useClickHandler.ts) | Processes board clicks | 172 |
-| [useAnalysisMode](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useAnalysisMode.ts) | History navigation | 112 |
+| [useInputController](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useInputController.ts) | Command resolution from clicks | 80 |
 | [usePGN](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/usePGN.ts) | Import/export game state | 90 |
-| [useSoundEffects](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useSoundEffects.ts) | Audio feedback via event subscription | 119 |
+| [useSoundEffects](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useSoundEffects.ts) | Audio feedback via event subscription | 90 |
+| [useAIOpponent](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/useAIOpponent.ts) | AI opponent integration | 125 |
+| [usePersistence](file:///c:/Users/liaml/Documents/GitHub/Castles/src/hooks/usePersistence.ts) | Game save/load | 80 |
 
 ---
 
@@ -440,7 +446,7 @@ loadPGN() in usePGN.ts
 | `ABILITY_ACTIVATED` | Special ability | `{ ability, source, target }` |
 | `GAME_ENDED` | Game over | `{ winner, reason }` |
 
-### Test Files (26 total)
+### Test Files (25 total)
 
 | Category | Files |
 |----------|-------|
@@ -457,6 +463,7 @@ loadPGN() in usePGN.ts
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 5.0 | 2026-01-25 | Replaced useGameLogic with GameContext/GameProvider pattern, added new hooks |
 | 4.0 | 2025-12-25 | Restructured as technical reference (removed evaluative content) |
 | 3.2 | 2025-12-25 | Added StateValidator section, hook composition diagram |
 | 3.1 | 2025-12-25 | AbilityConfig, AbilitySystem, hook consolidation |

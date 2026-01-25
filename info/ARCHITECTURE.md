@@ -287,6 +287,8 @@ interface GameCommand {
 | `CastleAttackCommand` | CASTLE_ATTACK | Castle capture |
 | `PassCommand` | PASS | Skip phase |
 | `RecruitCommand` | RECRUIT | Spawn piece |
+| `PledgeCommand` | PLEDGE | Sanctuary pledging |
+| `AbilityCommand` | ABILITY | Special abilities |
 
 ## Usage Example
 
@@ -300,21 +302,52 @@ const { newState, notation, success } = command.execute(currentState);
 
 ---
 
-# Hook Composition Architecture
+# GameContext/GameProvider Architecture
 
-The `useGameLogic` hook composes specialized hooks:
+> **Note**: As of January 2026, `useGameLogic` was refactored into a Context-based architecture.
+
+The game now uses a `GameProvider` component that wraps the game UI. This replaces the previous "God Hook" pattern:
 
 ```
-useGameLogic.ts (389 lines)
-├── useState (game state)
-├── useAnalysisMode (history navigation)
-├── useUISettings (display toggles)
+GameProvider.tsx (284 lines)
+├── useCoreGame (state initialization)
+├── useComputedGame (derived values: turn phase, legal moves)
+├── useMoveExecution (action execution)
+│   ├── handlePass
+│   ├── handleHexClick
+│   ├── pledge
+│   └── triggerAbility
+├── useGameAnalysisController (history navigation)
+├── useGameInteraction (piece selection, click handling)
 ├── usePGN (import/export)
-└── useMoveExecution (action execution)
-    ├── handlePass
-    ├── handleHexClick
-    ├── pledge
-    └── triggerAbility
+└── useSoundEffects (audio via event subscription)
+```
+
+## Context Split
+
+| Context | Purpose | Usage |
+|---------|---------|-------|
+| `GameStateContext` | Read-only game state | `useGameState()` |
+| `GameDispatchContext` | Action methods | `useGameActions()` |
+
+**Benefit**: Components that only need actions won't re-render on state changes.
+
+## Usage Example
+
+```tsx
+// In Game.tsx
+import { GameProvider } from '../contexts/GameProvider';
+
+<GameProvider config={config} rules={rules} mode={mode}>
+  <HexGrid />
+  <ControlPanel />
+</GameProvider>
+
+// In any child component
+import { useGameState, useGameActions } from '../contexts/GameContext';
+
+const { pieces, turnPhase } = useGameState();
+const { handleHexClick, handlePass } = useGameActions();
 ```
 
 ---
