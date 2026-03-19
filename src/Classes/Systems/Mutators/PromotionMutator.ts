@@ -18,6 +18,12 @@ export class PromotionMutator {
    * Promotes a swordsman to the chosen piece type.
    * Does NOT advance the turn counter — the move already did that.
    */
+  /** Convenience alias used by GameEngine */
+  public static applyPromotion(state: GameState, selectedType: PieceType): GameState {
+    if (!state.promotionPending) return state;
+    return PromotionMutator.promote(state, state.promotionPending, selectedType);
+  }
+
   public static promote(state: GameState, swordsman: Piece, newType: PieceType): GameState {
     if (swordsman.type !== PieceType.Swordsman) {
       console.warn("PromotionMutator: piece is not a Swordsman");

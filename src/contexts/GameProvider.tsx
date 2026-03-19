@@ -269,6 +269,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     handleHexClick,
     handleResign: (forColor?: Color) => handleResign(forColor || currentPlayer),
     promotePiece,
+    handlePromotion: promotePiece,
     pledge,
     canPledge,
     triggerAbility: (source, targetHex, ability) => triggerAbility(source.hex, targetHex, ability),

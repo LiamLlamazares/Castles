@@ -93,6 +93,7 @@ export interface IGameActions {
   
   // Promotion
   promotePiece: (newType: PieceType) => void;
+  handlePromotion: (newType: PieceType) => void;
 
   // Queries/Helpers
   canPledge: (sanctuaryHex: Hex) => boolean;

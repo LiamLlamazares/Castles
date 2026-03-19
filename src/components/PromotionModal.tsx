@@ -4,14 +4,18 @@
  */
 import React from 'react';
 import { PieceType, PROMOTABLE_TYPES, Color } from '../Constants';
+import { Piece } from '../Classes/Entities/Piece';
 import { getImageByPieceType } from './PieceImages';
 
 interface PromotionModalProps {
-  color: Color;
+  color?: Color;
+  playerColor?: Color;
+  promotion?: Piece;
   onSelect: (type: PieceType) => void;
 }
 
-const PromotionModal: React.FC<PromotionModalProps> = ({ color, onSelect }) => {
+const PromotionModal: React.FC<PromotionModalProps> = ({ color, playerColor, promotion, onSelect }) => {
+  const pieceColor = color ?? playerColor ?? promotion?.color ?? 'w';
   return (
     <div className="promotion-backdrop" onClick={(e) => e.stopPropagation()}>
       <div className="promotion-modal">
@@ -26,7 +30,7 @@ const PromotionModal: React.FC<PromotionModalProps> = ({ color, onSelect }) => {
               title={type}
             >
               <img
-                src={getImageByPieceType(type, color)}
+                src={getImageByPieceType(type, pieceColor)}
                 alt={type}
                 className="promotion-piece-img"
               />
