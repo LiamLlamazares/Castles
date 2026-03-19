@@ -12,7 +12,7 @@ import { Piece } from "../Classes/Entities/Piece";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
-import { MoveRecord, Color, SanctuaryType } from "../Constants";
+import { MoveRecord, Color, SanctuaryType, PieceType } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
 import { GameState } from "../Classes/Core/GameState";
 
@@ -203,6 +203,13 @@ export const GameProvider: React.FC<GameProviderProps> = ({
 
   const hasGameStarted = turnCounter > 0;
 
+  // =========== PROMOTION ===========
+  const promotePiece = useCallback((newType: PieceType) => {
+    if (!state.promotionPending) return;
+    const newState = gameEngine.promotePiece(state, state.promotionPending, newType);
+    setState((prev: GameState) => ({ ...prev, ...newState }));
+  }, [state, gameEngine, setState]);
+
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
       return gameEngine.canPledge(state, sanctuaryHex); 
   }, [gameEngine, state]);
@@ -238,6 +245,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
       isAnalysisMode,
       isViewingHistory,
       viewNodeId: state.viewNodeId,
+      promotionPending: state.promotionPending ?? null,
       aiIntegration: {
         gameEngine,
         board: gameEngine.board,
@@ -251,7 +259,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     turnPhase, currentPlayer, hexagons, legalMoveSet, legalAttackSet, victoryMessage, winner,
     isRecruitmentSpot, gameEngine, state.moveTree,
     state.sanctuaryPool, state.graveyard, state.phoenixRecords,
-    hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state, setState
+    hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state.promotionPending, state, setState
   ]);
 
   const gameActionsValue: IGameActions = useMemo(() => ({
@@ -260,6 +268,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     handlePieceClick,
     handleHexClick,
     handleResign: (forColor?: Color) => handleResign(forColor || currentPlayer),
+    promotePiece,
     pledge,
     canPledge,
     triggerAbility: (source, targetHex, ability) => triggerAbility(source.hex, targetHex, ability),
@@ -269,7 +278,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     getPGN,
     loadPGN
   }), [
-    handlePass, handleTakeback, handlePieceClick, handleHexClick, handleResign, pledge, canPledge,
+    handlePass, handleTakeback, handlePieceClick, handleHexClick, handleResign, promotePiece, pledge, canPledge,
     triggerAbility, gameEngine, viewState, jumpToNode, stepHistory, getPGN, loadPGN
   ]);
 

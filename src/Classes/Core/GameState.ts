@@ -37,7 +37,10 @@ export interface GameState extends PositionSnapshot {
   movingPiece: Piece | null;
   moveTree: MoveTree; // SINGLE SOURCE OF TRUTH for history and variations
   viewNodeId: string | null; // Node ID for history navigation (null = live)
-  
+
+  // Promotion state (set when a Swordsman reaches the opponent's back row)
+  promotionPending?: Piece | null;
+
   // Settings / Rules (Stable throughout game)
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };

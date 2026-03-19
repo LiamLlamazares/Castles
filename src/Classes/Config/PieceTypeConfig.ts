@@ -257,7 +257,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Phoenix]: {
     strength: 2,
     attackType: AttackType.Melee,
-    description: "Flies up to 2 hexes. Attacks adjacent. First death: Respawns after 3 turns at original sanctuary. Second death: Permanent.",
+    description: "Flies up to 3 hexes. Attacks adjacent. First death: Respawns after 3 turns at original sanctuary. Second death: Permanent.",
     moveStrategy: (hex, blocked, valid) => eagleMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },

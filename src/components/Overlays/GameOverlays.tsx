@@ -1,8 +1,9 @@
 import React from 'react';
 import RulesModal from "../RulesModal";
 import VictoryOverlay from "../VictoryOverlay";
-import QuickStartModal, { useQuickStart } from "../QuickStartModal";
-import { useGameState } from "../../contexts/GameContext";
+import QuickStartModal from "../QuickStartModal";
+import PromotionModal from "../PromotionModal";
+import { useGameState, useGameActions } from "../../contexts/GameContext";
 import { Color } from "../../Constants";
 
 interface GameOverlaysProps {
@@ -34,17 +35,20 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
   showQuickStart,
   onCloseQuickStart
 }) => {
+  const gameState = useGameState();
+  const { promotePiece } = useGameActions();
+
   return (
     <>
-      <RulesModal 
-        isOpen={showRules} 
-        onClose={onCloseRules} 
+      <RulesModal
+        isOpen={showRules}
+        onClose={onCloseRules}
       />
 
       {!isOverlayDismissed && (
-          <VictoryOverlay 
-            victoryMessage={victoryMessage} 
-            winner={winner} 
+          <VictoryOverlay
+            victoryMessage={victoryMessage}
+            winner={winner}
             onRestart={onRestart}
             onSetup={onSetup}
             onAnalyze={onDismissOverlay}
@@ -54,6 +58,13 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
 
       {showQuickStart && (
         <QuickStartModal onClose={onCloseQuickStart} />
+      )}
+
+      {gameState.promotionPending && (
+        <PromotionModal
+          color={gameState.promotionPending.color}
+          onSelect={promotePiece}
+        />
       )}
     </>
   );

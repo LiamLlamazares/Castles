@@ -33,7 +33,7 @@ import { Piece } from "./Classes/Entities/Piece";
 import { PieceFactory } from "./Classes/Entities/PieceFactory";
 import { Board } from "./Classes/Core/Board";
 import { LayoutService } from "./Classes/Systems/LayoutService";
-import { N_SQUARES, PieceType, Color } from "./Constants";
+import { N_SQUARES, PieceType } from "./Constants";
 
 // =========== PIECE GENERATION HELPERS ===========
 
@@ -131,7 +131,10 @@ export function getStartingPieces(boardRadius: number): Piece[] {
   const assassins = createMirroredPair(PieceType.Assassin, -1, n - 1, 2 - n);
   const monarchs = createMirroredPair(PieceType.Monarch, 1, n - 2, 1 - n);
 
-  return [
+  // Assemble in priority order: swordsmen first (lowest priority),
+  // so higher-value pieces overwrite them at colliding hexes.
+  // Collisions: n=4 Eagles/Archers, n=5 Trebuchets/Giants, n=7 Giants.
+  const allPieces = [
     ...swordsmen,
     ...knights,
     ...archers,
@@ -142,6 +145,17 @@ export function getStartingPieces(boardRadius: number): Piece[] {
     ...assassins,
     ...monarchs,
   ];
+
+  // Deduplicate: when two pieces share a hex, keep the higher-value one
+  const seen = new Map<string, Piece>();
+  for (const piece of allPieces) {
+    const key = piece.hex.getKey();
+    const existing = seen.get(key);
+    if (!existing || existing.type === PieceType.Swordsman) {
+      seen.set(key, piece);
+    }
+  }
+  return Array.from(seen.values());
 }
 
 export function getStartingBoard(boardRadius: number): Board {

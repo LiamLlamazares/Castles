@@ -1,6 +1,6 @@
 import { Hex } from '../Entities/Hex';
 import { generateHexagons } from '../Systems/BoardGeneration';
-import { N_SQUARES} from '../../Constants';
+import { N_SQUARES, Color } from '../../Constants';
 
 import { Castle } from '../Entities/Castle';
 
@@ -200,6 +200,28 @@ public isBlackCastle(castleHex: Hex): boolean {
   if (castleHex.r < 0) return true;
   if (castleHex.r === 0) return castleHex.s > 0; // Edge case: use s coordinate
   return false;
+}
+
+/**
+ * Checks if a hex is a promotion hex for a swordsman of the given color.
+ * The promotion zone is the two outermost edges of the opponent's side,
+ * forming a V-shape at the top (for white) or bottom (for black).
+ * River hexes (r=0) are excluded.
+ *
+ * For white swordsmen (promoting on black's back edges):
+ *   r = -N  (top-right edge) OR  s = N  (top-left edge), excluding r=0
+ * For black swordsmen (promoting on white's back edges):
+ *   r = N  (bottom-left edge) OR  s = -N  (bottom-right edge), excluding r=0
+ */
+public isPromotionHex(hex: Hex, swordsmanColor: Color): boolean {
+  const N = this.NSquares;
+  if (hex.r === 0) return false; // Exclude river row
+
+  if (swordsmanColor === 'w') {
+    return hex.r === -N || hex.s === N;
+  } else {
+    return hex.r === N || hex.s === -N;
+  }
 }
 
 get castles(): Castle[] {

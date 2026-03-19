@@ -9,7 +9,7 @@ import { Castle } from "../Entities/Castle";
 import { Hex } from "../Entities/Hex";
 import { GameState } from "../Core/GameState";
 import { Board } from "../Core/Board";
-import { AbilityType } from "../../Constants";
+import { AbilityType, PieceType } from "../../Constants";
 
 // Import specialized mutators
 import { MovementMutator } from "./Mutators/MovementMutator";
@@ -17,6 +17,7 @@ import { CombatMutator } from "./Mutators/CombatMutator";
 import { TurnMutator } from "./Mutators/TurnMutator";
 import { AbilityMutator } from "./Mutators/AbilityMutator";
 import { RecruitmentMutator } from "./Mutators/RecruitmentMutator";
+import { PromotionMutator } from "./Mutators/PromotionMutator";
 
 export class StateMutator {
 
@@ -44,6 +45,10 @@ export class StateMutator {
 
   public static recruitPiece(state: GameState, castle: Castle, hex: Hex, board: Board): GameState {
     return RecruitmentMutator.recruitPiece(state, castle, hex, board);
+  }
+
+  public static promotePiece(state: GameState, swordsman: Piece, newType: PieceType): GameState {
+    return PromotionMutator.promote(state, swordsman, newType);
   }
 
   public static resetTurnFlags(state: GameState): GameState {

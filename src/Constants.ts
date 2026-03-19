@@ -56,6 +56,17 @@ export enum PieceType {
   Phoenix = "Phoenix",
 }
 
+/** Piece types a Swordsman can promote to (standard pieces, no Monarch) */
+export const PROMOTABLE_TYPES: PieceType[] = [
+  PieceType.Archer,
+  PieceType.Knight,
+  PieceType.Trebuchet,
+  PieceType.Eagle,
+  PieceType.Giant,
+  PieceType.Assassin,
+  PieceType.Dragon,
+];
+
 export enum SanctuaryType {
   WolfCovenant = "WolfCovenant",
   SacredSpring = "SacredSpring",

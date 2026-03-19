@@ -85,6 +85,7 @@ export const useCoreGame = (
     pieces: initialPieces,
     pieceMap: createPieceMap(initialPieces),
     movingPiece: null,
+    promotionPending: null,
     turnCounter: initialTurnCounter,
     castles: initialBoard.castles as Castle[], 
     sanctuaries: startingSanctuaries,

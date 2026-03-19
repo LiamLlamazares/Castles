@@ -33,6 +33,7 @@ import {
   TurnPhase,
   MoveRecord,
   AbilityType,
+  PieceType,
 } from "../../Constants";
 import { GameError, GameErrorCode } from "./GameError";
 
@@ -213,6 +214,10 @@ export class GameEngine {
 
   public recruitPiece(state: GameState, castle: Castle, hex: Hex): GameState {
     return StateMutator.recruitPiece(state, castle, hex, this.board);
+  }
+
+  public promotePiece(state: GameState, swordsman: Piece, newType: PieceType): GameState {
+    return StateMutator.promotePiece(state, swordsman, newType);
   }
 
   public resetTurnFlags(state: GameState): GameState {
