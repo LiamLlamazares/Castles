@@ -1,7 +1,7 @@
 import { Piece } from "../Entities/Piece";
 import { Hex } from "../Entities/Hex";
 import { PieceType, AttackType } from "../../Constants";
-import { PieceMap } from "../../utils/PieceMap";
+import { PieceMap, getNeighborPieces } from "../../utils/PieceMap";
 
 export interface CombatResult {
   pieces: Piece[];
@@ -25,34 +25,16 @@ export class CombatSystem {
   public static getCombatStrength(piece: Piece, pieceMap: PieceMap): number {
     let strength = piece.Strength;
 
-    // Pack Tactics (Wolf)
-    if (piece.type === PieceType.Wolf) {
-        const neighbors = piece.hex.cubeRing(1);
-        let adjacentWolves = 0;
-        for (const n of neighbors) {
-            const neighborPiece = pieceMap.get(n);
-            if (neighborPiece && 
-                neighborPiece.color === piece.color && 
-                neighborPiece.type === PieceType.Wolf) {
-                adjacentWolves++;
-            }
+    // Single scan of friendly neighbors for Pack Tactics and Healer Aura
+    const friendlyNeighbors = getNeighborPieces(piece.hex, pieceMap, p => p.color === piece.color);
+    for (const neighbor of friendlyNeighbors) {
+        if (piece.type === PieceType.Wolf && neighbor.type === PieceType.Wolf) {
+            strength++;
         }
-        strength += adjacentWolves;
-    }
-
-    // Healer Aura (Strength Buff)
-    // Healers provide +1 Strength to adjacent friendly pieces
-    const neighbors = piece.hex.cubeRing(1);
-    let adjacentHealers = 0;
-    for (const n of neighbors) {
-        const neighborPiece = pieceMap.get(n);
-        if (neighborPiece && 
-            neighborPiece.color === piece.color && 
-            neighborPiece.type === PieceType.Healer) {
-            adjacentHealers++;
+        if (neighbor.type === PieceType.Healer) {
+            strength++;
         }
     }
-    strength += adjacentHealers;
 
     return strength;
   }

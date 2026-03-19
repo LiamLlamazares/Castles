@@ -41,10 +41,8 @@ export class ActionOrchestrator {
         movingPiece: null // Deselect piece after any action
     };
 
-    // 2. Sync PieceMap if pieces changed
-    if (partialState.pieces) {
-        newState.pieceMap = createPieceMap(newState.pieces);
-    }
+    // 2. Sync PieceMap unconditionally to prevent stale lookups
+    newState.pieceMap = createPieceMap(newState.pieces);
 
     // 3. Create Record
     const record = MutatorUtils.createMoveRecord(notation, state);

@@ -47,3 +47,29 @@ export class PieceMap {
 export function createPieceMap(pieces: Piece[]): PieceMap {
   return new PieceMap(pieces);
 }
+
+/**
+ * Gets all pieces adjacent to a hex, with optional filtering.
+ * Consolidates the common pattern of cubeRing(1) + pieceMap lookup
+ * that appears ~20 times across CombatSystem, RuleEngine, SanctuaryService.
+ *
+ * @param hex - Center hex to check neighbors of
+ * @param pieceMap - PieceMap for O(1) lookups
+ * @param predicate - Optional filter (e.g., only friendly wolves)
+ * @returns Array of pieces on adjacent hexes matching the predicate
+ */
+export function getNeighborPieces(
+  hex: Hex,
+  pieceMap: PieceMap,
+  predicate?: (p: Piece) => boolean
+): Piece[] {
+  const neighbors = hex.cubeRing(1);
+  const result: Piece[] = [];
+  for (const n of neighbors) {
+    const piece = pieceMap.get(n);
+    if (piece && (!predicate || predicate(piece))) {
+      result.push(piece);
+    }
+  }
+  return result;
+}

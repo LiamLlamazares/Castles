@@ -12,10 +12,10 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { Hex } from "../Classes/Entities/Hex";
 import { Board } from "../Classes/Core/Board";
 import { MoveTree } from "../Classes/Core/MoveTree";
-import { MoveRecord, TurnPhase, Color, SanctuaryType } from "../Constants";
+import { MoveRecord, TurnPhase, Color, SanctuaryType, PieceType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState, PositionSnapshot } from "../Classes/Core/GameState";
+import { GameState, PositionSnapshot, PromotionPending } from "../Classes/Core/GameState";
 
 // ============================================================================
 // CONFIGURATION INTERFACES
@@ -67,6 +67,9 @@ export interface IGameState extends Omit<GameState, 'moveTree'> {
   history: PositionSnapshot[]; // Snapshots array for history
   hasGameStarted: boolean;
 
+  // Promotion State
+  promotionPending: PromotionPending | null;
+
   // Analysis State
   isAnalysisMode: boolean;
   isViewingHistory: boolean;
@@ -91,6 +94,9 @@ export interface IGameActions {
   handleResign: (forColor?: Color) => void; // Made optional to match common usage, though implementation usually needs it
   pledge: (sanctuaryHex: Hex, spawnHex: Hex) => void;
   
+  // Promotion
+  handlePromotion: (selectedType: PieceType) => void;
+
   // Queries/Helpers
   canPledge: (sanctuaryHex: Hex) => boolean;
   triggerAbility: (source: Piece, targetHex: Hex, ability: import("../Constants").AbilityType) => void;

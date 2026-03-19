@@ -202,6 +202,22 @@ public isBlackCastle(castleHex: Hex): boolean {
   return false;
 }
 
+/**
+ * Checks if a hex is on the "back row" for a given player color.
+ * The back row is the furthest row of the opponent's territory:
+ * - For white: r = -N (deepest penetration into black territory)
+ * - For black: r = N (deepest penetration into white territory)
+ *
+ * When a Swordsman reaches the opponent's back row, it promotes.
+ */
+public isBackRow(hex: Hex, playerColor: import('../../Constants').Color): boolean {
+  if (playerColor === 'w') {
+    return hex.r === -this.NSquares;
+  } else {
+    return hex.r === this.NSquares;
+  }
+}
+
 get castles(): Castle[] {
   if (!this._castles) {
     const castles: Castle[] = [];

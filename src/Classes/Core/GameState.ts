@@ -2,7 +2,8 @@ import { Piece } from "../Entities/Piece";
 import { Castle } from "../Entities/Castle";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { MoveTree } from "./MoveTree";
-import { Color, SanctuaryType, MoveRecord } from "../../Constants";
+import { Color, SanctuaryType, MoveRecord, PieceType } from "../../Constants";
+import { Hex } from "../Entities/Hex";
 import { PieceMap } from "../../utils/PieceMap";
 
 // Phoenix Rebirth Record
@@ -29,6 +30,17 @@ export interface PositionSnapshot {
 
 
 /**
+ * Pending promotion state — set when a Swordsman reaches the opponent's back row.
+ * Turn advancement pauses until the player selects a promotion type.
+ */
+export interface PromotionPending {
+  /** Hex where the Swordsman that triggered promotion is located */
+  pieceHex: Hex;
+  /** Piece types the player can choose from (excludes Monarch per rules) */
+  options: PieceType[];
+}
+
+/**
  * Represents the complete runtime state of the game application.
  * Includes the history tree and UI-specific state.
  */
@@ -37,7 +49,10 @@ export interface GameState extends PositionSnapshot {
   movingPiece: Piece | null;
   moveTree: MoveTree; // SINGLE SOURCE OF TRUTH for history and variations
   viewNodeId: string | null; // Node ID for history navigation (null = live)
-  
+
+  /** Set when a Swordsman reaches the back row; turn pauses until promotion is resolved */
+  promotionPending?: PromotionPending | null;
+
   // Settings / Rules (Stable throughout game)
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };

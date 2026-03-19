@@ -23,6 +23,7 @@ import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PieceTheme } from "../Constants";
+import PromotionModal from "./PromotionModal";
 import "../css/Board.css";
 
 // Context
@@ -108,13 +109,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
       viewNodeId,
       aiIntegration,
       victoryMessage,
-      winner
+      winner,
+      promotionPending
   } = useGameState();
 
   const {
       handlePass,
       handleTakeback,
       handleResign,
+      handlePromotion,
       jumpToNode,
       stepHistory,
       getPGN,
@@ -342,7 +345,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
         showCoordinates={viewState.showCoordinates}
       />
 
-      <GameOverlays 
+      {promotionPending && (
+        <PromotionModal
+          promotion={promotionPending}
+          onSelect={handlePromotion}
+          playerColor={currentPlayer}
+        />
+      )}
+
+      <GameOverlays
         showRules={showRulesModal}
         onCloseRules={() => setShowRulesModal(false)}
         victoryMessage={victoryMessage}

@@ -33,8 +33,10 @@ import {
   TurnPhase,
   MoveRecord,
   AbilityType,
+  PieceType,
 } from "../../Constants";
 import { GameError, GameErrorCode } from "./GameError";
+import { PromotionMutator } from "../Systems/Mutators/PromotionMutator";
 
 /**
  * GameEngine: Central state machine for the Castles game.
@@ -217,5 +219,15 @@ export class GameEngine {
 
   public resetTurnFlags(state: GameState): GameState {
     return StateMutator.resetTurnFlags(state);
+  }
+
+  // ================= PROMOTION =================
+
+  /**
+   * Applies a Swordsman promotion choice.
+   * Called when the player selects a piece type from the promotion modal.
+   */
+  public applyPromotion(state: GameState, selectedType: PieceType): GameState {
+    return PromotionMutator.applyPromotion(state, selectedType);
   }
 }

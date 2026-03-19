@@ -28,6 +28,7 @@ import {
   AttackType,
   DEFENDED_PIECE_IS_PROTECTED_RANGED,
 } from "../../Constants";
+import { getNeighborPieces } from "../../utils/PieceMap";
 
 export class RuleEngine {
   // ================= BOARD QUERIES =================
@@ -238,18 +239,12 @@ export class RuleEngine {
   public static isHexDefended(hex: Hex, attackerColor: Color, gameState: GameState, board: Board): boolean {
       if (!DEFENDED_PIECE_IS_PROTECTED_RANGED) return false;
 
-      // Check all 6 neighbors for an Enemy Melee piece
-      const neighbors = hex.cubeRing(1);
-      for (const neighbor of neighbors) {
-          // Use O(1) pieceMap lookup if available in GameState
-          // We added pieceMap to GameState in Phase 2!
-          const piece = gameState.pieceMap.getByKey(neighbor.getKey());
-          if (piece && piece.color !== attackerColor && 
-              (piece.AttackType === AttackType.Melee || piece.AttackType === AttackType.Swordsman)) {
-              return true;
-          }
-      }
-      return false;
+      // Check if any enemy melee piece is adjacent to the target hex
+      const enemyMeleeNeighbors = getNeighborPieces(hex, gameState.pieceMap, p =>
+          p.color !== attackerColor &&
+          (p.AttackType === AttackType.Melee || p.AttackType === AttackType.Swordsman)
+      );
+      return enemyMeleeNeighbors.length > 0;
   }
 
   public static castleIsControlledByActivePlayer(castle: Castle, currentPlayer: Color): boolean {

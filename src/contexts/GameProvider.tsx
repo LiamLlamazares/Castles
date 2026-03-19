@@ -12,7 +12,7 @@ import { Piece } from "../Classes/Entities/Piece";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { Hex } from "../Classes/Entities/Hex";
-import { MoveRecord, Color, SanctuaryType } from "../Constants";
+import { MoveRecord, Color, SanctuaryType, PieceType } from "../Constants";
 import { startingBoard, allPieces } from "../ConstantImports";
 import { GameState } from "../Classes/Core/GameState";
 
@@ -204,8 +204,14 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const hasGameStarted = turnCounter > 0;
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
-      return gameEngine.canPledge(state, sanctuaryHex); 
+      return gameEngine.canPledge(state, sanctuaryHex);
   }, [gameEngine, state]);
+
+  const handlePromotion = useCallback((selectedType: PieceType) => {
+    if (!state.promotionPending) return;
+    const newState = gameEngine.applyPromotion(state, selectedType);
+    setState((prev: GameState) => ({ ...prev, ...newState }));
+  }, [state, gameEngine, setState]);
 
   // =========== CONTEXT VALUES ===========
   
@@ -235,6 +241,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
       graveyard: state.graveyard,
       phoenixRecords: state.phoenixRecords,
       hasGameStarted,
+      promotionPending: state.promotionPending || null,
       isAnalysisMode,
       isViewingHistory,
       viewNodeId: state.viewNodeId,
@@ -260,6 +267,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     handlePieceClick,
     handleHexClick,
     handleResign: (forColor?: Color) => handleResign(forColor || currentPlayer),
+    handlePromotion,
     pledge,
     canPledge,
     triggerAbility: (source, targetHex, ability) => triggerAbility(source.hex, targetHex, ability),
@@ -269,7 +277,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     getPGN,
     loadPGN
   }), [
-    handlePass, handleTakeback, handlePieceClick, handleHexClick, handleResign, pledge, canPledge,
+    handlePass, handleTakeback, handlePieceClick, handleHexClick, handleResign, handlePromotion, pledge, canPledge,
     triggerAbility, gameEngine, viewState, jumpToNode, stepHistory, getPGN, loadPGN
   ]);
 

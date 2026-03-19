@@ -50,8 +50,13 @@ export class DeathSystem {
       };
   }
 
+  /** Maximum number of retry cycles before Phoenix is permanently lost */
+  private static readonly MAX_RESPAWN_RETRIES = 3;
+
   /**
    * Checked at the specific phase or turn start to respawn Phoenixes.
+   * If spawn spots are blocked, the record is deferred to the next turn cycle
+   * (up to MAX_RESPAWN_RETRIES additional cycles) instead of being consumed.
    */
   public static processPhoenixRespawns(state: GameState): GameState {
       // Find records due for respawn
@@ -60,17 +65,18 @@ export class DeathSystem {
 
       // Keep records NOT due
       const remainingRecords = state.phoenixRecords.filter(r => r.respawnTurn > state.turnCounter);
-      
+
       let newPieces = [...state.pieces];
+      const deferredRecords: typeof remainingRecords = [];
 
       dueRecords.forEach(record => {
           const friendlyCastles = state.castles.filter(c => c.owner === record.owner);
-          
+
           if (friendlyCastles.length > 0) {
               // Try to find a spawn spot at a castle
               for (const castle of friendlyCastles) {
                   const candidates = [castle.hex, ...castle.hex.cubeRing(1)];
-                  
+
                   for (const spot of candidates) {
                        const isOccupied = newPieces.some(p => p.hex.equals(spot));
                        if (!isOccupied) {
@@ -81,8 +87,18 @@ export class DeathSystem {
                        }
                   }
               }
-              // If all spawn spots blocked, Phoenix is lost permanently
-              console.warn(`Phoenix for ${record.owner} could not respawn - all castle spawn locations blocked`);
+              // All spawn spots blocked — defer to next turn cycle if retries remain
+              const retries = (record as any).retries ?? 0;
+              if (retries < DeathSystem.MAX_RESPAWN_RETRIES) {
+                  deferredRecords.push({
+                      respawnTurn: state.turnCounter + PLAYER_CYCLE_LENGTH,
+                      owner: record.owner,
+                      retries: retries + 1,
+                  } as any);
+                  console.warn(`Phoenix for ${record.owner} spawn blocked — retry ${retries + 1}/${DeathSystem.MAX_RESPAWN_RETRIES}`);
+              } else {
+                  console.warn(`Phoenix for ${record.owner} permanently lost after ${DeathSystem.MAX_RESPAWN_RETRIES} failed respawn attempts`);
+              }
           }
       });
 
@@ -90,7 +106,7 @@ export class DeathSystem {
           ...state,
           pieces: newPieces,
           pieceMap: createPieceMap(newPieces),
-          phoenixRecords: remainingRecords
+          phoenixRecords: [...remainingRecords, ...deferredRecords]
       };
   }
 }
