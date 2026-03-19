@@ -15,7 +15,7 @@ import { MoveTree } from "../Classes/Core/MoveTree";
 import { MoveRecord, TurnPhase, Color, SanctuaryType, PieceType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState, PositionSnapshot, PromotionPending } from "../Classes/Core/GameState";
+import { GameState, PositionSnapshot } from "../Classes/Core/GameState";
 
 // ============================================================================
 // CONFIGURATION INTERFACES
@@ -67,9 +67,6 @@ export interface IGameState extends Omit<GameState, 'moveTree'> {
   history: PositionSnapshot[]; // Snapshots array for history
   hasGameStarted: boolean;
 
-  // Promotion State
-  promotionPending: PromotionPending | null;
-
   // Analysis State
   isAnalysisMode: boolean;
   isViewingHistory: boolean;
@@ -95,7 +92,7 @@ export interface IGameActions {
   pledge: (sanctuaryHex: Hex, spawnHex: Hex) => void;
   
   // Promotion
-  handlePromotion: (selectedType: PieceType) => void;
+  promotePiece: (newType: PieceType) => void;
 
   // Queries/Helpers
   canPledge: (sanctuaryHex: Hex) => boolean;

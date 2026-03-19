@@ -1,10 +1,6 @@
 /**
  * @file MovementMutator.ts
- * @description Handles piece movement mutations.
- *
- * Includes Swordsman promotion detection: when a Swordsman reaches the
- * opponent's back row (r = ±N), the game sets `promotionPending` and pauses
- * turn advancement until the player selects a piece type.
+ * @description Handles piece movement mutations, including promotion detection.
  */
 import { ActionOrchestrator } from "./ActionOrchestrator";
 import { GameState } from "../../Core/GameState";
@@ -15,28 +11,16 @@ import { NotationService } from "../NotationService";
 import { TurnManager } from "../../Core/TurnManager";
 import { PieceType } from "../../../Constants";
 
-/** Piece types a Swordsman can promote to (excludes Monarch per rules.md) */
-const PROMOTION_OPTIONS: PieceType[] = [
-  PieceType.Archer,
-  PieceType.Knight,
-  PieceType.Eagle,
-  PieceType.Giant,
-  PieceType.Trebuchet,
-  PieceType.Assassin,
-  PieceType.Dragon,
-];
-
 export class MovementMutator {
 
   public static applyMove(state: GameState, piece: Piece, targetHex: Hex, board: Board): GameState {
     const notation = NotationService.getMoveNotation(piece, targetHex);
 
+    const movedPiece = piece.with({ hex: targetHex, canMove: false });
+
     const newPieces = state.pieces.map(p => {
         if (p.hex.equals(piece.hex)) {
-            return p.with({
-                hex: targetHex,
-                canMove: false
-            });
+            return movedPiece;
         }
         return p;
     });
@@ -48,31 +32,14 @@ export class MovementMutator {
       ? state.castles.map(c => c.hex.equals(targetHex) ? c.with({ owner: mover }) : c)
       : state.castles;
 
-    // Check for Swordsman promotion (Coronation)
-    const isPromotion = piece.type === PieceType.Swordsman && board.isBackRow(targetHex, piece.color);
-
-    if (isPromotion) {
-      // Set promotionPending — turn advancement pauses until player selects a type.
-      // We still finalize the move (piece moves, castle captured, etc.) but the
-      // promotion choice will be resolved before the turn counter advances.
-      const result = ActionOrchestrator.finalizeAction(
-          state,
-          { pieces: newPieces, castles: newCastles },
-          notation,
-          board
-      );
-      return {
-          ...result,
-          promotionPending: {
-              pieceHex: targetHex,
-              options: PROMOTION_OPTIONS,
-          },
-      };
-    }
+    // Check for Swordsman promotion (reaching opponent's back row)
+    const promotionPending = (piece.type === PieceType.Swordsman && board.isPromotionHex(targetHex, piece.color))
+      ? movedPiece
+      : null;
 
     return ActionOrchestrator.finalizeAction(
         state,
-        { pieces: newPieces, castles: newCastles },
+        { pieces: newPieces, castles: newCastles, promotionPending },
         notation,
         board
     );

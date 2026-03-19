@@ -1,6 +1,6 @@
 import { Hex } from '../Entities/Hex';
 import { generateHexagons } from '../Systems/BoardGeneration';
-import { N_SQUARES} from '../../Constants';
+import { N_SQUARES, Color } from '../../Constants';
 
 import { Castle } from '../Entities/Castle';
 
@@ -203,18 +203,24 @@ public isBlackCastle(castleHex: Hex): boolean {
 }
 
 /**
- * Checks if a hex is on the "back row" for a given player color.
- * The back row is the furthest row of the opponent's territory:
- * - For white: r = -N (deepest penetration into black territory)
- * - For black: r = N (deepest penetration into white territory)
+ * Checks if a hex is a promotion hex for a swordsman of the given color.
+ * The promotion zone is the two outermost edges of the opponent's side,
+ * forming a V-shape at the top (for white) or bottom (for black).
+ * River hexes (r=0) are excluded.
  *
- * When a Swordsman reaches the opponent's back row, it promotes.
+ * For white swordsmen (promoting on black's back edges):
+ *   r = -N  (top-right edge) OR  s = N  (top-left edge), excluding r=0
+ * For black swordsmen (promoting on white's back edges):
+ *   r = N  (bottom-left edge) OR  s = -N  (bottom-right edge), excluding r=0
  */
-public isBackRow(hex: Hex, playerColor: import('../../Constants').Color): boolean {
-  if (playerColor === 'w') {
-    return hex.r === -this.NSquares;
+public isPromotionHex(hex: Hex, swordsmanColor: Color): boolean {
+  const N = this.NSquares;
+  if (hex.r === 0) return false; // Exclude river row
+
+  if (swordsmanColor === 'w') {
+    return hex.r === -N || hex.s === N;
   } else {
-    return hex.r === this.NSquares;
+    return hex.r === N || hex.s === -N;
   }
 }
 

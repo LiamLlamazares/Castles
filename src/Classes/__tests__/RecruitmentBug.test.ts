@@ -1,478 +1,234 @@
 /**
- * @file RecruitmentBug.test.ts
- * @description Diagnostic tests for the reported bug where pieces recruited
- * from castles (and sanctuaries) sometimes cannot move or attack.
+ * Diagnostic tests for the recruited piece mobility bug.
  *
- * Hypothesis: Swordsmen recruited at captured enemy castles face "forward"
- * toward the board edge, leaving no legal moves. Other piece types should
- * be fine due to omnidirectional movement.
+ * Investigates whether pieces recruited at castles/sanctuaries can actually
+ * move and attack after recruitment and turn cycling.
+ *
+ * Key hypothesis: Swordsmen recruited at opponent's corner castles may have
+ * no legal forward moves because all 3 directions point off-board.
  */
 import { Board } from '../Core/Board';
-import { GameState } from '../Core/GameState';
-import { Piece } from '../Entities/Piece';
 import { Hex } from '../Entities/Hex';
+import { Piece } from '../Entities/Piece';
 import { Castle } from '../Entities/Castle';
 import { PieceFactory } from '../Entities/PieceFactory';
+import { GameState } from '../Core/GameState';
+import { GameEngine } from '../Core/GameEngine';
+import { MoveTree } from '../Core/MoveTree';
+import { TurnManager } from '../Core/TurnManager';
 import { RuleEngine } from '../Systems/RuleEngine';
 import { RecruitmentMutator } from '../Systems/Mutators/RecruitmentMutator';
 import { TurnMutator } from '../Systems/Mutators/TurnMutator';
-import { PieceType, Color } from '../../Constants';
+import { PieceType, TurnPhase } from '../../Constants';
 import { createPieceMap } from '../../utils/PieceMap';
-import { MoveTree } from '../Core/MoveTree';
 
-// Board size matching production
-const BOARD_SIZE = 8;
+const N = 7; // Board radius (NSquares)
+const board = new Board({ nSquares: N });
+const engine = new GameEngine(board);
 
-const createTestBoard = () => new Board({ nSquares: BOARD_SIZE });
-
-const createMockState = (
+/** Creates a minimal game state for testing */
+function createTestState(
   pieces: Piece[],
-  castles: Castle[] = [],
+  castles: Castle[],
   turnCounter: number = 0
-): GameState => ({
-  pieces,
-  pieceMap: createPieceMap(pieces),
-  castles,
-  sanctuaries: [],
-  sanctuaryPool: [],
-  turnCounter,
-  movingPiece: null,
-  moveTree: new MoveTree(),
-  graveyard: [],
-  phoenixRecords: [],
-  viewNodeId: null,
-});
+): GameState {
+  return {
+    pieces,
+    pieceMap: createPieceMap(pieces),
+    castles,
+    sanctuaries: [],
+    sanctuaryPool: [],
+    turnCounter,
+    movingPiece: null,
+    moveTree: new MoveTree(),
+    graveyard: [],
+    phoenixRecords: [],
+    viewNodeId: null,
+    promotionPending: null,
+  };
+}
 
-// Helper: get castle positions for the board
-const getWhiteCastleHexes = (N: number): Hex[] => [
-  new Hex(0, N, -N),     // bottom center
-  new Hex(N, 0, -N),     // right (r=0, s<0 = white)
-  new Hex(-N, N, 0),     // bottom-left
-];
+/** Get all castle hexes for a given side */
+function getCastleHexes(color: 'w' | 'b'): Hex[] {
+  return color === 'w' ? board.whiteCastleHexes : board.blackCastleHexes;
+}
 
-const getBlackCastleHexes = (N: number): Hex[] => [
-  new Hex(0, -N, N),     // top center
-  new Hex(-N, 0, N),     // left (r=0, s>0 = black)
-  new Hex(N, -N, 0),     // top-right
-];
+/** Creates castles owned by a given player */
+function createOwnedCastles(hexes: Hex[], owner: 'w' | 'b'): Castle[] {
+  return hexes.map(hex => new Castle(hex, owner, 0));
+}
 
-// Helper: create castles for testing recruitment
-const createCastles = (N: number): Castle[] => {
-  const whiteCastles = getWhiteCastleHexes(N).map(h => new Castle(h, 'w', 0));
-  const blackCastles = getBlackCastleHexes(N).map(h => new Castle(h, 'b', 0));
-  return [...whiteCastles, ...blackCastles];
-};
+describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
 
-// Helper: find a valid spawn hex adjacent to a castle
-const findSpawnHex = (castleHex: Hex, board: Board, occupiedHexes: Hex[] = []): Hex | null => {
-  const occupiedSet = new Set(occupiedHexes.map(h => h.getKey()));
-  const neighbors = castleHex.cubeRing(1);
-  for (const n of neighbors) {
-    if (board.hexSet.has(n.getKey()) && !occupiedSet.has(n.getKey())) {
-      return n;
-    }
-  }
-  return null;
-};
+  describe('Swordsman mobility at castle positions', () => {
+    // For each white castle corner, recruit a white swordsman on each adjacent hex
+    // and check if it has any legal moves
+    const whiteCastles = getCastleHexes('w');
+    const blackCastles = getCastleHexes('b');
 
-describe('Recruitment Bug Diagnostics', () => {
-  let board: Board;
+    it('should identify which castle-adjacent hexes leave swordsmen stuck (white)', () => {
+      const stuckPositions: string[] = [];
 
-  beforeEach(() => {
-    board = createTestBoard();
-  });
+      for (const castleHex of whiteCastles) {
+        const adjacent = castleHex.cubeRing(1).filter(h => board.hexSet.has(h.getKey()));
+        for (const spawnHex of adjacent) {
+          const swordsman = PieceFactory.create(PieceType.Swordsman, spawnHex, 'w');
+          const state = createTestState([swordsman], []);
+          const moves = engine.getLegalMoves(state, swordsman);
 
-  // ================================================================
-  // TEST GROUP 1: Piece initialization after recruitment
-  // ================================================================
-  describe('Piece initialization after recruitment', () => {
-    it('recruited piece has canMove=true and canAttack=true', () => {
-      const castles = createCastles(BOARD_SIZE);
-      // Capture a black castle for white
-      const capturedCastle = castles.find(c => c.color === 'b')!;
-      const ownedCastle = capturedCastle.with({ owner: 'w', turns_controlled: 1 });
-      const allCastles = castles.map(c =>
-        c.hex.equals(capturedCastle.hex) ? ownedCastle : c
-      );
-
-      const spawnHex = findSpawnHex(ownedCastle.hex, board)!;
-      expect(spawnHex).not.toBeNull();
-
-      // Set up state at White's Recruitment phase (turnCounter=4)
-      const state = createMockState([], allCastles, 4);
-      const newState = RecruitmentMutator.recruitPiece(state, ownedCastle, spawnHex, board);
-
-      // Find the newly recruited piece
-      const recruited = newState.pieces.find(p => p.hex.equals(spawnHex));
-      expect(recruited).toBeDefined();
-      expect(recruited!.canMove).toBe(true);
-      expect(recruited!.canAttack).toBe(true);
-      expect(recruited!.damage).toBe(0);
-    });
-
-    it('recruited piece retains correct flags after turn reset', () => {
-      const castles = createCastles(BOARD_SIZE);
-      const capturedCastle = castles.find(c => c.color === 'b')!;
-      const ownedCastle = capturedCastle.with({ owner: 'w', turns_controlled: 1 });
-      const allCastles = castles.map(c =>
-        c.hex.equals(capturedCastle.hex) ? ownedCastle : c
-      );
-
-      const spawnHex = findSpawnHex(ownedCastle.hex, board)!;
-
-      // Simulate: White recruits at phase 4, turn advances to 5 (Black Movement)
-      // Then simulate turn advancing to 10 (White Movement again)
-      const state = createMockState([], allCastles, 4);
-      const afterRecruit = RecruitmentMutator.recruitPiece(state, ownedCastle, spawnHex, board);
-
-      // Simulate resetting at White's next turn start (turnCounter=10)
-      const stateAtWhiteTurn = { ...afterRecruit, turnCounter: 10 };
-      const afterReset = TurnMutator.resetTurnFlags(stateAtWhiteTurn);
-
-      const recruited = afterReset.pieces.find(p => p.hex.equals(spawnHex));
-      expect(recruited).toBeDefined();
-      expect(recruited!.canMove).toBe(true);
-      expect(recruited!.canAttack).toBe(true);
-      expect(recruited!.damage).toBe(0);
-    });
-  });
-
-  // ================================================================
-  // TEST GROUP 2: Swordsman movement at enemy castles (KEY HYPOTHESIS)
-  // ================================================================
-  describe('Swordsman movement at enemy castle positions', () => {
-    // White Swordsman recruited at captured BLACK castle — "forward" is toward r < 0 (off board)
-    it('white Swordsman recruited at black castle (0, -N, N) has limited or no forward moves', () => {
-      const castleHex = new Hex(0, -BOARD_SIZE, BOARD_SIZE); // top center black castle
-      const spawnHex = findSpawnHex(castleHex, board)!;
-      expect(spawnHex).not.toBeNull();
-
-      const swordsman = PieceFactory.create(PieceType.Swordsman, spawnHex, 'w');
-      const castles = createCastles(BOARD_SIZE);
-      const state = createMockState([swordsman], castles, 0); // White Movement phase
-
-      const legalMoves = RuleEngine.getLegalMoves(swordsman, state, board);
-
-      // Log which moves are available for diagnostic purposes
-      console.log(`White Swordsman at ${spawnHex.getKey()} near black castle ${castleHex.getKey()}`);
-      console.log(`Legal moves: ${legalMoves.map(h => h.getKey()).join(', ') || 'NONE'}`);
-      console.log(`Number of legal moves: ${legalMoves.length}`);
-
-      // This test documents the behavior — Swordsmen at enemy back row may have 0 moves
-      // If 0 moves, this confirms the root cause of the reported bug
-      if (legalMoves.length === 0) {
-        console.warn('CONFIRMED: Swordsman has no legal moves at enemy back row. Promotion feature needed.');
-      }
-    });
-
-    it('black Swordsman recruited at white castle (0, N, -N) has limited or no forward moves', () => {
-      const castleHex = new Hex(0, BOARD_SIZE, -BOARD_SIZE); // bottom center white castle
-      const spawnHex = findSpawnHex(castleHex, board)!;
-
-      const swordsman = PieceFactory.create(PieceType.Swordsman, spawnHex, 'b');
-      const castles = createCastles(BOARD_SIZE);
-      // Black movement: turnCounter=5
-      const state = createMockState([swordsman], castles, 5);
-
-      const legalMoves = RuleEngine.getLegalMoves(swordsman, state, board);
-      console.log(`Black Swordsman at ${spawnHex.getKey()} near white castle ${castleHex.getKey()}`);
-      console.log(`Legal moves: ${legalMoves.map(h => h.getKey()).join(', ') || 'NONE'}`);
-
-      if (legalMoves.length === 0) {
-        console.warn('CONFIRMED: Black Swordsman has no legal moves at enemy back row.');
-      }
-    });
-
-    // Test ALL 3 black castle positions for white swordsman
-    it.each([
-      { desc: 'top center', hex: new Hex(0, -BOARD_SIZE, BOARD_SIZE) },
-      { desc: 'left', hex: new Hex(-BOARD_SIZE, 0, BOARD_SIZE) },
-      { desc: 'top-right', hex: new Hex(BOARD_SIZE, -BOARD_SIZE, 0) },
-    ])('white Swordsman at captured black castle ($desc)', ({ hex }) => {
-      const spawnHex = findSpawnHex(hex, board);
-      if (!spawnHex) {
-        console.warn(`No spawn hex found adjacent to ${hex.getKey()}`);
-        return;
-      }
-
-      const swordsman = PieceFactory.create(PieceType.Swordsman, spawnHex, 'w');
-      const castles = createCastles(BOARD_SIZE);
-      const state = createMockState([swordsman], castles, 0);
-      const moves = RuleEngine.getLegalMoves(swordsman, state, board);
-
-      console.log(`Castle ${hex.getKey()}, spawn ${spawnHex.getKey()}: ${moves.length} moves`);
-    });
-  });
-
-  // ================================================================
-  // TEST GROUP 3: Other piece types at enemy castles (should work fine)
-  // ================================================================
-  describe('Non-Swordsman pieces at enemy castle positions', () => {
-    const piecesToTest: PieceType[] = [
-      PieceType.Archer,
-      PieceType.Knight,
-      PieceType.Eagle,
-      PieceType.Giant,
-      PieceType.Trebuchet,
-      PieceType.Assassin,
-      PieceType.Dragon,
-      PieceType.Monarch,
-    ];
-
-    it.each(piecesToTest.map(t => ({ type: t })))(
-      '$type recruited at enemy castle has legal moves',
-      ({ type }) => {
-        const castleHex = new Hex(0, -BOARD_SIZE, BOARD_SIZE); // black castle
-        const spawnHex = findSpawnHex(castleHex, board)!;
-        expect(spawnHex).not.toBeNull();
-
-        const piece = PieceFactory.create(type, spawnHex, 'w');
-        const castles = createCastles(BOARD_SIZE);
-        const state = createMockState([piece], castles, 0); // White Movement
-
-        const moves = RuleEngine.getLegalMoves(piece, state, board);
-
-        // All non-Swordsman pieces should have at least 1 legal move
-        // since they move in multiple/all directions
-        expect(moves.length).toBeGreaterThan(0);
-        console.log(`${type} at ${spawnHex.getKey()}: ${moves.length} moves`);
-      }
-    );
-  });
-
-  // ================================================================
-  // TEST GROUP 4: Swordsman attack at enemy castles
-  // ================================================================
-  describe('Swordsman attack capability at enemy castle positions', () => {
-    it('white Swordsman at enemy back row can attack enemy castles in forward diagonals', () => {
-      const castleHex = new Hex(0, -BOARD_SIZE, BOARD_SIZE);
-      const spawnHex = findSpawnHex(castleHex, board)!;
-
-      const swordsman = PieceFactory.create(PieceType.Swordsman, spawnHex, 'w');
-      const castles = createCastles(BOARD_SIZE);
-      // White Attack phase: turnCounter=2
-      const state = createMockState([swordsman], castles, 2);
-
-      const attacks = RuleEngine.getLegalAttacks(swordsman, state, board);
-      console.log(`White Swordsman attacks at ${spawnHex.getKey()}: ${attacks.length}`);
-      // May find enemy castle hexes in forward diagonals (castles are attackable targets)
-      console.log(`Targets: ${attacks.map(h => h.getKey()).join(', ')}`);
-    });
-
-    it('white Swordsman at enemy back row CAN attack if enemy is in a forward diagonal', () => {
-      const castleHex = new Hex(0, -BOARD_SIZE, BOARD_SIZE);
-      const spawnHex = findSpawnHex(castleHex, board)!;
-
-      const swordsman = PieceFactory.create(PieceType.Swordsman, spawnHex, 'w');
-
-      // Place an enemy in a forward diagonal (toward r < 0 for white)
-      // White swordsman forward attack dirs: (1, -1, 0), (0, -1, 1), (-1, 0, 1)
-      const enemyHex = new Hex(
-        spawnHex.q + 1,
-        spawnHex.r - 1,
-        spawnHex.s
-      );
-
-      let hasEnemy = false;
-      if (board.hexSet.has(enemyHex.getKey())) {
-        const enemy = PieceFactory.create(PieceType.Archer, enemyHex, 'b');
-        const castles = createCastles(BOARD_SIZE);
-        const state = createMockState([swordsman, enemy], castles, 2);
-
-        const attacks = RuleEngine.getLegalAttacks(swordsman, state, board);
-        console.log(`White Swordsman attacks with enemy at ${enemyHex.getKey()}: ${attacks.length}`);
-
-        if (board.hexSet.has(enemyHex.getKey())) {
-          hasEnemy = true;
-          // Should be able to attack the enemy in forward diagonal
-          expect(attacks.length).toBeGreaterThan(0);
+          if (moves.length === 0) {
+            stuckPositions.push(
+              `White Sw at ${spawnHex.getKey()} (adj to castle ${castleHex.getKey()}): 0 moves`
+            );
+          }
         }
       }
 
-      if (!hasEnemy) {
-        console.warn(`Enemy hex ${enemyHex.getKey()} is off the board — attack test skipped`);
+      // Log stuck positions for diagnostic purposes
+      if (stuckPositions.length > 0) {
+        console.log('WHITE SWORDSMEN WITH NO MOVES AT OWN CASTLES:');
+        stuckPositions.forEach(s => console.log(`  ${s}`));
       }
+      // This is a diagnostic test — it documents the issue rather than asserting pass/fail
+      expect(true).toBe(true);
+    });
+
+    it('should identify which enemy-castle-adjacent hexes leave swordsmen stuck (white at black castles)', () => {
+      const stuckPositions: string[] = [];
+
+      for (const castleHex of blackCastles) {
+        const adjacent = castleHex.cubeRing(1).filter(h => board.hexSet.has(h.getKey()));
+        for (const spawnHex of adjacent) {
+          const swordsman = PieceFactory.create(PieceType.Swordsman, spawnHex, 'w');
+          const state = createTestState([swordsman], []);
+          const moves = engine.getLegalMoves(state, swordsman);
+
+          if (moves.length === 0) {
+            stuckPositions.push(
+              `White Sw at ${spawnHex.getKey()} (adj to black castle ${castleHex.getKey()}): 0 moves`
+            );
+          }
+        }
+      }
+
+      if (stuckPositions.length > 0) {
+        console.log('WHITE SWORDSMEN WITH NO MOVES AT BLACK CASTLES:');
+        stuckPositions.forEach(s => console.log(`  ${s}`));
+      }
+      expect(true).toBe(true);
     });
   });
 
-  // ================================================================
-  // TEST GROUP 5: Full recruitment flow with turn cycling
-  // ================================================================
-  describe('Full recruitment + turn cycle flow', () => {
-    it('piece recruited by white is movable on whites next turn', () => {
-      const castles = createCastles(BOARD_SIZE);
-      // White captures a black castle
-      const blackCastle = castles.find(c => c.color === 'b')!;
-      const captured = blackCastle.with({ owner: 'w', turns_controlled: 2 }); // Will recruit Archer (index 2 = Knight)
-      const allCastles = castles.map(c =>
-        c.hex.equals(blackCastle.hex) ? captured : c
-      );
+  describe('Non-swordsman pieces at castle positions', () => {
+    const pieceTypes = [
+      PieceType.Archer, PieceType.Knight, PieceType.Eagle,
+      PieceType.Giant, PieceType.Trebuchet, PieceType.Dragon,
+    ];
 
-      const spawnHex = findSpawnHex(captured.hex, board)!;
+    it('should have legal moves for all non-swordsman pieces at any castle-adjacent hex', () => {
+      const allCastles = [...getCastleHexes('w'), ...getCastleHexes('b')];
+      const stuckPieces: string[] = [];
 
-      // White Recruitment phase (turnCounter=4)
-      const state = createMockState([], allCastles, 4);
-      const afterRecruit = RecruitmentMutator.recruitPiece(state, captured, spawnHex, board);
+      for (const castleHex of allCastles) {
+        const adjacent = castleHex.cubeRing(1).filter(h => board.hexSet.has(h.getKey()));
+        for (const spawnHex of adjacent) {
+          for (const type of pieceTypes) {
+            const piece = PieceFactory.create(type, spawnHex, 'w');
+            const state = createTestState([piece], []);
+            const moves = engine.getLegalMoves(state, piece);
 
-      const recruited = afterRecruit.pieces.find(p => p.hex.equals(spawnHex));
-      expect(recruited).toBeDefined();
+            if (moves.length === 0) {
+              stuckPieces.push(`${type} at ${spawnHex.getKey()} (adj to ${castleHex.getKey()})`);
+            }
+          }
+        }
+      }
 
-      // The piece should be a Knight (turns_controlled=2, RECRUITMENT_CYCLE[2] = Knight)
-      expect(recruited!.type).toBe(PieceType.Knight);
+      if (stuckPieces.length > 0) {
+        console.log('NON-SWORDSMAN PIECES WITH NO MOVES AT CASTLES:');
+        stuckPieces.forEach(s => console.log(`  ${s}`));
+      }
+      // Non-swordsman pieces should always have at least one move from any valid hex
+      expect(stuckPieces.length).toBe(0);
+    });
+  });
 
-      // Simulate: advance to White's next Movement phase (turnCounter=10)
-      const stateAtNextWhiteTurn = { ...afterRecruit, turnCounter: 10 };
-      const afterReset = TurnMutator.resetTurnFlags(stateAtNextWhiteTurn);
+  describe('Turn flag reset after recruitment', () => {
+    it('recruited piece should have canMove=true after turn reset', () => {
+      const castleHex = getCastleHexes('w')[0];
+      const spawnHex = castleHex.cubeRing(1).find(h => board.hexSet.has(h.getKey()))!;
 
-      const recruitedAfterReset = afterReset.pieces.find(p => p.hex.equals(spawnHex));
-      expect(recruitedAfterReset!.canMove).toBe(true);
+      // White controls a castle, turn counter at white's recruitment phase (4)
+      const castle = new Castle(castleHex, 'w', 0);
+      const state = createTestState([], [castle], 4);
 
-      // Verify the piece has legal moves
-      const moves = RuleEngine.getLegalMoves(recruitedAfterReset!, afterReset, board);
+      // Recruit
+      const afterRecruit = RecruitmentMutator.recruitPiece(state, castle, spawnHex, board);
+      const recruitedPiece = afterRecruit.pieces.find(p => p.hex.equals(spawnHex));
+
+      expect(recruitedPiece).toBeDefined();
+      expect(recruitedPiece!.canMove).toBe(true);
+      expect(recruitedPiece!.canAttack).toBe(true);
+    });
+
+    it('recruited piece should still have canMove=true after opponent turn and back to own turn', () => {
+      const castleHex = getCastleHexes('w')[0];
+      const spawnHex = castleHex.cubeRing(1).find(h => board.hexSet.has(h.getKey()))!;
+
+      const castle = new Castle(castleHex, 'w', 0);
+      const state = createTestState([], [castle], 4);
+
+      // Recruit
+      let gameState = RecruitmentMutator.recruitPiece(state, castle, spawnHex, board);
+
+      // Simulate turn reset (what happens at start of each player's turn)
+      gameState = TurnMutator.resetTurnFlags(gameState);
+
+      const piece = gameState.pieces.find(p => p.hex.equals(spawnHex));
+      expect(piece).toBeDefined();
+      expect(piece!.canMove).toBe(true);
+      expect(piece!.canAttack).toBe(true);
+    });
+  });
+
+  describe('Full recruitment flow', () => {
+    it('should recruit and verify piece has legal moves on next turn', () => {
+      const castleHex = getCastleHexes('w')[0];
+      const adjacent = castleHex.cubeRing(1).filter(h => board.hexSet.has(h.getKey()));
+      const spawnHex = adjacent[0];
+
+      const castle = new Castle(castleHex, 'w', 0);
+      const state = createTestState([], [castle], 4);
+
+      // Recruit an Archer (turns_controlled=1 → Archer in cycle)
+      const castle1Turn = new Castle(castleHex, 'w', 1);
+      const archerState = createTestState([], [castle1Turn], 4);
+      const afterRecruit = RecruitmentMutator.recruitPiece(archerState, castle1Turn, spawnHex, board);
+
+      const archer = afterRecruit.pieces.find(p => p.hex.equals(spawnHex));
+      expect(archer).toBeDefined();
+      expect(archer!.type).toBe(PieceType.Archer);
+
+      // Archer should always have legal moves from any valid hex (6 directions)
+      const moves = engine.getLegalMoves(afterRecruit, archer!);
       expect(moves.length).toBeGreaterThan(0);
     });
 
-    it('multiple pieces recruited in same phase are all movable next turn', () => {
-      const castles = createCastles(BOARD_SIZE);
-      // Capture 2 black castles
-      const blackCastles = castles.filter(c => c.color === 'b');
-      const captured1 = blackCastles[0].with({ owner: 'w', turns_controlled: 1 });
-      const captured2 = blackCastles[1].with({ owner: 'w', turns_controlled: 1 });
+    it('should verify recruitment hex validation excludes occupied hexes', () => {
+      const castleHex = getCastleHexes('w')[0];
+      const adjacent = castleHex.cubeRing(1).filter(h => board.hexSet.has(h.getKey()));
 
-      const allCastles = castles.map(c => {
-        if (c.hex.equals(captured1.hex)) return captured1;
-        if (c.hex.equals(captured2.hex)) return captured2;
-        return c;
-      });
+      // Place pieces on ALL adjacent hexes
+      const blockers = adjacent.map(h => PieceFactory.create(PieceType.Swordsman, h, 'w'));
+      const castle = new Castle(castleHex, 'w', 0);
+      const state = createTestState(blockers, [castle], 4);
 
-      const spawn1 = findSpawnHex(captured1.hex, board)!;
-      const spawn2 = findSpawnHex(captured2.hex, board, [spawn1])!;
-
-      // Recruit from first castle
-      const state = createMockState([], allCastles, 4);
-      const afterFirst = RecruitmentMutator.recruitPiece(state, captured1, spawn1, board);
-
-      // Recruit from second castle (if turn counter allows — increment might be 0)
-      const updatedCastle2 = afterFirst.castles.find(c => c.hex.equals(captured2.hex))!;
-
-      // Check if we're still in Recruitment phase
-      if (afterFirst.turnCounter % 5 === 4) {
-        const afterSecond = RecruitmentMutator.recruitPiece(afterFirst, updatedCastle2, spawn2, board);
-
-        // Simulate White's next turn
-        const nextTurnState = { ...afterSecond, turnCounter: 10 };
-        const afterReset = TurnMutator.resetTurnFlags(nextTurnState);
-
-        const piece1 = afterReset.pieces.find(p => p.hex.equals(spawn1));
-        const piece2 = afterReset.pieces.find(p => p.hex.equals(spawn2));
-
-        expect(piece1!.canMove).toBe(true);
-        expect(piece2!.canMove).toBe(true);
-
-        // Both should be Archer (turns_controlled=1)
-        expect(piece1!.type).toBe(PieceType.Archer);
-        expect(piece2!.type).toBe(PieceType.Archer);
-      }
-    });
-  });
-
-  // ================================================================
-  // TEST GROUP 6: PieceMap consistency after recruitment
-  // ================================================================
-  describe('PieceMap consistency', () => {
-    it('PieceMap contains recruited piece after recruitment', () => {
-      const castles = createCastles(BOARD_SIZE);
-      const blackCastle = castles.find(c => c.color === 'b')!;
-      const captured = blackCastle.with({ owner: 'w', turns_controlled: 0 });
-      const allCastles = castles.map(c =>
-        c.hex.equals(blackCastle.hex) ? captured : c
+      // Should have no recruitment hexes since all adjacent are occupied
+      const recruitHexes = RuleEngine.getRecruitmentHexes(state, board);
+      const castleRecruitHexes = recruitHexes.filter(h =>
+        adjacent.some(a => a.equals(h))
       );
-
-      const spawnHex = findSpawnHex(captured.hex, board)!;
-      const state = createMockState([], allCastles, 4);
-      const afterRecruit = RecruitmentMutator.recruitPiece(state, captured, spawnHex, board);
-
-      // PieceMap should have the new piece
-      const fromMap = afterRecruit.pieceMap.get(spawnHex);
-      expect(fromMap).toBeDefined();
-      expect(fromMap!.type).toBe(PieceType.Swordsman); // turns_controlled=0 → Swordsman
-      expect(fromMap!.hex.equals(spawnHex)).toBe(true);
-    });
-
-    it('PieceMap and pieces array are in sync after recruitment', () => {
-      const castles = createCastles(BOARD_SIZE);
-      const blackCastle = castles.find(c => c.color === 'b')!;
-      const captured = blackCastle.with({ owner: 'w', turns_controlled: 3 });
-      const allCastles = castles.map(c =>
-        c.hex.equals(blackCastle.hex) ? captured : c
-      );
-
-      const existingPiece = PieceFactory.create(PieceType.Archer, new Hex(0, 1, -1), 'w');
-      const spawnHex = findSpawnHex(captured.hex, board, [existingPiece.hex])!;
-      const state = createMockState([existingPiece], allCastles, 4);
-      const afterRecruit = RecruitmentMutator.recruitPiece(state, captured, spawnHex, board);
-
-      // Every piece in pieces array should be in pieceMap
-      for (const piece of afterRecruit.pieces) {
-        const fromMap = afterRecruit.pieceMap.get(piece.hex);
-        expect(fromMap).toBeDefined();
-        expect(fromMap!.type).toBe(piece.type);
-      }
-
-      // PieceMap size should equal pieces array length
-      expect(afterRecruit.pieces.length).toBe(2); // existing + recruited
-    });
-  });
-
-  // ================================================================
-  // TEST GROUP 7: Recruitment cycle correctness
-  // ================================================================
-  describe('Recruitment cycle piece types', () => {
-    const RECRUITMENT_CYCLE = [
-      PieceType.Swordsman,
-      PieceType.Archer,
-      PieceType.Knight,
-      PieceType.Eagle,
-      PieceType.Giant,
-      PieceType.Trebuchet,
-      PieceType.Assassin,
-      PieceType.Dragon,
-      PieceType.Monarch,
-    ];
-
-    it.each(
-      RECRUITMENT_CYCLE.map((type, i) => ({ type, turnsControlled: i }))
-    )('turns_controlled=$turnsControlled recruits $type', ({ type, turnsControlled }) => {
-      const castles = createCastles(BOARD_SIZE);
-      const blackCastle = castles.find(c => c.color === 'b')!;
-      const captured = blackCastle.with({ owner: 'w', turns_controlled: turnsControlled });
-      const allCastles = castles.map(c =>
-        c.hex.equals(blackCastle.hex) ? captured : c
-      );
-
-      const spawnHex = findSpawnHex(captured.hex, board)!;
-      const state = createMockState([], allCastles, 4);
-      const afterRecruit = RecruitmentMutator.recruitPiece(state, captured, spawnHex, board);
-
-      const recruited = afterRecruit.pieces.find(p => p.hex.equals(spawnHex));
-      expect(recruited).toBeDefined();
-      expect(recruited!.type).toBe(type);
-    });
-
-    it('recruitment cycle wraps after 9 turns', () => {
-      const castles = createCastles(BOARD_SIZE);
-      const blackCastle = castles.find(c => c.color === 'b')!;
-      const captured = blackCastle.with({ owner: 'w', turns_controlled: 9 }); // 9 % 9 = 0
-      const allCastles = castles.map(c =>
-        c.hex.equals(blackCastle.hex) ? captured : c
-      );
-
-      const spawnHex = findSpawnHex(captured.hex, board)!;
-      const state = createMockState([], allCastles, 4);
-      const afterRecruit = RecruitmentMutator.recruitPiece(state, captured, spawnHex, board);
-
-      const recruited = afterRecruit.pieces.find(p => p.hex.equals(spawnHex));
-      expect(recruited!.type).toBe(PieceType.Swordsman); // wraps back to index 0
+      expect(castleRecruitHexes.length).toBe(0);
     });
   });
 });

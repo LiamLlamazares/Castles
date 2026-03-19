@@ -1,71 +1,64 @@
 /**
  * @file PromotionMutator.ts
- * @description Handles Swordsman promotion (Coronation).
+ * @description Handles Swordsman promotion when reaching the opponent's back row.
  *
- * When a Swordsman reaches the opponent's back row, the game pauses with
- * `promotionPending` set. This mutator applies the player's choice,
- * replacing the Swordsman's type with the selected piece type.
- *
- * @see MovementMutator - Sets promotionPending when back row is reached
- * @see GameState.promotionPending - The pending promotion state
+ * Promotion is a "free action" — the move that brought the Swordsman to the
+ * back row already consumed a move action. This mutator just swaps the piece type
+ * and clears the promotionPending flag without advancing the turn counter.
  */
 import { GameState } from "../../Core/GameState";
-import { PieceType } from "../../../Constants";
+import { Piece } from "../../Entities/Piece";
+import { PieceFactory } from "../../Entities/PieceFactory";
+import { PieceType, PROMOTABLE_TYPES } from "../../../Constants";
 import { createPieceMap } from "../../../utils/PieceMap";
-import { GameError, GameErrorCode } from "../../Core/GameError";
 
 export class PromotionMutator {
+
   /**
-   * Applies a promotion choice, transforming the Swordsman into the selected type.
-   * Clears `promotionPending` so the game can continue.
-   *
-   * @param state - Current game state (must have promotionPending set)
-   * @param selectedType - The piece type chosen by the player
-   * @returns New game state with the promoted piece and promotionPending cleared
+   * Promotes a swordsman to the chosen piece type.
+   * Does NOT advance the turn counter — the move already did that.
    */
-  public static applyPromotion(state: GameState, selectedType: PieceType): GameState {
-    if (!state.promotionPending) {
-      throw new GameError(
-        "No promotion pending",
-        GameErrorCode.STATE_ERROR
-      );
+  public static promote(state: GameState, swordsman: Piece, newType: PieceType): GameState {
+    if (swordsman.type !== PieceType.Swordsman) {
+      console.warn("PromotionMutator: piece is not a Swordsman");
+      return state;
     }
 
-    const { pieceHex } = state.promotionPending;
+    if (!PROMOTABLE_TYPES.includes(newType)) {
+      console.warn(`PromotionMutator: ${newType} is not a valid promotion target`);
+      return state;
+    }
 
-    // Find the Swordsman at the promotion hex
-    const swordsman = state.pieces.find(
-      p => p.hex.equals(pieceHex) && p.type === PieceType.Swordsman
+    // Create the promoted piece at the same hex with the same color
+    const promotedPiece = PieceFactory.create(newType, swordsman.hex, swordsman.color);
+    // Preserve canMove/canAttack flags from the swordsman (already used move this turn)
+    const finalPiece = promotedPiece.with({
+      canMove: swordsman.canMove,
+      canAttack: swordsman.canAttack,
+    });
+
+    // Replace the swordsman in the pieces array
+    const newPieces = state.pieces.map(p =>
+      p.hex.equals(swordsman.hex) && p.color === swordsman.color ? finalPiece : p
     );
 
-    if (!swordsman) {
-      throw new GameError(
-        `No Swordsman found at ${pieceHex.getKey()} for promotion`,
-        GameErrorCode.STATE_ERROR
-      );
+    // Update the last move's notation to include promotion suffix
+    const newTree = state.moveTree.clone();
+    const currentNode = newTree.current;
+    if (currentNode.move) {
+      const shortType = newType.substring(0, 2); // "Ar", "Kn", etc.
+      currentNode.move = {
+        ...currentNode.move,
+        notation: `${currentNode.move.notation}=${shortType}`,
+      };
     }
-
-    // Validate the selected type is in the allowed options
-    if (!state.promotionPending.options.includes(selectedType)) {
-      throw new GameError(
-        `Invalid promotion type: ${selectedType}`,
-        GameErrorCode.STATE_ERROR
-      );
-    }
-
-    // Replace the Swordsman with the promoted piece (same hex, color, fresh state)
-    const newPieces = state.pieces.map(p => {
-      if (p.hex.equals(pieceHex) && p.type === PieceType.Swordsman) {
-        return p.with({ type: selectedType });
-      }
-      return p;
-    });
 
     return {
       ...state,
       pieces: newPieces,
       pieceMap: createPieceMap(newPieces),
       promotionPending: null,
+      moveTree: newTree,
     };
   }
 }

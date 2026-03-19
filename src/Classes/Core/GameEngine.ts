@@ -217,6 +217,10 @@ export class GameEngine {
     return StateMutator.recruitPiece(state, castle, hex, this.board);
   }
 
+  public promotePiece(state: GameState, swordsman: Piece, newType: PieceType): GameState {
+    return StateMutator.promotePiece(state, swordsman, newType);
+  }
+
   public resetTurnFlags(state: GameState): GameState {
     return StateMutator.resetTurnFlags(state);
   }
