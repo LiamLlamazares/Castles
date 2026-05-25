@@ -156,7 +156,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Knight]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Slides diagonally up to 2 hexes. Attacks adjacent hexes (captures by moving onto target).",
+    description: "Slides diagonally until blocked. Attacks adjacent hexes (captures by moving onto target).",
     moveStrategy: (hex, blocked, valid, _color, boardSize = N_SQUARES) => knightMoves(hex, blocked, valid, boardSize),
     attackStrategy: meleeAttackStrategy,
   },
@@ -180,7 +180,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Giant]: {
     strength: 2,
     attackType: AttackType.Melee,
-    description: "Slides up to 2 hexes in any direction. Attacks adjacent hexes. Strength 2 (requires 2+ attackers or strength 2+ attacker to defeat).",
+    description: "Slides along orthogonal lines until blocked. Attacks adjacent hexes. Strength 2 (requires 2+ attackers or strength 2+ attacker to defeat).",
     moveStrategy: (hex, blocked, valid, _color, boardSize = N_SQUARES) => giantMoves(hex, blocked, valid, boardSize),
     attackStrategy: meleeAttackStrategy,
   },
@@ -188,7 +188,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Assassin]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Moves 1 hex in any direction. Attacks adjacent hexes. Instantly kills Monarchs regardless of defenders.",
+    description: "Slides along both diagonal and orthogonal lines until blocked. Attacks adjacent hexes. Instantly kills Monarchs regardless of defenders.",
     moveStrategy: (hex, blocked, valid, _color, boardSize = N_SQUARES) => assassinMoves(hex, blocked, valid, boardSize),
     attackStrategy: meleeAttackStrategy,
   },
@@ -196,7 +196,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Dragon]: {
     strength: 3,
     attackType: AttackType.Melee,
-    description: "Slides up to 3 hexes in any direction. Attacks adjacent hexes. Strength 3 (very hard to kill).",
+    description: "Flies in long L-shaped jumps, ignoring blockers on the way. Attacks adjacent hexes. Strength 3 (very hard to kill).",
     moveStrategy: (hex, blocked, valid) => dragonMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },

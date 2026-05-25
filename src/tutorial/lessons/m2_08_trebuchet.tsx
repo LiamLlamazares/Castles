@@ -8,24 +8,25 @@ import { getStartingLayout } from '../../ConstantImports';
 import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
 
-export function createM2L5(): TutorialLesson {
+export function createM2L8(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-4, 4, 0), 'w', 0), new Castle(new Hex(4, -4, 0), 'b', 0)];
   const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Knight, new Hex(-3, 3, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(2, 0, -2), 'b'),
+    PieceFactory.create(PieceType.Trebuchet, new Hex(-3, 2, 1), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, -1, 1), 'b'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'b'),
   ];
   const layout = getStartingLayout(board);
 
   return {
-    id: 'm2_l5_knight',
-    title: '2.5 Knight',
-    description: <PieceRules type={PieceType.Knight} intro="The Knight is a fast diagonal slider. It moves along diagonal lanes until blocked, then attacks adjacent enemies like a melee piece." />,
+    id: 'm2_l8_trebuchet',
+    title: '2.8 Trebuchet',
+    description: <PieceRules type={PieceType.Trebuchet} intro="The Trebuchet is a long-range attacker. It is powerful at the right distance but cannot attack enemies that are too close." />,
     board,
     pieces,
     layout,
-    objectives: ['Slide the Knight along a diagonal lane, then capture the target.'],
-    hints: ['The Knight does not jump over blockers.', 'Use right-click to inspect its actual legal moves if the diagonal geometry feels odd at first.'],
+    objectives: ['Attack the distant enemy and notice that the closer enemy is too close.'],
+    hints: ['Trebuchets attack at range 3, or range 4 from high ground.', 'Keep them screened by other pieces.'],
   };
 }

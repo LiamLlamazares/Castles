@@ -8,24 +8,25 @@ import { getStartingLayout } from '../../ConstantImports';
 import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
 
-export function createM2L4(): TutorialLesson {
+export function createM2L11(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-3, 3, 0), 'w', 0), new Castle(new Hex(3, -3, 0), 'b', 0)];
   const boardConfig: BoardConfig = { nSquares: 3, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Archer, new Hex(-2, 2, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
+    PieceFactory.create(PieceType.Monarch, new Hex(-1, 1, 0), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'w'),
+    PieceFactory.create(PieceType.Monarch, new Hex(1, -1, 0), 'b'),
   ];
   const layout = getStartingLayout(board);
 
   return {
-    id: 'm2_l4_archer',
-    title: '2.4 Archer',
-    description: <PieceRules type={PieceType.Archer} intro="The Archer attacks from a fixed distance instead of capturing by moving onto the target." />,
+    id: 'm2_l11_monarch',
+    title: '2.11 Monarch',
+    description: <PieceRules type={PieceType.Monarch} intro="The Monarch is your most important piece. It is strong, but if it is captured, the game ends immediately." />,
     board,
     pieces,
     layout,
-    objectives: ['Use the Archer to attack the enemy at range 2.'],
-    hints: ['Archers cannot attack adjacent enemies.', 'Defended enemies can block ranged attacks; the defense lessons cover that soon.'],
+    objectives: ['Protect your Monarch and threaten the enemy Monarch.'],
+    hints: ['Capturing the enemy Monarch is one of the default win conditions.', 'Assassins are especially dangerous to Monarchs.'],
   };
 }
