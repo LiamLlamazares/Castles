@@ -182,7 +182,7 @@ export class GameEngine {
   }
 
   public hasAnyFutureControlledCastles(gameState: GameState): boolean {
-    return RuleEngine.hasAnyFutureControlledCastles(gameState);
+    return RuleEngine.hasAnyFutureControlledCastles(gameState, this.board);
   }
 
   public getFutureControlledCastlesActivePlayer(gameState: GameState): Castle[] {

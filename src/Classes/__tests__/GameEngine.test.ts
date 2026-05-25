@@ -276,6 +276,24 @@ describe('GameEngine', () => {
       const recruitHexes = gameEngine.getRecruitmentHexes(state);
       expect(recruitHexes).toEqual([]);
     });
+
+    it('returns empty when every non-river adjacent recruitment hex is occupied', () => {
+      const castleHex = new Hex(-7, 0, 7);
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
+      const blockers = castleHex.cubeRing(1)
+        .filter(hex =>
+          gameEngine.board.hexSet.has(hex.getKey()) &&
+          !gameEngine.board.riverHexSet.has(hex.getKey()) &&
+          !gameEngine.board.castleHexSet.has(hex.getKey())
+        )
+        .map(hex => new Piece(hex, 'w', PieceType.Swordsman));
+      const state = createMockState(blockers, [castle], 4);
+
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
+
+      expect(blockers.length).toBeGreaterThan(0);
+      expect(recruitHexes).toEqual([]);
+    });
   });
 
   describe('getTurnCounterIncrement recruitment availability', () => {
@@ -296,6 +314,23 @@ describe('GameEngine', () => {
       const increment = gameEngine.getTurnCounterIncrement(state);
 
       expect(increment).toBe(0);
+    });
+
+    it('auto-skips Recruitment when captured castles have no legal recruitment hexes', () => {
+      const castleHex = new Hex(-7, 0, 7);
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
+      const blockers = castleHex.cubeRing(1)
+        .filter(hex =>
+          gameEngine.board.hexSet.has(hex.getKey()) &&
+          !gameEngine.board.riverHexSet.has(hex.getKey()) &&
+          !gameEngine.board.castleHexSet.has(hex.getKey())
+        )
+        .map(hex => new Piece(hex, 'w', PieceType.Swordsman));
+      const state = createMockState(blockers, [castle], 4);
+
+      const increment = gameEngine.getTurnCounterIncrement(state);
+
+      expect(increment).toBe(1);
     });
 
     it('skips Recruitment when the only controlled castle is own-origin', () => {

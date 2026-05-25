@@ -306,13 +306,16 @@ export class RuleEngine {
   }
 
   /**
-   * Optimized check if ANY castle can grant recruitment to the active player (for turn skipping).
+   * Optimized check if ANY castle has a legal recruitment square for the active player.
    */
-  public static hasAnyFutureControlledCastles(gameState: GameState): boolean {
+  public static hasAnyFutureControlledCastles(gameState: GameState, board: Board): boolean {
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
+    const occupiedSet = new Set(RuleEngine.getOccupiedHexes(gameState).map(h => h.getKey()));
     // Use some() for early exit
     return gameState.castles.some((castle) => 
-        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer)
+        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer) &&
+        !castle.used_this_turn &&
+        castle.hex.cubeRing(1).some(hex => RuleEngine.isValidRecruitmentHex(hex, board, occupiedSet))
     );
   }
 
@@ -344,19 +347,29 @@ export class RuleEngine {
         for (const hex of adjacentHexes) {
            const key = hex.getKey();
            // Must be a valid board hex, not occupied, and not already added
-           if (
-              board.hexSet.has(key) &&
-              !board.riverHexSet.has(key) &&
-              !board.castleHexSet.has(key) &&
-              !occupiedSet.has(key) &&
-              !processedHexKeys.has(key)
-           ) {
+           if (RuleEngine.isValidRecruitmentHex(hex, board, occupiedSet, processedHexKeys)) {
               recruitmentHexes.push(hex);
               processedHexKeys.add(key);
            }
         }
      }
      return recruitmentHexes;
+  }
+
+  private static isValidRecruitmentHex(
+    hex: Hex,
+    board: Board,
+    occupiedSet: Set<string>,
+    processedHexKeys?: Set<string>
+  ): boolean {
+    const key = hex.getKey();
+    return (
+      board.hexSet.has(key) &&
+      !board.riverHexSet.has(key) &&
+      !board.castleHexSet.has(key) &&
+      !occupiedSet.has(key) &&
+      !processedHexKeys?.has(key)
+    );
   }
 
   // ================= TURN MANAGEMENT HELPER =================
@@ -368,7 +381,7 @@ export class RuleEngine {
   public static getTurnCounterIncrement(gameState: GameState, board: Board, isPassing: boolean = false): number {
     // Optimization Phase 3: Use early-exit checks instead of full list generation
     const hasFutureAttacks = RuleEngine.hasAnyFutureLegalAttacks(gameState, board);
-    const hasFutureControlledCastles = RuleEngine.hasAnyFutureControlledCastles(gameState);
+    const hasFutureControlledCastles = RuleEngine.hasAnyFutureControlledCastles(gameState, board);
     
     // Check legal moves (for skipping Movement phase)
     let hasFutureMoves = false;
@@ -389,12 +402,7 @@ export class RuleEngine {
 
     let hasUsableCastles = false;
     if (!passingRecruitment) {
-        const unusedControlledCastles = gameState.castles.filter(
-            (castle) =>
-            RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer) &&
-            !castle.used_this_turn
-        );
-        hasUsableCastles = unusedControlledCastles.length > 0;
+        hasUsableCastles = RuleEngine.hasAnyFutureControlledCastles(gameState, board);
     }
 
     // Pass ignorePhase=true because we want to know if it WOULD be valid in the Recruitment phase
