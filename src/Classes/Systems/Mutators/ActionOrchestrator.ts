@@ -65,7 +65,7 @@ export class ActionOrchestrator {
 
     // 5. Run Turn Transitions (Phoenixes, Sanctuary Cooldowns, Global Resets)
     newState = TurnMutator.checkTurnTransitions(newState, newlyStartedCooldownHexKeys);
-    newState = TurnMutator.normalizeForcedTurns(newState, board);
+    newState = TurnMutator.normalizeForcedTurns(newState, board, newlyStartedCooldownHexKeys);
 
     // 6. Finalize MoveTree (Single Source of Truth)
     newState.moveTree = MutatorUtils.recordMoveInTree(newState, record);

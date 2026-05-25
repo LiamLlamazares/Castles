@@ -3,7 +3,7 @@ import HexCell from "../HexCell";
 import { Hex } from "../../Classes/Entities/Hex";
 import { SanctuaryType } from "../../Constants";
 
-jest.mock("../../Classes/Services/AssetRegistry", () => ({
+vi.mock("../../Classes/Services/AssetRegistry", () => ({
   getAssetUrl: (_theme: string, color: string, type: string) => `${color}${type}.svg`,
 }));
 
@@ -21,7 +21,7 @@ const baseProps = {
   showTerrainIcons: true,
   showSanctuaryIcons: true,
   showCastleRecruitment: true,
-  onClick: jest.fn(),
+  onClick: vi.fn(),
   layoutSize: 40,
 };
 

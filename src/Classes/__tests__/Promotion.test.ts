@@ -127,8 +127,8 @@ describe('MovementMutator promotion detection', () => {
     const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(2, 1, -3), 'w');
     const state = createTestState([swordsman]);
     const targetHex = new Hex(2, 0, -2);
-    const promotionSpy = jest.spyOn(board, 'isPromotionHex').mockReturnValue(true);
-    const riverSpy = jest.spyOn(board, 'isRiver').mockReturnValue(true);
+    const promotionSpy = vi.spyOn(board, 'isPromotionHex').mockReturnValue(true);
+    const riverSpy = vi.spyOn(board, 'isRiver').mockReturnValue(true);
 
     const newState = MovementMutator.applyMove(state, swordsman, targetHex, board);
 
@@ -205,7 +205,7 @@ describe('PromotionMutator', () => {
     const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(0, -7, 7), 'w');
     const state = createTestState([swordsman]);
     state.promotionPending = swordsman;
-    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const newState = PromotionMutator.promote(state, swordsman, PieceType.Monarch);
 

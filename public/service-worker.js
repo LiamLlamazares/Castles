@@ -1,4 +1,4 @@
-const CACHE_NAME = "castles-shell-v1";
+const CACHE_NAME = "castles-shell-v2";
 const CORE_ASSETS = ["./", "./index.html", "./manifest.json", "./favicon.ico", "./castles-icon.svg"];
 
 self.addEventListener("install", event => {

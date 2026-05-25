@@ -6,7 +6,7 @@ import { ReplayDiagnostic } from "../PGNImporter";
 describe("PGN replay hydration diagnostics", () => {
   it("throws the replay failure in strict mode", () => {
     const moveTree = PGNParser.parseToTree("1. Z99Z98");
-    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     expect(() =>
       (PGNService.replayMoveHistory as any)(
@@ -26,7 +26,7 @@ describe("PGN replay hydration diagnostics", () => {
   it("collects replay diagnostics in non-strict mode without logging", () => {
     const moveTree = PGNParser.parseToTree("1. Z99Z98");
     const diagnostics: ReplayDiagnostic[] = [];
-    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const state = PGNService.replayMoveHistory(
       startingBoard,

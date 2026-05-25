@@ -29,7 +29,7 @@ const makeFirstLegalMove = (result: ReturnType<typeof renderGameLogicHook>["resu
 describe("loadPGN replay diagnostics", () => {
   it("returns null when replay diagnostics are produced", () => {
     const { result } = renderGameLogicHook();
-    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const header = result.current.getPGN().split("\n\n")[0];
     const invalidPgn = `${header}\n\n1. Z99Z98`;
 
@@ -52,7 +52,7 @@ describe("loadPGN replay diagnostics", () => {
     const { result } = renderGameLogicHook();
     makeFirstLegalMove(result);
 
-    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const header = result.current.getPGN().split("\n\n")[0];
     const mainMove = result.current.moveTree.getHistoryLine()[0].notation;
     const invalidVariationPgn = `${header}\n\n1. ${mainMove} (1. Z99Z98)`;
@@ -78,12 +78,12 @@ describe("loadPGN replay diagnostics", () => {
     const board = new Board({ nSquares: 3 }, [castle]);
     const moveTree = new MoveTree();
     const pgn = PGNService.generatePGN(board, [], [], [], {}, moveTree);
-    const replay = jest
+    const replay = vi
       .spyOn(PGNService, "replayMoveHistory")
       .mockImplementation(() => {
         throw new Error("forced replay failure");
       });
-    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const loaded = result.current.loadPGN(pgn);
 

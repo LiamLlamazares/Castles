@@ -38,7 +38,7 @@ describe("Ability Notation & Hydration", () => {
         const engine = new GameEngine(board);
         
         // Mock activateAbility to verify it's called
-        const activateSpy = jest.spyOn(engine, 'activateAbility');
+        const activateSpy = vi.spyOn(engine, 'activateAbility');
         activateSpy.mockImplementation((state, s, t, a) => state); // No-op
         
         // Setup state with a Wizard

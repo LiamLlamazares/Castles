@@ -1,3 +1,4 @@
+import type { Mock } from "vitest";
 import { AbilitySystem } from "../AbilitySystem";
 import { GameState } from "../../Core/GameState";
 import { Piece } from "../../Entities/Piece";
@@ -6,9 +7,9 @@ import { PieceType, AbilityType, Color } from "../../../Constants";
 import { getPieceConfig } from "../../Config/PieceTypeConfig";
 import { getAbilityConfig } from "../../Config/AbilityConfig";
 
-// Ensure mocks are established before imports functionality (jest hoisting handles this, but good to be clear)
-jest.mock("../../Config/PieceTypeConfig");
-jest.mock("../../Config/AbilityConfig");
+// Ensure mocks are established before imports functionality (Vitest hoisting handles this, but good to be clear)
+vi.mock("../../Config/PieceTypeConfig");
+vi.mock("../../Config/AbilityConfig");
 
 describe("AbilitySystem Generic Logic", () => {
     let mockState: GameState;
@@ -27,7 +28,7 @@ describe("AbilitySystem Generic Logic", () => {
     });
 
     test("should return empty array for piece with no abilities", () => {
-        (getPieceConfig as jest.Mock).mockReturnValue({
+        (getPieceConfig as Mock).mockReturnValue({
             abilities: undefined
         });
 
@@ -36,11 +37,11 @@ describe("AbilitySystem Generic Logic", () => {
     });
 
     test("should return abilities defined in config", () => {
-        (getPieceConfig as jest.Mock).mockReturnValue({
+        (getPieceConfig as Mock).mockReturnValue({
             abilities: [AbilityType.Fireball]
         });
         
-        (getAbilityConfig as jest.Mock).mockReturnValue({
+        (getAbilityConfig as Mock).mockReturnValue({
             name: "Fireball",
             range: 2,
             minRange: 1,
@@ -49,7 +50,7 @@ describe("AbilitySystem Generic Logic", () => {
         });
 
         // Mock canUseAbility to return true
-        jest.spyOn(AbilitySystem, 'canUseAbility').mockReturnValue({ valid: true });
+        vi.spyOn(AbilitySystem, 'canUseAbility').mockReturnValue({ valid: true });
 
         const abilities = AbilitySystem.getAbilitiesForPiece(mockPiece, mockState);
         

@@ -7,7 +7,7 @@ import { createM5L2 } from "../../tutorial/lessons/m5_02_wolf";
 import { createM5L5 } from "../../tutorial/lessons/m5_05_wizard";
 import { ThemeProvider } from "../../contexts/ThemeContext";
 
-jest.mock("../../Classes/Services/AssetRegistry", () => ({
+vi.mock("../../Classes/Services/AssetRegistry", () => ({
   getAssetUrl: (_theme: string, color: string, type: string) => `${color}${type}.svg`,
 }));
 
@@ -45,12 +45,12 @@ const getHexPolygon = (
 describe("Game ability integration", () => {
   beforeEach(() => {
     localStorage.setItem("hasSeenTooltipHint", "true");
-    jest.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
-    jest.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   test("Teleport selected from the HUD is used by board clicks", async () => {

@@ -1,24 +1,24 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import BoardEditorToolbar from "../BoardEditorToolbar";
 
-jest.mock("../../Classes/Services/AssetRegistry", () => ({
+vi.mock("../../Classes/Services/AssetRegistry", () => ({
   getAssetUrl: (_theme: string, color: string, type: string) => `${color}${type}.svg`,
 }));
 
 describe("BoardEditorToolbar", () => {
   it("shows delete mode near the top with a trash icon", () => {
-    const onToolSelect = jest.fn();
+    const onToolSelect = vi.fn();
 
     render(
       <BoardEditorToolbar
         selectedTool={null}
         onToolSelect={onToolSelect}
         boardRadius={8}
-        onBoardRadiusChange={jest.fn()}
+        onBoardRadiusChange={vi.fn()}
         isInitialBoard={false}
         showCoordinates
-        onShowCoordinatesChange={jest.fn()}
-        onTooltip={jest.fn()}
+        onShowCoordinatesChange={vi.fn()}
+        onTooltip={vi.fn()}
       />
     );
 

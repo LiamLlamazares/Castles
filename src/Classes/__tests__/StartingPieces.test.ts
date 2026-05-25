@@ -20,7 +20,7 @@ describe('Starting Pieces', () => {
           const dupes = Array.from(counts.entries())
             .filter(([, v]) => v.length > 1)
             .map(([k, v]) => `${k}: [${v.join(', ')}]`);
-          fail(`Duplicate positions found:\n${dupes.join('\n')}`);
+          throw new Error(`Duplicate positions found:\n${dupes.join('\n')}`);
         }
 
         expect(uniqueKeys.size).toBe(hexKeys.length);

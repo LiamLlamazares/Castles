@@ -178,7 +178,7 @@ describe("PGN setup round-trip", () => {
 
   it("returns null setup for invalid custom setup without crashing", () => {
     const pgn = `[Event "Castles Game"]\n[CustomSetup "not-valid-json-or-base64"]\n\n*`;
-    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const parsed = PGNService.parsePGN(pgn);
 

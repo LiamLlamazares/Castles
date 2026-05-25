@@ -502,10 +502,9 @@ export class PGNImporter {
       const castles = board.castles as Castle[]; 
 
       // Initial State
-      const { SanctuaryType } = require("../../Constants");
       const usedTypes = initialSanctuaries.map(s => s.type);
       const sanctuaryPool = options.initialSanctuaryPool ?? Object.values(SanctuaryType).filter(
-        (t): t is import("../../Constants").SanctuaryType => !usedTypes.includes(t as any)
+        (t): t is SanctuaryType => !usedTypes.includes(t as SanctuaryType)
       );
 
       const sanctuarySettings = gameSettings ? {

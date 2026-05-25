@@ -5,13 +5,13 @@ import { Sanctuary } from "../../Classes/Entities/Sanctuary";
 import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
 
-jest.mock("../../Classes/Services/AssetRegistry", () => ({
+vi.mock("../../Classes/Services/AssetRegistry", () => ({
   getAssetUrl: (_theme: string, color: string, type: string) => `${color}${type}.svg`,
 }));
 
 describe("GameSetup", () => {
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("passes the preview sanctuary positions through when starting a game", () => {
@@ -19,11 +19,11 @@ describe("GameSetup", () => {
       new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
       new Sanctuary(new Hex(1, -1, 0), SanctuaryType.WolfCovenant, "b"),
     ];
-    jest
+    vi
       .spyOn(SanctuaryGenerator, "generateRandomSanctuaries")
       .mockReturnValue(previewSanctuaries);
 
-    const onPlay = jest.fn();
+    const onPlay = vi.fn();
     render(<GameSetup onPlay={onPlay} />);
 
     fireEvent.click(screen.getByRole("button", { name: "PLAY GAME" }));

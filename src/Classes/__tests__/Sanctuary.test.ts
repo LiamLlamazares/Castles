@@ -126,9 +126,9 @@ describe("Sanctuary", () => {
       expect(sanctuary.isReady).toBe(false);
     });
 
-    it("should return false when already pledged this game", () => {
+    it("should return true when historical pledge flag remains but cooldown is clear", () => {
       const sanctuary = new Sanctuary(new Hex(0, 0, 0), SanctuaryType.WolfCovenant, 'w', null, 0, true);
-      expect(sanctuary.isReady).toBe(false);
+      expect(sanctuary.isReady).toBe(true);
     });
   });
 

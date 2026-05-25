@@ -10,9 +10,9 @@ import { AbilityType, Color, PieceType, SanctuaryType } from '../../Constants';
 import { MoveTree } from '../Core/MoveTree';
 
 // Mock Dependencies
-jest.mock('../Services/SanctuaryService', () => ({
+vi.mock('../Services/SanctuaryService', () => ({
   SanctuaryService: {
-    canPledge: jest.fn().mockReturnValue(true)
+    canPledge: vi.fn().mockReturnValue(true)
   }
 }));
 
@@ -25,8 +25,8 @@ describe('InteractionPolicy', () => {
     // Setup minimal mock state
     mockBoard = new Board(); // Assuming default constructor works or is mocked
     // Mock Board methods if necessary
-    mockBoard.isRiver = jest.fn().mockReturnValue(false);
-    mockBoard.isCastle = jest.fn().mockReturnValue(false);
+    mockBoard.isRiver = vi.fn().mockReturnValue(false);
+    mockBoard.isCastle = vi.fn().mockReturnValue(false);
     
     mockGameState = {
       pieceMap: new PieceMap([]),

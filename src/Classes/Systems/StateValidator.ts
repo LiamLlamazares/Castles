@@ -10,7 +10,7 @@
  *
  * @usage Enable in development by calling validateState() after setState
  * @example
- * if (process.env.NODE_ENV === 'development') {
+ * if (import.meta.env.DEV) {
  *   const errors = StateValidator.validate(newState, board);
  *   if (errors.length > 0) console.error('Invalid state:', errors);
  * }

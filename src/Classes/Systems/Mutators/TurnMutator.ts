@@ -71,7 +71,11 @@ export class TurnMutator {
       return newState;
   }
 
-  public static normalizeForcedTurns(state: GameState, board: Board): GameState {
+  public static normalizeForcedTurns(
+      state: GameState,
+      board: Board,
+      skipCooldownTickHexKeys: Set<string> = new Set()
+  ): GameState {
       let newState = state;
       const startTurnCounter = state.turnCounter;
 
@@ -87,7 +91,7 @@ export class TurnMutator {
               turnCounter: newState.turnCounter + increment
           };
 
-          newState = TurnMutator.checkTurnTransitions(newState);
+          newState = TurnMutator.checkTurnTransitions(newState, skipCooldownTickHexKeys);
 
           if (newState.turnCounter - startTurnCounter >= PLAYER_CYCLE_LENGTH) {
               return newState;

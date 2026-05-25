@@ -11,7 +11,7 @@ describe('Board Size Debug', () => {
         const details = offBoard.map(p =>
           `${p.type} ${p.color} at (${p.hex.q},${p.hex.r},${p.hex.s})`
         ).join('\n');
-        fail(`${offBoard.length} pieces off-board (NSquares=${board.NSquares}):\n${details}`);
+        throw new Error(`${offBoard.length} pieces off-board (NSquares=${board.NSquares}):\n${details}`);
       }
     });
 
@@ -30,7 +30,7 @@ describe('Board Size Debug', () => {
       }
 
       if (overlaps.length > 0) {
-        fail(`Overlaps found:\n${overlaps.join('\n')}`);
+        throw new Error(`Overlaps found:\n${overlaps.join('\n')}`);
       }
     });
   }

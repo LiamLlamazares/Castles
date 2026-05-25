@@ -73,8 +73,8 @@ describe("PGN persistence round-trip", () => {
   });
 
   it("autosaves parseable PGN when the move tree changes after mount", () => {
-    const getPGN = jest.fn(() => `[Event "Castles Game"]\n\n1. A`);
-    const loadPGN = jest.fn();
+    const getPGN = vi.fn(() => `[Event "Castles Game"]\n\n1. A`);
+    const loadPGN = vi.fn();
     const emptyTree = new MoveTree();
     const populatedTree = new MoveTree();
     populatedTree.addMove({
@@ -99,17 +99,17 @@ describe("PGN persistence round-trip", () => {
   });
 
   it("shareGame writes the PGN into the URL and clipboard", async () => {
-    const getPGN = jest.fn(() => `[Event "Castles Game"]\n\n1. A`);
-    const loadPGN = jest.fn();
-    const clipboardWrite = jest.fn<Promise<void>, [string]>(() => Promise.resolve());
+    const getPGN = vi.fn(() => `[Event "Castles Game"]\n\n1. A`);
+    const loadPGN = vi.fn();
+    const clipboardWrite = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
     const originalClipboard = navigator.clipboard;
     Object.assign(navigator, {
       clipboard: {
         writeText: clipboardWrite,
       },
     });
-    const alert = jest.spyOn(window, "alert").mockImplementation(() => undefined);
-    const replaceState = jest.spyOn(window.history, "replaceState");
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const replaceState = vi.spyOn(window.history, "replaceState");
 
     const { result } = renderHook(() => usePersistence(getPGN, loadPGN, new MoveTree()));
 

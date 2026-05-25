@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-jest.mock("../PieceImages", () => ({
+vi.mock("../PieceImages", () => ({
   getImageByPieceType: () => "test-piece.svg",
 }));
 
@@ -10,13 +10,13 @@ import { ThemeProvider } from "../../contexts/ThemeContext";
 const renderRulesModal = () =>
   render(
     <ThemeProvider>
-      <RulesModal isOpen={true} onClose={jest.fn()} />
+      <RulesModal isOpen={true} onClose={vi.fn()} />
     </ThemeProvider>
   );
 
 describe("RulesModal", () => {
   it("renders quick rules and opens the full rules page in a new tab", () => {
-    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 
     renderRulesModal();
 

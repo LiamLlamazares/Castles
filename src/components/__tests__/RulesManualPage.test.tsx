@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-jest.mock("../PieceImages", () => ({
+vi.mock("../PieceImages", () => ({
   getImageByPieceType: () => "test-piece.svg",
 }));
 
