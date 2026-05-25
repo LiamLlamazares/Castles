@@ -8,31 +8,25 @@ import { getStartingLayout } from '../../ConstantImports';
 import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
 
-export function createM2L6(): TutorialLesson {
+export function createM5L7(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-4, 4, 0), 'w', 0), new Castle(new Hex(4, -4, 0), 'b', 0)];
   const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Eagle, new Hex(-3, 3, 0), 'w'),
+    PieceFactory.create(PieceType.Phoenix, new Hex(-3, 3, 0), 'w'),
     PieceFactory.create(PieceType.Swordsman, new Hex(-2, 2, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(-2, 3, -1), 'w'),
     PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
   ];
   const layout = getStartingLayout(board);
 
   return {
-    id: 'm2_l6_eagle',
-    title: '2.6 Eagle',
-    description: <PieceRules type={PieceType.Eagle} intro="The Eagle is a flying melee piece. It can pass over blockers and rivers, but still captures only by attacking adjacent enemies." />,
+    id: 'm5_l7_phoenix',
+    title: '5.7 Phoenix',
+    description: <PieceRules type={PieceType.Phoenix} intro="The Phoenix is a flying melee unit with a rebirth rule: the first death sends it away temporarily instead of removing it forever." />,
     board,
     pieces,
     layout,
-    objectives: ['Fly past the friendly blockers and threaten the enemy Swordsman.'],
-    hints: [
-      'Flying ignores blockers on the route.',
-      'The landing hex still must be empty and legal.',
-      'After moving the Eagle, use your remaining movement action or press Pass before the Attack phase begins.',
-      'Watch the phase icon beside the controls: Movement and Attack are separate.',
-    ],
+    objectives: ['Fly the Phoenix over the blocker and compare it with the Eagle.'],
+    hints: ['The respawn rule needs an actual death to demonstrate fully.', 'For this lesson, focus on the flying movement and strength.'],
   };
 }

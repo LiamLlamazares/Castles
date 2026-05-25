@@ -31,8 +31,14 @@ import { createM4L1 } from './lessons/m4_01_castle_control';
 import { createM4L2 } from './lessons/m4_02_recruitment';
 import { createM4L3 } from './lessons/m4_03_pledging';
 import { createM5L1 } from './lessons/m5_01_special_units';
-import { createM5L2 } from './lessons/m5_02_all_units_reference';
-import { createM5L3 } from './lessons/m5_03_walkthrough';
+import { createM5L2 } from './lessons/m5_02_wolf';
+import { createM5L3 } from './lessons/m5_03_healer';
+import { createM5L4 } from './lessons/m5_04_ranger';
+import { createM5L5 } from './lessons/m5_05_wizard';
+import { createM5L6 } from './lessons/m5_06_necromancer';
+import { createM5L7 } from './lessons/m5_07_phoenix';
+import { createM5L8 } from './lessons/m5_08_all_units_reference';
+import { createM5L9 } from './lessons/m5_09_walkthrough';
 
 export type { TutorialLesson } from './types';
 
@@ -66,5 +72,11 @@ export function getAllLessons(): TutorialLesson[] {
     createM5L1(),
     createM5L2(),
     createM5L3(),
+    createM5L4(),
+    createM5L5(),
+    createM5L6(),
+    createM5L7(),
+    createM5L8(),
+    createM5L9(),
   ];
 }

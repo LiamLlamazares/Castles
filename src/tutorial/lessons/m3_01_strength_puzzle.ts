@@ -12,9 +12,9 @@ export function createM3L1(): TutorialLesson {
   const board = new Board(boardConfig, castles);
   const pieces = [
     PieceFactory.create(PieceType.Swordsman, new Hex(-2, 2, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 2, -1), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'w'),
     PieceFactory.create(PieceType.Giant, new Hex(-1, 1, 0), 'b'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(2, 1, -3), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(1, 1, -2), 'w'),
     PieceFactory.create(PieceType.Giant, new Hex(2, 0, -2), 'b'),
     PieceFactory.create(PieceType.Dragon, new Hex(-3, 1, 2), 'w'),
     PieceFactory.create(PieceType.Assassin, new Hex(-2, 1, 1), 'b'),
@@ -30,8 +30,8 @@ export function createM3L1(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      'Find the Giant that needs two Swordsman attacks.',
-      'Find the Giant that a lone Swordsman cannot legally attack.',
+      'Find the Giant that can be captured because two Swordsmen can both attack it this phase.',
+      'Find the Giant that a lone Swordsman geometrically attacks but cannot legally start attacking because it cannot be captured this phase.',
       'Find the target the Dragon can overpower alone.',
     ],
     hints: [

@@ -8,31 +8,26 @@ import { getStartingLayout } from '../../ConstantImports';
 import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
 
-export function createM2L6(): TutorialLesson {
+export function createM5L5(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-4, 4, 0), 'w', 0), new Castle(new Hex(4, -4, 0), 'b', 0)];
   const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Eagle, new Hex(-3, 3, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(-2, 2, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(-2, 3, -1), 'w'),
+    PieceFactory.create(PieceType.Wizard, new Hex(-2, 0, 2), 'w'),
     PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(1, -2, 1), 'b'),
   ];
   const layout = getStartingLayout(board);
 
   return {
-    id: 'm2_l6_eagle',
-    title: '2.6 Eagle',
-    description: <PieceRules type={PieceType.Eagle} intro="The Eagle is a flying melee piece. It can pass over blockers and rivers, but still captures only by attacking adjacent enemies." />,
+    id: 'm5_l5_wizard',
+    title: '5.5 Wizard',
+    description: <PieceRules type={PieceType.Wizard} intro="The Wizard is a ranged unit with once-per-game magical abilities such as Fireball and Teleport." />,
     board,
     pieces,
     layout,
-    objectives: ['Fly past the friendly blockers and threaten the enemy Swordsman.'],
-    hints: [
-      'Flying ignores blockers on the route.',
-      'The landing hex still must be empty and legal.',
-      'After moving the Eagle, use your remaining movement action or press Pass before the Attack phase begins.',
-      'Watch the phase icon beside the controls: Movement and Attack are separate.',
-    ],
+    initialTurnCounter: 2,
+    objectives: ['Try a normal ranged attack, then inspect the ability controls.'],
+    hints: ['Fireball is strongest when enemies are clustered.', 'Teleport is for repositioning rather than direct damage.'],
   };
 }

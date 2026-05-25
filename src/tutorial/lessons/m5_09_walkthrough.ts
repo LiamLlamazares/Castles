@@ -6,7 +6,7 @@ import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
-export function createM5L3(): TutorialLesson {
+export function createM5L9(): TutorialLesson {
   const castles: Castle[] = [
     new Castle(new Hex(-4, 4, 0), 'w', 0),
     new Castle(new Hex(4, -4, 0), 'b', 0),
@@ -30,8 +30,8 @@ export function createM5L3(): TutorialLesson {
   const layout = getStartingLayout(board);
 
   return {
-    id: 'm5_l3_walkthrough',
-    title: '5.3 Practice game',
+    id: 'm5_l9_walkthrough',
+    title: '5.9 Practice game',
     description: 'A compact practice position that uses the core concepts together: phases, terrain, attacks, castles, and Monarch safety.',
     board,
     pieces,

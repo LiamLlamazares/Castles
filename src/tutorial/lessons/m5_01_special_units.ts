@@ -8,27 +8,27 @@ import { TutorialLesson } from '../types';
 
 export function createM5L1(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-4, 4, 0), 'w', 0), new Castle(new Hex(4, -4, 0), 'b', 0)];
-  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 100, hasHighGround: true };
+  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: true };
   const board = new Board(boardConfig, castles);
   const pieces = [
     PieceFactory.create(PieceType.Wolf, new Hex(-3, 3, 0), 'w'),
-    PieceFactory.create(PieceType.Wolf, new Hex(-2, 2, 0), 'w'),
-    PieceFactory.create(PieceType.Ranger, new Hex(-3, 2, 1), 'w'),
-    PieceFactory.create(PieceType.Wizard, new Hex(-2, 3, -1), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(1, -1, 0), 'b'),
+    PieceFactory.create(PieceType.Healer, new Hex(-2, 3, -1), 'w'),
+    PieceFactory.create(PieceType.Ranger, new Hex(-1, 3, -2), 'w'),
+    PieceFactory.create(PieceType.Wizard, new Hex(0, 3, -3), 'w'),
+    PieceFactory.create(PieceType.Necromancer, new Hex(1, 2, -3), 'w'),
+    PieceFactory.create(PieceType.Phoenix, new Hex(2, 1, -3), 'w'),
   ];
   const layout = getStartingLayout(board);
 
   return {
     id: 'm5_l1_special_units',
-    title: '5.1 Special units',
-    description: 'Special units come from sanctuaries. They are powerful but less central than the core rules, so this section is a reference and practice area after the main tutorial.',
+    title: '5.1 Special units overview',
+    description: 'Special units come from sanctuaries. This section is optional, but useful once you understand movement, attacks, castles, recruitment, and pledging.',
     board,
     pieces,
     layout,
-    objectives: ['Try the Wolf pack, Ranger range, and Wizard tools.'],
-    hints: ['Special abilities use the ability controls when available.', 'Some special pieces are still being tuned, so treat this section as a playground.'],
-    instructions: 'Experiment with the special pieces. You can stop here and play a real game, or continue to the full unit reference.',
+    objectives: ['Right-click each special unit to preview its role.'],
+    hints: ['The next lessons isolate each special unit one at a time.'],
+    instructions: 'This is a lineup, not a puzzle. Continue for individual special-unit lessons.',
   };
 }

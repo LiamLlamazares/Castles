@@ -14,29 +14,21 @@ export function createM0L1(): TutorialLesson {
   const boardConfig: BoardConfig = { nSquares: 3 };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Monarch, new Hex(-1, 1, 0), 'w'),
-    PieceFactory.create(PieceType.Dragon, new Hex(0, 0, 0), 'w'),
-    PieceFactory.create(PieceType.Monarch, new Hex(1, -1, 0), 'b'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(3, -3, 0), 'w'),
   ];
   const layout = getStartingLayout(board);
 
   return {
     id: 'm0_01_victory_conditions',
     title: '0.1 How to win',
-    description: 'There are two default ways to win: capture the enemy Monarch, or control every castle on the board. Some game setups can also enable victory points, but the core tutorial teaches the default rules first.',
+    description: 'One default way to win is to control every castle on the board. This position is already won for White: White controls both castles, including the black-side castle occupied by the white Swordsman.',
     board,
     pieces,
     layout,
+    initialTurnCounter: 5,
     objectives: [
-      'Find the enemy Monarch.',
-      'Right-click both castles and notice that White controls them.',
-      'Notice that controlling an enemy castle matters more than merely standing near it.',
+      'Right-click both castles and notice that White controls them. Because White controls every castle, White has won.',
     ],
-    hints: [
-      'A captured Monarch ends the game immediately.',
-      'A castle keeps its current controller even if the occupying piece leaves.',
-      'Victory points are an optional setup variant, not the baseline tutorial win condition.',
-    ],
-    instructions: 'This board shows both win ideas at once: White threatens the black Monarch and already controls the black-side castle.',
+    instructions: 'No need to move here. Just inspect the castles and notice their controller.',
   };
 }

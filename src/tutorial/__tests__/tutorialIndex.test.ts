@@ -4,6 +4,7 @@ import { GameState } from '../../Classes/Core/GameState';
 import { MoveTree } from '../../Classes/Core/MoveTree';
 import { Hex } from '../../Classes/Entities/Hex';
 import { Piece } from '../../Classes/Entities/Piece';
+import { PieceFactory } from '../../Classes/Entities/PieceFactory';
 import { createPieceMap } from '../../utils/PieceMap';
 import { getAllLessons } from '..';
 
@@ -62,8 +63,14 @@ describe('tutorial lesson index', () => {
       'm4_l2_recruitment',
       'm4_l3_pledging',
       'm5_l1_special_units',
-      'm5_l2_all_units_reference',
-      'm5_l3_walkthrough',
+      'm5_l2_wolf',
+      'm5_l3_healer',
+      'm5_l4_ranger',
+      'm5_l5_wizard',
+      'm5_l6_necromancer',
+      'm5_l7_phoenix',
+      'm5_l8_all_units_reference',
+      'm5_l9_walkthrough',
     ]);
   });
 
@@ -113,6 +120,60 @@ describe('tutorial lesson index', () => {
     expect(lessons.get('m3_l4_range_practice')?.initialTurnCounter).toBe(2);
     expect(lessons.get('m4_l2_recruitment')?.initialTurnCounter).toBe(4);
     expect(lessons.get('m4_l3_pledging')?.initialTurnCounter).toBe(4);
+  });
+
+  it('keeps the early victory lesson inspection-only', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm0_01_victory_conditions');
+    if (!lesson) throw new Error('Missing victory lesson');
+
+    expect(lesson.hints).toBeUndefined();
+    expect(lesson.board.castles.every((castle) => castle.owner === 'w')).toBe(true);
+    expect(lesson.pieces.every((piece) => piece.color === 'w')).toBe(true);
+    expect(lesson.initialTurnCounter).toBe(5);
+  });
+
+  it('sets up the phase overview so a moved Swordsman can capture next phase', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm2_00_game_phases_overview');
+    if (!lesson) throw new Error('Missing phase overview lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const movedState = createLessonState({
+      ...lesson,
+      initialTurnCounter: 2,
+      pieces: [
+        PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
+        PieceFactory.create(PieceType.Swordsman, new Hex(-2, 1, 1), 'w'),
+        PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
+        PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'b'),
+      ],
+    });
+    const movedSwordsman = findPiece(movedState.pieces, PieceType.Swordsman, new Hex(-1, 1, 0));
+
+    expect(engine.getLegalAttacks(movedState, movedSwordsman).some((hex) => hex.equals(new Hex(0, 0, 0)))).toBe(true);
+  });
+
+  it('sets up the Swordsman river lesson as move once, then capture', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm2_l3_swordsman_river');
+    if (!lesson) throw new Error('Missing Swordsman river lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const startState = createLessonState(lesson);
+    const startingSwordsman = findPiece(startState.pieces, PieceType.Swordsman, new Hex(0, 0, 0));
+    const advancedHex = new Hex(1, -1, 0);
+
+    expect(engine.getLegalMoves(startState, startingSwordsman).some((hex) => hex.equals(advancedHex))).toBe(true);
+
+    const attackState = createLessonState({
+      ...lesson,
+      initialTurnCounter: 2,
+      pieces: [
+        PieceFactory.create(PieceType.Swordsman, advancedHex, 'w'),
+        PieceFactory.create(PieceType.Giant, new Hex(2, -2, 0), 'b'),
+      ],
+    });
+    const advancedSwordsman = findPiece(attackState.pieces, PieceType.Swordsman, advancedHex);
+
+    expect(engine.getLegalAttacks(attackState, advancedSwordsman).some((hex) => hex.equals(new Hex(2, -2, 0)))).toBe(true);
   });
 
   it('gives attack-phase lessons at least one legal attack for the side to move', () => {

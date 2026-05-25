@@ -24,7 +24,7 @@ export function createM3L4(): TutorialLesson {
   return {
     id: 'm3_l4_range_practice',
     title: '3.4 Range practice',
-    description: 'Archers, Trebuchets, and melee pieces want different distances. This board gives you nearby, medium, and long targets to compare.',
+    description: 'Archers, Trebuchets, and melee pieces want exact distances. Archers attack exactly range 2, Trebuchets attack exactly range 3, and high ground extends those exact ranges by 1.',
     board,
     pieces,
     layout,
@@ -36,8 +36,8 @@ export function createM3L4(): TutorialLesson {
       'Move onto high ground and compare extended range.',
     ],
     hints: [
-      'Archer: range 2, or 3 from high ground.',
-      'Trebuchet: range 3, or 4 from high ground.',
+      'Archer: exactly range 2, or exactly range 3 from high ground.',
+      'Trebuchet: exactly range 3, or exactly range 4 from high ground.',
       'Melee pieces attack adjacent enemies only.',
     ],
     instructions: 'Move the ranged pieces around and click targets. The useful lesson here is what does not light up as much as what does.',

@@ -47,9 +47,9 @@ function UnitList({ title, pieces }: { title: string; pieces: PieceType[] }): Re
   );
 }
 
-export function createM5L2(): TutorialLesson {
+export function createM5L8(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-4, 4, 0), 'w', 0), new Castle(new Hex(4, -4, 0), 'b', 0)];
-  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 100, hasHighGround: false };
+  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
     PieceFactory.create(PieceType.Swordsman, new Hex(-4, 3, 1), 'w'),
@@ -65,8 +65,8 @@ export function createM5L2(): TutorialLesson {
   const layout = getStartingLayout(board);
 
   return {
-    id: 'm5_l2_all_units_reference',
-    title: '5.2 All units reference',
+    id: 'm5_l8_all_units_reference',
+    title: '5.8 All units reference',
     description: (
       <div>
         <p style={{ marginTop: 0 }}>A compact rule card for every current unit. Use this as a lookup after the interactive lessons.</p>
