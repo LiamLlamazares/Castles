@@ -165,6 +165,8 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
           initialLayout={lesson.layout}
           initialTurnCounter={lesson.initialTurnCounter}
           initialSanctuaries={lesson.sanctuaries}
+          initialGraveyard={lesson.graveyard}
+          initialPhoenixRecords={lesson.phoenixRecords}
           isTutorialMode={true}
           isAnalysisMode={true}
           onSetup={() => {}}

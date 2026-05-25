@@ -11,6 +11,7 @@ interface LegalMoveOverlayProps {
   hexagons: Hex[];
   legalMoveSet: Set<string>;
   legalAttackSet: Set<string>;
+  abilityTargetSet?: Set<string>;
   isBoardRotated: boolean;
   onHexClick: (hex: Hex) => void;
   layout: LayoutService;
@@ -49,6 +50,7 @@ const LegalMoveOverlay = React.memo(({
   hexagons,
   legalMoveSet,
   legalAttackSet,
+  abilityTargetSet = new Set<string>(),
   isBoardRotated,
   onHexClick,
   layout
@@ -62,6 +64,10 @@ const LegalMoveOverlay = React.memo(({
       {Array.from(legalAttackSet).map((key) => {
         const hex = Hex.fromKey(key);
         return renderCircle(hex, "legalAttackDot", isBoardRotated, onHexClick, layout);
+      })}
+      {Array.from(abilityTargetSet).map((key) => {
+        const hex = Hex.fromKey(key);
+        return renderCircle(hex, "legalAbilityDot", isBoardRotated, onHexClick, layout);
       })}
     </>
   );

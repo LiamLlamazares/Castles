@@ -13,9 +13,9 @@ export function createM5L7(): TutorialLesson {
   const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Phoenix, new Hex(-3, 3, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(-2, 2, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
+    PieceFactory.create(PieceType.Phoenix, new Hex(-1, 1, 0), 'w'),
+    PieceFactory.create(PieceType.Eagle, new Hex(-3, 3, 0), 'w'),
+    PieceFactory.create(PieceType.Giant, new Hex(0, 0, 0), 'b'),
   ];
   const layout = getStartingLayout(board);
 
@@ -26,7 +26,16 @@ export function createM5L7(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Fly the Phoenix over the blocker and compare it with the Eagle.'],
-    hints: ['The respawn rule needs an actual death to demonstrate fully.', 'For this lesson, focus on the flying movement and strength.'],
+    initialTurnCounter: 7,
+    phoenixRecords: [{ respawnTurn: 8, owner: 'w' }],
+    objectives: [
+      'As Black, capture the nearby Phoenix with the Giant, or pass once to watch the prepared rebirth trigger.',
+      'Compare the Phoenix with the Eagle: both fly, but only the Phoenix has rebirth.',
+    ],
+    hints: [
+      'The prepared rebirth record is included so you can see a Phoenix return without passing through 3 full player turns.',
+      'A newly killed Phoenix still schedules its normal 3-full-player-turn return.',
+      'When a Phoenix returns, it looks for a friendly castle or adjacent open hex; if blocked, it waits and tries again later.',
+    ],
   };
 }

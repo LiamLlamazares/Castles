@@ -1,4 +1,4 @@
-import { PieceType } from '../../Constants';
+import { AbilityType, PieceType } from '../../Constants';
 import { GameEngine } from '../../Classes/Core/GameEngine';
 import { GameState } from '../../Classes/Core/GameState';
 import { MoveTree } from '../../Classes/Core/MoveTree';
@@ -17,8 +17,8 @@ const createLessonState = (lesson: ReturnType<typeof getAllLessons>[number]): Ga
   turnCounter: lesson.initialTurnCounter ?? 0,
   movingPiece: null,
   moveTree: new MoveTree(),
-  graveyard: [],
-  phoenixRecords: [],
+  graveyard: lesson.graveyard ?? [],
+  phoenixRecords: lesson.phoenixRecords ?? [],
   viewNodeId: null,
 });
 
@@ -120,6 +120,8 @@ describe('tutorial lesson index', () => {
     expect(lessons.get('m3_l4_range_practice')?.initialTurnCounter).toBe(2);
     expect(lessons.get('m4_l2_recruitment')?.initialTurnCounter).toBe(4);
     expect(lessons.get('m4_l3_pledging')?.initialTurnCounter).toBe(4);
+    expect(lessons.get('m5_l2_wolf')?.initialTurnCounter).toBe(0);
+    expect(lessons.get('m5_l3_healer')?.initialTurnCounter).toBe(0);
   });
 
   it('keeps the early victory lesson inspection-only', () => {
@@ -198,6 +200,113 @@ describe('tutorial lesson index', () => {
     }
   });
 
+  it('sets up the Wolf lesson as move into pack range, then capture the Giant', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm5_l2_wolf');
+    if (!lesson) throw new Error('Missing Wolf lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const startState = createLessonState(lesson);
+    const startingWolf = findPiece(startState.pieces, PieceType.Wolf, new Hex(-3, 2, 1));
+    const packHex = new Hex(-1, 0, 1);
+    const giantHex = new Hex(0, 0, 0);
+
+    expect(engine.getLegalMoves(startState, startingWolf).some((hex) => hex.equals(packHex))).toBe(true);
+
+    const attackState = createLessonState({
+      ...lesson,
+      initialTurnCounter: 2,
+      pieces: [
+        PieceFactory.create(PieceType.Wolf, packHex, 'w'),
+        PieceFactory.create(PieceType.Wolf, new Hex(-1, 1, 0), 'w'),
+        PieceFactory.create(PieceType.Giant, giantHex, 'b'),
+      ],
+    });
+    const packedWolf = findPiece(attackState.pieces, PieceType.Wolf, packHex);
+
+    expect(engine.getLegalAttacks(attackState, packedWolf).some((hex) => hex.equals(giantHex))).toBe(true);
+    expect(engine.applyAttack(attackState, packedWolf, giantHex).pieces.some((piece) => piece.type === PieceType.Giant && piece.hex.equals(giantHex))).toBe(false);
+  });
+
+  it('sets up the Healer lesson as move into aura range, then capture the Giant', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm5_l3_healer');
+    if (!lesson) throw new Error('Missing Healer lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const startState = createLessonState(lesson);
+    expect(lesson.board.riverHexes.length).toBeGreaterThan(0);
+
+    const swordsman = findPiece(startState.pieces, PieceType.Swordsman, new Hex(-2, 2, 0));
+    const healer = findPiece(startState.pieces, PieceType.Healer, new Hex(1, 1, -2));
+    const swordsmanAuraHex = new Hex(-1, 1, 0);
+    const healerAuraHex = new Hex(0, 1, -1);
+    const giantHex = new Hex(0, 0, 0);
+
+    expect(swordsman.hex.r).toBeGreaterThan(0);
+    expect(healer.hex.distance(swordsman.hex)).toBeGreaterThan(1);
+    expect(engine.getLegalMoves(startState, swordsman).some((hex) => hex.equals(swordsmanAuraHex))).toBe(true);
+    expect(engine.getLegalMoves(startState, healer).some((hex) => hex.equals(healerAuraHex))).toBe(true);
+
+    const attackState = createLessonState({
+      ...lesson,
+      initialTurnCounter: 2,
+      pieces: [
+        PieceFactory.create(PieceType.Healer, healerAuraHex, 'w'),
+        PieceFactory.create(PieceType.Swordsman, swordsmanAuraHex, 'w'),
+        PieceFactory.create(PieceType.Giant, giantHex, 'b'),
+      ],
+    });
+    const strengthenedSwordsman = findPiece(attackState.pieces, PieceType.Swordsman, swordsmanAuraHex);
+
+    expect(engine.getLegalAttacks(attackState, strengthenedSwordsman).some((hex) => hex.equals(giantHex))).toBe(true);
+    expect(engine.applyAttack(attackState, strengthenedSwordsman, giantHex).pieces.some((piece) => piece.type === PieceType.Giant && piece.hex.equals(giantHex))).toBe(false);
+  });
+
+  it('sets up the Wizard lesson off river and lets Fireball kill multiple weak pieces', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm5_l5_wizard');
+    if (!lesson) throw new Error('Missing Wizard lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const state = createLessonState(lesson);
+    const wizard = findPiece(state.pieces, PieceType.Wizard, new Hex(-2, 1, 1));
+    const targetHex = new Hex(0, -1, 1);
+
+    expect(lesson.board.riverHexSet.has(wizard.hex.getKey())).toBe(false);
+    expect(engine.getAbilityTargets(state, wizard, AbilityType.Fireball).some((hex) => hex.equals(targetHex))).toBe(true);
+
+    const afterFireball = engine.activateAbility(state, wizard.hex, targetHex, AbilityType.Fireball);
+
+    expect(afterFireball.pieces.some((piece) => piece.type === PieceType.Swordsman && piece.hex.equals(targetHex))).toBe(false);
+    expect(afterFireball.pieces.some((piece) => piece.type === PieceType.Archer && piece.hex.equals(new Hex(0, 0, 0)))).toBe(false);
+    expect(afterFireball.pieces.find((piece) => piece.type === PieceType.Giant && piece.hex.equals(new Hex(1, -1, 0)))?.damage).toBe(1);
+  });
+
+  it('sets up the Necromancer lesson so Black can create a graveyard piece and White can raise it', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm5_l6_necromancer');
+    if (!lesson) throw new Error('Missing Necromancer lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const state = createLessonState(lesson);
+    const blackGiant = findPiece(state.pieces, PieceType.Giant, new Hex(0, 0, 0));
+    const victimHex = new Hex(-1, 1, 0);
+
+    expect(lesson.initialTurnCounter).toBe(7);
+    expect(engine.getLegalAttacks(state, blackGiant).some((hex) => hex.equals(victimHex))).toBe(true);
+
+    const afterCapture = engine.applyAttack(state, blackGiant, victimHex);
+    expect(afterCapture.graveyard.some((piece) => piece.color === 'w' && piece.type === PieceType.Swordsman)).toBe(true);
+
+    const whiteNecromancer = findPiece(afterCapture.pieces, PieceType.Necromancer, new Hex(-2, 1, 1));
+    expect(whiteNecromancer.souls).toBe(1);
+  });
+
+  it('sets up the Phoenix lesson with an Eagle comparison and a pending rebirth demonstration', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm5_l7_phoenix');
+    if (!lesson) throw new Error('Missing Phoenix lesson');
+
+    expect(lesson.pieces.some((piece) => piece.type === PieceType.Eagle)).toBe(true);
+    expect(lesson.phoenixRecords?.some((record) => record.owner === 'w')).toBe(true);
+  });
+
   it('lets the defense follow-up lesson break defense then fire with the Archer', () => {
     const lesson = getAllLessons().find((candidate) => candidate.id === 'm3_l3_defense_followup');
     if (!lesson) throw new Error('Missing defense follow-up lesson');
@@ -224,10 +333,40 @@ describe('tutorial lesson index', () => {
 
     const recruitmentEngine = new GameEngine(recruitmentLesson.board);
     const recruitmentState = createLessonState(recruitmentLesson);
+    expect(recruitmentLesson.board.castles.find((castle) => castle.hex.equals(new Hex(3, -3, 0)))?.owner).toBe('w');
+    expect(findPiece(recruitmentLesson.pieces, PieceType.Swordsman, new Hex(3, -3, 0))).toBeTruthy();
     expect(recruitmentEngine.getRecruitmentHexes(recruitmentState).length).toBeGreaterThan(0);
 
     const pledgeEngine = new GameEngine(pledgeLesson.board);
     const pledgeState = createLessonState(pledgeLesson);
     expect(pledgeEngine.canPledge(pledgeState, pledgeLesson.sanctuaries![0].hex)).toBe(true);
+  });
+
+  it('shows every standard and sanctuary unit on the all-units reference board', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm5_l8_all_units_reference');
+    if (!lesson) throw new Error('Missing all-units reference lesson');
+
+    const typesOnBoard = new Set(lesson.pieces.map((piece) => piece.type));
+    const expectedTypes = [
+      PieceType.Swordsman,
+      PieceType.Archer,
+      PieceType.Knight,
+      PieceType.Eagle,
+      PieceType.Giant,
+      PieceType.Trebuchet,
+      PieceType.Assassin,
+      PieceType.Dragon,
+      PieceType.Monarch,
+      PieceType.Wolf,
+      PieceType.Healer,
+      PieceType.Ranger,
+      PieceType.Wizard,
+      PieceType.Necromancer,
+      PieceType.Phoenix,
+    ];
+
+    for (const pieceType of expectedTypes) {
+      expect(typesOnBoard.has(pieceType)).toBe(true);
+    }
   });
 });

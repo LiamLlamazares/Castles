@@ -13,7 +13,7 @@ export function createM4L2(): TutorialLesson {
   ];
   const boardConfig: BoardConfig = { nSquares: 3, riverCrossingLength: 1, hasHighGround: false };
   const board = new Board(boardConfig, castles);
-  const pieces = [PieceFactory.create(PieceType.Swordsman, new Hex(1, -1, 0), 'w')];
+  const pieces = [PieceFactory.create(PieceType.Swordsman, new Hex(3, -3, 0), 'w')];
   const layout = getStartingLayout(board);
 
   return {
@@ -25,7 +25,7 @@ export function createM4L2(): TutorialLesson {
     layout,
     initialTurnCounter: 4,
     objectives: [
-      'Reach the Castles phase.',
+      'Use the Castles phase from the already-captured black-side castle.',
       'Recruit beside the captured black-side castle, not the white-side castle.',
       'Notice river hexes are not legal recruitment targets.',
     ],
@@ -34,6 +34,6 @@ export function createM4L2(): TutorialLesson {
       'The next recruitment piece comes from the castle cycle shown in its tooltip.',
       'Only empty, non-river adjacent hexes are valid recruitment squares.',
     ],
-    instructions: 'Pass to the Castles phase if needed, then recruit from the captured enemy castle on the black side.',
+    instructions: 'You are already in the Castles phase. Recruit from the captured enemy castle on the black side.',
   };
 }

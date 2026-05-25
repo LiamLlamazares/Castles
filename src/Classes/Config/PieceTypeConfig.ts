@@ -215,7 +215,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Wolf]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Pack Tactics: Gains +1 strength for each adjacent friendly Wolf. Moves 2 hexes, attacks adjacent.",
+    description: "Pack Tactics: Gains +1 strength for each adjacent friendly Wolf. Moves 3 hexes, attacks adjacent.",
     moveStrategy: (hex, blocked, valid) => wolfMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },
@@ -231,7 +231,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Ranger]: {
     strength: 1,
     attackType: AttackType.LongRanged,
-    description: "Enhanced Archer. Moves 2 hexes, attacks at range 3 (or 4 from high ground).",
+    description: "Enhanced Archer. Moves 2 hexes, attacks at exactly range 3 (or exactly 4 from high ground).",
     moveStrategy: (hex, blocked, valid) => rangerMoves(hex, blocked, valid),
     attackStrategy: longRangedAttackStrategy,
   },
@@ -239,7 +239,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Wizard]: {
     strength: 1,
     attackType: AttackType.Ranged,
-    description: "Moves 1 hex, attacks at range 2. Ability (once per game): Fireball deals 1 damage to target hex + ring 1 (7 hexes total).",
+    description: "Moves 1 hex, attacks at exactly range 2. Ability (once per game): Fireball deals 1 damage to target hex + ring 1 (7 hexes total).",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: rangedAttackStrategy,
     abilities: [AbilityType.Fireball, AbilityType.Teleport],
@@ -248,7 +248,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Necromancer]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Moves 1 hex, attacks adjacent. Collects souls from nearby deaths. Ability: Spend 1 soul to raise a dead friendly piece.",
+    description: "Moves 1 hex, attacks adjacent. Starts with 1 soul and gains +1 soul when it captures. Ability: spend 1 soul to raise any one dead friendly piece.",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
     abilities: [AbilityType.RaiseDead],
@@ -257,7 +257,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Phoenix]: {
     strength: 2,
     attackType: AttackType.Melee,
-    description: "Flies up to 3 hexes. Attacks adjacent. First death: Respawns after 3 turns at original sanctuary. Second death: Permanent.",
+    description: "Flies up to 3 hexes. Attacks adjacent. First death: respawns after 3 full player turns at a friendly castle or adjacent open hex. Second death: permanent.",
     moveStrategy: (hex, blocked, valid) => eagleMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },

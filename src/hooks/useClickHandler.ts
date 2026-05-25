@@ -32,6 +32,10 @@ interface UseClickHandlerProps {
   pledge: (sanctuaryHex: Hex, spawnHex: Hex) => void;
   /** Execute an ability (Wizard/Necromancer) */
   triggerAbility: (sourceHex: Hex, targetHex: Hex, ability: AbilityType) => void;
+  /** Controlled ability targeting mode from the visible ability bar */
+  activeAbility?: AbilityType | null;
+  /** Controlled ability targeting setter from the visible ability bar */
+  setActiveAbility?: (ability: AbilityType | null) => void;
   /** Normal hex click handler from game engine */
   onEngineHexClick: (hex: Hex) => void;
   /** Board instance for terrain checks */
@@ -68,11 +72,15 @@ export function useClickHandler({
   canPledge, // Kept for API compatibility, but logic delegated to Policy if needed
   pledge,
   triggerAbility,
+  activeAbility: controlledActiveAbility,
+  setActiveAbility: controlledSetActiveAbility,
   onEngineHexClick,
   board,
   gameState
 }: UseClickHandlerProps): UseClickHandlerResult {
-  const [activeAbility, setActiveAbility] = useState<AbilityType | null>(null);
+  const [internalActiveAbility, setInternalActiveAbility] = useState<AbilityType | null>(null);
+  const activeAbility = controlledActiveAbility !== undefined ? controlledActiveAbility : internalActiveAbility;
+  const setActiveAbility = controlledSetActiveAbility || setInternalActiveAbility;
   const [pledgingSanctuary, setPledgingSanctuary] = useState<Hex | null>(null);
 
   // Policy Context
@@ -85,7 +93,7 @@ export function useClickHandler({
   useEffect(() => {
     setActiveAbility(null);
     setPledgingSanctuary(null);
-  }, [movingPiece]);
+  }, [movingPiece, setActiveAbility]);
 
   /**
    * Main click handler - processes in priority order
@@ -165,6 +173,7 @@ export function useClickHandler({
       sanctuaries,
       pledge,
       triggerAbility,
+      setActiveAbility,
       onEngineHexClick,
       interactionCtx 
     ]

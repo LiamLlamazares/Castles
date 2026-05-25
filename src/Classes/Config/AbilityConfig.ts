@@ -72,7 +72,7 @@ export const AbilityTypeConfig: Record<AbilityType, AbilityConfig> = {
     range: 1,
     minRange: 1,
     description:
-      "Spend 1 soul to revive a friendly piece from the graveyard at an adjacent hex. Revived pieces are exiled if killed again.",
+      "Spend 1 soul to revive any one friendly piece from the graveyard at an adjacent hex. Revived pieces are exiled if killed again.",
     oneTimeUse: false, // Can use multiple times if enough souls
     aoeRadius: 0,
   },

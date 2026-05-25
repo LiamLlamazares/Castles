@@ -61,6 +61,12 @@ export function createM5L8(): TutorialLesson {
     PieceFactory.create(PieceType.Assassin, new Hex(2, 1, -3), 'w'),
     PieceFactory.create(PieceType.Dragon, new Hex(3, 0, -3), 'w'),
     PieceFactory.create(PieceType.Monarch, new Hex(4, -1, -3), 'w'),
+    PieceFactory.create(PieceType.Wolf, new Hex(-4, 1, 3), 'w'),
+    PieceFactory.create(PieceType.Healer, new Hex(-3, 1, 2), 'w'),
+    PieceFactory.create(PieceType.Ranger, new Hex(-2, 1, 1), 'w'),
+    PieceFactory.create(PieceType.Wizard, new Hex(-1, 1, 0), 'w'),
+    PieceFactory.create(PieceType.Necromancer, new Hex(0, 1, -1), 'w'),
+    PieceFactory.create(PieceType.Phoenix, new Hex(1, 1, -2), 'w'),
   ];
   const layout = getStartingLayout(board);
 
@@ -77,6 +83,6 @@ export function createM5L8(): TutorialLesson {
     board,
     pieces,
     layout,
-    instructions: 'Right-click the pieces on the board and compare them with the reference text.',
+    instructions: 'Right-click the standard row and the sanctuary-piece row on the board, then compare them with the reference text.',
   };
 }

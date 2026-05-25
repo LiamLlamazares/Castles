@@ -62,6 +62,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const initialSanctuaries = config?.sanctuaries;
   const initialMoveTree = config?.moveTree;
   const initialPoolTypes = config?.poolTypes;
+  const initialGraveyard = config?.graveyard ?? [];
+  const initialPhoenixRecords = config?.phoenixRecords ?? [];
   
   // Extract rules
   const sanctuarySettings = rules?.sanctuarySettings;
@@ -82,7 +84,9 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     initialMoveTree,
     sanctuarySettings,
     gameRules,
-    initialPoolTypes
+    initialPoolTypes,
+    initialGraveyard,
+    initialPhoenixRecords
   );
 
   // =========== COMPOSED HOOKS ===========

@@ -10,12 +10,12 @@ import { TutorialLesson } from '../types';
 
 export function createM5L2(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-4, 4, 0), 'w', 0), new Castle(new Hex(4, -4, 0), 'b', 0)];
-  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: false };
+  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
+    PieceFactory.create(PieceType.Wolf, new Hex(-3, 2, 1), 'w'),
     PieceFactory.create(PieceType.Wolf, new Hex(-1, 1, 0), 'w'),
-    PieceFactory.create(PieceType.Wolf, new Hex(-1, 2, -1), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
+    PieceFactory.create(PieceType.Giant, new Hex(0, 0, 0), 'b'),
   ];
   const layout = getStartingLayout(board);
 
@@ -26,8 +26,12 @@ export function createM5L2(): TutorialLesson {
     board,
     pieces,
     layout,
-    initialTurnCounter: 2,
-    objectives: ['Attack with a Wolf and compare the clustered pack position.'],
-    hints: ['Wolf strength is easiest to understand by keeping Wolves near each other.', 'Right-click both Wolves before attacking.'],
+    initialTurnCounter: 0,
+    objectives: ['Move the left Wolf beside the other Wolf, then capture the Giant during the Attack phase.'],
+    hints: [
+      'A Wolf moves up to 3 hexes, so it can join the pack quickly.',
+      'A Wolf beside another friendly Wolf reaches strength 2 and can defeat a Giant.',
+      'Right-click the clustered Wolf before attacking to see the pack bonus.',
+    ],
   };
 }

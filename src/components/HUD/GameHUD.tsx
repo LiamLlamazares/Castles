@@ -10,6 +10,7 @@ import { useTooltip } from "../../hooks/useTooltip";
 import { Sanctuary } from "../../Classes/Entities/Sanctuary";
 import { AbilityType } from "../../Constants";
 import { Board } from "../../Classes/Core/Board";
+import { CombatSystem } from "../../Classes/Systems/CombatSystem";
 
 interface GameHUDProps {
   tooltip: ReturnType<typeof useTooltip>;
@@ -32,7 +33,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       victoryMessage,
       turnPhase,
       currentPlayer,
-      board
+      board,
+      pieceMap
   } = useGameState();
 
   const {
@@ -79,6 +81,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {tooltip.piece && (
         <PieceTooltip 
           piece={tooltip.piece} 
+          combatStrength={
+            tooltip.isSanctuaryPreview
+              ? undefined
+              : CombatSystem.getCombatStrength(tooltip.piece, pieceMap)
+          }
+          combatBonusLabels={
+            tooltip.isSanctuaryPreview
+              ? []
+              : CombatSystem.getCombatBonusLabels(tooltip.piece, pieceMap)
+          }
           isDefended={isHexDefended(
             tooltip.piece.hex, 
             tooltip.piece.color === 'w' ? 'b' : 'w'

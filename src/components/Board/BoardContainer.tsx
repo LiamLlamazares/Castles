@@ -7,11 +7,12 @@ import { Piece } from "../../Classes/Entities/Piece";
 import { Sanctuary } from "../../Classes/Entities/Sanctuary";
 import { Hex } from "../../Classes/Entities/Hex";
 import { PieceFactory } from "../../Classes/Entities/PieceFactory";
-import { SanctuaryConfig, PieceTheme } from "../../Constants";
+import { SanctuaryConfig, PieceTheme, AbilityType } from "../../Constants";
 import { useGameState, useGameActions } from "../../contexts/GameContext";
 import { useClickHandler } from "../../hooks/useClickHandler";
 import { useTooltip } from "../../hooks/useTooltip";
 import { useGameView } from "../../hooks/useGameView";
+import { AbilitySystem } from "../../Classes/Systems/AbilitySystem";
 
 interface BoardContainerProps {
   layout: LayoutService;
@@ -22,6 +23,8 @@ interface BoardContainerProps {
   // View State Props (passed from parent to ensure sync with Menu)
   viewState: ReturnType<typeof useGameView>;
   
+  activeAbility?: AbilityType | null;
+  onAbilitySelect?: (ability: AbilityType | null) => void;
   onActiveAbilityChange?: (ability: import("../../Constants").AbilityType | null) => void;
   containerStyle?: React.CSSProperties;
 }
@@ -32,9 +35,12 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
   isInitialLoad,
   tooltip,
   viewState,
+  activeAbility: controlledActiveAbility,
+  onAbilitySelect,
   onActiveAbilityChange,
   containerStyle
 }) => {
+  const gameState = useGameState();
   const {
       pieces,
       castles,
@@ -48,7 +54,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
       board,
       movingPiece,
       winner
-  } = useGameState();
+  } = gameState;
 
   const {
       handlePieceClick,
@@ -78,10 +84,29 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
             triggerAbility(piece, targetHex, ability);
         }
     },
+    activeAbility: controlledActiveAbility,
+    setActiveAbility: onAbilitySelect,
     onEngineHexClick,
     board,
-    gameState: useGameState() // Context state aligns with GameState interface
+    gameState // Context state aligns with GameState interface
   });
+
+  const boardHexKeySet = useMemo(
+    () => new Set(hexagons.map((hex) => hex.getKey())),
+    [hexagons]
+  );
+
+  const emptyOverlaySet = useMemo(() => new Set<string>(), []);
+
+  const abilityTargetSet = useMemo(() => {
+    if (!activeAbility || !movingPiece) return emptyOverlaySet;
+
+    return new Set(
+      AbilitySystem.getValidTargets(movingPiece, activeAbility, gameState)
+        .filter((hex) => boardHexKeySet.has(hex.getKey()))
+        .map((hex) => hex.getKey())
+    );
+  }, [activeAbility, boardHexKeySet, emptyOverlaySet, gameState, movingPiece]);
 
   // Notify parent of active ability changes if needed (for AbilityBar)
   React.useEffect(() => {
@@ -193,8 +218,9 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
         />
         <LegalMoveOverlay
           hexagons={hexagons}
-          legalMoveSet={legalMoveSet}
-          legalAttackSet={legalAttackSet}
+          legalMoveSet={activeAbility ? emptyOverlaySet : legalMoveSet}
+          legalAttackSet={activeAbility ? emptyOverlaySet : legalAttackSet}
+          abilityTargetSet={abilityTargetSet}
           isBoardRotated={viewState.isBoardRotated}
           onHexClick={handleBoardClick}
           layout={layout}

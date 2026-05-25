@@ -10,11 +10,13 @@ import { TutorialLesson } from '../types';
 
 export function createM5L4(): TutorialLesson {
   const castles: Castle[] = [new Castle(new Hex(-4, 4, 0), 'w', 0), new Castle(new Hex(4, -4, 0), 'b', 0)];
-  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: true };
+  const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
     PieceFactory.create(PieceType.Ranger, new Hex(-3, 0, 3), 'w'),
     PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(-2, 1, 1), 'b'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(1, -2, 1), 'b'),
   ];
   const layout = getStartingLayout(board);
 
@@ -26,7 +28,11 @@ export function createM5L4(): TutorialLesson {
     pieces,
     layout,
     initialTurnCounter: 2,
-    objectives: ['Attack the enemy from long range with the Ranger.'],
-    hints: ['Like other ranged pieces, distance matters.', 'High ground can extend ranged attacks.'],
+    objectives: ['Attack the enemy exactly 3 hexes away with the Ranger.'],
+    hints: [
+      'The Ranger cannot attack adjacent or range-2 enemies.',
+      'Without high ground, the Ranger attacks exactly 3 hexes away.',
+      'High ground can extend this to exactly 4 hexes in other positions.',
+    ],
   };
 }

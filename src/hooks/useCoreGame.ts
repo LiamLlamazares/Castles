@@ -35,7 +35,9 @@ export const useCoreGame = (
   initialMoveTree?: MoveTree,
   sanctuarySettings?: { unlockTurn: number, cooldown: number },
   gameRules?: { vpModeEnabled: boolean },
-  initialPoolTypes?: import("../Constants").SanctuaryType[]
+  initialPoolTypes?: import("../Constants").SanctuaryType[],
+  initialGraveyard: Piece[] = [],
+  initialPhoenixRecords: import("../Classes/Core/GameState").PhoenixRecord[] = []
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -73,12 +75,12 @@ export const useCoreGame = (
       sanctuaries: startingSanctuaries.map(s => s.clone()),
       turnCounter: 0,
       sanctuaryPool: initialPool,
-      graveyard: [],
-      phoenixRecords: []
+      graveyard: initialGraveyard,
+      phoenixRecords: initialPhoenixRecords
     };
     
     return tree;
-  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries]);
+  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries, initialGraveyard, initialPhoenixRecords]);
 
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>({
@@ -107,8 +109,8 @@ export const useCoreGame = (
     
     // History Navigation (node-based)
     viewNodeId: null,  // Node ID for tree navigation (null = live)
-    graveyard: [],
-    phoenixRecords: []
+    graveyard: initialGraveyard,
+    phoenixRecords: initialPhoenixRecords
   });
 
   return {

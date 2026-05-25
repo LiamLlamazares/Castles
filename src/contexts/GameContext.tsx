@@ -15,7 +15,7 @@ import { MoveTree } from "../Classes/Core/MoveTree";
 import { MoveRecord, TurnPhase, Color, SanctuaryType, PieceType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
-import { GameState, PositionSnapshot } from "../Classes/Core/GameState";
+import { GameState, PositionSnapshot, PhoenixRecord } from "../Classes/Core/GameState";
 
 // ============================================================================
 // CONFIGURATION INTERFACES
@@ -33,6 +33,8 @@ export interface GameConfig {
   turnCounter?: number;
   moveTree?: MoveTree;
   poolTypes?: SanctuaryType[];
+  graveyard?: Piece[];
+  phoenixRecords?: PhoenixRecord[];
 }
 
 /**

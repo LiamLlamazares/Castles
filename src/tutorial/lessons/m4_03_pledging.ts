@@ -33,6 +33,6 @@ export function createM4L3(): TutorialLesson {
       'The sanctuary tooltip shows the special unit and requirement.',
       'After this lesson you know enough to start playing; the next section is optional special-unit reference.',
     ],
-    instructions: 'Move or pass until the Castles phase, then use the sanctuary. You are ready to play after this; continue if you want the special-unit tour.',
+    instructions: 'You are already in the Castles phase. Use the sanctuary to pledge. You are ready to play after this; continue if you want the special-unit tour.',
   };
 }

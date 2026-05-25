@@ -13,9 +13,12 @@ export function createM5L5(): TutorialLesson {
   const boardConfig: BoardConfig = { nSquares: 4, riverCrossingLength: 2, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Wizard, new Hex(-2, 0, 2), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(1, -2, 1), 'b'),
+    PieceFactory.create(PieceType.Wizard, new Hex(-2, 1, 1), 'w'),
+    PieceFactory.create(PieceType.Archer, new Hex(-2, 3, -1), 'w'),
+    PieceFactory.create(PieceType.Archer, new Hex(0, 1, -1), 'b'),
+    PieceFactory.create(PieceType.Archer, new Hex(0, 0, 0), 'b'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, -1, 1), 'b'),
+    PieceFactory.create(PieceType.Giant, new Hex(1, -1, 0), 'b'),
   ];
   const layout = getStartingLayout(board);
 
@@ -27,7 +30,14 @@ export function createM5L5(): TutorialLesson {
     pieces,
     layout,
     initialTurnCounter: 2,
-    objectives: ['Try a normal ranged attack, then inspect the ability controls.'],
-    hints: ['Fireball is strongest when enemies are clustered.', 'Teleport is for repositioning rather than direct damage.'],
+    objectives: ['Select the Wizard, use Fireball on the clustered Swordsman, and notice it can kill multiple weak pieces while only damaging the Giant.'],
+    hints: [
+      'The Wizard normally attacks exactly 2 hexes away.',
+      'Fireball targets within range 2 and deals 1 damage to the target and adjacent pieces.',
+      'The Wizard starts off the river; the river is only there for terrain context.',
+      'The extra Archer shows the normal range while the clustered Swordsman, Archer, and Giant show Fireball splash.',
+      'The friendly Archer keeps another attack available so you can inspect the Giant after Fireball damage.',
+      'Teleport is for repositioning rather than direct damage.',
+    ],
   };
 }
