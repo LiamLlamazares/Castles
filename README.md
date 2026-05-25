@@ -36,6 +36,13 @@ The app is organized around a React UI and a TypeScript game engine.
 
 The canonical rules source is the in-app rules content in `src/rules/rulesContent.ts`. Use the Rules page in the app for the player-facing reference.
 
+## Documentation
+
+*   **`docs/architecture.md`**: Current architecture and source-of-truth boundaries.
+*   **`docs/ai-agent-api.md`**: Current AI agent interface and command boundary.
+*   **`docs/online-multiplayer-plan.md`**: Future online multiplayer architecture notes.
+*   **`docs/game-mechanics-research.md`**: Long-form mechanics research notes.
+
 ## Notes
 
 Runtime logs, build output, coverage, and dependency folders are ignored. Do not commit generated output files.
