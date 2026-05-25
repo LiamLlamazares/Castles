@@ -91,20 +91,19 @@ export class RuleEngine {
 
   /**
    * Returns hexes that are protected from ranged attacks.
-   * These are hexes adjacent to enemy melee pieces.
+   * These are occupied enemy hexes with an adjacent friendly melee defender.
    */
   public static getDefendedHexes(gameState: GameState, currentPlayer: Color, board: Board): Hex[] {
     if (!DEFENDED_PIECE_IS_PROTECTED_RANGED) return [];
-    
-    const enemyMeleePieces = gameState.pieces.filter(
-      (piece) =>
-        piece.color !== currentPlayer &&
-        (piece.AttackType === AttackType.Melee || piece.AttackType === AttackType.Swordsman)
-    );
-    
-    // Enemy melee pieces "defend" all hexes they can attack
-    return enemyMeleePieces
-      .flatMap((piece) => piece.legalAttacks(board.hexSet, board.highGroundHexSet));
+
+    return gameState.pieces
+      .filter((piece) => piece.color !== currentPlayer)
+      .filter((piece) =>
+        getNeighborPieces(piece.hex, gameState.pieceMap, p =>
+          p.color === piece.color && RuleEngine.isMeleeDefender(p)
+        ).length > 0
+      )
+      .map((piece) => piece.hex);
   }
 
   // ================= LEGAL ACTIONS =================
@@ -193,9 +192,13 @@ export class RuleEngine {
       // Check if any enemy melee piece is adjacent to the target hex
       const enemyMeleeNeighbors = getNeighborPieces(hex, gameState.pieceMap, p =>
           p.color !== attackerColor &&
-          (p.AttackType === AttackType.Melee || p.AttackType === AttackType.Swordsman)
+          RuleEngine.isMeleeDefender(p)
       );
       return enemyMeleeNeighbors.length > 0;
+  }
+
+  private static isMeleeDefender(piece: Piece): boolean {
+      return piece.AttackType === AttackType.Melee || piece.AttackType === AttackType.Swordsman;
   }
 
   private static getLegalAttacksForPlayer(

@@ -592,6 +592,26 @@ describe('Piece Movement & Attack Tests', () => {
   // CROSS-CUTTING: Defended piece protection
   // ================================================================
   describe('Defended piece protection (ranged)', () => {
+    it('defense markers do not treat enemy attack targets as defended pieces', () => {
+      const defender = PieceFactory.create(PieceType.Swordsman, SAFE_POS, 'w');
+      const enemyInAttackPath = PieceFactory.create(PieceType.Archer, new Hex(SAFE_POS.q + 1, SAFE_POS.r - 1, SAFE_POS.s), 'b');
+      const state = createState([defender, enemyInAttackPath], 2);
+
+      const defendedHexKeys = RuleEngine.getDefendedHexes(state, 'b', board).map(hex => hex.getKey());
+
+      expect(defendedHexKeys).not.toContain(enemyInAttackPath.hex.getKey());
+    });
+
+    it('defense markers include pieces protected by adjacent friendly melee pieces', () => {
+      const protectedPiece = PieceFactory.create(PieceType.Archer, new Hex(0, 1, -1), 'w');
+      const defender = PieceFactory.create(PieceType.Knight, new Hex(1, 0, -1), 'w');
+      const state = createState([protectedPiece, defender], 2);
+
+      const defendedHexKeys = RuleEngine.getDefendedHexes(state, 'b', board).map(hex => hex.getKey());
+
+      expect(defendedHexKeys).toContain(protectedPiece.hex.getKey());
+    });
+
     it('ranged pieces cannot attack targets defended by enemy melee', () => {
       // Enemy at range 2, defended by adjacent melee piece
       const target = PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'b');

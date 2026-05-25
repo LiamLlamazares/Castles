@@ -53,11 +53,16 @@ const PieceRenderer = React.memo(({
   // Pre-calculate defended hexes for all players in one pass
   const defendedHexSet = React.useMemo(() => {
     if (!board) return new Set<string>();
+
+    const defenseState = {
+      pieces,
+      pieceMap: createPieceMap(pieces)
+    } as any;
     
     // Get defended hexes for both white and black
     // Note: RuleEngine.getDefendedHexes returns hexes that are PROTECTED by friendly melee pieces
-    const whiteDefended = RuleEngine.getDefendedHexes({ pieces } as any, 'b', board); // Defended FROM black = white's defended hexes
-    const blackDefended = RuleEngine.getDefendedHexes({ pieces } as any, 'w', board); // Defended FROM white = black's defended hexes
+    const whiteDefended = RuleEngine.getDefendedHexes(defenseState, 'b', board); // Defended FROM black = white's defended hexes
+    const blackDefended = RuleEngine.getDefendedHexes(defenseState, 'w', board); // Defended FROM white = black's defended hexes
     
     return new Set([
       ...whiteDefended.map(h => h.getKey()),
