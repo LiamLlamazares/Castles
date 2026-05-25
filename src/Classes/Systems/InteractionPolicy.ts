@@ -71,5 +71,33 @@ export const InteractionPolicy = {
     // Must be neighbor AND valid spawn
     if (sanctuaryHex.distance(targetHex) !== 1) return false;
     return this.isValidPledgeSpawn(ctx, sanctuaryHex, targetHex);
+  },
+
+  /**
+   * Returns all valid spawn hexes for pledgeable sanctuaries.
+   */
+  getPledgeTargetHexes(
+    ctx: InteractionContext,
+    sanctuaryHex?: Hex
+  ): Hex[] {
+    const { board, gameState } = ctx;
+    return SanctuaryService.getPledgeSpawnHexes(gameState, board, sanctuaryHex);
+  },
+
+  /**
+   * Returns pledgeable sanctuary sources that can spawn onto the target hex.
+   * Used to support direct clicks on automatically highlighted sanctuary targets.
+   */
+  getPledgeSourcesForSpawn(
+    ctx: InteractionContext,
+    targetHex: Hex
+  ): Hex[] {
+    const { board, gameState } = ctx;
+    return gameState.sanctuaries
+      .filter(sanctuary =>
+        SanctuaryService.canPledge(gameState, board, sanctuary.hex) &&
+        this.isPledgeTarget(ctx, sanctuary.hex, targetHex)
+      )
+      .map(sanctuary => sanctuary.hex);
   }
 };

@@ -8,7 +8,15 @@ import { BoardConfig } from "../Core/Board";
 import { PieceType, SanctuaryType } from "../../Constants";
 
 /** Setup data for a castle position */
-export type CastleSetup = { q: number; r: number; s: number; color: 'w' | 'b' };
+export type CastleSetup = {
+  q: number;
+  r: number;
+  s: number;
+  color: 'w' | 'b';
+  turns_controlled?: number;
+  used_this_turn?: boolean;
+  owner?: 'w' | 'b';
+};
 
 /** Setup data for a piece position */
 export type PieceSetup = { type: PieceType; q: number; r: number; s: number; color: 'w' | 'b' };
@@ -44,7 +52,11 @@ export interface GameSetup {
   pieces: PieceSetup[];
   sanctuaries?: SanctuarySetup[];
   gameSettings?: GameSettings;
+  sanctuaryPool?: SanctuaryType[];
+  turnCounter?: number;
 }
+
+export type CompactCastleSetup = [number, number, number, 0 | 1, number?, (0 | 1)?, (0 | 1)?];
 
 /**
  * Compact format for efficient storage in PGN tags.
@@ -52,9 +64,11 @@ export interface GameSetup {
  */
 export interface CompactSetup {
   b: BoardConfig;
-  c: [number, number, number, 0 | 1][]; // q, r, s, color (0=w, 1=b)
+  c: CompactCastleSetup[]; // q, r, s, color, turns_controlled, used_this_turn, owner
   p: [PieceType, number, number, number, 0 | 1][]; // type, q, r, s, color
   s?: [SanctuaryType, number, number, number, 0 | 1, number, 0 | 1][]; // type, q, r, s, territorySide, cooldown, hasPledgedThisGame
   g?: [number, number]; // [sanctuaryUnlockTurn, sanctuaryRechargeTurns]
+  sp?: SanctuaryType[]; // sanctuary pool
+  tc?: number; // turn counter
 }
 

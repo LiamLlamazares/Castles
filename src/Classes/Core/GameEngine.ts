@@ -54,6 +54,10 @@ export class GameEngine {
     return SanctuaryService.canPledge(gameState, this.board, sanctuaryHex);
   }
 
+  public getPledgeSpawnHexes(gameState: GameState, sanctuaryHex?: Hex): Hex[] {
+    return SanctuaryService.getPledgeSpawnHexes(gameState, this.board, sanctuaryHex);
+  }
+
   public pledge(gameState: GameState, sanctuaryHex: Hex, spawnHex: Hex): GameState {
     return SanctuaryService.pledge(gameState, sanctuaryHex, spawnHex, this.board);
   }

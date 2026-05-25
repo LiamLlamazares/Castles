@@ -90,7 +90,7 @@ export interface AttackOption {
   isCastleAttack: boolean;
 }
 
-/** A recruitment option from a captured castle */
+/** A recruitment option from a controlled castle */
 export interface RecruitOption {
   castleHex: Hex;
   spawnHexes: Hex[];
@@ -131,7 +131,7 @@ export interface AIContext {
   /** All legal attacks indexed by piece hex key */
   readonly legalAttacks: ReadonlyMap<string, readonly Hex[]>;
 
-  /** Available recruitment options from captured castles */
+  /** Available recruitment options from controlled castles */
   readonly recruitOptions: readonly RecruitOption[];
 
   /** Available pledge options from ready sanctuaries */

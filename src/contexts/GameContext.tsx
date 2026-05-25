@@ -61,6 +61,7 @@ export interface IGameState extends Omit<GameState, 'moveTree'> {
   victoryMessage: string | null;
   winner: Color | null;
   isRecruitmentSpot: (hex: Hex) => boolean;
+  isPledgeSpot: (hex: Hex) => boolean;
   board: Board;
   moveTree: MoveTree; // Strict typing: MoveTree must always be present
   moveHistory: MoveRecord[]; // Derived list for UI display

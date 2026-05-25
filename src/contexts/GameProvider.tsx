@@ -121,7 +121,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     victoryMessage,
     winner,
     recruitmentHexes,
-    recruitmentHexSet
+    recruitmentHexSet,
+    pledgeHexSet
   } = useComputedGame({
     gameEngine,
     viewState,
@@ -150,6 +151,11 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const isRecruitmentSpot = useCallback(
     (hex: Hex): boolean => recruitmentHexSet.has(hex.getKey()),
     [recruitmentHexSet]
+  );
+
+  const isPledgeSpot = useCallback(
+    (hex: Hex): boolean => pledgeHexSet.has(hex.getKey()),
+    [pledgeHexSet]
   );
 
   // =========== MOVE EXECUTION HOOK ===========
@@ -234,6 +240,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
       victoryMessage,
       winner,
       isRecruitmentSpot,
+      isPledgeSpot,
       board: gameEngine.board,
       moveTree: state.moveTree,
       moveHistory: currentLine,
@@ -257,7 +264,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   }, [
     pieces, castles, state.sanctuaries, turnCounter, viewState.pieceMap, movingPiece,
     turnPhase, currentPlayer, hexagons, legalMoveSet, legalAttackSet, victoryMessage, winner,
-    isRecruitmentSpot, gameEngine, state.moveTree,
+    isRecruitmentSpot, isPledgeSpot, gameEngine, state.moveTree,
     state.sanctuaryPool, state.graveyard, state.phoenixRecords,
     hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state.promotionPending, state, setState
   ]);

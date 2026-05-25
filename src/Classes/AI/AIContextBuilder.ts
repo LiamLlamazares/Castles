@@ -58,6 +58,19 @@ export class AIContextBuilder {
     myColor: Color
   ): AIContext {
     const phase = TurnManager.getTurnPhase(gameState.turnCounter);
+    const activePlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
+
+    if (myColor !== activePlayer) {
+      return {
+        phase,
+        myColor,
+        legalMoves: new Map(),
+        legalAttacks: new Map(),
+        recruitOptions: [],
+        pledgeOptions: [],
+        abilityOptions: [],
+      };
+    }
 
     return {
       phase,
@@ -131,9 +144,9 @@ export class AIContextBuilder {
   }
 
   /**
-   * Builds recruitment options from captured castles.
+   * Builds recruitment options from controlled castles.
    * A castle can recruit if:
-   * - Owned by AI (not original owner) 
+   * - Owned by AI
    * - Not used this turn
    * - Has adjacent empty hexes
    */
@@ -148,11 +161,14 @@ export class AIContextBuilder {
     // Only collect during Recruitment phase
     if (phase !== "Recruitment") return result;
 
-    // Get controlled castles that can recruit (captured, not used this turn)
+    const legalRecruitmentHexSet = new Set(
+      RuleEngine.getRecruitmentHexes(gameState, board).map((hex) => hex.getKey())
+    );
+
+    // Get controlled castles that can recruit (owned, not used this turn)
     const controlledCastles = gameState.castles.filter(
       (c) =>
         c.owner === myColor &&
-        c.color !== myColor && // Must be captured (not starting castle)
         !c.used_this_turn
     );
 
@@ -163,7 +179,7 @@ export class AIContextBuilder {
       // Hex.cubeRing(1) returns all neighbors
       const neighbors = castle.hex.cubeRing(1);
       const spawnHexes = neighbors.filter(
-        (h: Hex) => board.hexSet.has(h.getKey()) && !occupiedSet.has(h.getKey())
+        (h: Hex) => legalRecruitmentHexSet.has(h.getKey()) && !occupiedSet.has(h.getKey())
       );
 
       if (spawnHexes.length > 0) {

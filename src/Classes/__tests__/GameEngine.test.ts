@@ -200,13 +200,13 @@ describe('GameEngine', () => {
       expect(recruitHexes).toEqual([]);
     });
 
-    it('returns empty array if only starting castles held', () => {
+    it('returns empty for a controlled own-origin castle', () => {
       const castleHex = new Hex(0, -6, 6); 
-      // Starting castle: Owner 'w' matches Color 'w' (not captured)
       const castle = new Castle(castleHex, 'w', 0, false, 'w');
       const state = createMockState([], [castle], 4);
 
       const recruitHexes = gameEngine.getRecruitmentHexes(state);
+
       expect(recruitHexes).toEqual([]);
     });
 
@@ -261,6 +261,48 @@ describe('GameEngine', () => {
       // Turn 0 = Movement phase
       const recruitHexes = gameEngine.getRecruitmentHexes(state);
       expect(recruitHexes).toEqual([]);
+    });
+  });
+
+  describe('getTurnCounterIncrement recruitment availability', () => {
+    it('advances from attack into Recruitment when a captured enemy castle can recruit', () => {
+      const castle = new Castle(new Hex(0, -6, 6), 'b', 0, false, 'w');
+      const state = createMockState([], [castle], 3);
+
+      const increment = gameEngine.getTurnCounterIncrement(state);
+
+      expect(gameEngine.getTurnPhase(state.turnCounter + increment)).toBe('Recruitment');
+      expect(gameEngine.getCurrentPlayer(state.turnCounter + increment)).toBe('w');
+    });
+
+    it('does not auto-skip Recruitment while an unused captured enemy castle remains', () => {
+      const castle = new Castle(new Hex(0, -6, 6), 'b', 0, false, 'w');
+      const state = createMockState([], [castle], 4);
+
+      const increment = gameEngine.getTurnCounterIncrement(state);
+
+      expect(increment).toBe(0);
+    });
+
+    it('skips Recruitment when the only controlled castle is own-origin', () => {
+      const castle = new Castle(new Hex(0, -6, 6), 'w', 0, false, 'w');
+      const state = createMockState([], [castle], 3);
+
+      const increment = gameEngine.getTurnCounterIncrement(state);
+
+      expect(gameEngine.getTurnPhase(state.turnCounter + increment)).not.toBe('Recruitment');
+    });
+  });
+
+  describe('getTurnCounterIncrement attack availability', () => {
+    it('skips Attack when the only geometric attack cannot lead to capture', () => {
+      const attacker = new Piece(new Hex(2, 2, -4), 'w', PieceType.Swordsman);
+      const target = new Piece(new Hex(3, 1, -4), 'b', PieceType.Swordsman);
+      const state = createMockState([attacker, target], [], 2);
+
+      const increment = gameEngine.getTurnCounterIncrement(state);
+
+      expect(increment).toBe(3);
     });
   });
 

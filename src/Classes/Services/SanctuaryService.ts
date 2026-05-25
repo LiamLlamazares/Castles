@@ -100,6 +100,36 @@ export class SanctuaryService {
   }
 
   /**
+   * Returns all currently valid spawn hexes for pledgeable sanctuaries.
+   * Used by the UI to advertise sanctuary pledge opportunities automatically
+   * during the Recruitment phase.
+   */
+  public static getPledgeSpawnHexes(gameState: GameState, board: Board, sanctuaryHex?: Hex): Hex[] {
+    const candidateSanctuaries = sanctuaryHex
+      ? gameState.sanctuaries.filter(s => s.hex.equals(sanctuaryHex))
+      : gameState.sanctuaries;
+
+    const spawnHexes: Hex[] = [];
+    const processedHexKeys = new Set<string>();
+
+    for (const sanctuary of candidateSanctuaries) {
+      if (!this.canPledge(gameState, board, sanctuary.hex)) continue;
+
+      for (const hex of sanctuary.hex.cubeRing(1)) {
+        const key = hex.getKey();
+        if (!board.hexSet.has(key)) continue;
+        if (processedHexKeys.has(key)) continue;
+        if (!isValidSpawnHex(hex, board, gameState.pieceMap)) continue;
+
+        spawnHexes.push(hex);
+        processedHexKeys.add(key);
+      }
+    }
+
+    return spawnHexes;
+  }
+
+  /**
    * Executes a pledge action, spawning a new piece from the sanctuary.
    * After pledging, the sanctuary evolves to the next higher-tier type.
    * Records the pledge in the MoveTree for history and PGN export.

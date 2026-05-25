@@ -15,6 +15,7 @@ import { Board } from "../Core/Board";
 import { Piece } from "../Entities/Piece";
 import { MoveRecord, Color } from "../../Constants";
 import { MoveTree, MoveNode } from "../Core/MoveTree";
+import { TurnManager } from "../Core/TurnManager";
 import { SanctuaryType } from "../../Constants";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { GameSetup, CompactSetup, CastleSetup, PieceSetup, SanctuarySetup, GameSettings } from "./PGNTypes";
@@ -32,14 +33,19 @@ export class PGNGenerator {
     moveTree?: MoveTree,
     gameSettings?: GameSettings
   ): string {
+    const setupCastles = (moveTree?.rootNode.snapshot?.castles ?? board.castles).map((c) => ({
+      q: c.hex.q,
+      r: c.hex.r,
+      s: c.hex.s,
+      color: c.color as 'w' | 'b',
+      turns_controlled: c.turns_controlled,
+      used_this_turn: c.used_this_turn,
+      owner: c.owner as 'w' | 'b',
+    }));
+
     const setup: GameSetup = {
       boardConfig: board.config,
-      castles: board.castles.map((c) => ({
-        q: c.hex.q,
-        r: c.hex.r,
-        s: c.hex.s,
-        color: c.color as 'w' | 'b',
-      })),
+      castles: setupCastles,
       pieces: pieces.map((p) => ({
         type: p.type,
         q: p.hex.q,
@@ -57,6 +63,8 @@ export class PGNGenerator {
         hasPledgedThisGame: s.hasPledgedThisGame,
       })),
       gameSettings: gameSettings,
+      sanctuaryPool: moveTree?.rootNode.snapshot?.sanctuaryPool,
+      turnCounter: moveTree?.rootNode.snapshot?.turnCounter ?? 0,
     };
 
     const compactSetup = PGNGenerator.compressSetup(setup);
@@ -83,7 +91,10 @@ export class PGNGenerator {
 
     // Write Moves
     if (moveTree) {
-        pgn += this.renderRecursiveHistory(moveTree.rootNode, 1, 'w');
+        const rootTurnCounter = moveTree.rootNode.snapshot?.turnCounter ?? 0;
+        const startColor = TurnManager.getCurrentPlayer(rootTurnCounter);
+        const startTurnNumber = Math.floor(rootTurnCounter / 10) + 1;
+        pgn += this.renderRecursiveHistory(moveTree.rootNode, startTurnNumber, startColor, startColor === 'b');
     } else {
         let turn = 1;
         for (let i = 0; i < history.length; i += 2) {
@@ -171,7 +182,15 @@ export class PGNGenerator {
   public static compressSetup(setup: GameSetup): CompactSetup {
       const result: CompactSetup = {
           b: setup.boardConfig,
-          c: setup.castles.map((c: CastleSetup) => [c.q, c.r, c.s, c.color === 'w' ? 0 : 1]),
+          c: setup.castles.map((c: CastleSetup): CompactSetup["c"][number] => [
+              c.q,
+              c.r,
+              c.s,
+              c.color === 'w' ? 0 : 1,
+              c.turns_controlled ?? 0,
+              c.used_this_turn ? 1 : 0,
+              (c.owner ?? c.color) === 'w' ? 0 : 1
+          ]),
           p: setup.pieces.map((p: PieceSetup) => [p.type, p.q, p.r, p.s, p.color === 'w' ? 0 : 1])
       };
       // Only include sanctuaries if present
@@ -189,6 +208,12 @@ export class PGNGenerator {
               setup.gameSettings.sanctuaryUnlockTurn,
               setup.gameSettings.sanctuaryRechargeTurns
           ];
+      }
+      if (setup.sanctuaryPool) {
+          result.sp = [...setup.sanctuaryPool];
+      }
+      if (setup.turnCounter !== undefined) {
+          result.tc = setup.turnCounter;
       }
       return result;
   }

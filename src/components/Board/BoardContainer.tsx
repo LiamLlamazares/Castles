@@ -44,6 +44,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
       legalMoveSet,
       legalAttackSet,
       isRecruitmentSpot,
+      isPledgeSpot,
       board,
       movingPiece,
       winner
@@ -95,6 +96,11 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
   const handleHexHover = React.useCallback((hex: Hex | null, event?: React.MouseEvent) => {
     tooltip.setHovered(hex, event);
   }, [tooltip]);
+
+  const isVisiblePledgeTarget = React.useCallback(
+    (hex: Hex): boolean => isPledgeTarget(hex) || isPledgeSpot(hex),
+    [isPledgeTarget, isPledgeSpot]
+  );
 
   const handlePieceClickWrapper = React.useCallback((piece: Piece) => {
     if (activeAbility) {
@@ -166,7 +172,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
           resizeVersion={viewState.resizeVersion}
           layout={layout}
           board={board}
-          isPledgeTarget={isPledgeTarget}
+          isPledgeTarget={isVisiblePledgeTarget}
           pledgingSanctuary={pledgingSanctuary}
           showCastleRecruitment={viewState.showCastleRecruitment}
           showTerrainIcons={viewState.showTerrainIcons}

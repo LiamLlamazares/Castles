@@ -26,9 +26,11 @@ import { SanctuaryService } from "../Services/SanctuaryService";
 import {
   Color,
   AttackType,
+  PieceType,
   DEFENDED_PIECE_IS_PROTECTED_RANGED,
 } from "../../Constants";
 import { getNeighborPieces } from "../../utils/PieceMap";
+import { CombatSystem } from "./CombatSystem";
 
 export class RuleEngine {
   // ================= BOARD QUERIES =================
@@ -119,23 +121,8 @@ export class RuleEngine {
   }
 
   public static getLegalAttacks(piece: Piece | null, gameState: GameState, board: Board): Hex[] {
-      const phase = TurnManager.getTurnPhase(gameState.turnCounter);
       const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
-
-      if (piece && phase === "Attack" && piece.canAttack) {
-          const attackable = RuleEngine.getAttackableHexes(gameState, currentPlayer);
-          const attackableSet = new Set(attackable.map(h => h.getKey()));
-          
-          const attacks = piece.legalAttacks(attackableSet, board.highGroundHexSet);
-
-          // Ranged and LongRanged pieces can only attack undefended targets
-          if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {
-              return attacks.filter(hex => !RuleEngine.isHexDefended(hex, currentPlayer, gameState, board));
-          }
-          
-          return attacks;
-      }
-      return [];
+      return RuleEngine.getLegalAttacksForPlayer(piece, gameState, board, currentPlayer, true);
   }
 
   /**
@@ -163,24 +150,11 @@ export class RuleEngine {
    */
   public static getFutureLegalAttacks(gameState: GameState, board: Board): Hex[] {
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
-    const attackable = RuleEngine.getAttackableHexes(gameState, currentPlayer);
-    const attackableSet = new Set(attackable.map(h => h.getKey()));
-    
-    // Calculate defended hexes ONCE
-    const defended = RuleEngine.getDefendedHexes(gameState, currentPlayer, board);
-    const defendedSet = new Set(defended.map(h => h.getKey()));
-    
     return gameState.pieces
       .filter((piece) => piece.color === currentPlayer && piece.canAttack)
-      .flatMap((piece) => {
-        const attacks = piece.legalAttacks(attackableSet, board.highGroundHexSet);
-        
-        // Ranged pieces can't attack defended hexes
-        if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {
-          return attacks.filter(hex => !defendedSet.has(hex.getKey()));
-        }
-        return attacks;
-      });
+      .flatMap((piece) =>
+        RuleEngine.getLegalAttacksForPlayer(piece, gameState, board, currentPlayer, false)
+      );
   }
 
   /**
@@ -191,41 +165,18 @@ export class RuleEngine {
   public static hasAnyFutureLegalAttacks(gameState: GameState, board: Board): boolean {
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     
-    // 1. Identify potential attackers (cheap filter)
     const potentialAttackers = gameState.pieces.filter(
       (piece) => piece.color === currentPlayer && piece.canAttack
     );
     if (potentialAttackers.length === 0) return false;
 
-    // 2. Cheap check: Are there any enemy units/castles at all?
     const hasEnemies = gameState.pieces.some(p => p.color !== currentPlayer) || 
                        gameState.castles.some(c => c.color !== currentPlayer && !RuleEngine.castleIsControlledByActivePlayer(c, currentPlayer));
     if (!hasEnemies) return false;
 
-    // 3. Build Attackable Set (Needed for legalAttacks check)
-    // Optimization: We could iterate potential targets, but pieces checks internal limits.
-    const attackable = RuleEngine.getAttackableHexes(gameState, currentPlayer);
-    const attackableSet = new Set(attackable.map(h => h.getKey()));
-    
-    // 4. Iterate attackers and return TRUE as soon as one legal attack is found
     for (const piece of potentialAttackers) {
-      const allAttacks = piece.legalAttacks(attackableSet, board.highGroundHexSet);
-      
-      if (allAttacks.length === 0) continue;
-
-      // Melee: If any attack exists, it's valid (Melee ignores defense for legality usually, or assumes trade)
-      // Logic check: legalAttacks() returns geometrically valid attacks on enemies. 
-      // Rule: Ranged cannot attack Defended. Melee can.
-      if (piece.AttackType !== AttackType.Ranged && piece.AttackType !== AttackType.LongRanged) {
-          return true;
-      }
-
-      // Ranged: Must check if target is defended.
-      // Optimization: Check `isHexDefended` for specific targets instead of generating ALL defended hexes.
-      for (const targetHex of allAttacks) {
-          if (!RuleEngine.isHexDefended(targetHex, currentPlayer, gameState, board)) {
-              return true; // Found one valid ranged attack!
-          }
+      if (RuleEngine.getLegalAttacksForPlayer(piece, gameState, board, currentPlayer, false).length > 0) {
+        return true;
       }
     }
 
@@ -247,8 +198,100 @@ export class RuleEngine {
       return enemyMeleeNeighbors.length > 0;
   }
 
+  private static getLegalAttacksForPlayer(
+    piece: Piece | null,
+    gameState: GameState,
+    board: Board,
+    currentPlayer: Color,
+    requireAttackPhase: boolean
+  ): Hex[] {
+      const phase = TurnManager.getTurnPhase(gameState.turnCounter);
+      if (requireAttackPhase && phase !== "Attack") return [];
+      if (!piece || !piece.canAttack || piece.color !== currentPlayer) return [];
+
+      const attackable = RuleEngine.getAttackableHexes(gameState, currentPlayer);
+      const attackableSet = new Set(attackable.map(h => h.getKey()));
+      const attacks = piece.legalAttacks(attackableSet, board.highGroundHexSet);
+      const geometricallyLegalAttacks = attacks.filter(hex =>
+        RuleEngine.canPieceGeometricallyAttackHex(piece, hex, gameState, board, currentPlayer)
+      );
+
+      return geometricallyLegalAttacks.filter(hex =>
+        RuleEngine.attackCanLeadToPieceCapture(piece, hex, gameState, board, currentPlayer)
+      );
+  }
+
+  private static canPieceGeometricallyAttackHex(
+    piece: Piece,
+    targetHex: Hex,
+    gameState: GameState,
+    board: Board,
+    currentPlayer: Color
+  ): boolean {
+      if (!piece.canAttack || piece.color !== currentPlayer) return false;
+
+      const targetSet = new Set([targetHex.getKey()]);
+      const attacks = piece.legalAttacks(targetSet, board.highGroundHexSet);
+      if (!attacks.some(hex => hex.equals(targetHex))) return false;
+
+      if (piece.AttackType === AttackType.Ranged || piece.AttackType === AttackType.LongRanged) {
+          return !RuleEngine.isHexDefended(targetHex, currentPlayer, gameState, board);
+      }
+
+      return true;
+  }
+
+  private static attackCanLeadToPieceCapture(
+    attacker: Piece,
+    targetHex: Hex,
+    gameState: GameState,
+    board: Board,
+    currentPlayer: Color
+  ): boolean {
+      const targetPiece = gameState.pieceMap.getByKey(targetHex.getKey());
+      if (!targetPiece) return true;
+      if (targetPiece.color === currentPlayer) return false;
+
+      const liveAttacker = gameState.pieceMap.getByKey(attacker.hex.getKey());
+      if (!liveAttacker || liveAttacker.color !== currentPlayer || !liveAttacker.canAttack) {
+          return false;
+      }
+
+      if (targetPiece.type === PieceType.Monarch && liveAttacker.type === PieceType.Assassin) {
+          return true;
+      }
+
+      const targetStrength = CombatSystem.getCombatStrength(targetPiece, gameState.pieceMap);
+      const attackStrength = CombatSystem.getCombatStrength(liveAttacker, gameState.pieceMap);
+      const remainingDamageNeeded = targetStrength - targetPiece.damage - attackStrength;
+      if (remainingDamageNeeded <= 0) return true;
+
+      let remainingAttackPower = 0;
+      for (const piece of gameState.pieces) {
+          if (piece.color !== currentPlayer || !piece.canAttack) continue;
+          if (piece.hex.equals(liveAttacker.hex)) continue;
+          if (!RuleEngine.canPieceGeometricallyAttackHex(piece, targetPiece.hex, gameState, board, currentPlayer)) continue;
+
+          if (targetPiece.type === PieceType.Monarch && piece.type === PieceType.Assassin) {
+              return true;
+          }
+
+          remainingAttackPower += CombatSystem.getCombatStrength(piece, gameState.pieceMap);
+          if (remainingAttackPower >= remainingDamageNeeded) return true;
+      }
+
+      return false;
+  }
+
   public static castleIsControlledByActivePlayer(castle: Castle, currentPlayer: Color): boolean {
     return castle.owner === currentPlayer;
+  }
+
+  public static castleGrantsRecruitmentToActivePlayer(castle: Castle, currentPlayer: Color): boolean {
+    return (
+      RuleEngine.castleIsControlledByActivePlayer(castle, currentPlayer) &&
+      castle.color !== currentPlayer
+    );
   }
 
   public static getControlledCastlesActivePlayer(gameState: GameState): Castle[] {
@@ -257,21 +300,19 @@ export class RuleEngine {
     return gameState.castles.filter((castle) => {
       if (phase !== "Recruitment") return false;
       return (
-        RuleEngine.castleIsControlledByActivePlayer(castle, currentPlayer) &&
-        castle.color !== currentPlayer
+        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer)
       );
     });
   }
 
   /**
-   * Optimized check if ANY castle is controlled by active player (for turn skipping).
+   * Optimized check if ANY castle can grant recruitment to the active player (for turn skipping).
    */
   public static hasAnyFutureControlledCastles(gameState: GameState): boolean {
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     // Use some() for early exit
     return gameState.castles.some((castle) => 
-        RuleEngine.castleIsControlledByActivePlayer(castle, currentPlayer) &&
-        castle.color !== currentPlayer
+        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer)
     );
   }
 
@@ -280,8 +321,7 @@ export class RuleEngine {
     return gameState.castles.filter((castle) => {
 
       return (
-        RuleEngine.castleIsControlledByActivePlayer(castle, currentPlayer) &&
-        castle.color !== currentPlayer
+        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer)
       );
     });
   }
@@ -343,12 +383,10 @@ export class RuleEngine {
 
     let hasUsableCastles = false;
     if (!passingRecruitment) {
-        // Only count castles that are DIFFERENT color (Start-castles cannot recruit)
         const unusedControlledCastles = gameState.castles.filter(
             (castle) =>
-            RuleEngine.castleIsControlledByActivePlayer(castle, currentPlayer) &&
-            !castle.used_this_turn &&
-            castle.color !== currentPlayer
+            RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer) &&
+            !castle.used_this_turn
         );
         hasUsableCastles = unusedControlledCastles.length > 0;
     }

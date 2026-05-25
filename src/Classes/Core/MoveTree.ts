@@ -1,5 +1,6 @@
 import { MoveRecord } from "../../Constants";
 import { PositionSnapshot } from "./GameState";
+import { createPieceMap } from "../../utils/PieceMap";
 
 
 export interface MoveNode {
@@ -36,6 +37,25 @@ export class MoveTree {
             children: [],
             selectedChildIndex: 0,
             snapshot
+        };
+    }
+
+    private cloneSnapshot(snapshot?: PositionSnapshot): PositionSnapshot | undefined {
+        if (!snapshot) return undefined;
+
+        const pieces = snapshot.pieces.map(p => p.clone());
+        return {
+            pieces,
+            pieceMap: createPieceMap(pieces),
+            castles: snapshot.castles.map(c => c.clone()),
+            sanctuaries: snapshot.sanctuaries.map(s => s.clone()),
+            sanctuaryPool: [...snapshot.sanctuaryPool],
+            turnCounter: snapshot.turnCounter,
+            graveyard: snapshot.graveyard.map(p => p.clone()),
+            phoenixRecords: snapshot.phoenixRecords.map(r => ({ ...r })),
+            victoryPoints: snapshot.victoryPoints
+                ? { ...snapshot.victoryPoints }
+                : undefined
         };
     }
 
@@ -194,7 +214,8 @@ export class MoveTree {
             const newNode: MoveNode = {
                 ...node,
                 parent,
-                children: [] // will be populated
+                children: [], // will be populated
+                snapshot: this.cloneSnapshot(node.snapshot)
             };
             newNode.children = node.children.map(c => cloneSubtree(c, newNode));
             return newNode;

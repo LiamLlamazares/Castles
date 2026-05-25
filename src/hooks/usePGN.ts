@@ -15,6 +15,7 @@ import { Piece } from "../Classes/Entities/Piece";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { MoveRecord } from "../Constants";
+import { ReplayDiagnostic } from "../Classes/Services/PGNService";
 
 export interface PGNLoadResult {
   board: Board;
@@ -25,6 +26,7 @@ export interface PGNLoadResult {
   castles: import("../Classes/Entities/Castle").Castle[];
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   sanctuaryPool?: import("../Constants").SanctuaryType[];
+  diagnostics?: ReplayDiagnostic[];
 }
 
 export interface PGNHookResult {
@@ -81,7 +83,24 @@ export const usePGN = (
     } : undefined;
     
     try {
-      const finalState = PGNService.replayMoveHistory(board, startPieces, moveTree, startSanctuaries, setup.gameSettings);
+      const diagnostics: ReplayDiagnostic[] = [];
+      const finalState = PGNService.replayMoveHistory(
+        board,
+        startPieces,
+        moveTree,
+        startSanctuaries,
+        setup.gameSettings,
+        {
+          diagnostics,
+          initialSanctuaryPool: setup.sanctuaryPool,
+          initialTurnCounter: setup.turnCounter
+        }
+      );
+      if (diagnostics.length > 0) {
+        console.error("[loadPGN] Replay diagnostics", diagnostics);
+        alert("Error replaying moves. PGN was not loaded.");
+        return null;
+      }
       
       // Derive the main line move records for the load result
       const moveHistoryLine = finalState.moveTree.getHistoryLine();
@@ -94,7 +113,8 @@ export const usePGN = (
         moveTree: finalState.moveTree!,
         turnCounter: finalState.turnCounter,
         sanctuarySettings: importedSettings,
-        sanctuaryPool: finalState.sanctuaryPool
+        sanctuaryPool: finalState.sanctuaryPool,
+        diagnostics
       };
     } catch (e) {
       console.error("Failed to replay moves:", e);
@@ -105,7 +125,7 @@ export const usePGN = (
         castles: board.castles,
         sanctuaries: startSanctuaries,
         moveTree: new MoveTree(),
-        turnCounter: 0
+        turnCounter: setup.turnCounter ?? 0
       };
     }
   }, []);

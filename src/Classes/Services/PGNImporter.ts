@@ -23,9 +23,22 @@ import { MoveTree, MoveNode } from "../Core/MoveTree";
 import { PGNParser } from "../Systems/PGNParser";
 import { createPieceMap } from "../../utils/PieceMap";
 import { NotationService } from "../Systems/NotationService";
-import { PieceType, AbilityType } from "../../Constants";
+import { PieceType, AbilityType, SanctuaryType } from "../../Constants";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { GameSetup, CompactSetup } from "./PGNTypes";
+
+export interface ReplayDiagnostic {
+  notation: string;
+  message: string;
+  nodeId?: string;
+}
+
+export interface ReplayOptions {
+  strict?: boolean;
+  diagnostics?: ReplayDiagnostic[];
+  initialSanctuaryPool?: SanctuaryType[];
+  initialTurnCounter?: number;
+}
 
 export class PGNImporter {
   /**
@@ -34,17 +47,30 @@ export class PGNImporter {
    * You must replay the moves on the Engine to get the final state.
    */
   public static parsePGN(pgn: string): { setup: GameSetup | null; moves: string[]; moveTree: MoveTree } {
-    // We use a regex loop to find all tags regardless of line breaks.
-    const tagRegex = /\[(\w+)\s+"([^"]*)"\]/g;
-    let match;
-    let lastIndex = 0;
+    // Parse only the contiguous header tag section at the start of the PGN.
+    // Tag values may contain escaped quotes for legacy raw JSON CustomSetup tags.
+    const tagRegex = /\[(\w+)\s+"((?:\\.|[^"\\])*)"\]/y;
+    let cursor = 0;
     
     let setup: GameSetup | null = null; 
 
-    while ((match = tagRegex.exec(pgn)) !== null) {
+    while (cursor < pgn.length) {
+        const whitespace = pgn.slice(cursor).match(/^\s*/)?.[0] ?? "";
+        cursor += whitespace.length;
+
+        if (pgn[cursor] !== "[") {
+            break;
+        }
+
+        tagRegex.lastIndex = cursor;
+        const match = tagRegex.exec(pgn);
+        if (!match) {
+            break;
+        }
+
         const tagName = match[1];
-        const tagValue = match[2];
-        lastIndex = tagRegex.lastIndex;
+        const tagValue = PGNImporter.unescapeTagValue(match[2]);
+        cursor = tagRegex.lastIndex;
 
         if (tagName === 'CustomSetup') {
             try {
@@ -70,7 +96,7 @@ export class PGNImporter {
     }
 
     // The rest of the string after the last tag is the moves
-    const movesString = pgn.substring(lastIndex);
+    const movesString = pgn.substring(cursor);
 
     // Parse into Tree
     const moveTree = PGNParser.parseToTree(movesString);
@@ -80,6 +106,30 @@ export class PGNImporter {
     const cleanMoves = historyLine.map(m => m.notation).filter(n => n !== "Start");
 
     return { setup, moves: cleanMoves, moveTree };
+  }
+
+  private static unescapeTagValue(value: string): string {
+      return value.replace(/\\(["\\])/g, "$1");
+  }
+
+  private static getPromotionPieceType(code: string): PieceType | undefined {
+      switch (code) {
+          case "Ar":
+          case "Arc": return PieceType.Archer;
+          case "Kn":
+          case "Kni": return PieceType.Knight;
+          case "Tr":
+          case "Tre": return PieceType.Trebuchet;
+          case "Ea":
+          case "Eag": return PieceType.Eagle;
+          case "Gi":
+          case "Gia": return PieceType.Giant;
+          case "As":
+          case "Asn": return PieceType.Assassin;
+          case "Dr":
+          case "Dra": return PieceType.Dragon;
+          default: return undefined;
+      }
   }
 
   /**
@@ -92,7 +142,10 @@ export class PGNImporter {
               q: c[0],
               r: c[1],
               s: c[2],
-              color: c[3] === 0 ? 'w' : 'b'
+              color: c[3] === 0 ? 'w' : 'b',
+              turns_controlled: c[4] ?? 0,
+              used_this_turn: c[5] === 1,
+              owner: c[6] === undefined ? (c[3] === 0 ? 'w' : 'b') : (c[6] === 0 ? 'w' : 'b')
           })),
           pieces: compact.p.map(p => ({
               type: p[0],
@@ -121,6 +174,10 @@ export class PGNImporter {
               sanctuaryRechargeTurns: compact.g[1]
           };
       }
+      if (compact.sp) {
+          result.sanctuaryPool = [...compact.sp];
+      }
+      result.turnCounter = compact.tc ?? 0;
       return result;
   }
 
@@ -130,7 +187,13 @@ export class PGNImporter {
   public static reconstructState(setup: GameSetup): { board: Board; pieces: Piece[]; sanctuaries: Sanctuary[] } {
         // Reconstruct Board
         // Convert setup.castles to Castle objects
-        const castles = setup.castles.map(c => new Castle(new Hex(c.q, c.r, c.s), c.color, 0));
+        const castles = setup.castles.map(c => new Castle(
+            new Hex(c.q, c.r, c.s),
+            c.color,
+            c.turns_controlled ?? 0,
+            c.used_this_turn ?? false,
+            c.owner ?? c.color
+        ));
         
         const board = new Board(setup.boardConfig, castles);
         
@@ -157,7 +220,8 @@ export class PGNImporter {
   private static hydrateRecursive(
       node: MoveNode, 
       engine: GameEngine, 
-      currentState: GameState
+      currentState: GameState,
+      options: ReplayOptions = {}
   ): void {
       for (const child of node.children) {
           // Clone state for this branch
@@ -171,15 +235,17 @@ export class PGNImporter {
           
           const rawToken = child.move.notation;
           // Sanitize token (remove check/mate suffixes, but preserve = for recruitment)
-          const token = rawToken.replace(/[+#?!]/g, "");
+          const token = rawToken.replace(/[+#?!]+$/g, "");
 
           // Logic from replayMoveHistory (Execute move)
           try {
                const currentPlayer = engine.getCurrentPlayer(currentState.turnCounter) as Color;
                let nextState = currentState;
+               let handled = false;
 
                if (token === "Pass") {
                    nextState = engine.passTurn(currentState);
+                   handled = true;
                }
                // Attack: J10xK11
                else if (token.includes('x')) {
@@ -196,6 +262,31 @@ export class PGNImporter {
                    } else {
                        nextState = engine.applyCastleAttack(currentState, attacker, targetHex);
                    }
+                   handled = true;
+               }
+               // Promotion movement: J8J7=Dr or J8J7=Dra
+               else if (/^[A-Z]\d+[A-Z]\d+=/.test(token)) {
+                   const promotionMatch = token.match(/^([A-Z]\d+)([A-Z]\d+)=([A-Za-z]{2,3})$/);
+                   if (!promotionMatch) {
+                       throw new Error(`Invalid promotion notation ${token}`);
+                   }
+
+                   const startHex = NotationService.fromCoordinate(promotionMatch[1]);
+                   const endHex = NotationService.fromCoordinate(promotionMatch[2]);
+                   const promotionType = PGNImporter.getPromotionPieceType(promotionMatch[3]);
+                   if (!promotionType) {
+                       throw new Error(`Unknown promotion piece code ${promotionMatch[3]}`);
+                   }
+
+                   const mover = currentState.pieces.find(p => p.hex.equals(startHex));
+                   if (!mover) throw new Error(`Mover not found at ${promotionMatch[1]}`);
+
+                   nextState = engine.applyMove(currentState, mover, endHex);
+                   if (!nextState.promotionPending) {
+                       throw new Error(`Promotion pending not found after ${promotionMatch[1]}${promotionMatch[2]}`);
+                   }
+                   nextState = engine.promotePiece(nextState, nextState.promotionPending, promotionType);
+                   handled = true;
                }
                // Recruitment: B2=Kni
                else if (token.includes('=')) {
@@ -241,6 +332,7 @@ export class PGNImporter {
                            };
                        }
                    }
+                   handled = true;
                }
                 // Pledge: P:WlfK11
                 else if (token.startsWith('P:')) {
@@ -294,6 +386,7 @@ export class PGNImporter {
                         };
                         nextState = engine.passTurn(nextState);
                     }
+                    handled = true;
                 }
                 // Movement: J10K11
                 else {
@@ -319,8 +412,9 @@ export class PGNImporter {
                             
                             if (ability) {
                                 nextState = engine.activateAbility(currentState, startHex, targetHex, ability);
+                                handled = true;
                             } else {
-                                console.warn(`Unknown ability code in PGN: ${fullCode}`);
+                                throw new Error(`Unknown ability code ${fullCode}`);
                             }
                         }
                     } 
@@ -339,9 +433,14 @@ export class PGNImporter {
                             if (!mover) throw new Error(`Mover not found at ${moveMatch[1]}`);
         
                             nextState = engine.applyMove(currentState, mover, endHex);
+                            handled = true;
                         }
                     }
                 }
+
+               if (!handled) {
+                   throw new Error(`Unrecognized PGN replay token ${token}`);
+               }
 
                // 1. Capture snapshot for this child
                // We need a snapshot of the state AFTER the move
@@ -370,10 +469,19 @@ export class PGNImporter {
                // if we were using it, but here we manually build it.
                
                // 3. Recurse
-               PGNImporter.hydrateRecursive(child, engine, nextState);
+               PGNImporter.hydrateRecursive(child, engine, nextState, options);
                
           } catch (e) {
-               console.error(`Failed to hydrate PGN node ${token}:`, e);
+               const message = e instanceof Error ? e.message : String(e);
+               options.diagnostics?.push({
+                   notation: token,
+                   message,
+                   nodeId: child.id
+               });
+
+               if (options.strict) {
+                   throw new Error(`Failed to hydrate PGN node ${token}: ${message}`);
+               }
           }
       }
   }
@@ -386,7 +494,8 @@ export class PGNImporter {
       initialPieces: Piece[], 
       moveTree: MoveTree,
       initialSanctuaries: Sanctuary[] = [],
-      gameSettings?: { sanctuaryUnlockTurn: number, sanctuaryRechargeTurns: number }
+      gameSettings?: { sanctuaryUnlockTurn: number, sanctuaryRechargeTurns: number },
+      options: ReplayOptions = {}
   ): GameState {
       // Initialize fresh engine and state
       const engine = new GameEngine(board);
@@ -395,7 +504,7 @@ export class PGNImporter {
       // Initial State
       const { SanctuaryType } = require("../../Constants");
       const usedTypes = initialSanctuaries.map(s => s.type);
-      const sanctuaryPool = Object.values(SanctuaryType).filter(
+      const sanctuaryPool = options.initialSanctuaryPool ?? Object.values(SanctuaryType).filter(
         (t): t is import("../../Constants").SanctuaryType => !usedTypes.includes(t as any)
       );
 
@@ -412,7 +521,7 @@ export class PGNImporter {
           sanctuaryPool,
           sanctuarySettings,
           moveTree: moveTree, 
-          turnCounter: 0, 
+          turnCounter: options.initialTurnCounter ?? 0,
           movingPiece: null,
           graveyard: [],
           phoenixRecords: [],
@@ -432,7 +541,7 @@ export class PGNImporter {
       };
 
       // Recursive Hydration
-      PGNImporter.hydrateRecursive(moveTree.rootNode, engine, initialState);
+      PGNImporter.hydrateRecursive(moveTree.rootNode, engine, initialState, options);
       
       // Auto-navigate to end of line
       let node = moveTree.rootNode;

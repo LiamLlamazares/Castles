@@ -95,7 +95,6 @@ export const usePersistence = (
     if (history.length > 0) {
         const pgn = getPGN();
         if (pgn) {
-            console.log("Auto-saving game state...");
             saveToLocalStorage(pgn);
         }
     }

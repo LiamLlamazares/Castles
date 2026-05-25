@@ -189,7 +189,7 @@ describe('Piece Movement & Attack Tests', () => {
       const validRing3 = ring3.filter(h => board.hexSet.has(h.getKey()));
       if (validRing3.length === 0) return;
 
-      const enemy = PieceFactory.create(PieceType.Swordsman, validRing3[0], 'b');
+      const enemy = PieceFactory.create(PieceType.Archer, validRing3[0], 'b');
       const attacks = getAttacks(PieceType.Archer, hgHex, 'w', board, [enemy]);
 
       expect(attacks.length).toBeGreaterThan(0);
@@ -500,7 +500,7 @@ describe('Piece Movement & Attack Tests', () => {
 
     it('attacks at range 3 (long range)', () => {
       const pos = new Hex(0, 4, -4);
-      const enemyAt3 = PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'b');
+      const enemyAt3 = PieceFactory.create(PieceType.Archer, new Hex(0, 1, -1), 'b');
       const attacks = getAttacks(PieceType.Ranger, pos, 'w', board, [enemyAt3]);
       expect(attacks.length).toBeGreaterThan(0);
     });
@@ -518,7 +518,7 @@ describe('Piece Movement & Attack Tests', () => {
 
     it('attacks at range 2 (ranged)', () => {
       const pos = new Hex(0, 3, -3);
-      const enemyAt2 = PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'b');
+      const enemyAt2 = PieceFactory.create(PieceType.Archer, new Hex(0, 1, -1), 'b');
       const attacks = getAttacks(PieceType.Wizard, pos, 'w', board, [enemyAt2]);
       expect(attacks.length).toBeGreaterThan(0);
     });
@@ -604,12 +604,35 @@ describe('Piece Movement & Attack Tests', () => {
     });
 
     it('melee pieces CAN attack defended targets', () => {
-      const target = PieceFactory.create(PieceType.Swordsman, new Hex(SAFE_POS.q + 1, SAFE_POS.r - 1, SAFE_POS.s), 'b');
+      const target = PieceFactory.create(PieceType.Archer, new Hex(SAFE_POS.q + 1, SAFE_POS.r - 1, SAFE_POS.s), 'b');
       const defender = PieceFactory.create(PieceType.Knight, new Hex(SAFE_POS.q + 2, SAFE_POS.r - 2, SAFE_POS.s), 'b');
 
       const attacks = getAttacks(PieceType.Knight, SAFE_POS, 'w', board, [target, defender]);
       const attackKeys = attacks.map(h => h.getKey());
       expect(attackKeys).toContain(target.hex.getKey());
+    });
+  });
+
+  describe('capture-feasible attack filtering', () => {
+    it('does not allow an attack that cannot lead to capture this phase', () => {
+      const attacker = PieceFactory.create(PieceType.Swordsman, new Hex(2, 2, -4), 'w');
+      const target = PieceFactory.create(PieceType.Swordsman, new Hex(3, 1, -4), 'b');
+      const state = createState([attacker, target], 2);
+
+      const attacks = RuleEngine.getLegalAttacks(attacker, state, board);
+
+      expect(attacks.map(hex => hex.getKey())).not.toContain(target.hex.getKey());
+    });
+
+    it('allows an opening attack when remaining attackers can finish the target', () => {
+      const attacker = PieceFactory.create(PieceType.Swordsman, new Hex(2, 2, -4), 'w');
+      const followUpAttacker = PieceFactory.create(PieceType.Swordsman, new Hex(4, 1, -5), 'w');
+      const target = PieceFactory.create(PieceType.Swordsman, new Hex(3, 1, -4), 'b');
+      const state = createState([attacker, followUpAttacker, target], 2);
+
+      const attacks = RuleEngine.getLegalAttacks(attacker, state, board);
+
+      expect(attacks.map(hex => hex.getKey())).toContain(target.hex.getKey());
     });
   });
 });

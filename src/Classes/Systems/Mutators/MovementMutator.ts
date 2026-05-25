@@ -33,7 +33,11 @@ export class MovementMutator {
       : state.castles;
 
     // Check for Swordsman promotion (reaching opponent's back row)
-    const promotionPending = (piece.type === PieceType.Swordsman && board.isPromotionHex(targetHex, piece.color))
+    const promotionPending = (
+      piece.type === PieceType.Swordsman &&
+      board.isPromotionHex(targetHex, piece.color) &&
+      !board.isRiver(targetHex)
+    )
       ? movedPiece
       : null;
 

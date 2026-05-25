@@ -56,7 +56,7 @@ describe("PGNService", () => {
     // - N11xM11 (castle attack): Turn advances based on game logic
     // For recruitment, we need to reach White Castles (Turn 4 or Turn 14, etc)
     
-    // Simplified test: Just verify that a captured castle can be found with owner != color
+    // Simplified test: Verify that captured castle ownership is preserved for recruitment replay.
     const pgn = `[Event "Castles Game"]
 [Site "Local"]
 [Date "2025.12.17"]
@@ -89,8 +89,7 @@ describe("PGNService", () => {
     expect(m11Castle?.color).toBe('b'); // Original color stays
     expect(m11Castle?.owner).toBe('w'); // Captured by white
     
-    // Verify that the fix: owner != color means it's a captured castle
-    // that White can recruit from (when in the right phase)
+    // Verify that original color stays separate from current owner.
     expect(m11Castle?.owner).not.toBe(m11Castle?.color);
   });
 });

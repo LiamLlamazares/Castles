@@ -15,7 +15,7 @@
 
 // Import modules for facade class
 import { PGNGenerator } from "./PGNGenerator";
-import { PGNImporter } from "./PGNImporter";
+import { PGNImporter, ReplayOptions } from "./PGNImporter";
 import { Board } from "../Core/Board";
 import { Piece } from "../Entities/Piece";
 import { MoveRecord, TurnPhase, GameResult } from "../../Constants";
@@ -26,6 +26,7 @@ import { GameSetup, GameSettings } from "./PGNTypes";
 
 // Re-export types
 export type { GameSetup, CompactSetup, GameSettings } from "./PGNTypes";
+export type { ReplayDiagnostic, ReplayOptions } from "./PGNImporter";
 
 /**
  * Facade class for PGN operations.
@@ -84,8 +85,9 @@ export class PGNService {
     initialPieces: Piece[],
     input: MoveTree,
     initialSanctuaries: Sanctuary[] = [],
-    gameSettings?: { sanctuaryUnlockTurn: number, sanctuaryRechargeTurns: number }
+    gameSettings?: { sanctuaryUnlockTurn: number, sanctuaryRechargeTurns: number },
+    options?: ReplayOptions
   ): GameState {
-    return PGNImporter.replayMoveHistory(board, initialPieces, input, initialSanctuaries, gameSettings);
+    return PGNImporter.replayMoveHistory(board, initialPieces, input, initialSanctuaries, gameSettings, options);
   }
 }

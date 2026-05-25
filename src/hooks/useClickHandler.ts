@@ -141,7 +141,21 @@ export function useClickHandler({
         }
       }
 
-      // 4. Delegate to Engine
+      // 4. Direct pledge from an automatically highlighted sanctuary spawn hex
+      if (!movingPiece) {
+        const pledgeSources = InteractionPolicy.getPledgeSourcesForSpawn(interactionCtx, hex);
+        if (pledgeSources.length === 1) {
+          try {
+            pledge(pledgeSources[0], hex);
+            setPledgingSanctuary(null);
+            return;
+          } catch (e) {
+            console.warn("Pledge failed:", e instanceof Error ? e.message : e);
+          }
+        }
+      }
+
+      // 5. Delegate to Engine
       onEngineHexClick(hex);
     },
     [

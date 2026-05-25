@@ -104,7 +104,7 @@ export class PGNParser {
                  // But simply: just Add Move.
                  
                  const moveRecord: MoveRecord = {
-                     notation: token,
+                     notation: this.normalizeMoveToken(token),
                      turnNumber: turnNumber, // Approximate
                      color: 'w', // Placeholder, corrected by replay?
                      phase: 'Movement' // Placeholder
@@ -113,5 +113,9 @@ export class PGNParser {
                  tree.addMove(moveRecord);
             }
         }
+    }
+
+    private static normalizeMoveToken(token: string): string {
+        return token.replace(/[+#?!]+$/g, "");
     }
 }

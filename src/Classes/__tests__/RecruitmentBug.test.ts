@@ -84,16 +84,10 @@ describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
         }
       }
 
-      // Log stuck positions for diagnostic purposes
-      if (stuckPositions.length > 0) {
-        console.log('WHITE SWORDSMEN WITH NO MOVES AT OWN CASTLES:');
-        stuckPositions.forEach(s => console.log(`  ${s}`));
-      }
-      // This is a diagnostic test — it documents the issue rather than asserting pass/fail
-      expect(true).toBe(true);
+      expect(stuckPositions).toEqual([]);
     });
 
-    it('should identify which enemy-castle-adjacent hexes leave swordsmen stuck (white at black castles)', () => {
+    it('documents enemy-castle-adjacent hexes that leave white swordsmen stuck by geometry', () => {
       const stuckPositions: string[] = [];
 
       for (const castleHex of blackCastles) {
@@ -111,11 +105,11 @@ describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
         }
       }
 
-      if (stuckPositions.length > 0) {
-        console.log('WHITE SWORDSMEN WITH NO MOVES AT BLACK CASTLES:');
-        stuckPositions.forEach(s => console.log(`  ${s}`));
-      }
-      expect(true).toBe(true);
+      expect(stuckPositions).toEqual([
+        'White Sw at -7,1,6 (adj to black castle -7,0,7): 0 moves',
+        'White Sw at -1,-6,7 (adj to black castle 0,-7,7): 0 moves',
+        'White Sw at 1,-7,6 (adj to black castle 0,-7,7): 0 moves',
+      ]);
     });
   });
 
@@ -144,22 +138,18 @@ describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
         }
       }
 
-      if (stuckPieces.length > 0) {
-        console.log('NON-SWORDSMAN PIECES WITH NO MOVES AT CASTLES:');
-        stuckPieces.forEach(s => console.log(`  ${s}`));
-      }
       // Non-swordsman pieces should always have at least one move from any valid hex
-      expect(stuckPieces.length).toBe(0);
+      expect(stuckPieces).toEqual([]);
     });
   });
 
   describe('Turn flag reset after recruitment', () => {
     it('recruited piece should have canMove=true after turn reset', () => {
-      const castleHex = getCastleHexes('w')[0];
+      const castleHex = getCastleHexes('b')[0];
       const spawnHex = castleHex.cubeRing(1).find(h => board.hexSet.has(h.getKey()))!;
 
-      // White controls a castle, turn counter at white's recruitment phase (4)
-      const castle = new Castle(castleHex, 'w', 0);
+      // White controls an enemy-origin castle, turn counter at white's recruitment phase (4)
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
       const state = createTestState([], [castle], 4);
 
       // Recruit
@@ -172,10 +162,10 @@ describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
     });
 
     it('recruited piece should still have canMove=true after opponent turn and back to own turn', () => {
-      const castleHex = getCastleHexes('w')[0];
+      const castleHex = getCastleHexes('b')[0];
       const spawnHex = castleHex.cubeRing(1).find(h => board.hexSet.has(h.getKey()))!;
 
-      const castle = new Castle(castleHex, 'w', 0);
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
       const state = createTestState([], [castle], 4);
 
       // Recruit
@@ -193,15 +183,15 @@ describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
 
   describe('Full recruitment flow', () => {
     it('should recruit and verify piece has legal moves on next turn', () => {
-      const castleHex = getCastleHexes('w')[0];
+      const castleHex = getCastleHexes('b')[0];
       const adjacent = castleHex.cubeRing(1).filter(h => board.hexSet.has(h.getKey()));
       const spawnHex = adjacent[0];
 
-      const castle = new Castle(castleHex, 'w', 0);
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
       const state = createTestState([], [castle], 4);
 
       // Recruit an Archer (turns_controlled=1 → Archer in cycle)
-      const castle1Turn = new Castle(castleHex, 'w', 1);
+      const castle1Turn = new Castle(castleHex, 'b', 1, false, 'w');
       const archerState = createTestState([], [castle1Turn], 4);
       const afterRecruit = RecruitmentMutator.recruitPiece(archerState, castle1Turn, spawnHex, board);
 
@@ -215,12 +205,12 @@ describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
     });
 
     it('should verify recruitment hex validation excludes occupied hexes', () => {
-      const castleHex = getCastleHexes('w')[0];
+      const castleHex = getCastleHexes('b')[0];
       const adjacent = castleHex.cubeRing(1).filter(h => board.hexSet.has(h.getKey()));
 
       // Place pieces on ALL adjacent hexes
       const blockers = adjacent.map(h => PieceFactory.create(PieceType.Swordsman, h, 'w'));
-      const castle = new Castle(castleHex, 'w', 0);
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
       const state = createTestState(blockers, [castle], 4);
 
       // Should have no recruitment hexes since all adjacent are occupied
@@ -229,6 +219,22 @@ describe('Recruitment Bug: Piece Mobility After Recruitment', () => {
         adjacent.some(a => a.equals(h))
       );
       expect(castleRecruitHexes.length).toBe(0);
+    });
+
+    it('should not offer captured-castle recruitment hexes that create immobile swordsmen', () => {
+      const capturedBlackCastles = getCastleHexes('b').map(
+        hex => new Castle(hex, 'b', 0, false, 'w')
+      );
+      const state = createTestState([], capturedBlackCastles, 4);
+      const recruitHexes = RuleEngine.getRecruitmentHexes(state, board);
+
+      const immobileRecruitmentHexes = recruitHexes.filter(hex => {
+        const swordsman = PieceFactory.create(PieceType.Swordsman, hex, 'w');
+        const movementState = createTestState([swordsman], capturedBlackCastles, 0);
+        return engine.getLegalMoves(movementState, swordsman).length === 0;
+      });
+
+      expect(immobileRecruitmentHexes.map(hex => hex.getKey())).toEqual([]);
     });
   });
 });

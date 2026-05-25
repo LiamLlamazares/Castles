@@ -41,6 +41,8 @@ export class StateValidator {
     errors.push(...this.validateCastleOwnership(state));
     errors.push(...this.validateTurnCounter(state));
     errors.push(...this.validatePieceMapSync(state));
+    errors.push(...this.validateSanctuaryPool(state));
+    errors.push(...this.validatePhoenixRecords(state));
 
     return errors;
   }
@@ -127,10 +129,10 @@ export class StateValidator {
   private static validateTurnCounter(state: GameState): ValidationError[] {
     const errors: ValidationError[] = [];
 
-    if (state.turnCounter < 0) {
+    if (state.turnCounter < 0 || !Number.isInteger(state.turnCounter)) {
       errors.push({
         code: "INVALID_TURN_COUNTER",
-        message: `Turn counter is negative: ${state.turnCounter}`,
+        message: `Turn counter must be a non-negative integer: ${state.turnCounter}`,
         details: { turnCounter: state.turnCounter },
       });
     }
@@ -172,6 +174,64 @@ export class StateValidator {
           code: "PIECE_MAP_MISMATCH",
           message: `PieceMap at ${key} contains different piece than array`,
           details: { hex: key },
+        });
+      }
+    }
+
+    return errors;
+  }
+
+  /**
+   * Invariant: Sanctuary pool must not contain duplicates or types already on board.
+   */
+  private static validateSanctuaryPool(state: GameState): ValidationError[] {
+    const errors: ValidationError[] = [];
+    const seenPoolTypes = new Set<string>();
+    const boardTypes = new Set(state.sanctuaries.map(s => s.type));
+
+    for (const type of state.sanctuaryPool) {
+      if (seenPoolTypes.has(type)) {
+        errors.push({
+          code: "DUPLICATE_SANCTUARY_POOL_TYPE",
+          message: `Sanctuary pool contains duplicate type ${type}`,
+          details: { type },
+        });
+      } else {
+        seenPoolTypes.add(type);
+      }
+
+      if (boardTypes.has(type)) {
+        errors.push({
+          code: "SANCTUARY_TYPE_IN_POOL_AND_BOARD",
+          message: `Sanctuary type ${type} exists both on board and in the pool`,
+          details: { type },
+        });
+      }
+    }
+
+    return errors;
+  }
+
+  /**
+   * Invariant: Phoenix respawn records in settled state must be future-due.
+   */
+  private static validatePhoenixRecords(state: GameState): ValidationError[] {
+    const errors: ValidationError[] = [];
+
+    for (const record of state.phoenixRecords) {
+      if (
+        record.respawnTurn < 0 ||
+        !Number.isInteger(record.respawnTurn) ||
+        record.respawnTurn <= state.turnCounter
+      ) {
+        errors.push({
+          code: "INVALID_PHOENIX_RECORD",
+          message: `Phoenix respawn turn must be a future non-negative integer: ${record.respawnTurn}`,
+          details: {
+            owner: record.owner,
+            respawnTurn: record.respawnTurn,
+            turnCounter: state.turnCounter,
+          },
         });
       }
     }

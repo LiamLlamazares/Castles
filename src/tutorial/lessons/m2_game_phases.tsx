@@ -59,7 +59,7 @@ export function createM2(): TutorialLesson {
           </div>
           <div style={{ marginBottom: '8px' }}>
             <img src={castleIcon} alt="Recruitment" style={iconStyle} />
-            <strong>Recruitment Phase:</strong> Recruit from captured castles and available sanctuaries
+            <strong>Recruitment Phase:</strong> Recruit from controlled castles and available sanctuaries
           </div>
         </div>
       </div>
@@ -70,7 +70,7 @@ export function createM2(): TutorialLesson {
     objectives: [
       'Move the swordsmen forward',
       'Capture the enemy swordsman and castle (swordsmen attack diagonally)',
-      'Recruit a new swordsman from the captured castle',
+      'Recruit a new swordsman from the controlled castle',
     ],
     hints: [],
     instructions: 'TODO: Move your piece, then attack the enemy.',

@@ -1,0 +1,112 @@
+import { act } from "@testing-library/react";
+import { Board } from "../../Classes/Core/Board";
+import { MoveTree } from "../../Classes/Core/MoveTree";
+import { Castle } from "../../Classes/Entities/Castle";
+import { Hex } from "../../Classes/Entities/Hex";
+import { PGNService } from "../../Classes/Services/PGNService";
+import { renderGameLogicHook } from "../test-utils/TestGameProviderUtils";
+
+const makeFirstLegalMove = (result: ReturnType<typeof renderGameLogicHook>["result"]) => {
+  const movablePiece = result.current.pieces.find(
+    (piece) => piece.color === result.current.currentPlayer && piece.canMove
+  );
+  expect(movablePiece).toBeDefined();
+
+  act(() => {
+    result.current.handlePieceClick(movablePiece!);
+  });
+
+  const targetHexKey = Array.from(result.current.legalMoveSet)[0];
+  expect(targetHexKey).toBeDefined();
+  const targetHex = result.current.hexagons.find((hex) => hex.getKey() === targetHexKey);
+  expect(targetHex).toBeDefined();
+
+  act(() => {
+    result.current.handleHexClick(targetHex!);
+  });
+};
+
+describe("loadPGN replay diagnostics", () => {
+  it("returns null when replay diagnostics are produced", () => {
+    const { result } = renderGameLogicHook();
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const alert = jest.spyOn(window, "alert").mockImplementation(() => undefined);
+    const header = result.current.getPGN().split("\n\n")[0];
+    const invalidPgn = `${header}\n\n1. Z99Z98`;
+
+    const loaded = result.current.loadPGN(invalidPgn);
+
+    expect(loaded).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[loadPGN] Replay diagnostics",
+      expect.arrayContaining([
+        expect.objectContaining({
+          notation: "Z99Z98",
+          message: "Mover not found at Z99",
+        }),
+      ])
+    );
+    expect(alert).toHaveBeenCalledWith("Error replaying moves. PGN was not loaded.");
+
+    consoleError.mockRestore();
+    alert.mockRestore();
+  });
+
+  it("returns null when a non-mainline variation produces replay diagnostics", () => {
+    const { result } = renderGameLogicHook();
+    makeFirstLegalMove(result);
+
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const alert = jest.spyOn(window, "alert").mockImplementation(() => undefined);
+    const header = result.current.getPGN().split("\n\n")[0];
+    const mainMove = result.current.moveTree.getHistoryLine()[0].notation;
+    const invalidVariationPgn = `${header}\n\n1. ${mainMove} (1. Z99Z98)`;
+
+    const loaded = result.current.loadPGN(invalidVariationPgn);
+
+    expect(loaded).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith(
+      "[loadPGN] Replay diagnostics",
+      expect.arrayContaining([
+        expect.objectContaining({
+          notation: "Z99Z98",
+          message: "Mover not found at Z99",
+        }),
+      ])
+    );
+    expect(alert).toHaveBeenCalledWith("Error replaying moves. PGN was not loaded.");
+
+    consoleError.mockRestore();
+    alert.mockRestore();
+  });
+
+  it("preserves setup castle state when hard replay failure falls back to start position", () => {
+    const { result } = renderGameLogicHook();
+    const castle = new Castle(new Hex(-3, 3, 0), "b", 4, true, "w");
+    const board = new Board({ nSquares: 3 }, [castle]);
+    const moveTree = new MoveTree();
+    const pgn = PGNService.generatePGN(board, [], [], [], {}, moveTree);
+    const replay = jest
+      .spyOn(PGNService, "replayMoveHistory")
+      .mockImplementation(() => {
+        throw new Error("forced replay failure");
+      });
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+    const alert = jest.spyOn(window, "alert").mockImplementation(() => undefined);
+
+    const loaded = result.current.loadPGN(pgn);
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.castles).toHaveLength(1);
+    expect(loaded?.castles[0].color).toBe("b");
+    expect(loaded?.castles[0].owner).toBe("w");
+    expect(loaded?.castles[0].turns_controlled).toBe(4);
+    expect(loaded?.castles[0].used_this_turn).toBe(true);
+    expect(alert).toHaveBeenCalledWith("Error replaying moves. Game loaded at start position.");
+    expect(alert).not.toHaveBeenCalledWith("Error replaying moves. PGN was not loaded.");
+
+    replay.mockRestore();
+    consoleError.mockRestore();
+    alert.mockRestore();
+  });
+});

@@ -122,6 +122,21 @@ describe('MovementMutator promotion detection', () => {
 
     expect(newState.promotionPending).toBeFalsy();
   });
+
+  it('should NOT set promotionPending on river hexes', () => {
+    const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(2, 1, -3), 'w');
+    const state = createTestState([swordsman]);
+    const targetHex = new Hex(2, 0, -2);
+    const promotionSpy = jest.spyOn(board, 'isPromotionHex').mockReturnValue(true);
+    const riverSpy = jest.spyOn(board, 'isRiver').mockReturnValue(true);
+
+    const newState = MovementMutator.applyMove(state, swordsman, targetHex, board);
+
+    expect(newState.promotionPending).toBeFalsy();
+
+    promotionSpy.mockRestore();
+    riverSpy.mockRestore();
+  });
 });
 
 describe('PromotionMutator', () => {
@@ -139,9 +154,34 @@ describe('PromotionMutator', () => {
     expect(promoted!.color).toBe('w');
   });
 
+  it('should reject promotion when no swordsman is pending promotion', () => {
+    const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(0, -7, 7), 'w');
+    const state = createTestState([swordsman]);
+
+    const newState = PromotionMutator.promote(state, swordsman, PieceType.Dragon);
+
+    expect(newState).toBe(state);
+    expect(newState.pieces[0].type).toBe(PieceType.Swordsman);
+    expect(newState.promotionPending).toBeNull();
+  });
+
+  it('should reject stale pending promotion when the board piece changed', () => {
+    const staleSwordsman = PieceFactory.create(PieceType.Swordsman, new Hex(0, -7, 7), 'w');
+    const currentKnight = PieceFactory.create(PieceType.Knight, new Hex(0, -7, 7), 'w');
+    const state = createTestState([currentKnight]);
+    state.promotionPending = staleSwordsman;
+
+    const newState = PromotionMutator.promote(state, staleSwordsman, PieceType.Dragon);
+
+    expect(newState).toBe(state);
+    expect(newState.pieces[0].type).toBe(PieceType.Knight);
+    expect(newState.promotionPending).toBe(staleSwordsman);
+  });
+
   it('should preserve piece color after promotion', () => {
     const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(0, 7, -7), 'b');
     const state = createTestState([swordsman]);
+    state.promotionPending = swordsman;
 
     const newState = PromotionMutator.promote(state, swordsman, PieceType.Knight);
 
@@ -154,6 +194,7 @@ describe('PromotionMutator', () => {
     for (const type of PROMOTABLE_TYPES) {
       const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(0, -7, 7), 'w');
       const state = createTestState([swordsman]);
+      state.promotionPending = swordsman;
 
       const newState = PromotionMutator.promote(state, swordsman, type);
       expect(newState.pieces[0].type).toBe(type);
@@ -163,11 +204,16 @@ describe('PromotionMutator', () => {
   it('should reject promotion to Monarch', () => {
     const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(0, -7, 7), 'w');
     const state = createTestState([swordsman]);
+    state.promotionPending = swordsman;
+    const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const newState = PromotionMutator.promote(state, swordsman, PieceType.Monarch);
 
     // Should be unchanged — promotion rejected
     expect(newState.pieces[0].type).toBe(PieceType.Swordsman);
+    expect(consoleWarn).toHaveBeenCalledWith('PromotionMutator: Monarch is not a valid promotion target');
+
+    consoleWarn.mockRestore();
   });
 
   it('should reject promotion of non-swordsman pieces', () => {
@@ -182,6 +228,7 @@ describe('PromotionMutator', () => {
   it('should update PieceMap after promotion', () => {
     const swordsman = PieceFactory.create(PieceType.Swordsman, new Hex(0, -7, 7), 'w');
     const state = createTestState([swordsman]);
+    state.promotionPending = swordsman;
 
     const newState = PromotionMutator.promote(state, swordsman, PieceType.Eagle);
 

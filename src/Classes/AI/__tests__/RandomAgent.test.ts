@@ -17,6 +17,7 @@ import { Piece } from "../../Entities/Piece";
 import { Hex } from "../../Entities/Hex";
 import { Castle } from "../../Entities/Castle";
 import { MoveTree } from "../../Core/MoveTree";
+import { RuleEngine } from "../../Systems/RuleEngine";
 import { createPieceMap } from "../../../utils/PieceMap";
 import { PieceType, Color } from "../../../Constants";
 
@@ -111,6 +112,16 @@ describe("RandomAgent", () => {
       expect(action).not.toBeNull();
       expect(action?.type).toBe("RECRUIT");
     });
+
+    it("does not return a RecruitCommand during Recruitment phase with controlled own-origin castle", async () => {
+      const castleHex = new Hex(0, 7, -7);
+      const castle = new Castle(castleHex, "w", 0, false, "w");
+      const state = createMockState([], [castle], 4);
+
+      const action = await agent.getNextAction(state, board, "w");
+
+      expect(action).toBeNull();
+    });
   });
 
   describe("AIContextBuilder integration", () => {
@@ -143,6 +154,33 @@ describe("RandomAgent", () => {
 
       // Should have no moves during attack phase
       expect(context.legalMoves.size).toBe(0);
+    });
+
+    it("does not build actions for a non-active player", () => {
+      const castle = new Castle(new Hex(0, -7, 7), "b", 0, false, "b");
+      const state = createMockState([], [castle], 4); // White recruitment phase
+
+      const context = AIContextBuilder.build(state, board, gameEngine, "b");
+
+      expect(context.recruitOptions).toEqual([]);
+      expect(AIContextBuilder.countActions(context)).toBe(0);
+    });
+
+    it("uses RuleEngine recruitment legality for AI spawn options", () => {
+      const castle = new Castle(new Hex(0, -7, 7), "b", 0, false, "w");
+      const blockingHex = new Hex(0, -6, 6);
+      const blocker = new Piece(blockingHex, "w", PieceType.Swordsman);
+      const state = createMockState([blocker], [castle], 4);
+      const legalHexSet = new Set(
+        RuleEngine.getRecruitmentHexes(state, board).map((hex) => hex.getKey())
+      );
+
+      const context = AIContextBuilder.build(state, board, gameEngine, "w");
+      const aiSpawnHexes = context.recruitOptions.flatMap((option) => option.spawnHexes);
+
+      expect(aiSpawnHexes.length).toBeGreaterThan(0);
+      expect(aiSpawnHexes.every((hex) => legalHexSet.has(hex.getKey()))).toBe(true);
+      expect(aiSpawnHexes.some((hex) => hex.equals(blockingHex))).toBe(false);
     });
   });
 });

@@ -25,6 +25,16 @@ export class PromotionMutator {
   }
 
   public static promote(state: GameState, swordsman: Piece, newType: PieceType): GameState {
+    const pending = state.promotionPending;
+    if (
+      !pending ||
+      !pending.hex.equals(swordsman.hex) ||
+      pending.color !== swordsman.color ||
+      pending.type !== swordsman.type
+    ) {
+      return state;
+    }
+
     if (swordsman.type !== PieceType.Swordsman) {
       console.warn("PromotionMutator: piece is not a Swordsman");
       return state;
@@ -35,17 +45,26 @@ export class PromotionMutator {
       return state;
     }
 
+    const currentSwordsman = state.pieces.find(p =>
+      p.hex.equals(swordsman.hex) &&
+      p.color === swordsman.color &&
+      p.type === PieceType.Swordsman
+    );
+    if (!currentSwordsman) {
+      return state;
+    }
+
     // Create the promoted piece at the same hex with the same color
-    const promotedPiece = PieceFactory.create(newType, swordsman.hex, swordsman.color);
+    const promotedPiece = PieceFactory.create(newType, currentSwordsman.hex, currentSwordsman.color);
     // Preserve canMove/canAttack flags from the swordsman (already used move this turn)
     const finalPiece = promotedPiece.with({
-      canMove: swordsman.canMove,
-      canAttack: swordsman.canAttack,
+      canMove: currentSwordsman.canMove,
+      canAttack: currentSwordsman.canAttack,
     });
 
     // Replace the swordsman in the pieces array
     const newPieces = state.pieces.map(p =>
-      p.hex.equals(swordsman.hex) && p.color === swordsman.color ? finalPiece : p
+      p === currentSwordsman ? finalPiece : p
     );
 
     // Update the last move's notation to include promotion suffix

@@ -49,6 +49,10 @@ export interface ComputedGameResult {
   recruitmentHexes: Hex[];
   /** O(1) lookup set for recruitment hexes */
   recruitmentHexSet: Set<string>;
+  /** Available sanctuary pledge spawn positions */
+  pledgeHexes: Hex[];
+  /** O(1) lookup set for sanctuary pledge spawn positions */
+  pledgeHexSet: Set<string>;
   /** Whether move indicators should be hidden */
   shouldHideMoveIndicators: boolean;
 }
@@ -107,6 +111,11 @@ export const useComputedGame = ({
     [gameEngine, viewState]
   );
 
+  const pledgeHexes = useMemo(
+    () => gameEngine.getPledgeSpawnHexes(viewState),
+    [gameEngine, viewState]
+  );
+
   // Hide indicators ONLY if we are in Play Mode (Read-Only) and viewing history
   const shouldHideMoveIndicators = !isAnalysisMode && isViewingHistory;
 
@@ -126,6 +135,11 @@ export const useComputedGame = ({
     [recruitmentHexes, shouldHideMoveIndicators]
   );
 
+  const pledgeHexSet = useMemo(
+    () => shouldHideMoveIndicators ? new Set<string>() : new Set(pledgeHexes.map(h => h.getKey())),
+    [pledgeHexes, shouldHideMoveIndicators]
+  );
+
   return {
     turnPhase,
     currentPlayer,
@@ -137,6 +151,8 @@ export const useComputedGame = ({
     winner,
     recruitmentHexes,
     recruitmentHexSet,
+    pledgeHexes,
+    pledgeHexSet,
     shouldHideMoveIndicators,
   };
 };

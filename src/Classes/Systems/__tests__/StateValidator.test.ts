@@ -7,7 +7,8 @@ import { GameState } from "../../Core/GameState";
 import { Board } from "../../Core/Board";
 import { Piece } from "../../Entities/Piece";
 import { Hex } from "../../Entities/Hex";
-import { PieceType } from "../../../Constants";
+import { Sanctuary } from "../../Entities/Sanctuary";
+import { PieceType, SanctuaryType } from "../../../Constants";
 import { createPieceMap } from "../../../utils/PieceMap";
 import { MoveTree } from "../../Core/MoveTree";
 
@@ -38,7 +39,7 @@ describe("StateValidator", () => {
       ];
       const state = createMinimalState(pieces);
       const errors = StateValidator.validate(state, board);
-      
+
       expect(errors.filter(e => e.code === "DUPLICATE_PIECE_POSITION")).toHaveLength(0);
     });
 
@@ -50,7 +51,7 @@ describe("StateValidator", () => {
       ];
       const state = createMinimalState(pieces);
       const errors = StateValidator.validate(state, board);
-      
+
       const duplicateErrors = errors.filter(e => e.code === "DUPLICATE_PIECE_POSITION");
       expect(duplicateErrors).toHaveLength(1);
       expect(duplicateErrors[0].details?.hex).toBe(sameHex.getKey());
@@ -64,7 +65,7 @@ describe("StateValidator", () => {
       ];
       const state = createMinimalState(pieces);
       const errors = StateValidator.validate(state, board);
-      
+
       expect(errors.filter(e => e.code === "PIECE_OFF_BOARD")).toHaveLength(0);
     });
 
@@ -75,7 +76,7 @@ describe("StateValidator", () => {
       ];
       const state = createMinimalState(pieces);
       const errors = StateValidator.validate(state, board);
-      
+
       const offBoardErrors = errors.filter(e => e.code === "PIECE_OFF_BOARD");
       expect(offBoardErrors).toHaveLength(1);
     });
@@ -86,7 +87,7 @@ describe("StateValidator", () => {
       const state = createMinimalState([]);
       state.turnCounter = 10;
       const errors = StateValidator.validate(state, board);
-      
+
       expect(errors.filter(e => e.code === "INVALID_TURN_COUNTER")).toHaveLength(0);
     });
 
@@ -94,7 +95,16 @@ describe("StateValidator", () => {
       const state = createMinimalState([]);
       (state as any).turnCounter = -5;
       const errors = StateValidator.validate(state, board);
-      
+
+      const turnErrors = errors.filter(e => e.code === "INVALID_TURN_COUNTER");
+      expect(turnErrors).toHaveLength(1);
+    });
+
+    it("should detect non-integer turn counter", () => {
+      const state = createMinimalState([]);
+      (state as any).turnCounter = 1.5;
+      const errors = StateValidator.validate(state, board);
+
       const turnErrors = errors.filter(e => e.code === "INVALID_TURN_COUNTER");
       expect(turnErrors).toHaveLength(1);
     });
@@ -108,10 +118,70 @@ describe("StateValidator", () => {
       const state = createMinimalState(pieces);
       // Manually corrupt the pieceMap
       state.pieceMap = createPieceMap([]);
-      
+
       const errors = StateValidator.validate(state, board);
-      
+
       expect(errors.filter(e => e.code === "PIECE_MAP_DESYNC")).toHaveLength(1);
+    });
+  });
+
+  describe("validateSanctuaryPool", () => {
+    it("should detect duplicate sanctuary types in the pool", () => {
+      const state = createMinimalState([]);
+      state.sanctuaryPool = [
+        SanctuaryType.WolfCovenant,
+        SanctuaryType.WolfCovenant,
+      ];
+
+      const errors = StateValidator.validate(state, board);
+
+      expect(errors.filter(e => e.code === "DUPLICATE_SANCTUARY_POOL_TYPE")).toHaveLength(1);
+    });
+
+    it("should detect sanctuary types that are both on board and in the pool", () => {
+      const state = createMinimalState([]);
+      state.sanctuaries = [
+        new Sanctuary(
+          new Hex(0, 1, -1),
+          SanctuaryType.WolfCovenant,
+          "w"
+        ),
+      ];
+      state.sanctuaryPool = [SanctuaryType.WolfCovenant];
+
+      const errors = StateValidator.validate(state, board);
+
+      expect(errors.filter(e => e.code === "SANCTUARY_TYPE_IN_POOL_AND_BOARD")).toHaveLength(1);
+    });
+  });
+
+  describe("validatePhoenixRecords", () => {
+    it("should detect negative phoenix respawn turns", () => {
+      const state = createMinimalState([]);
+      state.phoenixRecords = [{ owner: "w", respawnTurn: -1 }];
+
+      const errors = StateValidator.validate(state, board);
+
+      expect(errors.filter(e => e.code === "INVALID_PHOENIX_RECORD")).toHaveLength(1);
+    });
+
+    it("should detect non-integer phoenix respawn turns", () => {
+      const state = createMinimalState([]);
+      state.phoenixRecords = [{ owner: "w", respawnTurn: 2.5 }];
+
+      const errors = StateValidator.validate(state, board);
+
+      expect(errors.filter(e => e.code === "INVALID_PHOENIX_RECORD")).toHaveLength(1);
+    });
+
+    it("should detect due phoenix respawn records in settled state", () => {
+      const state = createMinimalState([]);
+      state.turnCounter = 10;
+      state.phoenixRecords = [{ owner: "w", respawnTurn: 10 }];
+
+      const errors = StateValidator.validate(state, board);
+
+      expect(errors.filter(e => e.code === "INVALID_PHOENIX_RECORD")).toHaveLength(1);
     });
   });
 
@@ -123,7 +193,7 @@ describe("StateValidator", () => {
         new Piece(sameHex, "b", PieceType.Knight),
       ];
       const state = createMinimalState(pieces);
-      
+
       expect(() => StateValidator.assertValid(state, board)).toThrow("Invalid game state");
     });
 
@@ -132,7 +202,7 @@ describe("StateValidator", () => {
         new Piece(new Hex(0, 1, -1), "w", PieceType.Swordsman),
       ];
       const state = createMinimalState(pieces);
-      
+
       expect(() => StateValidator.assertValid(state, board)).not.toThrow();
     });
   });
