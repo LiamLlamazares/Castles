@@ -42,8 +42,8 @@ export class RuleEngine {
 
   /**
    * Returns all hexes that block ground movement.
-   * Includes: rivers, enemy/neutral castles, and occupied hexes.
-   * Friendly castles are passable (pieceColor determines friendship).
+   * Includes: rivers, opponent-controlled castles, and occupied hexes.
+   * Castles currently owned by the moving piece's player are passable.
    */
   public static getBlockedHexes(gameState: GameState, board: Board, pieceColor?: Color): Hex[] {
     const occupied = RuleEngine.getOccupiedHexes(gameState);
@@ -421,5 +421,32 @@ export class RuleEngine {
         hasFutureControlledCastles || hasUsableSanctuaries,
         hasUsableCastles || hasUsableSanctuaries
     );
+  }
+
+  public static hasCurrentPhaseAction(gameState: GameState, board: Board): boolean {
+    const phase = TurnManager.getTurnPhase(gameState.turnCounter);
+
+    if (phase === "Movement") {
+      return RuleEngine.hasAnyLegalMoves(gameState, board);
+    }
+
+    if (phase === "Attack") {
+      return RuleEngine.hasAnyFutureLegalAttacks(gameState, board);
+    }
+
+    return (
+      RuleEngine.hasAnyFutureControlledCastles(gameState, board) ||
+      gameState.sanctuaries.some(sanctuary =>
+        SanctuaryService.canPledge(gameState, board, sanctuary.hex)
+      )
+    );
+  }
+
+  public static getForcedTurnCounterIncrement(gameState: GameState, board: Board): number {
+    if (RuleEngine.hasCurrentPhaseAction(gameState, board)) {
+      return 0;
+    }
+
+    return RuleEngine.getTurnCounterIncrement(gameState, board, false);
   }
 }

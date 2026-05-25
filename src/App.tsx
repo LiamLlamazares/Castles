@@ -6,11 +6,11 @@ import BoardEditor from './components/BoardEditor';
 import Tutorial from './components/Tutorial';
 import GameLibrary from './components/GameLibrary';
 import InstallAppHint from './components/InstallAppHint';
+import RulesManualPage from './components/RulesManualPage';
 import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
 import { MoveTree } from './Classes/Core/MoveTree';
-import { SanctuaryGenerator } from './Classes/Systems/SanctuaryGenerator';
 import { SanctuaryType, PieceTheme } from './Constants';
 import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
@@ -78,6 +78,7 @@ function App() {
     board: Board, 
     pieces: Piece[], 
     timeControl?: { initial: number, increment: number },
+    sanctuaries?: Sanctuary[],
     selectedSanctuaryTypes?: SanctuaryType[],
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     gameRules?: { vpModeEnabled: boolean },
@@ -86,15 +87,7 @@ function App() {
     opponentConfig?: AIOpponentConfig
   ) => {
     const layout = getStartingLayout(board);
-    
-    // Generate sanctuaries from selected types (defaults to Wolf + Healer if not provided)
-    const typesToGenerate = selectedSanctuaryTypes && selectedSanctuaryTypes.length > 0
-      ? selectedSanctuaryTypes
-      : [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring];
-    
-    const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, typesToGenerate);
-    
-    
+
     clearAutosave();
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
     setView('game');
@@ -173,6 +166,7 @@ function App() {
   };
   
   const [gameKey, setGameKey] = useState(0);
+  const isRulesPage = window.location.pathname === '/rules';
 
   const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
@@ -203,6 +197,10 @@ function App() {
   return (
     <ThemeProvider>
     <div className="App">
+      {isRulesPage ? (
+        <RulesManualPage />
+      ) : (
+        <>
       {view === 'menu' && (
         <MainMenu 
           onPlay={handleNewGameClick} 
@@ -271,6 +269,8 @@ function App() {
       )}
 
       <InstallAppHint />
+        </>
+      )}
     </div>
     </ThemeProvider>
   );

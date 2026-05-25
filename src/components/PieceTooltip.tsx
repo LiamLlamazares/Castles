@@ -12,6 +12,8 @@ interface PieceTooltipProps {
   position?: { x: number, y: number };
   isDefended?: boolean;
   isPreview?: boolean;  // True when showing generic piece info (e.g., from sanctuary)
+  combatStrength?: number;
+  combatBonusLabels?: string[];
   style?: React.CSSProperties;
 }
 
@@ -35,15 +37,16 @@ const PIECE_INFO: Record<PieceType, {
   [PieceType.Monarch]: { movement: '1 (any)', attackType: 'Melee', heavy: true, flying: false, special: 'Capture loses the game!' },
   [PieceType.Wolf]: { movement: '3 (walk)', attackType: 'Melee', heavy: false, flying: false, special: '+1 STR per adjacent ally Wolf' },
   [PieceType.Healer]: { movement: '1 (any)', attackType: 'None', heavy: false, flying: false, special: '+1 STR to all adjacent allies' },
-  [PieceType.Ranger]: { movement: '2 (walk)', attackType: 'Long-Range', range: '3 hexes', heavy: false, flying: false, special: 'Cannot attack defended pieces' },
-  [PieceType.Wizard]: { movement: '1 (any)', attackType: 'Ranged', range: '2 hexes', heavy: false, flying: false, special: 'Fireball: deals 1 damage to target + neighbors. Teleport: move anywhere.' },
-  [PieceType.Necromancer]: { movement: '1 (any)', attackType: 'Melee', heavy: false, flying: false, special: 'Starts with 1 soul. Gains +1 soul per capture. Raise Dead: spend 1 soul to revive a dead ally.' },
-  [PieceType.Phoenix]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true, special: 'Rebirth: respawns at your castle 3 rounds after death' },
+  [PieceType.Ranger]: { movement: '2 (walk)', attackType: 'Long-Range', range: 'exactly 3 hexes', heavy: false, flying: false, special: 'Cannot attack defended pieces' },
+  [PieceType.Wizard]: { movement: '1 (any)', attackType: 'Ranged', range: 'exactly 2 hexes', heavy: false, flying: false, special: 'Attack-phase abilities: Fireball damages target + neighbors. Teleport moves within range 3.' },
+  [PieceType.Necromancer]: { movement: '1 (any)', attackType: 'Melee', heavy: false, flying: false, special: 'Attack-phase ability: Raise Dead spends 1 soul to revive one dead ally.' },
+  [PieceType.Phoenix]: { movement: '3 (flying)', attackType: 'Melee', heavy: false, flying: true, special: 'Rebirth: respawns after 3 full player turns at a friendly castle or adjacent open hex' },
 };
 
-export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended, isPreview, style }) => {
+export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isDefended, isPreview, combatStrength, combatBonusLabels = [], style }) => {
   const info = PIECE_INFO[piece.type];
   if (!info) return null;
+  const displayedStrength = combatStrength ?? piece.Strength;
 
   const baseStyle: React.CSSProperties = {
     position: 'fixed',
@@ -148,9 +151,11 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
       <div style={rowStyle}>
         <span>Strength:</span>
         <span style={valueStyle}>
-          {piece.Strength}
-          {piece.type === PieceType.Swordsman && piece.Strength > 1 && (
-            <span style={{ fontSize: '0.7em', color: '#00ff00', marginLeft: '4px' }}>(River Bonus)</span>
+          {displayedStrength}
+          {combatBonusLabels.length > 0 && (
+            <span style={{ fontSize: '0.7em', color: '#00ff00', marginLeft: '4px' }}>
+              ({combatBonusLabels.join(', ')})
+            </span>
           )}
         </span>
       </div>
@@ -182,7 +187,7 @@ export const PieceTooltip: React.FC<PieceTooltipProps> = ({ piece, position, isD
           color: '#e74c3c',
           fontSize: '0.85rem'
         }}>
-          Damage: {piece.damage}/{piece.Strength}
+          Damage: {piece.damage}/{displayedStrength}
         </div>
       )}
 

@@ -101,11 +101,12 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
   let nextPieceType: PieceType | null = null;
   if (isCastle && castle) {
     title = "Castle";
-    badgeText = "Strategic Point";
+    badgeText = "Stronghold";
     // Match the vibrant highlight colors from Board.css
     color = castle.owner === 'w' ? '#00fbff' : '#8000ff';
-    const ownerName = castle.owner === 'w' ? 'White' : castle.owner === 'b' ? 'Black' : 'Neutral';
-    description = `A vital stronghold. Controls recruitment and victory. Currently held by ${ownerName}.`;
+    const ownerName = castle.owner === 'w' ? 'White' : 'Black';
+    const originalSideName = castle.color === 'w' ? 'White' : 'Black';
+    description = `${ownerName} controls this castle. Original side: ${originalSideName}.`;
     
     // Use the official recruitment cycle
     nextPieceType = RECRUITMENT_CYCLE[castle.turns_controlled % RECRUITMENT_CYCLE.length];
@@ -149,8 +150,12 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
       {isCastle && castle && nextPieceType && (
           <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px' }}>
               <div style={infoRowStyle}>
-                  <span>Held For:</span>
-                  <span style={{ color: '#fff' }}>{castle.turns_controlled} Full Rounds</span>
+                  <span>Controller:</span>
+                  <span style={{ color: '#fff' }}>{castle.owner === 'w' ? 'White' : 'Black'}</span>
+              </div>
+              <div style={infoRowStyle}>
+                  <span>Original Side:</span>
+                  <span style={{ color: '#fff' }}>{castle.color === 'w' ? 'White' : 'Black'}</span>
               </div>
               <div style={infoRowStyle}>
                   <span>Next Recruitment:</span>

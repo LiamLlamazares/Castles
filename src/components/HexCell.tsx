@@ -40,6 +40,7 @@ export interface HexCellProps {
   
   // Sanctuary Data
   sanctuaryType: SanctuaryType | null;
+  sanctuaryCooldown: number;
   
   // Config / Toggles
   showCoordinates: boolean;
@@ -66,6 +67,7 @@ const HexCell = React.memo(({
   castleOwner,
   castleTurnsControlled,
   sanctuaryType,
+  sanctuaryCooldown,
   showCoordinates,
   showTerrainIcons,
   showSanctuaryIcons,
@@ -158,6 +160,31 @@ const HexCell = React.memo(({
                   height={iconSize}
                   opacity={0.95}
                 />
+                {sanctuaryCooldown > 0 && (
+                  <g>
+                    <circle
+                      cx={center.x + offsetX + iconSize * 0.42}
+                      cy={center.y + offsetY - iconSize * 0.42}
+                      r={iconSize * 0.28}
+                      fill="#1d2130"
+                      stroke="#ffd700"
+                      strokeWidth={1.2}
+                    />
+                    <text
+                      x={center.x + offsetX + iconSize * 0.42}
+                      y={center.y + offsetY - iconSize * 0.42 + iconSize * 0.11}
+                      textAnchor="middle"
+                      style={{
+                        fontSize: `${Math.max(9, iconSize * 0.34)}px`,
+                        fill: "#ffd700",
+                        fontWeight: 800,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {sanctuaryCooldown}
+                    </text>
+                  </g>
+                )}
               </g>
             );
       }

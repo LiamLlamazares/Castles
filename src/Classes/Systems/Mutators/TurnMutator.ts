@@ -2,9 +2,10 @@ import { GameState } from "../../Core/GameState";
 import { Board } from "../../Core/Board";
 import { NotationService } from "../NotationService";
 import { DeathSystem } from "../DeathSystem";
-import { PieceType, PHASE_CYCLE_LENGTH } from "../../../Constants";
+import { PieceType, PHASE_CYCLE_LENGTH, PLAYER_CYCLE_LENGTH } from "../../../Constants";
 import { createPieceMap } from "../../../utils/PieceMap";
 import { ActionOrchestrator } from "./ActionOrchestrator";
+import { RuleEngine } from "../RuleEngine";
 
 export class TurnMutator {
 
@@ -23,7 +24,7 @@ export class TurnMutator {
    * Checks if we need to reset turn flags based on phase transitions.
    * Called by ActionOrchestrator during every action finalization.
    */
-  public static checkTurnTransitions(state: GameState): GameState {
+  public static checkTurnTransitions(state: GameState, skipCooldownTickHexKeys: Set<string> = new Set()): GameState {
       let newState = state;
 
       // Delegate Phoenix Respawns to DeathSystem
@@ -47,6 +48,7 @@ export class TurnMutator {
               });
 
               const updatedSanctuaries = newState.sanctuaries.map(s => {
+                  if (skipCooldownTickHexKeys.has(s.hex.getKey())) return s;
                   if (s.territorySide !== currentPhaseStartPlayer) return s;
                   if (s.cooldown <= 0) return s;
                   
@@ -66,6 +68,32 @@ export class TurnMutator {
           newState = TurnMutator.resetTurnFlags(newState);
       }
       
+      return newState;
+  }
+
+  public static normalizeForcedTurns(state: GameState, board: Board): GameState {
+      let newState = state;
+      const startTurnCounter = state.turnCounter;
+
+      for (let i = 0; i < PLAYER_CYCLE_LENGTH; i++) {
+          if (newState.promotionPending) return newState;
+
+          const increment = RuleEngine.getForcedTurnCounterIncrement(newState, board);
+          if (increment <= 0) return newState;
+
+          newState = {
+              ...newState,
+              movingPiece: null,
+              turnCounter: newState.turnCounter + increment
+          };
+
+          newState = TurnMutator.checkTurnTransitions(newState);
+
+          if (newState.turnCounter - startTurnCounter >= PLAYER_CYCLE_LENGTH) {
+              return newState;
+          }
+      }
+
       return newState;
   }
 

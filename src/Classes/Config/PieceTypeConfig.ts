@@ -128,7 +128,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Swordsman]: {
     strength: 1,
     attackType: AttackType.Swordsman,
-    description: "Moves 1 hex forward. Attacks diagonally forward (captures by moving onto target). Gains +1 Strength when crossing the river.",
+    description: "Moves 1 hex forward. Attacks diagonally forward (captures by moving onto target). Gains +1 Strength while on the enemy side of the river.",
     moveStrategy: (hex, blocked, valid, color) => swordsmanMoves(hex, blocked, valid, color),
     attackStrategy: swordsmanAttackStrategy,
     strengthCompute: (piece: PieceContext) => {
@@ -148,7 +148,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Archer]: {
     strength: 1,
     attackType: AttackType.Ranged,
-    description: "Moves 1 hex in any direction. Attacks at range 2 (3 from high ground). Cannot attack adjacent enemies.",
+    description: "Moves 1 hex in any direction. Attacks at exactly range 2, or range 2-3 from high ground. Cannot attack adjacent enemies.",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: rangedAttackStrategy,
   },
@@ -156,7 +156,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Knight]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Slides diagonally up to 2 hexes. Attacks adjacent hexes (captures by moving onto target).",
+    description: "Slides diagonally until blocked. Attacks adjacent hexes (captures by moving onto target).",
     moveStrategy: (hex, blocked, valid, _color, boardSize = N_SQUARES) => knightMoves(hex, blocked, valid, boardSize),
     attackStrategy: meleeAttackStrategy,
   },
@@ -164,7 +164,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Trebuchet]: {
     strength: 1,
     attackType: AttackType.LongRanged,
-    description: "Moves 1 hex in any direction. Attacks at range 3 (4 from high ground). Cannot attack closer enemies.",
+    description: "Moves 1 hex in any direction. Attacks at exactly range 3, or range 3-4 from high ground. Cannot attack closer enemies.",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: longRangedAttackStrategy,
   },
@@ -172,7 +172,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Eagle]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Flies over obstacles up to 3 hexes in straight lines. Attacks adjacent hexes.",
+    description: "Flies to any unblocked hex within 1-3 hexes, ignoring blockers on the way. Attacks adjacent hexes.",
     moveStrategy: (hex, blocked, valid) => eagleMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },
@@ -180,7 +180,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Giant]: {
     strength: 2,
     attackType: AttackType.Melee,
-    description: "Slides up to 2 hexes in any direction. Attacks adjacent hexes. Strength 2 (requires 2+ attackers or strength 2+ attacker to defeat).",
+    description: "Slides along orthogonal lines until blocked. Attacks adjacent hexes. Strength 2 (requires 2+ attackers or strength 2+ attacker to defeat).",
     moveStrategy: (hex, blocked, valid, _color, boardSize = N_SQUARES) => giantMoves(hex, blocked, valid, boardSize),
     attackStrategy: meleeAttackStrategy,
   },
@@ -188,7 +188,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Assassin]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Moves 1 hex in any direction. Attacks adjacent hexes. Instantly kills Monarchs regardless of defenders.",
+    description: "Slides along both diagonal and orthogonal lines until blocked. Attacks adjacent hexes. Instantly kills Monarchs regardless of defenders.",
     moveStrategy: (hex, blocked, valid, _color, boardSize = N_SQUARES) => assassinMoves(hex, blocked, valid, boardSize),
     attackStrategy: meleeAttackStrategy,
   },
@@ -196,7 +196,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Dragon]: {
     strength: 3,
     attackType: AttackType.Melee,
-    description: "Slides up to 3 hexes in any direction. Attacks adjacent hexes. Strength 3 (very hard to kill).",
+    description: "Flies in long L-shaped jumps, ignoring blockers on the way. Attacks adjacent hexes. Strength 3 (very hard to kill).",
     moveStrategy: (hex, blocked, valid) => dragonMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },
@@ -204,8 +204,8 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Monarch]: {
     strength: 3,
     attackType: AttackType.Melee,
-    description: "Moves 1 hex in any direction. Attacks adjacent hexes. Strength 3. Losing your Monarch = instant defeat.",
-    displayName: "Monarch (King/Queen)",
+    description: "Moves 1 hex in any direction. Attacks adjacent hexes. Strength 3. A side loses when it has no Monarchs remaining.",
+    displayName: "Monarch",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },
@@ -215,7 +215,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Wolf]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Pack Tactics: Gains +1 strength for each adjacent friendly Wolf. Moves 2 hexes, attacks adjacent.",
+    description: "Pack Tactics: Gains +1 strength for each adjacent friendly Wolf. Moves 3 hexes, attacks adjacent.",
     moveStrategy: (hex, blocked, valid) => wolfMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },
@@ -231,7 +231,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Ranger]: {
     strength: 1,
     attackType: AttackType.LongRanged,
-    description: "Enhanced Archer. Moves 2 hexes, attacks at range 3 (or 4 from high ground).",
+    description: "Moves up to 2 walking hexes. Attacks at exactly range 3, or range 3-4 from high ground.",
     moveStrategy: (hex, blocked, valid) => rangerMoves(hex, blocked, valid),
     attackStrategy: longRangedAttackStrategy,
   },
@@ -239,7 +239,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Wizard]: {
     strength: 1,
     attackType: AttackType.Ranged,
-    description: "Moves 1 hex, attacks at range 2. Ability (once per game): Fireball deals 1 damage to target hex + ring 1 (7 hexes total).",
+    description: "Moves 1 hex. Attacks at exactly range 2, or range 2-3 from high ground. Attack-phase abilities: choose either one Fireball or one Teleport per Wizard.",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: rangedAttackStrategy,
     abilities: [AbilityType.Fireball, AbilityType.Teleport],
@@ -248,7 +248,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Necromancer]: {
     strength: 1,
     attackType: AttackType.Melee,
-    description: "Moves 1 hex, attacks adjacent. Collects souls from nearby deaths. Ability: Spend 1 soul to raise a dead friendly piece.",
+    description: "Moves 1 hex, attacks adjacent. Starts with 1 soul and gains +1 soul when it captures. Attack-phase ability: spend 1 soul to raise the latest dead friendly piece.",
     moveStrategy: (hex, blocked, valid) => archerMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
     abilities: [AbilityType.RaiseDead],
@@ -257,7 +257,7 @@ export const PieceTypeConfig: Record<PieceType, PieceConfig> = {
   [PieceType.Phoenix]: {
     strength: 2,
     attackType: AttackType.Melee,
-    description: "Flies up to 3 hexes. Attacks adjacent. First death: Respawns after 3 turns at original sanctuary. Second death: Permanent.",
+    description: "Flies to any unblocked hex within 1-3 hexes, ignoring blockers on the way. Attacks adjacent. Death schedules rebirth after 3 full rounds at a friendly castle or adjacent open hex.",
     moveStrategy: (hex, blocked, valid) => eagleMoves(hex, blocked, valid),
     attackStrategy: meleeAttackStrategy,
   },

@@ -1,9 +1,3 @@
-/**
- * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.1: Swordsman
- * 
- * Objective: Capture target piece
- */
 import React from 'react';
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
@@ -11,59 +5,27 @@ import { Hex } from '../../Classes/Entities/Hex';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
 import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
+import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
 
 export function createM2L2(): TutorialLesson {
-  const boardRadius = 2; // Mini
-  
-  const castles: Castle[] = [
-    new Castle(new Hex(-2, 2, 0), 'w', 0),
-    new Castle(new Hex(2, -2, 0), 'b', 0),
-  ];
-  
-  const boardConfig: BoardConfig = { nSquares: boardRadius };
+  const castles: Castle[] = [new Castle(new Hex(-2, 2, 0), 'w', 0), new Castle(new Hex(2, -2, 0), 'b', 0)];
+  const boardConfig: BoardConfig = { nSquares: 2, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
-  
   const pieces = [
     PieceFactory.create(PieceType.Swordsman, new Hex(0, 1, -1), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'), // Target
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
   ];
-  
   const layout = getStartingLayout(board);
-  
+
   return {
     id: 'm2_l2_swordsman',
-    title: '3.1 Swordsman',
-    description: (
-      <div>
-        <p style={{ marginTop: 0 }}>The Swordsman is the basic melee unit (units that attack adjacent hexes and capture by moving onto the enemy hex).</p>
-            <div style={{ marginTop: '12px' }}>
-             <div style={{ marginBottom: '6px' }}>
-            <strong>Type:</strong> Melee
-          </div>   
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Movement:</strong> 1 hex forward in any direction
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Attack:</strong> An adjacent hex forward diagonally
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Strength:</strong> 1
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Special:</strong> +1 STR when on enemy side of board
-          </div>
-        </div>
-      </div>
-    ),
+    title: '2.2 Swordsman',
+    description: <PieceRules type={PieceType.Swordsman} intro="The Swordsman is the basic forward-moving melee piece. It is weak at home but becomes stronger after crossing into enemy territory." />,
     board,
     pieces,
     layout,
-    objectives: [
-      'Capture the enemy Swordsman',
-    ],
-    hints: [
-      'You need to move first.',
-    ]
+    objectives: ['Move into position, then capture the enemy Swordsman.'],
+    hints: ['Swordsmen move forward and attack forward diagonally.', 'If you cannot attack yet, pass through movement until the attack phase.'],
   };
 }

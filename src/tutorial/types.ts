@@ -7,6 +7,7 @@ import { Board } from '../Classes/Core/Board';
 import { Piece } from '../Classes/Entities/Piece';
 import { Sanctuary } from '../Classes/Entities/Sanctuary';
 import { LayoutService } from '../Classes/Systems/LayoutService';
+import { PhoenixRecord } from '../Classes/Core/GameState';
 
 /**
  * Represents a single tutorial lesson with board setup and instructional content.
@@ -26,9 +27,18 @@ export interface TutorialLesson {
   
   /** Pieces placed on the board */
   pieces: Piece[];
+
+  /** Optional pieces already in the graveyard when the lesson starts */
+  graveyard?: Piece[];
+
+  /** Optional pending Phoenix rebirth records when the lesson starts */
+  phoenixRecords?: PhoenixRecord[];
   
   /** Optional sanctuaries on the board */
   sanctuaries?: Sanctuary[];
+
+  /** Optional starting turn counter, used to begin tactical lessons in Attack or Castles phase */
+  initialTurnCounter?: number;
   
   /** Layout service for rendering */
   layout: LayoutService;

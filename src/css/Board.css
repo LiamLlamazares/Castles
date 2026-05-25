@@ -121,6 +121,16 @@ body {
 .legalAttackDot:hover {
   fill: rgba(255, 0, 0, 0.5);
 }
+.legalAbilityDot {
+  fill: rgba(0, 251, 255, 0.28);
+  stroke: rgba(255, 215, 0, 0.95);
+  stroke-width: 4;
+  cursor: pointer;
+  filter: drop-shadow(0 0 8px rgba(0, 251, 255, 0.9));
+}
+.legalAbilityDot:hover {
+  fill: rgba(255, 215, 0, 0.45);
+}
 .piece {
   cursor: pointer;
   /* Smooth Lichess-style piece movement */

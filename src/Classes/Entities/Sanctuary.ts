@@ -67,9 +67,9 @@ export class Sanctuary {
     return this.adjacentHexes().some((h) => h.equals(hex));
   }
 
-  /** Returns true if this sanctuary is ready to be used (not on cooldown, not pledged) */
+  /** Returns true if this sanctuary is ready to be used (not on cooldown) */
   get isReady(): boolean {
-    return this.cooldown === 0 && !this.hasPledgedThisGame;
+    return this.cooldown === 0;
   }
 
   /**

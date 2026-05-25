@@ -35,7 +35,9 @@ export const useCoreGame = (
   initialMoveTree?: MoveTree,
   sanctuarySettings?: { unlockTurn: number, cooldown: number },
   gameRules?: { vpModeEnabled: boolean },
-  initialPoolTypes?: import("../Constants").SanctuaryType[]
+  initialPoolTypes?: import("../Constants").SanctuaryType[],
+  initialGraveyard: Piece[] = [],
+  initialPhoenixRecords: import("../Classes/Core/GameState").PhoenixRecord[] = []
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -73,42 +75,46 @@ export const useCoreGame = (
       sanctuaries: startingSanctuaries.map(s => s.clone()),
       turnCounter: 0,
       sanctuaryPool: initialPool,
-      graveyard: [],
-      phoenixRecords: []
+      graveyard: initialGraveyard,
+      phoenixRecords: initialPhoenixRecords
     };
     
     return tree;
-  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries]);
+  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries, initialGraveyard, initialPhoenixRecords]);
 
   // =========== STATE ===========
-  const [state, setState] = useState<GameBoardState>({
-    pieces: initialPieces,
-    pieceMap: createPieceMap(initialPieces),
-    movingPiece: null,
-    promotionPending: null,
-    turnCounter: initialTurnCounter,
-    castles: initialBoard.castles as Castle[], 
-    sanctuaries: startingSanctuaries,
-    // Initialize sanctuary pool
-    sanctuaryPool: (initialPoolTypes || Object.values(SanctuaryType)).filter((t): t is SanctuaryType => {
-      // 1. Exclude types already on board
-      if (startingSanctuaries.some(s => s.type === t)) return false;
+  const [state, setState] = useState<GameBoardState>(() => {
+    const initialState: GameBoardState = {
+      pieces: initialPieces,
+      pieceMap: createPieceMap(initialPieces),
+      movingPiece: null,
+      promotionPending: null,
+      turnCounter: initialTurnCounter,
+      castles: initialBoard.castles as Castle[], 
+      sanctuaries: startingSanctuaries,
+      // Initialize sanctuary pool
+      sanctuaryPool: (initialPoolTypes || Object.values(SanctuaryType)).filter((t): t is SanctuaryType => {
+        // 1. Exclude types already on board
+        if (startingSanctuaries.some(s => s.type === t)) return false;
+        
+        // 2. If explicit pool provided, use it (already trusted)
+        if (initialPoolTypes) return true;
+   
+        // 3. Otherwise use defaults from config
+        const config = SanctuaryConfig[t];
+        return config.startAvailable === true; // Default to blocked if undefined, though we set defaults
+      }),
+      sanctuarySettings, // Include configurable sanctuary settings
+      gameRules, // Include active game rules
+      moveTree: startingMoveTree,
       
-      // 2. If explicit pool provided, use it (already trusted)
-      if (initialPoolTypes) return true;
- 
-      // 3. Otherwise use defaults from config
-      const config = SanctuaryConfig[t];
-      return config.startAvailable === true; // Default to blocked if undefined, though we set defaults
-    }),
-    sanctuarySettings, // Include configurable sanctuary settings
-    gameRules, // Include active game rules
-    moveTree: startingMoveTree,
-    
-    // History Navigation (node-based)
-    viewNodeId: null,  // Node ID for tree navigation (null = live)
-    graveyard: [],
-    phoenixRecords: []
+      // History Navigation (node-based)
+      viewNodeId: null,  // Node ID for tree navigation (null = live)
+      graveyard: initialGraveyard,
+      phoenixRecords: initialPhoenixRecords
+    };
+
+    return gameEngine.normalizeForcedTurns(initialState) as GameBoardState;
   });
 
   return {

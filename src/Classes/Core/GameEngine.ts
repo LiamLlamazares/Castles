@@ -199,6 +199,10 @@ export class GameEngine {
     return RuleEngine.getTurnCounterIncrement(gameState, this.board);
   }
 
+  public getForcedTurnCounterIncrement(gameState: GameState): number {
+    return RuleEngine.getForcedTurnCounterIncrement(gameState, this.board);
+  }
+
   // ================= STATE TRANSITIONS (Delegated to StateMutator) =================
 
   public applyMove(state: GameState, piece: Piece, targetHex: Hex): GameState {
@@ -227,6 +231,10 @@ export class GameEngine {
 
   public resetTurnFlags(state: GameState): GameState {
     return StateMutator.resetTurnFlags(state);
+  }
+
+  public normalizeForcedTurns(state: GameState): GameState {
+    return StateMutator.normalizeForcedTurns(state, this.board);
   }
 
   // ================= PROMOTION =================

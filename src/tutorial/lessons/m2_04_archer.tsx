@@ -1,9 +1,3 @@
-/**
- * MODULE 2: Your Army (Basic Pieces)
- * Lesson 2.2: Archer
- * 
- * Objective: Ranged attack demonstration
- */
 import React from 'react';
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
@@ -11,56 +5,28 @@ import { Hex } from '../../Classes/Entities/Hex';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
 import { PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
+import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
 
 export function createM2L4(): TutorialLesson {
-  const boardRadius = 3; // Mini
-  
-  const castles: Castle[] = [
-    new Castle(new Hex(-3, 3, 0), 'w', 0),
-    new Castle(new Hex(3, -3, 0), 'b', 0),
-  ];
-  
-  const boardConfig: BoardConfig = { nSquares: boardRadius };
+  const castles: Castle[] = [new Castle(new Hex(-3, 3, 0), 'w', 0), new Castle(new Hex(3, -3, 0), 'b', 0)];
+  const boardConfig: BoardConfig = { nSquares: 3, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
-  
   const pieces = [
     PieceFactory.create(PieceType.Archer, new Hex(-2, 2, 0), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'), // Target at range
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'b'),
   ];
-  
   const layout = getStartingLayout(board);
-  
+
   return {
     id: 'm2_l4_archer',
-    title: '3.2 Archer',
-    description: (
-      <div>
-        <p style={{ marginTop: 0 }}>The Archer is the basic ranged unit (a unit that attacks from a distance without moving).</p>
-        <div style={{ marginTop: '12px' }}>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Type:</strong> Ranged
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Movement:</strong> 1 hex forward in any direction
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Attack:</strong> 2 hexes away (cannot attack adjacent)
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Strength:</strong> 1
-          </div>
-          <div style={{ marginBottom: '6px' }}>
-            <strong>Special:</strong> Attacks without moving; cannot attack adjacent enemies
-          </div>
-        </div>
-      </div>
-    ),
+    title: '2.4 Archer',
+    description: <PieceRules type={PieceType.Archer} intro="The Archer attacks from a fixed distance instead of capturing by moving onto the target." />,
     board,
     pieces,
     layout,
-    objectives: [
-      'Capture the enemy Swordsman before he gets any closer ',
-    ]
+    initialTurnCounter: 2,
+    objectives: ['Use the Archer to attack the enemy at range 2.'],
+    hints: ['Archers cannot attack adjacent enemies.', 'Defended enemies can block ranged attacks; the defense lessons cover that soon.'],
   };
 }

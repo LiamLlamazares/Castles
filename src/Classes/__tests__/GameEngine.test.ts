@@ -356,6 +356,41 @@ describe('GameEngine', () => {
     });
   });
 
+  describe('forced turn normalization', () => {
+    it('skips an empty opponent turn instead of requiring a manual pass', () => {
+      const whitePiece = new Piece(new Hex(0, 2, -2), 'w', PieceType.Archer);
+      const state = createMockState([whitePiece], [], 4);
+
+      const afterPass = gameEngine.passTurn(state);
+
+      expect(afterPass.turnCounter).toBe(10);
+      expect(gameEngine.getCurrentPlayer(afterPass.turnCounter)).toBe('w');
+      expect(afterPass.moveTree.getHistoryLine()).toHaveLength(1);
+    });
+
+    it('keeps an empty side on Recruitment if it still has a captured castle action', () => {
+      const whitePiece = new Piece(new Hex(0, 2, -2), 'w', PieceType.Archer);
+      const capturedWhiteCastle = new Castle(new Hex(0, 6, -6), 'w', 0, false, 'b');
+      const state = createMockState([whitePiece], [capturedWhiteCastle], 4);
+
+      const afterPass = gameEngine.passTurn(state);
+
+      expect(afterPass.turnCounter).toBe(9);
+      expect(gameEngine.getCurrentPlayer(afterPass.turnCounter)).toBe('b');
+      expect(gameEngine.getTurnPhase(afterPass.turnCounter)).toBe('Recruitment');
+    });
+
+    it('normalizes an initially empty opponent turn on load', () => {
+      const whitePiece = new Piece(new Hex(0, 2, -2), 'w', PieceType.Archer);
+      const state = createMockState([whitePiece], [], 5);
+
+      const normalized = gameEngine.normalizeForcedTurns(state);
+
+      expect(normalized.turnCounter).toBe(10);
+      expect(gameEngine.getCurrentPlayer(normalized.turnCounter)).toBe('w');
+    });
+  });
+
   describe('getLegalMoves', () => {
     it('returns valid moves for a piece', () => {
         const hex = new Hex(0, 0, 0); // Center

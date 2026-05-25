@@ -1,52 +1,37 @@
-/**
- * MODULE 4: Economy & Control
- * Lesson 4.3: Sanctuary Pledging
- * 
- * Objective: Pledge a piece
- */
 import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { Sanctuary } from '../../Classes/Entities/Sanctuary';
+import { PieceType, SanctuaryType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
 export function createM4L3(): TutorialLesson {
-  const boardRadius = 3; // Small
-  
-  const castles: Castle[] = [
-    new Castle(new Hex(-3, 3, 0), 'w', 0),
-    new Castle(new Hex(3, -3, 0), 'b', 0),
-  ];
-  
-  const boardConfig: BoardConfig = { nSquares: boardRadius };
+  const castles: Castle[] = [new Castle(new Hex(-3, 3, 0), 'w', 0), new Castle(new Hex(3, -3, 0), 'b', 0)];
+  const boardConfig: BoardConfig = { nSquares: 3, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
-  
-  // TODO: Add sanctuary to board
   const pieces = [
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
-    PieceFactory.create(PieceType.Archer, new Hex(-1, 2, -1), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'w'),
+    PieceFactory.create(PieceType.Archer, new Hex(-2, 2, 0), 'w'),
   ];
-  
+  const sanctuaries = [new Sanctuary(new Hex(0, 0, 0), SanctuaryType.WolfCovenant, 'w', 'w')];
   const layout = getStartingLayout(board);
-  
+
   return {
     id: 'm4_l3_pledging',
-    title: '4.3 Sanctuary Pledging',
-    description: 'Pledge pieces to sanctuaries.',
+    title: '4.3 Sanctuary pledging',
+    description: 'Sanctuaries unlock special units through pledging. Tier 1 sanctuaries are the simplest: occupy the sanctuary during the Castles phase and pledge to unlock their unit.',
     board,
     pieces,
+    sanctuaries,
     layout,
-    objectives: [
-      'Move adjacent to sanctuary',
-      'Pledge a piece',
-    ],
+    initialTurnCounter: 4,
+    objectives: ['Pledge the Swordsman standing on the Wolf Covenant.'],
     hints: [
-      'Stand adjacent to sanctuary',
-      'Click sanctuary → select piece to pledge',
-      'Evolves sanctuary, grants special unit',
+      'Pledging is separate from castle recruitment.',
+      'Cooldown drops at the start of that side\'s turn, plus 1 for each non-Swordsman that side has across the river.',
     ],
-    instructions: 'TODO: Pledge a piece to the sanctuary.',
+    instructions: 'Pledge here to unlock the Wolf. After this, you can start a normal game or continue to the special-unit tour.',
   };
 }

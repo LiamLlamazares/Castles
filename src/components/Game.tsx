@@ -22,6 +22,7 @@ import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
+import { PhoenixRecord } from "../Classes/Core/GameState";
 import { PieceTheme } from "../Constants";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import PromotionModal from "./PromotionModal";
@@ -38,6 +39,8 @@ interface GameBoardProps {
   initialMoveTree?: import('../Classes/Core/MoveTree').MoveTree;
   initialTurnCounter?: number;
   initialSanctuaries?: Sanctuary[];
+  initialGraveyard?: Piece[];
+  initialPhoenixRecords?: PhoenixRecord[];
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };
   onResign?: () => void; 
@@ -419,6 +422,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
         isInitialLoad={isInitialLoad}
         tooltip={tooltip}
         viewState={viewState}
+        activeAbility={activeAbility}
+        onAbilitySelect={setActiveAbility}
         onActiveAbilityChange={setActiveAbility}
         containerStyle={{
           position: 'relative', // Override absolute
@@ -445,6 +450,8 @@ const GameBoard: React.FC<GameBoardProps> = (props) => {
         pieces: props.initialPieces,
         turnCounter: props.initialTurnCounter,
         sanctuaries: props.initialSanctuaries,
+        graveyard: props.initialGraveyard,
+        phoenixRecords: props.initialPhoenixRecords,
         moveTree: props.initialMoveTree,
         poolTypes: props.initialPoolTypes,
       }}

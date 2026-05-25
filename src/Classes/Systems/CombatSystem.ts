@@ -39,6 +39,31 @@ export class CombatSystem {
     return strength;
   }
 
+  public static getCombatBonusLabels(piece: Piece, pieceMap: PieceMap): string[] {
+    const labels: string[] = [];
+
+    if (
+      piece.type === PieceType.Swordsman &&
+      ((piece.color === 'w' && piece.hex.r < 0) || (piece.color === 'b' && piece.hex.r > 0))
+    ) {
+      labels.push('River Bonus');
+    }
+
+    const friendlyNeighbors = getNeighborPieces(piece.hex, pieceMap, p => p.color === piece.color);
+    if (
+      piece.type === PieceType.Wolf &&
+      friendlyNeighbors.some(neighbor => neighbor.type === PieceType.Wolf)
+    ) {
+      labels.push('Pack Bonus');
+    }
+
+    if (friendlyNeighbors.some(neighbor => neighbor.type === PieceType.Healer)) {
+      labels.push('Aura Bonus');
+    }
+
+    return labels;
+  }
+
   public static resolveAttack(
     pieces: Piece[],
     attacker: Piece,
