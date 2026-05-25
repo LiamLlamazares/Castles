@@ -1,4 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+
+jest.mock("../PieceImages", () => ({
+  getImageByPieceType: () => "test-piece.svg",
+}));
+
 import RulesManualPage from "../RulesManualPage";
 import { ThemeProvider } from "../../contexts/ThemeContext";
 import { PieceType } from "../../Constants";

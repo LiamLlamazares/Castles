@@ -7,7 +7,7 @@
 ## 🔴 Sanctuary System ✅ (Implemented)
 
 Special map locations where players can pledge powerful fantasy creatures to their cause.
-See `rules.md` for full documentation.
+See the in-app rules page and `src/rules/rulesContent.ts` for current rules.
 
 ---
 

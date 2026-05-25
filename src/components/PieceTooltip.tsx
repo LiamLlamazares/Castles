@@ -17,7 +17,7 @@ interface PieceTooltipProps {
   style?: React.CSSProperties;
 }
 
-// Piece info data based on rules.md
+// Piece info data based on the in-app rules reference.
 const PIECE_INFO: Record<PieceType, {
   movement: string;
   attackType: string;

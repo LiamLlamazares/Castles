@@ -5,6 +5,7 @@ import {
   commonBlockerRules,
   optionalModeRules,
   rangeDetailRules,
+  sanctuaryDetailRules,
   recruitmentCycle,
   sanctuaryRules,
   terrainRules,
@@ -43,16 +44,14 @@ describe("rules content", () => {
 
   it("uses accurate wording for fragile rules", () => {
     expect(terrainRules.find((rule) => rule.title === "River")?.text).toContain(
-      "cannot enter or pass through river hexes"
+      "cannot enter river hexes or pass through them"
     );
-    expect(castleRules.find((rule) => rule.title === "Recruitment")?.text).toContain(
+    expect(castleRules.find((rule) => rule.title === "Recruitment source")?.text).toContain(
       "enemy starting castles"
     );
-    expect(sanctuaryRules.find((rule) => rule.title === "Cooldown")?.text).toContain(
+    expect(sanctuaryDetailRules.find((rule) => rule.title === "Cooldown acceleration")?.text).toContain(
       "non-Swordsman"
     );
-    expect(sanctuaryRules.find((rule) => rule.title === "Cooldown")?.text).not.toContain(
-      "invader"
-    );
+    expect(sanctuaryRules.map((rule) => rule.text).join(" ")).not.toContain("invader");
   });
 });

@@ -1,68 +1,41 @@
-# Getting Started with Create React App
+# Castles
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Castles is a fantasy hex strategy game with local play, replay/analysis, PGN import/export, a local game library, and a random AI opponent.
 
-## Available Scripts
+## Scripts
 
-In the project directory, you can run:
+Run these commands from the project root.
 
 ### `npm start`
 
-Runs the app in the development mode.\
+Starts the development server.\
 Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
-
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
 
 ### `npm test`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Starts the Jest test runner in watch mode.
 
 ### `npm run build`
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+Builds a production bundle into `build/`.
 
 ## Project Overview
 
-This project implements "Castles", a hexagonal strategy game based on *The Ember Blade*.
+The app is organized around a React UI and a TypeScript game engine.
 
 ### Directory Structure
 
-The project structure is organized as follows:
+*   **`src/Classes/`**: Core game logic, rules systems, notation, AI, and persistence services.
+*   **`src/components/`**: React UI components for the board, setup, HUD, rules, tutorial, and library.
+*   **`src/rules/`**: Canonical in-app rules content used by the rules manual and modal.
+*   **`src/tutorial/`**: Tutorial lesson definitions and tutorial index.
+*   **`src/Assets/`**: Piece, terrain, icon, and sound assets.
+*   **`src/hooks/`**: Game interaction, analysis, persistence, AI, and input hooks.
 
-*   **`src/`**: Main source code directory.
-    *   **`Classes/`**: Contains core game logic and data structures.
-        *   `Board.ts`: Manages the game board state and grid.
-        *   `Hex.ts`: Defines hexagonal tile logic and coordinates.
-        *   `Piece.ts`: Base class for game pieces.
-        *   `Move.ts` & `Castle.ts`: Logic for movements and castle specifics.
-    *   **`components/`**: React UI components.
-        *   `Game.tsx`: The primary game engine and rendering component.
-        *   `Clock.tsx`: Handles the game timer.
-        *   `Turn_banner.tsx`: Specific UI for turn phases.
-    *   **`Assets/`**: Contains game assets (Images for pieces, banners, etc.).
-    *   **`css/`**: Styling files.
-*   **`Castles_rules.md`**: Detailed documentation of the game rules.
+## Rules
+
+The canonical rules source is the in-app rules content in `src/rules/rulesContent.ts`. Use the Rules page in the app for the player-facing reference.
+
+## Notes
+
+Runtime logs, build output, coverage, and dependency folders are ignored. Do not commit generated output files.

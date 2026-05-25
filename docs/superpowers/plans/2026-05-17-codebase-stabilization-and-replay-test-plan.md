@@ -36,8 +36,8 @@ Important risk points found during familiarization:
 | Pledge notation only stores piece type and spawn hex | It does not store sanctuary source or sacrifice details, so some future states may be lossy. | `src/Classes/Systems/NotationService.ts`, `src/Classes/Services/PGNImporter.ts` |
 | `MoveTree.clone()` preserves snapshot object references | Safe if snapshots are never mutated, dangerous if UI/mutators mutate objects later. | `src/Classes/Core/MoveTree.ts` |
 | `PieceMap` can silently overwrite duplicate piece positions | Duplicate occupancy can make `pieceMap.size !== pieces.length`; validator catches it but is not globally enforced. | `src/utils/PieceMap.ts`, `src/Classes/Systems/StateValidator.ts` |
-| Existing `tsc_output.txt` records a type error | Baseline may already be red or stale; verify before refactor. | `tsc_output.txt` |
-| Existing `test_output.txt` records worker leak warnings | There may be timers/effects that need deterministic teardown. | `test_output.txt`, likely UI/hook tests |
+| Historical TypeScript output recorded a type error | Baseline may already be red or stale; verify before refactor. | Run `npx tsc --noEmit` |
+| Historical Jest output recorded worker leak warnings | There may be timers/effects that need deterministic teardown. | Run the UI/hook tests directly |
 
 ---
 
@@ -70,9 +70,7 @@ Read-only:
 
 `tsconfig.json`
 
-`tsc_output.txt`
-
-`test_output.txt`
+Historical output files were removed from the repo. Recreate baseline evidence by running the commands below.
 
 **Purpose:** Determine whether the repo is currently red, stale-red, or green before any cleanup. Do not mix baseline fixes with architecture refactors.
 

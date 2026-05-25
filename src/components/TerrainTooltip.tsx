@@ -85,7 +85,7 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
   let badgeText = "Plains";
   let icon: React.ReactNode = null;
 
-  // Official recruitment cycle from rules.md
+  // Official recruitment cycle from the in-app rules reference.
   const RECRUITMENT_CYCLE = [
     PieceType.Swordsman,
     PieceType.Archer,
