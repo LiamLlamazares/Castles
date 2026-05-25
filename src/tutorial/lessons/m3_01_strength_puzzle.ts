@@ -28,6 +28,7 @@ export function createM3L1(): TutorialLesson {
     board,
     pieces,
     layout,
+    initialTurnCounter: 2,
     objectives: [
       'Find the Giant that needs two Swordsman attacks.',
       'Find the Giant that a lone Swordsman cannot legally attack.',

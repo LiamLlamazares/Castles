@@ -12,7 +12,7 @@ export function createM4L3(): TutorialLesson {
   const boardConfig: BoardConfig = { nSquares: 3, riverCrossingLength: 100, hasHighGround: false };
   const board = new Board(boardConfig, castles);
   const pieces = [
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
+    PieceFactory.create(PieceType.Swordsman, new Hex(0, 0, 0), 'w'),
     PieceFactory.create(PieceType.Archer, new Hex(-2, 2, 0), 'w'),
   ];
   const sanctuaries = [new Sanctuary(new Hex(0, 0, 0), SanctuaryType.WolfCovenant, 'w', 'w')];
@@ -21,12 +21,13 @@ export function createM4L3(): TutorialLesson {
   return {
     id: 'm4_l3_pledging',
     title: '4.3 Sanctuary pledging',
-    description: 'Sanctuaries unlock special units through pledging. Tier 1 sanctuaries are the simplest: stand nearby during the Castles phase and pledge to unlock their unit.',
+    description: 'Sanctuaries unlock special units through pledging. Tier 1 sanctuaries are the simplest: occupy the sanctuary during the Castles phase and pledge to unlock their unit.',
     board,
     pieces,
     sanctuaries,
     layout,
-    objectives: ['Reach the Castles phase and pledge at the Wolf Covenant.'],
+    initialTurnCounter: 4,
+    objectives: ['Pledge the Swordsman standing on the Wolf Covenant.'],
     hints: [
       'This is separate from castle recruitment.',
       'The sanctuary tooltip shows the special unit and requirement.',

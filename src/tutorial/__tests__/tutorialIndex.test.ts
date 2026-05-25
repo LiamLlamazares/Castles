@@ -1,5 +1,33 @@
 import { PieceType } from '../../Constants';
+import { GameEngine } from '../../Classes/Core/GameEngine';
+import { GameState } from '../../Classes/Core/GameState';
+import { MoveTree } from '../../Classes/Core/MoveTree';
+import { Hex } from '../../Classes/Entities/Hex';
+import { Piece } from '../../Classes/Entities/Piece';
+import { createPieceMap } from '../../utils/PieceMap';
 import { getAllLessons } from '..';
+
+const createLessonState = (lesson: ReturnType<typeof getAllLessons>[number]): GameState => ({
+  pieces: lesson.pieces,
+  pieceMap: createPieceMap(lesson.pieces),
+  castles: [...lesson.board.castles],
+  sanctuaries: lesson.sanctuaries ?? [],
+  sanctuaryPool: [],
+  turnCounter: lesson.initialTurnCounter ?? 0,
+  movingPiece: null,
+  moveTree: new MoveTree(),
+  graveyard: [],
+  phoenixRecords: [],
+  viewNodeId: null,
+});
+
+const findPiece = (pieces: Piece[], type: PieceType, hex: Hex): Piece => {
+  const piece = pieces.find((candidate) => candidate.type === type && candidate.hex.equals(hex));
+  if (!piece) {
+    throw new Error(`Missing ${type} at ${hex.getKey()}`);
+  }
+  return piece;
+};
 
 describe('tutorial lesson index', () => {
   it('keeps the reorganized tutorial flow unique and complete', () => {
@@ -72,5 +100,73 @@ describe('tutorial lesson index', () => {
         Array.from(basicPieceIds).some((id) => id.toLowerCase().includes(piece.toLowerCase()))
       ).toBe(true);
     }
+  });
+
+  it('starts tactical lessons in the phase their objective requires', () => {
+    const lessons = new Map(getAllLessons().map((lesson) => [lesson.id, lesson]));
+
+    expect(lessons.get('m2_l4_archer')?.initialTurnCounter).toBe(2);
+    expect(lessons.get('m2_l8_trebuchet')?.initialTurnCounter).toBe(2);
+    expect(lessons.get('m3_l1_strength_puzzle')?.initialTurnCounter).toBe(2);
+    expect(lessons.get('m3_l2_defense')?.initialTurnCounter).toBe(2);
+    expect(lessons.get('m3_l3_defense_followup')?.initialTurnCounter).toBe(2);
+    expect(lessons.get('m3_l4_range_practice')?.initialTurnCounter).toBe(2);
+    expect(lessons.get('m4_l2_recruitment')?.initialTurnCounter).toBe(4);
+    expect(lessons.get('m4_l3_pledging')?.initialTurnCounter).toBe(4);
+  });
+
+  it('gives attack-phase lessons at least one legal attack for the side to move', () => {
+    const lessons = getAllLessons().filter(
+      (lesson) => lesson.initialTurnCounter === 2 && lesson.id !== 'm3_l3_defense_followup'
+    );
+
+    for (const lesson of lessons) {
+      const engine = new GameEngine(lesson.board);
+      const state = createLessonState(lesson);
+      const legalAttackCount = lesson.pieces
+        .filter((piece) => piece.color === 'w')
+        .reduce((count, piece) => count + engine.getLegalAttacks(state, piece).length, 0);
+
+      if (legalAttackCount === 0) {
+        const attackMap = lesson.pieces
+          .filter((piece) => piece.color === 'w')
+          .map((piece) => `${piece.type}@${piece.hex.getKey()} -> ${engine.getLegalAttacks(state, piece).map((hex) => hex.getKey()).join(',') || 'none'}`)
+          .join('; ');
+        throw new Error(`${lesson.id} has no legal white attacks: ${attackMap}`);
+      }
+    }
+  });
+
+  it('lets the defense follow-up lesson break defense then fire with the Archer', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm3_l3_defense_followup');
+    if (!lesson) throw new Error('Missing defense follow-up lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const state = createLessonState(lesson);
+    const swordsman = findPiece(lesson.pieces, PieceType.Swordsman, new Hex(0, -1, 1));
+    const firstTarget = new Hex(1, -2, 1);
+
+    expect(engine.getLegalAttacks(state, swordsman).some((hex) => hex.equals(firstTarget))).toBe(true);
+
+    const afterMeleeCapture = engine.applyAttack(state, swordsman, firstTarget);
+    const archer = findPiece(afterMeleeCapture.pieces, PieceType.Archer, new Hex(0, 0, 0));
+    const remainingTarget = new Hex(2, -2, 0);
+
+    expect(engine.getLegalAttacks(afterMeleeCapture, archer).some((hex) => hex.equals(remainingTarget))).toBe(true);
+  });
+
+  it('gives castle-phase lessons a legal economy action', () => {
+    const lessons = new Map(getAllLessons().map((lesson) => [lesson.id, lesson]));
+    const recruitmentLesson = lessons.get('m4_l2_recruitment');
+    const pledgeLesson = lessons.get('m4_l3_pledging');
+    if (!recruitmentLesson || !pledgeLesson) throw new Error('Missing castle-phase lessons');
+
+    const recruitmentEngine = new GameEngine(recruitmentLesson.board);
+    const recruitmentState = createLessonState(recruitmentLesson);
+    expect(recruitmentEngine.getRecruitmentHexes(recruitmentState).length).toBeGreaterThan(0);
+
+    const pledgeEngine = new GameEngine(pledgeLesson.board);
+    const pledgeState = createLessonState(pledgeLesson);
+    expect(pledgeEngine.canPledge(pledgeState, pledgeLesson.sanctuaries![0].hex)).toBe(true);
   });
 });

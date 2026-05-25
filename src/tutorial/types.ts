@@ -29,6 +29,9 @@ export interface TutorialLesson {
   
   /** Optional sanctuaries on the board */
   sanctuaries?: Sanctuary[];
+
+  /** Optional starting turn counter, used to begin tactical lessons in Attack or Castles phase */
+  initialTurnCounter?: number;
   
   /** Layout service for rendering */
   layout: LayoutService;

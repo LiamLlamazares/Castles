@@ -26,6 +26,7 @@ export function createM2L8(): TutorialLesson {
     board,
     pieces,
     layout,
+    initialTurnCounter: 2,
     objectives: ['Attack the distant enemy and notice that the closer enemy is too close.'],
     hints: ['Trebuchets attack at range 3, or range 4 from high ground.', 'Keep them screened by other pieces.'],
   };

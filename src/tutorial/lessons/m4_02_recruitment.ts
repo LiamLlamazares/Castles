@@ -23,6 +23,7 @@ export function createM4L2(): TutorialLesson {
     board,
     pieces,
     layout,
+    initialTurnCounter: 4,
     objectives: [
       'Reach the Castles phase.',
       'Recruit beside the captured black-side castle, not the white-side castle.',
