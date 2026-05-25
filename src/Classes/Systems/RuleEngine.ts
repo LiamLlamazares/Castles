@@ -344,7 +344,13 @@ export class RuleEngine {
         for (const hex of adjacentHexes) {
            const key = hex.getKey();
            // Must be a valid board hex, not occupied, and not already added
-           if (board.hexSet.has(key) && !occupiedSet.has(key) && !processedHexKeys.has(key)) {
+           if (
+              board.hexSet.has(key) &&
+              !board.riverHexSet.has(key) &&
+              !board.castleHexSet.has(key) &&
+              !occupiedSet.has(key) &&
+              !processedHexKeys.has(key)
+           ) {
               recruitmentHexes.push(hex);
               processedHexKeys.add(key);
            }

@@ -132,13 +132,14 @@ const InnerGame: React.FC<GameBoardProps> = ({
     // 1. Check URL for shared game
     const urlPgn = getGameFromUrl();
     if (urlPgn) {
+      if (urlPgn === getPGN()) {
+        clearUrlParams();
+        return;
+      }
+
       try {
         const result = loadPGN(urlPgn);
         if (result && onLoadGame) {
-          if (urlPgn === getPGN()) {
-            clearUrlParams();
-            return;
-          }
           clearUrlParams();
           onLoadGame({
             board: result.board,
@@ -151,8 +152,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
           });
           return; 
         }
+        clearUrlParams();
       } catch (e) {
         console.warn("Failed to load shared game from URL", e);
+        clearUrlParams();
       }
     }
 
@@ -175,9 +178,12 @@ const InnerGame: React.FC<GameBoardProps> = ({
               sanctuarySettings: result.sanctuarySettings,
               initialPoolTypes: result.sanctuaryPool
             });
+          } else {
+            clearSave();
           }
         } catch (e) {
           console.warn("Failed to load saved game from localStorage", e);
+          clearSave();
         }
       }
     }

@@ -227,6 +227,20 @@ describe('GameEngine', () => {
       expect(recruitHexes.some(h => h.equals(expectedNeighbor))).toBe(true);
     });
 
+    it('excludes river hexes but keeps non-river hexes adjacent to a captured castle', () => {
+      const castleHex = new Hex(-7, 0, 7);
+      const castle = new Castle(castleHex, 'b', 0, false, 'w');
+      const state = createMockState([], [castle], 4);
+      const riverNeighbor = new Hex(-6, 0, 6);
+      const nonRiverNeighbor = new Hex(-7, 1, 6);
+
+      const recruitHexes = gameEngine.getRecruitmentHexes(state);
+
+      expect(gameEngine.board.riverHexSet.has(riverNeighbor.getKey())).toBe(true);
+      expect(recruitHexes.some(hex => hex.equals(riverNeighbor))).toBe(false);
+      expect(recruitHexes.some(hex => hex.equals(nonRiverNeighbor))).toBe(true);
+    });
+
     it('excludes occupied hexes', () => {
       const castleHex = new Hex(0, -6, 6); 
       const castle = new Castle(castleHex, 'b', 0, false, 'w');
@@ -292,6 +306,7 @@ describe('GameEngine', () => {
 
       expect(gameEngine.getTurnPhase(state.turnCounter + increment)).not.toBe('Recruitment');
     });
+
   });
 
   describe('getTurnCounterIncrement attack availability', () => {

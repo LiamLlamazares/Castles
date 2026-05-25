@@ -98,7 +98,6 @@ export const usePGN = (
       );
       if (diagnostics.length > 0) {
         console.error("[loadPGN] Replay diagnostics", diagnostics);
-        alert("Error replaying moves. PGN was not loaded.");
         return null;
       }
       
@@ -118,14 +117,17 @@ export const usePGN = (
       };
     } catch (e) {
       console.error("Failed to replay moves:", e);
-      alert("Error replaying moves. Game loaded at start position.");
       return {
         board,
         pieces: startPieces,
         castles: board.castles,
         sanctuaries: startSanctuaries,
         moveTree: new MoveTree(),
-        turnCounter: setup.turnCounter ?? 0
+        turnCounter: setup.turnCounter ?? 0,
+        diagnostics: [{
+          notation: "<replay>",
+          message: e instanceof Error ? e.message : String(e)
+        }]
       };
     }
   }, []);

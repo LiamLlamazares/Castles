@@ -121,4 +121,17 @@ describe("RecruitCommand", () => {
     expect(result.success).toBe(true);
     expect(result.newState.pieces.some(piece => piece.hex.equals(spawnHex))).toBe(true);
   });
+
+  it("rejects recruitment onto river hexes adjacent to a captured castle", () => {
+    const castle = new Castle(new Hex(-3, 0, 3), "b", 0, false, "w");
+    const riverSpawnHex = new Hex(-2, 0, 2);
+    const state = createState([], [castle]);
+    const command = new RecruitCommand(castle, riverSpawnHex, context);
+
+    const result = command.execute(state);
+
+    expect(result.success).toBe(false);
+    expect(result.newState).toBe(state);
+    expect(result.error).toBe("Invalid recruitment hex");
+  });
 });
