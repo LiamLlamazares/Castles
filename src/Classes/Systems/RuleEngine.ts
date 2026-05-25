@@ -42,8 +42,8 @@ export class RuleEngine {
 
   /**
    * Returns all hexes that block ground movement.
-   * Includes: rivers, enemy/neutral castles, and occupied hexes.
-   * Friendly castles are passable (pieceColor determines friendship).
+   * Includes: rivers, opponent-controlled castles, and occupied hexes.
+   * Castles currently owned by the moving piece's player are passable.
    */
   public static getBlockedHexes(gameState: GameState, board: Board, pieceColor?: Color): Hex[] {
     const occupied = RuleEngine.getOccupiedHexes(gameState);

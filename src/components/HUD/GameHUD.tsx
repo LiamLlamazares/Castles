@@ -26,6 +26,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 }) => {
   const {
       sanctuaries,
+      castles,
       turnCounter,
       movingPiece,
       victoryMessage,
@@ -88,12 +89,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* Terrain info tooltip (Right-click on empty hex) */}
       {tooltip.hex && (
-        <TerrainTooltip 
-          hex={tooltip.hex} 
-          board={board} 
-          castle={undefined} // Simplified for now, or fetch castle from state if needed
-          position={tooltip.mousePosition} 
-        />
+        (() => {
+          const castle = castles.find(c => c.hex.equals(tooltip.hex!));
+          return (
+            <TerrainTooltip 
+              hex={tooltip.hex} 
+              board={board} 
+              castle={castle}
+              position={tooltip.mousePosition} 
+            />
+          );
+        })()
       )}
       
       {/* Tooltip Discovery Hint Banner */}
