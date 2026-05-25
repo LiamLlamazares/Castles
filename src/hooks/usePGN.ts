@@ -14,20 +14,9 @@ import { Board } from "../Classes/Core/Board";
 import { Piece } from "../Classes/Entities/Piece";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
-import { MoveRecord } from "../Constants";
-import { ReplayDiagnostic } from "../Classes/Services/PGNService";
+import { loadPGNText, PGNLoadResult } from "../Classes/Services/PGNLoadService";
 
-export interface PGNLoadResult {
-  board: Board;
-  pieces: Piece[];
-  moveTree: MoveTree;
-  turnCounter: number;
-  sanctuaries: Sanctuary[];
-  castles: import("../Classes/Entities/Castle").Castle[];
-  sanctuarySettings?: { unlockTurn: number, cooldown: number };
-  sanctuaryPool?: import("../Constants").SanctuaryType[];
-  diagnostics?: ReplayDiagnostic[];
-}
+export type { PGNLoadResult } from "../Classes/Services/PGNLoadService";
 
 export interface PGNHookResult {
   getPGN: () => string;
@@ -64,72 +53,7 @@ export const usePGN = (
   }, [initialBoard, initialPieces, initialSanctuaries, moveTree, sanctuarySettings]);
 
   const loadPGN = useCallback((pgn: string) => {
-    // DEBUG: Uncomment these logs if PGN import issues occur
-    // console.log('[loadPGN] Raw PGN:', pgn.substring(0, 200) + '...');
-    
-    const { setup, moveTree } = PGNService.parsePGN(pgn);
-    
-    if (!setup) {
-      console.error("[loadPGN] Failed to parse PGN setup");
-      return null;
-    }
-    
-    const { board, pieces: startPieces, sanctuaries: startSanctuaries } = PGNService.reconstructState(setup);
-    
-    // Extract gameSettings from setup
-    const importedSettings = setup.gameSettings ? {
-      unlockTurn: setup.gameSettings.sanctuaryUnlockTurn,
-      cooldown: setup.gameSettings.sanctuaryRechargeTurns
-    } : undefined;
-    
-    try {
-      const diagnostics: ReplayDiagnostic[] = [];
-      const finalState = PGNService.replayMoveHistory(
-        board,
-        startPieces,
-        moveTree,
-        startSanctuaries,
-        setup.gameSettings,
-        {
-          diagnostics,
-          initialSanctuaryPool: setup.sanctuaryPool,
-          initialTurnCounter: setup.turnCounter
-        }
-      );
-      if (diagnostics.length > 0) {
-        console.error("[loadPGN] Replay diagnostics", diagnostics);
-        return null;
-      }
-      
-      // Derive the main line move records for the load result
-      const moveHistoryLine = finalState.moveTree.getHistoryLine();
-      
-      return { 
-        board, 
-        pieces: finalState.pieces,
-        castles: finalState.castles,
-        sanctuaries: finalState.sanctuaries,
-        moveTree: finalState.moveTree!,
-        turnCounter: finalState.turnCounter,
-        sanctuarySettings: importedSettings,
-        sanctuaryPool: finalState.sanctuaryPool,
-        diagnostics
-      };
-    } catch (e) {
-      console.error("Failed to replay moves:", e);
-      return {
-        board,
-        pieces: startPieces,
-        castles: board.castles,
-        sanctuaries: startSanctuaries,
-        moveTree: new MoveTree(),
-        turnCounter: setup.turnCounter ?? 0,
-        diagnostics: [{
-          notation: "<replay>",
-          message: e instanceof Error ? e.message : String(e)
-        }]
-      };
-    }
+    return loadPGNText(pgn);
   }, []);
 
   return {

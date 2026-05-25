@@ -20,6 +20,8 @@ interface HamburgerMenuProps {
   onToggleCoordinates: () => void;
   onShowRules: () => void;
   onEnableAnalysis?: () => void;
+  onSaveGameToLibrary?: () => void;
+  onOpenLibrary?: () => void;
   onEditPosition?: () => void;
   onTutorial?: () => void;
   isAnalysisMode?: boolean;
@@ -42,6 +44,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onToggleCoordinates,
   onShowRules,
   onEnableAnalysis,
+  onSaveGameToLibrary,
+  onOpenLibrary,
   onEditPosition,
   onTutorial,
   isAnalysisMode = false,
@@ -150,6 +154,24 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
           >
             Import PGN
           </button>
+
+          {onSaveGameToLibrary && (
+            <button 
+              className="menu-item" 
+              onClick={() => handleMenuItemClick(onSaveGameToLibrary)}
+            >
+              Save Game
+            </button>
+          )}
+
+          {onOpenLibrary && (
+            <button 
+              className="menu-item" 
+              onClick={() => handleMenuItemClick(onOpenLibrary)}
+            >
+              Game Library
+            </button>
+          )}
           
           <div className="menu-divider" />
           

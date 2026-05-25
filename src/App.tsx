@@ -4,6 +4,8 @@ import MainMenu from './components/MainMenu';
 import GameSetup from './components/GameSetup';
 import BoardEditor from './components/BoardEditor';
 import Tutorial from './components/Tutorial';
+import GameLibrary from './components/GameLibrary';
+import InstallAppHint from './components/InstallAppHint';
 import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
@@ -14,8 +16,16 @@ import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
 import { AIOpponentConfig } from './hooks/useAIOpponent';
 import { ThemeProvider } from './contexts/ThemeContext';
+import {
+  BrowserGameLibraryRepository,
+  SavedGameRecord,
+  SavedGameStatus,
+  createDefaultSavedGameName,
+  createSavedGameRecord,
+} from './Classes/Services/GameLibraryRepository';
+import { loadPGNText } from './Classes/Services/PGNLoadService';
 
-type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library';
 
 interface GameConfig {
   board?: Board;
@@ -44,6 +54,7 @@ function App() {
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
   const [previousView, setPreviousView] = useState<ViewState>('game');
+  const [gameLibraryRepository] = useState(() => new BrowserGameLibraryRepository());
 
   const clearAutosave = () => {
     localStorage.removeItem('castles_autosave');
@@ -56,6 +67,11 @@ function App() {
 
   const handleTutorialClick = () => {
     setView('tutorial');
+  };
+
+  const handleOpenLibrary = () => {
+    setPreviousView(view);
+    setView('library');
   };
 
   const handleStartGame = (
@@ -105,6 +121,55 @@ function App() {
     setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, sanctuarySettings, initialPoolTypes, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
+  };
+
+  const handleLoadSavedGame = (record: SavedGameRecord) => {
+    const result = loadPGNText(record.pgn);
+    if (!result || (result.diagnostics && result.diagnostics.length > 0)) {
+      alert("Saved game could not be loaded. The PGN may be damaged.");
+      return;
+    }
+
+    handleLoadGame({
+      board: result.board,
+      pieces: result.pieces,
+      turnCounter: result.turnCounter,
+      sanctuaries: result.sanctuaries,
+      moveTree: result.moveTree,
+      sanctuarySettings: result.sanctuarySettings,
+      initialPoolTypes: result.sanctuaryPool
+    });
+  };
+
+  const handleSaveGameToLibrary = async (pgn: string, status: SavedGameStatus) => {
+    const defaultName = createDefaultSavedGameName(pgn);
+    const name = prompt("Save game as:", defaultName);
+    if (!name?.trim()) return;
+
+    try {
+      await gameLibraryRepository.saveGame(createSavedGameRecord({
+        pgn,
+        name: name.trim(),
+        status
+      }));
+      alert("Game saved to library.");
+    } catch (error) {
+      console.error("Failed to save game to library", error);
+      alert("Could not save game to library.");
+    }
+  };
+
+  const handleImportPGNToLibrary = async (pgn: string, name: string) => {
+    const result = loadPGNText(pgn);
+    if (!result || (result.diagnostics && result.diagnostics.length > 0)) {
+      throw new Error("PGN could not be imported. Check that it replays correctly.");
+    }
+
+    await gameLibraryRepository.saveGame(createSavedGameRecord({
+      pgn,
+      name,
+      status: "analysis"
+    }));
   };
   
   const [gameKey, setGameKey] = useState(0);
@@ -171,10 +236,22 @@ function App() {
               onLoadGame={handleLoadGame}
               onEditPosition={handleEditPosition}
               onTutorial={handleTutorialClick}
+              onOpenLibrary={handleOpenLibrary}
+              onSaveGameToLibrary={handleSaveGameToLibrary}
               pieceTheme={gameConfig.pieceTheme}
               opponentConfig={gameConfig.opponentConfig}
+              initialPoolTypes={gameConfig.initialPoolTypes}
             />
         </div>
+      )}
+
+      {view === 'library' && (
+        <GameLibrary
+          repository={gameLibraryRepository}
+          onBack={() => setView(previousView === 'library' ? 'game' : previousView)}
+          onLoadGame={handleLoadSavedGame}
+          onImportPGN={handleImportPGNToLibrary}
+        />
       )}
 
       {view === 'editor' && (
@@ -192,6 +269,8 @@ function App() {
           onBack={() => setView('game')}
         />
       )}
+
+      <InstallAppHint />
     </div>
     </ThemeProvider>
   );

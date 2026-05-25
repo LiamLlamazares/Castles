@@ -23,6 +23,7 @@ import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PieceTheme } from "../Constants";
+import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import PromotionModal from "./PromotionModal";
 import "../css/Board.css";
 
@@ -53,6 +54,8 @@ interface GameBoardProps {
   }) => void;
   onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
   onTutorial?: () => void;
+  onOpenLibrary?: () => void;
+  onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<void> | void;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
   onEnableAnalysis?: (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
@@ -79,6 +82,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onLoadGame,
   onEditPosition,
   onTutorial,
+  onOpenLibrary,
+  onSaveGameToLibrary,
   timeControl,
   onEnableAnalysis = () => {},
   isTutorialMode = false,
@@ -322,6 +327,12 @@ const InnerGame: React.FC<GameBoardProps> = ({
     navigator.clipboard.writeText(pgn).then(() => alert("PGN copied to clipboard!"));
   };
 
+  const handleSaveGameToLibrary = React.useCallback(async () => {
+    if (!onSaveGameToLibrary) return;
+    const status: SavedGameStatus = isAnalysisMode ? "analysis" : winner ? "complete" : "ongoing";
+    await onSaveGameToLibrary(getPGN(), status);
+  }, [getPGN, isAnalysisMode, onSaveGameToLibrary, winner]);
+
   const dismissQuickStart = () => setShowQuickStart(false);
   const dismissTooltipHint = () => setShowTooltipHint(false);
 
@@ -336,6 +347,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
         onToggleCoordinates={viewState.toggleCoordinates}
         onShowRules={() => setShowRulesModal(true)}
         onEnableAnalysis={handleEnterAnalysis}
+        onSaveGameToLibrary={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
+        onOpenLibrary={onOpenLibrary}
         onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
         onTutorial={onTutorial}
         isAnalysisMode={isAnalysisMode}

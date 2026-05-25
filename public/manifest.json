@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Castles",
+  "name": "Castles Strategy Game",
+  "description": "A fantasy hex strategy game with local play, analysis, AI, PGN replay, and a local game library.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -8,18 +9,15 @@
       "type": "image/x-icon"
     },
     {
-      "src": "logo192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "logo512.png",
-      "type": "image/png",
-      "sizes": "512x512"
+      "src": "castles-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
     }
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#20150f",
+  "background_color": "#f6f1d1",
+  "categories": ["games", "strategy"]
 }
