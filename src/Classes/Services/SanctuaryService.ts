@@ -10,9 +10,9 @@
  *
  * EVOLUTION SYSTEM:
  * When a sanctuary is pledged, it evolves into the next available higher-tier
- * sanctuary type from the pool. The evolved sanctuary has a cooldown before
- * it can be pledged again. When no higher-tier types remain, the sanctuary
- * becomes permanently inactive.
+ * sanctuary type from the pool. The sanctuary then has a cooldown before it
+ * can be pledged again. When no higher-tier types remain, the sanctuary keeps
+ * its current type and recharges normally.
  *
  * @usage Called by GameEngine.canPledge() and GameEngine.pledge()
  * @see Sanctuary - Entity class for sanctuary state
@@ -190,8 +190,8 @@ export class SanctuaryService {
             hasPledgedThisGame: false // Reset so it can be pledged again after cooldown
           });
         } else {
-          // No evolution available - sanctuary becomes inactive
-          return s.with({ hasPledgedThisGame: true, cooldown: 0 });
+          // No evolution available - keep the same type and recharge normally
+          return s.with({ hasPledgedThisGame: false, cooldown: cooldownTurns });
         }
       }
       return s;

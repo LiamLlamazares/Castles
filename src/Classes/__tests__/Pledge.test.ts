@@ -82,7 +82,7 @@ describe('Pledge Mechanics', () => {
     expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
   });
 
-  test('Pledge spawns new piece and sanctuary becomes inactive with empty pool', () => {
+  test('Pledge spawns new piece and sanctuary recharges as same type with empty pool', () => {
     const sanctuary = sanctuaries[0];
     const spawnHex = new Hex(1, -5, 4);
     
@@ -98,10 +98,11 @@ describe('Pledge Mechanics', () => {
     expect(spawned?.type).toBe(PieceType.Wolf);
     expect(spawned?.color).toBe('w');
 
-    // With empty pool, sanctuary becomes permanently inactive
+    // With empty pool, sanctuary keeps its type and recharges normally
     const newSanctuary = newState.sanctuaries.find(s => s.hex.equals(sanctuary.hex));
-    expect(newSanctuary?.hasPledgedThisGame).toBe(true);
-    expect(newSanctuary?.cooldown).toBe(0); // No cooldown for inactive sanctuary
+    expect(newSanctuary?.type).toBe(SanctuaryType.WolfCovenant);
+    expect(newSanctuary?.hasPledgedThisGame).toBe(false);
+    expect(newSanctuary?.cooldown).toBe(5);
   });
 
   test('Pledge evolves sanctuary to higher tier when pool has types', () => {
@@ -127,12 +128,30 @@ describe('Pledge Mechanics', () => {
     expect(newState.sanctuaryPool).not.toContain(SanctuaryType.WardensWatch);
   });
 
-  test('Cannot pledge if already pledged this game', () => {
+  test('Fresh sanctuary cooldown is not reduced on the same turn transition that creates it', () => {
+    const sanctuary = sanctuaries[0].with({ territorySide: 'w' });
+    const spawnHex = new Hex(1, -5, 4);
+
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'b');
+    placePiece(new Hex(-4, -1, 5), PieceType.Archer, 'w');
+    placePiece(new Hex(-3, -1, 4), PieceType.Archer, 'w');
+    placePiece(new Hex(-2, -1, 3), PieceType.Archer, 'w');
+    placePiece(new Hex(-1, -1, 2), PieceType.Archer, 'w');
+    placePiece(new Hex(0, -1, 1), PieceType.Archer, 'w');
+
+    const state = createGameState(pieces, [sanctuary], 9);
+    const newState = gameEngine.pledge(state, sanctuary.hex, spawnHex);
+
+    const rechargingSanctuary = newState.sanctuaries.find(s => s.hex.equals(sanctuary.hex));
+    expect(rechargingSanctuary?.cooldown).toBe(5);
+  });
+
+  test('Historical pledged flag does not permanently disable a ready sanctuary', () => {
     const sanctuary = sanctuaries[0].with({ hasPledgedThisGame: true });
     placePiece(sanctuary.hex, PieceType.Swordsman, 'w');
     const state = createGameState(pieces, [sanctuary]);
 
-    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(false);
+    expect(gameEngine.canPledge(state, sanctuary.hex)).toBe(true);
   });
 
   test('Cannot pledge if on cooldown', () => {

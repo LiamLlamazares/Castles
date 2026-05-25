@@ -135,6 +135,7 @@ const HexGrid = React.memo(({
             castleTurnsControlled={castle?.turns_controlled || 0}
             
             sanctuaryType={sanctuary ? sanctuary.type : null}
+            sanctuaryCooldown={sanctuary?.cooldown || 0}
             
             showCoordinates={showCoordinates}
             showTerrainIcons={showTerrainIcons}

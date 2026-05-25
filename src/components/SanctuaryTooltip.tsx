@@ -1,15 +1,32 @@
 import React from 'react';
 import { Sanctuary } from '../Classes/Entities/Sanctuary';
-import { PHASE_CYCLE_LENGTH, PHASES_PER_TURN, SanctuaryConfig } from '../Constants';
+import { Color, SanctuaryConfig } from '../Constants';
 
 interface SanctuaryTooltipProps {
   sanctuary: Sanctuary;
   position: { x: number, y: number };
   turnCounter: number;
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
+  canPledgeNow?: boolean;
+  currentPhase?: string;
+  currentPledgeStrength?: number;
+  currentPlayerOccupies?: boolean;
+  cooldownSide?: Color;
+  cooldownAccelerators?: number;
+  cooldownReduction?: number;
 }
 
-export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, position, turnCounter, sanctuarySettings }) => {
+export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({
+  sanctuary,
+  position,
+  canPledgeNow = false,
+  currentPhase,
+  currentPledgeStrength = 0,
+  currentPlayerOccupies = false,
+  cooldownSide,
+  cooldownAccelerators = 0,
+  cooldownReduction = 1,
+}) => {
   const config = SanctuaryConfig[sanctuary.type];
 
   // Position slight offset from mouse/hex center
@@ -63,13 +80,25 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
   };
 
 
-  // Determine status color / text (no more turn locking)
-  let statusColor = sanctuary.isReady ? '#2ecc71' : '#e74c3c';
-  let statusText = sanctuary.hasPledgedThisGame 
-    ? "Already Pledged" 
-    : sanctuary.cooldown > 0 
-      ? `Cooldown (${sanctuary.cooldown} turns)` 
-      : "READY TO PLEDGE";
+  let statusColor = '#2ecc71';
+  let statusText = "READY TO PLEDGE";
+
+  if (sanctuary.cooldown > 0) {
+    statusColor = '#e67e22';
+    statusText = `Cooldown: ${sanctuary.cooldown}`;
+  } else if (!currentPlayerOccupies) {
+    statusColor = '#f1c40f';
+    statusText = "Needs your piece on the sanctuary";
+  } else if (config.requiredStrength > 1 && currentPledgeStrength < config.requiredStrength) {
+    statusColor = '#f1c40f';
+    statusText = `Need pledge strength ${config.requiredStrength}; you have ${currentPledgeStrength}`;
+  } else if (currentPhase !== "Recruitment") {
+    statusColor = '#f1c40f';
+    statusText = "Ready in the Castles phase";
+  } else if (!canPledgeNow) {
+    statusColor = '#f1c40f';
+    statusText = "Ready, but no adjacent spawn hex";
+  }
 
 
   const statusStyle: React.CSSProperties = {
@@ -86,7 +115,7 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
   return (
     <div style={style}>
       <h3 style={titleStyle}>
-        {sanctuary.type}
+        {config.displayName}
         <span style={tierBadgeStyle}>Tier {config.tier}</span>
       </h3>
       
@@ -101,6 +130,30 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({ sanctuary, p
            {config.tier === 1 ? "Occupancy" : `Str ${config.requiredStrength}+ ${config.requiresSacrifice ? "+ Sacrifice" : ""}`}
         </span>
       </div>
+
+      {config.requiredStrength > 1 && (
+        <div style={infoRowStyle}>
+          <span>Your pledge strength:</span>
+          <span style={valueStyle}>{currentPledgeStrength}</span>
+        </div>
+      )}
+
+      {sanctuary.cooldown > 0 && (
+        <>
+          <div style={infoRowStyle}>
+            <span>Cooldown side:</span>
+            <span style={valueStyle}>{cooldownSide === 'w' ? 'White' : 'Black'}</span>
+          </div>
+          <div style={infoRowStyle}>
+            <span>Across-river pieces:</span>
+            <span style={valueStyle}>{cooldownAccelerators}</span>
+          </div>
+          <div style={infoRowStyle}>
+            <span>Next reduction:</span>
+            <span style={valueStyle}>{cooldownReduction}</span>
+          </div>
+        </>
+      )}
 
       <div style={statusStyle}>
         {statusText}

@@ -422,4 +422,31 @@ export class RuleEngine {
         hasUsableCastles || hasUsableSanctuaries
     );
   }
+
+  public static hasCurrentPhaseAction(gameState: GameState, board: Board): boolean {
+    const phase = TurnManager.getTurnPhase(gameState.turnCounter);
+
+    if (phase === "Movement") {
+      return RuleEngine.hasAnyLegalMoves(gameState, board);
+    }
+
+    if (phase === "Attack") {
+      return RuleEngine.hasAnyFutureLegalAttacks(gameState, board);
+    }
+
+    return (
+      RuleEngine.hasAnyFutureControlledCastles(gameState, board) ||
+      gameState.sanctuaries.some(sanctuary =>
+        SanctuaryService.canPledge(gameState, board, sanctuary.hex)
+      )
+    );
+  }
+
+  public static getForcedTurnCounterIncrement(gameState: GameState, board: Board): number {
+    if (RuleEngine.hasCurrentPhaseAction(gameState, board)) {
+      return 0;
+    }
+
+    return RuleEngine.getTurnCounterIncrement(gameState, board, false);
+  }
 }

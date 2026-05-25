@@ -41,6 +41,17 @@ export class ActionOrchestrator {
         movingPiece: null // Deselect piece after any action
     };
 
+    const previousSanctuariesByHex = new Map(
+      state.sanctuaries.map(sanctuary => [sanctuary.hex.getKey(), sanctuary])
+    );
+    const newlyStartedCooldownHexKeys = new Set<string>();
+    for (const sanctuary of newState.sanctuaries) {
+      const previous = previousSanctuariesByHex.get(sanctuary.hex.getKey());
+      if ((previous?.cooldown ?? 0) <= 0 && sanctuary.cooldown > 0) {
+        newlyStartedCooldownHexKeys.add(sanctuary.hex.getKey());
+      }
+    }
+
     // 2. Sync PieceMap unconditionally to prevent stale lookups
     newState.pieceMap = createPieceMap(newState.pieces);
 
@@ -53,7 +64,8 @@ export class ActionOrchestrator {
     newState.turnCounter = state.turnCounter + increment;
 
     // 5. Run Turn Transitions (Phoenixes, Sanctuary Cooldowns, Global Resets)
-    newState = TurnMutator.checkTurnTransitions(newState);
+    newState = TurnMutator.checkTurnTransitions(newState, newlyStartedCooldownHexKeys);
+    newState = TurnMutator.normalizeForcedTurns(newState, board);
 
     // 6. Finalize MoveTree (Single Source of Truth)
     newState.moveTree = MutatorUtils.recordMoveInTree(newState, record);

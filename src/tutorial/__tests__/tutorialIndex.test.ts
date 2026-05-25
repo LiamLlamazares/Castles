@@ -55,6 +55,7 @@ describe('tutorial lesson index', () => {
       'm2_l9_assassin',
       'm2_l10_dragon',
       'm2_l11_monarch',
+      'm2_l12_promotion',
       'm3_l1_strength_puzzle',
       'm3_l2_defense',
       'm3_l3_defense_followup',
@@ -178,6 +179,22 @@ describe('tutorial lesson index', () => {
     expect(engine.getLegalAttacks(attackState, advancedSwordsman).some((hex) => hex.equals(new Hex(2, -2, 0)))).toBe(true);
   });
 
+  it('sets up the promotion lesson as one move to the back edge', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm2_l12_promotion');
+    if (!lesson) throw new Error('Missing promotion lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const state = createLessonState(lesson);
+    const swordsman = findPiece(state.pieces, PieceType.Swordsman, new Hex(0, -2, 2));
+    const promotionHex = new Hex(1, -3, 2);
+
+    expect(lesson.board.isPromotionHex(promotionHex, 'w')).toBe(true);
+    expect(engine.getLegalMoves(state, swordsman).some((hex) => hex.equals(promotionHex))).toBe(true);
+
+    const promotedState = engine.applyMove(state, swordsman, promotionHex);
+    expect(promotedState.promotionPending?.hex.equals(promotionHex)).toBe(true);
+  });
+
   it('gives attack-phase lessons at least one legal attack for the side to move', () => {
     const lessons = getAllLessons().filter(
       (lesson) => lesson.initialTurnCounter === 2 && lesson.id !== 'm3_l3_defense_followup'
@@ -278,6 +295,22 @@ describe('tutorial lesson index', () => {
     expect(afterFireball.pieces.some((piece) => piece.type === PieceType.Swordsman && piece.hex.equals(targetHex))).toBe(false);
     expect(afterFireball.pieces.some((piece) => piece.type === PieceType.Archer && piece.hex.equals(new Hex(0, 0, 0)))).toBe(false);
     expect(afterFireball.pieces.find((piece) => piece.type === PieceType.Giant && piece.hex.equals(new Hex(1, -1, 0)))?.damage).toBe(1);
+  });
+
+  it('blocks Wizard abilities outside the Attack phase', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm5_l5_wizard');
+    if (!lesson) throw new Error('Missing Wizard lesson');
+
+    const engine = new GameEngine(lesson.board);
+    const movementState = createLessonState({
+      ...lesson,
+      initialTurnCounter: 0,
+    });
+    const wizard = findPiece(movementState.pieces, PieceType.Wizard, new Hex(-2, 1, 1));
+
+    expect(() => engine.activateAbility(movementState, wizard.hex, new Hex(0, -1, 1), AbilityType.Fireball)).toThrow(
+      /Attack phase/
+    );
   });
 
   it('sets up the Necromancer lesson so Black can create a graveyard piece and White can raise it', () => {

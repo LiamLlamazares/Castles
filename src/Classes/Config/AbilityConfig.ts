@@ -52,7 +52,7 @@ export const AbilityTypeConfig: Record<AbilityType, AbilityConfig> = {
     range: 2,
     minRange: 1,
     description:
-      "Deals 1 damage to target hex and all adjacent hexes (7 hexes total). Cannot self-target.",
+      "Attack-phase ability. Deals 1 damage to every piece on the target hex and adjacent hexes, friendly or enemy. Cannot self-target.",
     oneTimeUse: true,
     aoeRadius: 1,
   },
@@ -62,7 +62,7 @@ export const AbilityTypeConfig: Record<AbilityType, AbilityConfig> = {
     range: 3,
     minRange: 1,
     description:
-      "Instantly move to any unoccupied hex within range. Cannot teleport onto other pieces.",
+      "Attack-phase ability. Instantly move to any unoccupied board hex within range. It does not follow normal movement paths.",
     oneTimeUse: true,
     aoeRadius: 0,
   },
@@ -72,7 +72,7 @@ export const AbilityTypeConfig: Record<AbilityType, AbilityConfig> = {
     range: 1,
     minRange: 1,
     description:
-      "Spend 1 soul to revive any one friendly piece from the graveyard at an adjacent hex. Revived pieces are exiled if killed again.",
+      "Attack-phase ability. Spend 1 soul to revive the latest friendly piece from the graveyard at an adjacent hex. Revived pieces are exiled if killed again.",
     oneTimeUse: false, // Can use multiple times if enough souls
     aoeRadius: 0,
   },

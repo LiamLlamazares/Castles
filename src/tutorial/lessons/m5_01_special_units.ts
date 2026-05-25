@@ -23,12 +23,11 @@ export function createM5L1(): TutorialLesson {
   return {
     id: 'm5_l1_special_units',
     title: '5.1 Special units overview',
-    description: 'Special units come from sanctuaries. This section is optional, but useful once you understand movement, attacks, castles, recruitment, and pledging.',
+    description: 'Special units come from sanctuaries. This section is optional.',
     board,
     pieces,
     layout,
-    objectives: ['Right-click each special unit to preview its role.'],
-    hints: ['The next lessons isolate each special unit one at a time.'],
-    instructions: 'This is a lineup, not a puzzle. Continue for individual special-unit lessons.',
+    objectives: ['Inspect each special unit.'],
+    instructions: 'Use this as a lineup.',
   };
 }

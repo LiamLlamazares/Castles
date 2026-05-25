@@ -29,14 +29,10 @@ export function createM2L1(): TutorialLesson {
   return {
     id: 'm2_l1_basic_pieces',
     title: '2.1 The basic pieces',
-    description: 'The standard army includes Swordsman, Archer, Knight, Eagle, Giant, Trebuchet, Assassin, Dragon, and Monarch. The next lessons isolate them one by one.',
+    description: 'Your standard army has nine piece types. The next lessons show them one at a time.',
     board,
     pieces,
     layout,
-    hints: [
-      'Right-click each piece to compare movement, attack type, and strength.',
-      'The sidebar icons let you jump between piece lessons.',
-    ],
-    instructions: 'Use this as a lineup. No objective here: the next lessons are the playable piece drills.',
+    instructions: 'Use this as a lineup.',
   };
 }

@@ -8,7 +8,7 @@ import lightbulbIcon from "../../Assets/Images/misc/lightbulb.svg";
 import { useGameState, useGameActions } from "../../contexts/GameContext";
 import { useTooltip } from "../../hooks/useTooltip";
 import { Sanctuary } from "../../Classes/Entities/Sanctuary";
-import { AbilityType } from "../../Constants";
+import { AbilityType, PieceType } from "../../Constants";
 import { Board } from "../../Classes/Core/Board";
 import { CombatSystem } from "../../Classes/Systems/CombatSystem";
 
@@ -34,11 +34,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       turnPhase,
       currentPlayer,
       board,
-      pieceMap
+      pieceMap,
+      pieces
   } = useGameState();
 
   const {
-      isHexDefended
+      isHexDefended,
+      canPledge
   } = useGameActions();
 
   // Tooltip Discovery Hint
@@ -54,7 +56,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   return (
     <>
       {/* Ability Bar */}
-      {movingPiece && !victoryMessage && (
+      {turnPhase === "Attack" && movingPiece && !victoryMessage && (
           <AbilityBar
             movingPiece={movingPiece}
             activeAbility={activeAbility}
@@ -66,12 +68,37 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {tooltip.hoveredHex && sanctuaries && (
           (() => {
               const sanctuary = sanctuaries.find((s: Sanctuary) => s.hex.equals(tooltip.hoveredHex!));
+              const occupant = sanctuary ? pieceMap.getByKey(sanctuary.hex.getKey()) : null;
+              const currentPlayerOccupies = !!occupant && occupant.color === currentPlayer;
+              const friendlyNeighbors = sanctuary
+                ? sanctuary.hex.cubeRing(1)
+                    .map((hex) => pieceMap.getByKey(hex.getKey()))
+                    .filter((piece) => piece && piece.color === currentPlayer)
+                : [];
+              const cooldownSide = sanctuary?.controller ?? sanctuary?.territorySide;
+              const cooldownAccelerators = cooldownSide
+                ? pieces.filter((piece) =>
+                    piece.type !== PieceType.Swordsman &&
+                    piece.color === cooldownSide &&
+                    (cooldownSide === 'w' ? piece.hex.r < 0 : piece.hex.r > 0)
+                  ).length
+                : 0;
+              const currentPledgeStrength = sanctuary && currentPlayerOccupies
+                ? occupant.Strength + friendlyNeighbors.reduce((sum, piece) => sum + (piece?.Strength ?? 0), 0)
+                : 0;
               return sanctuary ? (
                   <SanctuaryTooltip 
                     sanctuary={sanctuary} 
                     position={tooltip.mousePosition} 
                     turnCounter={turnCounter}
                     sanctuarySettings={sanctuarySettings}
+                    canPledgeNow={canPledge(sanctuary.hex)}
+                    currentPhase={turnPhase}
+                    currentPledgeStrength={currentPledgeStrength}
+                    currentPlayerOccupies={currentPlayerOccupies}
+                    cooldownSide={cooldownSide}
+                    cooldownAccelerators={cooldownAccelerators}
+                    cooldownReduction={1 + cooldownAccelerators}
                   />
               ) : null;
           })()

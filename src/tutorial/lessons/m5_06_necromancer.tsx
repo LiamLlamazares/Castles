@@ -32,6 +32,8 @@ export function createM5L6(): TutorialLesson {
       'Pass back to White, then select the Necromancer and use Raise Dead on an adjacent empty hex.',
     ],
     hints: [
+      'Raise Dead is an Attack-phase ability. It is not a capture, but it spends the Necromancer\'s attack action.',
+      'If no other attacks remain after Raise Dead, the game may automatically advance out of the Attack phase.',
       'Raise Dead costs exactly 1 soul, no matter the revived piece\'s strength.',
       'A Necromancer starts with 1 soul and gains +1 more only when the Necromancer itself captures.',
       'The raised piece comes from the friendly graveyard and is exiled if it dies again.',

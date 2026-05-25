@@ -26,6 +26,7 @@ import {
   isValidAbilityTarget,
 } from "../Config/AbilityConfig";
 import { getPieceConfig } from "../Config/PieceTypeConfig";
+import { TurnManager } from "../Core/TurnManager";
 
 /**
  * Result of ability validation check.
@@ -66,6 +67,20 @@ export class AbilitySystem {
     ability: AbilityType,
     gameState: GameState
   ): AbilityValidationResult {
+    if (TurnManager.getTurnPhase(gameState.turnCounter) !== "Attack") {
+      return {
+        valid: false,
+        error: `${ability} can only be used during the Attack phase`,
+      };
+    }
+
+    if (!piece.canAttack) {
+      return {
+        valid: false,
+        error: `${piece.type} has already used its attack action`,
+      };
+    }
+
     // Check if piece type can use this ability (via config)
     const pieceConfig = getPieceConfig(piece.type);
     if (!pieceConfig.abilities || !pieceConfig.abilities.includes(ability)) {

@@ -29,10 +29,9 @@ export function createM4L3(): TutorialLesson {
     initialTurnCounter: 4,
     objectives: ['Pledge the Swordsman standing on the Wolf Covenant.'],
     hints: [
-      'This is separate from castle recruitment.',
-      'The sanctuary tooltip shows the special unit and requirement.',
-      'After this lesson you know enough to start playing; the next section is optional special-unit reference.',
+      'Pledging is separate from castle recruitment.',
+      'Cooldown drops at the start of that side\'s turn, plus 1 for each non-Swordsman that side has across the river.',
     ],
-    instructions: 'You are already in the Castles phase. Use the sanctuary to pledge. You are ready to play after this; continue if you want the special-unit tour.',
+    instructions: 'Pledge here to unlock the Wolf. After this, you can start a normal game or continue to the special-unit tour.',
   };
 }

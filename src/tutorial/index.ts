@@ -23,6 +23,7 @@ import { createM2L8 } from './lessons/m2_08_trebuchet';
 import { createM2L9 } from './lessons/m2_09_assassin';
 import { createM2L10 } from './lessons/m2_10_dragon';
 import { createM2L11 } from './lessons/m2_11_monarch';
+import { createM2L12 } from './lessons/m2_12_promotion';
 import { createM3L1 } from './lessons/m3_01_strength_puzzle';
 import { createM3L2 } from './lessons/m3_02_defense';
 import { createM3L3 } from './lessons/m3_03_defense_followup';
@@ -62,6 +63,7 @@ export function getAllLessons(): TutorialLesson[] {
     createM2L9(),
     createM2L10(),
     createM2L11(),
+    createM2L12(),
     createM3L1(),
     createM3L2(),
     createM3L3(),

@@ -29,13 +29,14 @@ export function createM5L7(): TutorialLesson {
     initialTurnCounter: 7,
     phoenixRecords: [{ respawnTurn: 8, owner: 'w' }],
     objectives: [
-      'As Black, capture the nearby Phoenix with the Giant, or pass once to watch the prepared rebirth trigger.',
+      'As Black, capture the nearby Phoenix with the Giant.',
+      'Pass once if you want to see a Phoenix return immediately in this training position.',
       'Compare the Phoenix with the Eagle: both fly, but only the Phoenix has rebirth.',
     ],
     hints: [
-      'The prepared rebirth record is included so you can see a Phoenix return without passing through 3 full player turns.',
-      'A newly killed Phoenix still schedules its normal 3-full-player-turn return.',
-      'When a Phoenix returns, it looks for a friendly castle or adjacent open hex; if blocked, it waits and tries again later.',
+      'In a real game, a Phoenix returns after 3 full player turns.',
+      'This training position also has one return ready, so you can see the rebirth mechanic quickly.',
+      'When a Phoenix returns, it uses the first friendly castle with an open castle hex or adjacent open hex. If every spawn spot is blocked, it waits and tries again later.',
     ],
   };
 }

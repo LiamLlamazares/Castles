@@ -24,6 +24,6 @@ export function createM2L3(): TutorialLesson {
     pieces,
     layout,
     objectives: ['Move the Swordsman one hex up from the centre, then capture the Giant.'],
-    hints: ['White Swordsmen become stronger on the black side of the board.', 'River hexes themselves are not valid promotion or recruitment squares.'],
+    hints: ['White Swordsmen become stronger on the black side of the board.'],
   };
 }

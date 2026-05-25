@@ -139,26 +139,30 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
         </div>
       )}
 
-      {/* Coordinate Toggle */}
-      <div className="toolbar-section" style={{ marginBottom: '20px' }}>
-        <label style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          cursor: 'pointer',
-          padding: '10px',
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: '6px',
-          border: '1px solid rgba(255,255,255,0.2)',
-        }}>
-          <input
-            type="checkbox"
-            checked={showCoordinates}
-            onChange={(e) => onShowCoordinatesChange(e.target.checked)}
-            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-          />
-          <span style={{ fontSize: '0.9rem' }}>Show Coordinates</span>
-        </label>
+      {/* Delete Mode */}
+      <div className="toolbar-section" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <button
+          onClick={handleDeleteClick}
+          style={{
+            width: '100%',
+            padding: '14px',
+            background: selectedTool?.type === 'delete' ? 'rgba(231, 76, 60, 0.6)' : 'rgba(231, 76, 60, 0.2)',
+            border: selectedTool?.type === 'delete' ? '2px solid #e74c3c' : '1px solid rgba(231, 76, 60, 0.5)',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            color: '#fff',
+            fontSize: '1rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <span style={{ fontSize: '1.2rem' }}>🗑</span>
+          Delete Mode {selectedTool?.type === 'delete' ? '(Active)' : ''}
+        </button>
       </div>
 
       {/* Color Selector */}
@@ -339,31 +343,28 @@ const BoardEditorToolbar: React.FC<BoardEditorToolbarProps> = ({
         </div>
       </div>
 
-      {/* Delete Mode */}
+      {/* Coordinate Toggle */}
       <div className="toolbar-section" style={{ marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-        <button
-          onClick={handleDeleteClick}
-          style={{
-            width: '100%',
-            padding: '14px',
-            background: selectedTool?.type === 'delete' ? 'rgba(231, 76, 60, 0.6)' : 'rgba(231, 76, 60, 0.2)',
-            border: selectedTool?.type === 'delete' ? '2px solid #e74c3c' : '1px solid rgba(231, 76, 60, 0.5)',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            color: '#fff',
-            fontSize: '1rem',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <span style={{ fontSize: '1.2rem' }}>✕</span>
-          Delete Mode {selectedTool?.type === 'delete' ? '(Active)' : ''}
-        </button>
+        <label style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          cursor: 'pointer',
+          padding: '10px',
+          background: 'rgba(255,255,255,0.1)',
+          borderRadius: '6px',
+          border: '1px solid rgba(255,255,255,0.2)',
+        }}>
+          <input
+            type="checkbox"
+            checked={showCoordinates}
+            onChange={(e) => onShowCoordinatesChange(e.target.checked)}
+            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: '0.9rem' }}>Show Coordinates</span>
+        </label>
       </div>
+
     </div>
   );
 };

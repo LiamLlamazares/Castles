@@ -83,34 +83,38 @@ export const useCoreGame = (
   }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries, initialGraveyard, initialPhoenixRecords]);
 
   // =========== STATE ===========
-  const [state, setState] = useState<GameBoardState>({
-    pieces: initialPieces,
-    pieceMap: createPieceMap(initialPieces),
-    movingPiece: null,
-    promotionPending: null,
-    turnCounter: initialTurnCounter,
-    castles: initialBoard.castles as Castle[], 
-    sanctuaries: startingSanctuaries,
-    // Initialize sanctuary pool
-    sanctuaryPool: (initialPoolTypes || Object.values(SanctuaryType)).filter((t): t is SanctuaryType => {
-      // 1. Exclude types already on board
-      if (startingSanctuaries.some(s => s.type === t)) return false;
+  const [state, setState] = useState<GameBoardState>(() => {
+    const initialState: GameBoardState = {
+      pieces: initialPieces,
+      pieceMap: createPieceMap(initialPieces),
+      movingPiece: null,
+      promotionPending: null,
+      turnCounter: initialTurnCounter,
+      castles: initialBoard.castles as Castle[], 
+      sanctuaries: startingSanctuaries,
+      // Initialize sanctuary pool
+      sanctuaryPool: (initialPoolTypes || Object.values(SanctuaryType)).filter((t): t is SanctuaryType => {
+        // 1. Exclude types already on board
+        if (startingSanctuaries.some(s => s.type === t)) return false;
+        
+        // 2. If explicit pool provided, use it (already trusted)
+        if (initialPoolTypes) return true;
+   
+        // 3. Otherwise use defaults from config
+        const config = SanctuaryConfig[t];
+        return config.startAvailable === true; // Default to blocked if undefined, though we set defaults
+      }),
+      sanctuarySettings, // Include configurable sanctuary settings
+      gameRules, // Include active game rules
+      moveTree: startingMoveTree,
       
-      // 2. If explicit pool provided, use it (already trusted)
-      if (initialPoolTypes) return true;
- 
-      // 3. Otherwise use defaults from config
-      const config = SanctuaryConfig[t];
-      return config.startAvailable === true; // Default to blocked if undefined, though we set defaults
-    }),
-    sanctuarySettings, // Include configurable sanctuary settings
-    gameRules, // Include active game rules
-    moveTree: startingMoveTree,
-    
-    // History Navigation (node-based)
-    viewNodeId: null,  // Node ID for tree navigation (null = live)
-    graveyard: initialGraveyard,
-    phoenixRecords: initialPhoenixRecords
+      // History Navigation (node-based)
+      viewNodeId: null,  // Node ID for tree navigation (null = live)
+      graveyard: initialGraveyard,
+      phoenixRecords: initialPhoenixRecords
+    };
+
+    return gameEngine.normalizeForcedTurns(initialState) as GameBoardState;
   });
 
   return {

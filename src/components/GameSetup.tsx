@@ -5,6 +5,7 @@ import { getStartingPieces, getStartingBoard, getStartingLayout } from '../Const
 import { Board } from '../Classes/Core/Board';
 import { Piece } from '../Classes/Entities/Piece';
 import { Hex } from '../Classes/Entities/Hex';
+import { Sanctuary } from '../Classes/Entities/Sanctuary';
 import { PieceFactory } from '../Classes/Entities/PieceFactory';
 import { CastleGenerator } from '../Classes/Systems/CastleGenerator';
 import { SanctuaryGenerator } from '../Classes/Systems/SanctuaryGenerator';
@@ -21,6 +22,7 @@ interface GameSetupProps {
         board: Board, 
         pieces: Piece[], 
         timeControl?: { initial: number, increment: number },
+        sanctuaries?: Sanctuary[],
         selectedSanctuaryTypes?: SanctuaryType[],
         sanctuarySettings?: { unlockTurn: number, cooldown: number },
         gameRules?: { vpModeEnabled: boolean },
@@ -224,6 +226,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
             board, 
             pieces, 
             { initial: timeInitial, increment: timeIncrement },
+            sanctuaries,
             Array.from(selectedSanctuaries),
             { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
             { vpModeEnabled },

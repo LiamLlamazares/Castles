@@ -139,6 +139,51 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
     return layout.calculateViewBox();
   }, [layout]);
 
+  const occupiedSanctuaryCooldownBadges = useMemo(() => {
+    const occupiedHexKeys = new Set(pieces.map((piece) => piece.hex.getKey()));
+    return sanctuaries.filter(
+      (sanctuary) => sanctuary.cooldown > 0 && occupiedHexKeys.has(sanctuary.hex.getKey())
+    );
+  }, [pieces, sanctuaries]);
+
+  const renderOccupiedSanctuaryCooldownBadges = () => {
+    const iconSize = layout.size_image * 0.35;
+    const offsetX = iconSize * 1.1;
+    const badgeRadius = Math.max(12, iconSize * 0.34);
+
+    return occupiedSanctuaryCooldownBadges.map((sanctuary) => {
+      const center = layout.layout.hexToPixelReflected(sanctuary.hex, viewState.isBoardRotated);
+      const x = center.x + offsetX + iconSize * 0.42;
+      const y = center.y - iconSize * 0.42;
+
+      return (
+        <g key={`sanctuary-cooldown-${sanctuary.hex.getKey()}`} style={{ pointerEvents: 'none' }}>
+          <circle
+            cx={x}
+            cy={y}
+            r={badgeRadius}
+            fill="#1d2130"
+            stroke="#ffd700"
+            strokeWidth={2}
+          />
+          <text
+            x={x}
+            y={y + badgeRadius * 0.34}
+            textAnchor="middle"
+            style={{
+              fontSize: `${Math.max(11, badgeRadius * 0.95)}px`,
+              fill: "#ffd700",
+              fontWeight: 900,
+              pointerEvents: "none",
+            }}
+          >
+            {sanctuary.cooldown}
+          </text>
+        </g>
+      );
+    });
+  };
+
   const defaultStyle: React.CSSProperties = { 
     position: 'absolute',
     top: 0,
@@ -225,6 +270,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
           onHexClick={handleBoardClick}
           layout={layout}
         />
+        {renderOccupiedSanctuaryCooldownBadges()}
         </svg>
       </div>
   );

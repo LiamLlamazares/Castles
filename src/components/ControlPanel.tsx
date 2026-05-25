@@ -31,21 +31,91 @@ interface ControlPanelProps {
   victoryPoints?: { w: number, b: number };
 }
 
-// VP Badge component for displaying victory points
-const VPBadge: React.FC<{ vp: number, player: Color }> = ({ vp, player }) => (
+const VPTrack: React.FC<{ vp: number, player: Color }> = ({ vp, player }) => {
+  const filled = Math.max(0, Math.min(vp, VP_VICTORY_THRESHOLD));
+  const playerName = player === "w" ? "White" : "Black";
+
+  return (
+    <div
+      aria-label={`${playerName} victory points: ${filled} of ${VP_VICTORY_THRESHOLD}`}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(5, 12px)",
+        gap: "4px",
+      }}
+    >
+      {Array.from({ length: VP_VICTORY_THRESHOLD }).map((_, index) => {
+        const isFilled = index < filled;
+        return (
+          <span
+            key={index}
+            data-testid={`vp-pip-${player}`}
+            data-filled={isFilled ? "true" : "false"}
+            aria-hidden="true"
+            style={{
+              width: "12px",
+              height: "12px",
+              borderRadius: "2px",
+              border: isFilled
+                ? player === "w"
+                  ? "1px solid #f7f1c9"
+                  : "1px solid #020202"
+                : "1px solid rgba(255,255,255,0.2)",
+              background: isFilled
+                ? player === "w"
+                  ? "#fff7cf"
+                  : "#050505"
+                : "rgba(255,255,255,0.06)",
+              boxShadow: isFilled ? "0 0 8px rgba(255, 215, 0, 0.45)" : "none",
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
+const VPScoreRow: React.FC<{ label: string; vp: number; player: Color }> = ({ label, vp, player }) => (
   <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '4px 10px',
-    background: player === 'w' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.3)',
-    borderRadius: '8px',
-    fontSize: '0.85rem',
-    fontWeight: 600,
-    color: vp >= VP_VICTORY_THRESHOLD ? '#27ae60' : '#ffd700'
+    display: "grid",
+    gridTemplateColumns: "48px 1fr 44px",
+    alignItems: "center",
+    gap: "10px",
   }}>
-    <span><img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', filter: 'invert(1)' }} /></span>
-    <span>{vp}/{VP_VICTORY_THRESHOLD} VP</span>
+    <span style={{ fontSize: "0.8rem", color: "#f1ead0", fontWeight: 700 }}>{label}</span>
+    <VPTrack vp={vp} player={player} />
+    <span style={{ fontSize: "0.8rem", color: "#ffd700", textAlign: "right", fontWeight: 700 }}>
+      {Math.min(vp, VP_VICTORY_THRESHOLD)}/{VP_VICTORY_THRESHOLD}
+    </span>
+  </div>
+);
+
+const VPScoreboard: React.FC<{ victoryPoints: { w: number; b: number } }> = ({ victoryPoints }) => (
+  <div style={{
+    margin: "10px 0",
+    padding: "12px",
+    background: "linear-gradient(135deg, rgba(56, 48, 26, 0.86), rgba(25, 24, 20, 0.92))",
+    border: "1px solid rgba(255, 215, 0, 0.28)",
+    borderRadius: "10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  }}>
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      color: "#ffd700",
+      fontSize: "0.82rem",
+      fontWeight: 800,
+      letterSpacing: "0.8px",
+      textTransform: "uppercase",
+    }}>
+      <span><img src={trophyIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '6px', filter: 'invert(1)' }} />Victory Points</span>
+      <span style={{ color: "#d8cfa7", fontSize: "0.72rem" }}>First to {VP_VICTORY_THRESHOLD}</span>
+    </div>
+    <VPScoreRow label="White" vp={victoryPoints.w} player="w" />
+    <VPScoreRow label="Black" vp={victoryPoints.b} player="b" />
   </div>
 );
 
@@ -83,11 +153,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             isActive={hasGameStarted && currentPlayer === "b" && !winner}
             player="b"
           />
-          {victoryPoints && (
-            <VPBadge vp={victoryPoints.b} player="b" />
-          )}
         </div>
       </div>
+
+      {victoryPoints && (
+        <VPScoreboard victoryPoints={victoryPoints} />
+      )}
 
       {/* Move History (Middle) */}
       <div className="notation-section">
@@ -109,9 +180,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             isActive={hasGameStarted && currentPlayer === "w" && !winner}
             player="w"
           />
-          {victoryPoints && (
-            <VPBadge vp={victoryPoints.w} player="w" />
-          )}
         </div>
         {currentPlayer === "w" && !winner && (
           <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />

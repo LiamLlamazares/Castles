@@ -21,14 +21,12 @@ export function createM0L1(): TutorialLesson {
   return {
     id: 'm0_01_victory_conditions',
     title: '0.1 How to win',
-    description: 'One default way to win is to control every castle on the board. This position is already won for White: White controls both castles, including the black-side castle occupied by the white Swordsman.',
+    description: 'White controls every castle, so White has already won.',
     board,
     pieces,
     layout,
     initialTurnCounter: 5,
-    objectives: [
-      'Right-click both castles and notice that White controls them. Because White controls every castle, White has won.',
-    ],
-    instructions: 'No need to move here. Just inspect the castles and notice their controller.',
+    objectives: ['Right-click both castles to confirm their controller.'],
+    instructions: 'No move is needed here.',
   };
 }

@@ -28,6 +28,6 @@ export function createM2L8(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: ['Attack the enemy exactly 3 hexes away and notice that the closer enemy is too close.'],
-    hints: ['Trebuchets do not attack up to range 3; they attack exactly range 3.', 'The river is shown here because Swordsmen can have different strength after crossing sides.'],
+    hints: ['Trebuchets do not attack up to range 3; they attack exactly range 3.', 'Swordsmen on the far side of the river are stronger, so terrain side can change combat math.'],
   };
 }

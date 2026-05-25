@@ -15,11 +15,11 @@ export function createM1L1(): TutorialLesson {
   return {
     id: 'm1_l1_introduction',
     title: '1.1 The board: Castles',
-    description: 'Castles are the main strategic points. You can win by controlling all castles, and captured enemy castles are where recruitment happens during the Castles phase.',
+    description: 'Castles can be captured and controlled. Control every castle to win; captured enemy castles can recruit.',
     board,
     pieces,
     sanctuaries: [],
     layout,
-    instructions: 'Right-click each castle. The tooltip shows its controller, original side, and next recruitment piece.',
+    instructions: 'Inspect each castle controller.',
   };
 }

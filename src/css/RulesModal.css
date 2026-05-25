@@ -39,19 +39,34 @@
   padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--panel-border);
   display: flex;
-  justify-content: space-between;
+  gap: 1rem;
   align-items: center;
   background: var(--button-bg);
   border-radius: 16px 16px 0 0;
 }
 
 .rules-header h1 {
+  flex: 1;
   margin: 0;
   font-size: 1.8rem;
   color: var(--accent-color); /* Gold in dark, Purple in light */
   text-shadow: 0 2px 4px rgba(0,0,0,0.5);
   font-family: 'Georgia', serif; /* Fantasy feel */
   letter-spacing: 0.5px;
+}
+
+.rules-header-full-link {
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--panel-text);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.rules-header-full-link:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .rules-close {
@@ -145,7 +160,7 @@
 /* Visual Tiles Grid */
 .rules-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 1.5rem;
     margin: 1.5rem 0;
 }
@@ -160,6 +175,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 0.5rem;
 }
 
 .rule-tile:hover {
@@ -181,6 +197,32 @@
 }
 
 /* Note: Fill colors for SVG classes (.hexagon, .hexagon-river) come from Board.css global styles */
+
+.rules-modal .rules-terrain-river {
+  fill: rgb(56, 175, 205);
+  stroke: #aaa;
+  stroke-width: 4;
+}
+
+.rules-modal .rules-terrain-castle {
+  fill: #a29bfe;
+  stroke: #8000ff;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 8px rgba(128, 0, 255, 0.45));
+}
+
+.rules-modal .rules-terrain-high-ground {
+  fill: rgb(175, 87, 24);
+  stroke: #aaa;
+  stroke-width: 4;
+}
+
+.rules-modal .rules-terrain-sanctuary {
+  fill: var(--sanctuary-wolf, #95a5a6);
+  stroke: #f1c40f;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 8px rgba(149, 165, 166, 0.75));
+}
 
 .rule-tile span {
     font-size: 0.85rem;

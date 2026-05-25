@@ -54,4 +54,8 @@ export class StateMutator {
   public static resetTurnFlags(state: GameState): GameState {
     return TurnMutator.resetTurnFlags(state);
   }
+
+  public static normalizeForcedTurns(state: GameState, board: Board): GameState {
+    return TurnMutator.normalizeForcedTurns(state, board);
+  }
 }
