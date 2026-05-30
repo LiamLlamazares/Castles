@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,49 +35,110 @@ afterEach(async () => {
 });
 
 describe("JsonOnlineGameStore", () => {
-  it("saves and loads online room records", async () => {
+  it("appends and replays online game events", async () => {
     const dir = await mkdtemp(join(tmpdir(), "castles-online-"));
     tempDirs.push(dir);
-    const store = new JsonOnlineGameStore(join(dir, "games.json"));
+    const filePath = join(dir, "games.jsonl");
+    const store = new JsonOnlineGameStore(filePath);
+    const setup = createSetup();
 
-    const service = new OnlineGameService({
-      idFactory: () => "game_persisted",
-      tokenFactory: (seat) => `${seat}-token`,
+    await store.appendEvent({
+      type: "game_created",
+      gameId: "game_persisted",
+      whiteToken: "w-token",
+      blackToken: "b-token",
+      setup,
     });
-    const created = service.createGame(createSetup(), {
-      publicBaseUrl: "https://castles.example",
+    await store.appendEvent({
+      type: "action_accepted",
+      gameId: "game_persisted",
+      playerColor: "w",
+      version: 1,
+      action: { type: "PASS", baseVersion: 0 },
     });
-    const room = service.getRoomForToken(created.gameId, created.white.token);
-    if (!room) throw new Error("room missing");
-    room.submitAction(created.white.token, { type: "PASS", baseVersion: 0 });
 
-    await store.save(service.toRecords());
+    const raw = await readFile(filePath, "utf8");
+    const lines = raw.trim().split(/\r?\n/);
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toMatchObject({ type: "game_created" });
+    expect(JSON.parse(lines[1])).toMatchObject({
+      type: "action_accepted",
+      gameId: "game_persisted",
+      playerColor: "w",
+      version: 1,
+    });
 
     const records = await store.load();
     const restored = OnlineGameService.fromRecords(records);
 
-    expect(restored.getRoom(created.gameId)?.getSnapshot().version).toBe(1);
+    expect(restored.getRoom("game_persisted")?.getSnapshot().version).toBe(1);
   });
 
-  it("serializes overlapping saves through one write queue", async () => {
+  it("skips corrupt event log lines while loading valid events", async () => {
     const dir = await mkdtemp(join(tmpdir(), "castles-online-"));
     tempDirs.push(dir);
-    const store = new JsonOnlineGameStore(join(dir, "games.json"));
-    const records = Array.from({ length: 20 }, (_, index) => {
-      const service = new OnlineGameService({
-        idFactory: () => `game_${index}`,
-        tokenFactory: (seat) => `${seat}-${index}`,
-      });
-      service.createGame(createSetup(), {
-        publicBaseUrl: "https://castles.example",
-      });
-      return service.toRecords();
-    });
+    const filePath = join(dir, "games.jsonl");
+    const store = new JsonOnlineGameStore(filePath);
+    const setup = createSetup();
+    const errors: Array<{ line: number; error: unknown }> = [];
 
-    await expect(Promise.all(records.map((record) => store.save(record)))).resolves.toBeDefined();
+    await writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "game_created",
+          gameId: "game_corrupt_recovery",
+          whiteToken: "w-token",
+          blackToken: "b-token",
+          setup,
+        }),
+        "{not-json",
+        JSON.stringify({
+          type: "action_accepted",
+          gameId: "game_corrupt_recovery",
+          playerColor: "w",
+          version: 1,
+          action: { type: "PASS", baseVersion: 0 },
+        }),
+        "",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const records = await store.load({
+      onEventError: (line, error) => errors.push({ line, error }),
+    });
+    const restored = OnlineGameService.fromRecords(records);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].line).toBe(2);
+    expect(restored.getRoom("game_corrupt_recovery")?.getSnapshot().version).toBe(1);
+  });
+
+  it("serializes overlapping event appends through one write queue", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "castles-online-"));
+    tempDirs.push(dir);
+    const store = new JsonOnlineGameStore(join(dir, "games.jsonl"));
+    const setup = createSetup();
+
+    await expect(
+      Promise.all(
+        Array.from({ length: 20 }, (_, index) =>
+          store.appendEvent({
+            type: "game_created",
+            gameId: `game_${index}`,
+            whiteToken: `w-token-${index}`,
+            blackToken: `b-token-${index}`,
+            setup,
+          })
+        )
+      )
+    ).resolves.toBeDefined();
 
     const loaded = await store.load();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0].gameId).toBe("game_19");
+    expect(loaded).toHaveLength(20);
+    expect(loaded.map((record) => record.gameId)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `game_${index}`)
+    );
   });
 });

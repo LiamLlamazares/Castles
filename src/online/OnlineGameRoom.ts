@@ -10,6 +10,7 @@ import {
 import type { CommandContext, GameCommand } from "../Classes/Commands";
 import { GameState } from "../Classes/Core/GameState";
 import { Hex } from "../Classes/Entities/Hex";
+import { VP_VICTORY_THRESHOLD } from "../Classes/Systems/WinCondition";
 import { PieceType, Color } from "../Constants";
 import {
   createInitialStateFromSetupDTO,
@@ -30,8 +31,13 @@ export interface OnlineGameRoomCreateInput {
   gameId: string;
   whiteToken: string;
   blackToken: string;
-  acceptedActions?: OnlineActionDTO[];
+  acceptedActions?: AcceptedOnlineActionRecord[];
   result?: OnlineGameResultDTO;
+}
+
+export interface AcceptedOnlineActionRecord {
+  playerColor: Color;
+  action: OnlineActionDTO;
 }
 
 export interface OnlineGameRoomRecord {
@@ -39,7 +45,7 @@ export interface OnlineGameRoomRecord {
   whiteToken: string;
   blackToken: string;
   setup: OnlineGameSetupDTO;
-  acceptedActions: OnlineActionDTO[];
+  acceptedActions: AcceptedOnlineActionRecord[];
   result?: OnlineGameResultDTO;
 }
 
@@ -66,7 +72,7 @@ function sameHex(a: Hex, b: Hex): boolean {
 export class OnlineGameRoom {
   private state: GameState;
   private readonly context: CommandContext;
-  private acceptedActions: OnlineActionDTO[];
+  private acceptedActions: AcceptedOnlineActionRecord[];
   private result?: OnlineGameResultDTO;
 
   private constructor(
@@ -92,11 +98,9 @@ export class OnlineGameRoom {
       input.blackToken
     );
 
-    for (const action of input.acceptedActions ?? []) {
-      const token = room.tokenForColor(
-        room.context.gameEngine.getCurrentPlayer(room.state.turnCounter)
-      );
-      const result = room.submitAction(token, action, { replaying: true });
+    for (const entry of input.acceptedActions ?? []) {
+      const token = room.tokenForColor(entry.playerColor);
+      const result = room.submitAction(token, entry.action);
       if (!result.ok) {
         throw new Error(`Could not replay online action: ${result.error.message}`);
       }
@@ -135,11 +139,7 @@ export class OnlineGameRoom {
     };
   }
 
-  submitAction(
-    token: string,
-    action: OnlineActionDTO,
-    options: { replaying?: boolean } = {}
-  ): OnlineActionResult {
+  submitAction(token: string, action: OnlineActionDTO): OnlineActionResult {
     const snapshot = this.getSnapshot();
     const color = this.authenticate(token);
     if (!color) {
@@ -162,12 +162,12 @@ export class OnlineGameRoom {
 
     if (action.type === "RESIGN") {
       this.result = { winner: opposite(color), reason: "resignation" };
-      this.accept(action, options);
+      this.accept(color, action);
       return { ok: true, snapshot: this.getSnapshot() };
     }
 
     if (action.type === "PROMOTE") {
-      return this.submitPromotion(color, action, options);
+      return this.submitPromotion(color, action);
     }
 
     const command = this.commandFromAction(action, color);
@@ -186,7 +186,7 @@ export class OnlineGameRoom {
 
     this.state = result.newState;
     this.latchTerminalResult();
-    this.accept(action, options);
+    this.accept(color, action);
     return { ok: true, snapshot: this.getSnapshot() };
   }
 
@@ -205,15 +205,16 @@ export class OnlineGameRoom {
     return color === "w" ? this.whiteToken : this.blackToken;
   }
 
-  private accept(action: OnlineActionDTO, options: { replaying?: boolean }): void {
-    this.acceptedActions.push({ ...action, baseVersion: this.version });
-    if (!options.replaying) return;
+  private accept(playerColor: Color, action: OnlineActionDTO): void {
+    this.acceptedActions.push({
+      playerColor,
+      action: { ...action, baseVersion: this.version },
+    });
   }
 
   private submitPromotion(
     color: Color,
-    action: Extract<OnlineActionDTO, { type: "PROMOTE" }>,
-    options: { replaying?: boolean }
+    action: Extract<OnlineActionDTO, { type: "PROMOTE" }>
   ): OnlineActionResult {
     const snapshot = this.getSnapshot();
     const pending = this.state.promotionPending;
@@ -232,7 +233,7 @@ export class OnlineGameRoom {
 
     this.state = nextState;
     this.latchTerminalResult();
-    this.accept(action, options);
+    this.accept(color, action);
     return { ok: true, snapshot: this.getSnapshot() };
   }
 
@@ -242,9 +243,27 @@ export class OnlineGameRoom {
       this.state.castles,
       this.state.victoryPoints
     );
-    return engineWinner
-      ? { winner: engineWinner, reason: "monarch_captured" }
-      : undefined;
+    if (!engineWinner) return undefined;
+
+    const monarchExists = this.state.pieces.some(
+      (piece) => piece.type === PieceType.Monarch && piece.color === opposite(engineWinner)
+    );
+    if (!monarchExists) {
+      return { winner: engineWinner, reason: "monarch_captured" };
+    }
+
+    if (
+      this.state.castles.length > 0 &&
+      this.state.castles.every((castle) => castle.owner === engineWinner)
+    ) {
+      return { winner: engineWinner, reason: "castle_control" };
+    }
+
+    if ((this.state.victoryPoints?.[engineWinner] ?? 0) >= VP_VICTORY_THRESHOLD) {
+      return { winner: engineWinner, reason: "victory_points" };
+    }
+
+    return { winner: engineWinner, reason: "monarch_captured" };
   }
 
   private latchTerminalResult(): OnlineGameResultDTO | undefined {

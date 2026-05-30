@@ -11,18 +11,19 @@ async function main() {
   const staticDir = process.env.CASTLES_STATIC_DIR ?? path.resolve(process.cwd(), "build");
   const storePath =
     process.env.ONLINE_STORE_PATH ??
-    path.resolve(process.cwd(), "server-data", "online-games.json");
+    path.resolve(process.cwd(), "server-data", "online-game-events.jsonl");
 
   const store = new JsonOnlineGameStore(storePath);
-  const service = OnlineGameService.fromRecords(await store.load(), {
-    onRecordError: (gameId, error) => {
-      console.error(`Skipped corrupt online room record${gameId ? ` ${gameId}` : ""}`, error);
+  const records = await store.load({
+    onEventError: (line, error) => {
+      console.error(`Skipped corrupt online event log line ${line}`, error);
     },
   });
+  const service = OnlineGameService.fromRecords(records);
   const { app, server } = createOnlineHttpServer({
     publicBaseUrl,
     service,
-    onRoomsChanged: (records) => store.save(records),
+    onGameEvent: (event) => store.appendEvent(event),
   });
 
   if (existsSync(staticDir)) {

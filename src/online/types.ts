@@ -99,7 +99,7 @@ export interface OnlineGameSetupDTO {
 
 export interface OnlineGameResultDTO {
   winner: Color;
-  reason: "monarch_captured" | "resignation" | "timeout";
+  reason: "monarch_captured" | "castle_control" | "victory_points" | "resignation" | "timeout";
 }
 
 interface VersionedAction {

@@ -5,6 +5,7 @@ import { getStartingBoard, getStartingPieces } from "../../../ConstantImports";
 import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
+import { OnlineGameEvent } from "../../events";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 
@@ -102,14 +103,14 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
-  it("waits for room persistence before returning a created game", async () => {
+  it("waits for event persistence before returning a created game", async () => {
     let releasePersistence!: () => void;
     const persisted = new Promise<void>((resolve) => {
       releasePersistence = resolve;
     });
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
-      onRoomsChanged: () => persisted,
+      onGameEvent: () => persisted,
     });
     servers.push(server);
     const port = await listen(server);
@@ -163,7 +164,7 @@ describe("createOnlineHttpServer", () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       service,
-      onRoomsChanged: () => {
+      onGameEvent: () => {
         persistCount += 1;
         if (persistCount > 1) {
           throw new Error("disk unavailable");
@@ -216,6 +217,79 @@ describe("createOnlineHttpServer", () => {
       );
       const body = await snapshotResponse.json();
       expect(body.snapshot.version).toBe(0);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("persists created games and accepted websocket actions as append-only events", async () => {
+    const events: OnlineGameEvent[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_events",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onGameEvent: (event) => {
+        events.push(event);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "game_created",
+      gameId: "game_events",
+      whiteToken: "w-token",
+      blackToken: "b-token",
+    });
+
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify({
+          type: "join",
+          gameId: created.gameId,
+          token: created.white.token,
+        })
+      );
+    });
+
+    try {
+      await expect(nextSocketMessage(socket)).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      socket.send(
+        JSON.stringify({
+          type: "action",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      );
+
+      await expect(nextSocketMessage(socket)).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+      expect(events).toHaveLength(2);
+      expect(events[1]).toEqual({
+        type: "action_accepted",
+        gameId: "game_events",
+        playerColor: "w",
+        version: 1,
+        action: { type: "PASS", baseVersion: 0 },
+      });
     } finally {
       socket.close();
     }

@@ -2,8 +2,8 @@ import http from "node:http";
 import express, { NextFunction, Request, Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RawData } from "ws";
-import { OnlineGameRoomRecord } from "../OnlineGameRoom";
 import { OnlineGameService } from "../OnlineGameService";
+import { OnlineGameEvent } from "../events";
 import { OnlineReject } from "../types";
 import {
   OnlineClientMessage,
@@ -19,7 +19,7 @@ interface OnlineConnection {
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
-  onRoomsChanged?: (records: OnlineGameRoomRecord[]) => void | Promise<void>;
+  onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
 }
 
 class FixedWindowRateLimiter {
@@ -82,8 +82,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
 
-  const persistRooms = async () => {
-    await options.onRoomsChanged?.(service.toRecords());
+  const persistActionAccepted = async (
+    gameId: string,
+    playerColor: Extract<OnlineGameEvent, { type: "action_accepted" }>["playerColor"],
+    version: number,
+    action: Extract<OnlineGameEvent, { type: "action_accepted" }>["action"]
+  ) => {
+    await options.onGameEvent?.({
+      type: "action_accepted",
+      gameId,
+      playerColor,
+      version,
+      action,
+    });
   };
 
   app.use((_req, res, next) => {
@@ -133,12 +144,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const created = service.createGame(setup.value, {
       publicBaseUrl: options.publicBaseUrl,
     });
+    const room = service.getRoom(created.gameId);
 
     try {
-      await persistRooms();
+      if (!room) {
+        throw new Error(`Created online game ${created.gameId} is missing from service.`);
+      }
+      const record = room.toRecord();
+      await options.onGameEvent?.({
+        type: "game_created",
+        gameId: record.gameId,
+        whiteToken: record.whiteToken,
+        blackToken: record.blackToken,
+        setup: record.setup,
+      });
     } catch (error) {
       service.deleteGame(created.gameId);
-      console.error("Failed to persist online game rooms", error);
+      console.error("Failed to persist online game creation", error);
       res.status(503).json({
         error: {
           code: "persistence_failed",
@@ -260,6 +282,15 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
+      const playerColor = room.authenticate(connection.token);
+      if (!playerColor) {
+        sendSocketError(socket, {
+          code: "unauthorized",
+          message: "This player token is not valid.",
+        });
+        return;
+      }
+
       const beforeAction = room.toRecord();
       const result = room.submitAction(connection.token, message.action);
       if (!result.ok) {
@@ -272,12 +303,17 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
 
       try {
-        await persistRooms();
+        await persistActionAccepted(
+          connection.gameId,
+          playerColor,
+          result.snapshot.version,
+          message.action
+        );
       } catch (error) {
         service.replaceRoom(beforeAction);
         const restoredSnapshot =
           service.getRoom(connection.gameId)?.getSnapshot() ?? result.snapshot;
-        console.error("Failed to persist online game rooms", error);
+        console.error("Failed to persist online game action", error);
         sendJson(socket, {
           type: "error",
           error: {

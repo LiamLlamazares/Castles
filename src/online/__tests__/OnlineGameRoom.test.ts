@@ -125,4 +125,32 @@ describe("OnlineGameRoom", () => {
     expect(result.error.code).toBe("game_over");
     expect(room.getSnapshot().version).toBe(0);
   });
+
+  it("reports castle-control victories distinctly from monarch capture", () => {
+    const room = createRoom();
+    const state = (room as any).state;
+    (room as any).state = {
+      ...state,
+      castles: state.castles.map((castle: any) => castle.with({ owner: "w" })),
+    };
+
+    expect(room.getSnapshot().result).toEqual({
+      winner: "w",
+      reason: "castle_control",
+    });
+  });
+
+  it("reports victory-point wins distinctly from monarch capture", () => {
+    const room = createRoom();
+    const state = (room as any).state;
+    (room as any).state = {
+      ...state,
+      victoryPoints: { w: 10, b: 0 },
+    };
+
+    expect(room.getSnapshot().result).toEqual({
+      winner: "w",
+      reason: "victory_points",
+    });
+  });
 });

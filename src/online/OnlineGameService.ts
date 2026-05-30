@@ -25,10 +25,6 @@ export interface OnlineGameServiceOptions {
   tokenFactory?: (seat: "w" | "b") => string;
 }
 
-export interface OnlineGameServiceFromRecordsOptions {
-  onRecordError?: (gameId: string | undefined, error: unknown) => void;
-}
-
 function defaultIdFactory(): string {
   return `game_${randomBytes(9).toString("base64url")}`;
 }
@@ -60,20 +56,10 @@ export class OnlineGameService {
     this.tokenFactory = options.tokenFactory ?? defaultTokenFactory;
   }
 
-  static fromRecords(
-    records: OnlineGameRoomRecord[],
-    options: OnlineGameServiceFromRecordsOptions = {}
-  ): OnlineGameService {
+  static fromRecords(records: OnlineGameRoomRecord[]): OnlineGameService {
     const service = new OnlineGameService();
     for (const record of records) {
-      try {
-        service.rooms.set(record.gameId, OnlineGameRoom.create(record));
-      } catch (error) {
-        options.onRecordError?.(
-          typeof record?.gameId === "string" ? record.gameId : undefined,
-          error
-        );
-      }
+      service.rooms.set(record.gameId, OnlineGameRoom.create(record));
     }
     return service;
   }
@@ -127,9 +113,5 @@ export class OnlineGameService {
     const room = this.getRoom(gameId);
     if (!room || !room.authenticate(token)) return null;
     return room;
-  }
-
-  toRecords(): OnlineGameRoomRecord[] {
-    return Array.from(this.rooms.values()).map((room) => room.toRecord());
   }
 }

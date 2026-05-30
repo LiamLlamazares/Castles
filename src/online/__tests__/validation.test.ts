@@ -3,6 +3,7 @@ import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
 import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
+import { validateOnlineGameEvent } from "../events";
 import { validateOnlineAction, validateOnlineGameSetup } from "../validation";
 
 function createSetup() {
@@ -62,6 +63,20 @@ describe("online validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toContain("hex");
+    }
+  });
+
+  it("requires accepted action events to include the submitting player", () => {
+    const result = validateOnlineGameEvent({
+      type: "action_accepted",
+      gameId: "game_test",
+      version: 1,
+      action: { type: "RESIGN", baseVersion: 0 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("playerColor");
     }
   });
 });
