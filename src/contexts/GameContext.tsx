@@ -16,6 +16,7 @@ import { MoveRecord, TurnPhase, Color, SanctuaryType, PieceType } from "../Const
 import { PieceMap } from "../utils/PieceMap";
 import { GameEngine } from "../Classes/Core/GameEngine";
 import { GameState, PositionSnapshot, PhoenixRecord } from "../Classes/Core/GameState";
+import type { OnlineClientSession } from "../online/types";
 
 // ============================================================================
 // CONFIGURATION INTERFACES
@@ -35,6 +36,7 @@ export interface GameConfig {
   poolTypes?: SanctuaryType[];
   graveyard?: Piece[];
   phoenixRecords?: PhoenixRecord[];
+  promotionPending?: Piece | null;
 }
 
 /**
@@ -51,6 +53,7 @@ export interface GameRules {
 export interface GameModeFlags {
   isAnalysisMode?: boolean;
   isTutorialMode?: boolean;
+  onlineSession?: OnlineClientSession;
 }
 
 export interface IGameState extends Omit<GameState, 'moveTree'> {
@@ -83,6 +86,7 @@ export interface IGameState extends Omit<GameState, 'moveTree'> {
     applyAIState: (newState: GameState) => void;
     isViewingHistory: boolean;
   };
+  onlineSession?: OnlineClientSession;
 }
 
 export interface IGameActions {

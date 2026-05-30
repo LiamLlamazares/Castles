@@ -37,7 +37,8 @@ export const useCoreGame = (
   gameRules?: { vpModeEnabled: boolean },
   initialPoolTypes?: import("../Constants").SanctuaryType[],
   initialGraveyard: Piece[] = [],
-  initialPhoenixRecords: import("../Classes/Core/GameState").PhoenixRecord[] = []
+  initialPhoenixRecords: import("../Classes/Core/GameState").PhoenixRecord[] = [],
+  initialPromotionPending: Piece | null = null
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -88,7 +89,7 @@ export const useCoreGame = (
       pieces: initialPieces,
       pieceMap: createPieceMap(initialPieces),
       movingPiece: null,
-      promotionPending: null,
+      promotionPending: initialPromotionPending,
       turnCounter: initialTurnCounter,
       castles: initialBoard.castles as Castle[], 
       sanctuaries: startingSanctuaries,

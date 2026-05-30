@@ -21,8 +21,8 @@ export class MoveCommand implements GameCommand {
   private notation: string;
 
   constructor(
-    private readonly piece: Piece,
-    private readonly targetHex: Hex,
+    public readonly piece: Piece,
+    public readonly targetHex: Hex,
     private readonly context: CommandContext
   ) {
     // Pre-compute notation for efficiency

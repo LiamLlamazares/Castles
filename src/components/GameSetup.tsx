@@ -30,6 +30,17 @@ interface GameSetupProps {
         pieceTheme?: PieceTheme,
         opponentConfig?: AIOpponentConfig
     ) => void;
+    onCreateOnlineGame?: (
+        board: Board,
+        pieces: Piece[],
+        timeControl?: { initial: number, increment: number },
+        sanctuaries?: Sanctuary[],
+        selectedSanctuaryTypes?: SanctuaryType[],
+        sanctuarySettings?: { unlockTurn: number, cooldown: number },
+        gameRules?: { vpModeEnabled: boolean },
+        initialPoolTypes?: SanctuaryType[],
+        pieceTheme?: PieceTheme
+    ) => void;
 }
 
 // Opponent options for card-based selection
@@ -82,7 +93,7 @@ const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     }
 };
 
-const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
+const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame }) => {
     // Game Mode State
     const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
     
@@ -236,6 +247,20 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
         );
     };
 
+    const handleCreateOnlineGame = () => {
+        onCreateOnlineGame?.(
+            board,
+            pieces,
+            { initial: timeInitial, increment: timeIncrement },
+            sanctuaries,
+            Array.from(selectedSanctuaries),
+            { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
+            { vpModeEnabled },
+            Array.from(selectedPoolTypes),
+            pieceTheme
+        );
+    };
+
     return (
         <>
             <div className="game-setup" style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: Palette.PanelBackground, color: Palette.TextPrimary, overflow: 'hidden' }}>
@@ -370,6 +395,26 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay }) => {
                 >
                     PLAY GAME
                 </button>
+                {onCreateOnlineGame && (
+                    <button
+                        onClick={handleCreateOnlineGame}
+                        style={{
+                            padding: '13px',
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            borderRadius: '8px',
+                            border: `1px solid ${Colors.Primary}`,
+                            background: Colors.SelectionBackground,
+                            color: 'white',
+                            fontWeight: 'bold',
+                            width: '100%',
+                            marginTop: '-8px',
+                            marginBottom: '10px'
+                        }}
+                    >
+                        CREATE ONLINE GAME
+                    </button>
+                )}
                 
                 {/* Board Configuration */}
                 <BoardConfig

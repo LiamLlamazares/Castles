@@ -64,6 +64,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const initialPoolTypes = config?.poolTypes;
   const initialGraveyard = config?.graveyard ?? [];
   const initialPhoenixRecords = config?.phoenixRecords ?? [];
+  const initialPromotionPending = config?.promotionPending ?? null;
   
   // Extract rules
   const sanctuarySettings = rules?.sanctuarySettings;
@@ -74,6 +75,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   // Extract mode flags
   const isAnalysisMode = mode?.isAnalysisMode ?? false;
   const isTutorialMode = mode?.isTutorialMode ?? false;
+  const onlineSession = mode?.onlineSession;
   
   // =========== CORE GAME STATE ===========
   const { state, setState, gameEngine, startingSanctuaries } = useCoreGame(
@@ -86,7 +88,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     gameRules,
     initialPoolTypes,
     initialGraveyard,
-    initialPhoenixRecords
+    initialPhoenixRecords,
+    initialPromotionPending
   );
 
   // =========== COMPOSED HOOKS ===========
@@ -179,6 +182,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     initialBoard,
     startingSanctuaries,
     initialTurnCounter,
+    onlineSession,
   });
 
   // =========== INTERACTION HOOK ===========
@@ -189,10 +193,13 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     turnPhase,
     currentPlayer,
     handleHexClick,
-    movingPiece
+    movingPiece,
+    onlineSession
   });
 
   const handleTakeback = useCallback(() => {
+    if (onlineSession) return;
+
     const newTree = state.moveTree.clone();
     if (newTree.navigateBack()) {
       const parentNode = newTree.current;
@@ -209,16 +216,25 @@ export const GameProvider: React.FC<GameProviderProps> = ({
         }));
       }
     }
-  }, [state.moveTree, setState]);
+  }, [state.moveTree, setState, onlineSession]);
 
   const hasGameStarted = turnCounter > 0;
 
   // =========== PROMOTION ===========
   const promotePiece = useCallback((newType: PieceType) => {
+    if (onlineSession) {
+      onlineSession.submitAction({
+        type: "PROMOTE",
+        pieceType: newType,
+        baseVersion: onlineSession.version,
+      });
+      return;
+    }
+
     if (!state.promotionPending) return;
     const newState = gameEngine.promotePiece(state, state.promotionPending, newType);
     setState((prev: GameState) => ({ ...prev, ...newState }));
-  }, [state, gameEngine, setState]);
+  }, [state, gameEngine, setState, onlineSession]);
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
       return gameEngine.canPledge(state, sanctuaryHex); 
@@ -263,14 +279,16 @@ export const GameProvider: React.FC<GameProviderProps> = ({
         getState: () => state,
         applyAIState: (newState: GameState) => setState(prev => ({ ...prev, ...newState })),
         isViewingHistory,
-      }
+      },
+      onlineSession
     };
   }, [
     pieces, castles, state.sanctuaries, turnCounter, viewState.pieceMap, movingPiece,
     turnPhase, currentPlayer, hexagons, legalMoveSet, legalAttackSet, victoryMessage, winner,
     isRecruitmentSpot, isPledgeSpot, gameEngine, state.moveTree,
     state.sanctuaryPool, state.graveyard, state.phoenixRecords,
-    hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state.promotionPending, state, setState
+    hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state.promotionPending, state, setState,
+    onlineSession
   ]);
 
   const gameActionsValue: IGameActions = useMemo(() => ({
@@ -278,7 +296,16 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     handleTakeback,
     handlePieceClick,
     handleHexClick,
-    handleResign: (forColor?: Color) => handleResign(forColor || currentPlayer),
+    handleResign: (forColor?: Color) => {
+      if (onlineSession) {
+        onlineSession.submitAction({
+          type: "RESIGN",
+          baseVersion: onlineSession.version,
+        });
+        return;
+      }
+      handleResign(forColor || currentPlayer);
+    },
     promotePiece,
     handlePromotion: promotePiece,
     pledge,
@@ -291,7 +318,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     loadPGN
   }), [
     handlePass, handleTakeback, handlePieceClick, handleHexClick, handleResign, promotePiece, pledge, canPledge,
-    triggerAbility, gameEngine, viewState, jumpToNode, stepHistory, getPGN, loadPGN
+    triggerAbility, gameEngine, viewState, jumpToNode, stepHistory, getPGN, loadPGN,
+    onlineSession, currentPlayer
   ]);
 
   return (

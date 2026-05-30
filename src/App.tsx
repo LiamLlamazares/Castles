@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import GameBoard from './components/Game';
 import MainMenu from './components/MainMenu';
 import GameSetup from './components/GameSetup';
@@ -15,6 +15,19 @@ import { SanctuaryType, PieceTheme } from './Constants';
 import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
 import { AIOpponentConfig } from './hooks/useAIOpponent';
+import { useOnlineGameConnection } from './hooks/useOnlineGameConnection';
+import {
+  createMoveTreeFromHistory,
+  hydrateGameStateDTO,
+  hydrateOnlineGameSetupDTO,
+  serializeOnlineGameSetup,
+} from './online/serialization';
+import {
+  createOnlineGame,
+  parseOnlineJoinParams,
+  OnlineJoinParams,
+} from './online/client';
+import type { OnlineClientSession, OnlineGameSnapshotDTO } from './online/types';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
   BrowserGameLibraryRepository,
@@ -24,6 +37,7 @@ import {
   createSavedGameRecord,
 } from './Classes/Services/GameLibraryRepository';
 import { loadPGNText } from './Classes/Services/PGNLoadService';
+import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library';
 
@@ -38,6 +52,9 @@ interface GameConfig {
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };
   initialPoolTypes?: SanctuaryType[];
+  graveyard?: Piece[];
+  phoenixRecords?: PhoenixRecord[];
+  promotionPending?: Piece | null;
   pieceTheme?: PieceTheme;
   isAnalysisMode?: boolean;
   opponentConfig?: AIOpponentConfig;
@@ -55,13 +72,28 @@ function App() {
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
   const [previousView, setPreviousView] = useState<ViewState>('game');
   const [gameLibraryRepository] = useState(() => new BrowserGameLibraryRepository());
+  const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(() =>
+    parseOnlineJoinParams(window.location.href)
+  );
+  const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
 
   const clearAutosave = () => {
     localStorage.removeItem('castles_autosave');
   };
 
+  const clearOnlineUrl = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("onlineGame");
+    url.searchParams.delete("seat");
+    url.searchParams.delete("token");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
   const handleNewGameClick = () => {
     clearAutosave();
+    clearOnlineUrl();
+    setOnlineJoin(null);
+    setOnlineSnapshot(null);
     setView('setup');
   };
 
@@ -89,8 +121,56 @@ function App() {
     const layout = getStartingLayout(board);
 
     clearAutosave();
+    clearOnlineUrl();
+    setOnlineJoin(null);
+    setOnlineSnapshot(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
     setView('game');
+  };
+
+  const handleCreateOnlineGame = async (
+    board: Board,
+    pieces: Piece[],
+    timeControl?: { initial: number, increment: number },
+    sanctuaries?: Sanctuary[],
+    _selectedSanctuaryTypes?: SanctuaryType[],
+    sanctuarySettings?: { unlockTurn: number, cooldown: number },
+    gameRules?: { vpModeEnabled: boolean },
+    initialPoolTypes?: SanctuaryType[],
+    pieceTheme?: PieceTheme
+  ) => {
+    try {
+      clearAutosave();
+      const created = await createOnlineGame(
+        serializeOnlineGameSetup({
+          board,
+          pieces,
+          sanctuaries: sanctuaries ?? [],
+          timeControl,
+          sanctuarySettings,
+          gameRules,
+          initialPoolTypes,
+          pieceTheme,
+        })
+      );
+
+      window.prompt("Send this invite link to your friend:", created.black.url);
+      const whiteUrl = new URL(created.white.url);
+      window.history.pushState(
+        {},
+        "",
+        `${window.location.pathname}?${whiteUrl.searchParams.toString()}`
+      );
+      setOnlineJoin({
+        gameId: created.gameId,
+        seat: "w",
+        token: created.white.token,
+      });
+      setView('game');
+    } catch (error) {
+      console.error("Failed to create online game", error);
+      alert("Could not create an online game. Make sure the Node server is running.");
+    }
   };
 
   const handleRestartGame = () => {
@@ -111,6 +191,9 @@ function App() {
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
+    clearOnlineUrl();
+    setOnlineJoin(null);
+    setOnlineSnapshot(null);
     setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, sanctuarySettings, initialPoolTypes, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
@@ -168,6 +251,47 @@ function App() {
   const [gameKey, setGameKey] = useState(0);
   const isRulesPage = window.location.pathname === '/rules';
 
+  const handleOnlineSnapshot = useCallback((snapshot: OnlineGameSnapshotDTO) => {
+    const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
+    const moveTree = createMoveTreeFromHistory(snapshot.moveHistory, snapshot.state);
+    const state = hydrateGameStateDTO(snapshot.state, snapshot.setup, moveTree);
+    const layout = getStartingLayout(setup.board);
+
+    setOnlineSnapshot(snapshot);
+    setGameConfig({
+      board: setup.board,
+      pieces: state.pieces,
+      layout,
+      moveTree: state.moveTree,
+      turnCounter: state.turnCounter,
+      sanctuaries: state.sanctuaries,
+      sanctuarySettings: setup.sanctuarySettings,
+      gameRules: setup.gameRules,
+      initialPoolTypes: state.sanctuaryPool,
+      graveyard: state.graveyard,
+      phoenixRecords: state.phoenixRecords,
+      promotionPending: state.promotionPending,
+      pieceTheme: setup.pieceTheme,
+      timeControl: setup.timeControl,
+      isAnalysisMode: false,
+    });
+    setGameKey(prev => prev + 1);
+    setView('game');
+  }, []);
+
+  const onlineConnection = useOnlineGameConnection(onlineJoin, handleOnlineSnapshot);
+  const onlineSession = useMemo<OnlineClientSession | undefined>(() => {
+    if (!onlineJoin || !onlineSnapshot) return undefined;
+    return {
+      gameId: onlineJoin.gameId,
+      playerColor: onlineJoin.seat,
+      version: onlineSnapshot.version,
+      status: onlineConnection.status,
+      lastError: onlineConnection.lastError,
+      submitAction: onlineConnection.submitAction,
+    };
+  }, [onlineJoin, onlineSnapshot, onlineConnection]);
+
   const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
     setGameConfig({ board, pieces, layout, turnCounter, sanctuaries, isAnalysisMode: true });
@@ -189,6 +313,9 @@ function App() {
   const handlePlayFromEditor = (board: Board, pieces: Piece[], sanctuaries: Sanctuary[]) => {
     clearAutosave();
     const layout = getStartingLayout(board);
+    clearOnlineUrl();
+    setOnlineJoin(null);
+    setOnlineSnapshot(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
     setGameKey(prev => prev + 1);
     setView('game');
@@ -210,10 +337,28 @@ function App() {
       {view === 'setup' && (
         <GameSetup 
           onPlay={handleStartGame} 
+          onCreateOnlineGame={handleCreateOnlineGame}
         />
       )}
 
-      {view === 'game' && (
+      {view === 'game' && onlineJoin && !onlineSnapshot && (
+        <div
+          style={{
+            height: '100vh',
+            width: '100vw',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#151515',
+            color: '#f5f5f5',
+            fontSize: '1rem',
+          }}
+        >
+          Connecting online game{onlineConnection.lastError ? `: ${onlineConnection.lastError}` : '...'}
+        </div>
+      )}
+
+      {view === 'game' && (!onlineJoin || onlineSnapshot) && (
         <div style={{ height: '100vh', width: '100vw' }}> {/* Ensure full screen for game */}
             <GameBoard 
               key={gameKey}
@@ -223,6 +368,9 @@ function App() {
               initialMoveTree={gameConfig.moveTree}
               initialTurnCounter={gameConfig.turnCounter}
               initialSanctuaries={gameConfig.sanctuaries}
+              initialGraveyard={gameConfig.graveyard}
+              initialPhoenixRecords={gameConfig.phoenixRecords}
+              initialPromotionPending={gameConfig.promotionPending}
               timeControl={gameConfig.timeControl}
               sanctuarySettings={gameConfig.sanctuarySettings}
               gameRules={gameConfig.gameRules}
@@ -238,6 +386,7 @@ function App() {
               onSaveGameToLibrary={handleSaveGameToLibrary}
               pieceTheme={gameConfig.pieceTheme}
               opponentConfig={gameConfig.opponentConfig}
+              onlineSession={onlineSession}
               initialPoolTypes={gameConfig.initialPoolTypes}
             />
         </div>

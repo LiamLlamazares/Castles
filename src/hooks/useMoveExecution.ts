@@ -23,6 +23,8 @@ import { TurnPhase, Color, MoveRecord, AbilityType } from "../Constants";
 import { PieceMap } from "../utils/PieceMap";
 import { useInputController } from "./useInputController";
 import { gameEvents } from "../Classes/Events";
+import { commandToOnlineAction } from "../online/commandToOnlineAction";
+import type { OnlineClientSession } from "../online/types";
 
 // Command Pattern imports
 import {
@@ -54,6 +56,7 @@ export interface MoveExecutionProps {
   initialBoard: import("../Classes/Core/Board").Board;
   startingSanctuaries: import("../Classes/Entities/Sanctuary").Sanctuary[];
   initialTurnCounter: number;
+  onlineSession?: OnlineClientSession;
 }
 
 /**
@@ -73,6 +76,7 @@ export const useMoveExecution = ({
   isLegalAttack,
   isRecruitmentSpot,
   getEffectiveState,
+  onlineSession,
 }: MoveExecutionProps) => {
   const { movingPiece, castles } = state;
 
@@ -117,6 +121,17 @@ export const useMoveExecution = ({
           moveTree: treeForMutation
       };
 
+      if (onlineSession) {
+        if (onlineSession.playerColor !== currentPlayer) {
+          return false;
+        }
+
+        onlineSession.submitAction(
+          commandToOnlineAction(command, onlineSession.version)
+        );
+        return true;
+      }
+
       const result = command.execute(stateToExecute);
 
       if (result.success) {
@@ -148,7 +163,7 @@ export const useMoveExecution = ({
         return false;
       }
     },
-    [isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, setState, gameEngine] // Added gameEngine dependency
+    [isAnalysisMode, isViewingHistory, getEffectiveState, prepareTreeForMutation, onlineSession, currentPlayer, setState, gameEngine] // Added gameEngine dependency
   );
 
   /**

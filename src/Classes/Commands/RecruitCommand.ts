@@ -22,8 +22,8 @@ export class RecruitCommand implements GameCommand {
   readonly type = CommandType.Recruit;
 
   constructor(
-    private readonly castle: Castle,
-    private readonly spawnHex: Hex,
+    public readonly castle: Castle,
+    public readonly spawnHex: Hex,
     private readonly context: CommandContext
   ) {}
 

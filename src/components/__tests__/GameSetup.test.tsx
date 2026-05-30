@@ -35,4 +35,26 @@ describe("GameSetup", () => {
       SanctuaryType.SacredSpring,
     ]);
   });
+
+  it("passes the preview setup through when creating an online game", () => {
+    const previewSanctuaries = [
+      new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
+      new Sanctuary(new Hex(1, -1, 0), SanctuaryType.WolfCovenant, "b"),
+    ];
+    vi
+      .spyOn(SanctuaryGenerator, "generateRandomSanctuaries")
+      .mockReturnValue(previewSanctuaries);
+
+    const onCreateOnlineGame = vi.fn();
+    render(<GameSetup onPlay={vi.fn()} onCreateOnlineGame={onCreateOnlineGame} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "CREATE ONLINE GAME" }));
+
+    expect(onCreateOnlineGame).toHaveBeenCalledTimes(1);
+    expect(onCreateOnlineGame.mock.calls[0][3]).toBe(previewSanctuaries);
+    expect(onCreateOnlineGame.mock.calls[0][4]).toEqual([
+      SanctuaryType.WolfCovenant,
+      SanctuaryType.SacredSpring,
+    ]);
+  });
 });

@@ -25,9 +25,9 @@ export class AbilityCommand implements GameCommand {
   readonly type = CommandType.Ability;
 
   constructor(
-    private readonly caster: Piece,
-    private readonly targetHex: Hex,
-    private readonly ability: AbilityType,
+    public readonly caster: Piece,
+    public readonly targetHex: Hex,
+    public readonly ability: AbilityType,
     private readonly context: CommandContext
   ) {}
 

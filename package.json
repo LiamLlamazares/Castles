@@ -3,14 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "express": "^5.2.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "ws": "^8.21.0"
   },
   "scripts": {
     "start": "vite --host localhost --port 3000",
     "dev": "vite --host localhost --port 3000",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host localhost --port 3000",
+    "server:dev": "tsx server/index.ts",
+    "server:build": "tsc -p tsconfig.server.json",
+    "server:start": "node server-build/server/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "audit": "npm audit --audit-level=low"
@@ -31,11 +36,14 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.19.19",
     "@types/react": "^18.3.29",
     "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.2",
     "jsdom": "^29.1.1",
+    "tsx": "^4.22.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.14",
     "vitest": "^4.1.7"

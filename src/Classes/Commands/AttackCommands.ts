@@ -21,8 +21,8 @@ export class AttackCommand implements GameCommand {
   private notation: string;
 
   constructor(
-    private readonly attacker: Piece,
-    private readonly targetHex: Hex,
+    public readonly attacker: Piece,
+    public readonly targetHex: Hex,
     private readonly context: CommandContext
   ) {
     this.notation = NotationService.getAttackNotation(attacker, targetHex);
@@ -81,8 +81,8 @@ export class CastleAttackCommand implements GameCommand {
   private notation: string;
 
   constructor(
-    private readonly attacker: Piece,
-    private readonly targetHex: Hex,
+    public readonly attacker: Piece,
+    public readonly targetHex: Hex,
     private readonly context: CommandContext
   ) {
     this.notation = NotationService.getAttackNotation(attacker, targetHex);

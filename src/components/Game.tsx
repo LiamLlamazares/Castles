@@ -24,6 +24,7 @@ import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
 import { PieceTheme } from "../Constants";
+import type { OnlineClientSession } from "../online/types";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import PromotionModal from "./PromotionModal";
 import "../css/Board.css";
@@ -41,6 +42,7 @@ interface GameBoardProps {
   initialSanctuaries?: Sanctuary[];
   initialGraveyard?: Piece[];
   initialPhoenixRecords?: PhoenixRecord[];
+  initialPromotionPending?: Piece | null;
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };
   onResign?: () => void; 
@@ -66,6 +68,7 @@ interface GameBoardProps {
   initialPoolTypes?: import('../Constants').SanctuaryType[];
   pieceTheme?: PieceTheme;
   opponentConfig?: AIOpponentConfig;
+  onlineSession?: OnlineClientSession;
 }
 
 /**
@@ -91,7 +94,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onEnableAnalysis = () => {},
   isTutorialMode = false,
   pieceTheme = "Castles",
-  opponentConfig
+  opponentConfig,
+  onlineSession
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [showRulesModal, setShowRulesModal] = React.useState(false);
@@ -414,6 +418,27 @@ const InnerGame: React.FC<GameBoardProps> = ({
           victoryPoints={victoryPoints}
         />
       )}
+
+      {onlineSession && (
+        <div
+          style={{
+            position: "absolute",
+            top: "10px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 20,
+            padding: "6px 10px",
+            borderRadius: "6px",
+            background: "rgba(0, 0, 0, 0.72)",
+            color: "#f5f5f5",
+            fontSize: "0.82rem",
+            border: "1px solid rgba(255,255,255,0.18)",
+          }}
+        >
+          Online {onlineSession.playerColor === "w" ? "White" : "Black"} · {onlineSession.status}
+          {onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}
+        </div>
+      )}
       
       {/* Board Container */}
       <BoardContainer 
@@ -452,6 +477,7 @@ const GameBoard: React.FC<GameBoardProps> = (props) => {
         sanctuaries: props.initialSanctuaries,
         graveyard: props.initialGraveyard,
         phoenixRecords: props.initialPhoenixRecords,
+        promotionPending: props.initialPromotionPending,
         moveTree: props.initialMoveTree,
         poolTypes: props.initialPoolTypes,
       }}
@@ -462,6 +488,7 @@ const GameBoard: React.FC<GameBoardProps> = (props) => {
       mode={{
         isAnalysisMode: props.isAnalysisMode,
         isTutorialMode: props.isTutorialMode,
+        onlineSession: props.onlineSession,
       }}
     >
       <InnerGame {...props} />

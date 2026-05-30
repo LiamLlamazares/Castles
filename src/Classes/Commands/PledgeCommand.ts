@@ -25,8 +25,8 @@ export class PledgeCommand implements GameCommand {
   readonly type = CommandType.Pledge;
 
   constructor(
-    private readonly sanctuary: Sanctuary,
-    private readonly spawnHex: Hex,
+    public readonly sanctuary: Sanctuary,
+    public readonly spawnHex: Hex,
     private readonly context: CommandContext
   ) {}
 

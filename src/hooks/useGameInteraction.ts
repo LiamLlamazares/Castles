@@ -8,6 +8,7 @@ import { GameState } from "../Classes/Core/GameState";
 import { GameEngine } from "../Classes/Core/GameEngine";
 import { Color, TurnPhase } from "../Constants";
 import { GameBoardState } from "./useCoreGame";
+import type { OnlineClientSession } from "../online/types";
 
 interface UseGameInteractionProps {
   state: GameBoardState;
@@ -17,6 +18,7 @@ interface UseGameInteractionProps {
   currentPlayer: Color;
   handleHexClick: (hex: import("../Classes/Entities/Hex").Hex) => void;
   movingPiece: Piece | null;
+  onlineSession?: OnlineClientSession;
 }
 
 export const useGameInteraction = ({
@@ -26,10 +28,15 @@ export const useGameInteraction = ({
   turnPhase,
   currentPlayer,
   handleHexClick,
-  movingPiece
+  movingPiece,
+  onlineSession
 }: UseGameInteractionProps) => {
 
   const handlePieceClick = useCallback((pieceClicked: Piece) => {
+    if (onlineSession && onlineSession.playerColor !== currentPlayer) {
+      return;
+    }
+
     // Check if clicking an enemy piece during Attack phase - delegate to handleHexClick for attack
     const isEnemyPiece = pieceClicked.color !== currentPlayer;
     if (turnPhase === "Attack" && isEnemyPiece && movingPiece?.canAttack) {
@@ -73,7 +80,7 @@ export const useGameInteraction = ({
             movingPiece: newMovingPiece
         };
     });
-  }, [currentPlayer, turnPhase, movingPiece, handleHexClick, setState, gameEngine]);
+  }, [currentPlayer, turnPhase, movingPiece, handleHexClick, setState, gameEngine, onlineSession]);
 
   const handleResign = useCallback((player: Color) => {
     // Reset to live game state before resigning (in case viewing history)
