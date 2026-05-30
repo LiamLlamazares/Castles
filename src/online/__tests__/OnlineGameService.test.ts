@@ -92,4 +92,35 @@ describe("OnlineGameService", () => {
 
     expect(restored.getRoom(created.gameId)?.getSnapshot().result?.winner).toBe("w");
   });
+
+  it("skips corrupt persisted records without losing valid rooms", () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_valid",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const errors: Array<{ gameId?: string; error: unknown }> = [];
+
+    const restored = OnlineGameService.fromRecords(
+      [
+        {
+          gameId: "game_broken",
+          whiteToken: "white",
+          blackToken: "black",
+          setup: { board: null, pieces: [], sanctuaries: [] },
+          acceptedActions: [],
+        } as any,
+        ...service.toRecords(),
+      ],
+      {
+        onRecordError: (gameId, error) => errors.push({ gameId, error }),
+      }
+    );
+
+    expect(restored.getRoom(created.gameId)?.authenticate(created.white.token)).toBe("w");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].gameId).toBe("game_broken");
+  });
 });

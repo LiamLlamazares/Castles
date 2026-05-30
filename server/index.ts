@@ -14,7 +14,11 @@ async function main() {
     path.resolve(process.cwd(), "server-data", "online-games.json");
 
   const store = new JsonOnlineGameStore(storePath);
-  const service = OnlineGameService.fromRecords(await store.load());
+  const service = OnlineGameService.fromRecords(await store.load(), {
+    onRecordError: (gameId, error) => {
+      console.error(`Skipped corrupt online room record${gameId ? ` ${gameId}` : ""}`, error);
+    },
+  });
   const { app, server } = createOnlineHttpServer({
     publicBaseUrl,
     service,
@@ -44,4 +48,3 @@ main().catch((error) => {
   console.error("Failed to start Castles online server", error);
   process.exitCode = 1;
 });
-

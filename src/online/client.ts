@@ -1,10 +1,20 @@
 import type { CreatedOnlineGame } from "./OnlineGameService";
-import { OnlineGameSetupDTO } from "./types";
+import { OnlineGameSetupDTO, OnlineGameSnapshotDTO } from "./types";
 
 export interface OnlineJoinParams {
   gameId: string;
   seat: "w" | "b";
   token: string;
+}
+
+interface OnlineJoinStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+function storageKey(gameId: string, seat: "w" | "b"): string {
+  return `castles_online_join:${gameId}:${seat}`;
 }
 
 export function parseOnlineJoinParams(urlText: string): OnlineJoinParams | null {
@@ -20,6 +30,40 @@ export function parseOnlineJoinParams(urlText: string): OnlineJoinParams | null 
   return { gameId, seat, token };
 }
 
+export function rememberOnlineJoinParams(
+  join: OnlineJoinParams,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.setItem(storageKey(join.gameId, join.seat), join.token);
+}
+
+export function resolveOnlineJoinParams(
+  urlText: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): OnlineJoinParams | null {
+  const parsed = parseOnlineJoinParams(urlText);
+  if (parsed) {
+    rememberOnlineJoinParams(parsed, storage);
+    return parsed;
+  }
+
+  const url = new URL(urlText);
+  const gameId = url.searchParams.get("onlineGame");
+  const seat = url.searchParams.get("seat");
+  if (!gameId || (seat !== "w" && seat !== "b")) {
+    return null;
+  }
+
+  const token = storage?.getItem(storageKey(gameId, seat));
+  return token ? { gameId, seat, token } : null;
+}
+
+export function removeOnlineTokenFromUrl(urlText: string): string {
+  const url = new URL(urlText);
+  url.searchParams.delete("token");
+  return url.toString();
+}
+
 export function buildOnlineWebSocketUrl(originOrUrl: string): string {
   const url = new URL(originOrUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -27,6 +71,18 @@ export function buildOnlineWebSocketUrl(originOrUrl: string): string {
   url.search = "";
   url.hash = "";
   return url.toString();
+}
+
+export function getReconnectDelayMs(attempt: number): number {
+  const cappedAttempt = Math.min(Math.max(attempt, 0), 6);
+  return Math.min(10_000, 500 * 2 ** cappedAttempt);
+}
+
+export function shouldApplyOnlineSnapshotVersion(
+  latestVersion: number | null,
+  nextVersion: number
+): boolean {
+  return latestVersion === null || nextVersion > latestVersion;
 }
 
 export async function createOnlineGame(
@@ -44,4 +100,22 @@ export async function createOnlineGame(
   }
 
   return response.json();
+}
+
+export async function fetchOnlineSnapshot(
+  join: OnlineJoinParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameSnapshotDTO> {
+  const response = await fetchImpl(`/api/online/games/${encodeURIComponent(join.gameId)}`, {
+    headers: {
+      authorization: `Bearer ${join.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch online game (${response.status})`);
+  }
+
+  const body = await response.json();
+  return body.snapshot;
 }

@@ -58,4 +58,26 @@ describe("JsonOnlineGameStore", () => {
 
     expect(restored.getRoom(created.gameId)?.getSnapshot().version).toBe(1);
   });
+
+  it("serializes overlapping saves through one write queue", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "castles-online-"));
+    tempDirs.push(dir);
+    const store = new JsonOnlineGameStore(join(dir, "games.json"));
+    const records = Array.from({ length: 20 }, (_, index) => {
+      const service = new OnlineGameService({
+        idFactory: () => `game_${index}`,
+        tokenFactory: (seat) => `${seat}-${index}`,
+      });
+      service.createGame(createSetup(), {
+        publicBaseUrl: "https://castles.example",
+      });
+      return service.toRecords();
+    });
+
+    await expect(Promise.all(records.map((record) => store.save(record)))).resolves.toBeDefined();
+
+    const loaded = await store.load();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].gameId).toBe("game_19");
+  });
 });

@@ -102,7 +102,11 @@ export class OnlineGameRoom {
       }
     }
 
-    room.result = input.result;
+    if (input.result) {
+      room.result = input.result;
+    } else {
+      room.latchTerminalResult();
+    }
     return room;
   }
 
@@ -117,16 +121,7 @@ export class OnlineGameRoom {
   }
 
   getSnapshot(): OnlineGameSnapshotDTO {
-    const engineWinner = this.context.gameEngine.getWinner(
-      this.state.pieces,
-      this.state.castles,
-      this.state.victoryPoints
-    );
-    const result =
-      this.result ??
-      (engineWinner
-        ? ({ winner: engineWinner, reason: "monarch_captured" } as const)
-        : undefined);
+    const result = this.result ?? this.detectTerminalResult();
 
     return {
       gameId: this.gameId,
@@ -151,8 +146,9 @@ export class OnlineGameRoom {
       return reject(snapshot, "unauthorized", "This player token is not valid.");
     }
 
-    if (this.result) {
-      return reject(snapshot, "game_over", "This game is already over.");
+    const terminalResult = this.latchTerminalResult();
+    if (terminalResult) {
+      return reject(this.getSnapshot(), "game_over", "This game is already over.");
     }
 
     if (action.baseVersion !== this.version) {
@@ -189,6 +185,7 @@ export class OnlineGameRoom {
     }
 
     this.state = result.newState;
+    this.latchTerminalResult();
     this.accept(action, options);
     return { ok: true, snapshot: this.getSnapshot() };
   }
@@ -234,8 +231,27 @@ export class OnlineGameRoom {
     }
 
     this.state = nextState;
+    this.latchTerminalResult();
     this.accept(action, options);
     return { ok: true, snapshot: this.getSnapshot() };
+  }
+
+  private detectTerminalResult(): OnlineGameResultDTO | undefined {
+    const engineWinner = this.context.gameEngine.getWinner(
+      this.state.pieces,
+      this.state.castles,
+      this.state.victoryPoints
+    );
+    return engineWinner
+      ? { winner: engineWinner, reason: "monarch_captured" }
+      : undefined;
+  }
+
+  private latchTerminalResult(): OnlineGameResultDTO | undefined {
+    if (!this.result) {
+      this.result = this.detectTerminalResult();
+    }
+    return this.result;
   }
 
   private commandFromAction(

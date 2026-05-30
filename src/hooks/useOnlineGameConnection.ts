@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   buildOnlineWebSocketUrl,
+  fetchOnlineSnapshot,
+  getReconnectDelayMs,
   OnlineJoinParams,
+  shouldApplyOnlineSnapshotVersion,
 } from "../online/client";
 import {
   OnlineActionDTO,
@@ -21,6 +24,9 @@ export function useOnlineGameConnection(
 ): UseOnlineGameConnectionResult {
   const socketRef = useRef<WebSocket | null>(null);
   const onSnapshotRef = useRef(onSnapshot);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const heartbeatTimerRef = useRef<number | null>(null);
+  const latestSnapshotVersionRef = useRef<number | null>(null);
   const [status, setStatus] = useState<OnlineConnectionStatus>("idle");
   const [lastError, setLastError] = useState<string | undefined>();
 
@@ -29,63 +35,139 @@ export function useOnlineGameConnection(
   }, [onSnapshot]);
 
   useEffect(() => {
+    const clearTimers = () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (heartbeatTimerRef.current !== null) {
+        window.clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
+    };
+
     if (!join) {
+      clearTimers();
+      socketRef.current?.close();
+      socketRef.current = null;
       setStatus("idle");
       setLastError(undefined);
       return;
     }
 
-    setStatus("connecting");
+    let cancelled = false;
+    let reconnectAttempt = 0;
+    latestSnapshotVersionRef.current = null;
     setLastError(undefined);
-    const socket = new WebSocket(buildOnlineWebSocketUrl(window.location.href));
-    socketRef.current = socket;
 
-    socket.onopen = () => {
-      setStatus("connected");
-      socket.send(
-        JSON.stringify({
-          type: "join",
-          gameId: join.gameId,
-          token: join.token,
-        })
-      );
-    };
-
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === "joined" || message.type === "snapshot") {
-        onSnapshotRef.current(message.snapshot);
+    const applySnapshot = (snapshot: OnlineGameSnapshotDTO) => {
+      if (!shouldApplyOnlineSnapshotVersion(latestSnapshotVersionRef.current, snapshot.version)) {
         return;
       }
+      latestSnapshotVersionRef.current = snapshot.version;
+      onSnapshotRef.current(snapshot);
+    };
 
-      if (message.type === "rejected") {
-        setLastError(message.error?.message ?? "Online action was rejected.");
-        if (message.snapshot) {
-          onSnapshotRef.current(message.snapshot);
+    const pullSnapshot = async () => {
+      try {
+        const snapshot = await fetchOnlineSnapshot(join);
+        if (!cancelled) {
+          applySnapshot(snapshot);
         }
-        return;
-      }
-
-      if (message.type === "error") {
-        setStatus("error");
-        setLastError(message.error?.message ?? "Online connection error.");
+      } catch (error) {
+        if (!cancelled) {
+          setLastError(error instanceof Error ? error.message : "Could not resync online game.");
+        }
       }
     };
 
-    socket.onerror = () => {
-      setStatus("error");
-      setLastError("Online connection failed.");
+    const connect = () => {
+      if (cancelled) return;
+
+      setStatus("connecting");
+      const socket = new WebSocket(buildOnlineWebSocketUrl(window.location.href));
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        socket.send(
+          JSON.stringify({
+            type: "join",
+            gameId: join.gameId,
+            token: join.token,
+          })
+        );
+        heartbeatTimerRef.current = window.setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
+          }
+        }, 15_000);
+      };
+
+      socket.onmessage = (event) => {
+        let message: any;
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          setLastError("Online server sent an invalid message.");
+          return;
+        }
+
+        if (message.type === "joined" || message.type === "snapshot") {
+          reconnectAttempt = 0;
+          setStatus("connected");
+          setLastError(undefined);
+          applySnapshot(message.snapshot);
+          return;
+        }
+
+        if (message.type === "pong") {
+          return;
+        }
+
+        if (message.type === "rejected") {
+          setLastError(message.error?.message ?? "Online action was rejected.");
+          if (message.snapshot) {
+            applySnapshot(message.snapshot);
+          }
+          return;
+        }
+
+        if (message.type === "error") {
+          setStatus("error");
+          setLastError(message.error?.message ?? "Online connection error.");
+        }
+      };
+
+      socket.onerror = () => {
+        setLastError("Online connection failed.");
+      };
+
+      socket.onclose = () => {
+        if (heartbeatTimerRef.current !== null) {
+          window.clearInterval(heartbeatTimerRef.current);
+          heartbeatTimerRef.current = null;
+        }
+        if (socketRef.current === socket) {
+          socketRef.current = null;
+        }
+        if (cancelled) return;
+
+        setStatus((current) => (current === "error" ? "error" : "disconnected"));
+        const delay = getReconnectDelayMs(reconnectAttempt++);
+        reconnectTimerRef.current = window.setTimeout(() => {
+          void pullSnapshot().finally(connect);
+        }, delay);
+      };
     };
 
-    socket.onclose = () => {
-      setStatus((current) => (current === "error" ? "error" : "disconnected"));
-    };
+    void pullSnapshot();
+    connect();
 
     return () => {
-      socket.close();
-      if (socketRef.current === socket) {
-        socketRef.current = null;
-      }
+      cancelled = true;
+      clearTimers();
+      socketRef.current?.close();
+      socketRef.current = null;
     };
   }, [join]);
 
@@ -106,4 +188,3 @@ export function useOnlineGameConnection(
 
   return { status, lastError, submitAction };
 }
-

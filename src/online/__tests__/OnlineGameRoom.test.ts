@@ -4,6 +4,7 @@ import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
 import { OnlineGameRoom } from "../OnlineGameRoom";
+import { createPieceMap } from "../../utils/PieceMap";
 
 function createRoom() {
   const board = getStartingBoard(6);
@@ -95,6 +96,33 @@ describe("OnlineGameRoom", () => {
 
     if (result.ok) throw new Error("expected action to be rejected");
     expect(result.error.code).toBe("illegal_action");
+    expect(room.getSnapshot().version).toBe(0);
+  });
+
+  it("blocks further actions once the rules engine reports a terminal position", () => {
+    const room = createRoom();
+    const state = (room as any).state;
+    const pieces = state.pieces.filter(
+      (piece: any) => !(piece.color === "b" && piece.type === "Monarch")
+    );
+    (room as any).state = {
+      ...state,
+      pieces,
+      pieceMap: createPieceMap(pieces),
+    };
+
+    expect(room.getSnapshot().result).toEqual({
+      winner: "w",
+      reason: "monarch_captured",
+    });
+
+    const result = room.submitAction("white-token", {
+      type: "PASS",
+      baseVersion: 0,
+    });
+
+    if (result.ok) throw new Error("expected action to be rejected");
+    expect(result.error.code).toBe("game_over");
     expect(room.getSnapshot().version).toBe(0);
   });
 });

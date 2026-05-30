@@ -1,10 +1,15 @@
 import http from "node:http";
-import express from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RawData } from "ws";
 import { OnlineGameRoomRecord } from "../OnlineGameRoom";
 import { OnlineGameService } from "../OnlineGameService";
-import { OnlineActionDTO, OnlineGameSetupDTO } from "../types";
+import { OnlineReject } from "../types";
+import {
+  OnlineClientMessage,
+  validateClientMessage,
+  validateOnlineGameSetup,
+} from "../validation";
 
 interface OnlineConnection {
   gameId: string;
@@ -17,10 +22,40 @@ export interface CreateOnlineHttpServerOptions {
   onRoomsChanged?: (records: OnlineGameRoomRecord[]) => void | Promise<void>;
 }
 
+class FixedWindowRateLimiter {
+  private readonly entries = new Map<string, { count: number; resetAt: number }>();
+
+  constructor(
+    private readonly limit: number,
+    private readonly windowMs: number
+  ) {}
+
+  take(key: string): boolean {
+    const now = Date.now();
+    const entry = this.entries.get(key);
+    if (!entry || entry.resetAt <= now) {
+      this.entries.set(key, { count: 1, resetAt: now + this.windowMs });
+      return true;
+    }
+    if (entry.count >= this.limit) {
+      return false;
+    }
+    entry.count += 1;
+    return true;
+  }
+}
+
 function sendJson(socket: WebSocket, payload: unknown): void {
   if (socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(payload));
   }
+}
+
+function sendSocketError(socket: WebSocket, error: OnlineReject): void {
+  sendJson(socket, {
+    type: "error",
+    error,
+  });
 }
 
 function parseMessage(data: RawData): unknown {
@@ -28,51 +63,96 @@ function parseMessage(data: RawData): unknown {
   return JSON.parse(text);
 }
 
-function isOnlineSetupDTO(value: unknown): value is OnlineGameSetupDTO {
-  if (!value || typeof value !== "object") return false;
-  const setup = value as Partial<OnlineGameSetupDTO>;
-  return !!setup.board && Array.isArray(setup.pieces) && Array.isArray(setup.sanctuaries);
+function getClientKey(req: Request): string {
+  return req.ip || req.socket.remoteAddress || "unknown";
+}
+
+function getBearerToken(header: unknown): string | null {
+  if (typeof header !== "string") return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] ?? null;
 }
 
 export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const app = express();
   const service = options.service ?? new OnlineGameService();
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
   const connections = new Map<WebSocket, OnlineConnection>();
+  const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
+  const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
 
-  const persistRooms = () => {
-    Promise.resolve(options.onRoomsChanged?.(service.toRecords())).catch((error) => {
-      console.error("Failed to persist online game rooms", error);
-    });
+  const persistRooms = async () => {
+    await options.onRoomsChanged?.(service.toRecords());
   };
 
-  app.use(express.json({ limit: "1mb" }));
+  app.use((_req, res, next) => {
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    next();
+  });
+
+  app.use(express.json({ limit: "256kb" }));
+
+  app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (error instanceof SyntaxError) {
+      res.status(400).json({
+        error: {
+          code: "bad_json",
+          message: "Request body was not valid JSON.",
+        },
+      });
+      return;
+    }
+    next(error);
+  });
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true });
   });
 
-  app.post("/api/online/games", (req, res) => {
-    if (!isOnlineSetupDTO(req.body?.setup)) {
-      res.status(400).json({
+  app.post("/api/online/games", async (req, res) => {
+    if (!createGameLimiter.take(getClientKey(req))) {
+      res.status(429).json({
         error: {
-          code: "bad_request",
-          message: "Request body must include a valid online game setup.",
+          code: "rate_limited",
+          message: "Too many online games have been created from this client. Try again shortly.",
         },
       });
       return;
     }
 
-    const created = service.createGame(req.body.setup, {
+    const setup = validateOnlineGameSetup(req.body?.setup);
+    if (!setup.ok) {
+      res.status(400).json({
+        error: setup.error,
+      });
+      return;
+    }
+
+    const created = service.createGame(setup.value, {
       publicBaseUrl: options.publicBaseUrl,
     });
-    persistRooms();
+
+    try {
+      await persistRooms();
+    } catch (error) {
+      service.deleteGame(created.gameId);
+      console.error("Failed to persist online game rooms", error);
+      res.status(503).json({
+        error: {
+          code: "persistence_failed",
+          message: "The online game could not be saved.",
+        },
+      });
+      return;
+    }
+
     res.status(201).json(created);
   });
 
   app.get("/api/online/games/:gameId", (req, res) => {
-    const token = String(req.query.token ?? "");
+    const token = getBearerToken(req.headers.authorization) ?? String(req.query.token ?? "");
     const room = service.getRoomForToken(req.params.gameId, token);
     if (!room) {
       res.status(404).json({
@@ -101,91 +181,137 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
-  wss.on("connection", (socket) => {
-    socket.on("message", (data) => {
-      let message: any;
+  const handleClientMessage = async (
+    socket: WebSocket,
+    data: RawData,
+    clientKey: string
+  ): Promise<void> => {
+    if (!socketMessageLimiter.take(clientKey)) {
+      sendSocketError(socket, {
+        code: "rate_limited",
+        message: "Too many online messages were sent too quickly.",
+      });
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = parseMessage(data);
+    } catch {
+      sendSocketError(socket, {
+        code: "bad_json",
+        message: "Message was not valid JSON.",
+      });
+      return;
+    }
+
+    const validation = validateClientMessage(parsed);
+    if (!validation.ok) {
+      sendSocketError(socket, validation.error);
+      return;
+    }
+
+    const message: OnlineClientMessage = validation.value;
+
+    if (message.type === "ping") {
+      sendJson(socket, {
+        type: "pong",
+        clientTime: message.clientTime,
+        serverTime: Date.now(),
+      });
+      return;
+    }
+
+    if (message.type === "join") {
+      const room = service.getRoomForToken(message.gameId, message.token);
+      if (!room) {
+        sendSocketError(socket, {
+          code: "unauthorized",
+          message: "No online game was found for that id and token.",
+        });
+        return;
+      }
+
+      connections.set(socket, { gameId: message.gameId, token: message.token });
+      sendJson(socket, {
+        type: "joined",
+        color: room.authenticate(message.token),
+        snapshot: room.getSnapshot(),
+      });
+      return;
+    }
+
+    if (message.type === "action") {
+      const connection = connections.get(socket);
+      if (!connection) {
+        sendSocketError(socket, {
+          code: "not_joined",
+          message: "Join an online game before sending actions.",
+        });
+        return;
+      }
+
+      const room = service.getRoomForToken(connection.gameId, connection.token);
+      if (!room) {
+        sendSocketError(socket, {
+          code: "not_found",
+          message: "Online game no longer exists.",
+        });
+        return;
+      }
+
+      const beforeAction = room.toRecord();
+      const result = room.submitAction(connection.token, message.action);
+      if (!result.ok) {
+        sendJson(socket, {
+          type: "rejected",
+          error: result.error,
+          snapshot: result.snapshot,
+        });
+        return;
+      }
+
       try {
-        message = parseMessage(data);
-      } catch {
+        await persistRooms();
+      } catch (error) {
+        service.replaceRoom(beforeAction);
+        const restoredSnapshot =
+          service.getRoom(connection.gameId)?.getSnapshot() ?? result.snapshot;
+        console.error("Failed to persist online game rooms", error);
         sendJson(socket, {
           type: "error",
-          error: { code: "bad_json", message: "Message was not valid JSON." },
+          error: {
+            code: "persistence_failed",
+            message: "The accepted action could not be saved.",
+          },
+          snapshot: restoredSnapshot,
         });
         return;
       }
 
-      if (message?.type === "join") {
-        const gameId = String(message.gameId ?? "");
-        const token = String(message.token ?? "");
-        const room = service.getRoomForToken(gameId, token);
-        if (!room) {
-          sendJson(socket, {
-            type: "error",
-            error: {
-              code: "unauthorized",
-              message: "No online game was found for that id and token.",
-            },
-          });
-          return;
-        }
+      broadcastSnapshot(connection.gameId);
+      return;
+    }
+  };
 
-        connections.set(socket, { gameId, token });
-        sendJson(socket, {
-          type: "joined",
-          color: room.authenticate(token),
-          snapshot: room.getSnapshot(),
+  wss.on("connection", (socket, req) => {
+    const clientKey = req.socket.remoteAddress ?? "unknown";
+
+    socket.on("message", (data) => {
+      handleClientMessage(socket, data, clientKey).catch((error) => {
+        console.error("Unhandled online socket message error", error);
+        sendSocketError(socket, {
+          code: "bad_request",
+          message: "The online message could not be processed.",
         });
-        return;
-      }
-
-      if (message?.type === "action") {
-        const connection = connections.get(socket);
-        if (!connection) {
-          sendJson(socket, {
-            type: "error",
-            error: {
-              code: "not_joined",
-              message: "Join an online game before sending actions.",
-            },
-          });
-          return;
-        }
-
-        const action = message.action as OnlineActionDTO;
-        const room = service.getRoomForToken(connection.gameId, connection.token);
-        if (!room) {
-          sendJson(socket, {
-            type: "error",
-            error: {
-              code: "not_found",
-              message: "Online game no longer exists.",
-            },
-          });
-          return;
-        }
-
-        const result = room.submitAction(connection.token, action);
-        if (!result.ok) {
-          sendJson(socket, {
-            type: "rejected",
-            error: result.error,
-            snapshot: result.snapshot,
-          });
-          return;
-        }
-
-        persistRooms();
-        broadcastSnapshot(connection.gameId);
-        return;
-      }
-
-      sendJson(socket, {
-        type: "error",
-        error: { code: "unknown_message", message: "Unknown online message type." },
       });
     });
 
     socket.on("close", () => {
+      connections.delete(socket);
+    });
+
+    socket.on("error", () => {
       connections.delete(socket);
     });
   });

@@ -1,8 +1,11 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { OnlineGameRoomRecord } from "../OnlineGameRoom";
 
 export class JsonOnlineGameStore {
+  private writeQueue: Promise<void> = Promise.resolve();
+  private writeCounter = 0;
+
   constructor(private readonly filePath: string) {}
 
   async load(): Promise<OnlineGameRoomRecord[]> {
@@ -19,14 +22,21 @@ export class JsonOnlineGameStore {
   }
 
   async save(records: OnlineGameRoomRecord[]): Promise<void> {
+    const recordsJson = JSON.stringify({ rooms: records }, null, 2);
+    const saveOperation = this.writeQueue.then(() => this.writeSnapshot(recordsJson));
+    this.writeQueue = saveOperation.catch(() => undefined);
+    return saveOperation;
+  }
+
+  private async writeSnapshot(recordsJson: string): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
-    const tempPath = `${this.filePath}.tmp`;
-    await writeFile(
-      tempPath,
-      JSON.stringify({ rooms: records }, null, 2),
-      "utf8"
-    );
-    await rename(tempPath, this.filePath);
+    const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.${this.writeCounter++}.tmp`;
+    try {
+      await writeFile(tempPath, recordsJson, "utf8");
+      await rename(tempPath, this.filePath);
+    } catch (error) {
+      await rm(tempPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 }
-

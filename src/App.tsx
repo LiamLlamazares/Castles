@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import GameBoard from './components/Game';
 import MainMenu from './components/MainMenu';
 import GameSetup from './components/GameSetup';
@@ -24,7 +24,9 @@ import {
 } from './online/serialization';
 import {
   createOnlineGame,
-  parseOnlineJoinParams,
+  rememberOnlineJoinParams,
+  removeOnlineTokenFromUrl,
+  resolveOnlineJoinParams,
   OnlineJoinParams,
 } from './online/client';
 import type { OnlineClientSession, OnlineGameSnapshotDTO } from './online/types';
@@ -73,7 +75,7 @@ function App() {
   const [previousView, setPreviousView] = useState<ViewState>('game');
   const [gameLibraryRepository] = useState(() => new BrowserGameLibraryRepository());
   const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(() =>
-    parseOnlineJoinParams(window.location.href)
+    resolveOnlineJoinParams(window.location.href)
   );
   const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
 
@@ -88,6 +90,18 @@ function App() {
     url.searchParams.delete("token");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
+
+  const clearOnlineTokenFromUrl = () => {
+    if (!window.location.search.includes("token=")) return;
+    const url = new URL(removeOnlineTokenFromUrl(window.location.href));
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  useEffect(() => {
+    if (!onlineJoin) return;
+    rememberOnlineJoinParams(onlineJoin);
+    clearOnlineTokenFromUrl();
+  }, [onlineJoin]);
 
   const handleNewGameClick = () => {
     clearAutosave();
@@ -146,7 +160,7 @@ function App() {
           board,
           pieces,
           sanctuaries: sanctuaries ?? [],
-          timeControl,
+          timeControl: undefined,
           sanctuarySettings,
           gameRules,
           initialPoolTypes,
@@ -155,17 +169,19 @@ function App() {
       );
 
       window.prompt("Send this invite link to your friend:", created.black.url);
-      const whiteUrl = new URL(created.white.url);
+      const whiteJoin = {
+        gameId: created.gameId,
+        seat: "w" as const,
+        token: created.white.token,
+      };
+      rememberOnlineJoinParams(whiteJoin);
+      const whiteUrl = new URL(removeOnlineTokenFromUrl(created.white.url));
       window.history.pushState(
         {},
         "",
         `${window.location.pathname}?${whiteUrl.searchParams.toString()}`
       );
-      setOnlineJoin({
-        gameId: created.gameId,
-        seat: "w",
-        token: created.white.token,
-      });
+      setOnlineJoin(whiteJoin);
       setView('game');
     } catch (error) {
       console.error("Failed to create online game", error);
@@ -272,7 +288,7 @@ function App() {
       phoenixRecords: state.phoenixRecords,
       promotionPending: state.promotionPending,
       pieceTheme: setup.pieceTheme,
-      timeControl: setup.timeControl,
+      timeControl: undefined,
       isAnalysisMode: false,
     });
     setGameKey(prev => prev + 1);

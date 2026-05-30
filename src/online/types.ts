@@ -15,7 +15,13 @@ export type OnlineRejectCode =
   | "wrong_player"
   | "illegal_action"
   | "game_over"
-  | "not_found";
+  | "not_found"
+  | "bad_request"
+  | "bad_json"
+  | "not_joined"
+  | "unknown_message"
+  | "rate_limited"
+  | "persistence_failed";
 
 export interface OnlineReject {
   code: OnlineRejectCode;
