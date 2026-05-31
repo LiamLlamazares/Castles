@@ -7,21 +7,31 @@ import {
   type ValidationResult,
 } from "./validation";
 
+export const ONLINE_EVENT_SCHEMA_VERSION = 1;
+export const ONLINE_RULESET_VERSION = "castles-beta-v1";
+
+interface OnlineGameEventEnvelope {
+  schemaVersion: typeof ONLINE_EVENT_SCHEMA_VERSION;
+  eventId: string;
+  createdAt: string;
+  rulesetVersion: typeof ONLINE_RULESET_VERSION;
+}
+
 export type OnlineGameEvent =
-  | {
+  | (OnlineGameEventEnvelope & {
       type: "game_created";
       gameId: string;
       whiteToken: string;
       blackToken: string;
       setup: OnlineGameSetupDTO;
-    }
-  | {
+    })
+  | (OnlineGameEventEnvelope & {
       type: "action_accepted";
       gameId: string;
       playerColor: Color;
       version: number;
       action: OnlineActionDTO;
-    };
+    });
 
 export interface OnlineGameEventReplayOptions {
   onEventError?: (eventIndex: number, error: unknown) => void;
@@ -30,6 +40,7 @@ export interface OnlineGameEventReplayOptions {
 const MAX_ID_LENGTH = 128;
 const MAX_TOKEN_LENGTH = 256;
 const COLORS = new Set<Color>(["w", "b"]);
+let nextEventSequence = 0;
 
 function bad(message: string): ValidationResult<never> {
   return {
@@ -57,10 +68,74 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) > 0;
 }
 
+function isIsoDateString(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return false;
+  return new Date(timestamp).toISOString() === value;
+}
+
+function createEnvelope(
+  metadata: Partial<OnlineGameEventEnvelope> = {}
+): OnlineGameEventEnvelope {
+  nextEventSequence += 1;
+  return {
+    schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+    eventId:
+      metadata.eventId ??
+      `evt_${Date.now().toString(36)}_${nextEventSequence.toString(36)}`,
+    createdAt: metadata.createdAt ?? new Date().toISOString(),
+    rulesetVersion: ONLINE_RULESET_VERSION,
+  };
+}
+
+export function createOnlineGameCreatedEvent(
+  event: Omit<Extract<OnlineGameEvent, { type: "game_created" }>, keyof OnlineGameEventEnvelope>,
+  metadata?: Partial<OnlineGameEventEnvelope>
+): Extract<OnlineGameEvent, { type: "game_created" }> {
+  return {
+    ...event,
+    ...createEnvelope(metadata),
+  };
+}
+
+export function createOnlineActionAcceptedEvent(
+  event: Omit<
+    Extract<OnlineGameEvent, { type: "action_accepted" }>,
+    keyof OnlineGameEventEnvelope
+  >,
+  metadata?: Partial<OnlineGameEventEnvelope>
+): Extract<OnlineGameEvent, { type: "action_accepted" }> {
+  return {
+    ...event,
+    ...createEnvelope(metadata),
+  };
+}
+
 export function validateOnlineGameEvent(value: unknown): ValidationResult<OnlineGameEvent> {
   if (!isRecord(value)) return bad("event must be an object.");
+  if (value.schemaVersion !== ONLINE_EVENT_SCHEMA_VERSION) {
+    return bad(`event.schemaVersion must be ${ONLINE_EVENT_SCHEMA_VERSION}.`);
+  }
+  if (!isBoundedString(value.eventId, MAX_ID_LENGTH)) {
+    return bad("event.eventId is invalid.");
+  }
+  if (!isIsoDateString(value.createdAt)) {
+    return bad("event.createdAt must be a valid timestamp.");
+  }
+  if (value.rulesetVersion !== ONLINE_RULESET_VERSION) {
+    return bad(`event.rulesetVersion must be ${ONLINE_RULESET_VERSION}.`);
+  }
   if (typeof value.type !== "string") return bad("event.type must be a string.");
   if (!isBoundedString(value.gameId, MAX_ID_LENGTH)) return bad("event.gameId is invalid.");
+
+  const envelope: OnlineGameEventEnvelope = {
+    schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+    eventId: value.eventId,
+    createdAt: value.createdAt,
+    rulesetVersion: ONLINE_RULESET_VERSION,
+  };
 
   if (value.type === "game_created") {
     if (!isBoundedString(value.whiteToken, MAX_TOKEN_LENGTH)) {
@@ -74,6 +149,7 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     return {
       ok: true,
       value: {
+        ...envelope,
         type: "game_created",
         gameId: value.gameId,
         whiteToken: value.whiteToken,
@@ -98,6 +174,7 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     return {
       ok: true,
       value: {
+        ...envelope,
         type: "action_accepted",
         gameId: value.gameId,
         playerColor: value.playerColor,
@@ -148,6 +225,7 @@ export function onlineGameEventsToRecords(
       });
     } catch (error) {
       options.onEventError?.(eventIndex, error);
+      throw error;
     }
   });
 

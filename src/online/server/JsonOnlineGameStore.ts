@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, appendFile, mkdir, open, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { OnlineGameRoomRecord } from "../OnlineGameRoom";
 import {
@@ -52,6 +53,15 @@ export class JsonOnlineGameStore {
     return saveOperation;
   }
 
+  async checkReady(): Promise<boolean> {
+    const dir = dirname(this.filePath);
+    await mkdir(dir, { recursive: true });
+    await access(dir, constants.W_OK);
+    const handle = await open(this.filePath, "a");
+    await handle.close();
+    return true;
+  }
+
   private async appendValidatedEvent(event: OnlineGameEvent): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     await appendFile(this.filePath, `${JSON.stringify(event)}\n`, "utf8");
@@ -69,17 +79,21 @@ export class JsonOnlineGameStore {
       const line = lines[index].trim();
       if (!line) continue;
 
+      let parsed: unknown;
       try {
-        const parsed = JSON.parse(line);
-        const validation = validateOnlineGameEvent(parsed);
-        if (!validation.ok) {
-          options.onEventError?.(lineNumber, new Error(validation.error.message));
-          continue;
-        }
-        loadedEvents.push({ event: validation.value, line: lineNumber });
+        parsed = JSON.parse(line);
       } catch (error) {
         options.onEventError?.(lineNumber, error);
+        throw error;
       }
+
+      const validation = validateOnlineGameEvent(parsed);
+      if (!validation.ok) {
+        const error = new Error(validation.error.message);
+        options.onEventError?.(lineNumber, error);
+        throw error;
+      }
+      loadedEvents.push({ event: validation.value, line: lineNumber });
     }
 
     return loadedEvents;

@@ -16,7 +16,7 @@ async function main() {
   const store = new JsonOnlineGameStore(storePath);
   const records = await store.load({
     onEventError: (line, error) => {
-      console.error(`Skipped corrupt online event log line ${line}`, error);
+      console.error(`Invalid online event log line ${line}`, error);
     },
   });
   const service = OnlineGameService.fromRecords(records);
@@ -24,6 +24,12 @@ async function main() {
     publicBaseUrl,
     service,
     onGameEvent: (event) => store.appendEvent(event),
+    health: {
+      buildId: process.env.BUILD_ID,
+      commit: process.env.GIT_COMMIT,
+      storePath,
+      checkStoreReady: () => store.checkReady(),
+    },
   });
 
   if (existsSync(staticDir)) {

@@ -1,0 +1,76 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import vm from "node:vm";
+import { describe, expect, it, vi } from "vitest";
+
+function loadServiceWorkerPolicy() {
+  const script = readFileSync(resolve(process.cwd(), "public", "service-worker.js"), "utf8");
+  const context = {
+    caches: {
+      delete: vi.fn(() => Promise.resolve(true)),
+      keys: vi.fn(),
+      open: vi.fn(),
+      match: vi.fn(),
+    },
+    self: {
+      addEventListener: vi.fn(),
+      clients: { claim: vi.fn() },
+      location: { origin: "https://castles.example" },
+      skipWaiting: vi.fn(),
+    },
+    URL,
+  };
+  vm.runInNewContext(script, context);
+  return context as typeof context & {
+    shouldBypassCacheForRequest?: (request: { method: string; url: string }) => boolean;
+  };
+}
+
+describe("service worker cache policy", () => {
+  it("bypasses online, API, websocket, and token-bearing same-origin GET requests", () => {
+    const context = loadServiceWorkerPolicy();
+
+    expect(typeof context.shouldBypassCacheForRequest).toBe("function");
+    const shouldBypass = context.shouldBypassCacheForRequest!;
+
+    expect(shouldBypass({ method: "GET", url: "https://castles.example/api/health" })).toBe(true);
+    expect(shouldBypass({ method: "GET", url: "https://castles.example/api/online/games/game_1" })).toBe(true);
+    expect(shouldBypass({ method: "GET", url: "https://castles.example/ws" })).toBe(true);
+    expect(
+      shouldBypass({
+        method: "GET",
+        url: "https://castles.example/?onlineGame=game_1&seat=w",
+      })
+    ).toBe(true);
+    expect(
+      shouldBypass({
+        method: "GET",
+        url: "https://castles.example/?onlineGame=game_1&seat=w&token=secret",
+      })
+    ).toBe(true);
+    expect(shouldBypass({ method: "GET", url: "https://castles.example/manifest.json" })).toBe(
+      false
+    );
+  });
+
+  it("deletes old cache versions during activation", async () => {
+    const context = loadServiceWorkerPolicy();
+    const activateHandler = context.self.addEventListener.mock.calls.find(
+      ([eventName]) => eventName === "activate"
+    )?.[1];
+    expect(typeof activateHandler).toBe("function");
+
+    context.caches.keys.mockResolvedValue(["castles-shell-v2", "castles-shell-v3"]);
+    let activationPromise: Promise<unknown> | undefined;
+    activateHandler({
+      waitUntil: (promise: Promise<unknown>) => {
+        activationPromise = promise;
+      },
+    });
+
+    await activationPromise;
+
+    expect(context.caches.delete).toHaveBeenCalledWith("castles-shell-v2");
+    expect(context.caches.delete).not.toHaveBeenCalledWith("castles-shell-v3");
+  });
+});

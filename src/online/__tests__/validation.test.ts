@@ -68,6 +68,10 @@ describe("online validation", () => {
 
   it("requires accepted action events to include the submitting player", () => {
     const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-action-1",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
       type: "action_accepted",
       gameId: "game_test",
       version: 1,
@@ -77,6 +81,59 @@ describe("online validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toContain("playerColor");
+    }
+  });
+
+  it("rejects event log entries without the v1 envelope metadata", () => {
+    const result = validateOnlineGameEvent({
+      type: "game_created",
+      gameId: "game_test",
+      whiteToken: "w-token",
+      blackToken: "b-token",
+      setup: createSetup(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("schemaVersion");
+    }
+  });
+
+  it("requires event timestamps to use the JSONL v1 ISO format", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-create",
+      createdAt: "May 31 2026",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_test",
+      whiteToken: "w-token",
+      blackToken: "b-token",
+      setup: createSetup(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("createdAt");
+    }
+  });
+
+  it("rejects normalized but invalid calendar dates in event timestamps", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-create",
+      createdAt: "2026-02-31T00:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_test",
+      whiteToken: "w-token",
+      blackToken: "b-token",
+      setup: createSetup(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("createdAt");
     }
   });
 });

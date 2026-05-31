@@ -1,0 +1,15 @@
+[Unit]
+Description=Castles online Node server
+After=network.target
+
+[Service]
+Type=simple
+User=lukasz
+WorkingDirectory=/home/lukasz/Castles
+EnvironmentFile=/etc/castles/castles.env
+ExecStart=/usr/bin/npm run server:start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

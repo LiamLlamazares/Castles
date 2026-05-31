@@ -43,6 +43,10 @@ describe("JsonOnlineGameStore", () => {
     const setup = createSetup();
 
     await store.appendEvent({
+      schemaVersion: 1,
+      eventId: "evt-create",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
       type: "game_created",
       gameId: "game_persisted",
       whiteToken: "w-token",
@@ -50,6 +54,10 @@ describe("JsonOnlineGameStore", () => {
       setup,
     });
     await store.appendEvent({
+      schemaVersion: 1,
+      eventId: "evt-action-1",
+      createdAt: "2026-05-31T12:00:01.000Z",
+      rulesetVersion: "castles-beta-v1",
       type: "action_accepted",
       gameId: "game_persisted",
       playerColor: "w",
@@ -60,8 +68,18 @@ describe("JsonOnlineGameStore", () => {
     const raw = await readFile(filePath, "utf8");
     const lines = raw.trim().split(/\r?\n/);
     expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0])).toMatchObject({ type: "game_created" });
+    expect(JSON.parse(lines[0])).toMatchObject({
+      schemaVersion: 1,
+      eventId: "evt-create",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+    });
     expect(JSON.parse(lines[1])).toMatchObject({
+      schemaVersion: 1,
+      eventId: "evt-action-1",
+      createdAt: "2026-05-31T12:00:01.000Z",
+      rulesetVersion: "castles-beta-v1",
       type: "action_accepted",
       gameId: "game_persisted",
       playerColor: "w",
@@ -74,7 +92,7 @@ describe("JsonOnlineGameStore", () => {
     expect(restored.getRoom("game_persisted")?.getSnapshot().version).toBe(1);
   });
 
-  it("skips corrupt event log lines while loading valid events", async () => {
+  it("rejects corrupt event log lines instead of replaying partial history", async () => {
     const dir = await mkdtemp(join(tmpdir(), "castles-online-"));
     tempDirs.push(dir);
     const filePath = join(dir, "games.jsonl");
@@ -86,6 +104,10 @@ describe("JsonOnlineGameStore", () => {
       filePath,
       [
         JSON.stringify({
+          schemaVersion: 1,
+          eventId: "evt-create",
+          createdAt: "2026-05-31T12:00:00.000Z",
+          rulesetVersion: "castles-beta-v1",
           type: "game_created",
           gameId: "game_corrupt_recovery",
           whiteToken: "w-token",
@@ -94,6 +116,10 @@ describe("JsonOnlineGameStore", () => {
         }),
         "{not-json",
         JSON.stringify({
+          schemaVersion: 1,
+          eventId: "evt-action-1",
+          createdAt: "2026-05-31T12:00:01.000Z",
+          rulesetVersion: "castles-beta-v1",
           type: "action_accepted",
           gameId: "game_corrupt_recovery",
           playerColor: "w",
@@ -105,14 +131,14 @@ describe("JsonOnlineGameStore", () => {
       "utf8"
     );
 
-    const records = await store.load({
+    await expect(
+      store.load({
       onEventError: (line, error) => errors.push({ line, error }),
-    });
-    const restored = OnlineGameService.fromRecords(records);
+      })
+    ).rejects.toThrow();
 
     expect(errors).toHaveLength(1);
     expect(errors[0].line).toBe(2);
-    expect(restored.getRoom("game_corrupt_recovery")?.getSnapshot().version).toBe(1);
   });
 
   it("serializes overlapping event appends through one write queue", async () => {
@@ -125,6 +151,10 @@ describe("JsonOnlineGameStore", () => {
       Promise.all(
         Array.from({ length: 20 }, (_, index) =>
           store.appendEvent({
+            schemaVersion: 1,
+            eventId: `evt-create-${index}`,
+            createdAt: `2026-05-31T12:00:${String(index).padStart(2, "0")}.000Z`,
+            rulesetVersion: "castles-beta-v1",
             type: "game_created",
             gameId: `game_${index}`,
             whiteToken: `w-token-${index}`,
@@ -140,5 +170,34 @@ describe("JsonOnlineGameStore", () => {
     expect(loaded.map((record) => record.gameId)).toEqual(
       Array.from({ length: 20 }, (_, index) => `game_${index}`)
     );
+  });
+
+  it("rejects legacy event log entries without a v1 envelope", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "castles-online-"));
+    tempDirs.push(dir);
+    const store = new JsonOnlineGameStore(join(dir, "games.jsonl"));
+    const setup = createSetup();
+
+    await expect(
+      store.appendEvent({
+        type: "game_created",
+        gameId: "game_legacy",
+        whiteToken: "w-token",
+        blackToken: "b-token",
+        setup,
+      } as any)
+    ).rejects.toThrow(/schemaVersion/);
+  });
+
+  it("checks readiness by opening the target event log file for append", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "castles-online-"));
+    tempDirs.push(dir);
+    const filePath = join(dir, "games.jsonl");
+    const store = new JsonOnlineGameStore(filePath);
+
+    await expect(store.checkReady()).resolves.toBe(true);
+
+    const raw = await readFile(filePath, "utf8");
+    expect(raw).toBe("");
   });
 });

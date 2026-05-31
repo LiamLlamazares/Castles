@@ -3,7 +3,11 @@ import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
 import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
-import { onlineGameEventsToRecords } from "../events";
+import {
+  ONLINE_EVENT_SCHEMA_VERSION,
+  ONLINE_RULESET_VERSION,
+  onlineGameEventsToRecords,
+} from "../events";
 import { OnlineGameService } from "../OnlineGameService";
 
 function createSetup() {
@@ -23,6 +27,15 @@ function createSetup() {
     initialPoolTypes: [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
     pieceTheme: "Castles",
   });
+}
+
+function eventEnvelope(index: number) {
+  return {
+    schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+    eventId: `evt-${index}`,
+    createdAt: `2026-05-31T12:00:0${index}.000Z`,
+    rulesetVersion: ONLINE_RULESET_VERSION,
+  } as const;
 }
 
 describe("OnlineGameService", () => {
@@ -50,6 +63,7 @@ describe("OnlineGameService", () => {
     const restored = OnlineGameService.fromRecords(
       onlineGameEventsToRecords([
         {
+          ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_fixed",
           whiteToken: "w-token",
@@ -57,6 +71,7 @@ describe("OnlineGameService", () => {
           setup,
         },
         {
+          ...eventEnvelope(2),
           type: "action_accepted",
           gameId: "game_fixed",
           playerColor: "w",
@@ -75,6 +90,7 @@ describe("OnlineGameService", () => {
     const restored = OnlineGameService.fromRecords(
       onlineGameEventsToRecords([
         {
+          ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_resign",
           whiteToken: "w-token",
@@ -82,6 +98,7 @@ describe("OnlineGameService", () => {
           setup: createSetup(),
         },
         {
+          ...eventEnvelope(2),
           type: "action_accepted",
           gameId: "game_resign",
           playerColor: "b",

@@ -1,6 +1,6 @@
 # Online Multiplayer Plan
 
-Last refreshed: 2026-05-30
+Last refreshed: 2026-05-31
 
 Castles now has a private-link online beta path. The current implementation is intentionally small: one authoritative Node server owns each game room, validates actions with the existing TypeScript rules engine, persists accepted events to JSONL, and broadcasts full snapshots over WebSocket.
 
@@ -61,12 +61,15 @@ Implemented for private beta:
 - request body limits, WebSocket payload limits, basic per-client rate limits,
 - `Referrer-Policy: no-referrer` and bearer-token snapshot fetches,
 - invite tokens stored in `sessionStorage` and removed from the browser URL after first use,
+- service worker and HTTP cache bypass for online/API/token-bearing requests,
+- `Cache-Control: no-store` and `Vary: Authorization` on online API responses,
 - queued JSONL event persistence,
 - create-game responses wait for persistence,
-- accepted actions are saved before snapshot broadcast,
-- append-only event-log persistence for game creation and accepted actions,
+- accepted actions are serialized per game and saved before snapshot broadcast,
+- append-only v1 event-log persistence for game creation and accepted actions,
 - startup replay from the event log into authoritative room records,
-- corrupt event log lines are skipped and reported instead of bricking startup,
+- corrupt or unsupported event log lines fail startup loudly instead of replaying partial history,
+- health checks report build metadata, event schema, ruleset version, and store readiness,
 - terminal game results are latched so no later action can sneak through,
 - reconnect attempts with exponential backoff, heartbeat pings, and REST snapshot resync,
 - online clocks are disabled until server-authoritative clocks exist.
@@ -77,7 +80,7 @@ This is not ready for a public lobby or multiple server replicas.
 
 - Do not run multiple app instances against the same JSONL file.
 - JSONL persistence is fine for a friend beta, not for a large public service.
-- Accepted actions are persisted before broadcast, but there is still no database transaction or cross-process lock.
+- Accepted actions are serialized in the single Node process, but there is still no database transaction or cross-process lock.
 - Private invite links are bearer secrets. Use HTTPS and avoid posting them publicly.
 - Accounts, ratings, moderation, spectator permissions, and anti-cheat are intentionally out of scope for this phase.
 

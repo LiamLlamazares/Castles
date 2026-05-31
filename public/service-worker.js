@@ -1,5 +1,18 @@
-const CACHE_NAME = "castles-shell-v2";
+const CACHE_NAME = "castles-shell-v3";
 const CORE_ASSETS = ["./", "./index.html", "./manifest.json", "./favicon.ico", "./castles-icon.svg"];
+
+function shouldBypassCacheForRequest(request) {
+  if (request.method !== "GET") return true;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return true;
+
+  if (url.pathname.startsWith("/api/")) return true;
+  if (url.pathname === "/ws" || url.pathname.startsWith("/ws/")) return true;
+  if (url.searchParams.has("onlineGame") || url.searchParams.has("token")) return true;
+
+  return false;
+}
 
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -17,10 +30,7 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   const request = event.request;
-  if (request.method !== "GET") return;
-
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  if (shouldBypassCacheForRequest(request)) return;
 
   event.respondWith(
     caches.match(request).then(cached => {
