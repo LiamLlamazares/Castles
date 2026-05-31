@@ -154,6 +154,10 @@ export function shouldApplyOnlineSnapshot(
 
   const latestServerNow = latestSnapshot.clock?.serverNow;
   const nextServerNow = nextSnapshot.clock?.serverNow;
+  if (latestSnapshot.clock === undefined && nextSnapshot.clock !== undefined) {
+    return true;
+  }
+
   return (
     typeof latestServerNow === "number" &&
     typeof nextServerNow === "number" &&

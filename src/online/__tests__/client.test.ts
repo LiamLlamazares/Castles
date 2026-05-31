@@ -125,6 +125,19 @@ describe("online client helpers", () => {
     ).toBe(false);
   });
 
+  it("accepts same-version snapshots that restore a missing clock", () => {
+    const latest = {
+      version: 2,
+    } as any;
+
+    expect(
+      shouldApplyOnlineSnapshot(latest, {
+        version: 2,
+        clock: { serverNow: 1_500 },
+      } as any)
+    ).toBe(true);
+  });
+
   it("formats online timeout results for the game-over overlay", () => {
     expect(formatOnlineGameResult({ winner: "b", reason: "timeout" })).toBe(
       "Black wins on time"
