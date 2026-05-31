@@ -103,6 +103,27 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
   const [showQuickStart, setShowQuickStart] = React.useState(false);
   const [showTooltipHint, setShowTooltipHint] = React.useState(false);
+  const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
+  const statusTimeoutRef = React.useRef<number | null>(null);
+
+  const showStatusMessage = React.useCallback((message: string) => {
+    if (statusTimeoutRef.current !== null) {
+      window.clearTimeout(statusTimeoutRef.current);
+    }
+    setStatusMessage(message);
+    statusTimeoutRef.current = window.setTimeout(() => {
+      setStatusMessage(null);
+      statusTimeoutRef.current = null;
+    }, 4_000);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (statusTimeoutRef.current !== null) {
+        window.clearTimeout(statusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Consolidated tooltip state
   const tooltip = useTooltip();
@@ -142,22 +163,22 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const isReadOnlyOnline = onlineSession?.role === "spectator";
   const copyOnlineLink = React.useCallback((url: string, successMessage: string) => {
     copyOnlineInviteUrl(url)
-      .then(() => alert(successMessage))
+      .then(() => showStatusMessage(successMessage))
       .catch((error) => {
         console.error("Failed to copy online link", error);
-        alert("Could not copy the link. Try again from a secure browser session.");
+        showStatusMessage("Could not copy the link. Try again from a secure browser session.");
       });
-  }, []);
+  }, [showStatusMessage]);
   const handleShare = React.useCallback(() => {
     shareGame();
   }, [shareGame]);
   const handleCopyOpponentInvite = React.useCallback(() => {
     if (onlineSession?.role !== "player" || !onlineSession.opponentInviteUrl) return;
-    copyOnlineLink(onlineSession.opponentInviteUrl, "Opponent invite link copied to clipboard.");
+    copyOnlineLink(onlineSession.opponentInviteUrl, "Opponent invite link copied.");
   }, [copyOnlineLink, onlineSession]);
   const handleCopySpectator = React.useCallback(() => {
     if (!onlineSession?.spectatorUrl) return;
-    copyOnlineLink(onlineSession.spectatorUrl, "Spectator link copied to clipboard.");
+    copyOnlineLink(onlineSession.spectatorUrl, "Spectator link copied.");
   }, [copyOnlineLink, onlineSession]);
 
   // Restore game logic from old Game.tsx
@@ -270,6 +291,16 @@ const InnerGame: React.FC<GameBoardProps> = ({
     : null;
   const displayedVictoryMessage = onlineVictoryMessage ?? victoryMessage;
   const displayedWinner = onlineSession?.result?.winner ?? winner;
+  const onlineSessionLabel = React.useMemo(() => {
+    if (!onlineSession) return null;
+    const roleLabel = onlineSession.role === "player"
+      ? `Online ${onlineSession.playerColor === "w" ? "White" : "Black"}`
+      : "Spectating";
+    const stateLabel = onlineSession.result
+      ? `Complete · ${formatOnlineGameResult(onlineSession.result)}`
+      : onlineSession.status;
+    return `${roleLabel} · ${stateLabel}${onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}`;
+  }, [onlineSession]);
 
   // Reset overlay when game restarts
   React.useEffect(() => {
@@ -362,7 +393,12 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
   const handleExportPGN = () => {
     const pgn = getPGN();
-    navigator.clipboard.writeText(pgn).then(() => alert("PGN copied to clipboard!"));
+    copyOnlineInviteUrl(pgn)
+      .then(() => showStatusMessage("PGN copied."))
+      .catch((error) => {
+        console.error("Failed to copy PGN", error);
+        showStatusMessage("Could not copy PGN. Try again from a secure browser session.");
+      });
   };
 
   const handleSaveGameToLibrary = React.useCallback(async () => {
@@ -477,10 +513,17 @@ const InnerGame: React.FC<GameBoardProps> = ({
             border: "1px solid rgba(255,255,255,0.18)",
           }}
         >
-          {onlineSession.role === "player"
-            ? `Online ${onlineSession.playerColor === "w" ? "White" : "Black"}`
-            : "Spectating"} · {onlineSession.status}
-          {onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}
+          {onlineSessionLabel}
+        </div>
+      )}
+
+      {statusMessage && (
+        <div
+          role="status"
+          className="game-status-toast"
+          aria-live="polite"
+        >
+          {statusMessage}
         </div>
       )}
       

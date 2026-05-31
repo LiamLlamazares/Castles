@@ -5,6 +5,7 @@ import express from "express";
 import type { WebSocketServer } from "ws";
 import { createOnlineHttpServer } from "../src/online/server/createOnlineHttpServer";
 import { createOnlineGameStoreFromEnv } from "../src/online/server/createOnlineGameStore";
+import { formatOnlineServerLogEvent } from "../src/online/server/onlineServerLogging";
 import { OnlineGameService } from "../src/online/OnlineGameService";
 
 function resolveOnce<T>(settle: (resolve: (value: T) => void, reject: (error: unknown) => void) => void): Promise<T> {
@@ -91,6 +92,9 @@ async function main() {
       publicBaseUrl,
       service,
       onGameEvent: (event) => store.appendEvent(event),
+      onLog: (event) => {
+        console.log(formatOnlineServerLogEvent(event));
+      },
       health: {
         buildId: process.env.BUILD_ID,
         commit: process.env.GIT_COMMIT,

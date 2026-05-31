@@ -9,6 +9,9 @@ import { createM5L2 } from "../../tutorial/lessons/m5_02_wolf";
 import { createM5L5 } from "../../tutorial/lessons/m5_05_wizard";
 import { ThemeProvider } from "../../contexts/ThemeContext";
 
+const INTEGRATION_TIMEOUT_MS = 20_000;
+let originalClipboardDescriptor: PropertyDescriptor | undefined;
+
 vi.mock("../../Classes/Services/AssetRegistry", () => ({
   getAssetUrl: (_theme: string, color: string, type: string) => `${color}${type}.svg`,
 }));
@@ -46,6 +49,7 @@ const getHexPolygon = (
 
 describe("Game ability integration", () => {
   beforeEach(() => {
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     localStorage.clear();
     localStorage.setItem("hasSeenTooltipHint", "true");
     vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
@@ -55,6 +59,11 @@ describe("Game ability integration", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, "clipboard", originalClipboardDescriptor);
+    } else {
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
     window.history.replaceState({}, "", "/");
   });
 
@@ -95,7 +104,7 @@ describe("Game ability integration", () => {
       expect(Number(wizard.getAttribute("x"))).toBeCloseTo(targetCenter.x - lesson.layout.size_image / 2);
       expect(Number(wizard.getAttribute("y"))).toBeCloseTo(targetCenter.y - lesson.layout.size_image / 2);
     });
-  });
+  }, INTEGRATION_TIMEOUT_MS);
 
   test("piece tooltip shows context combat strength for adjacent Wolves", async () => {
     const lesson = createM5L2();
@@ -190,7 +199,7 @@ describe("Game ability integration", () => {
       configurable: true,
       value: { writeText },
     });
-    vi.spyOn(window, "alert").mockImplementation(() => {});
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
 
     render(
       <ThemeProvider>
@@ -215,6 +224,8 @@ describe("Game ability integration", () => {
         "https://castles.example/?onlineGame=game_share_split&seat=b&token=black-token"
       );
     });
+    expect(await screen.findByRole("status")).toHaveTextContent("Opponent invite link copied.");
+    expect(alert).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy Spectator Link" }));
     await waitFor(() => {
@@ -222,5 +233,72 @@ describe("Game ability integration", () => {
         "https://castles.example/?onlineGame=game_share_split&view=spectator"
       );
     });
+    expect(await screen.findByRole("status")).toHaveTextContent("Spectator link copied.");
+    expect(alert).not.toHaveBeenCalled();
+  }, INTEGRATION_TIMEOUT_MS);
+
+  test("PGN export reports clipboard status in the app instead of using alerts", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    render(
+      <ThemeProvider>
+        <GameBoard />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export PGN" }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("[Event"));
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("PGN copied.");
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  test("PGN export reports clipboard failures in the app", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    render(
+      <ThemeProvider>
+        <GameBoard />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export PGN" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Could not copy PGN.");
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  test("online terminal games label the session as complete", () => {
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_complete_label",
+            role: "player",
+            playerColor: "w",
+            version: 1,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_complete_label&view=spectator",
+            result: { winner: "w", reason: "resignation" },
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByText("Online White · Complete · White wins by resignation")).toBeInTheDocument();
   });
 });

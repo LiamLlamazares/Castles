@@ -1,5 +1,5 @@
 import { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { getStartingBoard, getStartingPieces } from "../../../ConstantImports";
 import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator";
@@ -115,6 +115,7 @@ async function waitForCondition(
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -334,6 +335,188 @@ describe("createOnlineHttpServer", () => {
     expect(body.gameId).toMatch(/^game_/);
     expect(body.white.url).toContain("seat=w");
     expect(body.black.url).toContain("seat=b");
+  });
+
+  it("logs structured create and join events without leaking player tokens", async () => {
+    const logs: unknown[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_log_redaction",
+      tokenFactory: (seat) => `${seat}-secret-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onLog: (event) => {
+        logs.push(event);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify({
+          type: "join",
+          gameId: created.gameId,
+          token: created.white.token,
+        })
+      );
+    });
+
+    try {
+      await expect(nextSocketMessage(socket, "logged join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+    } finally {
+      socket.close();
+    }
+
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "online.game.create",
+          gameId: "game_log_redaction",
+          status: "accepted",
+        }),
+        expect.objectContaining({
+          event: "online.socket.join",
+          gameId: "game_log_redaction",
+          role: "player",
+          status: "accepted",
+        }),
+      ])
+    );
+    expect(JSON.stringify(logs)).not.toContain("secret-token");
+  });
+
+  it("logs rejected action attempts with gameId role action and status fields", async () => {
+    const logs: unknown[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_log_action_rejected",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onLog: (event) => {
+        logs.push(event);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify({
+          type: "join",
+          gameId: created.gameId,
+          token: created.white.token,
+        })
+      );
+    });
+
+    try {
+      await expect(nextSocketMessage(socket, "logged action join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      socket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 99 } }));
+      await expect(nextSocketMessage(socket, "logged action rejection")).resolves.toMatchObject({
+        type: "rejected",
+        error: { code: "stale_action" },
+      });
+    } finally {
+      socket.close();
+    }
+
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "online.action",
+          gameId: "game_log_action_rejected",
+          role: "player",
+          action: "PASS",
+          status: "rejected",
+          reason: "stale_action",
+        }),
+      ])
+    );
+  });
+
+  it("keeps logging hook failures from changing create-game behavior", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_log_hook_failure",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onLog: () => {
+        throw new Error("log sink unavailable");
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    expect(consoleError).toHaveBeenCalledWith(
+      "Online server log hook failed",
+      expect.any(Error)
+    );
+  });
+
+  it("does not include malformed HTTP join ids in structured logs", async () => {
+    const logs: unknown[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      onLog: (event) => {
+        logs.push(event);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const malformedGameId = "g".repeat(129);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games/${malformedGameId}`, {
+      headers: { authorization: "Bearer bad-token" },
+    });
+
+    expect(response.status).toBe(400);
+    expect(logs).toEqual([
+      expect.objectContaining({
+        event: "online.http.join",
+        role: "player",
+        status: "rejected",
+        reason: "bad_request",
+      }),
+    ]);
+    expect(JSON.stringify(logs)).not.toContain(malformedGameId);
+    expect(JSON.stringify(logs)).not.toContain("bad-token");
   });
 
   it("adds the default online clock when a create request omits time control", async () => {

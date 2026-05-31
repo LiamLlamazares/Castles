@@ -408,6 +408,25 @@ body {
   cursor: not-allowed;
 }
 
+.game-status-toast {
+  position: fixed;
+  left: 50%;
+  top: 56px;
+  transform: translateX(-50%);
+  z-index: 500;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(28, 30, 30, 0.94);
+  color: #f7f1d6;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+
 /* Legacy sidebar - keep for compatibility but hide */
 .sidebar {
   display: none;

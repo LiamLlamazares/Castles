@@ -24,12 +24,22 @@ type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
   | { role: "spectator"; gameId: string };
 
+export type OnlineServerLogEvent = {
+  event: string;
+  status: "accepted" | "rejected" | "connected" | "disconnected" | "expired" | "failed";
+  gameId?: string;
+  role?: "player" | "spectator";
+  action?: string;
+  reason?: string;
+};
+
 const DEFAULT_ONLINE_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
   onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
+  onLog?: (event: OnlineServerLogEvent) => void;
   now?: () => number;
   health?: {
     buildId?: string;
@@ -122,10 +132,33 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
   const connections = new Map<WebSocket, OnlineConnection>();
+  const disconnectedSockets = new WeakSet<WebSocket>();
   const actionQueues = new Map<string, Promise<void>>();
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
   const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
+
+  const log = (event: OnlineServerLogEvent): void => {
+    try {
+      options.onLog?.(event);
+    } catch (error) {
+      console.error("Online server log hook failed", error);
+    }
+  };
+
+  const logSocketDisconnect = (socket: WebSocket, reason?: string): void => {
+    if (disconnectedSockets.has(socket)) return;
+    disconnectedSockets.add(socket);
+    const connection = connections.get(socket);
+    log({
+      event: "online.socket.disconnect",
+      gameId: connection?.gameId,
+      role: connection?.role,
+      status: "disconnected",
+      reason,
+    });
+    connections.delete(socket);
+  };
 
   const enqueueGameAction = (gameId: string, operation: () => Promise<void>): Promise<void> => {
     const previous = actionQueues.get(gameId) ?? Promise.resolve();
@@ -194,10 +227,31 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     try {
       await persistTimeoutAdjudicated(gameId, timeout);
+      log({
+        event: "online.timeout",
+        gameId,
+        role: "player",
+        status: "expired",
+        reason: timeout.playerColor,
+      });
       return { ok: true, timeout };
     } catch (error) {
       service.replaceRoom(beforeTimeout);
       const restoredSnapshot = service.getRoom(gameId)?.getSnapshot() ?? room.getSnapshot();
+      log({
+        event: "online.persistence",
+        gameId,
+        role: "player",
+        status: "failed",
+        reason: "timeout_adjudicated",
+      });
+      log({
+        event: "online.timeout",
+        gameId,
+        role: "player",
+        status: "rejected",
+        reason: "persistence_failed",
+      });
       console.error("Failed to persist online game timeout", error);
       return {
         ok: false,
@@ -269,6 +323,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
   app.post("/api/online/games", async (req, res) => {
     if (!createGameLimiter.take(getClientKey(req))) {
+      log({ event: "online.game.create", status: "rejected", reason: "rate_limited" });
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -280,6 +335,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     const setup = validateOnlineGameSetup(req.body?.setup);
     if (!setup.ok) {
+      log({ event: "online.game.create", status: "rejected", reason: setup.error.code });
       res.status(400).json({
         error: setup.error,
       });
@@ -315,6 +371,18 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       );
     } catch (error) {
       service.deleteGame(created.gameId);
+      log({
+        event: "online.persistence",
+        gameId: created.gameId,
+        status: "failed",
+        reason: "game_created",
+      });
+      log({
+        event: "online.game.create",
+        gameId: created.gameId,
+        status: "rejected",
+        reason: "persistence_failed",
+      });
       console.error("Failed to persist online game creation", error);
       res.status(503).json({
         error: {
@@ -325,14 +393,29 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
+    log({ event: "online.game.create", gameId: created.gameId, status: "accepted" });
     res.status(201).json(created);
   });
 
   app.get("/api/online/games/:gameId", async (req, res) => {
-    await enqueueGameAction(req.params.gameId, async () => {
+    const gameId = validateOnlineGameId(req.params.gameId, "join.gameId");
+    if (!gameId.ok) {
+      log({ event: "online.http.join", role: "player", status: "rejected", reason: gameId.error.code });
+      res.status(400).json({ error: gameId.error });
+      return;
+    }
+
+    await enqueueGameAction(gameId.value, async () => {
       const token = getBearerToken(req.headers.authorization) ?? "";
-      const room = service.getRoomForToken(req.params.gameId, token);
+      const room = service.getRoomForToken(gameId.value, token);
       if (!room) {
+        log({
+          event: "online.http.join",
+          gameId: gameId.value,
+          role: "player",
+          status: "rejected",
+          reason: "not_found",
+        });
         res.status(404).json({
           error: {
             code: "not_found",
@@ -342,8 +425,15 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const timeout = await adjudicateTimeoutForRoom(req.params.gameId, room);
+      const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
+        log({
+          event: "online.http.join",
+          gameId: gameId.value,
+          role: "player",
+          status: "rejected",
+          reason: timeout.error.code,
+        });
         res.status(503).json({
           error: timeout.error,
           snapshot: timeout.snapshot,
@@ -351,12 +441,18 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(req.params.gameId);
+        broadcastSnapshot(gameId.value);
       }
 
       res.json({
         color: room.authenticate(token),
         snapshot: room.getSnapshot(),
+      });
+      log({
+        event: "online.http.join",
+        gameId: gameId.value,
+        role: "player",
+        status: "accepted",
       });
     });
   });
@@ -364,11 +460,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.get("/api/online/games/:gameId/spectator", async (req, res) => {
     const gameId = validateOnlineGameId(req.params.gameId, "spectator.gameId");
     if (!gameId.ok) {
+      log({ event: "online.http.spectate", status: "rejected", reason: gameId.error.code });
       res.status(400).json({ error: gameId.error });
       return;
     }
 
     if (!spectatorSnapshotLimiter.take(getClientKey(req))) {
+      log({
+        event: "online.http.spectate",
+        gameId: gameId.value,
+        role: "spectator",
+        status: "rejected",
+        reason: "rate_limited",
+      });
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -381,6 +485,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     await enqueueGameAction(gameId.value, async () => {
       const room = service.getRoom(gameId.value);
       if (!room) {
+        log({
+          event: "online.http.spectate",
+          gameId: gameId.value,
+          role: "spectator",
+          status: "rejected",
+          reason: "not_found",
+        });
         res.status(404).json({
           error: {
             code: "not_found",
@@ -392,6 +503,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
+        log({
+          event: "online.http.spectate",
+          gameId: gameId.value,
+          role: "spectator",
+          status: "rejected",
+          reason: timeout.error.code,
+        });
         res.status(503).json({
           error: timeout.error,
           snapshot: timeout.snapshot,
@@ -405,6 +523,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         role: "spectator",
         snapshot: room.getSnapshot(),
+      });
+      log({
+        event: "online.http.spectate",
+        gameId: gameId.value,
+        role: "spectator",
+        status: "accepted",
       });
     });
   });
@@ -426,6 +550,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     clientKey: string
   ): Promise<void> => {
     if (!socketMessageLimiter.take(clientKey)) {
+      log({ event: "online.socket.message", status: "rejected", reason: "rate_limited" });
       sendSocketError(socket, {
         code: "rate_limited",
         message: "Too many online messages were sent too quickly.",
@@ -437,6 +562,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     try {
       parsed = parseMessage(data);
     } catch {
+      log({ event: "online.socket.message", status: "rejected", reason: "bad_json" });
       sendSocketError(socket, {
         code: "bad_json",
         message: "Message was not valid JSON.",
@@ -446,6 +572,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     const validation = validateClientMessage(parsed);
     if (!validation.ok) {
+      log({ event: "online.socket.message", status: "rejected", reason: validation.error.code });
       sendSocketError(socket, validation.error);
       return;
     }
@@ -501,6 +628,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       await enqueueGameAction(message.gameId, async () => {
         const room = service.getRoomForToken(message.gameId, message.token);
         if (!room) {
+          log({
+            event: "online.socket.join",
+            gameId: message.gameId,
+            role: "player",
+            status: "rejected",
+            reason: "unauthorized",
+          });
           sendSocketError(socket, {
             code: "unauthorized",
             message: "No online game was found for that id and token.",
@@ -510,6 +644,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
         const timeout = await adjudicateTimeoutForRoom(message.gameId, room);
         if (!timeout.ok) {
+          log({
+            event: "online.socket.join",
+            gameId: message.gameId,
+            role: "player",
+            status: "rejected",
+            reason: timeout.error.code,
+          });
           sendJson(socket, {
             type: "error",
             error: timeout.error,
@@ -519,6 +660,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         }
 
         connections.set(socket, { role: "player", gameId: message.gameId, token: message.token });
+        log({
+          event: "online.socket.join",
+          gameId: message.gameId,
+          role: "player",
+          status: "accepted",
+        });
         sendJson(socket, {
           type: "joined",
           color: room.authenticate(message.token),
@@ -535,6 +682,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       await enqueueGameAction(message.gameId, async () => {
         const room = service.getRoom(message.gameId);
         if (!room) {
+          log({
+            event: "online.socket.spectate",
+            gameId: message.gameId,
+            role: "spectator",
+            status: "rejected",
+            reason: "not_found",
+          });
           sendSocketError(socket, {
             code: "not_found",
             message: "No online game was found for that id.",
@@ -544,6 +698,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
         const timeout = await adjudicateTimeoutForRoom(message.gameId, room);
         if (!timeout.ok) {
+          log({
+            event: "online.socket.spectate",
+            gameId: message.gameId,
+            role: "spectator",
+            status: "rejected",
+            reason: timeout.error.code,
+          });
           sendJson(socket, {
             type: "error",
             error: timeout.error,
@@ -553,6 +714,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         }
 
         connections.set(socket, { role: "spectator", gameId: message.gameId });
+        log({
+          event: "online.socket.spectate",
+          gameId: message.gameId,
+          role: "spectator",
+          status: "accepted",
+        });
         sendJson(socket, {
           type: "spectating",
           snapshot: room.getSnapshot(),
@@ -567,6 +734,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (message.type === "action") {
       const connection = connections.get(socket);
       if (!connection || connection.role !== "player") {
+        log({
+          event: "online.action",
+          role: "player",
+          action: message.action.type,
+          status: "rejected",
+          reason: "not_joined",
+        });
         sendSocketError(socket, {
           code: "not_joined",
           message: "Join an online game before sending actions.",
@@ -582,6 +756,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           currentConnection.gameId !== connection.gameId ||
           currentConnection.token !== connection.token
         ) {
+          log({
+            event: "online.action",
+            gameId: connection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "not_joined",
+          });
           sendSocketError(socket, {
             code: "not_joined",
             message: "Join an online game before sending actions.",
@@ -591,6 +773,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
         const room = service.getRoomForToken(currentConnection.gameId, currentConnection.token);
         if (!room) {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "not_found",
+          });
           sendSocketError(socket, {
             code: "not_found",
             message: "Online game no longer exists.",
@@ -600,6 +790,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
         const playerColor = room.authenticate(currentConnection.token);
         if (!playerColor) {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "unauthorized",
+          });
           sendSocketError(socket, {
             code: "unauthorized",
             message: "This player token is not valid.",
@@ -609,6 +807,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
         const timeout = await adjudicateTimeoutForRoom(currentConnection.gameId, room);
         if (!timeout.ok) {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: timeout.error.code,
+          });
           sendJson(socket, {
             type: "error",
             error: timeout.error,
@@ -618,6 +824,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         }
         if (timeout.timeout) {
           const snapshot = room.getSnapshot();
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "game_over",
+          });
           sendJson(socket, {
             type: "rejected",
             error: {
@@ -633,6 +847,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         const beforeAction = room.toRecord();
         const result = room.submitAction(currentConnection.token, message.action);
         if (!result.ok) {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: result.error.code,
+          });
           sendJson(socket, {
             type: "rejected",
             error: result.error,
@@ -665,6 +887,22 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           service.replaceRoom(beforeAction);
           const restoredSnapshot =
             service.getRoom(currentConnection.gameId)?.getSnapshot() ?? result.snapshot;
+          log({
+            event: "online.persistence",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "failed",
+            reason: "action_accepted",
+          });
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "persistence_failed",
+          });
           console.error("Failed to persist online game action", error);
           sendJson(socket, {
             type: "error",
@@ -677,6 +915,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
+        log({
+          event: "online.action",
+          gameId: currentConnection.gameId,
+          role: "player",
+          action: acceptedAction.action.type,
+          status: "accepted",
+        });
         broadcastSnapshot(currentConnection.gameId);
       });
       return;
@@ -685,6 +930,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
   wss.on("connection", (socket, req) => {
     const clientKey = getSocketClientKey(req);
+    log({ event: "online.socket.connect", status: "connected" });
 
     socket.on("message", (data) => {
       handleClientMessage(socket, data, clientKey).catch((error) => {
@@ -697,11 +943,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
 
     socket.on("close", () => {
-      connections.delete(socket);
+      logSocketDisconnect(socket);
     });
 
     socket.on("error", () => {
-      connections.delete(socket);
+      logSocketDisconnect(socket, "socket_error");
     });
   });
 
