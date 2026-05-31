@@ -76,7 +76,11 @@ Implemented for private beta:
 - server-authoritative clocks with timeout adjudication and reconnect-safe clock snapshots,
 - PostgreSQL event storage for the remote beta,
 - creator-side invite copying from the in-game Share button instead of a browser prompt,
-- local PostgreSQL restart smoke tooling that verifies create, join, action persistence, shutdown, restart, and reload.
+- local PostgreSQL restart smoke tooling that verifies create, join, action persistence, shutdown, restart, and reload,
+- read-only spectator URLs using `?onlineGame=<id>&view=spectator`,
+- public spectator snapshot fetches without player bearer tokens,
+- WebSocket spectator joins that receive authoritative broadcasts but cannot submit actions,
+- in-app spectator controls that keep board viewing, clocks, history, and link copying while disabling play controls.
 
 ## Known Constraints
 
@@ -85,12 +89,11 @@ This is not ready for a public lobby or multiple server replicas.
 - This app still assumes one writer process until cross-process coordination is added.
 - Accepted actions are serialized in the single Node process, but there is still no explicit per-game database transaction or advisory lock.
 - Private invite links are bearer secrets. Use HTTPS and avoid posting them publicly.
+- Spectator links are view-only but intentionally public to anyone who has the random game id.
 - Accounts, ratings, moderation, spectator permissions, and anti-cheat are intentionally out of scope for this phase.
 
 ## Next Phases
 
-1. Local PostgreSQL rehearsal: run the local restart smoke check against a real local database before asking the server owner to pull anything.
-2. Remote PostgreSQL beta: deploy one reviewed commit with `ONLINE_STORE_BACKEND=postgres` and verify create/join/play/restart recovery.
-3. Spectators and archive: create read-only links, archived game views, and PGN/export UX.
-4. Public service features: lobby, accounts, ratings, moderation, observability, and anti-cheat.
-5. Multi-instance coordination: database transactions/advisory locks, shared pub/sub, rolling deploys, and operational dashboards.
+1. Spectator/archive polish: add a clearer second in-game button for spectator links, archived-game labels after completion, and PGN/export entry points from online games.
+2. Public service features: lobby, accounts, ratings, moderation, observability, and anti-cheat.
+3. Multi-instance coordination: database transactions/advisory locks, shared pub/sub, rolling deploys, and operational dashboards.

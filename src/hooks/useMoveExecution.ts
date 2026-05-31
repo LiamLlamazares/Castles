@@ -125,7 +125,10 @@ export const useMoveExecution = ({
         if (onlineSession.result) {
           return false;
         }
-        if (onlineSession.playerColor !== currentPlayer) {
+        if (
+          onlineSession.role !== "player" ||
+          onlineSession.playerColor !== currentPlayer
+        ) {
           return false;
         }
 

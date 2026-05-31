@@ -150,17 +150,30 @@ export type OnlineConnectionStatus =
   | "disconnected"
   | "error";
 
-export interface OnlineClientSession {
+interface BaseOnlineClientSession {
   gameId: string;
-  playerColor: Color;
-  opponentInviteUrl?: string;
+  role: "player" | "spectator";
   version: number;
   status: OnlineConnectionStatus;
   lastError?: string;
   clock?: OnlineClockStateDTO;
   result?: OnlineGameResultDTO;
+  spectatorUrl?: string;
+}
+
+export interface OnlinePlayerClientSession extends BaseOnlineClientSession {
+  role: "player";
+  playerColor: Color;
+  opponentInviteUrl?: string;
   submitAction: (action: OnlineActionDTO) => void;
 }
+
+export interface OnlineSpectatorClientSession extends BaseOnlineClientSession {
+  role: "spectator";
+  spectatorUrl: string;
+}
+
+export type OnlineClientSession = OnlinePlayerClientSession | OnlineSpectatorClientSession;
 
 export type OnlineActionResult =
   | { ok: true; snapshot: OnlineGameSnapshotDTO }

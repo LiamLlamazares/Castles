@@ -16,6 +16,7 @@ import { Sanctuary } from './Classes/Entities/Sanctuary';
 import { getStartingLayout } from './ConstantImports';
 import { AIOpponentConfig } from './hooks/useAIOpponent';
 import { useOnlineGameConnection } from './hooks/useOnlineGameConnection';
+import { useOnlineSpectatorConnection } from './hooks/useOnlineSpectatorConnection';
 import {
   createMoveTreeFromHistory,
   hydrateGameStateDTO,
@@ -23,13 +24,16 @@ import {
   serializeOnlineGameSetup,
 } from './online/serialization';
 import {
+  buildSpectatorUrl,
   createOnlineGame,
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
   removeOnlineTokenFromUrl,
+  parseOnlineSpectatorParams,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   OnlineJoinParams,
+  OnlineSpectatorParams,
 } from './online/client';
 import type { OnlineClientSession, OnlineGameSnapshotDTO } from './online/types';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -79,6 +83,9 @@ function App() {
   const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(() =>
     resolveOnlineJoinParams(window.location.href)
   );
+  const [onlineSpectator, setOnlineSpectator] = useState<OnlineSpectatorParams | null>(() =>
+    parseOnlineSpectatorParams(window.location.href)
+  );
   const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
   const [onlineOpponentInviteUrl, setOnlineOpponentInviteUrl] = useState<string | null>(() =>
     onlineJoin?.seat === "w" ? resolveOnlineOpponentInviteUrl(onlineJoin.gameId) : null
@@ -93,6 +100,7 @@ function App() {
     url.searchParams.delete("onlineGame");
     url.searchParams.delete("seat");
     url.searchParams.delete("token");
+    url.searchParams.delete("view");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
@@ -104,6 +112,7 @@ function App() {
 
   useEffect(() => {
     if (!onlineJoin) return;
+    setOnlineSpectator(null);
     rememberOnlineJoinParams(onlineJoin);
     clearOnlineTokenFromUrl();
   }, [onlineJoin]);
@@ -112,6 +121,7 @@ function App() {
     clearAutosave();
     clearOnlineUrl();
     setOnlineJoin(null);
+    setOnlineSpectator(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setView('setup');
@@ -143,6 +153,7 @@ function App() {
     clearAutosave();
     clearOnlineUrl();
     setOnlineJoin(null);
+    setOnlineSpectator(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
@@ -162,6 +173,7 @@ function App() {
   ) => {
     try {
       clearAutosave();
+      setOnlineSpectator(null);
       const created = await createOnlineGame(
         serializeOnlineGameSetup({
           board,
@@ -189,6 +201,7 @@ function App() {
         `${window.location.pathname}?${whiteUrl.searchParams.toString()}`
       );
       setOnlineJoin(whiteJoin);
+      setOnlineSpectator(null);
       setOnlineSnapshot(null);
       setOnlineOpponentInviteUrl(created.black.url);
       setView('game');
@@ -218,6 +231,7 @@ function App() {
     // PGN imports should always start in analysis mode so users can navigate the game
     clearOnlineUrl();
     setOnlineJoin(null);
+    setOnlineSpectator(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, sanctuarySettings, initialPoolTypes, isAnalysisMode: true });
@@ -305,21 +319,51 @@ function App() {
     setView('game');
   }, []);
 
+  const activeOnlineSpectator = onlineJoin ? null : onlineSpectator;
   const onlineConnection = useOnlineGameConnection(onlineJoin, handleOnlineSnapshot);
+  const onlineSpectatorConnection = useOnlineSpectatorConnection(
+    activeOnlineSpectator?.gameId ?? null,
+    handleOnlineSnapshot
+  );
   const onlineSession = useMemo<OnlineClientSession | undefined>(() => {
-    if (!onlineJoin || !onlineSnapshot) return undefined;
-    return {
-      gameId: onlineJoin.gameId,
-      playerColor: onlineJoin.seat,
-      version: onlineSnapshot.version,
-      status: onlineConnection.status,
-      lastError: onlineConnection.lastError,
-      clock: onlineSnapshot.clock,
-      result: onlineSnapshot.result,
-      opponentInviteUrl: onlineJoin.seat === "w" ? onlineOpponentInviteUrl ?? undefined : undefined,
-      submitAction: onlineConnection.submitAction,
-    };
-  }, [onlineJoin, onlineSnapshot, onlineOpponentInviteUrl, onlineConnection]);
+    if (onlineJoin && onlineSnapshot) {
+      return {
+        gameId: onlineJoin.gameId,
+        role: "player",
+        playerColor: onlineJoin.seat,
+        version: onlineSnapshot.version,
+        status: onlineConnection.status,
+        lastError: onlineConnection.lastError,
+        clock: onlineSnapshot.clock,
+        result: onlineSnapshot.result,
+        opponentInviteUrl: onlineJoin.seat === "w" ? onlineOpponentInviteUrl ?? undefined : undefined,
+        spectatorUrl: buildSpectatorUrl(window.location.href, onlineJoin.gameId),
+        submitAction: onlineConnection.submitAction,
+      };
+    }
+
+    if (activeOnlineSpectator && onlineSnapshot) {
+      return {
+        gameId: activeOnlineSpectator.gameId,
+        role: "spectator",
+        version: onlineSnapshot.version,
+        status: onlineSpectatorConnection.status,
+        lastError: onlineSpectatorConnection.lastError,
+        clock: onlineSnapshot.clock,
+        result: onlineSnapshot.result,
+        spectatorUrl: buildSpectatorUrl(window.location.href, activeOnlineSpectator.gameId),
+      };
+    }
+
+    return undefined;
+  }, [
+    onlineJoin,
+    activeOnlineSpectator,
+    onlineSnapshot,
+    onlineOpponentInviteUrl,
+    onlineConnection,
+    onlineSpectatorConnection,
+  ]);
 
   const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
@@ -344,6 +388,7 @@ function App() {
     const layout = getStartingLayout(board);
     clearOnlineUrl();
     setOnlineJoin(null);
+    setOnlineSpectator(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
@@ -371,7 +416,7 @@ function App() {
         />
       )}
 
-      {view === 'game' && onlineJoin && !onlineSnapshot && (
+      {view === 'game' && (onlineJoin || activeOnlineSpectator) && !onlineSnapshot && (
         <div
           style={{
             height: '100vh',
@@ -384,11 +429,15 @@ function App() {
             fontSize: '1rem',
           }}
         >
-          Connecting online game{onlineConnection.lastError ? `: ${onlineConnection.lastError}` : '...'}
+          Connecting online game{
+            (onlineJoin ? onlineConnection.lastError : onlineSpectatorConnection.lastError)
+              ? `: ${onlineJoin ? onlineConnection.lastError : onlineSpectatorConnection.lastError}`
+              : '...'
+          }
         </div>
       )}
 
-      {view === 'game' && (!onlineJoin || onlineSnapshot) && (
+      {view === 'game' && ((!onlineJoin && !activeOnlineSpectator) || onlineSnapshot) && (
         <div style={{ height: '100vh', width: '100vw' }}> {/* Ensure full screen for game */}
             <GameBoard 
               key={gameKey}

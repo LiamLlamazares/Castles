@@ -4,7 +4,7 @@ import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
 import { validateOnlineGameEvent } from "../events";
-import { validateOnlineAction, validateOnlineGameSetup } from "../validation";
+import { validateClientMessage, validateOnlineAction, validateOnlineGameSetup } from "../validation";
 
 function createSetup() {
   const board = getStartingBoard(6);
@@ -92,6 +92,15 @@ describe("online validation", () => {
     if (!result.ok) {
       expect(result.error.message).toContain("hex");
     }
+  });
+
+  it("validates spectator websocket messages", () => {
+    expect(validateClientMessage({ type: "spectate", gameId: "game_test" })).toEqual({
+      ok: true,
+      value: { type: "spectate", gameId: "game_test", lastSeenVersion: undefined },
+    });
+    expect(validateClientMessage({ type: "spectate", gameId: "" }).ok).toBe(false);
+    expect(validateClientMessage({ type: "spectate", gameId: "g", lastSeenVersion: -1 }).ok).toBe(false);
   });
 
   it("requires accepted action events to include the submitting player", () => {

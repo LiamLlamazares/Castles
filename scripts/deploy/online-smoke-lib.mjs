@@ -30,6 +30,24 @@ export function createFetchWithTimeout(requestTimeoutMs) {
   };
 }
 
+export async function assertSpectatorSnapshot(
+  fetchWithTimeout,
+  baseUrl,
+  gameId,
+  expectedVersion
+) {
+  const response = await fetchWithTimeout(
+    `${baseUrl}/api/online/games/${encodeURIComponent(gameId)}/spectator`
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `Spectator snapshot fetch failed with ${response.status}`);
+  assert(body.role === "spectator", "Spectator snapshot did not report spectator role");
+  assert(
+    body.snapshot?.version === expectedVersion,
+    `Spectator snapshot returned version ${body.snapshot?.version}, expected ${expectedVersion}`
+  );
+}
+
 export function createWebSocketWaiters(socketTimeoutMs) {
   function waitForSocketOpen(socket) {
     if (socket.readyState === 1) return Promise.resolve();

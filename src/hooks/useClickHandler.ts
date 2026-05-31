@@ -38,6 +38,8 @@ interface UseClickHandlerProps {
   setActiveAbility?: (ability: AbilityType | null) => void;
   /** Normal hex click handler from game engine */
   onEngineHexClick: (hex: Hex) => void;
+  /** Disable mutation-oriented click flows while preserving hover/right-click inspection. */
+  isReadOnly?: boolean;
   /** Board instance for terrain checks */
   board: import("../Classes/Core/Board").Board;
   /** Full Game State access for Policy Context */
@@ -75,6 +77,7 @@ export function useClickHandler({
   activeAbility: controlledActiveAbility,
   setActiveAbility: controlledSetActiveAbility,
   onEngineHexClick,
+  isReadOnly = false,
   board,
   gameState
 }: UseClickHandlerProps): UseClickHandlerResult {
@@ -93,13 +96,19 @@ export function useClickHandler({
   useEffect(() => {
     setActiveAbility(null);
     setPledgingSanctuary(null);
-  }, [movingPiece, setActiveAbility]);
+  }, [isReadOnly, movingPiece, setActiveAbility]);
 
   /**
    * Main click handler - processes in priority order
    */
   const handleBoardClick = useCallback(
     (hex: Hex) => {
+      if (isReadOnly) {
+        setActiveAbility(null);
+        setPledgingSanctuary(null);
+        return;
+      }
+
       // 1. Ability Targeting Mode
       if (activeAbility && movingPiece) {
         if (InteractionPolicy.isValidAbilityTarget(movingPiece.hex, hex, activeAbility)) {
@@ -175,6 +184,7 @@ export function useClickHandler({
       triggerAbility,
       setActiveAbility,
       onEngineHexClick,
+      isReadOnly,
       interactionCtx 
     ]
   );
@@ -184,10 +194,10 @@ export function useClickHandler({
    */
   const isPledgeTarget = useCallback(
     (hex: Hex) => {
-      if (!pledgingSanctuary) return false;
+      if (isReadOnly || !pledgingSanctuary) return false;
       return InteractionPolicy.isPledgeTarget(interactionCtx, pledgingSanctuary, hex);
     },
-    [pledgingSanctuary, interactionCtx]
+    [isReadOnly, pledgingSanctuary, interactionCtx]
   );
 
   return {

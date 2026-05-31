@@ -8,6 +8,7 @@ describe("online terminal action guards", () => {
     const { result } = renderCustomGameLogicHook({
       onlineSession: {
         gameId: "game_terminal",
+        role: "player",
         playerColor: "w",
         version: 3,
         status: "connected",
@@ -22,5 +23,24 @@ describe("online terminal action guards", () => {
     });
 
     expect(submitAction).not.toHaveBeenCalled();
+  });
+
+  it("treats spectator sessions as read-only", () => {
+    const { result } = renderCustomGameLogicHook({
+      onlineSession: {
+        gameId: "game_spectator",
+        role: "spectator",
+        version: 3,
+        status: "connected",
+        spectatorUrl: "https://castles.example/?onlineGame=game_spectator&view=spectator",
+      },
+    });
+
+    act(() => {
+      result.current.handlePass();
+      result.current.handleResign("w");
+    });
+
+    expect(result.current.turnCounter).toBe(0);
   });
 });

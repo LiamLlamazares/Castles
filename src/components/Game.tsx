@@ -139,22 +139,35 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
   // Persistence Hooks
   const { shareGame, getGameFromUrl, loadFromLocalStorage, clearUrlParams, clearSave } = usePersistence(getPGN, loadPGN, moveTree);
+  const isReadOnlyOnline = onlineSession?.role === "spectator";
+  const onlineShareUrl =
+    onlineSession?.role === "player" && onlineSession.opponentInviteUrl
+      ? onlineSession.opponentInviteUrl
+      : onlineSession?.spectatorUrl;
+  const onlineShareMessage =
+    onlineSession?.role === "player" && onlineSession.opponentInviteUrl
+      ? "Invite link copied to clipboard."
+      : "Spectator link copied to clipboard.";
   const handleShare = React.useCallback(() => {
-    if (!onlineSession?.opponentInviteUrl) {
+    if (!onlineShareUrl) {
       shareGame();
       return;
     }
 
-    copyOnlineInviteUrl(onlineSession.opponentInviteUrl)
-      .then(() => alert("Invite link copied to clipboard."))
+    copyOnlineInviteUrl(onlineShareUrl)
+      .then(() => alert(onlineShareMessage))
       .catch((error) => {
-        console.error("Failed to copy online invite link", error);
-        alert("Could not copy the invite link. Try again from a secure browser session.");
+        console.error("Failed to copy online link", error);
+        alert("Could not copy the link. Try again from a secure browser session.");
       });
-  }, [onlineSession?.opponentInviteUrl, shareGame]);
+  }, [onlineShareMessage, onlineShareUrl, shareGame]);
 
   // Restore game logic from old Game.tsx
   React.useEffect(() => {
+    if (onlineSession) {
+      return;
+    }
+
     // 1. Check URL for shared game
     const urlPgn = getGameFromUrl();
     if (urlPgn) {
@@ -320,7 +333,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   }, [getPGN, loadPGN, onLoadGame]);
 
   useInputHandler({
-    onPass: handlePass,
+    onPass: isReadOnlyOnline ? () => {} : handlePass,
     onFlipBoard: viewState.handleFlipBoard,
     onTakeback: handleTakeback,
     onResize: viewState.incrementResizeVersion,
@@ -391,7 +404,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         showCoordinates={viewState.showCoordinates}
       />
 
-      {promotionPending && (
+      {promotionPending && !isReadOnlyOnline && (
         <PromotionModal
           promotion={promotionPending}
           onSelect={handlePromotion}
@@ -421,15 +434,28 @@ const InnerGame: React.FC<GameBoardProps> = ({
           currentPlayer={currentPlayer}
           turnPhase={turnPhase}
           turnCounter={turnCounter}
-          onPass={handlePass}
+          onPass={isReadOnlyOnline ? () => {} : handlePass}
           onResign={() => {
+              if (isReadOnlyOnline) return;
               handleResign(currentPlayer);
               onResign();
           }}
           onNewGame={handleNewGame}
           onShare={handleShare}
-          shareLabel={onlineSession?.opponentInviteUrl ? "Copy Invite" : "Share"}
-          shareTitle={onlineSession?.opponentInviteUrl ? "Copy opponent invite link" : "Share Game URL"}
+          shareLabel={
+            onlineSession?.role === "player" && onlineSession.opponentInviteUrl
+              ? "Copy Invite"
+              : onlineSession?.spectatorUrl
+                ? "Copy Spectator"
+                : "Share"
+          }
+          shareTitle={
+            onlineSession?.role === "player" && onlineSession.opponentInviteUrl
+              ? "Copy opponent invite link"
+              : onlineSession?.spectatorUrl
+                ? "Copy spectator link"
+                : "Share Game URL"
+          }
           moveHistory={moveHistory || []}
           moveTree={moveTree}
           onJumpToNode={jumpToNode}
@@ -438,6 +464,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           timeControl={timeControl}
           onlineClock={onlineSession?.clock}
           isOnline={!!onlineSession}
+          isReadOnly={isReadOnlyOnline}
           viewNodeId={viewNodeId}
           victoryPoints={victoryPoints}
         />
@@ -459,7 +486,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
             border: "1px solid rgba(255,255,255,0.18)",
           }}
         >
-          Online {onlineSession.playerColor === "w" ? "White" : "Black"} · {onlineSession.status}
+          {onlineSession.role === "player"
+            ? `Online ${onlineSession.playerColor === "w" ? "White" : "Black"}`
+            : "Spectating"} · {onlineSession.status}
           {onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}
         </div>
       )}

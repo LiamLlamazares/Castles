@@ -24,6 +24,7 @@ export type ValidationResult<T> =
 
 export type OnlineClientMessage =
   | { type: "join"; gameId: string; token: string; lastSeenVersion?: number }
+  | { type: "spectate"; gameId: string; lastSeenVersion?: number }
   | { type: "action"; action: OnlineActionDTO }
   | { type: "ping"; clientTime?: unknown };
 
@@ -75,6 +76,11 @@ function isColor(value: unknown): value is Color {
 
 function isBoundedString(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= maxLength;
+}
+
+export function validateOnlineGameId(value: unknown, label = "gameId"): ValidationResult<string> {
+  if (!isBoundedString(value, MAX_ID_LENGTH)) return bad(`${label} is invalid.`);
+  return { ok: true, value };
 }
 
 function validateHex(value: unknown, path: string): ValidationResult<HexDTO> {
@@ -426,7 +432,8 @@ export function validateOnlineAction(value: unknown): ValidationResult<OnlineAct
 export function validateClientMessage(value: unknown): ValidationResult<OnlineClientMessage> {
   if (!isRecord(value)) return bad("message must be an object.");
   if (value.type === "join") {
-    if (!isBoundedString(value.gameId, MAX_ID_LENGTH)) return bad("join.gameId is invalid.");
+    const gameId = validateOnlineGameId(value.gameId, "join.gameId");
+    if (!gameId.ok) return gameId;
     if (!isBoundedString(value.token, MAX_TOKEN_LENGTH)) return bad("join.token is invalid.");
     if (value.lastSeenVersion !== undefined && !isNonNegativeInteger(value.lastSeenVersion)) {
       return bad("join.lastSeenVersion must be a non-negative integer when present.");
@@ -435,8 +442,24 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
       ok: true,
       value: {
         type: "join",
-        gameId: value.gameId,
+        gameId: gameId.value,
         token: value.token,
+        lastSeenVersion: value.lastSeenVersion,
+      },
+    };
+  }
+
+  if (value.type === "spectate") {
+    const gameId = validateOnlineGameId(value.gameId, "spectate.gameId");
+    if (!gameId.ok) return gameId;
+    if (value.lastSeenVersion !== undefined && !isNonNegativeInteger(value.lastSeenVersion)) {
+      return bad("spectate.lastSeenVersion must be a non-negative integer when present.");
+    }
+    return {
+      ok: true,
+      value: {
+        type: "spectate",
+        gameId: gameId.value,
         lastSeenVersion: value.lastSeenVersion,
       },
     };

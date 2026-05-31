@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   assert,
+  assertSpectatorSnapshot,
   buildWebSocketUrl,
   createFetchWithTimeout,
   createWebSocketWaiters,
@@ -226,6 +227,7 @@ async function playOnePass(baseUrl) {
   const readBody = await readJson(readResponse);
   assert(readResponse.status === 200, `Snapshot fetch failed with ${readResponse.status}`);
   assert(readBody.snapshot?.version === 1, "Snapshot fetch did not return persisted version 1");
+  await assertSpectatorSnapshot(fetchWithTimeout, baseUrl, created.gameId, 1);
 
   return {
     gameId: created.gameId,
@@ -240,6 +242,7 @@ async function fetchPersistedSnapshot(baseUrl, gameId, token) {
   const body = await readJson(response);
   assert(response.status === 200, `Restart snapshot fetch failed with ${response.status}`);
   assert(body.snapshot?.version === 1, "Restart did not preserve the accepted action");
+  await assertSpectatorSnapshot(fetchWithTimeout, baseUrl, gameId, 1);
 }
 
 async function withServer(port, callback) {

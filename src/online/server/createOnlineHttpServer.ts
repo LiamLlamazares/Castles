@@ -16,13 +16,13 @@ import { OnlineReject } from "../types";
 import {
   OnlineClientMessage,
   validateClientMessage,
+  validateOnlineGameId,
   validateOnlineGameSetup,
 } from "../validation";
 
-interface OnlineConnection {
-  gameId: string;
-  token: string;
-}
+type OnlineConnection =
+  | { role: "player"; gameId: string; token: string }
+  | { role: "spectator"; gameId: string };
 
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
@@ -79,8 +79,27 @@ function parseMessage(data: RawData): unknown {
   return JSON.parse(text);
 }
 
+function isLoopbackAddress(address: string | undefined): boolean {
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
+function lastHeaderValue(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const values = raw?.split(",").map((part) => part.trim()).filter(Boolean) ?? [];
+  return values.at(-1) ?? null;
+}
+
+function getTrustedForwardedClient(headers: http.IncomingHttpHeaders, remoteAddress: string | undefined): string | null {
+  if (!isLoopbackAddress(remoteAddress)) return null;
+  return lastHeaderValue(headers["x-forwarded-for"]) ?? lastHeaderValue(headers["x-real-ip"]);
+}
+
 function getClientKey(req: Request): string {
-  return req.ip || req.socket.remoteAddress || "unknown";
+  return getTrustedForwardedClient(req.headers, req.socket.remoteAddress) ?? req.ip ?? req.socket.remoteAddress ?? "unknown";
+}
+
+function getSocketClientKey(req: http.IncomingMessage): string {
+  return getTrustedForwardedClient(req.headers, req.socket.remoteAddress) ?? req.socket.remoteAddress ?? "unknown";
 }
 
 function getBearerToken(header: unknown): string | null {
@@ -96,12 +115,14 @@ function setOnlineNoStoreHeaders(res: Response): void {
 
 export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const app = express();
+  app.set("trust proxy", "loopback");
   const service = options.service ?? new OnlineGameService({ now: options.now });
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
   const connections = new Map<WebSocket, OnlineConnection>();
   const actionQueues = new Map<string, Promise<void>>();
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
+  const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
 
   const enqueueGameAction = (gameId: string, operation: () => Promise<void>): Promise<void> => {
@@ -331,6 +352,54 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
   });
 
+  app.get("/api/online/games/:gameId/spectator", async (req, res) => {
+    const gameId = validateOnlineGameId(req.params.gameId, "spectator.gameId");
+    if (!gameId.ok) {
+      res.status(400).json({ error: gameId.error });
+      return;
+    }
+
+    if (!spectatorSnapshotLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many spectator snapshots have been requested from this client. Try again shortly.",
+        },
+      });
+      return;
+    }
+
+    await enqueueGameAction(gameId.value, async () => {
+      const room = service.getRoom(gameId.value);
+      if (!room) {
+        res.status(404).json({
+          error: {
+            code: "not_found",
+            message: "No online game was found for that id.",
+          },
+        });
+        return;
+      }
+
+      const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
+      if (!timeout.ok) {
+        res.status(503).json({
+          error: timeout.error,
+          snapshot: timeout.snapshot,
+        });
+        return;
+      }
+      if (timeout.timeout) {
+        broadcastSnapshot(gameId.value);
+      }
+
+      res.json({
+        role: "spectator",
+        snapshot: room.getSnapshot(),
+      });
+    });
+  });
+
   const broadcastSnapshot = (gameId: string) => {
     const room = service.getRoom(gameId);
     if (!room) return;
@@ -386,7 +455,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
 
       await enqueueGameAction(connection.gameId, async () => {
-        const room = service.getRoomForToken(connection.gameId, connection.token);
+        const room =
+          connection.role === "player"
+            ? service.getRoomForToken(connection.gameId, connection.token)
+            : service.getRoom(connection.gameId);
         if (!room) {
           sendSocketError(socket, {
             code: "not_found",
@@ -437,7 +509,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
-        connections.set(socket, { gameId: message.gameId, token: message.token });
+        connections.set(socket, { role: "player", gameId: message.gameId, token: message.token });
         sendJson(socket, {
           type: "joined",
           color: room.authenticate(message.token),
@@ -450,9 +522,42 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
+    if (message.type === "spectate") {
+      await enqueueGameAction(message.gameId, async () => {
+        const room = service.getRoom(message.gameId);
+        if (!room) {
+          sendSocketError(socket, {
+            code: "not_found",
+            message: "No online game was found for that id.",
+          });
+          return;
+        }
+
+        const timeout = await adjudicateTimeoutForRoom(message.gameId, room);
+        if (!timeout.ok) {
+          sendJson(socket, {
+            type: "error",
+            error: timeout.error,
+            snapshot: timeout.snapshot,
+          });
+          return;
+        }
+
+        connections.set(socket, { role: "spectator", gameId: message.gameId });
+        sendJson(socket, {
+          type: "spectating",
+          snapshot: room.getSnapshot(),
+        });
+        if (timeout.timeout) {
+          broadcastSnapshot(message.gameId);
+        }
+      });
+      return;
+    }
+
     if (message.type === "action") {
       const connection = connections.get(socket);
-      if (!connection) {
+      if (!connection || connection.role !== "player") {
         sendSocketError(socket, {
           code: "not_joined",
           message: "Join an online game before sending actions.",
@@ -464,6 +569,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         const currentConnection = connections.get(socket);
         if (
           !currentConnection ||
+          currentConnection.role !== "player" ||
           currentConnection.gameId !== connection.gameId ||
           currentConnection.token !== connection.token
         ) {
@@ -569,7 +675,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   };
 
   wss.on("connection", (socket, req) => {
-    const clientKey = req.socket.remoteAddress ?? "unknown";
+    const clientKey = getSocketClientKey(req);
 
     socket.on("message", (data) => {
       handleClientMessage(socket, data, clientKey).catch((error) => {

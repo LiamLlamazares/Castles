@@ -98,6 +98,20 @@ describe("ControlPanel", () => {
     expect(screen.getByRole("button", { name: "New Game" })).not.toBeDisabled();
   });
 
+  it("disables play controls in read-only spectator mode", () => {
+    render(
+      <ControlPanel
+        {...baseProps}
+        isReadOnly
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Pass" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Resign" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Share" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "New Game" })).not.toBeDisabled();
+  });
+
   it("can relabel the share control for online invites", () => {
     const onShare = vi.fn();
     render(

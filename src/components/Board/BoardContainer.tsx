@@ -53,8 +53,10 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
       isPledgeSpot,
       board,
       movingPiece,
-      winner
+      winner,
+      onlineSession
   } = gameState;
+  const isReadOnly = onlineSession?.role === "spectator";
 
   const {
       handlePieceClick,
@@ -87,6 +89,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
     activeAbility: controlledActiveAbility,
     setActiveAbility: onAbilitySelect,
     onEngineHexClick,
+    isReadOnly,
     board,
     gameState // Context state aligns with GameState interface
   });
@@ -99,14 +102,14 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
   const emptyOverlaySet = useMemo(() => new Set<string>(), []);
 
   const abilityTargetSet = useMemo(() => {
-    if (!activeAbility || !movingPiece) return emptyOverlaySet;
+    if (isReadOnly || !activeAbility || !movingPiece) return emptyOverlaySet;
 
     return new Set(
       AbilitySystem.getValidTargets(movingPiece, activeAbility, gameState)
         .filter((hex) => boardHexKeySet.has(hex.getKey()))
         .map((hex) => hex.getKey())
     );
-  }, [activeAbility, boardHexKeySet, emptyOverlaySet, gameState, movingPiece]);
+  }, [activeAbility, boardHexKeySet, emptyOverlaySet, gameState, isReadOnly, movingPiece]);
 
   // Notify parent of active ability changes if needed (for AbilityBar)
   React.useEffect(() => {
@@ -123,8 +126,8 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
   }, [tooltip]);
 
   const isVisiblePledgeTarget = React.useCallback(
-    (hex: Hex): boolean => isPledgeTarget(hex) || isPledgeSpot(hex),
-    [isPledgeTarget, isPledgeSpot]
+    (hex: Hex): boolean => !isReadOnly && (isPledgeTarget(hex) || isPledgeSpot(hex)),
+    [isReadOnly, isPledgeTarget, isPledgeSpot]
   );
 
   const handlePieceClickWrapper = React.useCallback((piece: Piece) => {

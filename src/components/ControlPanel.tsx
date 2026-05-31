@@ -32,6 +32,7 @@ interface ControlPanelProps {
   timeControl?: { initial: number, increment: number };
   onlineClock?: OnlineClockStateDTO;
   isOnline?: boolean;
+  isReadOnly?: boolean;
   viewNodeId?: string | null;
   victoryPoints?: { w: number, b: number };
 }
@@ -194,12 +195,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   timeControl,
   onlineClock,
   isOnline = false,
+  isReadOnly = false,
   viewNodeId,
   victoryPoints,
 }) => {
   // Calculate phase index within current player's turn (0-4)
   const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
   const isGameOver = !!winner;
+  const arePlayControlsDisabled = isGameOver || isReadOnly;
 
   return (
     <div className="game-panel">
@@ -266,11 +269,11 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           className="control-button pass"
           onClick={onPass}
           title="Pass Turn (Space)"
-          disabled={isGameOver}
+          disabled={arePlayControlsDisabled}
         >
           Pass
         </button>
-        <button className="control-button resign" onClick={onResign} disabled={isGameOver}>
+        <button className="control-button resign" onClick={onResign} disabled={arePlayControlsDisabled}>
           Resign
         </button>
         <button className="control-button share" onClick={onShare} title={shareTitle}>

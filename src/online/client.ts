@@ -7,6 +7,10 @@ export interface OnlineJoinParams {
   token: string;
 }
 
+export interface OnlineSpectatorParams {
+  gameId: string;
+}
+
 interface OnlineJoinStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -36,6 +40,29 @@ export function parseOnlineJoinParams(urlText: string): OnlineJoinParams | null 
   }
 
   return { gameId, seat, token };
+}
+
+export function parseOnlineSpectatorParams(urlText: string): OnlineSpectatorParams | null {
+  const url = new URL(urlText);
+  const gameId = url.searchParams.get("onlineGame");
+  const view = url.searchParams.get("view");
+
+  if (!gameId || view !== "spectator") {
+    return null;
+  }
+
+  return { gameId };
+}
+
+export function buildSpectatorUrl(originOrUrl: string, gameId: string): string {
+  const url = new URL(originOrUrl);
+  url.searchParams.delete("seat");
+  url.searchParams.delete("token");
+  url.searchParams.delete("pgn");
+  url.searchParams.delete("game");
+  url.searchParams.set("onlineGame", gameId);
+  url.searchParams.set("view", "spectator");
+  return url.toString();
 }
 
 export function rememberOnlineJoinParams(
@@ -192,6 +219,22 @@ export async function fetchOnlineSnapshot(
 
   if (!response.ok) {
     throw new Error(`Could not fetch online game (${response.status})`);
+  }
+
+  const body = await response.json();
+  return body.snapshot;
+}
+
+export async function fetchOnlineSpectatorSnapshot(
+  gameId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameSnapshotDTO> {
+  const response = await fetchImpl(
+    `/api/online/games/${encodeURIComponent(gameId)}/spectator`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch spectator game (${response.status})`);
   }
 
   const body = await response.json();

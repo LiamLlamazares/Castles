@@ -46,10 +46,57 @@ async function listen(server: { listen: (port: number, callback: () => void) => 
   return (server.address() as AddressInfo).port;
 }
 
-function nextSocketMessage(socket: WebSocket): Promise<any> {
+function nextSocketMessage(socket: WebSocket, description = "WebSocket message"): Promise<any> {
   return new Promise((resolve, reject) => {
-    socket.once("message", (data) => resolve(JSON.parse(data.toString("utf8"))));
-    socket.once("error", reject);
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out waiting for ${description}`));
+    }, 3_000);
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.off("message", onMessage);
+      socket.off("error", onError);
+    };
+    const onMessage = (data: WebSocket.RawData) => {
+      cleanup();
+      try {
+        resolve(JSON.parse(data.toString("utf8")));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    socket.once("message", onMessage);
+    socket.once("error", onError);
+  });
+}
+
+function waitForSocketOpen(socket: WebSocket): Promise<void> {
+  if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for WebSocket open"));
+    }, 3_000);
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.off("open", onOpen);
+      socket.off("error", onError);
+    };
+    const onOpen = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    socket.once("open", onOpen);
+    socket.once("error", onError);
   });
 }
 
@@ -136,6 +183,100 @@ describe("createOnlineHttpServer", () => {
 
     expect(snapshotResponse.status).toBe(404);
     expect(snapshotResponse.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("serves read-only spectator snapshots without player tokens", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_spectator_rest",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+
+    const spectatorResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}/spectator`
+    );
+    const spectatorBody = await spectatorResponse.json();
+
+    expect(spectatorResponse.status).toBe(200);
+    expect(spectatorResponse.headers.get("cache-control")).toContain("no-store");
+    expect(spectatorBody).toMatchObject({
+      role: "spectator",
+      snapshot: {
+        gameId: "game_spectator_rest",
+        version: 0,
+      },
+    });
+  });
+
+  it("rejects malformed spectator game ids before queueing a lookup", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const spectatorResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${"g".repeat(129)}/spectator`
+    );
+    const spectatorBody = await spectatorResponse.json();
+
+    expect(spectatorResponse.status).toBe(400);
+    expect(spectatorBody.error).toMatchObject({
+      code: "bad_request",
+    });
+  });
+
+  it("rate limits public spectator snapshot reads", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_spectator_limited",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const spectatorUrl = `http://127.0.0.1:${port}/api/online/games/${created.gameId}/spectator`;
+
+    for (let i = 0; i < 120; i += 1) {
+      const response = await fetch(spectatorUrl, {
+        headers: { "x-forwarded-for": "198.51.100.99, 203.0.113.10" },
+      });
+      expect(response.status).toBe(200);
+    }
+    const limitedResponse = await fetch(spectatorUrl, {
+      headers: { "x-forwarded-for": "203.0.113.10" },
+    });
+    const otherClientResponse = await fetch(spectatorUrl, {
+      headers: { "x-forwarded-for": "203.0.113.11" },
+    });
+    const spoofedOnlyResponse = await fetch(spectatorUrl, {
+      headers: { "x-forwarded-for": "198.51.100.99" },
+    });
+
+    expect(limitedResponse.status).toBe(429);
+    expect(otherClientResponse.status).toBe(200);
+    expect(spoofedOnlyResponse.status).toBe(200);
   });
 
   it("reports deployment and store readiness metadata in health checks", async () => {
@@ -269,6 +410,141 @@ describe("createOnlineHttpServer", () => {
     });
 
     socket.close();
+  });
+
+  it("allows websocket spectators to watch broadcasts but not submit actions", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_spectator_ws",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const spectatorSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    let whiteSocket: WebSocket | undefined;
+
+    try {
+      spectatorSocket.on("open", () => {
+        spectatorSocket.send(JSON.stringify({ type: "spectate", gameId: created.gameId }));
+      });
+      await expect(nextSocketMessage(spectatorSocket, "spectator join")).resolves.toMatchObject({
+        type: "spectating",
+        snapshot: { version: 0 },
+      });
+
+      spectatorSocket.send(
+        JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } })
+      );
+      await expect(nextSocketMessage(spectatorSocket, "spectator action rejection")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "not_joined" },
+      });
+
+      const playerSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      whiteSocket = playerSocket;
+      playerSocket.on("open", () => {
+        playerSocket.send(
+          JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+        );
+      });
+      await expect(nextSocketMessage(playerSocket, "white join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      const spectatorSnapshot = nextSocketMessage(spectatorSocket, "spectator broadcast");
+      playerSocket.send(
+        JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } })
+      );
+
+      await expect(nextSocketMessage(playerSocket, "white action broadcast")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+      await expect(spectatorSnapshot).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+    } finally {
+      spectatorSocket.close();
+      whiteSocket?.close();
+    }
+  });
+
+  it("rate limits websocket messages by forwarded client address behind the proxy", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const limitedSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": "198.51.100.99, 203.0.113.20" },
+    });
+    const sameRealClientSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": "203.0.113.20" },
+    });
+    const otherClientSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": "203.0.113.21" },
+    });
+    const spoofedOnlySocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": "198.51.100.99" },
+    });
+
+    try {
+      await Promise.all([
+        waitForSocketOpen(limitedSocket),
+        waitForSocketOpen(sameRealClientSocket),
+        waitForSocketOpen(otherClientSocket),
+        waitForSocketOpen(spoofedOnlySocket),
+      ]);
+
+      for (let i = 0; i < 120; i += 1) {
+        limitedSocket.send(JSON.stringify({ type: "ping", clientTime: i }));
+        await expect(nextSocketMessage(limitedSocket, `limited ping ${i}`)).resolves.toMatchObject({
+          type: "pong",
+          clientTime: i,
+        });
+      }
+
+      limitedSocket.send(JSON.stringify({ type: "ping", clientTime: 120 }));
+      await expect(nextSocketMessage(limitedSocket, "limited websocket rate limit")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "rate_limited" },
+      });
+
+      sameRealClientSocket.send(JSON.stringify({ type: "ping", clientTime: 1 }));
+      await expect(nextSocketMessage(sameRealClientSocket, "same real client rate limit")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "rate_limited" },
+      });
+
+      otherClientSocket.send(JSON.stringify({ type: "ping", clientTime: 1 }));
+      await expect(nextSocketMessage(otherClientSocket, "other client ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 1,
+      });
+
+      spoofedOnlySocket.send(JSON.stringify({ type: "ping", clientTime: 1 }));
+      await expect(nextSocketMessage(spoofedOnlySocket, "spoofed-only client ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 1,
+      });
+    } finally {
+      limitedSocket.close();
+      sameRealClientSocket.close();
+      otherClientSocket.close();
+      spoofedOnlySocket.close();
+    }
   });
 
   it("rolls back an accepted websocket action when persistence fails", async () => {

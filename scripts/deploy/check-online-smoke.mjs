@@ -2,6 +2,7 @@
 import { createRequire } from "node:module";
 import {
   assert,
+  assertSpectatorSnapshot,
   buildWebSocketUrl,
   createFetchWithTimeout,
   createWebSocketWaiters,
@@ -78,6 +79,7 @@ async function main() {
   const readBody = await readJson(readResponse);
   assert(readResponse.status === 200, `Snapshot fetch failed with ${readResponse.status}`);
   assert(readBody.snapshot?.version === 1, "Snapshot fetch did not return persisted version 1");
+  await assertSpectatorSnapshot(fetchWithTimeout, baseUrl, created.gameId, 1);
 
   console.log(`Smoke check passed for ${baseUrl} using game ${created.gameId}`);
 }

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
+  buildSpectatorUrl,
   copyOnlineInviteUrl,
+  fetchOnlineSpectatorSnapshot,
   formatOnlineGameResult,
   parseOnlineJoinParams,
+  parseOnlineSpectatorParams,
   rememberOnlineOpponentInviteUrl,
   removeOnlineTokenFromUrl,
   resolveOnlineOpponentInviteUrl,
@@ -34,6 +37,15 @@ describe("online client helpers", () => {
   it("builds local websocket URLs from http origins", () => {
     expect(buildOnlineWebSocketUrl("http://127.0.0.1:3000")).toBe(
       "ws://127.0.0.1:3000/ws"
+    );
+  });
+
+  it("parses and builds spectator URLs without player tokens", () => {
+    expect(
+      parseOnlineSpectatorParams("https://castles.example/?onlineGame=game_123&view=spectator")
+    ).toEqual({ gameId: "game_123" });
+    expect(buildSpectatorUrl("https://castles.example/?onlineGame=game_123&seat=w", "game_123")).toBe(
+      "https://castles.example/?onlineGame=game_123&view=spectator"
     );
   });
 
@@ -132,5 +144,19 @@ describe("online client helpers", () => {
     expect(clipboard.writeText).toHaveBeenCalledWith(
       "https://castles.example/?onlineGame=g&seat=b&token=t"
     );
+  });
+
+  it("fetches spectator snapshots without authorization headers", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ snapshot: { gameId: "game_123", version: 2 } }),
+    });
+
+    await expect(fetchOnlineSpectatorSnapshot("game_123", fetchImpl as any)).resolves.toMatchObject({
+      gameId: "game_123",
+      version: 2,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games/game_123/spectator");
   });
 });

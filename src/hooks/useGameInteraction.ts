@@ -37,7 +37,10 @@ export const useGameInteraction = ({
       return;
     }
 
-    if (onlineSession && onlineSession.playerColor !== currentPlayer) {
+    if (
+      onlineSession &&
+      (onlineSession.role !== "player" || onlineSession.playerColor !== currentPlayer)
+    ) {
       return;
     }
 

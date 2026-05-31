@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import GameBoard from "../Game";
 import { Hex } from "../../Classes/Entities/Hex";
 import { PieceFactory } from "../../Classes/Entities/PieceFactory";
+import { PGNService } from "../../Classes/Services/PGNService";
 import { PieceType } from "../../Constants";
+import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
 import { createM5L2 } from "../../tutorial/lessons/m5_02_wolf";
 import { createM5L5 } from "../../tutorial/lessons/m5_05_wizard";
 import { ThemeProvider } from "../../contexts/ThemeContext";
@@ -44,13 +46,16 @@ const getHexPolygon = (
 
 describe("Game ability integration", () => {
   beforeEach(() => {
+    localStorage.clear();
     localStorage.setItem("hasSeenTooltipHint", "true");
     vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
     vi.spyOn(console, "log").mockImplementation(() => {});
+    window.history.replaceState({}, "", "/");
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/");
   });
 
   test("Teleport selected from the HUD is used by board clicks", async () => {
@@ -148,5 +153,34 @@ describe("Game ability integration", () => {
       expect(text).toContain("AuraBonus");
       expect(text).not.toContain("RiverBonus");
     });
+  });
+
+  test("online sessions ignore local shared-game and autosave restore", () => {
+    const savedPgn = PGNService.generatePGN(
+      getStartingBoard(5),
+      getStartingPieces(5),
+      [],
+      []
+    );
+    localStorage.setItem("castles_autosave", savedPgn);
+    window.history.replaceState({}, "", `/?pgn=${encodeURIComponent(savedPgn)}`);
+    const onLoadGame = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_spectator",
+            role: "spectator",
+            version: 0,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_spectator&view=spectator",
+          }}
+          onLoadGame={onLoadGame}
+        />
+      </ThemeProvider>
+    );
+
+    expect(onLoadGame).not.toHaveBeenCalled();
   });
 });
