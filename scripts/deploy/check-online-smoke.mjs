@@ -2,6 +2,7 @@
 import { createRequire } from "node:module";
 import {
   assert,
+  assertDefaultOnlineClock,
   assertSpectatorSnapshot,
   buildWebSocketUrl,
   createFetchWithTimeout,
@@ -63,12 +64,14 @@ async function main() {
     const joinedMessage = await joined;
     assert(joinedMessage.type === "joined", "WebSocket did not join the created game");
     assert(joinedMessage.snapshot?.version === 0, "Created game did not start at version 0");
+    assertDefaultOnlineClock(joinedMessage.snapshot, "Joined snapshot");
 
     const snapshot = nextSocketMessage(socket, "post-action snapshot");
     socket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } }));
     const snapshotMessage = await snapshot;
     assert(snapshotMessage.type === "snapshot", "Pass action did not produce a snapshot");
     assert(snapshotMessage.snapshot?.version === 1, "Pass action did not advance to version 1");
+    assertDefaultOnlineClock(snapshotMessage.snapshot, "Post-action snapshot");
   } finally {
     socket.close();
   }
@@ -79,6 +82,7 @@ async function main() {
   const readBody = await readJson(readResponse);
   assert(readResponse.status === 200, `Snapshot fetch failed with ${readResponse.status}`);
   assert(readBody.snapshot?.version === 1, "Snapshot fetch did not return persisted version 1");
+  assertDefaultOnlineClock(readBody.snapshot, "Persisted snapshot");
   await assertSpectatorSnapshot(fetchWithTimeout, baseUrl, created.gameId, 1);
 
   console.log(`Smoke check passed for ${baseUrl} using game ${created.gameId}`);

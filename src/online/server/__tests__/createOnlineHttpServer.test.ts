@@ -336,6 +336,36 @@ describe("createOnlineHttpServer", () => {
     expect(body.black.url).toContain("seat=b");
   });
 
+  it("adds the default online clock when a create request omits time control", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+    });
+    servers.push(server);
+
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: { authorization: `Bearer ${created.white.token}` } }
+    );
+    const snapshotBody = await snapshotResponse.json();
+
+    expect(snapshotResponse.status).toBe(200);
+    expect(snapshotBody.snapshot.setup.timeControl).toEqual({ initial: 20, increment: 20 });
+    expect(snapshotBody.snapshot.clock).toMatchObject({
+      timeControl: { initialMs: 1_200_000, incrementMs: 20_000 },
+      activeColor: "w",
+    });
+    expect(snapshotBody.snapshot.clock.remainingMs.w).toBeGreaterThan(1_199_000);
+    expect(snapshotBody.snapshot.clock.remainingMs.b).toBe(1_200_000);
+  });
+
   it("rejects structurally invalid setup data with a 400", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",

@@ -24,6 +24,8 @@ type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
   | { role: "spectator"; gameId: string };
 
+const DEFAULT_ONLINE_TIME_CONTROL = { initial: 20, increment: 20 } as const;
+
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
@@ -284,7 +286,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
-    const created = service.createGame(setup.value, {
+    const normalizedSetup = setup.value.timeControl
+      ? setup.value
+      : {
+          ...setup.value,
+          timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL },
+        };
+
+    const created = service.createGame(normalizedSetup, {
       publicBaseUrl: options.publicBaseUrl,
     });
     const room = service.getRoom(created.gameId);

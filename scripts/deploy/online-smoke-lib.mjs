@@ -46,6 +46,25 @@ export async function assertSpectatorSnapshot(
     body.snapshot?.version === expectedVersion,
     `Spectator snapshot returned version ${body.snapshot?.version}, expected ${expectedVersion}`
   );
+  assertDefaultOnlineClock(body.snapshot, "Spectator snapshot");
+}
+
+export function assertDefaultOnlineClock(snapshot, description = "Snapshot") {
+  assert(snapshot?.setup?.timeControl?.initial === 20, `${description} did not use 20 minute initial time`);
+  assert(snapshot?.setup?.timeControl?.increment === 20, `${description} did not use 20 second increment`);
+  assert(
+    snapshot?.clock?.timeControl?.initialMs === 1_200_000,
+    `${description} did not include the default initial clock`
+  );
+  assert(
+    snapshot?.clock?.timeControl?.incrementMs === 20_000,
+    `${description} did not include the default increment clock`
+  );
+  assert(
+    typeof snapshot.clock.remainingMs?.w === "number" &&
+      typeof snapshot.clock.remainingMs?.b === "number",
+    `${description} did not include both remaining clock values`
+  );
 }
 
 export function createWebSocketWaiters(socketTimeoutMs) {
