@@ -13,8 +13,16 @@ interface OnlineJoinStorage {
   removeItem(key: string): void;
 }
 
+interface ClipboardWriter {
+  writeText(text: string): Promise<void>;
+}
+
 function storageKey(gameId: string, seat: "w" | "b"): string {
   return `castles_online_join:${gameId}:${seat}`;
+}
+
+function opponentInviteStorageKey(gameId: string): string {
+  return `castles_online_opponent_invite:${gameId}`;
 }
 
 export function parseOnlineJoinParams(urlText: string): OnlineJoinParams | null {
@@ -35,6 +43,21 @@ export function rememberOnlineJoinParams(
   storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
 ): void {
   storage?.setItem(storageKey(join.gameId, join.seat), join.token);
+}
+
+export function rememberOnlineOpponentInviteUrl(
+  gameId: string,
+  inviteUrl: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.setItem(opponentInviteStorageKey(gameId), inviteUrl);
+}
+
+export function resolveOnlineOpponentInviteUrl(
+  gameId: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): string | null {
+  return storage?.getItem(opponentInviteStorageKey(gameId)) ?? null;
 }
 
 export function resolveOnlineJoinParams(
@@ -126,6 +149,18 @@ export function formatOnlineGameResult(result: OnlineGameResultDTO): string {
     default:
       return `${winner} wins`;
   }
+}
+
+export async function copyOnlineInviteUrl(
+  inviteUrl: string,
+  clipboard: ClipboardWriter | undefined =
+    typeof navigator === "undefined" ? undefined : navigator.clipboard
+): Promise<void> {
+  if (!clipboard) {
+    throw new Error("Clipboard API is not available.");
+  }
+
+  await clipboard.writeText(inviteUrl);
 }
 
 export async function createOnlineGame(

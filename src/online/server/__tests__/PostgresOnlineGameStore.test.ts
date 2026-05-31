@@ -41,6 +41,16 @@ function createGameCreatedEvent(
 }
 
 describe("PostgresOnlineGameStore", () => {
+  it("closes its database connection when a closer is provided", async () => {
+    const client = new FakePostgresClient();
+    const close = vi.fn().mockResolvedValue(undefined);
+    const store = new PostgresOnlineGameStore({ queryable: client, close });
+
+    await store.close();
+
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("creates the online event schema during readiness checks", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });

@@ -22,6 +22,8 @@ interface ControlPanelProps {
   onResign: () => void;
   onNewGame: () => void;
   onShare?: () => void;
+  shareLabel?: string;
+  shareTitle?: string;
   moveHistory: MoveRecord[];
   moveTree?: MoveTree;
   onJumpToNode?: (nodeId: string) => void;
@@ -182,6 +184,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onResign,
   onNewGame,
   onShare,
+  shareLabel = "Share",
+  shareTitle = "Share Game URL",
   moveHistory,
   moveTree,
   onJumpToNode,
@@ -269,8 +273,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <button className="control-button resign" onClick={onResign} disabled={isGameOver}>
           Resign
         </button>
-        <button className="control-button share" onClick={onShare} title="Share Game URL">
-          Share
+        <button className="control-button share" onClick={onShare} title={shareTitle}>
+          {shareLabel}
         </button>
         <button 
           className="control-button new-game" 

@@ -9,4 +9,5 @@ export interface OnlineGameStore {
   load(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameRoomRecord[]>;
   appendEvent(event: OnlineGameEvent): Promise<void>;
   checkReady(): Promise<boolean>;
+  close(): Promise<void>;
 }

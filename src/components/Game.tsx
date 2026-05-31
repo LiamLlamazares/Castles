@@ -25,7 +25,7 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
 import { PieceTheme } from "../Constants";
 import type { OnlineClientSession } from "../online/types";
-import { formatOnlineGameResult } from "../online/client";
+import { copyOnlineInviteUrl, formatOnlineGameResult } from "../online/client";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import PromotionModal from "./PromotionModal";
 import "../css/Board.css";
@@ -139,6 +139,19 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
   // Persistence Hooks
   const { shareGame, getGameFromUrl, loadFromLocalStorage, clearUrlParams, clearSave } = usePersistence(getPGN, loadPGN, moveTree);
+  const handleShare = React.useCallback(() => {
+    if (!onlineSession?.opponentInviteUrl) {
+      shareGame();
+      return;
+    }
+
+    copyOnlineInviteUrl(onlineSession.opponentInviteUrl)
+      .then(() => alert("Invite link copied to clipboard."))
+      .catch((error) => {
+        console.error("Failed to copy online invite link", error);
+        alert("Could not copy the invite link. Try again from a secure browser session.");
+      });
+  }, [onlineSession?.opponentInviteUrl, shareGame]);
 
   // Restore game logic from old Game.tsx
   React.useEffect(() => {
@@ -414,7 +427,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
               onResign();
           }}
           onNewGame={handleNewGame}
-          onShare={shareGame}
+          onShare={handleShare}
+          shareLabel={onlineSession?.opponentInviteUrl ? "Copy Invite" : "Share"}
+          shareTitle={onlineSession?.opponentInviteUrl ? "Copy opponent invite link" : "Share Game URL"}
           moveHistory={moveHistory || []}
           moveTree={moveTree}
           onJumpToNode={jumpToNode}

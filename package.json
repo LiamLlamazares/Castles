@@ -17,6 +17,7 @@
     "server:dev": "tsx server/index.ts",
     "server:build": "tsc -p tsconfig.server.json",
     "server:start": "node server-build/server/index.js",
+    "online:smoke:local": "node scripts/deploy/check-local-online-restart-smoke.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "audit": "npm audit --audit-level=low"

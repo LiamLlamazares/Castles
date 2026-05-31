@@ -14,15 +14,18 @@ interface PostgresQueryable {
 export interface PostgresOnlineGameStoreOptions {
   connectionString?: string;
   queryable?: PostgresQueryable;
+  close?: () => Promise<void>;
 }
 
 export class PostgresOnlineGameStore implements OnlineGameStore {
   private readonly queryable: PostgresQueryable;
+  private readonly closeConnection?: () => Promise<void>;
   private schemaReady?: Promise<void>;
 
   constructor(options: PostgresOnlineGameStoreOptions) {
     if (options.queryable) {
       this.queryable = options.queryable;
+      this.closeConnection = options.close;
       return;
     }
 
@@ -30,7 +33,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       throw new Error("PostgresOnlineGameStore requires a connectionString or queryable.");
     }
 
-    this.queryable = new Pool({ connectionString: options.connectionString });
+    const pool = new Pool({ connectionString: options.connectionString });
+    this.queryable = pool;
+    this.closeConnection = () => pool.end();
   }
 
   async load(options: OnlineGameStoreLoadOptions = {}): Promise<OnlineGameRoomRecord[]> {
@@ -67,6 +72,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     await this.ensureSchema();
     await this.queryable.query("SELECT 1");
     return true;
+  }
+
+  async close(): Promise<void> {
+    await this.closeConnection?.();
   }
 
   private validate(event: OnlineGameEvent): OnlineGameEvent {

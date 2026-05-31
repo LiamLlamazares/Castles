@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
+  copyOnlineInviteUrl,
   formatOnlineGameResult,
   parseOnlineJoinParams,
+  rememberOnlineOpponentInviteUrl,
   removeOnlineTokenFromUrl,
+  resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
@@ -63,6 +66,26 @@ describe("online client helpers", () => {
     ).toEqual(join);
   });
 
+  it("stores creator opponent invites for same-session reloads", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+
+    rememberOnlineOpponentInviteUrl(
+      "game_123",
+      "https://castles.example/?onlineGame=game_123&seat=b&token=black-secret",
+      storageAdapter
+    );
+
+    expect(resolveOnlineOpponentInviteUrl("game_123", storageAdapter)).toBe(
+      "https://castles.example/?onlineGame=game_123&seat=b&token=black-secret"
+    );
+    expect(resolveOnlineOpponentInviteUrl("game_other", storageAdapter)).toBeNull();
+  });
+
   it("ignores stale or duplicate snapshot versions during reconnect resync", () => {
     expect(shouldApplyOnlineSnapshotVersion(null, 0)).toBe(true);
     expect(shouldApplyOnlineSnapshotVersion(0, 0)).toBe(false);
@@ -96,6 +119,18 @@ describe("online client helpers", () => {
     );
     expect(formatOnlineGameResult({ winner: "w", reason: "resignation" })).toBe(
       "White wins by resignation"
+    );
+  });
+
+  it("copies online invite links to the supplied clipboard", async () => {
+    const clipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await copyOnlineInviteUrl("https://castles.example/?onlineGame=g&seat=b&token=t", clipboard);
+
+    expect(clipboard.writeText).toHaveBeenCalledWith(
+      "https://castles.example/?onlineGame=g&seat=b&token=t"
     );
   });
 });

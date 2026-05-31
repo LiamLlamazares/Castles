@@ -74,7 +74,9 @@ Implemented for private beta:
 - terminal game results are latched so no later action can sneak through,
 - reconnect attempts with exponential backoff, heartbeat pings, and REST snapshot resync,
 - server-authoritative clocks with timeout adjudication and reconnect-safe clock snapshots,
-- PostgreSQL event storage for the remote beta.
+- PostgreSQL event storage for the remote beta,
+- creator-side invite copying from the in-game Share button instead of a browser prompt,
+- local PostgreSQL restart smoke tooling that verifies create, join, action persistence, shutdown, restart, and reload.
 
 ## Known Constraints
 
@@ -87,7 +89,8 @@ This is not ready for a public lobby or multiple server replicas.
 
 ## Next Phases
 
-1. Remote PostgreSQL beta: deploy one fresh instance with `ONLINE_STORE_BACKEND=postgres` and verify create/join/play/restart recovery.
-2. Spectators and archive: create read-only links, archived game views, and PGN/export UX.
-3. Public service features: lobby, accounts, ratings, moderation, observability, and anti-cheat.
-4. Multi-instance coordination: database transactions/advisory locks, shared pub/sub, rolling deploys, and operational dashboards.
+1. Local PostgreSQL rehearsal: run the local restart smoke check against a real local database before asking the server owner to pull anything.
+2. Remote PostgreSQL beta: deploy one reviewed commit with `ONLINE_STORE_BACKEND=postgres` and verify create/join/play/restart recovery.
+3. Spectators and archive: create read-only links, archived game views, and PGN/export UX.
+4. Public service features: lobby, accounts, ratings, moderation, observability, and anti-cheat.
+5. Multi-instance coordination: database transactions/advisory locks, shared pub/sub, rolling deploys, and operational dashboards.

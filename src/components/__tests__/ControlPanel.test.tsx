@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import ControlPanel from "../ControlPanel";
 
 describe("ControlPanel", () => {
@@ -96,5 +96,24 @@ describe("ControlPanel", () => {
     expect(screen.getByRole("button", { name: "Pass" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Resign" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "New Game" })).not.toBeDisabled();
+  });
+
+  it("can relabel the share control for online invites", () => {
+    const onShare = vi.fn();
+    render(
+      <ControlPanel
+        {...baseProps}
+        onShare={onShare}
+        shareLabel="Copy Invite"
+        shareTitle="Copy opponent invite link"
+      />
+    );
+
+    const shareButton = screen.getByRole("button", { name: "Copy Invite" });
+    expect(shareButton).toHaveAttribute("title", "Copy opponent invite link");
+
+    fireEvent.click(shareButton);
+
+    expect(onShare).toHaveBeenCalledOnce();
   });
 });

@@ -153,6 +153,7 @@ export type OnlineConnectionStatus =
 export interface OnlineClientSession {
   gameId: string;
   playerColor: Color;
+  opponentInviteUrl?: string;
   version: number;
   status: OnlineConnectionStatus;
   lastError?: string;

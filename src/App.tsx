@@ -25,7 +25,9 @@ import {
 import {
   createOnlineGame,
   rememberOnlineJoinParams,
+  rememberOnlineOpponentInviteUrl,
   removeOnlineTokenFromUrl,
+  resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   OnlineJoinParams,
 } from './online/client';
@@ -78,6 +80,9 @@ function App() {
     resolveOnlineJoinParams(window.location.href)
   );
   const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
+  const [onlineOpponentInviteUrl, setOnlineOpponentInviteUrl] = useState<string | null>(() =>
+    onlineJoin?.seat === "w" ? resolveOnlineOpponentInviteUrl(onlineJoin.gameId) : null
+  );
 
   const clearAutosave = () => {
     localStorage.removeItem('castles_autosave');
@@ -108,6 +113,7 @@ function App() {
     clearOnlineUrl();
     setOnlineJoin(null);
     setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
     setView('setup');
   };
 
@@ -138,6 +144,7 @@ function App() {
     clearOnlineUrl();
     setOnlineJoin(null);
     setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
     setView('game');
   };
@@ -168,13 +175,13 @@ function App() {
         })
       );
 
-      window.prompt("Send this invite link to your friend:", created.black.url);
       const whiteJoin = {
         gameId: created.gameId,
         seat: "w" as const,
         token: created.white.token,
       };
       rememberOnlineJoinParams(whiteJoin);
+      rememberOnlineOpponentInviteUrl(created.gameId, created.black.url);
       const whiteUrl = new URL(removeOnlineTokenFromUrl(created.white.url));
       window.history.pushState(
         {},
@@ -182,6 +189,8 @@ function App() {
         `${window.location.pathname}?${whiteUrl.searchParams.toString()}`
       );
       setOnlineJoin(whiteJoin);
+      setOnlineSnapshot(null);
+      setOnlineOpponentInviteUrl(created.black.url);
       setView('game');
     } catch (error) {
       console.error("Failed to create online game", error);
@@ -210,6 +219,7 @@ function App() {
     clearOnlineUrl();
     setOnlineJoin(null);
     setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, sanctuarySettings, initialPoolTypes, isAnalysisMode: true });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
@@ -306,9 +316,10 @@ function App() {
       lastError: onlineConnection.lastError,
       clock: onlineSnapshot.clock,
       result: onlineSnapshot.result,
+      opponentInviteUrl: onlineJoin.seat === "w" ? onlineOpponentInviteUrl ?? undefined : undefined,
       submitAction: onlineConnection.submitAction,
     };
-  }, [onlineJoin, onlineSnapshot, onlineConnection]);
+  }, [onlineJoin, onlineSnapshot, onlineOpponentInviteUrl, onlineConnection]);
 
   const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
@@ -334,6 +345,7 @@ function App() {
     clearOnlineUrl();
     setOnlineJoin(null);
     setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
     setGameKey(prev => prev + 1);
     setView('game');
