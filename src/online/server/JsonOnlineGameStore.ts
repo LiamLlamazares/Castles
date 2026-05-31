@@ -7,17 +7,16 @@ import {
   onlineGameEventsToRecords,
   validateOnlineGameEvent,
 } from "../events";
+import type { OnlineGameStore, OnlineGameStoreLoadOptions } from "./OnlineGameStore";
 
-export interface JsonOnlineGameStoreLoadOptions {
-  onEventError?: (line: number, error: unknown) => void;
-}
+export type JsonOnlineGameStoreLoadOptions = OnlineGameStoreLoadOptions;
 
 interface LoadedOnlineGameEvent {
   event: OnlineGameEvent;
   line: number;
 }
 
-export class JsonOnlineGameStore {
+export class JsonOnlineGameStore implements OnlineGameStore {
   private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly filePath: string) {}

@@ -2,18 +2,17 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import express from "express";
 import { createOnlineHttpServer } from "../src/online/server/createOnlineHttpServer";
-import { JsonOnlineGameStore } from "../src/online/server/JsonOnlineGameStore";
+import { createOnlineGameStoreFromEnv } from "../src/online/server/createOnlineGameStore";
 import { OnlineGameService } from "../src/online/OnlineGameService";
 
 async function main() {
   const port = Number(process.env.PORT ?? 3000);
   const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? `http://localhost:${port}`;
   const staticDir = process.env.CASTLES_STATIC_DIR ?? path.resolve(process.cwd(), "build");
-  const storePath =
-    process.env.ONLINE_STORE_PATH ??
-    path.resolve(process.cwd(), "server-data", "online-game-events.jsonl");
+  const { backend: storeBackend, healthStorePath, store } = createOnlineGameStoreFromEnv(
+    process.env
+  );
 
-  const store = new JsonOnlineGameStore(storePath);
   const records = await store.load({
     onEventError: (line, error) => {
       console.error(`Invalid online event log line ${line}`, error);
@@ -27,7 +26,8 @@ async function main() {
     health: {
       buildId: process.env.BUILD_ID,
       commit: process.env.GIT_COMMIT,
-      storePath,
+      storePath: healthStorePath,
+      storeBackend,
       checkStoreReady: () => store.checkReady(),
     },
   });
@@ -47,7 +47,7 @@ async function main() {
 
   server.listen(port, () => {
     console.log(`Castles online server listening on ${publicBaseUrl}`);
-    console.log(`Persisting online games to ${storePath}`);
+    console.log(`Persisting online games with ${storeBackend} store at ${healthStorePath}`);
   });
 }
 

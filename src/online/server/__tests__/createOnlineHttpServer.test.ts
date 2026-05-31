@@ -144,6 +144,7 @@ describe("createOnlineHttpServer", () => {
       health: {
         buildId: "test-build",
         commit: "abc123",
+        storeBackend: "postgres",
         storePath: "/var/lib/castles/online-game-events.jsonl",
         checkStoreReady: async () => true,
       },
@@ -165,6 +166,7 @@ describe("createOnlineHttpServer", () => {
         eventSchemaVersion: 1,
         store: {
           ok: true,
+          backend: "postgres",
           path: "/var/lib/castles/online-game-events.jsonl",
         },
       },

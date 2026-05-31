@@ -33,6 +33,7 @@ export interface CreateOnlineHttpServerOptions {
     buildId?: string;
     commit?: string;
     storePath?: string;
+    storeBackend?: string;
     checkStoreReady?: () => boolean | Promise<boolean>;
   };
 }
@@ -230,6 +231,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         rulesetVersion: ONLINE_RULESET_VERSION,
         store: {
           ok: storeOk,
+          backend: options.health?.storeBackend ?? "unknown",
           path: options.health?.storePath ?? null,
           error: storeError,
         },

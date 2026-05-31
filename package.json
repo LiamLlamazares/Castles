@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "express": "^5.2.1",
+    "pg": "^8.21.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "ws": "^8.21.0"
@@ -16,6 +17,7 @@
     "server:dev": "tsx server/index.ts",
     "server:build": "tsc -p tsconfig.server.json",
     "server:start": "node server-build/server/index.js",
+    "online:migrate-jsonl-to-postgres": "tsx scripts/migrate-online-jsonl-to-postgres.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "audit": "npm audit --audit-level=low"
@@ -38,6 +40,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/express": "^5.0.6",
     "@types/node": "^22.19.19",
+    "@types/pg": "^8.20.0",
     "@types/react": "^18.3.29",
     "@types/react-dom": "^18.3.7",
     "@types/ws": "^8.18.1",

@@ -63,6 +63,34 @@ fi
 if [ -d /var/lib/castles ]; then
   sudo tar -C / -czf "$backup/var-lib-castles.tgz" var/lib/castles
 fi
+db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env 2>/dev/null || true)"
+if [ -n "$db_url" ]; then
+  eval "$(
+    DATABASE_URL="$db_url" node - <<'NODE'
+const url = new URL(process.env.DATABASE_URL);
+const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+const env = {
+  PGHOST: url.hostname,
+  PGPORT: url.port || "5432",
+  PGDATABASE: url.pathname.replace(/^\//, ""),
+  PGUSER: decodeURIComponent(url.username),
+  PGPASSWORD: decodeURIComponent(url.password),
+};
+for (const [key, value] of Object.entries(env)) {
+  console.log(`export ${key}=${quote(value)}`);
+}
+NODE
+  )"
+  command -v pg_dump >/dev/null || {
+    echo "pg_dump is required to back up PostgreSQL online events."
+    exit 1
+  }
+  pg_dump > "$backup/postgres-online-events.sql"
+  test -s "$backup/postgres-online-events.sql" || {
+    echo "PostgreSQL backup is empty or failed."
+    exit 1
+  }
+fi
 
 sudo sh -c 'find "$1" -type f ! -name SHA256SUMS.txt -exec sha256sum {} + > "$1/SHA256SUMS.txt"' sh "$backup"
 ```
@@ -121,6 +149,83 @@ PORT=3000
 PUBLIC_BASE_URL=https://castles.ls314.com
 ONLINE_STORE_PATH=/var/lib/castles/online-game-events.jsonl
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
+```
+
+For PostgreSQL persistence, use this instead of `ONLINE_STORE_PATH` as the active store:
+
+```text
+PORT=3000
+PUBLIC_BASE_URL=https://castles.ls314.com
+ONLINE_STORE_BACKEND=postgres
+DATABASE_URL=postgresql://castles:<password>@localhost:5432/castles
+CASTLES_STATIC_DIR=/home/lukasz/Castles/build
+```
+
+Create the database and app user before starting the service. Replace the password with the same value used in `DATABASE_URL`:
+
+```bash
+sudo -u postgres psql <<'SQL'
+CREATE DATABASE castles;
+CREATE USER castles WITH PASSWORD 'replace-with-password';
+GRANT CONNECT ON DATABASE castles TO castles;
+\c castles
+GRANT USAGE, CREATE ON SCHEMA public TO castles;
+SQL
+```
+
+Then verify the app user can connect and create tables:
+
+```bash
+load_castles_db_env() {
+  local db_url
+  db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env)"
+  eval "$(
+    DATABASE_URL="$db_url" node - <<'NODE'
+const url = new URL(process.env.DATABASE_URL);
+const quote = (value) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+const env = {
+  PGHOST: url.hostname,
+  PGPORT: url.port || "5432",
+  PGDATABASE: url.pathname.replace(/^\//, ""),
+  PGUSER: decodeURIComponent(url.username),
+  PGPASSWORD: decodeURIComponent(url.password),
+};
+for (const [key, value] of Object.entries(env)) {
+  console.log(`export ${key}=${quote(value)}`);
+}
+NODE
+  )"
+  export PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD
+}
+load_castles_db_env
+psql -v ON_ERROR_STOP=1 <<'SQL'
+select 1;
+create table castles_privilege_check (id integer);
+drop table castles_privilege_check;
+SQL
+```
+
+The `load_castles_db_env` helper above is reused by the migration and verification snippets below. Keep these PostgreSQL commands in the same shell session.
+
+If there is a JSONL event log to keep, migrate it before switching the service:
+
+```bash
+cd /home/lukasz/Castles
+sudo systemctl stop castles-node.service 2>/dev/null || true
+load_castles_db_env
+jsonl_events="$(sudo awk 'NF { count++ } END { print count + 0 }' /var/lib/castles/online-game-events.jsonl 2>/dev/null || echo 0)"
+db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env)"
+existing_pg_events="$(psql -At -c "select count(*) from online_game_events;" 2>/dev/null || echo 0)"
+test "$existing_pg_events" = "0" || {
+  echo "PostgreSQL already has online events. Do not import older JSONL events after live PostgreSQL writes."
+  exit 1
+}
+ONLINE_STORE_PATH=/var/lib/castles/online-game-events.jsonl DATABASE_URL="$db_url" npm run online:migrate-jsonl-to-postgres
+pg_events="$(psql -At -c "select count(*) from online_game_events;")"
+test "$pg_events" -ge "$jsonl_events" || {
+  echo "PostgreSQL event count is lower than JSONL event count. Stop before switching stores."
+  exit 1
+}
 ```
 
 Install service/proxy config:
@@ -184,7 +289,7 @@ Then manually open two browser sessions:
 - restart the service with `sudo systemctl restart castles-node.service`,
 - reload both browsers and confirm the game returns at the latest move.
 
-Confirm the new store is being used:
+For JSONL mode, confirm the text event log is being used:
 
 ```bash
 sudo ls -la /var/lib/castles
@@ -194,9 +299,19 @@ sudo journalctl -u castles-node.service -n 200 --no-pager | grep -E "online-game
 
 There should be no new writes to the old `server-data/online-games.json`.
 
+For PostgreSQL mode, confirm health reports `"backend":"postgres"` and inspect the table without printing credentials:
+
+```bash
+curl -sS https://castles.ls314.com/api/health | grep postgres
+load_castles_db_env
+psql -c "select count(*) from online_game_events;"
+```
+
 ## 5. Rollback
 
 Use the backup folder created in step 2:
+
+If rolling back from PostgreSQL to a pre-PostgreSQL commit, online games created after the switch only exist in PostgreSQL unless they are exported separately. Keep `$backup/postgres-online-events.sql` before rollback.
 
 ```bash
 backup="/home/lukasz/deploy-backups/castles-YYYYMMDD-HHMMSS"
