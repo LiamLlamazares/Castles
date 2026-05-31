@@ -8,9 +8,18 @@ interface VictoryOverlayProps {
   onSetup: () => void;
   onAnalyze: () => void;
   onEnableAnalysis?: () => void;
+  canRestart?: boolean;
 }
 
-const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ victoryMessage, winner, onRestart, onSetup, onAnalyze, onEnableAnalysis }) => {
+const VictoryOverlay: React.FC<VictoryOverlayProps> = ({
+  victoryMessage,
+  winner,
+  onRestart,
+  onSetup,
+  onAnalyze,
+  onEnableAnalysis,
+  canRestart = true
+}) => {
   if (!victoryMessage) return null;
 
   return (
@@ -18,9 +27,11 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({ victoryMessage, winner,
       <div className={`victory-banner ${winner}`}>
         <h1>{victoryMessage}</h1>
         <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+          {canRestart && (
             <button onClick={onRestart} style={{ padding: '10px 20px', fontSize: '1.2rem' }}>
                 Reset Board
             </button>
+          )}
             <button onClick={onSetup} style={{ padding: '10px 20px', fontSize: '1.2rem' }}>
                 Configure New Game
             </button>

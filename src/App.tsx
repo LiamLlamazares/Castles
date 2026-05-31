@@ -101,6 +101,8 @@ function App() {
     url.searchParams.delete("seat");
     url.searchParams.delete("token");
     url.searchParams.delete("view");
+    url.searchParams.delete("pgn");
+    url.searchParams.delete("game");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
@@ -157,6 +159,7 @@ function App() {
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
+    setGameKey(prev => prev + 1);
     setView('game');
   };
 

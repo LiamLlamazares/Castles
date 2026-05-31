@@ -16,6 +16,7 @@ interface GameOverlaysProps {
   onRestart: () => void;
   onSetup: () => void;
   onEnableAnalysis: () => void;
+  canRestart?: boolean;
   showQuickStart: boolean;
   onCloseQuickStart: () => void;
   showTooltipHint: boolean;
@@ -32,6 +33,7 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
   onRestart,
   onSetup,
   onEnableAnalysis,
+  canRestart = true,
   showQuickStart,
   onCloseQuickStart
 }) => {
@@ -53,6 +55,7 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
             onSetup={onSetup}
             onAnalyze={onDismissOverlay}
             onEnableAnalysis={onEnableAnalysis}
+            canRestart={canRestart}
           />
       )}
 

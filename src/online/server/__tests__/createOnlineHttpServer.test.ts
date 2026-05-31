@@ -511,6 +511,80 @@ describe("createOnlineHttpServer", () => {
     }
   });
 
+  it("broadcasts an out-of-turn resignation result to both players", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_resign_broadcast",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const whiteSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const blackSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      whiteSocket.on("open", () => {
+        whiteSocket.send(JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token }));
+      });
+      blackSocket.on("open", () => {
+        blackSocket.send(JSON.stringify({ type: "join", gameId: created.gameId, token: created.black.token }));
+      });
+
+      await expect(nextSocketMessage(whiteSocket, "white join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+      await expect(nextSocketMessage(blackSocket, "black join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      const whiteBroadcast = nextSocketMessage(whiteSocket, "white resignation broadcast");
+      const blackBroadcast = nextSocketMessage(blackSocket, "black resignation broadcast");
+
+      blackSocket.send(JSON.stringify({ type: "action", action: { type: "RESIGN", baseVersion: 0 } }));
+
+      await expect(whiteBroadcast).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: {
+          version: 1,
+          result: { winner: "w", reason: "resignation" },
+        },
+      });
+      await expect(blackBroadcast).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: {
+          version: 1,
+          result: { winner: "w", reason: "resignation" },
+        },
+      });
+
+      const snapshotResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+        { headers: { authorization: `Bearer ${created.white.token}` } }
+      );
+      await expect(snapshotResponse.json()).resolves.toMatchObject({
+        snapshot: {
+          version: 1,
+          result: { winner: "w", reason: "resignation" },
+        },
+      });
+    } finally {
+      whiteSocket.close();
+      blackSocket.close();
+    }
+  });
+
   it("rate limits websocket messages by forwarded client address behind the proxy", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",

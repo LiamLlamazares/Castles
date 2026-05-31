@@ -1,6 +1,9 @@
-import { act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderCustomGameLogicHook } from "../test-utils/TestGameProviderUtils";
+import { useGameInteraction } from "../useGameInteraction";
+import { useCoreGame } from "../useCoreGame";
+import { startingBoard, allPieces } from "../../ConstantImports";
 
 describe("online terminal action guards", () => {
   it("does not submit online actions after a terminal online result", () => {
@@ -42,5 +45,66 @@ describe("online terminal action guards", () => {
     });
 
     expect(result.current.turnCounter).toBe(0);
+  });
+
+  it("submits online resignation through the provider action without local state mutation", () => {
+    const submitAction = vi.fn();
+    const { result } = renderCustomGameLogicHook({
+      onlineSession: {
+        gameId: "game_provider_resign",
+        role: "player",
+        playerColor: "b",
+        version: 0,
+        status: "connected",
+        submitAction,
+      },
+    });
+
+    act(() => {
+      result.current.handleResign("w");
+    });
+
+    expect(result.current.pieces.find((piece) => piece.type === "Monarch" && piece.color === "w")).toBeDefined();
+    expect(submitAction).toHaveBeenCalledExactlyOnceWith({
+      type: "RESIGN",
+      baseVersion: 0,
+    });
+  });
+
+  it("does not run local monarch-removal resignation while an online session exists", () => {
+    const submitAction = vi.fn();
+
+    const { result } = renderHook(() => {
+      const { state, setState, gameEngine } = useCoreGame(startingBoard, allPieces);
+      const interaction = useGameInteraction({
+        state,
+        setState,
+        gameEngine,
+        turnPhase: "Movement",
+        currentPlayer: "w",
+        handleHexClick: vi.fn(),
+        movingPiece: null,
+        onlineSession: {
+          gameId: "game_online_resign",
+          role: "player",
+          playerColor: "b",
+          version: 0,
+          status: "connected",
+          submitAction,
+        },
+      });
+
+      return { state, interaction };
+    });
+
+    act(() => {
+      result.current.interaction.handleResign("w");
+    });
+
+    expect(result.current.state.pieces.find((piece) => piece.type === "Monarch" && piece.color === "w")).toBeDefined();
+    expect(submitAction).toHaveBeenCalledExactlyOnceWith({
+      type: "RESIGN",
+      baseVersion: 0,
+    });
   });
 });

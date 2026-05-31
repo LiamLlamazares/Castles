@@ -183,4 +183,44 @@ describe("Game ability integration", () => {
 
     expect(onLoadGame).not.toHaveBeenCalled();
   });
+
+  test("online player screens expose separate opponent invite and spectator copy actions", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_share_split",
+            role: "player",
+            playerColor: "w",
+            version: 0,
+            status: "connected",
+            opponentInviteUrl: "https://castles.example/?onlineGame=game_share_split&seat=b&token=black-token",
+            spectatorUrl: "https://castles.example/?onlineGame=game_share_split&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Opponent Invite" }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        "https://castles.example/?onlineGame=game_share_split&seat=b&token=black-token"
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Spectator Link" }));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        "https://castles.example/?onlineGame=game_share_split&view=spectator"
+      );
+    });
+  });
 });

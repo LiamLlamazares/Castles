@@ -140,27 +140,25 @@ const InnerGame: React.FC<GameBoardProps> = ({
   // Persistence Hooks
   const { shareGame, getGameFromUrl, loadFromLocalStorage, clearUrlParams, clearSave } = usePersistence(getPGN, loadPGN, moveTree);
   const isReadOnlyOnline = onlineSession?.role === "spectator";
-  const onlineShareUrl =
-    onlineSession?.role === "player" && onlineSession.opponentInviteUrl
-      ? onlineSession.opponentInviteUrl
-      : onlineSession?.spectatorUrl;
-  const onlineShareMessage =
-    onlineSession?.role === "player" && onlineSession.opponentInviteUrl
-      ? "Invite link copied to clipboard."
-      : "Spectator link copied to clipboard.";
-  const handleShare = React.useCallback(() => {
-    if (!onlineShareUrl) {
-      shareGame();
-      return;
-    }
-
-    copyOnlineInviteUrl(onlineShareUrl)
-      .then(() => alert(onlineShareMessage))
+  const copyOnlineLink = React.useCallback((url: string, successMessage: string) => {
+    copyOnlineInviteUrl(url)
+      .then(() => alert(successMessage))
       .catch((error) => {
         console.error("Failed to copy online link", error);
         alert("Could not copy the link. Try again from a secure browser session.");
       });
-  }, [onlineShareMessage, onlineShareUrl, shareGame]);
+  }, []);
+  const handleShare = React.useCallback(() => {
+    shareGame();
+  }, [shareGame]);
+  const handleCopyOpponentInvite = React.useCallback(() => {
+    if (onlineSession?.role !== "player" || !onlineSession.opponentInviteUrl) return;
+    copyOnlineLink(onlineSession.opponentInviteUrl, "Opponent invite link copied to clipboard.");
+  }, [copyOnlineLink, onlineSession]);
+  const handleCopySpectator = React.useCallback(() => {
+    if (!onlineSession?.spectatorUrl) return;
+    copyOnlineLink(onlineSession.spectatorUrl, "Spectator link copied to clipboard.");
+  }, [copyOnlineLink, onlineSession]);
 
   // Restore game logic from old Game.tsx
   React.useEffect(() => {
@@ -422,6 +420,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         onRestart={onRestart}
         onSetup={onSetup}
         onEnableAnalysis={handleEnterAnalysis}
+        canRestart={!onlineSession}
         showQuickStart={showQuickStart}
         onCloseQuickStart={dismissQuickStart}
         showTooltipHint={showTooltipHint}
@@ -441,21 +440,13 @@ const InnerGame: React.FC<GameBoardProps> = ({
               onResign();
           }}
           onNewGame={handleNewGame}
-          onShare={handleShare}
-          shareLabel={
+          onShare={onlineSession ? undefined : handleShare}
+          onCopyOpponentInvite={
             onlineSession?.role === "player" && onlineSession.opponentInviteUrl
-              ? "Copy Invite"
-              : onlineSession?.spectatorUrl
-                ? "Copy Spectator"
-                : "Share"
+              ? handleCopyOpponentInvite
+              : undefined
           }
-          shareTitle={
-            onlineSession?.role === "player" && onlineSession.opponentInviteUrl
-              ? "Copy opponent invite link"
-              : onlineSession?.spectatorUrl
-                ? "Copy spectator link"
-                : "Share Game URL"
-          }
+          onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
           moveHistory={moveHistory || []}
           moveTree={moveTree}
           onJumpToNode={jumpToNode}

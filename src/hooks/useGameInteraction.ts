@@ -90,6 +90,16 @@ export const useGameInteraction = ({
   }, [currentPlayer, turnPhase, movingPiece, handleHexClick, setState, gameEngine, onlineSession]);
 
   const handleResign = useCallback((player: Color) => {
+    if (onlineSession) {
+      if (onlineSession.result) return;
+      if (onlineSession.role !== "player") return;
+      onlineSession.submitAction({
+        type: "RESIGN",
+        baseVersion: onlineSession.version,
+      });
+      return;
+    }
+
     // Reset to live game state before resigning (in case viewing history)
     setState(prev => {
         // First reset viewNodeId to exit history view
@@ -101,7 +111,7 @@ export const useGameInteraction = ({
         }
         return { ...prev, viewNodeId: null, movingPiece: null };
     });
-  }, [setState]);
+  }, [setState, onlineSession]);
 
   return {
     handlePieceClick,

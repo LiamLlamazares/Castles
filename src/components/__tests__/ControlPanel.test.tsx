@@ -130,4 +130,33 @@ describe("ControlPanel", () => {
 
     expect(onShare).toHaveBeenCalledOnce();
   });
+
+  it("separates move-enabled opponent invites from read-only spectator links", () => {
+    const onCopyOpponentInvite = vi.fn();
+    const onCopySpectator = vi.fn();
+    const onShare = vi.fn();
+
+    render(
+      <ControlPanel
+        {...baseProps}
+        onShare={onShare}
+        onCopyOpponentInvite={onCopyOpponentInvite}
+        onCopySpectator={onCopySpectator}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+
+    const opponentButton = screen.getByRole("button", { name: "Copy Opponent Invite" });
+    const spectatorButton = screen.getByRole("button", { name: "Copy Spectator Link" });
+    expect(opponentButton).toHaveAttribute("title", "Copy move-enabled opponent invite link");
+    expect(spectatorButton).toHaveAttribute("title", "Copy read-only spectator link");
+
+    fireEvent.click(opponentButton);
+    fireEvent.click(spectatorButton);
+
+    expect(onCopyOpponentInvite).toHaveBeenCalledOnce();
+    expect(onCopySpectator).toHaveBeenCalledOnce();
+    expect(onShare).not.toHaveBeenCalled();
+  });
 });

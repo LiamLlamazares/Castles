@@ -299,15 +299,6 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     handlePieceClick,
     handleHexClick,
     handleResign: (forColor?: Color) => {
-      if (onlineSession) {
-        if (onlineSession.result) return;
-        if (onlineSession.role !== "player") return;
-        onlineSession.submitAction({
-          type: "RESIGN",
-          baseVersion: onlineSession.version,
-        });
-        return;
-      }
       handleResign(forColor || currentPlayer);
     },
     promotePiece,
