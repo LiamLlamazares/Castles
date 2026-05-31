@@ -35,7 +35,7 @@ export type OnlineGameEvent =
       gameId: string;
       playerColor: Color;
       version: number;
-      playedAt?: number;
+      playedAt: number;
       clock?: OnlineClockRecord;
       action: OnlineActionDTO;
     })
@@ -202,21 +202,6 @@ function validateTimeoutResult(value: unknown): ValidationResult<OnlineGameResul
   };
 }
 
-function createInitialClockRecord(
-  setup: OnlineGameSetupDTO,
-  runningSince: number
-): OnlineClockRecord | undefined {
-  if (!setup.timeControl) return undefined;
-  return {
-    remainingMs: {
-      w: setup.timeControl.initial * 60_000,
-      b: setup.timeControl.initial * 60_000,
-    },
-    activeColor: "w",
-    runningSince,
-  };
-}
-
 export function validateOnlineGameEvent(value: unknown): ValidationResult<OnlineGameEvent> {
   if (!isRecord(value)) return bad("event must be an object.");
   if (value.schemaVersion !== ONLINE_EVENT_SCHEMA_VERSION) {
@@ -258,6 +243,8 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
       const clockResult = validateClockRecord(value.clock, "event.clock");
       if (!clockResult.ok) return clockResult;
       clock = clockResult.value;
+    } else if (setup.value.timeControl) {
+      return bad("event.clock is required for time-controlled games.");
     }
     return {
       ok: true,
@@ -285,8 +272,8 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     if (action.value.baseVersion + 1 !== value.version) {
       return bad("event.version must be one greater than action.baseVersion.");
     }
-    if (value.playedAt !== undefined && !isNonNegativeSafeInteger(value.playedAt)) {
-      return bad("event.playedAt must be a non-negative integer when present.");
+    if (!isNonNegativeSafeInteger(value.playedAt)) {
+      return bad("event.playedAt must be a non-negative integer.");
     }
     let clock: OnlineClockRecord | undefined;
     if (value.clock !== undefined) {
@@ -358,12 +345,15 @@ export function onlineGameEventsToRecords(
         if (rooms.has(event.gameId)) {
           throw new Error(`Duplicate online game creation event for ${event.gameId}.`);
         }
+        if (event.setup.timeControl && !event.clock) {
+          throw new Error(`Clocked creation event for ${event.gameId} is missing persisted clock.`);
+        }
         rooms.set(event.gameId, {
           gameId: event.gameId,
           whiteToken: event.whiteToken,
           blackToken: event.blackToken,
           setup: event.setup,
-          clock: event.clock ?? createInitialClockRecord(event.setup, Date.parse(event.createdAt)),
+          clock: event.clock,
           acceptedActions: [],
         });
         return;
@@ -378,6 +368,9 @@ export function onlineGameEventsToRecords(
       }
       if (event.type === "action_accepted" && event.clock && !room.setup.timeControl) {
         throw new Error(`Clocked action event references no-clock game ${event.gameId}.`);
+      }
+      if (event.type === "action_accepted" && room.setup.timeControl && !event.clock) {
+        throw new Error(`Clocked action event for ${event.gameId} is missing persisted clock.`);
       }
       if (event.type === "timeout_adjudicated") {
         if (!room.setup.timeControl) {
@@ -404,7 +397,7 @@ export function onlineGameEventsToRecords(
           playerColor: event.playerColor,
           action: event.action,
           version: event.version,
-          playedAt: event.playedAt ?? Date.parse(event.createdAt),
+          playedAt: event.playedAt,
           clock: event.clock,
         });
         return;

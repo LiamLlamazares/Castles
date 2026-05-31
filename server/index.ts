@@ -15,7 +15,7 @@ async function main() {
 
   const records = await store.load({
     onEventError: (line, error) => {
-      console.error(`Invalid online event log line ${line}`, error);
+      console.error(`Invalid online event store entry ${line}`, error);
     },
   });
   const service = OnlineGameService.fromRecords(records);

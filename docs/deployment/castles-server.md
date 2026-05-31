@@ -57,12 +57,6 @@ if [ -f /etc/systemd/system/castles-node.service ]; then
 fi
 sudo cp -a /etc/castles/castles.env "$backup/castles.env" 2>/dev/null || true
 
-if [ -d /home/lukasz/Castles/server-data ]; then
-  tar -C /home/lukasz/Castles -czf "$backup/server-data.tgz" server-data
-fi
-if [ -d /var/lib/castles ]; then
-  sudo tar -C / -czf "$backup/var-lib-castles.tgz" var/lib/castles
-fi
 db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env 2>/dev/null || true)"
 if [ -n "$db_url" ]; then
   eval "$(
@@ -95,8 +89,6 @@ fi
 sudo sh -c 'find "$1" -type f ! -name SHA256SUMS.txt -exec sha256sum {} + > "$1/SHA256SUMS.txt"' sh "$backup"
 ```
 
-The current legacy text save at `/home/lukasz/Castles/server-data/online-games.json` is backup-only. It is not migrated because current online games are disposable.
-
 ## 3. Deploy Exact Commit
 
 ```bash
@@ -124,14 +116,13 @@ npm run build
 npm run server:build
 ```
 
-Set up the runtime data directory and environment:
+Set up the runtime environment:
 
 ```bash
 test -n "${backup:-}" && test -d "$backup" || {
   echo "The backup variable is not set to a real backup directory. Run step 2 first."
   exit 1
 }
-sudo install -d -o lukasz -g lukasz -m 750 /var/lib/castles
 sudo install -d -m 755 /etc/castles
 if [ ! -f /etc/castles/castles.env ]; then
   sudo install -m 600 deploy/systemd/castles.env.example /etc/castles/castles.env
@@ -140,18 +131,17 @@ sudo cp -a /etc/castles/castles.env "$backup/castles.env.predeploy"
 sudo sed -i "s/GIT_COMMIT=.*/GIT_COMMIT=$sha/" /etc/castles/castles.env
 sudo sed -i "s/BUILD_ID=.*/BUILD_ID=$(date -u +%Y%m%d-%H%M%S)/" /etc/castles/castles.env
 sudo chmod 600 /etc/castles/castles.env
+sudo grep -qx "ONLINE_STORE_BACKEND=postgres" /etc/castles/castles.env || {
+  echo "ONLINE_STORE_BACKEND must be postgres before deployment."
+  exit 1
+}
+sudo grep -q "^DATABASE_URL=postgresql://" /etc/castles/castles.env || {
+  echo "DATABASE_URL must be set before deployment."
+  exit 1
+}
 ```
 
 Review `/etc/castles/castles.env` before starting. It should contain:
-
-```text
-PORT=3000
-PUBLIC_BASE_URL=https://castles.ls314.com
-ONLINE_STORE_PATH=/var/lib/castles/online-game-events.jsonl
-CASTLES_STATIC_DIR=/home/lukasz/Castles/build
-```
-
-For PostgreSQL persistence, use this instead of `ONLINE_STORE_PATH` as the active store:
 
 ```text
 PORT=3000
@@ -205,28 +195,7 @@ drop table castles_privilege_check;
 SQL
 ```
 
-The `load_castles_db_env` helper above is reused by the migration and verification snippets below. Keep these PostgreSQL commands in the same shell session.
-
-If there is a JSONL event log to keep, migrate it before switching the service:
-
-```bash
-cd /home/lukasz/Castles
-sudo systemctl stop castles-node.service 2>/dev/null || true
-load_castles_db_env
-jsonl_events="$(sudo awk 'NF { count++ } END { print count + 0 }' /var/lib/castles/online-game-events.jsonl 2>/dev/null || echo 0)"
-db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env)"
-existing_pg_events="$(psql -At -c "select count(*) from online_game_events;" 2>/dev/null || echo 0)"
-test "$existing_pg_events" = "0" || {
-  echo "PostgreSQL already has online events. Do not import older JSONL events after live PostgreSQL writes."
-  exit 1
-}
-ONLINE_STORE_PATH=/var/lib/castles/online-game-events.jsonl DATABASE_URL="$db_url" npm run online:migrate-jsonl-to-postgres
-pg_events="$(psql -At -c "select count(*) from online_game_events;")"
-test "$pg_events" -ge "$jsonl_events" || {
-  echo "PostgreSQL event count is lower than JSONL event count. Stop before switching stores."
-  exit 1
-}
-```
+The `load_castles_db_env` helper above is reused by the verification snippet below. Keep these PostgreSQL commands in the same shell session.
 
 Install service/proxy config:
 
@@ -289,17 +258,7 @@ Then manually open two browser sessions:
 - restart the service with `sudo systemctl restart castles-node.service`,
 - reload both browsers and confirm the game returns at the latest move.
 
-For JSONL mode, confirm the text event log is being used:
-
-```bash
-sudo ls -la /var/lib/castles
-sudo tail -n 5 /var/lib/castles/online-game-events.jsonl
-sudo journalctl -u castles-node.service -n 200 --no-pager | grep -E "online-games.json|online-game-events"
-```
-
-There should be no new writes to the old `server-data/online-games.json`.
-
-For PostgreSQL mode, confirm health reports `"backend":"postgres"` and inspect the table without printing credentials:
+Confirm health reports `"backend":"postgres"` and inspect the table without printing credentials:
 
 ```bash
 curl -sS https://castles.ls314.com/api/health | grep postgres
@@ -341,12 +300,6 @@ if [ -s "$backup/nginx-enabled-target.txt" ]; then
   sudo ln -sfn "$(cat "$backup/nginx-enabled-target.txt")" /etc/nginx/sites-enabled/castles
 else
   sudo rm -f /etc/nginx/sites-enabled/castles
-fi
-if [ -f "$backup/server-data.tgz" ]; then
-  tar -C /home/lukasz/Castles -xzf "$backup/server-data.tgz"
-fi
-if [ -f "$backup/var-lib-castles.tgz" ]; then
-  sudo tar -C / -xzf "$backup/var-lib-castles.tgz"
 fi
 sudo nginx -t
 sudo systemctl daemon-reload

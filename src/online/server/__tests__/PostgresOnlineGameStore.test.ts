@@ -5,9 +5,7 @@ import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEve
 class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
   rows: Array<{ payload: OnlineGameEvent }> = [];
-  count = 0;
   failNextCreateTable = false;
-  failNextInsert = false;
 
   async query(text: string, values?: unknown[]) {
     this.queries.push({ text, values });
@@ -17,13 +15,6 @@ class FakePostgresClient {
     }
     if (/select\s+payload/i.test(text)) {
       return { rows: this.rows };
-    }
-    if (/select\s+count\(\*\)::integer as count/i.test(text)) {
-      return { rows: [{ count: this.count }] };
-    }
-    if (this.failNextInsert && /insert into online_game_events/i.test(text)) {
-      this.failNextInsert = false;
-      throw new Error("temporary insert failure");
     }
     return { rows: [] };
   }
@@ -59,16 +50,6 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /create table if not exists online_game_events/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create unique index if not exists/i.test(query.text))).toBe(true);
     expect(client.queries.at(-1)?.text).toMatch(/select 1/i);
-  });
-
-  it("counts stored events for migration safety checks", async () => {
-    const client = new FakePostgresClient();
-    client.count = 3;
-    const store = new PostgresOnlineGameStore({ queryable: client });
-
-    await expect(store.countEvents()).resolves.toBe(3);
-
-    expect(client.queries.some((query) => /select count\(\*\)::integer as count/i.test(query.text))).toBe(true);
   });
 
   it("retries schema creation after a transient readiness failure", async () => {
@@ -126,6 +107,7 @@ describe("PostgresOnlineGameStore", () => {
           gameId: "game_replay",
           playerColor: "w",
           version: 1,
+          playedAt: 2_000,
           action: { type: "PASS", baseVersion: 0 },
         },
       },
@@ -143,44 +125,4 @@ describe("PostgresOnlineGameStore", () => {
     });
   });
 
-  it("imports existing events idempotently for JSONL migration", async () => {
-    const client = new FakePostgresClient();
-    const store = new PostgresOnlineGameStore({ queryable: client });
-    const event = createGameCreatedEvent();
-
-    await store.importEventIfMissing(event);
-
-    const insert = client.queries.find((query) => /insert into online_game_events/i.test(query.text));
-    expect(insert?.text).toMatch(/on conflict \(event_id\) do nothing/i);
-  });
-
-  it("imports migration batches inside a transaction", async () => {
-    const client = new FakePostgresClient();
-    const store = new PostgresOnlineGameStore({ queryable: client });
-
-    await store.importEventsIfMissing([
-      createGameCreatedEvent("game_one"),
-      createGameCreatedEvent("game_two"),
-    ]);
-
-    const transactionQueries = client.queries
-      .map((query) => query.text.trim().toUpperCase())
-      .filter((text) => ["BEGIN", "COMMIT", "ROLLBACK"].includes(text));
-    expect(transactionQueries).toEqual(["BEGIN", "COMMIT"]);
-  });
-
-  it("rolls back migration batches when an insert fails", async () => {
-    const client = new FakePostgresClient();
-    client.failNextInsert = true;
-    const store = new PostgresOnlineGameStore({ queryable: client });
-
-    await expect(store.importEventsIfMissing([createGameCreatedEvent()])).rejects.toThrow(
-      /temporary insert failure/
-    );
-
-    const transactionQueries = client.queries
-      .map((query) => query.text.trim().toUpperCase())
-      .filter((text) => ["BEGIN", "COMMIT", "ROLLBACK"].includes(text));
-    expect(transactionQueries).toEqual(["BEGIN", "ROLLBACK"]);
-  });
 });

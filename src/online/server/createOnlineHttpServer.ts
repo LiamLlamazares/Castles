@@ -122,7 +122,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     playerColor: Extract<OnlineGameEvent, { type: "action_accepted" }>["playerColor"],
     version: number,
     action: Extract<OnlineGameEvent, { type: "action_accepted" }>["action"],
-    playedAt?: number,
+    playedAt: number,
     clock?: Extract<OnlineGameEvent, { type: "action_accepted" }>["clock"]
   ) => {
     await options.onGameEvent?.(
@@ -527,14 +527,24 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         }
 
         const acceptedAction = room.toRecord().acceptedActions.at(-1);
+        if (!acceptedAction || acceptedAction.version !== result.snapshot.version) {
+          throw new Error(
+            `Accepted online action for ${currentConnection.gameId} was not recorded.`
+          );
+        }
+        if (result.snapshot.clock && !acceptedAction.clock) {
+          throw new Error(
+            `Accepted online action for ${currentConnection.gameId} is missing clock.`
+          );
+        }
         try {
           await persistActionAccepted(
             currentConnection.gameId,
             playerColor,
             result.snapshot.version,
-            acceptedAction?.action ?? message.action,
-            acceptedAction?.playedAt,
-            acceptedAction?.clock
+            acceptedAction.action,
+            acceptedAction.playedAt,
+            acceptedAction.clock
           );
         } catch (error) {
           service.replaceRoom(beforeAction);

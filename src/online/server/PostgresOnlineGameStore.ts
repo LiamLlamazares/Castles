@@ -18,8 +18,6 @@ export interface PostgresOnlineGameStoreOptions {
 
 export class PostgresOnlineGameStore implements OnlineGameStore {
   private readonly queryable: PostgresQueryable;
-  private readonly closeConnection?: () => Promise<void>;
-  private readonly pool?: Pool;
   private schemaReady?: Promise<void>;
 
   constructor(options: PostgresOnlineGameStoreOptions) {
@@ -32,10 +30,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       throw new Error("PostgresOnlineGameStore requires a connectionString or queryable.");
     }
 
-    const pool = new Pool({ connectionString: options.connectionString });
-    this.queryable = pool;
-    this.pool = pool;
-    this.closeConnection = () => pool.end();
+    this.queryable = new Pool({ connectionString: options.connectionString });
   }
 
   async load(options: OnlineGameStoreLoadOptions = {}): Promise<OnlineGameRoomRecord[]> {
@@ -68,38 +63,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     await this.insertEvent(validated);
   }
 
-  async importEventIfMissing(event: OnlineGameEvent): Promise<void> {
-    const validated = this.validate(event);
-    await this.ensureSchema();
-    await this.insertEvent(validated, " ON CONFLICT (event_id) DO NOTHING");
-  }
-
-  async importEventsIfMissing(events: OnlineGameEvent[]): Promise<void> {
-    const validated = events.map((event) => this.validate(event));
-    await this.ensureSchema();
-    await this.withTransaction(async (queryable) => {
-      for (const event of validated) {
-        await this.insertEvent(event, " ON CONFLICT (event_id) DO NOTHING", queryable);
-      }
-    });
-  }
-
   async checkReady(): Promise<boolean> {
     await this.ensureSchema();
     await this.queryable.query("SELECT 1");
     return true;
-  }
-
-  async countEvents(): Promise<number> {
-    await this.ensureSchema();
-    const result = await this.queryable.query(
-      "SELECT count(*)::integer AS count FROM online_game_events"
-    );
-    return Number(result.rows[0]?.count ?? 0);
-  }
-
-  async close(): Promise<void> {
-    await this.closeConnection?.();
   }
 
   private validate(event: OnlineGameEvent): OnlineGameEvent {
@@ -147,38 +114,8 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     `);
   }
 
-  private async withTransaction(operation: (queryable: PostgresQueryable) => Promise<void>) {
-    if (this.pool) {
-      const client = await this.pool.connect();
-      try {
-        await client.query("BEGIN");
-        await operation(client);
-        await client.query("COMMIT");
-      } catch (error) {
-        await client.query("ROLLBACK").catch(() => undefined);
-        throw error;
-      } finally {
-        client.release();
-      }
-      return;
-    }
-
-    await this.queryable.query("BEGIN");
-    try {
-      await operation(this.queryable);
-      await this.queryable.query("COMMIT");
-    } catch (error) {
-      await this.queryable.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    }
-  }
-
-  private async insertEvent(
-    event: OnlineGameEvent,
-    conflictClause = "",
-    queryable: PostgresQueryable = this.queryable
-  ): Promise<void> {
-    await queryable.query(
+  private async insertEvent(event: OnlineGameEvent): Promise<void> {
+    await this.queryable.query(
       `
         INSERT INTO online_game_events (
           event_id,
@@ -189,7 +126,6 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
           payload
         )
         VALUES ($1, $2, $3, $4, $5, $6)
-        ${conflictClause}
       `,
       [
         event.eventId,

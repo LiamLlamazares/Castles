@@ -76,6 +76,7 @@ describe("OnlineGameService", () => {
           gameId: "game_fixed",
           playerColor: "w",
           version: 1,
+          playedAt: 2_000,
           action: { type: "PASS", baseVersion: 0 },
         },
       ])
@@ -103,6 +104,7 @@ describe("OnlineGameService", () => {
           gameId: "game_resign",
           playerColor: "b",
           version: 1,
+          playedAt: 2_000,
           action: { type: "RESIGN", baseVersion: 0 },
         },
       ])
@@ -123,6 +125,11 @@ describe("OnlineGameService", () => {
           setup: {
             ...createSetup(),
             timeControl: { initial: 1, increment: 0 },
+          },
+          clock: {
+            remainingMs: { w: 60_000, b: 60_000 },
+            activeColor: "w",
+            runningSince: 1_000,
           },
         },
         {
@@ -182,14 +189,13 @@ describe("OnlineGameService", () => {
     });
   });
 
-  it("synthesizes deterministic creation clocks for legacy clocked creation events", () => {
-    const createdAt = "2026-05-31T12:00:01.000Z";
-    const records = onlineGameEventsToRecords([
+  it("rejects clocked creation events without persisted clock state", () => {
+    expect(() =>
+      onlineGameEventsToRecords([
       {
         ...eventEnvelope(1),
-        createdAt,
         type: "game_created",
-        gameId: "game_legacy_clock",
+        gameId: "game_missing_clock",
         whiteToken: "w-token",
         blackToken: "b-token",
         setup: {
@@ -197,12 +203,7 @@ describe("OnlineGameService", () => {
           timeControl: { initial: 1, increment: 0 },
         },
       },
-    ]);
-
-    expect(records[0].clock).toEqual({
-      remainingMs: { w: 60_000, b: 60_000 },
-      activeColor: "w",
-      runningSince: Date.parse(createdAt),
-    });
+      ])
+    ).toThrow(/missing persisted clock/);
   });
 });

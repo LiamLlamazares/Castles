@@ -127,7 +127,7 @@ describe("online validation", () => {
     }
   });
 
-  it("requires event timestamps to use the JSONL v1 ISO format", () => {
+  it("requires event timestamps to use the online v1 ISO format", () => {
     const result = validateOnlineGameEvent({
       schemaVersion: 1,
       eventId: "evt-create",
@@ -167,6 +167,47 @@ describe("online validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toContain("clock");
+    }
+  });
+
+  it("requires creation event clocks when the game has a time control", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-create-clocked",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_test",
+      whiteToken: "w-token",
+      blackToken: "b-token",
+      setup: {
+        ...createSetup(),
+        timeControl: { initial: 1, increment: 0 },
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("clock");
+    }
+  });
+
+  it("requires accepted action events to include the server acceptance time", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-action-time",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "action_accepted",
+      gameId: "game_test",
+      playerColor: "w",
+      version: 1,
+      action: { type: "PASS", baseVersion: 0 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("playedAt");
     }
   });
 

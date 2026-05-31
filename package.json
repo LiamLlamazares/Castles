@@ -17,7 +17,6 @@
     "server:dev": "tsx server/index.ts",
     "server:build": "tsc -p tsconfig.server.json",
     "server:start": "node server-build/server/index.js",
-    "online:migrate-jsonl-to-postgres": "tsx scripts/migrate-online-jsonl-to-postgres.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "audit": "npm audit --audit-level=low"

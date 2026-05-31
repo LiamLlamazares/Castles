@@ -1,19 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { JsonOnlineGameStore } from "../JsonOnlineGameStore";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { createOnlineGameStoreFromEnv } from "../createOnlineGameStore";
 
 describe("createOnlineGameStoreFromEnv", () => {
-  it("defaults to JSONL persistence with the configured path", () => {
-    const configured = createOnlineGameStoreFromEnv({
-      ONLINE_STORE_PATH: "C:/castles/online-game-events.jsonl",
-    });
-
-    expect(configured.backend).toBe("jsonl");
-    expect(configured.healthStorePath).toBe("C:/castles/online-game-events.jsonl");
-    expect(configured.store).toBeInstanceOf(JsonOnlineGameStore);
-  });
-
   it("creates a PostgreSQL store without exposing the database URL in health metadata", () => {
     const configured = createOnlineGameStoreFromEnv({
       ONLINE_STORE_BACKEND: "postgres",
@@ -33,10 +22,14 @@ describe("createOnlineGameStoreFromEnv", () => {
     ).toThrow(/DATABASE_URL/);
   });
 
+  it("requires explicit PostgreSQL persistence", () => {
+    expect(() => createOnlineGameStoreFromEnv({})).toThrow(/ONLINE_STORE_BACKEND/);
+  });
+
   it("rejects unknown online store backends", () => {
     expect(() =>
       createOnlineGameStoreFromEnv({
-        ONLINE_STORE_BACKEND: "redis",
+        ONLINE_STORE_BACKEND: "jsonl",
       })
     ).toThrow(/ONLINE_STORE_BACKEND/);
   });

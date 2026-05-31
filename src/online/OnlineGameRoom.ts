@@ -50,7 +50,7 @@ export interface AcceptedOnlineActionRecord {
   playerColor: Color;
   action: OnlineActionDTO;
   version?: number;
-  playedAt?: number;
+  playedAt: number;
   clock?: OnlineClockRecord;
 }
 
@@ -274,30 +274,14 @@ export class OnlineGameRoom {
   }
 
   private replayAcceptedAction(entry: AcceptedOnlineActionRecord): void {
-    const replayedAt = entry.playedAt;
-    const shouldDeriveClock = !entry.clock && replayedAt !== undefined;
-    const activeColorBeforeAction = this.context.gameEngine.getCurrentPlayer(this.state.turnCounter);
-
     if (entry.action.type === "RESIGN") {
-      if (shouldDeriveClock) {
-        this.settleClockAt(replayedAt);
-      }
       this.result = { winner: opposite(entry.playerColor), reason: "resignation" };
-      if (shouldDeriveClock) {
-        this.stopClock();
-      }
     } else if (entry.action.type === "PROMOTE") {
-      if (shouldDeriveClock) {
-        this.settleClockAt(replayedAt);
-      }
       const nextState = this.context.gameEngine.applyPromotion(this.state, entry.action.pieceType);
       if (nextState === this.state || nextState.promotionPending) {
         throw new Error("Could not replay online promotion.");
       }
       this.state = nextState;
-      if (shouldDeriveClock) {
-        this.advanceClockAfterAction(activeColorBeforeAction, replayedAt);
-      }
     } else {
       const command = this.commandFromAction(entry.action, entry.playerColor);
       if (!command.ok) {
@@ -311,14 +295,8 @@ export class OnlineGameRoom {
           }`
         );
       }
-      if (shouldDeriveClock) {
-        this.settleClockAt(replayedAt);
-      }
       this.state = result.newState;
       this.latchTerminalResult();
-      if (shouldDeriveClock) {
-        this.advanceClockAfterAction(activeColorBeforeAction, replayedAt);
-      }
     }
 
     this.acceptedActions.push({
