@@ -1,5 +1,5 @@
 import type { CreatedOnlineGame } from "./OnlineGameService";
-import { OnlineGameSetupDTO, OnlineGameSnapshotDTO } from "./types";
+import { OnlineGameResultDTO, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from "./types";
 
 export interface OnlineJoinParams {
   gameId: string;
@@ -83,6 +83,49 @@ export function shouldApplyOnlineSnapshotVersion(
   nextVersion: number
 ): boolean {
   return latestVersion === null || nextVersion > latestVersion;
+}
+
+export function shouldApplyOnlineSnapshot(
+  latestSnapshot: OnlineGameSnapshotDTO | null,
+  nextSnapshot: OnlineGameSnapshotDTO
+): boolean {
+  if (!latestSnapshot) return true;
+  if (nextSnapshot.version > latestSnapshot.version) return true;
+  if (nextSnapshot.version < latestSnapshot.version) return false;
+
+  const latestResult = latestSnapshot.result;
+  const nextResult = nextSnapshot.result;
+  if (
+    latestResult?.winner !== nextResult?.winner ||
+    latestResult?.reason !== nextResult?.reason
+  ) {
+    return true;
+  }
+
+  const latestServerNow = latestSnapshot.clock?.serverNow;
+  const nextServerNow = nextSnapshot.clock?.serverNow;
+  return (
+    typeof latestServerNow === "number" &&
+    typeof nextServerNow === "number" &&
+    nextServerNow > latestServerNow
+  );
+}
+
+export function formatOnlineGameResult(result: OnlineGameResultDTO): string {
+  const winner = result.winner === "w" ? "White" : "Black";
+  switch (result.reason) {
+    case "timeout":
+      return `${winner} wins on time`;
+    case "resignation":
+      return `${winner} wins by resignation`;
+    case "castle_control":
+      return `${winner} wins by castle control`;
+    case "victory_points":
+      return `${winner} wins by victory points`;
+    case "monarch_captured":
+    default:
+      return `${winner} wins`;
+  }
 }
 
 export async function createOnlineGame(

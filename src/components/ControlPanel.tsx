@@ -9,6 +9,7 @@ import HistoryTable from "./HistoryTable";
 import { TurnPhase, Color, MoveRecord, PHASE_CYCLE_LENGTH } from "../Constants";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { VP_VICTORY_THRESHOLD } from "../Classes/Systems/WinCondition";
+import type { OnlineClockStateDTO } from "../online/types";
 
 // SVG import
 import trophyIcon from "../Assets/Images/misc/trophy.svg";
@@ -27,9 +28,63 @@ interface ControlPanelProps {
   hasGameStarted: boolean;
   winner: Color | null;
   timeControl?: { initial: number, increment: number };
+  onlineClock?: OnlineClockStateDTO;
+  isOnline?: boolean;
   viewNodeId?: string | null;
   victoryPoints?: { w: number, b: number };
 }
+
+function formatClockMs(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds < 10 ? `0${seconds}` : seconds}`;
+}
+
+const OnlineClock: React.FC<{ clock: OnlineClockStateDTO; player: Color }> = ({ clock, player }) => {
+  const [clientNow, setClientNow] = React.useState(() => Date.now());
+  const receivedAtRef = React.useRef(clientNow);
+
+  React.useEffect(() => {
+    receivedAtRef.current = Date.now();
+    setClientNow(receivedAtRef.current);
+    const intervalId = window.setInterval(() => {
+      setClientNow(Date.now());
+    }, 250);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    clock.activeColor,
+    clock.runningSince,
+    clock.serverNow,
+    clock.remainingMs.w,
+    clock.remainingMs.b,
+  ]);
+
+  const estimatedServerNow = clock.serverNow + Math.max(0, clientNow - receivedAtRef.current);
+  const elapsedMs =
+    clock.activeColor === player && clock.runningSince !== null
+      ? Math.max(0, estimatedServerNow - clock.runningSince)
+      : 0;
+  const remainingMs = Math.max(0, clock.remainingMs[player] - elapsedMs);
+
+  return (
+    <div
+      className={`clock-box ${player} ${clock.activeColor === player ? "active" : ""}`}
+      data-testid={`online-clock-${player}`}
+    >
+      {formatClockMs(remainingMs)}
+    </div>
+  );
+};
+
+const NoClock: React.FC<{ player: Color }> = ({ player }) => (
+  <div className={`clock-box ${player}`} data-testid={`online-clock-${player}`}>
+    --:--
+  </div>
+);
 
 const VPTrack: React.FC<{ vp: number, player: Color }> = ({ vp, player }) => {
   const filled = Math.max(0, Math.min(vp, VP_VICTORY_THRESHOLD));
@@ -133,11 +188,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   hasGameStarted,
   winner,
   timeControl,
+  onlineClock,
+  isOnline = false,
   viewNodeId,
   victoryPoints,
 }) => {
   // Calculate phase index within current player's turn (0-4)
   const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
+  const isGameOver = !!winner;
 
   return (
     <div className="game-panel">
@@ -147,12 +205,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-          <ChessClock
-            initialTime={(timeControl?.initial ?? 20) * 60}
-            increment={timeControl?.increment ?? 0}
-            isActive={hasGameStarted && currentPlayer === "b" && !winner}
-            player="b"
-          />
+          {onlineClock ? (
+            <OnlineClock clock={onlineClock} player="b" />
+          ) : isOnline ? (
+            <NoClock player="b" />
+          ) : (
+            <ChessClock
+              initialTime={(timeControl?.initial ?? 20) * 60}
+              increment={timeControl?.increment ?? 0}
+              isActive={hasGameStarted && currentPlayer === "b" && !isGameOver}
+              player="b"
+            />
+          )}
         </div>
       </div>
 
@@ -174,12 +238,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       {/* White Player Section (Bottom) */}
       <div className="player-section white">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-          <ChessClock
-            initialTime={(timeControl?.initial ?? 20) * 60}
-            increment={timeControl?.increment ?? 0}
-            isActive={hasGameStarted && currentPlayer === "w" && !winner}
-            player="w"
-          />
+          {onlineClock ? (
+            <OnlineClock clock={onlineClock} player="w" />
+          ) : isOnline ? (
+            <NoClock player="w" />
+          ) : (
+            <ChessClock
+              initialTime={(timeControl?.initial ?? 20) * 60}
+              increment={timeControl?.increment ?? 0}
+              isActive={hasGameStarted && currentPlayer === "w" && !isGameOver}
+              player="w"
+            />
+          )}
         </div>
         {currentPlayer === "w" && !winner && (
           <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
@@ -188,10 +258,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
       {/* Game Controls */}
       <div className="game-controls">
-        <button className="control-button pass" onClick={onPass} title="Pass Turn (Space)">
+        <button
+          className="control-button pass"
+          onClick={onPass}
+          title="Pass Turn (Space)"
+          disabled={isGameOver}
+        >
           Pass
         </button>
-        <button className="control-button resign" onClick={onResign}>
+        <button className="control-button resign" onClick={onResign} disabled={isGameOver}>
           Resign
         </button>
         <button className="control-button share" onClick={onShare} title="Share Game URL">

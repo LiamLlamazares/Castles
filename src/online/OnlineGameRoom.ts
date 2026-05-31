@@ -20,6 +20,7 @@ import {
 import {
   OnlineActionDTO,
   OnlineActionResult,
+  OnlineClockStateDTO,
   OnlineGameResultDTO,
   OnlineGameSetupDTO,
   OnlineGameSnapshotDTO,
@@ -31,13 +32,34 @@ export interface OnlineGameRoomCreateInput {
   gameId: string;
   whiteToken: string;
   blackToken: string;
+  clock?: OnlineClockRecord;
   acceptedActions?: AcceptedOnlineActionRecord[];
+  timeout?: AcceptedOnlineTimeoutRecord;
   result?: OnlineGameResultDTO;
+  now?: () => number;
+}
+
+export interface OnlineClockRecord {
+  remainingMs: { w: number; b: number };
+  activeColor: Color | null;
+  runningSince: number | null;
+  flag?: { color: Color; at: number };
 }
 
 export interface AcceptedOnlineActionRecord {
   playerColor: Color;
   action: OnlineActionDTO;
+  version?: number;
+  playedAt?: number;
+  clock?: OnlineClockRecord;
+}
+
+export interface AcceptedOnlineTimeoutRecord {
+  playerColor: Color;
+  version: number;
+  adjudicatedAt: number;
+  result: OnlineGameResultDTO;
+  clock: OnlineClockRecord;
 }
 
 export interface OnlineGameRoomRecord {
@@ -45,7 +67,9 @@ export interface OnlineGameRoomRecord {
   whiteToken: string;
   blackToken: string;
   setup: OnlineGameSetupDTO;
+  clock?: OnlineClockRecord;
   acceptedActions: AcceptedOnlineActionRecord[];
+  timeout?: AcceptedOnlineTimeoutRecord;
   result?: OnlineGameResultDTO;
 }
 
@@ -73,13 +97,17 @@ export class OnlineGameRoom {
   private state: GameState;
   private readonly context: CommandContext;
   private acceptedActions: AcceptedOnlineActionRecord[];
+  private timeout?: AcceptedOnlineTimeoutRecord;
   private result?: OnlineGameResultDTO;
+  private stateVersion = 0;
+  private clockState?: OnlineClockRecord;
 
   private constructor(
     private readonly setup: OnlineGameSetupDTO,
     private readonly gameId: string,
     private readonly whiteToken: string,
-    private readonly blackToken: string
+    private readonly blackToken: string,
+    private readonly now: () => number
   ) {
     const hydrated = createInitialStateFromSetupDTO(setup);
     this.state = hydrated.state;
@@ -88,6 +116,7 @@ export class OnlineGameRoom {
       board: hydrated.board,
     };
     this.acceptedActions = [];
+    this.clockState = this.createInitialClockState();
   }
 
   static create(input: OnlineGameRoomCreateInput): OnlineGameRoom {
@@ -95,20 +124,22 @@ export class OnlineGameRoom {
       input.setup,
       input.gameId,
       input.whiteToken,
-      input.blackToken
+      input.blackToken,
+      input.now ?? Date.now
     );
+    room.clockState = room.cloneClockRecord(input.clock) ?? room.clockState;
 
     for (const entry of input.acceptedActions ?? []) {
-      const token = room.tokenForColor(entry.playerColor);
-      const result = room.submitAction(token, entry.action);
-      if (!result.ok) {
-        throw new Error(`Could not replay online action: ${result.error.message}`);
-      }
+      room.replayAcceptedAction(entry);
+    }
+
+    if (input.timeout) {
+      room.applyTimeoutRecord(input.timeout);
     }
 
     if (input.result) {
       room.result = input.result;
-    } else {
+    } else if (!input.timeout) {
       room.latchTerminalResult();
     }
     return room;
@@ -121,10 +152,10 @@ export class OnlineGameRoom {
   }
 
   get version(): number {
-    return this.acceptedActions.length;
+    return this.stateVersion;
   }
 
-  getSnapshot(): OnlineGameSnapshotDTO {
+  getSnapshot(now = this.now()): OnlineGameSnapshotDTO {
     const result = this.result ?? this.detectTerminalResult();
 
     return {
@@ -136,11 +167,13 @@ export class OnlineGameRoom {
       playerToMove: this.context.gameEngine.getCurrentPlayer(this.state.turnCounter),
       turnPhase: this.context.gameEngine.getTurnPhase(this.state.turnCounter),
       result,
+      clock: this.snapshotClock(now),
     };
   }
 
   submitAction(token: string, action: OnlineActionDTO): OnlineActionResult {
-    const snapshot = this.getSnapshot();
+    const acceptedAt = this.now();
+    const snapshot = this.getSnapshot(acceptedAt);
     const color = this.authenticate(token);
     if (!color) {
       return reject(snapshot, "unauthorized", "This player token is not valid.");
@@ -161,13 +194,15 @@ export class OnlineGameRoom {
     }
 
     if (action.type === "RESIGN") {
+      this.settleClockAt(acceptedAt);
       this.result = { winner: opposite(color), reason: "resignation" };
-      this.accept(color, action);
-      return { ok: true, snapshot: this.getSnapshot() };
+      this.stopClock();
+      this.accept(color, action, acceptedAt);
+      return { ok: true, snapshot: this.getSnapshot(acceptedAt) };
     }
 
     if (action.type === "PROMOTE") {
-      return this.submitPromotion(color, action);
+      return this.submitPromotion(color, action, acceptedAt);
     }
 
     const command = this.commandFromAction(action, color);
@@ -184,10 +219,13 @@ export class OnlineGameRoom {
       );
     }
 
+    const activeColorBeforeAction = this.context.gameEngine.getCurrentPlayer(this.state.turnCounter);
+    this.settleClockAt(acceptedAt);
     this.state = result.newState;
     this.latchTerminalResult();
-    this.accept(color, action);
-    return { ok: true, snapshot: this.getSnapshot() };
+    this.advanceClockAfterAction(activeColorBeforeAction, acceptedAt);
+    this.accept(color, action, acceptedAt);
+    return { ok: true, snapshot: this.getSnapshot(acceptedAt) };
   }
 
   toRecord(): OnlineGameRoomRecord {
@@ -196,8 +234,202 @@ export class OnlineGameRoom {
       whiteToken: this.whiteToken,
       blackToken: this.blackToken,
       setup: this.setup,
+      clock: this.cloneClockRecord(this.clockState),
       acceptedActions: [...this.acceptedActions],
+      timeout: this.timeout,
       result: this.result,
+    };
+  }
+
+  adjudicateTimeout(adjudicatedAt = this.now()): AcceptedOnlineTimeoutRecord | null {
+    if (!this.timeControlMs() || !this.clockState || this.result) return null;
+
+    this.settleClockAt(adjudicatedAt);
+    const timedOutColor = this.clockState.activeColor;
+    if (!timedOutColor || this.clockState.remainingMs[timedOutColor] > 0) {
+      return null;
+    }
+
+    const version = this.version + 1;
+    this.clockState = {
+      ...this.clockState,
+      remainingMs: {
+        ...this.clockState.remainingMs,
+        [timedOutColor]: 0,
+      },
+      activeColor: null,
+      runningSince: null,
+      flag: { color: timedOutColor, at: adjudicatedAt },
+    };
+    this.result = { winner: opposite(timedOutColor), reason: "timeout" };
+    this.timeout = {
+      playerColor: timedOutColor,
+      version,
+      adjudicatedAt,
+      result: this.result,
+      clock: this.cloneClockRecord(this.clockState)!,
+    };
+    this.stateVersion = version;
+    return this.timeout;
+  }
+
+  private replayAcceptedAction(entry: AcceptedOnlineActionRecord): void {
+    const replayedAt = entry.playedAt;
+    const shouldDeriveClock = !entry.clock && replayedAt !== undefined;
+    const activeColorBeforeAction = this.context.gameEngine.getCurrentPlayer(this.state.turnCounter);
+
+    if (entry.action.type === "RESIGN") {
+      if (shouldDeriveClock) {
+        this.settleClockAt(replayedAt);
+      }
+      this.result = { winner: opposite(entry.playerColor), reason: "resignation" };
+      if (shouldDeriveClock) {
+        this.stopClock();
+      }
+    } else if (entry.action.type === "PROMOTE") {
+      if (shouldDeriveClock) {
+        this.settleClockAt(replayedAt);
+      }
+      const nextState = this.context.gameEngine.applyPromotion(this.state, entry.action.pieceType);
+      if (nextState === this.state || nextState.promotionPending) {
+        throw new Error("Could not replay online promotion.");
+      }
+      this.state = nextState;
+      if (shouldDeriveClock) {
+        this.advanceClockAfterAction(activeColorBeforeAction, replayedAt);
+      }
+    } else {
+      const command = this.commandFromAction(entry.action, entry.playerColor);
+      if (!command.ok) {
+        throw new Error(`Could not replay online action: ${command.error}`);
+      }
+      const result = command.command.execute(this.state);
+      if (!result.success) {
+        throw new Error(
+          `Could not replay online action: ${
+            result.error ?? "The action is not legal in this position."
+          }`
+        );
+      }
+      if (shouldDeriveClock) {
+        this.settleClockAt(replayedAt);
+      }
+      this.state = result.newState;
+      this.latchTerminalResult();
+      if (shouldDeriveClock) {
+        this.advanceClockAfterAction(activeColorBeforeAction, replayedAt);
+      }
+    }
+
+    this.acceptedActions.push({
+      ...entry,
+      action: { ...entry.action },
+      clock: this.cloneClockRecord(entry.clock),
+    });
+    this.clockState = this.cloneClockRecord(entry.clock) ?? this.clockState;
+    this.stateVersion = entry.version ?? this.stateVersion + 1;
+  }
+
+  private applyTimeoutRecord(timeout: AcceptedOnlineTimeoutRecord): void {
+    this.timeout = {
+      ...timeout,
+      result: { ...timeout.result },
+      clock: this.cloneClockRecord(timeout.clock)!,
+    };
+    this.result = this.timeout.result;
+    this.clockState = this.cloneClockRecord(timeout.clock);
+    this.stateVersion = timeout.version;
+  }
+
+  private createInitialClockState(): OnlineClockRecord | undefined {
+    const timeControl = this.timeControlMs();
+    if (!timeControl) return undefined;
+    return {
+      remainingMs: {
+        w: timeControl.initialMs,
+        b: timeControl.initialMs,
+      },
+      activeColor: this.context.gameEngine.getCurrentPlayer(this.state.turnCounter),
+      runningSince: this.now(),
+    };
+  }
+
+  private timeControlMs(): OnlineClockStateDTO["timeControl"] | undefined {
+    if (!this.setup.timeControl) return undefined;
+    return {
+      initialMs: this.setup.timeControl.initial * 60_000,
+      incrementMs: this.setup.timeControl.increment * 1_000,
+    };
+  }
+
+  private snapshotClock(now: number): OnlineClockStateDTO | undefined {
+    const timeControl = this.timeControlMs();
+    if (!timeControl || !this.clockState) return undefined;
+    return {
+      timeControl,
+      remainingMs: { ...this.clockState.remainingMs },
+      activeColor: this.clockState.activeColor,
+      runningSince: this.clockState.runningSince,
+      serverNow: now,
+      flag: this.clockState.flag ? { ...this.clockState.flag } : undefined,
+    };
+  }
+
+  private settleClockAt(now: number): void {
+    if (!this.clockState || !this.clockState.activeColor || this.clockState.runningSince === null) {
+      return;
+    }
+
+    const activeColor = this.clockState.activeColor;
+    const elapsedMs = Math.max(0, now - this.clockState.runningSince);
+    this.clockState = {
+      ...this.clockState,
+      remainingMs: {
+        ...this.clockState.remainingMs,
+        [activeColor]: Math.max(0, this.clockState.remainingMs[activeColor] - elapsedMs),
+      },
+      runningSince: now,
+    };
+  }
+
+  private advanceClockAfterAction(previousActiveColor: Color, now: number): void {
+    if (!this.clockState) return;
+    if (this.result) {
+      this.stopClock();
+      return;
+    }
+
+    const nextActiveColor = this.context.gameEngine.getCurrentPlayer(this.state.turnCounter);
+    const timeControl = this.timeControlMs();
+    const remainingMs = { ...this.clockState.remainingMs };
+    if (nextActiveColor !== previousActiveColor && timeControl) {
+      remainingMs[previousActiveColor] += timeControl.incrementMs;
+    }
+
+    this.clockState = {
+      ...this.clockState,
+      remainingMs,
+      activeColor: nextActiveColor,
+      runningSince: now,
+    };
+  }
+
+  private stopClock(): void {
+    if (!this.clockState) return;
+    this.clockState = {
+      ...this.clockState,
+      activeColor: null,
+      runningSince: null,
+    };
+  }
+
+  private cloneClockRecord(clock: OnlineClockRecord | undefined): OnlineClockRecord | undefined {
+    if (!clock) return undefined;
+    return {
+      remainingMs: { ...clock.remainingMs },
+      activeColor: clock.activeColor,
+      runningSince: clock.runningSince,
+      flag: clock.flag ? { ...clock.flag } : undefined,
     };
   }
 
@@ -205,18 +437,28 @@ export class OnlineGameRoom {
     return color === "w" ? this.whiteToken : this.blackToken;
   }
 
-  private accept(playerColor: Color, action: OnlineActionDTO): void {
-    this.acceptedActions.push({
+  private accept(playerColor: Color, action: OnlineActionDTO, playedAt: number): AcceptedOnlineActionRecord {
+    const version = this.version + 1;
+    const accepted = {
       playerColor,
       action: { ...action, baseVersion: this.version },
+      version,
+      playedAt,
+      clock: this.cloneClockRecord(this.clockState),
+    };
+    this.acceptedActions.push({
+      ...accepted,
     });
+    this.stateVersion = version;
+    return accepted;
   }
 
   private submitPromotion(
     color: Color,
-    action: Extract<OnlineActionDTO, { type: "PROMOTE" }>
+    action: Extract<OnlineActionDTO, { type: "PROMOTE" }>,
+    acceptedAt: number
   ): OnlineActionResult {
-    const snapshot = this.getSnapshot();
+    const snapshot = this.getSnapshot(acceptedAt);
     const pending = this.state.promotionPending;
     if (!pending || pending.color !== color) {
       return reject(snapshot, "illegal_action", "There is no promotion pending for this player.");
@@ -231,10 +473,13 @@ export class OnlineGameRoom {
       return reject(snapshot, "illegal_action", "The promotion could not be applied.");
     }
 
+    const activeColorBeforeAction = this.context.gameEngine.getCurrentPlayer(this.state.turnCounter);
+    this.settleClockAt(acceptedAt);
     this.state = nextState;
     this.latchTerminalResult();
-    this.accept(color, action);
-    return { ok: true, snapshot: this.getSnapshot() };
+    this.advanceClockAfterAction(activeColorBeforeAction, acceptedAt);
+    this.accept(color, action, acceptedAt);
+    return { ok: true, snapshot: this.getSnapshot(acceptedAt) };
   }
 
   private detectTerminalResult(): OnlineGameResultDTO | undefined {

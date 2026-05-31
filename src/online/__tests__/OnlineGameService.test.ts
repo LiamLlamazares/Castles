@@ -110,4 +110,99 @@ describe("OnlineGameService", () => {
 
     expect(restored.getRoom("game_resign")?.getSnapshot().result?.winner).toBe("w");
   });
+
+  it("rebuilds terminal timeout results from timeout adjudication events", () => {
+    const restored = OnlineGameService.fromRecords(
+      onlineGameEventsToRecords([
+        {
+          ...eventEnvelope(1),
+          type: "game_created",
+          gameId: "game_timeout",
+          whiteToken: "w-token",
+          blackToken: "b-token",
+          setup: {
+            ...createSetup(),
+            timeControl: { initial: 1, increment: 0 },
+          },
+        },
+        {
+          ...eventEnvelope(2),
+          type: "timeout_adjudicated",
+          gameId: "game_timeout",
+          playerColor: "w",
+          version: 1,
+          adjudicatedAt: 61_000,
+          result: { winner: "b", reason: "timeout" },
+          clock: {
+            remainingMs: { w: 0, b: 60_000 },
+            activeColor: null,
+            runningSince: null,
+            flag: { color: "w", at: 61_000 },
+          },
+        },
+      ] as any)
+    );
+
+    expect(restored.getRoom("game_timeout")?.getSnapshot()).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+      clock: {
+        remainingMs: { w: 0, b: 60_000 },
+        activeColor: null,
+      },
+    });
+  });
+
+  it("rebuilds untouched clocked games from the persisted creation clock", () => {
+    const restored = OnlineGameService.fromRecords(
+      onlineGameEventsToRecords([
+        {
+          ...eventEnvelope(1),
+          type: "game_created",
+          gameId: "game_created_clock",
+          whiteToken: "w-token",
+          blackToken: "b-token",
+          setup: {
+            ...createSetup(),
+            timeControl: { initial: 1, increment: 0 },
+          },
+          clock: {
+            remainingMs: { w: 60_000, b: 60_000 },
+            activeColor: "w",
+            runningSince: 12_345,
+          },
+        },
+      ] as any)
+    );
+
+    expect(restored.getRoom("game_created_clock")?.getSnapshot().clock).toMatchObject({
+      remainingMs: { w: 60_000, b: 60_000 },
+      activeColor: "w",
+      runningSince: 12_345,
+    });
+  });
+
+  it("synthesizes deterministic creation clocks for legacy clocked creation events", () => {
+    const createdAt = "2026-05-31T12:00:01.000Z";
+    const records = onlineGameEventsToRecords([
+      {
+        ...eventEnvelope(1),
+        createdAt,
+        type: "game_created",
+        gameId: "game_legacy_clock",
+        whiteToken: "w-token",
+        blackToken: "b-token",
+        setup: {
+          ...createSetup(),
+          timeControl: { initial: 1, increment: 0 },
+        },
+      },
+    ]);
+
+    expect(records[0].clock).toEqual({
+      remainingMs: { w: 60_000, b: 60_000 },
+      activeColor: "w",
+      runningSince: Date.parse(createdAt),
+    });
+  });
 });

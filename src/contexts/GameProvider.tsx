@@ -223,6 +223,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   // =========== PROMOTION ===========
   const promotePiece = useCallback((newType: PieceType) => {
     if (onlineSession) {
+      if (onlineSession.result) return;
       onlineSession.submitAction({
         type: "PROMOTE",
         pieceType: newType,
@@ -298,6 +299,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     handleHexClick,
     handleResign: (forColor?: Color) => {
       if (onlineSession) {
+        if (onlineSession.result) return;
         onlineSession.submitAction({
           type: "RESIGN",
           baseVersion: onlineSession.version,

@@ -34,6 +34,8 @@ const MAX_CASTLES = 40;
 const MAX_SANCTUARIES = 24;
 const MAX_ID_LENGTH = 128;
 const MAX_TOKEN_LENGTH = 256;
+const MAX_INITIAL_TIME_MINUTES = 24 * 60;
+const MAX_INCREMENT_SECONDS = 60 * 60;
 
 const COLORS = new Set<Color>(["w", "b"]);
 const PIECE_TYPES = new Set(Object.values(PieceType));
@@ -300,6 +302,32 @@ export function validateOnlineGameSetup(value: unknown): ValidationResult<Online
     pieceTheme = value.pieceTheme as PieceTheme;
   }
 
+  let timeControl: OnlineGameSetupDTO["timeControl"];
+  if (value.timeControl !== undefined) {
+    if (!isRecord(value.timeControl)) return bad("setup.timeControl must be an object.");
+    if (
+      !isSafeInteger(value.timeControl.initial) ||
+      value.timeControl.initial < 1 ||
+      value.timeControl.initial > MAX_INITIAL_TIME_MINUTES
+    ) {
+      return bad(
+        `setup.timeControl.initial must be an integer between 1 and ${MAX_INITIAL_TIME_MINUTES}.`
+      );
+    }
+    if (
+      !isNonNegativeInteger(value.timeControl.increment) ||
+      value.timeControl.increment > MAX_INCREMENT_SECONDS
+    ) {
+      return bad(
+        `setup.timeControl.increment must be an integer between 0 and ${MAX_INCREMENT_SECONDS}.`
+      );
+    }
+    timeControl = {
+      initial: value.timeControl.initial,
+      increment: value.timeControl.increment,
+    };
+  }
+
   return {
     ok: true,
     value: {
@@ -310,6 +338,7 @@ export function validateOnlineGameSetup(value: unknown): ValidationResult<Online
       gameRules,
       initialPoolTypes,
       pieceTheme,
+      timeControl,
     },
   };
 }

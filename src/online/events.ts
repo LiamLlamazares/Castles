@@ -1,6 +1,10 @@
-import type { OnlineGameRoomRecord } from "./OnlineGameRoom";
+import type {
+  AcceptedOnlineTimeoutRecord,
+  OnlineClockRecord,
+  OnlineGameRoomRecord,
+} from "./OnlineGameRoom";
 import { Color } from "../Constants";
-import { OnlineActionDTO, OnlineGameSetupDTO } from "./types";
+import { OnlineActionDTO, OnlineGameResultDTO, OnlineGameSetupDTO } from "./types";
 import {
   validateOnlineAction,
   validateOnlineGameSetup,
@@ -24,13 +28,25 @@ export type OnlineGameEvent =
       whiteToken: string;
       blackToken: string;
       setup: OnlineGameSetupDTO;
+      clock?: OnlineClockRecord;
     })
   | (OnlineGameEventEnvelope & {
       type: "action_accepted";
       gameId: string;
       playerColor: Color;
       version: number;
+      playedAt?: number;
+      clock?: OnlineClockRecord;
       action: OnlineActionDTO;
+    })
+  | (OnlineGameEventEnvelope & {
+      type: "timeout_adjudicated";
+      gameId: string;
+      playerColor: Color;
+      version: number;
+      adjudicatedAt: number;
+      result: OnlineGameResultDTO;
+      clock: OnlineClockRecord;
     });
 
 export interface OnlineGameEventReplayOptions {
@@ -66,6 +82,10 @@ function isColor(value: unknown): value is Color {
 
 function isPositiveSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
 function isIsoDateString(value: unknown): value is string {
@@ -113,6 +133,90 @@ export function createOnlineActionAcceptedEvent(
   };
 }
 
+export function createOnlineTimeoutAdjudicatedEvent(
+  event: Omit<
+    Extract<OnlineGameEvent, { type: "timeout_adjudicated" }>,
+    keyof OnlineGameEventEnvelope
+  >,
+  metadata?: Partial<OnlineGameEventEnvelope>
+): Extract<OnlineGameEvent, { type: "timeout_adjudicated" }> {
+  return {
+    ...event,
+    ...createEnvelope(metadata),
+  };
+}
+
+function validateClockRecord(value: unknown, path: string): ValidationResult<OnlineClockRecord> {
+  if (!isRecord(value)) return bad(`${path} must be a clock object.`);
+  if (!isRecord(value.remainingMs)) return bad(`${path}.remainingMs must be an object.`);
+  if (
+    !isNonNegativeSafeInteger(value.remainingMs.w) ||
+    !isNonNegativeSafeInteger(value.remainingMs.b)
+  ) {
+    return bad(`${path}.remainingMs values must be non-negative integers.`);
+  }
+  if (value.activeColor !== null && !isColor(value.activeColor)) {
+    return bad(`${path}.activeColor must be w, b, or null.`);
+  }
+  if (value.runningSince !== null && !isNonNegativeSafeInteger(value.runningSince)) {
+    return bad(`${path}.runningSince must be a non-negative integer or null.`);
+  }
+  if ((value.activeColor === null) !== (value.runningSince === null)) {
+    return bad(`${path}.activeColor and runningSince must both be set or both be null.`);
+  }
+
+  let flag: OnlineClockRecord["flag"];
+  if (value.flag !== undefined) {
+    if (!isRecord(value.flag)) return bad(`${path}.flag must be an object when present.`);
+    if (!isColor(value.flag.color)) return bad(`${path}.flag.color must be w or b.`);
+    if (!isNonNegativeSafeInteger(value.flag.at)) {
+      return bad(`${path}.flag.at must be a non-negative integer.`);
+    }
+    flag = { color: value.flag.color, at: value.flag.at };
+  }
+
+  return {
+    ok: true,
+    value: {
+      remainingMs: {
+        w: value.remainingMs.w,
+        b: value.remainingMs.b,
+      },
+      activeColor: value.activeColor,
+      runningSince: value.runningSince,
+      flag,
+    },
+  };
+}
+
+function validateTimeoutResult(value: unknown): ValidationResult<OnlineGameResultDTO> {
+  if (!isRecord(value)) return bad("event.result must be an object.");
+  if (!isColor(value.winner)) return bad("event.result.winner must be w or b.");
+  if (value.reason !== "timeout") return bad("event.result.reason must be timeout.");
+  return {
+    ok: true,
+    value: {
+      winner: value.winner,
+      reason: "timeout",
+    },
+  };
+}
+
+function createInitialClockRecord(
+  setup: OnlineGameSetupDTO,
+  runningSince: number
+): OnlineClockRecord | undefined {
+  if (!setup.timeControl) return undefined;
+  return {
+    remainingMs: {
+      w: setup.timeControl.initial * 60_000,
+      b: setup.timeControl.initial * 60_000,
+    },
+    activeColor: "w",
+    runningSince,
+  };
+}
+
 export function validateOnlineGameEvent(value: unknown): ValidationResult<OnlineGameEvent> {
   if (!isRecord(value)) return bad("event must be an object.");
   if (value.schemaVersion !== ONLINE_EVENT_SCHEMA_VERSION) {
@@ -146,6 +250,15 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     }
     const setup = validateOnlineGameSetup(value.setup);
     if (!setup.ok) return setup;
+    let clock: OnlineClockRecord | undefined;
+    if (value.clock !== undefined) {
+      if (!setup.value.timeControl) {
+        return bad("event.clock requires setup.timeControl.");
+      }
+      const clockResult = validateClockRecord(value.clock, "event.clock");
+      if (!clockResult.ok) return clockResult;
+      clock = clockResult.value;
+    }
     return {
       ok: true,
       value: {
@@ -155,6 +268,7 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
         whiteToken: value.whiteToken,
         blackToken: value.blackToken,
         setup: setup.value,
+        clock,
       },
     };
   }
@@ -171,6 +285,15 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     if (action.value.baseVersion + 1 !== value.version) {
       return bad("event.version must be one greater than action.baseVersion.");
     }
+    if (value.playedAt !== undefined && !isNonNegativeSafeInteger(value.playedAt)) {
+      return bad("event.playedAt must be a non-negative integer when present.");
+    }
+    let clock: OnlineClockRecord | undefined;
+    if (value.clock !== undefined) {
+      const clockResult = validateClockRecord(value.clock, "event.clock");
+      if (!clockResult.ok) return clockResult;
+      clock = clockResult.value;
+    }
     return {
       ok: true,
       value: {
@@ -179,7 +302,41 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
         gameId: value.gameId,
         playerColor: value.playerColor,
         version: value.version,
+        playedAt: value.playedAt,
+        clock,
         action: action.value,
+      },
+    };
+  }
+
+  if (value.type === "timeout_adjudicated") {
+    if (!isColor(value.playerColor)) {
+      return bad("event.playerColor must be w or b.");
+    }
+    if (!isPositiveSafeInteger(value.version)) {
+      return bad("event.version must be a positive integer.");
+    }
+    if (!isNonNegativeSafeInteger(value.adjudicatedAt)) {
+      return bad("event.adjudicatedAt must be a non-negative integer.");
+    }
+    const result = validateTimeoutResult(value.result);
+    if (!result.ok) return result;
+    if (result.value.winner !== (value.playerColor === "w" ? "b" : "w")) {
+      return bad("event.result.winner must be the opponent of the timed-out player.");
+    }
+    const clock = validateClockRecord(value.clock, "event.clock");
+    if (!clock.ok) return clock;
+    return {
+      ok: true,
+      value: {
+        ...envelope,
+        type: "timeout_adjudicated",
+        gameId: value.gameId,
+        playerColor: value.playerColor,
+        version: value.version,
+        adjudicatedAt: value.adjudicatedAt,
+        result: result.value,
+        clock: clock.value,
       },
     };
   }
@@ -192,6 +349,8 @@ export function onlineGameEventsToRecords(
   options: OnlineGameEventReplayOptions = {}
 ): OnlineGameRoomRecord[] {
   const rooms = new Map<string, OnlineGameRoomRecord>();
+  const roomVersion = (room: OnlineGameRoomRecord): number =>
+    room.timeout?.version ?? room.acceptedActions.at(-1)?.version ?? room.acceptedActions.length;
 
   events.forEach((event, eventIndex) => {
     try {
@@ -204,6 +363,7 @@ export function onlineGameEventsToRecords(
           whiteToken: event.whiteToken,
           blackToken: event.blackToken,
           setup: event.setup,
+          clock: event.clock ?? createInitialClockRecord(event.setup, Date.parse(event.createdAt)),
           acceptedActions: [],
         });
         return;
@@ -211,18 +371,56 @@ export function onlineGameEventsToRecords(
 
       const room = rooms.get(event.gameId);
       if (!room) {
-        throw new Error(`Accepted action event references missing game ${event.gameId}.`);
+        throw new Error(`Online event references missing game ${event.gameId}.`);
       }
-      if (event.version !== room.acceptedActions.length + 1) {
+      if (room.timeout) {
+        throw new Error(`Online event references already-finished game ${event.gameId}.`);
+      }
+      if (event.type === "action_accepted" && event.clock && !room.setup.timeControl) {
+        throw new Error(`Clocked action event references no-clock game ${event.gameId}.`);
+      }
+      if (event.type === "timeout_adjudicated") {
+        if (!room.setup.timeControl) {
+          throw new Error(`Timeout event references no-clock game ${event.gameId}.`);
+        }
+        if (
+          event.clock.activeColor !== null ||
+          event.clock.runningSince !== null ||
+          event.clock.remainingMs[event.playerColor] !== 0 ||
+          event.clock.flag?.color !== event.playerColor
+        ) {
+          throw new Error(`Timeout event for ${event.gameId} has inconsistent clock state.`);
+        }
+      }
+      const expectedVersion = roomVersion(room) + 1;
+      if (event.version !== expectedVersion) {
         throw new Error(
-          `Accepted action event for ${event.gameId} has non-contiguous version ${event.version}.`
+          `Online event for ${event.gameId} has non-contiguous version ${event.version}.`
         );
       }
 
-      room.acceptedActions.push({
-        playerColor: event.playerColor,
-        action: event.action,
-      });
+      if (event.type === "action_accepted") {
+        room.acceptedActions.push({
+          playerColor: event.playerColor,
+          action: event.action,
+          version: event.version,
+          playedAt: event.playedAt ?? Date.parse(event.createdAt),
+          clock: event.clock,
+        });
+        return;
+      }
+
+      if (event.type === "timeout_adjudicated") {
+        const timeout: AcceptedOnlineTimeoutRecord = {
+          playerColor: event.playerColor,
+          version: event.version,
+          adjudicatedAt: event.adjudicatedAt,
+          result: event.result,
+          clock: event.clock,
+        };
+        room.timeout = timeout;
+        room.result = event.result;
+      }
     } catch (error) {
       options.onEventError?.(eventIndex, error);
       throw error;

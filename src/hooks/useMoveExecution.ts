@@ -122,6 +122,9 @@ export const useMoveExecution = ({
       };
 
       if (onlineSession) {
+        if (onlineSession.result) {
+          return false;
+        }
         if (onlineSession.playerColor !== currentPlayer) {
           return false;
         }

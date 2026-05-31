@@ -30,6 +30,34 @@ describe("online validation", () => {
     expect(validateOnlineGameSetup(createSetup()).ok).toBe(true);
   });
 
+  it("preserves bounded time controls in online setup validation", () => {
+    const setup = {
+      ...createSetup(),
+      timeControl: { initial: 5, increment: 3 },
+    };
+
+    const result = validateOnlineGameSetup(setup);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.timeControl).toEqual({ initial: 5, increment: 3 });
+    }
+  });
+
+  it("rejects invalid online time controls", () => {
+    const setup = {
+      ...createSetup(),
+      timeControl: { initial: 0, increment: -1 },
+    };
+
+    const result = validateOnlineGameSetup(setup);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("timeControl");
+    }
+  });
+
   it("rejects malformed hex coordinates before hydration can throw", () => {
     const setup = createSetup();
     setup.pieces[0] = {
@@ -115,6 +143,30 @@ describe("online validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toContain("createdAt");
+    }
+  });
+
+  it("rejects creation event clocks when the game has no time control", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-create-clockless",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_test",
+      whiteToken: "w-token",
+      blackToken: "b-token",
+      setup: createSetup(),
+      clock: {
+        remainingMs: { w: 60_000, b: 60_000 },
+        activeColor: "w",
+        runningSince: 1_000,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("clock");
     }
   });
 

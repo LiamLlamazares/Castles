@@ -102,6 +102,15 @@ export interface OnlineGameResultDTO {
   reason: "monarch_captured" | "castle_control" | "victory_points" | "resignation" | "timeout";
 }
 
+export interface OnlineClockStateDTO {
+  timeControl: { initialMs: number; incrementMs: number };
+  remainingMs: { w: number; b: number };
+  activeColor: Color | null;
+  runningSince: number | null;
+  serverNow: number;
+  flag?: { color: Color; at: number };
+}
+
 interface VersionedAction {
   baseVersion: number;
 }
@@ -131,6 +140,7 @@ export interface OnlineGameSnapshotDTO {
   playerToMove: Color;
   turnPhase: TurnPhase;
   result?: OnlineGameResultDTO;
+  clock?: OnlineClockStateDTO;
 }
 
 export type OnlineConnectionStatus =
@@ -146,6 +156,8 @@ export interface OnlineClientSession {
   version: number;
   status: OnlineConnectionStatus;
   lastError?: string;
+  clock?: OnlineClockStateDTO;
+  result?: OnlineGameResultDTO;
   submitAction: (action: OnlineActionDTO) => void;
 }
 

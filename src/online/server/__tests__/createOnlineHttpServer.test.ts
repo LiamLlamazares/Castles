@@ -30,6 +30,13 @@ function createSetup() {
   });
 }
 
+function createClockedSetup() {
+  return {
+    ...createSetup(),
+    timeControl: { initial: 1, increment: 0 },
+  };
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -583,5 +590,97 @@ describe("createOnlineHttpServer", () => {
       whiteSocket.close();
       blackSocket?.close();
     }
+  });
+
+  it("persists timeout adjudication before serving an expired snapshot", async () => {
+    let now = 0;
+    const events: OnlineGameEvent[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_timeout_http",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => now,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onGameEvent: (event) => {
+        events.push(event);
+      },
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+
+    now = 61_000;
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: { authorization: `Bearer ${created.white.token}` } }
+    );
+    const body = await snapshotResponse.json();
+
+    expect(snapshotResponse.status).toBe(200);
+    expect(body.snapshot).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+      clock: {
+        remainingMs: { w: 0, b: 60_000 },
+        activeColor: null,
+      },
+    });
+    expect(events.map((event) => event.type)).toEqual([
+      "game_created",
+      "timeout_adjudicated",
+    ]);
+  });
+
+  it("rolls back timeout adjudication when timeout persistence fails", async () => {
+    let now = 0;
+    const service = new OnlineGameService({
+      idFactory: () => "game_timeout_rollback",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => now,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onGameEvent: (event) => {
+        if (event.type === "timeout_adjudicated") {
+          throw new Error("disk unavailable");
+        }
+      },
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+
+    now = 61_000;
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: { authorization: `Bearer ${created.white.token}` } }
+    );
+
+    expect(snapshotResponse.status).toBe(503);
+    expect(service.getRoom(created.gameId)?.getSnapshot()).toMatchObject({
+      version: 0,
+      result: undefined,
+      clock: {
+        remainingMs: { w: 60_000, b: 60_000 },
+        activeColor: "w",
+      },
+    });
   });
 });

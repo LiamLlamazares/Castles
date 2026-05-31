@@ -25,6 +25,7 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
 import { PieceTheme } from "../Constants";
 import type { OnlineClientSession } from "../online/types";
+import { formatOnlineGameResult } from "../online/client";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import PromotionModal from "./PromotionModal";
 import "../css/Board.css";
@@ -240,12 +241,18 @@ const InnerGame: React.FC<GameBoardProps> = ({
     isViewingHistory: aiIntegrationSafe?.isViewingHistory,
   });
 
+  const onlineVictoryMessage = onlineSession?.result
+    ? formatOnlineGameResult(onlineSession.result)
+    : null;
+  const displayedVictoryMessage = onlineVictoryMessage ?? victoryMessage;
+  const displayedWinner = onlineSession?.result?.winner ?? winner;
+
   // Reset overlay when game restarts
   React.useEffect(() => {
-    if (!victoryMessage) {
+    if (!displayedVictoryMessage) {
         setOverlayDismissed(false);
     }
-  }, [victoryMessage]);
+  }, [displayedVictoryMessage]);
 
   // VP Accumulation
   React.useEffect(() => {
@@ -268,7 +275,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   }, [turnCounter, castles, victoryPoints, gameRules?.vpModeEnabled]);
 
   const handleNewGame = () => {
-    const safeToReset = !hasGameStarted || winner || isAnalysisMode;
+    const safeToReset = !hasGameStarted || displayedWinner || isAnalysisMode;
 
     if (safeToReset) {
       clearSave();
@@ -306,7 +313,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     onResize: viewState.incrementResizeVersion,
     onNavigate: stepHistory,
     onNewGame: handleNewGame,
-    isNewGameEnabled: !hasGameStarted || !!winner,
+    isNewGameEnabled: !hasGameStarted || !!winner || !!onlineSession?.result,
   });
 
   const handleImportPGN = () => {
@@ -336,9 +343,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
   const handleSaveGameToLibrary = React.useCallback(async () => {
     if (!onSaveGameToLibrary) return;
-    const status: SavedGameStatus = isAnalysisMode ? "analysis" : winner ? "complete" : "ongoing";
+    const status: SavedGameStatus = isAnalysisMode ? "analysis" : displayedWinner ? "complete" : "ongoing";
     await onSaveGameToLibrary(getPGN(), status);
-  }, [getPGN, isAnalysisMode, onSaveGameToLibrary, winner]);
+  }, [getPGN, isAnalysisMode, onSaveGameToLibrary, displayedWinner]);
 
   const dismissQuickStart = () => setShowQuickStart(false);
   const dismissTooltipHint = () => setShowTooltipHint(false);
@@ -382,8 +389,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
       <GameOverlays
         showRules={showRulesModal}
         onCloseRules={() => setShowRulesModal(false)}
-        victoryMessage={victoryMessage}
-        winner={winner}
+        victoryMessage={displayedVictoryMessage}
+        winner={displayedWinner}
         isOverlayDismissed={isOverlayDismissed}
         onDismissOverlay={() => setOverlayDismissed(true)}
         onRestart={onRestart}
@@ -412,8 +419,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
           moveTree={moveTree}
           onJumpToNode={jumpToNode}
           hasGameStarted={hasGameStarted}
-          winner={winner}
+          winner={displayedWinner}
           timeControl={timeControl}
+          onlineClock={onlineSession?.clock}
+          isOnline={!!onlineSession}
           viewNodeId={viewNodeId}
           victoryPoints={victoryPoints}
         />

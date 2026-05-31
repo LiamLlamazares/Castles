@@ -3,9 +3,11 @@ import express, { NextFunction, Request, Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RawData } from "ws";
 import { OnlineGameService } from "../OnlineGameService";
+import type { AcceptedOnlineTimeoutRecord } from "../OnlineGameRoom";
 import {
   createOnlineActionAcceptedEvent,
   createOnlineGameCreatedEvent,
+  createOnlineTimeoutAdjudicatedEvent,
   OnlineGameEvent,
   ONLINE_EVENT_SCHEMA_VERSION,
   ONLINE_RULESET_VERSION,
@@ -26,6 +28,7 @@ export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
   onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
+  now?: () => number;
   health?: {
     buildId?: string;
     commit?: string;
@@ -92,7 +95,7 @@ function setOnlineNoStoreHeaders(res: Response): void {
 
 export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const app = express();
-  const service = options.service ?? new OnlineGameService();
+  const service = options.service ?? new OnlineGameService({ now: options.now });
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
   const connections = new Map<WebSocket, OnlineConnection>();
@@ -113,15 +116,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return next;
   };
 
-  const waitForPendingGameActions = async (gameId: string): Promise<void> => {
-    await actionQueues.get(gameId);
-  };
-
   const persistActionAccepted = async (
     gameId: string,
     playerColor: Extract<OnlineGameEvent, { type: "action_accepted" }>["playerColor"],
     version: number,
-    action: Extract<OnlineGameEvent, { type: "action_accepted" }>["action"]
+    action: Extract<OnlineGameEvent, { type: "action_accepted" }>["action"],
+    playedAt?: number,
+    clock?: Extract<OnlineGameEvent, { type: "action_accepted" }>["clock"]
   ) => {
     await options.onGameEvent?.(
       createOnlineActionAcceptedEvent({
@@ -130,8 +131,59 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         playerColor,
         version,
         action,
+        playedAt,
+        clock,
       })
     );
+  };
+
+  const persistTimeoutAdjudicated = async (
+    gameId: string,
+    timeout: AcceptedOnlineTimeoutRecord
+  ) => {
+    await options.onGameEvent?.(
+      createOnlineTimeoutAdjudicatedEvent({
+        type: "timeout_adjudicated",
+        gameId,
+        playerColor: timeout.playerColor,
+        version: timeout.version,
+        adjudicatedAt: timeout.adjudicatedAt,
+        result: timeout.result,
+        clock: timeout.clock,
+      })
+    );
+  };
+
+  const adjudicateTimeoutForRoom = async (
+    gameId: string,
+    room: NonNullable<ReturnType<OnlineGameService["getRoom"]>>
+  ):
+    Promise<
+      | { ok: true; timeout: AcceptedOnlineTimeoutRecord | null }
+      | { ok: false; error: OnlineReject; snapshot: ReturnType<typeof room.getSnapshot> }
+    > => {
+    const beforeTimeout = room.toRecord();
+    const timeout = room.adjudicateTimeout();
+    if (!timeout) {
+      return { ok: true, timeout: null };
+    }
+
+    try {
+      await persistTimeoutAdjudicated(gameId, timeout);
+      return { ok: true, timeout };
+    } catch (error) {
+      service.replaceRoom(beforeTimeout);
+      const restoredSnapshot = service.getRoom(gameId)?.getSnapshot() ?? room.getSnapshot();
+      console.error("Failed to persist online game timeout", error);
+      return {
+        ok: false,
+        error: {
+          code: "persistence_failed",
+          message: "The timeout result could not be saved.",
+        },
+        snapshot: restoredSnapshot,
+      };
+    }
   };
 
   app.use((_req, res, next) => {
@@ -226,6 +278,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           whiteToken: record.whiteToken,
           blackToken: record.blackToken,
           setup: record.setup,
+          clock: record.clock,
         })
       );
     } catch (error) {
@@ -244,23 +297,35 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/games/:gameId", async (req, res) => {
-    await waitForPendingGameActions(req.params.gameId);
+    await enqueueGameAction(req.params.gameId, async () => {
+      const token = getBearerToken(req.headers.authorization) ?? "";
+      const room = service.getRoomForToken(req.params.gameId, token);
+      if (!room) {
+        res.status(404).json({
+          error: {
+            code: "not_found",
+            message: "No online game was found for that id and token.",
+          },
+        });
+        return;
+      }
 
-    const token = getBearerToken(req.headers.authorization) ?? "";
-    const room = service.getRoomForToken(req.params.gameId, token);
-    if (!room) {
-      res.status(404).json({
-        error: {
-          code: "not_found",
-          message: "No online game was found for that id and token.",
-        },
+      const timeout = await adjudicateTimeoutForRoom(req.params.gameId, room);
+      if (!timeout.ok) {
+        res.status(503).json({
+          error: timeout.error,
+          snapshot: timeout.snapshot,
+        });
+        return;
+      }
+      if (timeout.timeout) {
+        broadcastSnapshot(req.params.gameId);
+      }
+
+      res.json({
+        color: room.authenticate(token),
+        snapshot: room.getSnapshot(),
       });
-      return;
-    }
-
-    res.json({
-      color: room.authenticate(token),
-      snapshot: room.getSnapshot(),
     });
   });
 
@@ -308,31 +373,77 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const message: OnlineClientMessage = validation.value;
 
     if (message.type === "ping") {
-      sendJson(socket, {
-        type: "pong",
-        clientTime: message.clientTime,
-        serverTime: Date.now(),
+      const connection = connections.get(socket);
+      if (!connection) {
+        sendJson(socket, {
+          type: "pong",
+          clientTime: message.clientTime,
+          serverTime: Date.now(),
+        });
+        return;
+      }
+
+      await enqueueGameAction(connection.gameId, async () => {
+        const room = service.getRoomForToken(connection.gameId, connection.token);
+        if (!room) {
+          sendSocketError(socket, {
+            code: "not_found",
+            message: "Online game no longer exists.",
+          });
+          return;
+        }
+
+        const timeout = await adjudicateTimeoutForRoom(connection.gameId, room);
+        if (!timeout.ok) {
+          sendJson(socket, {
+            type: "error",
+            error: timeout.error,
+            snapshot: timeout.snapshot,
+          });
+          return;
+        }
+        if (timeout.timeout) {
+          broadcastSnapshot(connection.gameId);
+        }
+        sendJson(socket, {
+          type: "pong",
+          clientTime: message.clientTime,
+          serverTime: Date.now(),
+        });
       });
       return;
     }
 
     if (message.type === "join") {
-      await waitForPendingGameActions(message.gameId);
+      await enqueueGameAction(message.gameId, async () => {
+        const room = service.getRoomForToken(message.gameId, message.token);
+        if (!room) {
+          sendSocketError(socket, {
+            code: "unauthorized",
+            message: "No online game was found for that id and token.",
+          });
+          return;
+        }
 
-      const room = service.getRoomForToken(message.gameId, message.token);
-      if (!room) {
-        sendSocketError(socket, {
-          code: "unauthorized",
-          message: "No online game was found for that id and token.",
+        const timeout = await adjudicateTimeoutForRoom(message.gameId, room);
+        if (!timeout.ok) {
+          sendJson(socket, {
+            type: "error",
+            error: timeout.error,
+            snapshot: timeout.snapshot,
+          });
+          return;
+        }
+
+        connections.set(socket, { gameId: message.gameId, token: message.token });
+        sendJson(socket, {
+          type: "joined",
+          color: room.authenticate(message.token),
+          snapshot: room.getSnapshot(),
         });
-        return;
-      }
-
-      connections.set(socket, { gameId: message.gameId, token: message.token });
-      sendJson(socket, {
-        type: "joined",
-        color: room.authenticate(message.token),
-        snapshot: room.getSnapshot(),
+        if (timeout.timeout) {
+          broadcastSnapshot(message.gameId);
+        }
       });
       return;
     }
@@ -379,6 +490,29 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
+        const timeout = await adjudicateTimeoutForRoom(currentConnection.gameId, room);
+        if (!timeout.ok) {
+          sendJson(socket, {
+            type: "error",
+            error: timeout.error,
+            snapshot: timeout.snapshot,
+          });
+          return;
+        }
+        if (timeout.timeout) {
+          const snapshot = room.getSnapshot();
+          sendJson(socket, {
+            type: "rejected",
+            error: {
+              code: "game_over",
+              message: "This game is already over on time.",
+            },
+            snapshot,
+          });
+          broadcastSnapshot(currentConnection.gameId);
+          return;
+        }
+
         const beforeAction = room.toRecord();
         const result = room.submitAction(currentConnection.token, message.action);
         if (!result.ok) {
@@ -390,12 +524,15 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
+        const acceptedAction = room.toRecord().acceptedActions.at(-1);
         try {
           await persistActionAccepted(
             currentConnection.gameId,
             playerColor,
             result.snapshot.version,
-            message.action
+            acceptedAction?.action ?? message.action,
+            acceptedAction?.playedAt,
+            acceptedAction?.clock
           );
         } catch (error) {
           service.replaceRoom(beforeAction);

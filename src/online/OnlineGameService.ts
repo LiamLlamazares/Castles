@@ -23,6 +23,7 @@ export interface CreateOnlineGameOptions {
 export interface OnlineGameServiceOptions {
   idFactory?: () => string;
   tokenFactory?: (seat: "w" | "b") => string;
+  now?: () => number;
 }
 
 function defaultIdFactory(): string {
@@ -50,10 +51,12 @@ export class OnlineGameService {
   private readonly rooms = new Map<string, OnlineGameRoom>();
   private readonly idFactory: () => string;
   private readonly tokenFactory: (seat: "w" | "b") => string;
+  private readonly now: () => number;
 
   constructor(options: OnlineGameServiceOptions = {}) {
     this.idFactory = options.idFactory ?? defaultIdFactory;
     this.tokenFactory = options.tokenFactory ?? defaultTokenFactory;
+    this.now = options.now ?? Date.now;
   }
 
   static fromRecords(records: OnlineGameRoomRecord[]): OnlineGameService {
@@ -80,6 +83,7 @@ export class OnlineGameService {
       gameId,
       whiteToken,
       blackToken,
+      now: this.now,
     });
 
     this.rooms.set(gameId, room);
@@ -106,7 +110,7 @@ export class OnlineGameService {
   }
 
   replaceRoom(record: OnlineGameRoomRecord): void {
-    this.rooms.set(record.gameId, OnlineGameRoom.create(record));
+    this.rooms.set(record.gameId, OnlineGameRoom.create({ ...record, now: this.now }));
   }
 
   getRoomForToken(gameId: string, token: string): OnlineGameRoom | null {

@@ -33,6 +33,10 @@ export const useGameInteraction = ({
 }: UseGameInteractionProps) => {
 
   const handlePieceClick = useCallback((pieceClicked: Piece) => {
+    if (onlineSession?.result) {
+      return;
+    }
+
     if (onlineSession && onlineSession.playerColor !== currentPlayer) {
       return;
     }

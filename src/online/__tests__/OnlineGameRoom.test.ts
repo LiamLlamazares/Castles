@@ -5,8 +5,14 @@ import { SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
 import { OnlineGameRoom } from "../OnlineGameRoom";
 import { createPieceMap } from "../../utils/PieceMap";
+import type { OnlineGameSetupDTO } from "../types";
 
-function createRoom() {
+function createRoom(options: {
+  now?: () => number;
+  timeControl?: OnlineGameSetupDTO["timeControl"];
+  acceptedActions?: any[];
+  timeout?: any;
+} = {}) {
   const board = getStartingBoard(6);
   const pieces = getStartingPieces(6);
   const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, [
@@ -23,10 +29,14 @@ function createRoom() {
       gameRules: { vpModeEnabled: false },
       initialPoolTypes: [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
       pieceTheme: "Castles",
+      timeControl: options.timeControl,
     }),
     gameId: "game-test",
     whiteToken: "white-token",
     blackToken: "black-token",
+    acceptedActions: options.acceptedActions,
+    timeout: options.timeout,
+    now: options.now,
   });
 }
 
@@ -84,6 +94,113 @@ describe("OnlineGameRoom", () => {
     expect(result.snapshot.version).toBe(1);
     expect(result.snapshot.state.turnCounter).toBeGreaterThan(0);
     expect(result.snapshot.moveHistory.at(-1)?.notation).toBe("Pass");
+  });
+
+  it("includes authoritative server clock state for clocked online games", () => {
+    const room = createRoom({
+      now: () => 1_000,
+      timeControl: { initial: 1, increment: 2 },
+    });
+
+    expect(room.getSnapshot().clock).toEqual({
+      timeControl: { initialMs: 60_000, incrementMs: 2_000 },
+      remainingMs: { w: 60_000, b: 60_000 },
+      activeColor: "w",
+      runningSince: 1_000,
+      serverNow: 1_000,
+    });
+  });
+
+  it("deducts elapsed server time and applies increment when the active color changes", () => {
+    let now = 1_000;
+    const room = createRoom({
+      now: () => now,
+      timeControl: { initial: 1, increment: 2 },
+    });
+
+    now = 11_000;
+    const result = room.submitAction("white-token", {
+      type: "PASS",
+      baseVersion: 0,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.version).toBe(1);
+    const firstClock = result.snapshot.clock;
+    const firstActionChangedActiveColor = firstClock?.activeColor !== "w";
+    expect(firstClock?.remainingMs.w).toBe(firstActionChangedActiveColor ? 52_000 : 50_000);
+    expect(result.snapshot.clock?.remainingMs.b).toBe(60_000);
+    expect(result.snapshot.clock?.activeColor).not.toBeNull();
+
+    now = 21_000;
+    const activeToken = result.snapshot.clock?.activeColor === "b" ? "black-token" : "white-token";
+    const secondResult = room.submitAction(activeToken, {
+      type: "PASS",
+      baseVersion: 1,
+    });
+
+    expect(secondResult.ok).toBe(true);
+    expect(secondResult.snapshot.clock?.activeColor).not.toBeNull();
+  });
+
+  it("adjudicates timeout as a persisted terminal state with an advanced version", () => {
+    let now = 0;
+    const room = createRoom({
+      now: () => now,
+      timeControl: { initial: 1, increment: 0 },
+    });
+
+    now = 61_000;
+    const timeout = (room as any).adjudicateTimeout();
+
+    expect(timeout).toMatchObject({
+      playerColor: "w",
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+      clock: {
+        remainingMs: { w: 0, b: 60_000 },
+        activeColor: null,
+        runningSince: null,
+      },
+    });
+    expect(room.getSnapshot()).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+      clock: {
+        remainingMs: { w: 0, b: 60_000 },
+        activeColor: null,
+      },
+    });
+  });
+
+  it("replays persisted clock state without applying live elapsed time on startup", () => {
+    const room = createRoom({
+      now: () => 999_000,
+      timeControl: { initial: 1, increment: 2 },
+      acceptedActions: [
+        {
+          playerColor: "w",
+          action: { type: "PASS", baseVersion: 0 },
+          version: 1,
+          playedAt: 11_000,
+          clock: {
+            remainingMs: { w: 50_000, b: 60_000 },
+            activeColor: "w",
+            runningSince: 11_000,
+          },
+        },
+      ],
+    });
+
+    expect(room.getSnapshot()).toMatchObject({
+      version: 1,
+      clock: {
+        remainingMs: { w: 50_000, b: 60_000 },
+        activeColor: "w",
+        runningSince: 11_000,
+        serverNow: 999_000,
+      },
+    });
   });
 
   it("rejects unknown action payloads without throwing", () => {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
+  formatOnlineGameResult,
   parseOnlineJoinParams,
   removeOnlineTokenFromUrl,
   resolveOnlineJoinParams,
+  shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
 } from "../client";
 
@@ -66,5 +68,34 @@ describe("online client helpers", () => {
     expect(shouldApplyOnlineSnapshotVersion(0, 0)).toBe(false);
     expect(shouldApplyOnlineSnapshotVersion(2, 1)).toBe(false);
     expect(shouldApplyOnlineSnapshotVersion(2, 3)).toBe(true);
+  });
+
+  it("accepts same-version snapshots when they carry fresher clock server time", () => {
+    const latest = {
+      version: 2,
+      clock: { serverNow: 1_000 },
+    } as any;
+
+    expect(
+      shouldApplyOnlineSnapshot(latest, {
+        version: 2,
+        clock: { serverNow: 1_500 },
+      } as any)
+    ).toBe(true);
+    expect(
+      shouldApplyOnlineSnapshot(latest, {
+        version: 2,
+        clock: { serverNow: 900 },
+      } as any)
+    ).toBe(false);
+  });
+
+  it("formats online timeout results for the game-over overlay", () => {
+    expect(formatOnlineGameResult({ winner: "b", reason: "timeout" })).toBe(
+      "Black wins on time"
+    );
+    expect(formatOnlineGameResult({ winner: "w", reason: "resignation" })).toBe(
+      "White wins by resignation"
+    );
   });
 });

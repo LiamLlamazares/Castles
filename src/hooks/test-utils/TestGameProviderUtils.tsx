@@ -12,6 +12,7 @@ import { Piece } from '../../Classes/Entities/Piece';
 import { Sanctuary } from '../../Classes/Entities/Sanctuary';
 import { MoveTree } from '../../Classes/Core/MoveTree';
 import { SanctuaryType } from '../../Constants';
+import type { OnlineClientSession } from '../../online/types';
 
 // A shim that behaves like the old useGameLogic by combining the two new hooks
 // This allows us to reuse most test logic with minimal changes
@@ -37,6 +38,7 @@ export interface CustomTestGameProps extends TestGameProps {
   poolTypes?: SanctuaryType[];
   sanctuaryPool?: SanctuaryType[];
   sanctuarySettings?: { unlockTurn: number; cooldown: number };
+  onlineSession?: OnlineClientSession;
 }
 
 // Wrapper component for tests
@@ -80,6 +82,7 @@ export const renderCustomGameLogicHook = (props: CustomTestGameProps = {}) => {
         mode={{
           isAnalysisMode: props.isAnalysisMode,
           isTutorialMode: props.isTutorialMode,
+          onlineSession: props.onlineSession,
         }}
       >
         {children}

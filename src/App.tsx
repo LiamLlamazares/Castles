@@ -160,7 +160,7 @@ function App() {
           board,
           pieces,
           sanctuaries: sanctuaries ?? [],
-          timeControl: undefined,
+          timeControl,
           sanctuarySettings,
           gameRules,
           initialPoolTypes,
@@ -288,7 +288,7 @@ function App() {
       phoenixRecords: state.phoenixRecords,
       promotionPending: state.promotionPending,
       pieceTheme: setup.pieceTheme,
-      timeControl: undefined,
+      timeControl: setup.timeControl,
       isAnalysisMode: false,
     });
     setGameKey(prev => prev + 1);
@@ -304,6 +304,8 @@ function App() {
       version: onlineSnapshot.version,
       status: onlineConnection.status,
       lastError: onlineConnection.lastError,
+      clock: onlineSnapshot.clock,
+      result: onlineSnapshot.result,
       submitAction: onlineConnection.submitAction,
     };
   }, [onlineJoin, onlineSnapshot, onlineConnection]);

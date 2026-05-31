@@ -4,7 +4,7 @@ import {
   fetchOnlineSnapshot,
   getReconnectDelayMs,
   OnlineJoinParams,
-  shouldApplyOnlineSnapshotVersion,
+  shouldApplyOnlineSnapshot,
 } from "../online/client";
 import {
   OnlineActionDTO,
@@ -26,7 +26,7 @@ export function useOnlineGameConnection(
   const onSnapshotRef = useRef(onSnapshot);
   const reconnectTimerRef = useRef<number | null>(null);
   const heartbeatTimerRef = useRef<number | null>(null);
-  const latestSnapshotVersionRef = useRef<number | null>(null);
+  const latestSnapshotRef = useRef<OnlineGameSnapshotDTO | null>(null);
   const [status, setStatus] = useState<OnlineConnectionStatus>("idle");
   const [lastError, setLastError] = useState<string | undefined>();
 
@@ -57,14 +57,14 @@ export function useOnlineGameConnection(
 
     let cancelled = false;
     let reconnectAttempt = 0;
-    latestSnapshotVersionRef.current = null;
+    latestSnapshotRef.current = null;
     setLastError(undefined);
 
     const applySnapshot = (snapshot: OnlineGameSnapshotDTO) => {
-      if (!shouldApplyOnlineSnapshotVersion(latestSnapshotVersionRef.current, snapshot.version)) {
+      if (!shouldApplyOnlineSnapshot(latestSnapshotRef.current, snapshot)) {
         return;
       }
-      latestSnapshotVersionRef.current = snapshot.version;
+      latestSnapshotRef.current = snapshot;
       onSnapshotRef.current(snapshot);
     };
 
