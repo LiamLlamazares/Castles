@@ -14,6 +14,7 @@ import {
   roleForOnlineSeat,
   type OnlineAccessRole,
 } from "./accessPolicy";
+import { stringContainsDurableSecret } from "./secretSafety";
 
 export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 1;
 
@@ -153,6 +154,48 @@ function validateResult(value: unknown): ValidationResult<OnlineGameResultDTO> {
   };
 }
 
+export function validateOnlineIdentity(
+  value: unknown,
+  label = "identity"
+): ValidationResult<OnlineIdentity> {
+  if (!isRecord(value)) return bad(`${label} must be an object.`);
+  if (
+    value.kind !== "anonymous" &&
+    value.kind !== "session" &&
+    value.kind !== "registered"
+  ) {
+    return bad(`${label}.kind is invalid.`);
+  }
+  if (!isBoundedString(value.id)) {
+    return bad(`${label}.id is invalid.`);
+  }
+  if (stringContainsDurableSecret(value.id)) {
+    return bad(`${label}.id must be a public non-secret surrogate.`);
+  }
+  if (
+    value.kind === "registered" &&
+    value.displayName !== undefined &&
+    !isBoundedString(value.displayName, 64)
+  ) {
+    return bad(`${label}.displayName is invalid.`);
+  }
+  const identity: OnlineIdentity =
+    value.kind === "registered"
+      ? {
+          kind: "registered",
+          id: value.id,
+          displayName:
+            typeof value.displayName === "string"
+              ? value.displayName
+              : undefined,
+        }
+      : {
+          kind: value.kind,
+          id: value.id,
+        };
+  return { ok: true, value: identity };
+}
+
 function validateParticipant(value: unknown): ValidationResult<OnlineGameSummaryParticipant> {
   if (!isRecord(value)) return bad("summary.participants[] must be an object.");
   if (!isColor(value.seat)) return bad("summary.participants[].seat must be w or b.");
@@ -162,44 +205,14 @@ function validateParticipant(value: unknown): ValidationResult<OnlineGameSummary
   if (value.role !== roleForOnlineSeat(value.seat)) {
     return bad("summary.participants[].role must match its seat.");
   }
-  if (!isRecord(value.identity)) return bad("summary.participants[].identity must be an object.");
-  if (
-    value.identity.kind !== "anonymous" &&
-    value.identity.kind !== "session" &&
-    value.identity.kind !== "registered"
-  ) {
-    return bad("summary.participants[].identity.kind is invalid.");
-  }
-  if (!isBoundedString(value.identity.id)) {
-    return bad("summary.participants[].identity.id is invalid.");
-  }
-  if (
-    value.identity.kind === "registered" &&
-    value.identity.displayName !== undefined &&
-    !isBoundedString(value.identity.displayName, 64)
-  ) {
-    return bad("summary.participants[].identity.displayName is invalid.");
-  }
-  const identity: OnlineIdentity =
-    value.identity.kind === "registered"
-      ? {
-          kind: "registered",
-          id: value.identity.id,
-          displayName:
-            typeof value.identity.displayName === "string"
-              ? value.identity.displayName
-              : undefined,
-        }
-      : {
-          kind: value.identity.kind,
-          id: value.identity.id,
-        };
+  const identity = validateOnlineIdentity(value.identity, "summary.participants[].identity");
+  if (!identity.ok) return identity;
   return {
     ok: true,
     value: {
       seat: value.seat,
       role: value.role as "white" | "black",
-      identity,
+      identity: identity.value,
     },
   };
 }

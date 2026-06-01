@@ -111,6 +111,47 @@ Current game creation still projects anonymous identities only. Session and regi
 
 Identity `id` values in public summaries are never authentication secrets. Do not put cookies, bearer tokens, raw private invite tokens, or server auth session ids in `OnlineIdentity.id`. Use a separate private credential table for authentication material.
 
+## Challenge Lifecycle Contract
+
+`OnlineChallengeEvent` schema v1 is the durable contract for direct challenges. It is intentionally endpoint-free in this slice: no HTTP route, database table, or UI should depend on challenge behavior until the event contract and projection rules are stable.
+
+Challenge v1 is direct-only. Public/open seeks are deferred to a later contract because they need a different accept policy and lobby exposure model.
+
+Challenge event envelope:
+
+- `schemaVersion: 1`
+- `eventId`
+- `createdAt`
+
+Challenge events:
+
+- `challenge_created`: `challengeId`, `challengerIdentity`, `challengedIdentity`, `challengerSeat`, `visibility`, and `expiresAt`.
+- `challenge_accepted`: `challengeId`, `acceptedBy`, `acceptedAt`, `gameId`, `whiteIdentity`, and `blackIdentity`.
+- `challenge_declined`: `challengeId`, `declinedBy`, and `declinedAt`.
+- `challenge_cancelled`: `challengeId`, `cancelledBy`, and `cancelledAt`.
+- `challenge_expired`: `challengeId`, `expiredBy: "system"`, and `expiredAt`.
+
+Challenge statuses are `pending`, `accepted`, `declined`, `cancelled`, and `expired`. Challenge visibility is currently `private` or `unlisted`; `public` is reserved for future open-seek/lobby work.
+
+Projection applies events in stream order and validates the lifecycle:
+
+- A challenge can be created once, and event ids must be unique across the projected stream.
+- Self-challenges are invalid.
+- `expiresAt` must be later than challenge creation.
+- Acceptance and decline must be performed by the challenged identity.
+- Cancellation must be performed by the challenger identity.
+- Expiry is system-only.
+- Terminal domain timestamps equal the event envelope `createdAt`.
+- Accepted, declined, and cancelled timestamps must be at or after challenge creation and before expiry.
+- Expired timestamps must be at or after expiry.
+- Any event after a terminal state is invalid.
+
+Accepted challenges persist the resolved seats. If `challengerSeat === "w"`, the challenger must be white and the challenged identity black. If `challengerSeat === "b"`, the challenger must be black and the challenged identity white. If `challengerSeat === "random"`, the accepted event is the durable source of the resolved seats, but the two seats must still be exactly the challenger and challenged identities.
+
+Challenge authorization helpers compare identity by `kind + id`; registered display names are public presentation data and do not affect identity equality. Action helpers for accept, decline, and cancel are intended for server-resolved authenticated identities only. Future endpoints must derive that identity from the server session/account layer, never from a request body field supplied by the browser.
+
+Durable challenge events must not contain bearer secrets. Validation rejects token/credential/session/auth/cookie-like fields recursively, bearer/auth/cookie-looking string values, raw invite URLs, and absolute or relative URL strings with token-bearing query parameters or fragments. As with game summaries, `OnlineIdentity.id` is a public non-secret surrogate; obvious bearer, cookie, session, auth, or token material is invalid.
+
 ## Visibility And Access
 
 Visibility values:
@@ -140,6 +181,7 @@ For this low-scale foundation slice, server spectator authorization scans `loadG
 
 ## Next Contract Changes
 
-1. Add durable challenge and visibility lifecycle events before public lobby/challenge UI.
-2. Add a public account/session ownership layer before private challenge authorization.
-3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes.
+1. Add challenge persistence/endpoints that write `OnlineChallengeEvent` records and create games from accepted challenges.
+2. Add durable visibility lifecycle events before public lobby/archive UI can change exposure mid-game.
+3. Add a public account/session ownership layer before private challenge authorization.
+4. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes.

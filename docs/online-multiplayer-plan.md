@@ -123,12 +123,13 @@ Tests/review/deploy gates:
 
 Goal: support intentional game creation and joining flows before public discovery.
 
-Status: access-policy foundation in progress. Public listing and spectator joins are moving behind a shared policy module before challenge lifecycle records and challenge UI are added. The next challenge slice must add durable lifecycle events, identity/session binding for challenged users, and visibility-change rules before any private challenge or lobby surface depends on those roles.
+Status: access-policy foundation is in place, and the direct challenge lifecycle contract has been added as a pure event/projection slice. The next challenge slice is persistence/endpoints: storing challenge events, creating games from accepted challenges, and binding requests to the challenger/challenged identities before any private challenge UI depends on those roles. Visibility-change rules still need their own durable event contract before public lobby/archive screens can change exposure mid-game.
 
 Work:
 
 - Benchmark challenge UX before implementation.
-- Add durable challenge and visibility lifecycle events before private challenges, public challenges, lobby listings, or archives depend on them.
+- Keep the durable direct-challenge lifecycle event contract as the base for private challenge endpoints.
+- Add durable visibility lifecycle events before public challenges, lobby listings, or archives depend on mutable exposure.
 - Introduce a shared access-policy module so HTTP, WebSocket, spectator, challenge, and future lobby routes enforce the same visibility and role rules.
 - Build challenge creation, accept/decline/expire, copied links, access-denied, and pending states.
 - Define private, unlisted, and public visibility semantics.
@@ -171,6 +172,7 @@ Work:
 
 - Benchmark Lichess navigation, game-page side panels, tutorial/help entry points, archive/lobby affordances, and mobile layouts; compare with at least one other mature online board-game service.
 - Audit the current app shell with screenshots across desktop and mobile viewports, including setup, game, tutorial/rules, library/save/progress, online spectator, pending action, access-denied, disconnected, resyncing, and terminal states.
+- Address the current audit findings: fragile `previousView`/`viewStack` navigation, cramped setup topbar, tutorial mobile ordering risk, overloaded game sidebar actions, hidden mobile move history/progress, split save/export/library affordances, mixed hamburger-menu icon styles, top-overlay crowding, library page mismatch with app workflow, global overflow clipping, and silent tutorial progress.
 - Rework the side bar/navigation so users can reliably move between setup, game, tutorial/rules, saved games/library, online links, and future lobby/archive screens.
 - Place tutorial/help where a new player naturally expects it, while keeping the actual game screen primary.
 - Make save/progress controls discoverable without crowding turn controls or online status.
@@ -221,6 +223,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Complete the Phase 5 access-policy foundation slice and push it.
-2. Plan the challenge lifecycle event and identity-binding slice.
-3. Pull Phase 6A UI shell polish forward once challenge/access surfaces are sketched, so sidebar, tutorial placement, save/progress navigation, go-back overlap, and mobile layout defects are fixed before broader lobby/archive work.
+1. Complete and push the Phase 5 direct challenge lifecycle contract slice.
+2. Plan challenge persistence/endpoints for create, accept, decline, cancel, expire, access-denied, and game creation from accepted challenges.
+3. Pull Phase 6A UI shell polish forward once challenge/access endpoint surfaces are sketched, so sidebar, tutorial placement, save/progress navigation, go-back overlap, and mobile layout defects are fixed before broader lobby/archive work.
