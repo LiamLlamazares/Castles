@@ -7,19 +7,31 @@ import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../../readModel";
 import { hashOnlineToken } from "../onlineTokenCredentials";
+import {
+  ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+  createChallengeAcceptedEvent,
+  createChallengeCancelledEvent,
+  createChallengeCreatedEvent,
+  type OnlineChallengeEvent,
+} from "../../challenges";
 
 class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
   eventRows: Array<{ payload: OnlineGameEvent }> = [];
+  challengeEventRows: Array<{ payload: OnlineChallengeEvent }> = [];
   credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }> = [];
   summaryRows: Array<{ payload: unknown }> = [];
+  challengeSummaryRows: Array<{ payload: unknown }> = [];
   failNextCreateTable = false;
   failNextSummaryInsert = false;
+  failNextChallengeSummaryInsert = false;
   failRollback = false;
   private transactionSnapshot: {
     eventRows: Array<{ payload: OnlineGameEvent }>;
+    challengeEventRows: Array<{ payload: OnlineChallengeEvent }>;
     credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }>;
     summaryRows: Array<{ payload: unknown }>;
+    challengeSummaryRows: Array<{ payload: unknown }>;
   } | null = null;
 
   async query(text: string, values?: unknown[]) {
@@ -27,8 +39,10 @@ class FakePostgresClient {
     if (/^\s*begin\s*$/i.test(text)) {
       this.transactionSnapshot = {
         eventRows: this.eventRows.map((row) => ({ payload: row.payload })),
+        challengeEventRows: this.challengeEventRows.map((row) => ({ payload: row.payload })),
         credentialRows: this.credentialRows.map((row) => ({ ...row })),
         summaryRows: this.summaryRows.map((row) => ({ payload: row.payload })),
+        challengeSummaryRows: this.challengeSummaryRows.map((row) => ({ payload: row.payload })),
       };
       return { rows: [] };
     }
@@ -42,8 +56,10 @@ class FakePostgresClient {
       }
       if (this.transactionSnapshot) {
         this.eventRows = this.transactionSnapshot.eventRows.map((row) => ({ payload: row.payload }));
+        this.challengeEventRows = this.transactionSnapshot.challengeEventRows.map((row) => ({ payload: row.payload }));
         this.credentialRows = this.transactionSnapshot.credentialRows.map((row) => ({ ...row }));
         this.summaryRows = this.transactionSnapshot.summaryRows.map((row) => ({ payload: row.payload }));
+        this.challengeSummaryRows = this.transactionSnapshot.challengeSummaryRows.map((row) => ({ payload: row.payload }));
         this.transactionSnapshot = null;
       }
       return { rows: [] };
@@ -57,6 +73,21 @@ class FakePostgresClient {
     }
     if (/insert into online_game_events/i.test(text) && values?.[5]) {
       this.eventRows.push({ payload: values[5] as OnlineGameEvent });
+    }
+    if (/insert into online_challenge_events/i.test(text) && values?.[4]) {
+      const event = values[4] as OnlineChallengeEvent;
+      if (this.challengeEventRows.some((row) => row.payload.eventId === event.eventId)) {
+        throw new Error("duplicate challenge event id");
+      }
+      if (
+        event.type === "challenge_created" &&
+        this.challengeEventRows.some(
+          (row) => row.payload.type === "challenge_created" && row.payload.challengeId === event.challengeId
+        )
+      ) {
+        throw new Error("duplicate challenge creation");
+      }
+      this.challengeEventRows.push({ payload: event });
     }
     if (/insert into online_game_credentials/i.test(text) && values) {
       const gameId = values[0] as string;
@@ -82,6 +113,17 @@ class FakePostgresClient {
       }
       return { rows: [] };
     }
+    if (/delete\s+from\s+online_challenge_summaries/i.test(text)) {
+      if (/where\s+challenge_id/i.test(text)) {
+        this.challengeSummaryRows = this.challengeSummaryRows.filter((row) => {
+          const payload = row.payload as { challengeId?: string };
+          return payload.challengeId !== values?.[0];
+        });
+      } else {
+        this.challengeSummaryRows = [];
+      }
+      return { rows: [] };
+    }
     if (/insert into online_game_summaries/i.test(text) && values?.[6]) {
       if (this.failNextSummaryInsert) {
         this.failNextSummaryInsert = false;
@@ -94,8 +136,31 @@ class FakePostgresClient {
       });
       this.summaryRows.push({ payload: values[6] });
     }
+    if (/insert into online_challenge_summaries/i.test(text) && values?.[5]) {
+      if (this.failNextChallengeSummaryInsert) {
+        this.failNextChallengeSummaryInsert = false;
+        throw new Error("challenge summary insert unavailable");
+      }
+      const challengeId = values[0];
+      this.challengeSummaryRows = this.challengeSummaryRows.filter((row) => {
+        const payload = row.payload as { challengeId?: string };
+        return payload.challengeId !== challengeId;
+      });
+      this.challengeSummaryRows.push({ payload: values[5] });
+    }
     if (/select\s+payload\s+from\s+online_game_summaries/i.test(text)) {
       return { rows: this.summaryRows };
+    }
+    if (/select\s+payload\s+from\s+online_challenge_summaries/i.test(text)) {
+      return { rows: this.challengeSummaryRows };
+    }
+    if (/select\s+payload\s+from\s+online_challenge_events\s+where\s+challenge_id/i.test(text)) {
+      return {
+        rows: this.challengeEventRows.filter((row) => row.payload.challengeId === values?.[0]),
+      };
+    }
+    if (/select\s+payload\s+from\s+online_challenge_events/i.test(text)) {
+      return { rows: this.challengeEventRows };
     }
     if (/select\s+payload\s+from\s+online_game_events\s+where\s+game_id/i.test(text)) {
       return {
@@ -195,6 +260,66 @@ function seedCreatedGame(
   client.credentialRows = createCredentialRows(event.gameId);
 }
 
+const challengeChallenger = { kind: "session", id: "session_challenger" } as const;
+const challengeChallenged = { kind: "session", id: "session_challenged" } as const;
+
+function createChallengeCreated(
+  challengeId = "challenge_pg"
+): Extract<OnlineChallengeEvent, { type: "challenge_created" }> {
+  return createChallengeCreatedEvent(
+    {
+      type: "challenge_created",
+      challengeId,
+      challengerIdentity: challengeChallenger,
+      challengedIdentity: challengeChallenged,
+      challengerSeat: "w",
+      visibility: "unlisted",
+      expiresAt: "2026-06-01T12:10:00.000Z",
+    },
+    {
+      eventId: `challenge-evt-${challengeId}-create`,
+      createdAt: "2026-06-01T12:00:00.000Z",
+    }
+  );
+}
+
+function createChallengeAccepted(
+  challengeId = "challenge_pg"
+): Extract<OnlineChallengeEvent, { type: "challenge_accepted" }> {
+  return createChallengeAcceptedEvent(
+    {
+      type: "challenge_accepted",
+      challengeId,
+      acceptedBy: challengeChallenged,
+      acceptedAt: "2026-06-01T12:05:00.000Z",
+      gameId: `game_${challengeId}`,
+      whiteIdentity: challengeChallenger,
+      blackIdentity: challengeChallenged,
+    },
+    {
+      eventId: `challenge-evt-${challengeId}-accepted`,
+      createdAt: "2026-06-01T12:05:00.000Z",
+    }
+  );
+}
+
+function createChallengeCancelled(
+  challengeId = "challenge_pg"
+): Extract<OnlineChallengeEvent, { type: "challenge_cancelled" }> {
+  return createChallengeCancelledEvent(
+    {
+      type: "challenge_cancelled",
+      challengeId,
+      cancelledBy: challengeChallenger,
+      cancelledAt: "2026-06-01T12:06:00.000Z",
+    },
+    {
+      eventId: `challenge-evt-${challengeId}-cancelled`,
+      createdAt: "2026-06-01T12:06:00.000Z",
+    }
+  );
+}
+
 describe("PostgresOnlineGameStore", () => {
   it("closes its database connection when a closer is provided", async () => {
     const client = new FakePostgresClient();
@@ -214,7 +339,11 @@ describe("PostgresOnlineGameStore", () => {
 
     expect(client.queries.some((query) => /create table if not exists online_game_events/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_game_summaries/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_challenge_events/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_challenge_summaries/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_challenge_locks/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create unique index if not exists/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /online_challenge_events_one_create_per_challenge/i.test(query.text))).toBe(true);
     expect(
       client.queries.some(
         (query) =>
@@ -969,6 +1098,223 @@ describe("PostgresOnlineGameStore", () => {
     expect(summaries).toHaveLength(1);
     expect(summaries[0].gameId).toBe("game_summary_loaded");
     expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
+  });
+
+  it("persists challenge creation events and returns the pending summary from a locked transaction", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createChallengeCreated("challenge_append_pending");
+
+    const summary = await store.appendChallengeEvent(created);
+
+    expect(summary).toMatchObject({
+      schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      challengeId: "challenge_append_pending",
+      status: "pending",
+      lastEventId: created.eventId,
+    });
+    expect(client.challengeEventRows.map((row) => row.payload)).toEqual([created]);
+    expect(client.challengeSummaryRows.map((row) => row.payload)).toEqual([summary]);
+
+    const queryTexts = client.queries.map((query) => query.text);
+    const beginIndex = queryTexts.findIndex((text) => /^\s*begin\s*$/i.test(text));
+    const lockInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_locks/i.test(text));
+    const rowLockIndex = queryTexts.findIndex((text) => /from\s+online_challenge_locks/i.test(text) && /for update/i.test(text));
+    const summaryLockIndex = queryTexts.findIndex((text) => /pg_advisory_xact_lock/i.test(text));
+    const eventInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_events/i.test(text));
+    const summaryInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_summaries/i.test(text));
+    const commitIndex = queryTexts.findIndex((text) => /^\s*commit\s*$/i.test(text));
+
+    expect(beginIndex).toBeGreaterThanOrEqual(0);
+    expect(lockInsertIndex).toBeGreaterThan(beginIndex);
+    expect(client.queries[lockInsertIndex].values).toEqual(["challenge_append_pending"]);
+    expect(rowLockIndex).toBeGreaterThan(lockInsertIndex);
+    expect(client.queries[rowLockIndex].values).toEqual(["challenge_append_pending"]);
+    expect(summaryLockIndex).toBeGreaterThan(rowLockIndex);
+    expect(eventInsertIndex).toBeGreaterThan(summaryLockIndex);
+    expect(summaryInsertIndex).toBeGreaterThan(eventInsertIndex);
+    expect(commitIndex).toBeGreaterThan(summaryInsertIndex);
+  });
+
+  it("rejects accepted challenge events until atomic game creation is implemented", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    await store.appendChallengeEvent(createChallengeCreated("challenge_append_accepted"));
+
+    await expect(
+      store.appendChallengeEvent(createChallengeAccepted("challenge_append_accepted") as any)
+    ).rejects.toThrow(/acceptChallengeAndCreateGame/);
+
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual([
+      "challenge_created",
+    ]);
+    expect(client.challengeSummaryRows).toHaveLength(1);
+    expect(client.challengeSummaryRows[0].payload).toMatchObject({ status: "pending" });
+  });
+
+  it("rejects invalid challenge events before inserting", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(store.appendChallengeEvent({ type: "challenge_created" } as any)).rejects.toThrow(/schemaVersion/);
+    await expect(
+      store.appendChallengeEvent({
+        ...createChallengeCreated("challenge_secret_reject"),
+        note: "access_token=secret",
+      } as any)
+    ).rejects.toThrow(/token|credential|session|auth|cookie|invite/i);
+
+    expect(client.challengeEventRows).toHaveLength(0);
+  });
+
+  it("rolls back challenge events when summary refresh fails", async () => {
+    const client = new FakePostgresClient();
+    client.failNextChallengeSummaryInsert = true;
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.appendChallengeEvent(createChallengeCreated("challenge_append_rollback"))
+    ).rejects.toThrow(/challenge summary insert unavailable/);
+
+    expect(client.challengeEventRows).toHaveLength(0);
+    expect(client.challengeSummaryRows).toHaveLength(0);
+    expect(client.queries.some((query) => /^\s*rollback\s*$/i.test(query.text))).toBe(true);
+  });
+
+  it("rolls back lifecycle failures without changing challenge summaries", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.appendChallengeEvent(createChallengeCancelled("challenge_missing_create"))
+    ).rejects.toThrow(/missing challenge/);
+    expect(client.challengeEventRows).toHaveLength(0);
+    expect(client.challengeSummaryRows).toHaveLength(0);
+  });
+
+  it("rolls back duplicate challenge event ids and duplicate creation events", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createChallengeCreated("challenge_duplicates");
+    const firstSummary = await store.appendChallengeEvent(created);
+
+    await expect(
+      store.appendChallengeEvent({
+        ...createChallengeCancelled("challenge_duplicates"),
+        eventId: created.eventId,
+      })
+    ).rejects.toThrow(/duplicate challenge event id/);
+    await expect(
+      store.appendChallengeEvent({
+        ...createChallengeCreated("challenge_duplicates"),
+        eventId: "challenge-evt-duplicate-create-new-id",
+      })
+    ).rejects.toThrow(/duplicate challenge creation/);
+
+    expect(client.challengeEventRows).toHaveLength(1);
+    expect(client.challengeSummaryRows).toEqual([{ payload: firstSummary }]);
+  });
+
+  it("rolls back terminal-after-terminal challenge events", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    await store.appendChallengeEvent(createChallengeCreated("challenge_terminal_again"));
+    const cancelledSummary = await store.appendChallengeEvent(createChallengeCancelled("challenge_terminal_again"));
+
+    await expect(
+      store.appendChallengeEvent({
+        ...createChallengeCancelled("challenge_terminal_again"),
+        eventId: "challenge-evt-challenge_terminal_again-cancelled-again",
+        createdAt: "2026-06-01T12:07:00.000Z",
+        cancelledAt: "2026-06-01T12:07:00.000Z",
+      })
+    ).rejects.toThrow(/already terminal/);
+
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual([
+      "challenge_created",
+      "challenge_cancelled",
+    ]);
+    expect(client.challengeSummaryRows).toEqual([{ payload: cancelledSummary }]);
+  });
+
+  it("loads existing challenge summaries without reading challenge events", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const summary = await store.appendChallengeEvent(createChallengeCreated("challenge_summary_loaded"));
+    client.queries.length = 0;
+
+    const summaries = await store.loadChallengeSummaries();
+
+    expect(summaries).toEqual([summary]);
+    expect(client.queries.some((query) => /from\s+online_challenge_events/i.test(query.text))).toBe(false);
+  });
+
+  it("rebuilds challenge summaries from ordered challenge events inside a locked transaction", async () => {
+    const client = new FakePostgresClient();
+    client.challengeEventRows = [
+      { payload: createChallengeCreated("challenge_rebuild") },
+      { payload: createChallengeAccepted("challenge_rebuild") },
+    ];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const summaries = await store.rebuildChallengeSummaries();
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      challengeId: "challenge_rebuild",
+      status: "accepted",
+    });
+    expect(client.challengeSummaryRows).toEqual([{ payload: summaries[0] }]);
+
+    const queryTexts = client.queries.map((query) => query.text);
+    const beginIndex = queryTexts.findIndex((text) => /^\s*begin\s*$/i.test(text));
+    const lockIndex = queryTexts.findIndex((text) => /pg_advisory_xact_lock/i.test(text));
+    const selectIndex = queryTexts.findIndex((text) => /select\s+payload\s+from\s+online_challenge_events/i.test(text));
+    const deleteIndex = queryTexts.findIndex((text) => /delete\s+from\s+online_challenge_summaries/i.test(text));
+    const insertIndex = queryTexts.findIndex((text) => /insert into online_challenge_summaries/i.test(text));
+    const commitIndex = queryTexts.findIndex((text) => /^\s*commit\s*$/i.test(text));
+
+    expect(beginIndex).toBeGreaterThanOrEqual(0);
+    expect(lockIndex).toBeGreaterThan(beginIndex);
+    expect(selectIndex).toBeGreaterThan(lockIndex);
+    expect(deleteIndex).toBeGreaterThan(selectIndex);
+    expect(insertIndex).toBeGreaterThan(deleteIndex);
+    expect(commitIndex).toBeGreaterThan(insertIndex);
+
+    const gameLockValue = client.queries.find(
+      (query) => /pg_advisory_xact_lock/i.test(query.text) && query.values?.[0] === 1_431_903_351
+    );
+    const challengeLockValue = client.queries.find(
+      (query) => /pg_advisory_xact_lock/i.test(query.text) && query.values?.[0] === 1_431_903_352
+    );
+    expect(gameLockValue).toBeUndefined();
+    expect(challengeLockValue).toBeDefined();
+  });
+
+  it("rolls back challenge summary rebuilds when an upsert fails", async () => {
+    const client = new FakePostgresClient();
+    const existing = {
+      schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      challengeId: "challenge_existing_summary",
+      challengerIdentity: challengeChallenger,
+      challengedIdentity: challengeChallenged,
+      challengerSeat: "w",
+      visibility: "unlisted",
+      createdAt: "2026-06-01T12:00:00.000Z",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+      expiresAt: "2026-06-01T12:10:00.000Z",
+      status: "pending",
+      lastEventId: "challenge-evt-existing",
+    };
+    client.challengeSummaryRows = [{ payload: existing }];
+    client.challengeEventRows = [{ payload: createChallengeCreated("challenge_rebuild_rollback") }];
+    client.failNextChallengeSummaryInsert = true;
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(store.rebuildChallengeSummaries()).rejects.toThrow(/challenge summary insert unavailable/);
+
+    expect(client.challengeSummaryRows).toEqual([{ payload: existing }]);
+    expect(client.queries.some((query) => /^\s*rollback\s*$/i.test(query.text))).toBe(true);
   });
 
 });

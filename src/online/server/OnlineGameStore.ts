@@ -1,4 +1,5 @@
 import type { OnlineGameRoomRecord } from "../OnlineGameRoom";
+import type { OnlineChallengeEvent, OnlineChallengeSummary } from "../challenges";
 import type { OnlineGameCredentials, OnlineGameEvent } from "../events";
 import type { OnlineGameSummary } from "../readModel";
 import type {
@@ -14,12 +15,22 @@ export interface OnlineGameStoreLoadOptions {
 export interface OnlineGameStore {
   load(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameRoomRecord[]>;
   loadSummaries(): Promise<OnlineGameSummary[]>;
+  loadChallengeSummaries(): Promise<OnlineChallengeSummary[]>;
   rebuildSummaries(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameSummary[]>;
+  rebuildChallengeSummaries(options?: OnlineGameStoreLoadOptions): Promise<OnlineChallengeSummary[]>;
   appendGameCreated(
     event: Extract<OnlineGameEvent, { type: "game_created" }>,
     credentials: OnlineGameCredentials
   ): Promise<void>;
   appendEvent(event: OnlineGameEvent): Promise<void>;
+  /**
+   * Low-level lifecycle append for challenge creation, decline, cancel, and
+   * expiry. `challenge_accepted` is intentionally excluded until it can be
+   * persisted atomically with online game creation and game credentials.
+   */
+  appendChallengeEvent(
+    event: Exclude<OnlineChallengeEvent, { type: "challenge_accepted" }>
+  ): Promise<OnlineChallengeSummary>;
   applyGameAction(input: OnlineGameStoreActionInput): Promise<OnlineGameStoreActionResult>;
   adjudicateGameTimeout(
     input: OnlineGameStoreTimeoutInput

@@ -152,6 +152,14 @@ Challenge authorization helpers compare identity by `kind + id`; registered disp
 
 Durable challenge events must not contain bearer secrets. Validation rejects token/credential/session/auth/cookie-like fields recursively, bearer/auth/cookie-looking string values, raw invite URLs, and absolute or relative URL strings with token-bearing query parameters or fragments. As with game summaries, `OnlineIdentity.id` is a public non-secret surrogate; obvious bearer, cookie, session, auth, or token material is invalid.
 
+### Challenge Persistence
+
+Challenge events are persisted in the append-only `online_challenge_events` table. Challenge summaries are materialized in `online_challenge_summaries` and can be rebuilt from the challenge event stream. Challenge persistence uses its own row-lock table and advisory summary lock, separate from game summary locking, so challenge rebuilds do not block ordinary game action summary refreshes.
+
+Appending a non-accepted challenge event validates and canonicalizes the event first, inserts it, projects the affected challenge summary, and upserts that summary inside one transaction. If summary refresh or projection fails, the event insert rolls back.
+
+This persistence slice still does not introduce challenge bearer credentials, public HTTP challenge routes, or game creation from accepted challenges. The generic challenge append API intentionally rejects `challenge_accepted`. The future accept endpoint must use a dedicated atomic store method that creates the online game, stores the game credentials, appends `challenge_accepted`, and refreshes both game and challenge summaries in one transaction. It must not create the game and append the challenge event as two independent operations.
+
 ## Visibility And Access
 
 Visibility values:
@@ -181,7 +189,7 @@ For this low-scale foundation slice, server spectator authorization scans `loadG
 
 ## Next Contract Changes
 
-1. Add challenge persistence/endpoints that write `OnlineChallengeEvent` records and create games from accepted challenges.
+1. Add challenge endpoint/auth flows that write `OnlineChallengeEvent` records and atomically create games from accepted challenges.
 2. Add durable visibility lifecycle events before public lobby/archive UI can change exposure mid-game.
 3. Add a public account/session ownership layer before private challenge authorization.
 4. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OnlineIdentity } from "../readModel";
 import {
   ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION,
+  ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
   type AuthenticatedOnlineIdentity,
   canIdentityAcceptChallenge,
   canIdentityCancelChallenge,
@@ -16,7 +17,9 @@ import {
   isSameOnlineIdentity,
   projectOnlineChallengeSummaries,
   validateOnlineChallengeEvent,
+  validateOnlineChallengeSummary,
   type OnlineChallengeEvent,
+  type OnlineChallengeSummary,
 } from "../challenges";
 
 const CREATED_AT = "2026-06-01T12:00:00.000Z";
@@ -136,6 +139,46 @@ function expiredEvent(
 
 function expectInvalid(value: unknown): void {
   const result = validateOnlineChallengeEvent(value);
+  expect(result.ok).toBe(false);
+}
+
+function pendingSummary(
+  overrides: Partial<OnlineChallengeSummary> = {}
+): OnlineChallengeSummary {
+  const [summary] = projectOnlineChallengeSummaries([createdEvent()]);
+  return { ...summary, ...overrides };
+}
+
+function acceptedSummary(
+  overrides: Partial<OnlineChallengeSummary> = {}
+): OnlineChallengeSummary {
+  const [summary] = projectOnlineChallengeSummaries([createdEvent({ challengerSeat: "w" }), acceptedEvent()]);
+  return { ...summary, ...overrides };
+}
+
+function declinedSummary(
+  overrides: Partial<OnlineChallengeSummary> = {}
+): OnlineChallengeSummary {
+  const [summary] = projectOnlineChallengeSummaries([createdEvent(), declinedEvent()]);
+  return { ...summary, ...overrides };
+}
+
+function cancelledSummary(
+  overrides: Partial<OnlineChallengeSummary> = {}
+): OnlineChallengeSummary {
+  const [summary] = projectOnlineChallengeSummaries([createdEvent(), cancelledEvent()]);
+  return { ...summary, ...overrides };
+}
+
+function expiredSummary(
+  overrides: Partial<OnlineChallengeSummary> = {}
+): OnlineChallengeSummary {
+  const [summary] = projectOnlineChallengeSummaries([createdEvent(), expiredEvent()]);
+  return { ...summary, ...overrides };
+}
+
+function expectInvalidSummary(value: unknown): void {
+  const result = validateOnlineChallengeSummary(value);
   expect(result.ok).toBe(false);
 }
 
@@ -554,5 +597,124 @@ describe("online challenge projection", () => {
     expect(canIdentityDeclineChallenge(terminalSummary, authenticated(challenged), DECLINED_AT)).toBe(false);
     expect(canIdentityCancelChallenge(terminalSummary, authenticated(challenger), CANCELLED_AT)).toBe(false);
     expect(canSystemExpireChallenge(terminalSummary, EXPIRES_AT)).toBe(false);
+  });
+});
+
+describe("online challenge summary validation", () => {
+  it("uses an explicit challenge summary schema version", () => {
+    const summary = pendingSummary();
+
+    expect(ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION).toBe(1);
+    expect(summary.schemaVersion).toBe(ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION);
+    expect(validateOnlineChallengeSummary(summary)).toEqual({
+      ok: true,
+      value: summary,
+    });
+  });
+
+  it("accepts all terminal summary variants with required fields", () => {
+    expect(validateOnlineChallengeSummary(acceptedSummary()).ok).toBe(true);
+    expect(validateOnlineChallengeSummary(declinedSummary()).ok).toBe(true);
+    expect(validateOnlineChallengeSummary(cancelledSummary()).ok).toBe(true);
+    expect(validateOnlineChallengeSummary(expiredSummary()).ok).toBe(true);
+  });
+
+  it("rejects malformed common summary fields", () => {
+    const summary = pendingSummary();
+    const { schemaVersion: _schemaVersion, ...missingSchemaVersion } = summary;
+
+    expectInvalidSummary(missingSchemaVersion);
+    expectInvalidSummary({ ...summary, schemaVersion: 99 });
+    expectInvalidSummary({ ...summary, challengeId: "" });
+    expectInvalidSummary({ ...summary, challengeId: "x".repeat(129) });
+    expectInvalidSummary({ ...summary, createdAt: "bad-date" });
+    expectInvalidSummary({ ...summary, updatedAt: "bad-date" });
+    expectInvalidSummary({ ...summary, expiresAt: "bad-date" });
+    expectInvalidSummary({ ...summary, lastEventId: "" });
+    expectInvalidSummary({ ...summary, visibility: "public" });
+    expectInvalidSummary({ ...summary, challengerSeat: "white" });
+    expectInvalidSummary({ ...summary, challengerIdentity: { kind: "registered", id: "" } });
+    expectInvalidSummary({ ...summary, challengedIdentity: { kind: "session", id: "access_token=secret" } });
+  });
+
+  it("rejects summary lifecycle field contradictions", () => {
+    expectInvalidSummary({ ...pendingSummary(), acceptedAt: ACCEPTED_AT });
+    expectInvalidSummary({ ...acceptedSummary(), gameId: undefined });
+    expectInvalidSummary({ ...acceptedSummary(), acceptedBy: undefined });
+    expectInvalidSummary({ ...acceptedSummary(), whiteIdentity: undefined });
+    expectInvalidSummary({ ...acceptedSummary(), blackIdentity: undefined });
+    expectInvalidSummary({ ...declinedSummary(), declinedBy: undefined });
+    expectInvalidSummary({ ...cancelledSummary(), cancelledBy: undefined });
+    expectInvalidSummary({ ...expiredSummary(), expiredBy: undefined });
+    expectInvalidSummary({ ...expiredSummary(), expiredBy: "player" });
+
+    expectInvalidSummary({ ...declinedSummary(), acceptedAt: ACCEPTED_AT });
+    expectInvalidSummary({ ...acceptedSummary(), declinedAt: DECLINED_AT });
+    expectInvalidSummary({ ...cancelledSummary(), expiredAt: EXPIRED_AT });
+    expectInvalidSummary({ ...expiredSummary(), cancelledAt: CANCELLED_AT });
+  });
+
+  it("rejects impossible summary timestamp ordering", () => {
+    expectInvalidSummary({
+      ...pendingSummary(),
+      updatedAt: "2026-06-01T11:59:59.000Z",
+    });
+    expectInvalidSummary({
+      ...pendingSummary(),
+      expiresAt: CREATED_AT,
+    });
+    expectInvalidSummary({
+      ...acceptedSummary(),
+      updatedAt: ACCEPTED_AT,
+      acceptedAt: EXPIRES_AT,
+    });
+    expectInvalidSummary({
+      ...acceptedSummary(),
+      updatedAt: EXPIRES_AT,
+      acceptedAt: EXPIRES_AT,
+    });
+    expectInvalidSummary({
+      ...declinedSummary(),
+      updatedAt: DECLINED_AT,
+      declinedAt: EXPIRES_AT,
+    });
+    expectInvalidSummary({
+      ...declinedSummary(),
+      updatedAt: EXPIRES_AT,
+      declinedAt: EXPIRES_AT,
+    });
+    expectInvalidSummary({
+      ...cancelledSummary(),
+      updatedAt: CANCELLED_AT,
+      cancelledAt: "2026-06-01T11:59:59.000Z",
+    });
+    expectInvalidSummary({
+      ...cancelledSummary(),
+      updatedAt: "2026-06-01T11:59:59.000Z",
+      cancelledAt: "2026-06-01T11:59:59.000Z",
+    });
+    expectInvalidSummary({
+      ...expiredSummary(),
+      updatedAt: EXPIRED_AT,
+      expiredAt: ACCEPTED_AT,
+    });
+    expectInvalidSummary({
+      ...expiredSummary(),
+      updatedAt: ACCEPTED_AT,
+      expiredAt: ACCEPTED_AT,
+    });
+    expectInvalidSummary({
+      ...acceptedSummary(),
+      updatedAt: "2026-06-01T12:05:01.000Z",
+    });
+  });
+
+  it("rejects token-like data anywhere in challenge summaries", () => {
+    expectInvalidSummary({ ...pendingSummary(), token: "secret" });
+    expectInvalidSummary({ ...pendingSummary(), note: "access_token=secret" });
+    expectInvalidSummary({
+      ...pendingSummary(),
+      challengerIdentity: { kind: "session", id: "Bearer secret" },
+    });
   });
 });

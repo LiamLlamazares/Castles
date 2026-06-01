@@ -2,6 +2,13 @@ import { Pool } from "pg";
 import { OnlineGameRoom, type OnlineGameRoomRecord } from "../OnlineGameRoom";
 import { isValidClientActionId, sameOnlineAction } from "../actionIdempotency";
 import {
+  type OnlineChallengeEvent,
+  type OnlineChallengeSummary,
+  projectOnlineChallengeSummaries,
+  validateOnlineChallengeEvent,
+  validateOnlineChallengeSummary,
+} from "../challenges";
+import {
   createOnlineActionAcceptedEvent,
   createOnlineTimeoutAdjudicatedEvent,
   type OnlineGameCredentials,
@@ -43,6 +50,7 @@ export interface PostgresOnlineGameStoreOptions {
 
 export class PostgresOnlineGameStore implements OnlineGameStore {
   private static readonly summaryLockKey = 1_431_903_351;
+  private static readonly challengeSummaryLockKey = 1_431_903_352;
   private readonly queryable: PostgresQueryable;
   private readonly transactionClientFactory?: () => Promise<PostgresTransactionClient>;
   private readonly closeConnection?: () => Promise<void>;
@@ -98,6 +106,20 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  async loadChallengeSummaries(): Promise<OnlineChallengeSummary[]> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      "SELECT payload FROM online_challenge_summaries ORDER BY updated_at DESC, challenge_id ASC"
+    );
+    return result.rows.map((row, index) => {
+      const validation = validateOnlineChallengeSummary(row.payload);
+      if (!validation.ok) {
+        throw new Error(`Invalid online challenge summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+  }
+
   async rebuildSummaries(
     options: OnlineGameStoreLoadOptions = {}
   ): Promise<OnlineGameSummary[]> {
@@ -111,6 +133,24 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       }
       return summaries;
     });
+  }
+
+  async rebuildChallengeSummaries(
+    options: OnlineGameStoreLoadOptions = {}
+  ): Promise<OnlineChallengeSummary[]> {
+    await this.ensureSchema();
+    return this.withTransaction(
+      async (client) => {
+        const events = await this.loadChallengeEvents(options, client);
+        const summaries = projectOnlineChallengeSummaries(events);
+        await client.query("DELETE FROM online_challenge_summaries");
+        for (const summary of summaries) {
+          await this.upsertChallengeSummary(summary, client);
+        }
+        return summaries;
+      },
+      (queryable) => this.acquireChallengeSummaryLock(queryable)
+    );
   }
 
   async appendGameCreated(
@@ -139,6 +179,26 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     await this.withTransaction(async (client) => {
       await this.insertEvent(validated, client);
       await this.refreshSummaryForGame(validated.gameId, client);
+    });
+  }
+
+  async appendChallengeEvent(
+    event: Exclude<OnlineChallengeEvent, { type: "challenge_accepted" }>
+  ): Promise<OnlineChallengeSummary> {
+    const validated = this.validateChallenge(event);
+    if (validated.type === "challenge_accepted") {
+      throw new Error(
+        "challenge_accepted must be persisted through acceptChallengeAndCreateGame so game creation and challenge acceptance are atomic."
+      );
+    }
+    await this.ensureSchema();
+    return this.withChallengeTransaction(validated.challengeId, async (client) => {
+      await this.insertChallengeEvent(validated, client);
+      const summary = await this.refreshChallengeSummaryForChallenge(validated.challengeId, client);
+      if (!summary) {
+        throw new Error(`Online challenge summary was not refreshed for ${validated.challengeId}.`);
+      }
+      return summary;
     });
   }
 
@@ -376,6 +436,14 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     return validation.value;
   }
 
+  private validateChallenge(event: OnlineChallengeEvent): OnlineChallengeEvent {
+    const validation = validateOnlineChallengeEvent(event);
+    if (!validation.ok) {
+      throw new Error(validation.error.message);
+    }
+    return validation.value;
+  }
+
   private async ensureSchema(): Promise<void> {
     this.schemaReady ??= this.createSchema().catch((error) => {
       this.schemaReady = undefined;
@@ -461,8 +529,52 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         ON online_game_summaries (status, updated_at DESC)
     `);
     await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_challenge_events (
+        id BIGSERIAL PRIMARY KEY,
+        event_id TEXT NOT NULL UNIQUE,
+        challenge_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        payload JSONB NOT NULL,
+        inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await this.queryable.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS online_challenge_events_one_create_per_challenge
+        ON online_challenge_events (challenge_id)
+        WHERE event_type = 'challenge_created'
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_challenge_events_order_idx
+        ON online_challenge_events (id)
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_challenge_summaries (
+        challenge_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        visibility TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL,
+        payload JSONB NOT NULL,
+        rebuilt_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_challenge_summaries_status_updated_idx
+        ON online_challenge_summaries (status, updated_at DESC)
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_challenge_summaries_visibility_updated_idx
+        ON online_challenge_summaries (visibility, updated_at DESC)
+    `);
+    await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_game_locks (
         game_id TEXT PRIMARY KEY
+      )
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_challenge_locks (
+        challenge_id TEXT PRIMARY KEY
       )
     `);
   }
@@ -488,6 +600,31 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         event.gameId,
         event.type,
         this.gameVersion(event),
+        event.createdAt,
+        event,
+      ]
+    );
+  }
+
+  private async insertChallengeEvent(
+    event: OnlineChallengeEvent,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_challenge_events (
+          event_id,
+          challenge_id,
+          event_type,
+          created_at,
+          payload
+        )
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        event.eventId,
+        event.challengeId,
+        event.type,
         event.createdAt,
         event,
       ]
@@ -526,6 +663,28 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
 
     for (let index = 0; index < result.rows.length; index++) {
       const validation = validateOnlineGameEvent(result.rows[index].payload);
+      if (!validation.ok) {
+        const error = new Error(validation.error.message);
+        options.onEventError?.(index + 1, error);
+        throw error;
+      }
+      events.push(validation.value);
+    }
+
+    return events;
+  }
+
+  private async loadChallengeEvents(
+    options: OnlineGameStoreLoadOptions = {},
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<OnlineChallengeEvent[]> {
+    const result = await queryable.query(
+      "SELECT payload FROM online_challenge_events ORDER BY id ASC"
+    );
+    const events: OnlineChallengeEvent[] = [];
+
+    for (let index = 0; index < result.rows.length; index++) {
+      const validation = validateOnlineChallengeEvent(result.rows[index].payload);
       if (!validation.ok) {
         const error = new Error(validation.error.message);
         options.onEventError?.(index + 1, error);
@@ -623,6 +782,27 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     return events;
   }
 
+  private async loadChallengeEventsForChallenge(
+    challengeId: string,
+    queryable: PostgresQueryable
+  ): Promise<OnlineChallengeEvent[]> {
+    const result = await queryable.query(
+      "SELECT payload FROM online_challenge_events WHERE challenge_id = $1 ORDER BY id ASC",
+      [challengeId]
+    );
+    const events: OnlineChallengeEvent[] = [];
+
+    for (let index = 0; index < result.rows.length; index++) {
+      const validation = validateOnlineChallengeEvent(result.rows[index].payload);
+      if (!validation.ok) {
+        throw new Error(`Invalid online challenge event for ${challengeId} at row ${index + 1}: ${validation.error.message}`);
+      }
+      events.push(validation.value);
+    }
+
+    return events;
+  }
+
   private async loadRecordForGame(
     gameId: string,
     queryable: PostgresQueryable
@@ -657,6 +837,22 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       return;
     }
     await this.upsertSummary(summary, queryable);
+  }
+
+  private async refreshChallengeSummaryForChallenge(
+    challengeId: string,
+    queryable: PostgresQueryable
+  ): Promise<OnlineChallengeSummary | null> {
+    const summaries = projectOnlineChallengeSummaries(
+      await this.loadChallengeEventsForChallenge(challengeId, queryable)
+    );
+    const summary = summaries.find((candidate) => candidate.challengeId === challengeId);
+    if (!summary) {
+      await queryable.query("DELETE FROM online_challenge_summaries WHERE challenge_id = $1", [challengeId]);
+      return null;
+    }
+    await this.upsertChallengeSummary(summary, queryable);
+    return summary;
   }
 
   private async upsertSummary(
@@ -696,6 +892,46 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         validation.value.visibility,
         validation.value.archiveState,
         validation.value.version,
+        validation.value.updatedAt,
+        validation.value,
+      ]
+    );
+  }
+
+  private async upsertChallengeSummary(
+    summary: OnlineChallengeSummary,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    const validation = validateOnlineChallengeSummary(summary);
+    if (!validation.ok) {
+      throw new Error(validation.error.message);
+    }
+
+    await queryable.query(
+      `
+        INSERT INTO online_challenge_summaries (
+          challenge_id,
+          status,
+          visibility,
+          expires_at,
+          updated_at,
+          payload
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (challenge_id) DO UPDATE
+        SET
+          status = EXCLUDED.status,
+          visibility = EXCLUDED.visibility,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = EXCLUDED.updated_at,
+          payload = EXCLUDED.payload,
+          rebuilt_at = now()
+      `,
+      [
+        validation.value.challengeId,
+        validation.value.status,
+        validation.value.visibility,
+        validation.value.expiresAt,
         validation.value.updatedAt,
         validation.value,
       ]
@@ -747,9 +983,32 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  private async withChallengeTransaction<T>(
+    challengeId: string,
+    operation: (queryable: PostgresQueryable) => Promise<T>
+  ): Promise<T> {
+    return this.withTransaction(operation, async (queryable) => {
+      await queryable.query(
+        "INSERT INTO online_challenge_locks (challenge_id) VALUES ($1) ON CONFLICT (challenge_id) DO NOTHING",
+        [challengeId]
+      );
+      await queryable.query(
+        "SELECT challenge_id FROM online_challenge_locks WHERE challenge_id = $1 FOR UPDATE",
+        [challengeId]
+      );
+      await this.acquireChallengeSummaryLock(queryable);
+    });
+  }
+
   private async acquireSummaryLock(queryable: PostgresQueryable): Promise<void> {
     await queryable.query("SELECT pg_advisory_xact_lock($1)", [
       PostgresOnlineGameStore.summaryLockKey,
+    ]);
+  }
+
+  private async acquireChallengeSummaryLock(queryable: PostgresQueryable): Promise<void> {
+    await queryable.query("SELECT pg_advisory_xact_lock($1)", [
+      PostgresOnlineGameStore.challengeSummaryLockKey,
     ]);
   }
 }

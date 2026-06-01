@@ -6,6 +6,7 @@ import { containsDurableSecret } from "./secretSafety";
 import type { ValidationResult } from "./validation";
 
 export const ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION = 1;
+export const ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION = 1;
 
 export type OnlineChallengeStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
 export type OnlineChallengeVisibility = "private" | "unlisted";
@@ -61,7 +62,7 @@ export type OnlineChallengeEvent =
     });
 
 export interface OnlineChallengeSummary {
-  schemaVersion: typeof ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION;
+  schemaVersion: typeof ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION;
   challengeId: string;
   challengerIdentity: OnlineIdentity;
   challengedIdentity: OnlineIdentity;
@@ -88,6 +89,13 @@ export interface OnlineChallengeSummary {
 const MAX_ID_LENGTH = 128;
 const CHALLENGE_VISIBILITIES = new Set<OnlineChallengeVisibility>(["private", "unlisted"]);
 const CHALLENGE_SEATS = new Set<OnlineChallengeSeat>(["w", "b", "random"]);
+const CHALLENGE_STATUSES = new Set<OnlineChallengeStatus>([
+  "pending",
+  "accepted",
+  "declined",
+  "cancelled",
+  "expired",
+]);
 let nextChallengeEventSequence = 0;
 
 function bad(message: string): ValidationResult<never> {
@@ -454,7 +462,7 @@ export function projectOnlineChallengeSummaries(
         throw new Error(`Duplicate challenge creation event for ${event.challengeId}.`);
       }
       summaries.set(event.challengeId, {
-        schemaVersion: ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION,
+        schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
         challengeId: event.challengeId,
         challengerIdentity: event.challengerIdentity,
         challengedIdentity: event.challengedIdentity,
@@ -529,6 +537,246 @@ export function projectOnlineChallengeSummaries(
   }
 
   return Array.from(summaries.values());
+}
+
+function hasAnyDefined(value: Record<string, unknown>, keys: string[]): boolean {
+  return keys.some((key) => value[key] !== undefined);
+}
+
+function validateSummaryTerminalTimestamp(
+  value: unknown,
+  updatedAt: string,
+  label: string
+): ValidationResult<string> {
+  if (!isIsoDateString(value)) return bad(`${label} must be a valid timestamp.`);
+  if (value !== updatedAt) return bad(`${label} must equal summary.updatedAt.`);
+  return { ok: true, value };
+}
+
+function validateSummaryBeforeExpiry(
+  summary: OnlineChallengeSummary,
+  timestampValue: string
+): ValidationResult<string> {
+  if (timestamp(timestampValue) < timestamp(summary.createdAt)) {
+    return bad(`summary terminal timestamp is before creation.`);
+  }
+  if (timestamp(timestampValue) >= timestamp(summary.expiresAt)) {
+    return bad(`summary terminal timestamp must be before expiry.`);
+  }
+  return { ok: true, value: timestampValue };
+}
+
+function validateSummaryExpiredAtOrAfterExpiry(
+  summary: OnlineChallengeSummary,
+  timestampValue: string
+): ValidationResult<string> {
+  if (timestamp(timestampValue) < timestamp(summary.expiresAt)) {
+    return bad(`summary.expiredAt must be at or after expiry.`);
+  }
+  return { ok: true, value: timestampValue };
+}
+
+export function validateOnlineChallengeSummary(value: unknown): ValidationResult<OnlineChallengeSummary> {
+  if (!isRecord(value)) return bad("summary must be an object.");
+  if (containsDurableSecret(value)) {
+    return bad("summary must not contain token, credential, session, auth, cookie, or invite fields.");
+  }
+  if (value.schemaVersion !== ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION) {
+    return bad(`summary.schemaVersion must be ${ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION}.`);
+  }
+  if (!isBoundedString(value.challengeId, MAX_ID_LENGTH)) {
+    return bad("summary.challengeId is invalid.");
+  }
+  const challengerIdentity = validateIdentityField(
+    value.challengerIdentity,
+    "summary.challengerIdentity"
+  );
+  if (!challengerIdentity.ok) return challengerIdentity;
+  const challengedIdentity = validateIdentityField(
+    value.challengedIdentity,
+    "summary.challengedIdentity"
+  );
+  if (!challengedIdentity.ok) return challengedIdentity;
+  if (isSameOnlineIdentity(challengerIdentity.value, challengedIdentity.value)) {
+    return bad("summary must not challenge the same identity.");
+  }
+  if (!isChallengeSeat(value.challengerSeat)) {
+    return bad("summary.challengerSeat must be w, b, or random.");
+  }
+  if (!isChallengeVisibility(value.visibility)) {
+    return bad("summary.visibility must be private or unlisted.");
+  }
+  if (!isIsoDateString(value.createdAt)) {
+    return bad("summary.createdAt must be a valid timestamp.");
+  }
+  if (!isIsoDateString(value.updatedAt)) {
+    return bad("summary.updatedAt must be a valid timestamp.");
+  }
+  if (!isIsoDateString(value.expiresAt)) {
+    return bad("summary.expiresAt must be a valid timestamp.");
+  }
+  if (timestamp(value.updatedAt) < timestamp(value.createdAt)) {
+    return bad("summary.updatedAt must not be before createdAt.");
+  }
+  if (timestamp(value.expiresAt) <= timestamp(value.createdAt)) {
+    return bad("summary.expiresAt must be later than createdAt.");
+  }
+  if (typeof value.status !== "string" || !CHALLENGE_STATUSES.has(value.status as OnlineChallengeStatus)) {
+    return bad("summary.status is invalid.");
+  }
+  if (!isBoundedString(value.lastEventId, MAX_ID_LENGTH)) {
+    return bad("summary.lastEventId is invalid.");
+  }
+
+  const acceptedKeys = ["acceptedAt", "acceptedBy", "gameId", "whiteIdentity", "blackIdentity"];
+  const declinedKeys = ["declinedAt", "declinedBy"];
+  const cancelledKeys = ["cancelledAt", "cancelledBy"];
+  const expiredKeys = ["expiredAt", "expiredBy"];
+  const status = value.status as OnlineChallengeStatus;
+
+  if (status !== "accepted" && hasAnyDefined(value, acceptedKeys)) {
+    return bad("summary.accepted fields are only allowed for accepted challenges.");
+  }
+  if (status !== "declined" && hasAnyDefined(value, declinedKeys)) {
+    return bad("summary.declined fields are only allowed for declined challenges.");
+  }
+  if (status !== "cancelled" && hasAnyDefined(value, cancelledKeys)) {
+    return bad("summary.cancelled fields are only allowed for cancelled challenges.");
+  }
+  if (status !== "expired" && hasAnyDefined(value, expiredKeys)) {
+    return bad("summary.expired fields are only allowed for expired challenges.");
+  }
+
+  const summaryBase = {
+    schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+    challengeId: value.challengeId,
+    challengerIdentity: challengerIdentity.value,
+    challengedIdentity: challengedIdentity.value,
+    challengerSeat: value.challengerSeat,
+    visibility: value.visibility,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    expiresAt: value.expiresAt,
+    status,
+    lastEventId: value.lastEventId,
+  } satisfies Omit<
+    OnlineChallengeSummary,
+    | "acceptedAt"
+    | "acceptedBy"
+    | "gameId"
+    | "whiteIdentity"
+    | "blackIdentity"
+    | "declinedAt"
+    | "declinedBy"
+    | "cancelledAt"
+    | "cancelledBy"
+    | "expiredAt"
+    | "expiredBy"
+  >;
+
+  if (status === "pending") {
+    return { ok: true, value: summaryBase };
+  }
+
+  if (status === "accepted") {
+    if (!isBoundedString(value.gameId, MAX_ID_LENGTH)) return bad("summary.gameId is invalid.");
+    const acceptedAt = validateSummaryTerminalTimestamp(
+      value.acceptedAt,
+      value.updatedAt,
+      "summary.acceptedAt"
+    );
+    if (!acceptedAt.ok) return acceptedAt;
+    const acceptedTiming = validateSummaryBeforeExpiry(summaryBase, acceptedAt.value);
+    if (!acceptedTiming.ok) return acceptedTiming;
+    const acceptedBy = validateIdentityField(value.acceptedBy, "summary.acceptedBy");
+    if (!acceptedBy.ok) return acceptedBy;
+    const whiteIdentity = validateIdentityField(value.whiteIdentity, "summary.whiteIdentity");
+    if (!whiteIdentity.ok) return whiteIdentity;
+    const blackIdentity = validateIdentityField(value.blackIdentity, "summary.blackIdentity");
+    if (!blackIdentity.ok) return blackIdentity;
+    try {
+      assertAcceptedSeatBinding(summaryBase, {
+        type: "challenge_accepted",
+        schemaVersion: ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION,
+        eventId: value.lastEventId,
+        createdAt: acceptedAt.value,
+        challengeId: value.challengeId,
+        acceptedBy: acceptedBy.value,
+        acceptedAt: acceptedAt.value,
+        gameId: value.gameId,
+        whiteIdentity: whiteIdentity.value,
+        blackIdentity: blackIdentity.value,
+      });
+    } catch (error) {
+      return bad(error instanceof Error ? error.message : "summary accepted seats are invalid.");
+    }
+    if (!isSameOnlineIdentity(acceptedBy.value, challengedIdentity.value)) {
+      return bad("summary.acceptedBy must be the challenged identity.");
+    }
+    return {
+      ok: true,
+      value: {
+        ...summaryBase,
+        acceptedAt: acceptedAt.value,
+        acceptedBy: acceptedBy.value,
+        gameId: value.gameId,
+        whiteIdentity: whiteIdentity.value,
+        blackIdentity: blackIdentity.value,
+      },
+    };
+  }
+
+  if (status === "declined") {
+    const declinedAt = validateSummaryTerminalTimestamp(
+      value.declinedAt,
+      value.updatedAt,
+      "summary.declinedAt"
+    );
+    if (!declinedAt.ok) return declinedAt;
+    const declinedTiming = validateSummaryBeforeExpiry(summaryBase, declinedAt.value);
+    if (!declinedTiming.ok) return declinedTiming;
+    const declinedBy = validateIdentityField(value.declinedBy, "summary.declinedBy");
+    if (!declinedBy.ok) return declinedBy;
+    if (!isSameOnlineIdentity(declinedBy.value, challengedIdentity.value)) {
+      return bad("summary.declinedBy must be the challenged identity.");
+    }
+    return { ok: true, value: { ...summaryBase, declinedAt: declinedAt.value, declinedBy: declinedBy.value } };
+  }
+
+  if (status === "cancelled") {
+    const cancelledAt = validateSummaryTerminalTimestamp(
+      value.cancelledAt,
+      value.updatedAt,
+      "summary.cancelledAt"
+    );
+    if (!cancelledAt.ok) return cancelledAt;
+    const cancelledTiming = validateSummaryBeforeExpiry(summaryBase, cancelledAt.value);
+    if (!cancelledTiming.ok) return cancelledTiming;
+    const cancelledBy = validateIdentityField(value.cancelledBy, "summary.cancelledBy");
+    if (!cancelledBy.ok) return cancelledBy;
+    if (!isSameOnlineIdentity(cancelledBy.value, challengerIdentity.value)) {
+      return bad("summary.cancelledBy must be the challenger identity.");
+    }
+    return { ok: true, value: { ...summaryBase, cancelledAt: cancelledAt.value, cancelledBy: cancelledBy.value } };
+  }
+
+  const expiredAt = validateSummaryTerminalTimestamp(
+    value.expiredAt,
+    value.updatedAt,
+    "summary.expiredAt"
+  );
+  if (!expiredAt.ok) return expiredAt;
+  const expiredTiming = validateSummaryExpiredAtOrAfterExpiry(summaryBase, expiredAt.value);
+  if (!expiredTiming.ok) return expiredTiming;
+  if (value.expiredBy !== "system") return bad("summary.expiredBy must be system.");
+  return {
+    ok: true,
+    value: {
+      ...summaryBase,
+      expiredAt: expiredAt.value,
+      expiredBy: "system",
+    },
+  };
 }
 
 export function isSameOnlineIdentity(a: OnlineIdentity, b: OnlineIdentity): boolean {
