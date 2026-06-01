@@ -8,6 +8,7 @@ import GameLibrary from './components/GameLibrary';
 import OnlineGameBrowser from './components/OnlineGameBrowser';
 import InstallAppHint from './components/InstallAppHint';
 import RulesManualPage from './components/RulesManualPage';
+import AppShellNav, { AppShellDestination } from './components/AppShellNav';
 import { Board } from './Classes/Core/Board';
 import { Piece } from './Classes/Entities/Piece';
 import { LayoutService } from './Classes/Systems/LayoutService';
@@ -37,6 +38,8 @@ import {
   fetchOnlineSpectatorSnapshot,
   formatOnlinePendingConnectionMessage,
   forgetOnlineChallengeParams,
+  forgetOnlineJoinParams,
+  forgetOnlineOpponentInviteUrl,
   rememberOnlineChallengeParams,
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
@@ -315,6 +318,13 @@ function App() {
     if (onlineChallenge) {
       forgetOnlineChallengeParams(onlineChallenge);
     }
+    if (onlineJoin) {
+      forgetOnlineJoinParams(onlineJoin);
+      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
+    }
+    if (onlineSnapshot) {
+      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
+    }
     setOnlineJoin(null);
     setOnlineSpectator(null);
     setOnlineChallenge(null);
@@ -410,6 +420,13 @@ function App() {
     clearOnlineUrl();
     if (onlineChallenge) {
       forgetOnlineChallengeParams(onlineChallenge);
+    }
+    if (onlineJoin) {
+      forgetOnlineJoinParams(onlineJoin);
+      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
+    }
+    if (onlineSnapshot) {
+      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
     setOnlineJoin(null);
     setOnlineSpectator(null);
@@ -750,6 +767,13 @@ function App() {
     if (onlineChallenge) {
       forgetOnlineChallengeParams(onlineChallenge);
     }
+    if (onlineJoin) {
+      forgetOnlineJoinParams(onlineJoin);
+      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
+    }
+    if (onlineSnapshot) {
+      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
+    }
     setOnlineJoin(null);
     setOnlineSpectator(null);
     setOnlineChallenge(null);
@@ -913,6 +937,64 @@ function App() {
     pendingOnlineConnection.status === "server-error" ||
     pendingOnlineConnection.status === "terminal";
 
+  const clearTransientOnlineState = useCallback(() => {
+    cancelPendingReplay();
+    clearAutosave();
+    clearOnlineUrl();
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
+    if (onlineJoin) {
+      forgetOnlineJoinParams(onlineJoin);
+      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
+    }
+    if (onlineSnapshot) {
+      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
+    }
+    setOnlineJoin(null);
+    setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
+    setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
+  }, [cancelPendingReplay, onlineChallenge, onlineJoin, onlineSnapshot]);
+
+  const handleOnlineStateBackToPlay = useCallback(() => {
+    clearTransientOnlineState();
+    setViewStack(['game']);
+    setPreviousView('game');
+    setView('setup');
+  }, [clearTransientOnlineState]);
+
+  const handleOnlineStateTutorial = useCallback(() => {
+    clearTransientOnlineState();
+    setViewStack(['setup']);
+    setPreviousView('setup');
+    setView('tutorial');
+  }, [clearTransientOnlineState]);
+
+  const handleOnlineStateLibrary = useCallback(() => {
+    clearTransientOnlineState();
+    setViewStack(['setup']);
+    setPreviousView('setup');
+    setView('library');
+  }, [clearTransientOnlineState]);
+
+  const handleOnlineStateWatch = useCallback(() => {
+    clearTransientOnlineState();
+    setViewStack(['setup']);
+    setPreviousView('setup');
+    setView('watch');
+  }, [clearTransientOnlineState]);
+
+  const onlineStateDestinations = useMemo<AppShellDestination[]>(() => [
+    { id: "play", label: "Play" },
+    { id: "learn", label: "Learn", onClick: handleOnlineStateTutorial },
+    { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
+    { id: "watch", label: "Watch", onClick: handleOnlineStateWatch },
+  ], [handleOnlineStateTutorial, handleOnlineStateLibrary, handleOnlineStateWatch]);
+
   // Editor handlers
   const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
     cancelPendingReplay();
@@ -971,48 +1053,19 @@ function App() {
       )}
 
       {view === 'challenge' && (
-        <div
-          style={{
-            minHeight: '100vh',
-            width: '100vw',
-            background: '#151515',
-            color: '#f5f5f5',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            boxSizing: 'border-box',
-          }}
-        >
-          <section
-            style={{
-              width: 'min(640px, 100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '14px',
-            }}
-            aria-label="Online challenge"
-          >
-            <button
-              type="button"
-              onClick={handleNewGameClick}
-              style={{
-                alignSelf: 'flex-start',
-                minHeight: '38px',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                border: '1px solid rgba(255,255,255,0.24)',
-                background: 'transparent',
-                color: '#f5f5f5',
-                cursor: 'pointer',
-              }}
-            >
-              Back to play
-            </button>
-            <h1 style={{ margin: 0, fontSize: '1.6rem', letterSpacing: 0 }}>
-              Online Challenge
-            </h1>
-            <div role="status" aria-live="polite">
+        <div className="online-state-page">
+          <section className="online-state-panel" aria-label="Online challenge">
+            <AppShellNav
+              ariaLabel="Challenge navigation"
+              activeDestination="play"
+              title="Online Challenge"
+              kicker="Challenge"
+              description="Accept, cancel, or join a private game invite."
+              backLabel="Back to play"
+              onBack={handleOnlineStateBackToPlay}
+              destinations={onlineStateDestinations}
+            />
+            <div className="online-state-status" role="status" aria-live="polite">
               {onlineChallengeStatus === "loading"
                 ? "Loading challenge..."
                 : onlineChallengeStatus === "acting"
@@ -1020,36 +1073,23 @@ function App() {
                   : onlineChallengeError ?? `Status: ${onlineChallengeResponse?.summary.status ?? "pending"}`}
             </div>
             {onlineChallengeShareUrl && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label className="online-state-field">
                 Challenge link
                 <input
                   readOnly
                   value={onlineChallengeShareUrl}
                   onFocus={(event) => event.currentTarget.select()}
-                  style={{
-                    minHeight: '42px',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(255,255,255,0.24)',
-                  }}
+                  className="online-state-input"
                 />
               </label>
             )}
             {onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenged" && (
-              <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+              <div className="online-state-actions">
                 <button
                   type="button"
                   onClick={handleAcceptOnlineChallenge}
                   disabled={onlineChallengeStatus === "acting"}
-                  style={{
-                    minHeight: '44px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    background: '#2f855a',
-                    color: '#fff',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
+                  className="online-state-button accept"
                 >
                   Accept Challenge
                 </button>
@@ -1057,35 +1097,19 @@ function App() {
                   type="button"
                   onClick={handleDeclineOnlineChallenge}
                   disabled={onlineChallengeStatus === "acting"}
-                  style={{
-                    minHeight: '44px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(255,255,255,0.24)',
-                    background: '#7f1d1d',
-                    color: '#fff',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
+                  className="online-state-button danger"
                 >
                   Decline Challenge
                 </button>
               </div>
             )}
             {onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenger" && (
-              <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+              <div className="online-state-actions">
                 <button
                   type="button"
                   onClick={handleRefreshOnlineChallenge}
                   disabled={onlineChallengeStatus === "loading"}
-                  style={{
-                    minHeight: '44px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(255,255,255,0.24)',
-                    background: '#f7f1d6',
-                    color: '#141414',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
+                  className="online-state-button neutral"
                 >
                   Refresh Challenge
                 </button>
@@ -1093,15 +1117,7 @@ function App() {
                   type="button"
                   onClick={handleCancelOnlineChallenge}
                   disabled={onlineChallengeStatus === "acting"}
-                  style={{
-                    minHeight: '44px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(255,255,255,0.24)',
-                    background: '#7f1d1d',
-                    color: '#fff',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
+                  className="online-state-button danger"
                 >
                   Cancel Challenge
                 </button>
@@ -1111,15 +1127,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => onlineChallengeResponse.gameInvite && enterOnlineGameFromInvite(onlineChallengeResponse.gameInvite)}
-                style={{
-                  minHeight: '44px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: '#2b6cb0',
-                  color: '#fff',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
+                className="online-state-button primary"
               >
                 Join Game
               </button>
@@ -1129,45 +1137,35 @@ function App() {
       )}
 
       {view === 'game' && (onlineJoin || activeOnlineSpectator) && !onlineSnapshot && (
-        <div
-          style={{
-            height: '100vh',
-            width: '100vw',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#151515',
-            color: '#f5f5f5',
-            fontSize: '1rem',
-          }}
-        >
-          <div role="status" aria-live="polite" aria-atomic="true">
-            {pendingOnlineMessage}{
-              pendingOnlineConnection.lastError
-                ? `: ${pendingOnlineConnection.lastError}`
-                : '...'
-            }
-          </div>
-          {canRecoverPendingOnlineConnection && (
-            <button
-              type="button"
-              onClick={handleNewGameClick}
-              style={{
-                minHeight: '40px',
-                padding: '10px 14px',
-                border: '1px solid rgba(255, 255, 255, 0.22)',
-                borderRadius: '6px',
-                background: '#f7f1d6',
-                color: '#141414',
-                fontWeight: 800,
-                cursor: 'pointer',
-              }}
-            >
-              Configure New Game
-            </button>
-          )}
+        <div className="online-state-page">
+          <section className="online-state-panel compact" aria-label="Online game connection">
+            <AppShellNav
+              ariaLabel="Online game navigation"
+              activeDestination="play"
+              title="Online Game"
+              kicker="Connection"
+              description="Reconnect, recover, or move to another Castles area."
+              backLabel="Back to play"
+              onBack={handleOnlineStateBackToPlay}
+              destinations={onlineStateDestinations}
+            />
+            <div className="online-state-status" role="status" aria-live="polite" aria-atomic="true">
+              {pendingOnlineMessage}{
+                pendingOnlineConnection.lastError
+                  ? `: ${pendingOnlineConnection.lastError}`
+                  : '...'
+              }
+            </div>
+            {canRecoverPendingOnlineConnection && (
+              <button
+                type="button"
+                onClick={handleOnlineStateBackToPlay}
+                className="online-state-button neutral"
+              >
+                Configure New Game
+              </button>
+            )}
+          </section>
         </div>
       )}
 

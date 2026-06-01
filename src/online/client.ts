@@ -150,12 +150,26 @@ export function rememberOnlineJoinParams(
   storage?.setItem(storageKey(join.gameId, join.seat), join.token);
 }
 
+export function forgetOnlineJoinParams(
+  join: Pick<OnlineJoinParams, "gameId" | "seat">,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.removeItem(storageKey(join.gameId, join.seat));
+}
+
 export function rememberOnlineOpponentInviteUrl(
   gameId: string,
   inviteUrl: string,
   storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
 ): void {
   storage?.setItem(opponentInviteStorageKey(gameId), inviteUrl);
+}
+
+export function forgetOnlineOpponentInviteUrl(
+  gameId: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.removeItem(opponentInviteStorageKey(gameId));
 }
 
 export function rememberOnlineChallengeParams(

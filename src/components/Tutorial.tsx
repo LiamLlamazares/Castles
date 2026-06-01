@@ -146,13 +146,13 @@ const Tutorial: React.FC<TutorialProps> = ({
         </div>
 
         {lesson.id.startsWith('m2_l') && (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="tutorial-quick-nav" role="group" aria-label="Piece lessons">
             {PIECE_LESSONS.map(({ id, piece, label }) => {
               const isActive = lesson.id === id;
               return (
-                <button key={id} onClick={() => jumpToLesson(id)} title={label} className={`tutorial-nav-btn ${isActive ? 'active' : ''}`}>
-                  <img src={getImageByPieceType(piece, 'w')} alt={label} style={{ width: '28px', height: '28px', filter: isActive ? 'brightness(0.3)' : 'none' }} />
-                  <span style={{ fontSize: '9px', fontWeight: 'bold' }}>{label}</span>
+                <button key={id} onClick={() => jumpToLesson(id)} title={label} aria-label={label} className={`tutorial-nav-btn ${isActive ? 'active' : ''}`}>
+                  <img src={getImageByPieceType(piece, 'w')} alt="" className="tutorial-quick-nav-icon" />
+                  <span>{label}</span>
                 </button>
               );
             })}
@@ -160,43 +160,43 @@ const Tutorial: React.FC<TutorialProps> = ({
         )}
 
         {lesson.id.startsWith('m1_l') && (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <div className="tutorial-quick-nav" role="group" aria-label="Terrain lessons">
             {TERRAIN_LESSONS.map(({ id, label, hexClass }) => {
               const isActive = lesson.id === id;
               return (
-                <button key={id} onClick={() => jumpToLesson(id)} title={label} className={`tutorial-nav-btn ${isActive ? 'active' : ''}`}>
-                  <svg viewBox="0 0 110 110" style={{ width: 28, height: 28 }}>
+                <button key={id} onClick={() => jumpToLesson(id)} title={label} aria-label={label} className={`tutorial-nav-btn ${isActive ? 'active' : ''}`}>
+                  <svg viewBox="0 0 110 110" className="tutorial-quick-nav-icon" aria-hidden="true">
                     <polygon points="55 5, 98 27.5, 98 72.5, 55 95, 12 72.5, 12 27.5" className={hexClass} style={{ strokeWidth: 3 }} />
                   </svg>
-                  <span style={{ fontSize: '9px', fontWeight: 'bold' }}>{label}</span>
+                  <span>{label}</span>
                 </button>
               );
             })}
           </div>
         )}
 
-        <div style={{ margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{lesson.description}</div>
+        <div className="tutorial-description">{lesson.description}</div>
 
         {lesson.instructions && (
-          <div style={{ padding: '12px', backgroundColor: isDark ? '#2a2a4e' : '#e8e8f0', borderRadius: '8px', fontSize: '14px', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+          <div className={`tutorial-callout ${isDark ? "dark" : "light"}`}>
             {lesson.instructions}
           </div>
         )}
 
         {lesson.objectives && lesson.objectives.length > 0 && (
-          <div>
-            <h3 style={{ color: isDark ? '#ffd700' : '#702cf0', marginTop: 0, marginBottom: '8px' }}>Objectives:</h3>
-            <ul style={{ paddingLeft: '20px', margin: 0 }}>
-              {lesson.objectives.map((obj, i) => <li key={i} style={{ marginBottom: '4px' }}>{obj}</li>)}
+          <div className={`tutorial-list-section ${isDark ? "dark" : "light"}`}>
+            <h3>Objectives:</h3>
+            <ul>
+              {lesson.objectives.map((obj, i) => <li key={i}>{obj}</li>)}
             </ul>
           </div>
         )}
 
         {lesson.hints && lesson.hints.length > 0 && (
-          <div>
-            <h3 style={{ color: isDark ? '#ffd700' : '#702cf0', marginTop: '16px', marginBottom: '8px' }}>Hints:</h3>
-            <ul style={{ paddingLeft: '20px', margin: 0 }}>
-              {lesson.hints.map((hint, i) => <li key={i} style={{ marginBottom: '4px' }}>{hint}</li>)}
+          <div className={`tutorial-list-section ${isDark ? "dark" : "light"}`}>
+            <h3>Hints:</h3>
+            <ul>
+              {lesson.hints.map((hint, i) => <li key={i}>{hint}</li>)}
             </ul>
           </div>
         )}

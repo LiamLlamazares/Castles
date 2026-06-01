@@ -28,7 +28,7 @@ Current private-link beta:
 - Read-only public spectator URLs and WebSocket spectator joins exist; spectators cannot submit actions.
 - Local PostgreSQL restart smoke tooling verifies create, join, action persistence, shutdown, restart, and reload.
 - Local PostgreSQL concurrency smoke tooling verifies per-game locking and stale-action behavior.
-- The game shell has shared Play/Learn/Library/Watch navigation, contextual game controls, guarded New Game flow, save feedback, mobile tutorial bounds, drawer cleanup, and browser screenshot overlap checks.
+- The game shell has shared Play/Learn/Library/Watch navigation, contextual game controls, guarded New Game flow, save feedback, mobile tutorial bounds, modal drawer focus management, shared challenge/online pending shells, and browser screenshot overlap checks.
 
 Current constraints:
 
@@ -141,7 +141,7 @@ Tests/review/deploy gates:
 - Review: contract/security review for challenge events, visibility changes, shared access policy, confusing links, accidental public exposure, and unauthorized joins.
 - Deploy: challenge records are observable, expirable, and recoverable after restart.
 
-Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI shell polish forward before building broader lobby/archive surfaces. Sidebar navigation, tutorial placement, save/progress paths, go-back overlap, and mobile layout defects should be resolved while challenge UI is still small.
+Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI shell polish forward before building broader lobby/archive surfaces. Sidebar navigation, tutorial placement, save/progress paths, go-back overlap, and mobile layout defects should be resolved while challenge UI is still small. The first three Phase 6A passes have now resolved the major shell/navigation defects found so far; repeat the audit when lobby, open seeks, accounts, or matchmaking add new destinations.
 
 ## Phase 6: Spectator, Archive, Lobby, Matchmaking
 
@@ -202,7 +202,7 @@ Tests/review/deploy gates:
 
 Goal: make the app feel navigable and sturdy before broader public discovery.
 
-Status: second pass implemented and locally verified on 2026-06-01. The shell now uses shared Play/Learn/Library/Watch navigation on setup, tutorial, local Library, and Watch; the game side panel is contextual to live play and review actions; New Game is guarded for active games; Save Game reports in-app feedback; mobile tutorial layout keeps the board in the first viewport without fixed minimum-row clipping; drawer icon/scroll behavior is cleaned up; and stale topbar/sidebar CSS and unused ControlPanel navigation props were removed under the no-legacy-support direction.
+Status: third pass implemented and locally verified on 2026-06-01. The shell now uses shared Play/Learn/Library/Watch navigation on setup, tutorial, local Library, Watch, challenge, and pending online/error screens; the game side panel is contextual to live play and review actions; New Game is guarded for active games; Save Game reports in-app feedback; mobile tutorial layout keeps the board reachable on short screens; the drawer is a modal dialog with focus trap, Escape close, focus restoration, and background inerting; and stale topbar/sidebar CSS and unused ControlPanel navigation props were removed under the no-legacy-support direction.
 
 This phase is required before calling the online experience Lichess-like. The current app shell has known rough edges: the side bar can feel awkward, the tutorial entry point is not placed naturally, routes/views can be hard to return from, save/progress affordances are not prominent enough, and some controls may overlap on smaller layouts.
 
@@ -229,6 +229,7 @@ Implemented notes:
 - Active local and online games use an in-app New Game confirmation dialog with focus trap, Escape handling, background inerting, and focus restoration to the invoking control or hamburger button.
 - Library import is collapsed by default so saved games stay primary; Watch and Library use denser app-shell headers.
 - Reviewer findings from the second pass were accepted and fixed: drawer-started New Game focus restoration and short-height mobile tutorial clipping.
+- Reviewer findings from the third pass were accepted and fixed: challenge and failed-online states now use the shared shell, drawer focus cannot escape through the trigger, app-level background content is inert while the drawer is open, the drawer sits above the install prompt layer, stale online/challenge/autosave/session credential state is cleared when leaving failed online states, and short-screen tutorial/online-state spacing avoids horizontal overflow.
 
 Tests/review/deploy gates:
 
@@ -273,7 +274,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish verification, review, commit, and push the durable game visibility controls.
-2. Run a Phase 6A third UI polish pass from the latest audit: mobile drawer focus trap/background inerting, tutorial short-screen layout, sidebar/control grouping, online status/back-button overlap checks, and consistent AppShellNav use on pending challenge/online screens.
-3. Continue Phase 6 archive/lobby work: archive search/detail pages, replay URLs if needed, lobby presence, and simple matchmaking.
-4. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.
+1. Finish verification, review, commit, and push the Phase 6A third UI polish pass.
+2. Continue Phase 6 archive/lobby work: archive search/detail pages, replay URLs if needed, lobby presence, and simple matchmaking.
+3. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.
+4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts and drawer-open states.

@@ -29,6 +29,21 @@ const renderMenu = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu
   return { ...result, props };
 };
 
+const menuProps = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu>> = {}) => ({
+  onExportPGN: vi.fn(),
+  onImportPGN: vi.fn(),
+  onFlipBoard: vi.fn(),
+  onToggleCoordinates: vi.fn(),
+  onShowRules: vi.fn(),
+  onNewGame: vi.fn(),
+  onOpenLibrary: vi.fn(),
+  onOpenOnlineBrowser: vi.fn(),
+  onSaveGameToLibrary: vi.fn(),
+  onTutorial: vi.fn(),
+  onOpenChange: vi.fn(),
+  ...overrides,
+});
+
 describe("HamburgerMenu", () => {
   it("promotes primary navigation actions and closes after a navigation action", () => {
     const { container, props } = renderMenu();
@@ -122,5 +137,111 @@ describe("HamburgerMenu", () => {
 
     expect(container.querySelector(".hamburger-menu")).not.toBeInTheDocument();
     expect(props.onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("focuses the drawer, traps Tab, and restores focus to the menu button", () => {
+    renderMenu();
+
+    const menuButton = screen.getByRole("button", { name: "Menu" });
+    menuButton.focus();
+    fireEvent.click(menuButton);
+
+    expect(screen.getByRole("dialog", { name: "Castles menu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveFocus();
+    expect(menuButton).toHaveAttribute("aria-hidden", "true");
+    expect(menuButton).toHaveAttribute("inert", "");
+    expect(menuButton).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(screen.getByRole("button", { name: "Icon Settings" })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(menuButton).toHaveFocus();
+    expect(menuButton).not.toHaveAttribute("aria-hidden");
+    expect(menuButton).not.toHaveAttribute("inert");
+    expect(menuButton).not.toHaveAttribute("tabindex", "-1");
+  });
+
+  it("wraps forward Tab from the last drawer control back to the close button", () => {
+    renderMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    const lastControl = screen.getByRole("button", { name: "Icon Settings" });
+    lastControl.focus();
+
+    fireEvent.keyDown(document, { key: "Tab" });
+
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveFocus();
+  });
+
+  it("recovers forward Tab when focus is forced outside the open drawer", () => {
+    renderMenu();
+
+    const menuButton = screen.getByRole("button", { name: "Menu" });
+    fireEvent.click(menuButton);
+    menuButton.focus();
+
+    fireEvent.keyDown(document, { key: "Tab" });
+
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveFocus();
+  });
+
+  it("inerts background siblings while the drawer is open and restores them after close", () => {
+    render(
+      <ThemeProvider>
+        <div>
+          <button type="button">Outside action</button>
+          <HamburgerMenu {...menuProps()} />
+        </div>
+      </ThemeProvider>
+    );
+
+    const outsideAction = screen.getByRole("button", { name: "Outside action" });
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(outsideAction).toHaveAttribute("aria-hidden", "true");
+    expect(outsideAction).toHaveAttribute("inert", "");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close menu" }));
+
+    expect(outsideAction).not.toHaveAttribute("aria-hidden");
+    expect(outsideAction).not.toHaveAttribute("inert");
+  });
+
+  it("inerts app-level siblings outside the game shell while the drawer is open", () => {
+    render(
+      <ThemeProvider>
+        <div>
+          <main>
+            <section>
+              <button type="button">Board action</button>
+              <HamburgerMenu {...menuProps()} />
+            </section>
+          </main>
+          <aside aria-label="Install prompt">
+            <button type="button">Install app</button>
+          </aside>
+        </div>
+      </ThemeProvider>
+    );
+
+    const boardAction = screen.getByRole("button", { name: "Board action" });
+    const installPrompt = screen.getByLabelText("Install prompt");
+    const installAction = screen.getByRole("button", { name: "Install app" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(boardAction).toHaveAttribute("aria-hidden", "true");
+    expect(boardAction).toHaveAttribute("inert", "");
+    expect(installPrompt).toHaveAttribute("aria-hidden", "true");
+    expect(installPrompt).toHaveAttribute("inert", "");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close menu" }));
+
+    expect(boardAction).not.toHaveAttribute("aria-hidden");
+    expect(boardAction).not.toHaveAttribute("inert");
+    expect(installPrompt).not.toHaveAttribute("aria-hidden");
+    expect(installPrompt).not.toHaveAttribute("inert");
+    expect(installAction).toBeInTheDocument();
   });
 });

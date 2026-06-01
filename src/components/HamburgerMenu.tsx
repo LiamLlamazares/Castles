@@ -68,16 +68,137 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isIconsMenuOpen, setIsIconsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const menuButtonModalStateRef = useRef<{
+    ariaHidden: string | null;
+    inert: boolean;
+    tabIndex: string | null;
+  } | null>(null);
   const { toggleTheme, isDark } = useTheme();
 
+  const hideMenuButtonForModal = React.useCallback(() => {
+    const menuButton = menuButtonRef.current;
+    if (!menuButton || menuButtonModalStateRef.current) return;
+    menuButtonModalStateRef.current = {
+      ariaHidden: menuButton.getAttribute("aria-hidden"),
+      inert: menuButton.hasAttribute("inert"),
+      tabIndex: menuButton.getAttribute("tabindex"),
+    };
+    menuButton.setAttribute("aria-hidden", "true");
+    menuButton.setAttribute("inert", "");
+    menuButton.setAttribute("tabindex", "-1");
+  }, []);
+
+  const restoreMenuButtonAfterModal = React.useCallback(() => {
+    const menuButton = menuButtonRef.current;
+    const previousState = menuButtonModalStateRef.current;
+    if (!menuButton || !previousState) return;
+    if (previousState.ariaHidden === null) {
+      menuButton.removeAttribute("aria-hidden");
+    } else {
+      menuButton.setAttribute("aria-hidden", previousState.ariaHidden);
+    }
+    if (!previousState.inert) {
+      menuButton.removeAttribute("inert");
+    }
+    if (previousState.tabIndex === null) {
+      menuButton.removeAttribute("tabindex");
+    } else {
+      menuButton.setAttribute("tabindex", previousState.tabIndex);
+    }
+    menuButtonModalStateRef.current = null;
+  }, []);
+
   const setMenuOpen = React.useCallback((nextOpen: boolean) => {
+    if (nextOpen) {
+      const activeElement = document.activeElement;
+      restoreFocusRef.current = activeElement instanceof HTMLElement && activeElement !== document.body
+        ? activeElement
+        : menuButtonRef.current;
+      hideMenuButtonForModal();
+    }
     setIsOpen(nextOpen);
     if (!nextOpen) {
       setIsIconsMenuOpen(false);
+      restoreMenuButtonAfterModal();
+      const restoreTarget = restoreFocusRef.current ?? menuButtonRef.current;
+      if (restoreTarget && document.contains(restoreTarget)) {
+        restoreTarget.focus();
+      }
     }
     onOpenChange?.(nextOpen);
-  }, [onOpenChange]);
+  }, [hideMenuButtonForModal, onOpenChange, restoreMenuButtonAfterModal]);
+
+  useEffect(() => restoreMenuButtonAfterModal, [restoreMenuButtonAfterModal]);
+
+  const getDrawerFocusables = React.useCallback(() => {
+    if (!drawerRef.current) return [];
+    const selectors = [
+      "button:not(:disabled)",
+      "input:not(:disabled)",
+      "select:not(:disabled)",
+      "textarea:not(:disabled)",
+      "a[href]",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+    return Array.from(drawerRef.current.querySelectorAll<HTMLElement>(selectors))
+      .filter((element) => element.getAttribute("aria-hidden") !== "true");
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    closeButtonRef.current?.focus();
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const container = menuRef.current;
+    if (!container) return;
+
+    const backgroundElements: HTMLElement[] = [];
+    let pathChild: HTMLElement = container;
+    let parent = container.parentElement;
+
+    while (parent) {
+      for (const element of Array.from(parent.children)) {
+        if (element instanceof HTMLElement && element !== pathChild) {
+          backgroundElements.push(element);
+        }
+      }
+      if (parent === document.body) {
+        break;
+      }
+      pathChild = parent;
+      parent = parent.parentElement;
+    }
+
+    const previousValues = Array.from(new Set(backgroundElements)).map((element) => ({
+      element,
+      ariaHidden: element.getAttribute("aria-hidden"),
+      inert: element.hasAttribute("inert"),
+    }));
+
+    previousValues.forEach(({ element }) => {
+      element.setAttribute("aria-hidden", "true");
+      element.setAttribute("inert", "");
+    });
+
+    return () => {
+      previousValues.forEach(({ element, ariaHidden, inert }) => {
+        if (ariaHidden === null) {
+          element.removeAttribute("aria-hidden");
+        } else {
+          element.setAttribute("aria-hidden", ariaHidden);
+        }
+        if (!inert) {
+          element.removeAttribute("inert");
+        }
+      });
+    };
+  }, [isOpen]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -95,21 +216,50 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     };
   }, [isOpen, setMenuOpen]);
 
-  // Close menu when Escape is pressed
+  // Close menu with Escape and keep keyboard focus inside the drawer.
   useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMenuOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const focusableElements = getDrawerFocusables();
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (!drawerRef.current?.contains(activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? lastElement : firstElement).focus();
+        return;
+      }
+
+      if (event.shiftKey && activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+        return;
+      }
+
+      if (!event.shiftKey && activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
     if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
+      document.addEventListener("keydown", handleKeyDown);
     }
     return () => {
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, setMenuOpen]);
+  }, [getDrawerFocusables, isOpen, setMenuOpen]);
 
   const handleMenuItemClick = (action: () => void) => {
     menuButtonRef.current?.focus();
@@ -131,7 +281,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   );
 
   return (
-    <div className="hamburger-container" ref={menuRef}>
+    <div className={`hamburger-container ${isOpen ? "open" : ""}`} ref={menuRef}>
       {/* Hamburger Icon */}
       <button
         className="hamburger-button"
@@ -145,10 +295,23 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
 
       {/* Slide-out Menu */}
       {isOpen && (
-        <div className="hamburger-menu open">
+        <div
+          className="hamburger-menu open"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Castles menu"
+          ref={drawerRef}
+        >
           <div className="menu-header">
             <span>Castles</span>
-            <button className="menu-close" onClick={() => setMenuOpen(false)} aria-label="Close menu">×</button>
+            <button
+              className="menu-close"
+              onClick={() => setMenuOpen(false)}
+              aria-label="Close menu"
+              ref={closeButtonRef}
+            >
+              ×
+            </button>
           </div>
 
           <div className="menu-items">

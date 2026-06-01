@@ -700,6 +700,61 @@ describe("App game setup lifecycle", () => {
     expect(window.location.search).not.toContain("token=");
   });
 
+  it("uses shared navigation on failed pre-snapshot online connections", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_denied&seat=w&token=bad-token"
+    );
+    onlineHookMocks.useOnlineGameConnection.mockReturnValue({
+      status: "access-denied",
+      lastError: "Invite link expired.",
+      submitAction: onlineHookMocks.submitAction,
+    });
+    localStorage.setItem("castles_autosave", "stale autosave");
+    sessionStorage.setItem("castles_online_join:game_denied:w", "bad-token");
+    sessionStorage.setItem(
+      "castles_online_opponent_invite:game_denied",
+      "https://castles.example/?onlineGame=game_denied&seat=b&token=black-token"
+    );
+
+    render(<App />);
+
+    expect(screen.getByRole("navigation", { name: "Online game navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("onlineGame=");
+    expect(window.location.search).not.toContain("token=");
+    expect(localStorage.getItem("castles_autosave")).toBeNull();
+    expect(sessionStorage.getItem("castles_online_join:game_denied:w")).toBeNull();
+    expect(sessionStorage.getItem("castles_online_opponent_invite:game_denied")).toBeNull();
+  });
+
+  it("wraps long pre-snapshot online errors in the online state layout", () => {
+    const longError = "This invite cannot be opened because the server rejected the bearer token after a long reconnect attempt. Ask for a fresh invite link.";
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_long_error&seat=b&token=bad-token"
+    );
+    onlineHookMocks.useOnlineGameConnection.mockReturnValue({
+      status: "access-denied",
+      lastError: longError,
+      submitAction: onlineHookMocks.submitAction,
+    });
+
+    render(<App />);
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveClass("online-state-status");
+    expect(status).toHaveTextContent(`Access denied: ${longError}`);
+  });
+
   it("seeds public player visibility and wires updates through the bearer-authorized client helper", async () => {
     window.history.replaceState(
       {},
@@ -876,5 +931,51 @@ describe("App game setup lifecycle", () => {
 
     expect(await screen.findByRole("button", { name: "Refresh Challenge" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel Challenge" })).toBeInTheDocument();
+  });
+
+  it("uses shared navigation on challenge screens", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_123&challengeRole=challenger#challengeToken=secret"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            role: "challenger",
+            summary: {
+              schemaVersion: 1,
+              challengeId: "challenge_123",
+              challengerIdentity: { kind: "session", id: "challenge_123_challenger" },
+              challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+              challengerSeat: "w",
+              visibility: "unlisted",
+              setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+              createdAt: "2026-06-01T12:00:00.000Z",
+              updatedAt: "2026-06-01T12:00:00.000Z",
+              expiresAt: "2026-06-02T12:00:00.000Z",
+              status: "pending",
+              lastEventId: "challenge_evt_created",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: "Challenge navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to play" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
   });
 });

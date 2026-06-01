@@ -114,6 +114,7 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
+    expect(screen.getByRole("group", { name: "Terrain lessons" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Castles" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Rivers" }));
@@ -125,6 +126,22 @@ describe("Tutorial", () => {
         showNavigationMenu: false,
       })
     );
+  });
+
+  it("labels piece lesson shortcuts when piece lessons are active", () => {
+    render(
+      <ThemeProvider>
+        <Tutorial onBack={vi.fn()} />
+      </ThemeProvider>
+    );
+
+    for (let i = 0; i < 7; i += 1) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    }
+
+    expect(screen.getByRole("group", { name: "Piece lessons" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sword" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archer" })).toBeInTheDocument();
   });
 
   it("keeps working when tutorial progress storage is unavailable", () => {

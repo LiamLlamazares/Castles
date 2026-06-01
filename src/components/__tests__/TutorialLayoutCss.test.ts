@@ -14,6 +14,41 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).not.toContain("min-height: 250px;");
   });
 
+  it("compresses tutorial chrome on short mobile screens", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(css).toContain("@media (max-width: 760px) and (max-height: 720px)");
+    expect(css).toContain("grid-template-rows: minmax(0, 52dvh) minmax(0, 48dvh);");
+    expect(css).toContain("max-height: 52dvh;");
+    expect(css).toContain("height: 48dvh;");
+    expect(css).toContain(".tutorial-quick-nav");
+    expect(css).toContain(".tutorial-description");
+    expect(css).toContain(".tutorial-callout");
+  });
+
+  it("keeps shared mobile shell spacing aligned inside online state pages", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(css).toMatch(/\.online-state-panel\s*\{[^}]*--app-shell-mobile-padding-x:\s*0px;[^}]*--app-shell-mobile-padding-y:\s*0px;/s);
+    expect(css).toContain("@media (max-width: 760px) and (max-height: 720px)");
+    expect(css).toContain("--app-shell-mobile-padding-x: 16px;");
+  });
+
+  it("keeps the modal drawer above app-level install prompts", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    const openContainerRule = css.match(/\.hamburger-container\.open\s*\{[^}]+}/)?.[0] ?? "";
+    const drawerRule = css.match(/\.hamburger-menu\s*\{[^}]+}/)?.[0] ?? "";
+    const backdropRule = css.match(/\.menu-backdrop\s*\{[^}]+}/)?.[0] ?? "";
+
+    expect(openContainerRule).toContain("z-index: 4000;");
+    expect(drawerRule).toContain("z-index: 4002;");
+    expect(backdropRule).toContain("z-index: 4001;");
+  });
+
   it("keeps the desktop tooltip discovery hint away from shell controls", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");

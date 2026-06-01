@@ -26,13 +26,24 @@ Phase 6B implementation status, 2026-06-01:
 - Spectate handoff uses `?onlineGame=<id>&view=spectator` and strips player tokens, challenge parameters, PGN parameters, and URL fragments.
 - Public lobby creation, open seeks, accounts, ratings, chat, and matchmaking stay deferred until the backend contracts exist.
 
-Next UI polish audit, 2026-06-01:
+Phase 6A third-pass implementation status, 2026-06-01:
+
+- Challenge creation/pending/error states and failed pre-snapshot online states now use the shared Play/Learn/Watch/Library app-shell navigation.
+- Leaving failed online/challenge states clears stale online URLs, challenge parameters, invite tokens, and local autosave before opening another destination.
+- Long online status and error text uses a wrapped status block with stable responsive spacing at narrow widths.
+- The mobile drawer now behaves as a modal dialog: initial focus moves into the drawer, Tab and Shift+Tab stay inside it, Escape closes it, focus is restored, app-level background content is inert while open, and the drawer/backdrop sit above the install prompt layer.
+- Tutorial lesson quick navigation uses stable accessible groups and compact short-screen rules so progress, lesson controls, and the board remain reachable at 360 x 640.
+- Reviewer follow-ups were fixed for drawer-trigger focus escape, install-prompt overlay risk, AppShellNav negative-margin overflow inside online state panels, and stale autosave/session-credential cleanup.
+- Screenshot artifacts for this pass are in `artifacts/ui-audit/phase6c-third-pass`.
+
+Next UI polish audit:
 
 - Keep lichess-style top destinations simple: Play, Learn, Watch, Library, and later Tools/Lobby when backed by server contracts.
-- Add a stronger mobile drawer accessibility pass: focus trap, Escape close, focus restoration, and background inerting.
-- Make tutorial mobile more compact on short screens: reduce header/chip crowding and keep progress visible without pushing the board out of view.
+- Recheck drawer modal behavior after any new menu destination or banner is added.
+- Recheck tutorial mobile compactness after adding new lessons or tutorial controls.
 - Keep the game side panel contextual to clocks, turn phase, history, save/review, online links, and analysis; do not use it as general app navigation.
-- Check long online status/error text at 360 px, 390 px, and 430 px widths so it does not collide with back/menu controls.
+- Check long online status/error text at 360 px, 390 px, and 430 px widths whenever challenge or connection copy changes.
+- Add the next navigation pass when Lobby, open seeks, account identity, or matchmaking adds genuinely new top-level destinations.
 
 Reference pages checked:
 
@@ -112,3 +123,6 @@ For every screenshot, check:
 - Accessibility check: move history entries are real buttons so keyboard users can jump through history in desktop and mobile history surfaces.
 - Online browser test: Watch -> Spectate enters a token-free spectator URL and clears stale player/challenge URL state.
 - Online visibility test: a player can publish an unlisted game to Watch and unlist it again without exposing bearer tokens.
+- Online state navigation test: failed pending online and challenge states expose shared navigation, clear stale online state when leaving, and keep long status text inside the responsive status block.
+- Hamburger menu test: drawer open state is a modal dialog with focus trap, Escape close, focus restoration, and background inerting.
+- Tutorial layout test: short mobile viewports use the compact split and stable quick-nav/text classes.

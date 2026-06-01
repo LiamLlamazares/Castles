@@ -92,8 +92,8 @@
     position: sticky;
     top: 0;
     z-index: 30;
-    margin: -20px -20px 16px;
-    padding: 12px 20px 14px;
+    margin: calc(-1 * var(--app-shell-mobile-padding-y, 20px)) calc(-1 * var(--app-shell-mobile-padding-x, 20px)) 16px;
+    padding: 12px var(--app-shell-mobile-padding-x, 20px) 14px;
     background: inherit;
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }

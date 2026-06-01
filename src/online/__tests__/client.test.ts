@@ -18,6 +18,7 @@ import {
   parseOnlineSpectatorParams,
   rememberOnlineChallengeParams,
   rememberOnlineOpponentInviteUrl,
+  rememberOnlineJoinParams,
   removeOnlineChallengeTokenFromUrl,
   resolveOnlineChallengeParams,
   removeOnlineTokenFromUrl,
@@ -28,6 +29,8 @@ import {
   shouldApplyOnlineSnapshotVersion,
   updateOnlineGameVisibility,
   forgetOnlineChallengeParams,
+  forgetOnlineJoinParams,
+  forgetOnlineOpponentInviteUrl,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import type { OnlineConnectionStatus } from "../types";
@@ -120,6 +123,31 @@ describe("online client helpers", () => {
         storageAdapter
       )
     ).toEqual(join);
+  });
+
+  it("forgets stored private invite and opponent invite credentials", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+    const join = { gameId: "game_123", seat: "w" as const, token: "secret" };
+
+    rememberOnlineJoinParams(join, storageAdapter);
+    rememberOnlineOpponentInviteUrl(
+      "game_123",
+      "https://castles.example/?onlineGame=game_123&seat=b&token=black-secret",
+      storageAdapter
+    );
+
+    forgetOnlineJoinParams(join, storageAdapter);
+    forgetOnlineOpponentInviteUrl("game_123", storageAdapter);
+
+    expect(
+      resolveOnlineJoinParams("https://castles.example/?onlineGame=game_123&seat=w", storageAdapter)
+    ).toBeNull();
+    expect(resolveOnlineOpponentInviteUrl("game_123", storageAdapter)).toBeNull();
   });
 
   it("stores challenge fragment tokens outside the URL and resolves tokenless reload URLs", () => {
