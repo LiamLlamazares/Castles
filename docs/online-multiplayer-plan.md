@@ -28,7 +28,7 @@ Current private-link beta:
 - Read-only public spectator URLs and WebSocket spectator joins exist; spectators cannot submit actions.
 - Local PostgreSQL restart smoke tooling verifies create, join, action persistence, shutdown, restart, and reload.
 - Local PostgreSQL concurrency smoke tooling verifies per-game locking and stale-action behavior.
-- The game shell has responsive navigation, tutorial/rules/library access, save/load controls, and mobile overlap checks.
+- The game shell has responsive navigation, tutorial/rules/library access, save/load controls, and mobile overlap checks, but a second Lichess-benchmarked UI/navigation pass is queued after the archive replay slice.
 
 Current constraints:
 
@@ -147,7 +147,7 @@ Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI 
 
 Goal: add discovery and post-game surfaces on top of stable contracts.
 
-Status: Phase 6B is implemented locally on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models and the existing spectator flow. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
+Status: Phase 6D is in verification on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
 
 Work:
 
@@ -180,11 +180,29 @@ Tests/review/deploy gates:
 - Review: data/access-policy review to confirm only public summaries are listed; UX/accessibility review for keyboard row actions, mobile list layout, and clear public/unlisted language.
 - Deploy: existing online browser smoke must still pass through create/join/spectate/terminal flows.
 
+## Phase 6D: Archive Replay Launch
+
+Goal: completed Online Archive rows should open local analysis/replay directly instead of first joining the spectator WebSocket flow.
+
+Work:
+
+- Keep active Watch rows on the token-free spectator URL flow.
+- Add a distinct archive replay callback for completed rows, labelled as analysis/replay rather than spectating.
+- Fetch a single public spectator snapshot for archived games, clear online/challenge/shared-game URL state, and remount the local game in analysis mode.
+- Prefer a replay-built PGN analysis from the snapshot setup and move history; fall back to current-position analysis if replay import fails.
+- Preserve hydrated online state such as victory points, graveyard, phoenix records, promotion state, piece theme, time control, rules, and sanctuary data during replay handoff.
+
+Tests/review/deploy gates:
+
+- Tests: Online Archive row action coverage, App archive replay handoff coverage, focused replay tests, full suite/build/server build, and browser smoke.
+- Review: spectator/archive UX and correctness review focused on not accidentally opening WebSocket spectator mode, preserving state, clearing stale URL secrets, and keeping copy/link labels honest.
+- Deploy: existing online smoke must still pass through create/join/action/spectate/terminal flows.
+
 ## Phase 6A: UI Shell, Navigation, Tutorial, and Save UX Polish
 
 Goal: make the app feel navigable and sturdy before broader public discovery.
 
-Status: implemented for the current shell on 2026-06-01. Keep this phase as a regression checklist when adding future lobby, archive, challenge, spectator, or analysis screens.
+Status: first pass implemented for the current shell on 2026-06-01. User testing still reports that the sidebar feels awkward, tutorial placement is unnatural, returning between pages is not obvious enough, save/progress affordances need work, and some controls may overlap. Run a second Lichess-benchmarked UI pass after the current archive replay slice and before deeper lobby/matchmaking work.
 
 This phase is required before calling the online experience Lichess-like. The current app shell has known rough edges: the side bar can feel awkward, the tutorial entry point is not placed naturally, routes/views can be hard to return from, save/progress affordances are not prominent enough, and some controls may overlap on smaller layouts.
 
@@ -251,6 +269,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish verification, reviewer fixes, docs, smoke updates, commit, and push the Phase 5 challenge endpoint/auth flow.
-2. Pull Phase 6A UI shell polish forward immediately after this challenge/access endpoint slice, so sidebar, tutorial placement, save/progress navigation, go-back overlap, and mobile layout defects are fixed before broader lobby/archive work.
-3. After the UI shell pass, continue Phase 6 with spectator/archive/lobby surfaces on top of the stable challenge and navigation contracts.
+1. Finish Phase 6D verification, reviewer fixes, browser smoke/manual checks, commit, and push the archive replay launch.
+2. Run the second Phase 6A UI shell/navigation pass with Lichess screenshots as a benchmark: sidebar, tutorial placement, page return paths, save/progress affordances, go-back overlap, mobile bottom controls, and similar layout defects across all pages.
+3. Continue Phase 6 archive/lobby work after the UI pass: archive search/detail pages, replay URLs if needed, public visibility controls, lobby presence, and simple matchmaking.

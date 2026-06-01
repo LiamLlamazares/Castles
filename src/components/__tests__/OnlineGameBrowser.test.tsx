@@ -35,6 +35,7 @@ describe("OnlineGameBrowser", () => {
         loadGames={vi.fn().mockResolvedValue([])}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
+        onReplay={vi.fn()}
       />
     );
 
@@ -50,6 +51,7 @@ describe("OnlineGameBrowser", () => {
         loadGames={vi.fn().mockResolvedValue([summary()])}
         onBack={vi.fn()}
         onSpectate={onSpectate}
+        onReplay={vi.fn()}
       />
     );
 
@@ -58,7 +60,7 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("3 moves");
     expect(row).toHaveTextContent("Timed");
 
-    fireEvent.click(within(row).getByRole("button", { name: "Spectate game_public_active" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Spectate Ada vs Ben, game_public_active" }));
 
     expect(onSpectate).toHaveBeenCalledWith("game_public_active");
   });
@@ -73,6 +75,7 @@ describe("OnlineGameBrowser", () => {
         ])}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
+        onReplay={vi.fn()}
       />
     );
 
@@ -82,7 +85,9 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByRole("button", { name: "Watch game_unlisted_hidden" })).not.toBeInTheDocument();
   });
 
-  it("keeps completed games in the Online Archive tab with result labels", async () => {
+  it("keeps completed games in the Online Archive tab with local analysis replay actions", async () => {
+    const onReplay = vi.fn();
+    const onSpectate = vi.fn();
     render(
       <OnlineGameBrowser
         initialTab="archive"
@@ -97,7 +102,8 @@ describe("OnlineGameBrowser", () => {
           }),
         ])}
         onBack={vi.fn()}
-        onSpectate={vi.fn()}
+        onSpectate={onSpectate}
+        onReplay={onReplay}
       />
     );
 
@@ -105,7 +111,10 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true");
     expect(row).toHaveTextContent("Complete");
     expect(row).toHaveTextContent("White wins by resignation");
-    expect(within(row).getByRole("button", { name: "View replay game_public_archive" })).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole("button", { name: "Analyze replay Ada vs Ben, game_public_archive" }));
+
+    expect(onReplay).toHaveBeenCalledWith("game_public_archive");
+    expect(onSpectate).not.toHaveBeenCalled();
     expect(within(row).getByRole("button", { name: "Copy spectator link for game_public_archive" })).toBeInTheDocument();
   });
 
@@ -124,6 +133,7 @@ describe("OnlineGameBrowser", () => {
         ])}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
+        onReplay={vi.fn()}
       />
     );
 
@@ -146,6 +156,7 @@ describe("OnlineGameBrowser", () => {
         loadGames={loadGames}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
+        onReplay={vi.fn()}
       />
     );
 

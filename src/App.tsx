@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GameBoard from './components/Game';
 import MainMenu from './components/MainMenu';
 import GameSetup from './components/GameSetup';
@@ -20,6 +20,7 @@ import { useOnlineGameConnection } from './hooks/useOnlineGameConnection';
 import { useOnlineSpectatorConnection } from './hooks/useOnlineSpectatorConnection';
 import {
   createMoveTreeFromHistory,
+  createInitialStateFromSetupDTO,
   hydrateGameStateDTO,
   hydrateOnlineGameSetupDTO,
   serializeOnlineGameSetup,
@@ -32,6 +33,7 @@ import {
   declineOnlineChallenge,
   fetchOnlineChallenge,
   createOnlineGame,
+  fetchOnlineSpectatorSnapshot,
   formatOnlinePendingConnectionMessage,
   forgetOnlineChallengeParams,
   rememberOnlineChallengeParams,
@@ -59,6 +61,7 @@ import {
   createSavedGameRecord,
 } from './Classes/Services/GameLibraryRepository';
 import { loadPGNText } from './Classes/Services/PGNLoadService';
+import { PGNService } from './Classes/Services/PGNService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'watch';
@@ -89,6 +92,90 @@ interface EditorConfig {
   sanctuaries?: Sanctuary[];
 }
 
+function gameSettingsFromSetup(setup: ReturnType<typeof hydrateOnlineGameSetupDTO>) {
+  return setup.sanctuarySettings
+    ? {
+        sanctuaryUnlockTurn: setup.sanctuarySettings.unlockTurn,
+        sanctuaryRechargeTurns: setup.sanctuarySettings.cooldown,
+      }
+    : undefined;
+}
+
+function createGameConfigFromOnlineSnapshot(
+  snapshot: OnlineGameSnapshotDTO,
+  isAnalysisMode: boolean
+): GameConfig {
+  const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
+  const moveTree = createMoveTreeFromHistory(snapshot.moveHistory, snapshot.state);
+  const state = hydrateGameStateDTO(snapshot.state, snapshot.setup, moveTree);
+  const layout = getStartingLayout(setup.board);
+
+  return {
+    board: setup.board,
+    pieces: state.pieces,
+    layout,
+    moveTree: state.moveTree,
+    turnCounter: state.turnCounter,
+    sanctuaries: state.sanctuaries,
+    sanctuarySettings: setup.sanctuarySettings,
+    gameRules: setup.gameRules,
+    initialPoolTypes: state.sanctuaryPool,
+    graveyard: state.graveyard,
+    phoenixRecords: state.phoenixRecords,
+    promotionPending: state.promotionPending,
+    victoryPoints: state.victoryPoints,
+    pieceTheme: setup.pieceTheme,
+    timeControl: setup.timeControl,
+    isAnalysisMode,
+  };
+}
+
+function createReplayMoveTreeFromOnlineSnapshot(snapshot: OnlineGameSnapshotDTO): MoveTree {
+  const { state } = createInitialStateFromSetupDTO(snapshot.setup);
+  for (const record of snapshot.moveHistory) {
+    state.moveTree.addMove(record);
+  }
+  return state.moveTree;
+}
+
+function createReplayGameConfigFromOnlineSnapshot(snapshot: OnlineGameSnapshotDTO): GameConfig {
+  const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
+  const hydratedConfig = createGameConfigFromOnlineSnapshot(snapshot, true);
+  if (snapshot.moveHistory.length > 0) {
+    try {
+      const replayMoveTree = createReplayMoveTreeFromOnlineSnapshot(snapshot);
+      const replayPgn = PGNService.generatePGN(
+        setup.board,
+        setup.pieces,
+        snapshot.moveHistory,
+        setup.sanctuaries,
+        {},
+        replayMoveTree,
+        gameSettingsFromSetup(setup)
+      );
+      const replay = loadPGNText(replayPgn);
+      if (replay && (!replay.diagnostics || replay.diagnostics.length === 0)) {
+        return {
+          ...hydratedConfig,
+          board: replay.board,
+          pieces: replay.pieces,
+          layout: getStartingLayout(replay.board),
+          moveTree: replay.moveTree,
+          turnCounter: replay.turnCounter,
+          sanctuaries: replay.sanctuaries,
+          sanctuarySettings: replay.sanctuarySettings ?? setup.sanctuarySettings,
+          initialPoolTypes: replay.sanctuaryPool ?? hydratedConfig.initialPoolTypes,
+          isAnalysisMode: true,
+        };
+      }
+    } catch (error) {
+      console.warn("Could not rebuild archived game replay from move history", error);
+    }
+  }
+
+  return hydratedConfig;
+}
+
 function App() {
   const [view, setView] = useState<ViewState>('game');
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
@@ -113,6 +200,11 @@ function App() {
   const [onlineChallengeShareUrl, setOnlineChallengeShareUrl] = useState<string | null>(null);
   const [onlineChallengeStatus, setOnlineChallengeStatus] = useState<"idle" | "loading" | "acting" | "error">("idle");
   const [onlineChallengeError, setOnlineChallengeError] = useState<string | null>(null);
+  const replayRequestIdRef = useRef(0);
+
+  const cancelPendingReplay = () => {
+    replayRequestIdRef.current += 1;
+  };
 
   const clearAutosave = () => {
     localStorage.removeItem('castles_autosave');
@@ -183,6 +275,7 @@ function App() {
   }, [onlineChallenge]);
 
   const handleNewGameClick = () => {
+    cancelPendingReplay();
     clearAutosave();
     clearOnlineUrl();
     if (onlineChallenge) {
@@ -202,6 +295,7 @@ function App() {
   };
 
   const handleTutorialClick = () => {
+    cancelPendingReplay();
     if (view !== 'tutorial') {
       setViewStack(prev => [...prev, view]);
       setPreviousView(view);
@@ -210,6 +304,7 @@ function App() {
   };
 
   const handleOpenLibrary = () => {
+    cancelPendingReplay();
     if (view !== 'library') {
       setViewStack(prev => [...prev, view]);
       setPreviousView(view);
@@ -218,6 +313,7 @@ function App() {
   };
 
   const handleOpenOnlineBrowser = () => {
+    cancelPendingReplay();
     if (view !== 'watch') {
       setViewStack(prev => [...prev, view]);
       setPreviousView(view);
@@ -226,6 +322,7 @@ function App() {
   };
 
   const returnToPreviousView = () => {
+    cancelPendingReplay();
     setViewStack(prev => {
       if (prev.length === 0) {
         const fallback = previousView === 'library' || previousView === 'tutorial' || previousView === 'watch' ? 'game' : previousView;
@@ -256,6 +353,7 @@ function App() {
     pieceTheme?: PieceTheme,
     opponentConfig?: AIOpponentConfig
   ) => {
+    cancelPendingReplay();
     const layout = getStartingLayout(board);
 
     clearAutosave();
@@ -287,6 +385,7 @@ function App() {
     pieceTheme?: PieceTheme
   ) => {
     try {
+      cancelPendingReplay();
       clearAutosave();
       if (onlineChallenge) {
         forgetOnlineChallengeParams(onlineChallenge);
@@ -333,6 +432,7 @@ function App() {
   };
 
   const enterOnlineGameFromInvite = (invite: OnlineChallengeGameInvite) => {
+    cancelPendingReplay();
     if (onlineChallenge) {
       forgetOnlineChallengeParams(onlineChallenge);
     }
@@ -359,6 +459,7 @@ function App() {
   };
 
   const handleSpectateOnlineGame = (gameId: string) => {
+    cancelPendingReplay();
     if (onlineChallenge) {
       forgetOnlineChallengeParams(onlineChallenge);
     }
@@ -379,6 +480,36 @@ function App() {
     setView('game');
   };
 
+  const handleReplayOnlineGame = async (gameId: string) => {
+    const requestId = replayRequestIdRef.current + 1;
+    replayRequestIdRef.current = requestId;
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
+    clearOnlineUrl();
+    setOnlineJoin(null);
+    setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
+    setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
+
+    try {
+      const snapshot = await fetchOnlineSpectatorSnapshot(gameId);
+      if (replayRequestIdRef.current !== requestId) return;
+      const replayConfig = createReplayGameConfigFromOnlineSnapshot(snapshot);
+      setGameConfig(replayConfig);
+      setGameKey(prev => prev + 1);
+      setPreviousView('watch');
+      setView('game');
+    } catch (error) {
+      if (replayRequestIdRef.current !== requestId) return;
+      console.error("Failed to open archived online replay", error);
+      alert("Could not open this archived replay. Refresh public games and try again.");
+    }
+  };
+
   const handleCreateOnlineChallenge = async (
     board: Board,
     pieces: Piece[],
@@ -391,6 +522,7 @@ function App() {
     pieceTheme?: PieceTheme
   ) => {
     try {
+      cancelPendingReplay();
       clearAutosave();
       const created = await createOnlineChallenge(
         serializeOnlineGameSetup({
@@ -437,6 +569,7 @@ function App() {
 
   const handleAcceptOnlineChallenge = async () => {
     if (!onlineChallenge) return;
+    cancelPendingReplay();
     setOnlineChallengeStatus("acting");
     setOnlineChallengeError(null);
     try {
@@ -455,6 +588,7 @@ function App() {
 
   const handleDeclineOnlineChallenge = async () => {
     if (!onlineChallenge) return;
+    cancelPendingReplay();
     setOnlineChallengeStatus("acting");
     setOnlineChallengeError(null);
     try {
@@ -476,6 +610,7 @@ function App() {
 
   const handleCancelOnlineChallenge = async () => {
     if (!onlineChallenge) return;
+    cancelPendingReplay();
     setOnlineChallengeStatus("acting");
     setOnlineChallengeError(null);
     try {
@@ -497,6 +632,7 @@ function App() {
 
   const handleRefreshOnlineChallenge = async () => {
     if (!onlineChallenge) return;
+    cancelPendingReplay();
     setOnlineChallengeStatus("loading");
     setOnlineChallengeError(null);
     try {
@@ -511,6 +647,7 @@ function App() {
   };
 
   const handleRestartGame = () => {
+    cancelPendingReplay();
     clearAutosave();
     setGameKey(prev => prev + 1);
   };
@@ -531,6 +668,7 @@ function App() {
     timeControl?: { initial: number, increment: number },
     victoryPoints?: { w: number; b: number }
   }) => {
+    cancelPendingReplay();
     const {
       board,
       pieces,
@@ -636,30 +774,8 @@ function App() {
   const isRulesPage = window.location.pathname === '/rules';
 
   const handleOnlineSnapshot = useCallback((snapshot: OnlineGameSnapshotDTO) => {
-    const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
-    const moveTree = createMoveTreeFromHistory(snapshot.moveHistory, snapshot.state);
-    const state = hydrateGameStateDTO(snapshot.state, snapshot.setup, moveTree);
-    const layout = getStartingLayout(setup.board);
-
     setOnlineSnapshot(snapshot);
-    setGameConfig({
-      board: setup.board,
-      pieces: state.pieces,
-      layout,
-      moveTree: state.moveTree,
-      turnCounter: state.turnCounter,
-      sanctuaries: state.sanctuaries,
-      sanctuarySettings: setup.sanctuarySettings,
-      gameRules: setup.gameRules,
-      initialPoolTypes: state.sanctuaryPool,
-      graveyard: state.graveyard,
-      phoenixRecords: state.phoenixRecords,
-      promotionPending: state.promotionPending,
-      victoryPoints: state.victoryPoints,
-      pieceTheme: setup.pieceTheme,
-      timeControl: setup.timeControl,
-      isAnalysisMode: false,
-    });
+    setGameConfig(createGameConfigFromOnlineSnapshot(snapshot, false));
     setGameKey(prev => prev + 1);
     setView('game');
   }, []);
@@ -723,6 +839,7 @@ function App() {
 
   // Editor handlers
   const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
+    cancelPendingReplay();
     clearAutosave();
     setPreviousView(view);
     setEditorConfig({ board, pieces, sanctuaries });
@@ -730,10 +847,12 @@ function App() {
   };
 
   const handleEditorBack = () => {
+    cancelPendingReplay();
     setView(previousView);
   };
 
   const handlePlayFromEditor = (board: Board, pieces: Piece[], sanctuaries: Sanctuary[]) => {
+    cancelPendingReplay();
     clearAutosave();
     const layout = getStartingLayout(board);
     clearOnlineUrl();
@@ -1042,6 +1161,7 @@ function App() {
           onBack={returnToPreviousView}
           backLabel={currentBackLabel}
           onSpectate={handleSpectateOnlineGame}
+          onReplay={handleReplayOnlineGame}
         />
       )}
 

@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../App";
+import { SanctuaryType } from "../Constants";
 import type { OnlineGameSnapshotDTO } from "../online/types";
 
 const onlineHookMocks = vi.hoisted(() => ({
@@ -16,6 +17,13 @@ vi.mock("../hooks/useOnlineSpectatorConnection", () => ({
   useOnlineSpectatorConnection: onlineHookMocks.useOnlineSpectatorConnection,
 }));
 
+function moveHistoryLength(moveTree: unknown): string {
+  const candidate = moveTree as { getHistoryLine?: () => unknown[] } | undefined;
+  return typeof candidate?.getHistoryLine === "function"
+    ? String(candidate.getHistoryLine().length)
+    : "none";
+}
+
 vi.mock("../components/Game", () => ({
   default: (props: {
     initialBoard?: unknown;
@@ -23,6 +31,7 @@ vi.mock("../components/Game", () => ({
     initialMoveTree?: unknown;
     initialTurnCounter?: number;
     initialSanctuaries?: unknown[];
+    initialVictoryPoints?: { w: number; b: number };
     isAnalysisMode?: boolean;
     onlineSession?: { role: string };
     sanctuarySettings?: { unlockTurn: number; cooldown: number };
@@ -45,6 +54,13 @@ vi.mock("../components/Game", () => ({
       <div>Game Ready</div>
       <div>Online session: {props.onlineSession?.role ?? "none"}</div>
       <div>Analysis mode: {props.isAnalysisMode ? "yes" : "no"}</div>
+      <div>
+        Victory points: {props.initialVictoryPoints
+          ? `${props.initialVictoryPoints.w}-${props.initialVictoryPoints.b}`
+          : "none"}
+      </div>
+      <div>Pool types: {props.initialPoolTypes?.join(",") ?? "none"}</div>
+      <div>Move history: {moveHistoryLength(props.initialMoveTree)}</div>
       <button type="button" onClick={props.onSetup}>
         Configure New Game
       </button>
@@ -109,10 +125,12 @@ vi.mock("../components/GameSetup", () => ({
 vi.mock("../components/OnlineGameBrowser", () => ({
   default: ({
     onBack,
+    onReplay,
     onSpectate,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
+    onReplay: (gameId: string) => void;
     onSpectate: (gameId: string) => void;
     backLabel?: string;
   }) => (
@@ -123,6 +141,9 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       </button>
       <button type="button" onClick={() => onSpectate("game_watch_public")}>
         Spectate public game
+      </button>
+      <button type="button" onClick={() => onReplay("game_archive_public")}>
+        Analyze archived game
       </button>
     </div>
   ),
@@ -177,6 +198,14 @@ function spectatorSnapshot(gameId: string): OnlineGameSnapshotDTO {
     playerToMove: "w",
     turnPhase: "Movement",
   };
+}
+
+function deferredResponse() {
+  let resolve!: (value: Response) => void;
+  const promise = new Promise<Response>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
 }
 
 describe("App game setup lifecycle", () => {
@@ -297,6 +326,164 @@ describe("App game setup lifecycle", () => {
       "game_watch_public",
       expect.any(Function)
     );
+  });
+
+  it("opens archived public games as local analysis without entering spectator mode", async () => {
+    const archiveSnapshot = spectatorSnapshot("game_archive_public");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          snapshot: {
+            ...archiveSnapshot,
+            setup: {
+              ...archiveSnapshot.setup,
+              gameRules: { vpModeEnabled: true },
+            },
+            state: {
+              ...archiveSnapshot.state,
+              victoryPoints: { w: 4, b: 2 },
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=stale_player&seat=w&token=secret&onlineChallenge=old&challengeRole=challenged&challengeToken=query-secret&pgn=stale-pgn&game=stale-game#challengeToken=fragment-secret"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+      expect(screen.getByText("Online session: none")).toBeInTheDocument();
+      expect(screen.getByText("Victory points: 4-2")).toBeInTheDocument();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/online/games/game_archive_public/spectator");
+    expect(window.location.search).not.toContain("onlineGame=");
+    expect(window.location.search).not.toContain("seat=");
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.search).not.toContain("onlineChallenge=");
+    expect(window.location.search).not.toContain("challengeRole=");
+    expect(window.location.search).not.toContain("challengeToken=");
+    expect(window.location.search).not.toContain("pgn=");
+    expect(window.location.search).not.toContain("game=");
+    expect(window.location.hash).toBe("");
+    expect(onlineHookMocks.useOnlineSpectatorConnection).toHaveBeenLastCalledWith(
+      null,
+      expect.any(Function)
+    );
+  });
+
+  it("detaches an existing spectator session while an archived replay snapshot is loading", async () => {
+    const pendingFetch = deferredResponse();
+    const fetchMock = vi.fn().mockReturnValue(pendingFetch.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState({}, "", "/?onlineGame=game_live&view=spectator");
+    render(<App />);
+    const spectatorCallback = onlineHookMocks.useOnlineSpectatorConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      spectatorCallback(spectatorSnapshot("game_live"));
+    });
+    expect(screen.getByText("Online session: spectator")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(onlineHookMocks.useOnlineSpectatorConnection).toHaveBeenLastCalledWith(
+      null,
+      expect.any(Function)
+    );
+
+    await act(async () => {
+      pendingFetch.resolve(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            snapshot: spectatorSnapshot("game_archive_public"),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+    });
+  });
+
+  it("does not let a slow archived replay fetch replace newer navigation", async () => {
+    const pendingFetch = deferredResponse();
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(pendingFetch.promise));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+
+    await act(async () => {
+      pendingFetch.resolve(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            snapshot: spectatorSnapshot("game_archive_public"),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Analysis mode: yes")).not.toBeInTheDocument();
+  });
+
+  it("uses replay setup metadata for archived games with move history", async () => {
+    const archiveSnapshot = spectatorSnapshot("game_archive_public");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          snapshot: {
+            ...archiveSnapshot,
+            setup: {
+              ...archiveSnapshot.setup,
+              initialPoolTypes: [SanctuaryType.PyreEternal],
+            },
+            state: {
+              ...archiveSnapshot.state,
+              turnCounter: 10,
+              sanctuaryPool: [SanctuaryType.PyreEternal],
+            },
+            moveHistory: [
+              { notation: "Pass", turnNumber: 1, color: "w", phase: "Movement" },
+            ],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+      expect(screen.getByText("Pool types: PyreEternal")).toBeInTheDocument();
+      expect(screen.getByText("Move history: 1")).toBeInTheDocument();
+    });
   });
 
   it("opens an online spectator game as local analysis and clears online URL state", () => {

@@ -13,6 +13,7 @@ type OnlineBrowserTab = "watch" | "archive";
 interface OnlineGameBrowserProps {
   loadGames?: () => Promise<OnlineGameSummary[]>;
   onBack: () => void;
+  onReplay: (gameId: string) => void;
   onSpectate: (gameId: string) => void;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
@@ -57,6 +58,7 @@ function searchText(summary: OnlineGameSummary): string {
 const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   loadGames = fetchOnlineGameSummaries,
   onBack,
+  onReplay,
   onSpectate,
   backLabel = "Back to game",
   initialTab = "watch",
@@ -189,8 +191,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               const white = participantName(game.participants, "w");
               const black = participantName(game.participants, "b");
               const resultLabel = game.result ? formatOnlineGameResult(game.result) : null;
-              const primaryActionLabel = game.status === "complete" ? "View Replay" : "Spectate";
-              const primaryActionAriaLabel = `${game.status === "complete" ? "View replay" : "Spectate"} ${game.gameId}`;
+              const isArchivedGame = tab === "archive" && game.status === "complete" && game.archiveState === "archived";
+              const primaryActionLabel = isArchivedGame ? "Analyze Replay" : "Spectate";
+              const primaryActionAriaLabel = isArchivedGame
+                ? `Analyze replay ${white} vs ${black}, ${game.gameId}`
+                : `Spectate ${white} vs ${black}, ${game.gameId}`;
               return (
                 <article
                   key={game.gameId}
@@ -216,7 +221,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <button
                       type="button"
                       className="online-browser-button primary"
-                      onClick={() => onSpectate(game.gameId)}
+                      onClick={() => {
+                        if (isArchivedGame) {
+                          onReplay(game.gameId);
+                        } else {
+                          onSpectate(game.gameId);
+                        }
+                      }}
                       aria-label={primaryActionAriaLabel}
                     >
                       {primaryActionLabel}
