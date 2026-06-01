@@ -89,7 +89,7 @@ async function verifyHealth() {
   const body = await readJson(health);
   assert(health.ok, `Health check failed with ${health.status}`);
   assert(body.ok === true, "Health body did not report ok=true");
-  assert(body.online?.eventSchemaVersion === 1, "Health did not report event schema v1");
+  assert(body.online?.eventSchemaVersion === 2, "Health did not report event schema v2");
   if (expectedCommit) {
     assert(
       body.build?.commit === expectedCommit,

@@ -3,7 +3,7 @@ import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
 import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
-import { validateOnlineGameEvent } from "../events";
+import { ONLINE_EVENT_SCHEMA_VERSION, validateOnlineGameEvent } from "../events";
 import { validateClientMessage, validateOnlineAction, validateOnlineGameSetup } from "../validation";
 
 function createSetup() {
@@ -103,9 +103,46 @@ describe("online validation", () => {
     expect(validateClientMessage({ type: "spectate", gameId: "g", lastSeenVersion: -1 }).ok).toBe(false);
   });
 
+  it("requires online action messages to include a bounded client action id", () => {
+    expect(
+      validateClientMessage({
+        type: "action",
+        clientActionId: "action_1",
+        action: { type: "PASS", baseVersion: 0 },
+      })
+    ).toEqual({
+      ok: true,
+      value: {
+        type: "action",
+        clientActionId: "action_1",
+        action: { type: "PASS", baseVersion: 0 },
+      },
+    });
+    expect(
+      validateClientMessage({
+        type: "action",
+        action: { type: "PASS", baseVersion: 0 },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateClientMessage({
+        type: "action",
+        clientActionId: "",
+        action: { type: "PASS", baseVersion: 0 },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateClientMessage({
+        type: "action",
+        clientActionId: "x".repeat(129),
+        action: { type: "PASS", baseVersion: 0 },
+      }).ok
+    ).toBe(false);
+  });
+
   it("requires accepted action events to include the submitting player", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-action-1",
       createdAt: "2026-05-31T12:00:00.000Z",
       rulesetVersion: "castles-beta-v1",
@@ -136,7 +173,7 @@ describe("online validation", () => {
 
   it("accepts token-free game creation events", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-create",
       createdAt: "2026-05-31T12:00:00.000Z",
       rulesetVersion: "castles-beta-v1",
@@ -153,7 +190,7 @@ describe("online validation", () => {
 
   it("rejects raw player tokens in durable creation events", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-create-with-tokens",
       createdAt: "2026-05-31T12:00:00.000Z",
       rulesetVersion: "castles-beta-v1",
@@ -172,7 +209,7 @@ describe("online validation", () => {
 
   it("requires event timestamps to use the online v1 ISO format", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-create",
       createdAt: "May 31 2026",
       rulesetVersion: "castles-beta-v1",
@@ -189,7 +226,7 @@ describe("online validation", () => {
 
   it("rejects creation event clocks when the game has no time control", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-create-clockless",
       createdAt: "2026-05-31T12:00:00.000Z",
       rulesetVersion: "castles-beta-v1",
@@ -211,7 +248,7 @@ describe("online validation", () => {
 
   it("requires creation event clocks when the game has a time control", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-create-clocked",
       createdAt: "2026-05-31T12:00:00.000Z",
       rulesetVersion: "castles-beta-v1",
@@ -231,13 +268,14 @@ describe("online validation", () => {
 
   it("requires accepted action events to include the server acceptance time", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-action-time",
       createdAt: "2026-05-31T12:00:00.000Z",
       rulesetVersion: "castles-beta-v1",
       type: "action_accepted",
       gameId: "game_test",
       playerColor: "w",
+      clientActionId: "client-action-time",
       version: 1,
       action: { type: "PASS", baseVersion: 0 },
     });
@@ -248,9 +286,29 @@ describe("online validation", () => {
     }
   });
 
+  it("requires accepted action events to include the client action id", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+      eventId: "evt-action-client-id",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "action_accepted",
+      gameId: "game_test",
+      playerColor: "w",
+      version: 1,
+      playedAt: 1_000,
+      action: { type: "PASS", baseVersion: 0 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("clientActionId");
+    }
+  });
+
   it("rejects normalized but invalid calendar dates in event timestamps", () => {
     const result = validateOnlineGameEvent({
-      schemaVersion: 1,
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-create",
       createdAt: "2026-02-31T00:00:00.000Z",
       rulesetVersion: "castles-beta-v1",

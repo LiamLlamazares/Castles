@@ -11,6 +11,7 @@ import {
   OnlineConnectionStatus,
   OnlineGameSnapshotDTO,
 } from "../online/types";
+import { createClientActionId } from "../online/actionIdempotency";
 import { validateOnlineServerMessage } from "../online/protocol";
 
 interface UseOnlineGameConnectionResult {
@@ -200,6 +201,7 @@ export function useOnlineGameConnection(
     socket.send(
       JSON.stringify({
         type: "action",
+        clientActionId: createClientActionId(),
         action,
       })
     );

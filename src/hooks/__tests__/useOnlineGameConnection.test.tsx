@@ -110,6 +110,30 @@ describe("useOnlineGameConnection", () => {
     expect(snapshots.at(-1)).toMatchObject({ version: 1 });
   });
 
+  it("adds a fresh client action id to outbound action messages", async () => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "client-action-hook-1"),
+    });
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
+    const { result } = renderHook(() => useOnlineGameConnection(join, vi.fn()));
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onopen?.();
+    });
+
+    act(() => {
+      result.current.submitAction({ type: "PASS", baseVersion: 0 });
+    });
+
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({
+      type: "action",
+      clientActionId: "client-action-hook-1",
+      action: { type: "PASS", baseVersion: 0 },
+    });
+  });
+
   it("turns malformed server messages into controlled connection errors", async () => {
     const snapshots: Array<{ version: number }> = [];
     const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };

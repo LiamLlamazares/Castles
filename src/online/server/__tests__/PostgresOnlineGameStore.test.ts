@@ -215,6 +215,15 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /create table if not exists online_game_events/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_game_summaries/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create unique index if not exists/i.test(query.text))).toBe(true);
+    expect(
+      client.queries.some(
+        (query) =>
+          /online_game_events_one_client_action_per_player/i.test(query.text) &&
+          /game_id/i.test(query.text) &&
+          /playerColor/i.test(query.text) &&
+          /clientActionId/i.test(query.text)
+      )
+    ).toBe(true);
     expect(client.queries.at(-1)?.text).toMatch(/select 1/i);
   });
 
@@ -312,6 +321,7 @@ describe("PostgresOnlineGameStore", () => {
       type: "action_accepted",
       gameId: "game_append_summary",
       playerColor: "b",
+      clientActionId: "client-action-append-resign",
       version: 1,
       playedAt: 2_000,
       action: { type: "RESIGN", baseVersion: 0 },
@@ -346,6 +356,7 @@ describe("PostgresOnlineGameStore", () => {
     const result = await store.applyGameAction({
       gameId: "game_apply_action",
       token: "w-token",
+      clientActionId: "client-action-apply",
       action: { type: "PASS", baseVersion: 0 },
       now: () => 2_000,
     });
@@ -359,6 +370,7 @@ describe("PostgresOnlineGameStore", () => {
       type: "action_accepted",
       gameId: "game_apply_action",
       playerColor: "w",
+      clientActionId: "client-action-apply",
       version: 1,
       playedAt: 2_000,
       action: { type: "PASS", baseVersion: 0 },
@@ -394,6 +406,162 @@ describe("PostgresOnlineGameStore", () => {
     expect(commitIndex).toBeGreaterThan(summaryInsertIndex);
   });
 
+  it("returns an existing accepted action for an exact client action id retry without appending", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(client, createGameCreatedEvent("game_apply_duplicate"));
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const first = await store.applyGameAction({
+      gameId: "game_apply_duplicate",
+      token: "w-token",
+      clientActionId: "client-action-duplicate",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 2_000,
+    });
+    const retry = await store.applyGameAction({
+      gameId: "game_apply_duplicate",
+      token: "w-token",
+      clientActionId: "client-action-duplicate",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 99_000,
+    });
+
+    expect(first.ok).toBe(true);
+    expect(retry.ok).toBe(true);
+    if (!first.ok || !retry.ok) throw new Error("expected duplicate retry to succeed");
+    expect(retry.event).toEqual(first.event);
+    expect(retry.snapshot.version).toBe(1);
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "action_accepted",
+    ]);
+  });
+
+  it("keeps exact accepted action retries idempotent while adjudicating expired clocks", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(client, createClockedGameCreatedEvent("game_apply_duplicate_before_timeout"));
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const first = await store.applyGameAction({
+      gameId: "game_apply_duplicate_before_timeout",
+      token: "w-token",
+      clientActionId: "client-action-duplicate-before-timeout",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 1_000,
+    });
+    const retry = await store.applyGameAction({
+      gameId: "game_apply_duplicate_before_timeout",
+      token: "w-token",
+      clientActionId: "client-action-duplicate-before-timeout",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 120_000,
+    });
+
+    expect(first.ok).toBe(true);
+    expect(retry.ok).toBe(true);
+    if (!first.ok || !retry.ok) throw new Error("expected duplicate retry to succeed");
+    expect(retry.event).toEqual(first.event);
+    expect(retry).toMatchObject({
+      snapshot: {
+        version: 2,
+        result: { reason: "timeout" },
+      },
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "action_accepted",
+      "timeout_adjudicated",
+    ]);
+  });
+
+  it("rejects reused client action ids with different payloads without appending", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(client, createGameCreatedEvent("game_apply_conflict"));
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await store.applyGameAction({
+      gameId: "game_apply_conflict",
+      token: "w-token",
+      clientActionId: "client-action-conflict",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 2_000,
+    });
+    const conflict = await store.applyGameAction({
+      gameId: "game_apply_conflict",
+      token: "w-token",
+      clientActionId: "client-action-conflict",
+      action: { type: "RESIGN", baseVersion: 0 },
+      now: () => 3_000,
+    });
+
+    expect(conflict.ok).toBe(false);
+    if (conflict.ok) throw new Error("expected idempotency conflict");
+    expect(conflict.error.code).toBe("duplicate_action");
+    expect(conflict.snapshot).toMatchObject({ version: 1 });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "action_accepted",
+    ]);
+  });
+
+  it("adjudicates timeout before rejecting a conflicting duplicate client action id", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(client, createClockedGameCreatedEvent("game_apply_conflict_timeout"));
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const first = await store.applyGameAction({
+      gameId: "game_apply_conflict_timeout",
+      token: "w-token",
+      clientActionId: "client-action-conflict-timeout",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 1_000,
+    });
+    const conflict = await store.applyGameAction({
+      gameId: "game_apply_conflict_timeout",
+      token: "w-token",
+      clientActionId: "client-action-conflict-timeout",
+      action: { type: "RESIGN", baseVersion: 0 },
+      now: () => 120_000,
+    });
+    const repeatedConflict = await store.applyGameAction({
+      gameId: "game_apply_conflict_timeout",
+      token: "w-token",
+      clientActionId: "client-action-conflict-timeout",
+      action: { type: "RESIGN", baseVersion: 0 },
+      now: () => 130_000,
+    });
+
+    expect(first.ok).toBe(true);
+    expect(conflict.ok).toBe(false);
+    if (conflict.ok) throw new Error("expected timeout rejection");
+    expect(conflict).toMatchObject({
+      error: { code: "game_over" },
+      event: {
+        type: "timeout_adjudicated",
+        gameId: "game_apply_conflict_timeout",
+        version: 2,
+      },
+      snapshot: {
+        version: 2,
+        result: { reason: "timeout" },
+      },
+    });
+    expect(repeatedConflict.ok).toBe(false);
+    if (repeatedConflict.ok) throw new Error("expected repeated timeout rejection");
+    expect(repeatedConflict).toMatchObject({
+      error: { code: "game_over" },
+      snapshot: {
+        version: 2,
+        result: { reason: "timeout" },
+      },
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "action_accepted",
+      "timeout_adjudicated",
+    ]);
+  });
+
   it("returns rejected action snapshots from the locked persisted game without appending", async () => {
     const client = new FakePostgresClient();
     seedCreatedGame(client, createGameCreatedEvent("game_apply_reject"));
@@ -402,6 +570,7 @@ describe("PostgresOnlineGameStore", () => {
     const result = await store.applyGameAction({
       gameId: "game_apply_reject",
       token: "w-token",
+      clientActionId: "client-action-reject",
       action: { type: "PASS", baseVersion: 99 },
       now: () => 2_000,
     });
@@ -418,6 +587,27 @@ describe("PostgresOnlineGameStore", () => {
     ).toHaveLength(0);
   });
 
+  it("does not expose snapshots from unauthorized store action attempts", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(client, createGameCreatedEvent("game_apply_unauthorized"));
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.applyGameAction({
+      gameId: "game_apply_unauthorized",
+      token: "wrong-token",
+      clientActionId: "client-action-unauthorized",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 2_000,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected unauthorized action rejection");
+    expect(result.error).toMatchObject({ code: "unauthorized" });
+    expect(result.snapshot).toBeUndefined();
+    expect(result.room).toBeUndefined();
+    expect(client.eventRows).toHaveLength(1);
+  });
+
   it("rolls back accepted actions when the locked summary refresh fails", async () => {
     const client = new FakePostgresClient();
     seedCreatedGame(client, createGameCreatedEvent("game_apply_rollback"));
@@ -428,6 +618,7 @@ describe("PostgresOnlineGameStore", () => {
       store.applyGameAction({
         gameId: "game_apply_rollback",
         token: "w-token",
+        clientActionId: "client-action-rollback",
         action: { type: "PASS", baseVersion: 0 },
         now: () => 2_000,
       })
@@ -446,6 +637,7 @@ describe("PostgresOnlineGameStore", () => {
     const result = await store.applyGameAction({
       gameId: "game_apply_timeout",
       token: "w-token",
+      clientActionId: "client-action-timeout",
       action: { type: "PASS", baseVersion: 0 },
       now: () => 61_000,
     });
@@ -624,6 +816,7 @@ describe("PostgresOnlineGameStore", () => {
           type: "action_accepted",
           gameId: "game_replay",
           playerColor: "w",
+          clientActionId: "client-action-replay",
           version: 1,
           playedAt: 2_000,
           action: { type: "PASS", baseVersion: 0 },
@@ -657,6 +850,7 @@ describe("PostgresOnlineGameStore", () => {
           type: "action_accepted",
           gameId: "game_summary_pg",
           playerColor: "b",
+          clientActionId: "client-action-summary-pg",
           version: 1,
           playedAt: 2_000,
           action: { type: "RESIGN", baseVersion: 0 },

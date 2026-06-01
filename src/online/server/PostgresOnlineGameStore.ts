@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { OnlineGameRoom, type OnlineGameRoomRecord } from "../OnlineGameRoom";
+import { isValidClientActionId, sameOnlineAction } from "../actionIdempotency";
 import {
   createOnlineActionAcceptedEvent,
   createOnlineTimeoutAdjudicatedEvent,
@@ -146,7 +147,8 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   ): Promise<OnlineGameStoreActionResult> {
     await this.ensureSchema();
     return this.withGameTransaction(input.gameId, async (client) => {
-      const record = await this.loadRecordForGame(input.gameId, client);
+      const loaded = await this.loadRecordWithEventsForGame(input.gameId, client);
+      const record = loaded?.record ?? null;
       if (!record) {
         return {
           ok: false,
@@ -156,6 +158,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
           },
         };
       }
+      const events = loaded!.events;
 
       const room = OnlineGameRoom.create({
         ...record,
@@ -170,10 +173,30 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
             code: "unauthorized",
             message: "This player token is not valid.",
           },
+        };
+      }
+      if (!isValidClientActionId(input.clientActionId)) {
+        return {
+          ok: false,
+          error: {
+            code: "bad_request",
+            message: "A valid client action id is required.",
+          },
           room: room.toRecord(),
           snapshot: room.getSnapshot(),
         };
       }
+
+      const existingEvent = events.find(
+        (
+          event
+        ): event is Extract<OnlineGameEvent, { type: "action_accepted" }> =>
+          event.type === "action_accepted" &&
+          event.playerColor === playerColor &&
+          event.clientActionId === input.clientActionId
+      );
+      const duplicateConflict =
+        !!existingEvent && !sameOnlineAction(existingEvent.action, input.action);
 
       const timeout = room.adjudicateTimeout();
       if (timeout) {
@@ -188,6 +211,15 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         });
         await this.insertEvent(event, client);
         await this.refreshSummaryForGame(input.gameId, client);
+        if (existingEvent && !duplicateConflict) {
+          return {
+            ok: true,
+            event: existingEvent,
+            playerColor,
+            room: room.toRecord(),
+            snapshot: room.getSnapshot(),
+          };
+        }
         return {
           ok: false,
           error: {
@@ -200,7 +232,42 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         };
       }
 
-      const result = room.submitAction(input.token, input.action);
+      const snapshotAfterTimeoutCheck = room.getSnapshot();
+      if (duplicateConflict && snapshotAfterTimeoutCheck.result?.reason === "timeout") {
+        return {
+          ok: false,
+          error: {
+            code: "game_over",
+            message: "This game is already over on time.",
+          },
+          room: room.toRecord(),
+          snapshot: snapshotAfterTimeoutCheck,
+        };
+      }
+
+      if (duplicateConflict) {
+        return {
+          ok: false,
+          error: {
+            code: "duplicate_action",
+            message: "This client action id has already been used for a different action.",
+          },
+          room: room.toRecord(),
+          snapshot: room.getSnapshot(),
+        };
+      }
+
+      if (existingEvent) {
+        return {
+          ok: true,
+          event: existingEvent,
+          playerColor,
+          room: room.toRecord(),
+          snapshot: room.getSnapshot(),
+        };
+      }
+
+      const result = room.submitAction(input.token, input.action, input.clientActionId);
       if (!result.ok) {
         return {
           ok: false,
@@ -223,6 +290,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         type: "action_accepted",
         gameId: input.gameId,
         playerColor,
+        clientActionId: acceptedAction.clientActionId,
         version: result.snapshot.version,
         action: acceptedAction.action,
         playedAt: acceptedAction.playedAt,
@@ -338,6 +406,15 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       CREATE UNIQUE INDEX IF NOT EXISTS online_game_events_one_version_per_game
         ON online_game_events (game_id, game_version)
         WHERE game_version IS NOT NULL
+    `);
+    await this.queryable.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS online_game_events_one_client_action_per_player
+        ON online_game_events (
+          game_id,
+          (payload->>'playerColor'),
+          (payload->>'clientActionId')
+        )
+        WHERE event_type = 'action_accepted'
     `);
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_game_credentials (
@@ -550,6 +627,13 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     gameId: string,
     queryable: PostgresQueryable
   ): Promise<OnlineGameRoomRecord | null> {
+    return (await this.loadRecordWithEventsForGame(gameId, queryable))?.record ?? null;
+  }
+
+  private async loadRecordWithEventsForGame(
+    gameId: string,
+    queryable: PostgresQueryable
+  ): Promise<{ events: OnlineGameEvent[]; record: OnlineGameRoomRecord } | null> {
     const events = await this.loadEventsForGame(gameId, queryable);
     const credentials = await this.loadCredentialsForGame(gameId, queryable);
     const records = onlineGameEventsToRecords(events, {
@@ -559,7 +643,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     if (records.length > 1) {
       throw new Error(`Expected one online game record for ${gameId}, found ${records.length}.`);
     }
-    return records[0];
+    return { events, record: records[0] };
   }
 
   private async refreshSummaryForGame(

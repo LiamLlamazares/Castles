@@ -167,7 +167,7 @@ async function waitForHealth(serverProcess) {
       const response = await fetchWithTimeout(`${serverProcess.baseUrl}/api/health`);
       const body = await readJson(response);
       if (response.ok && body.ok === true) {
-        assert(body.online?.eventSchemaVersion === 1, "Health did not report event schema v1");
+        assert(body.online?.eventSchemaVersion === 2, "Health did not report event schema v2");
         assert(
           body.online?.store?.backend === "postgres",
           `Expected postgres health backend, got ${body.online?.store?.backend}`
@@ -216,7 +216,13 @@ async function playOnePass(baseUrl) {
     assertDefaultOnlineClock(joinedMessage.snapshot, "Joined snapshot");
 
     const snapshot = nextSocketMessage(socket, "post-action snapshot");
-    socket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } }));
+    socket.send(
+      JSON.stringify({
+        type: "action",
+        clientActionId: "restart-smoke-pass-1",
+        action: { type: "PASS", baseVersion: 0 },
+      })
+    );
     const snapshotMessage = await snapshot;
     assert(snapshotMessage.type === "snapshot", "Pass action did not produce a snapshot");
     assert(snapshotMessage.snapshot?.version === 1, "Pass action did not advance to version 1");

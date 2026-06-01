@@ -31,6 +31,7 @@ export interface OnlineGameStore {
 export interface OnlineGameStoreActionInput {
   gameId: string;
   token: string;
+  clientActionId: string;
   action: OnlineActionDTO;
   now?: () => number;
 }

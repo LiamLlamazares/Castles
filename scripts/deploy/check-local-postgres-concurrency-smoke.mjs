@@ -104,12 +104,14 @@ async function main() {
       storeA.applyGameAction({
         gameId,
         token: whiteToken,
+        clientActionId: "concurrency-pass-a",
         action: { type: "PASS", baseVersion: 0 },
         now: () => 1_000,
       }),
       storeB.applyGameAction({
         gameId,
         token: whiteToken,
+        clientActionId: "concurrency-pass-b",
         action: { type: "PASS", baseVersion: 0 },
         now: () => 1_000,
       }),
@@ -135,6 +137,7 @@ async function main() {
     const followUp = await storeB.applyGameAction({
       gameId,
       token: blackToken,
+      clientActionId: "concurrency-resign-b",
       action: { type: "RESIGN", baseVersion: 1 },
       now: () => 2_000,
     });

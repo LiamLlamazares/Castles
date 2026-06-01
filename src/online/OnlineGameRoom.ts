@@ -17,6 +17,7 @@ import {
   hydrateHexDTO,
   serializeGameState,
 } from "./serialization";
+import { isValidClientActionId, sameOnlineAction } from "./actionIdempotency";
 import {
   OnlineActionDTO,
   OnlineActionResult,
@@ -49,6 +50,7 @@ export interface OnlineClockRecord {
 
 export interface AcceptedOnlineActionRecord {
   playerColor: Color;
+  clientActionId: string;
   action: OnlineActionDTO;
   version?: number;
   playedAt: number;
@@ -179,12 +181,31 @@ export class OnlineGameRoom {
     };
   }
 
-  submitAction(token: string, action: OnlineActionDTO): OnlineActionResult {
+  submitAction(
+    token: string,
+    action: OnlineActionDTO,
+    clientActionId: string
+  ): OnlineActionResult {
     const acceptedAt = this.now();
     const snapshot = this.getSnapshot(acceptedAt);
     const color = this.authenticate(token);
     if (!color) {
       return reject(snapshot, "unauthorized", "This player token is not valid.");
+    }
+    if (!isValidClientActionId(clientActionId)) {
+      return reject(snapshot, "bad_request", "A valid client action id is required.");
+    }
+
+    const existingAction = this.getAcceptedActionByClientId(color, clientActionId);
+    if (existingAction) {
+      if (!sameOnlineAction(existingAction.action, action)) {
+        return reject(
+          this.getSnapshot(acceptedAt),
+          "duplicate_action",
+          "This client action id has already been used for a different action."
+        );
+      }
+      return { ok: true, snapshot: this.getSnapshot(acceptedAt) };
     }
 
     const terminalResult = this.latchTerminalResult();
@@ -205,12 +226,12 @@ export class OnlineGameRoom {
       this.settleClockAt(acceptedAt);
       this.result = { winner: opposite(color), reason: "resignation" };
       this.stopClock();
-      this.accept(color, action, acceptedAt);
+      this.accept(color, clientActionId, action, acceptedAt);
       return { ok: true, snapshot: this.getSnapshot(acceptedAt) };
     }
 
     if (action.type === "PROMOTE") {
-      return this.submitPromotion(color, action, acceptedAt);
+      return this.submitPromotion(color, clientActionId, action, acceptedAt);
     }
 
     const command = this.commandFromAction(action, color);
@@ -232,7 +253,7 @@ export class OnlineGameRoom {
     this.state = result.newState;
     this.latchTerminalResult();
     this.advanceClockAfterAction(activeColorBeforeAction, acceptedAt);
-    this.accept(color, action, acceptedAt);
+    this.accept(color, clientActionId, action, acceptedAt);
     return { ok: true, snapshot: this.getSnapshot(acceptedAt) };
   }
 
@@ -279,6 +300,17 @@ export class OnlineGameRoom {
     };
     this.stateVersion = version;
     return this.timeout;
+  }
+
+  getAcceptedActionByClientId(
+    playerColor: Color,
+    clientActionId: string
+  ): AcceptedOnlineActionRecord | undefined {
+    return this.acceptedActions.find(
+      (acceptedAction) =>
+        acceptedAction.playerColor === playerColor &&
+        acceptedAction.clientActionId === clientActionId
+    );
   }
 
   private replayAcceptedAction(entry: AcceptedOnlineActionRecord): void {
@@ -419,10 +451,16 @@ export class OnlineGameRoom {
     };
   }
 
-  private accept(playerColor: Color, action: OnlineActionDTO, playedAt: number): AcceptedOnlineActionRecord {
+  private accept(
+    playerColor: Color,
+    clientActionId: string,
+    action: OnlineActionDTO,
+    playedAt: number
+  ): AcceptedOnlineActionRecord {
     const version = this.version + 1;
     const accepted = {
       playerColor,
+      clientActionId,
       action: { ...action, baseVersion: this.version },
       version,
       playedAt,
@@ -437,6 +475,7 @@ export class OnlineGameRoom {
 
   private submitPromotion(
     color: Color,
+    clientActionId: string,
     action: Extract<OnlineActionDTO, { type: "PROMOTE" }>,
     acceptedAt: number
   ): OnlineActionResult {
@@ -460,7 +499,7 @@ export class OnlineGameRoom {
     this.state = nextState;
     this.latchTerminalResult();
     this.advanceClockAfterAction(activeColorBeforeAction, acceptedAt);
-    this.accept(color, action, acceptedAt);
+    this.accept(color, clientActionId, action, acceptedAt);
     return { ok: true, snapshot: this.getSnapshot(acceptedAt) };
   }
 

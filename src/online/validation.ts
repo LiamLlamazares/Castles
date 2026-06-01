@@ -16,6 +16,7 @@ import {
   PieceDTO,
   SanctuaryDTO,
 } from "./types";
+import { isValidClientActionId } from "./actionIdempotency";
 
 type ValidationErrorCode = "bad_request";
 
@@ -26,7 +27,7 @@ export type ValidationResult<T> =
 export type OnlineClientMessage =
   | { type: "join"; gameId: string; token: string; lastSeenVersion?: number }
   | { type: "spectate"; gameId: string; lastSeenVersion?: number }
-  | { type: "action"; action: OnlineActionDTO }
+  | { type: "action"; clientActionId: string; action: OnlineActionDTO }
   | { type: "ping"; clientTime?: unknown };
 
 const MAX_BOARD_SIZE = 12;
@@ -560,9 +561,15 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
   }
 
   if (value.type === "action") {
+    if (!isValidClientActionId(value.clientActionId)) {
+      return bad("action.clientActionId is invalid.");
+    }
     const action = validateOnlineAction(value.action);
     if (!action.ok) return action;
-    return { ok: true, value: { type: "action", action: action.value } };
+    return {
+      ok: true,
+      value: { type: "action", clientActionId: value.clientActionId, action: action.value },
+    };
   }
 
   if (value.type === "ping") {

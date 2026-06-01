@@ -101,7 +101,7 @@ describe("OnlineGameRoom", () => {
     const result = room.submitAction("black-token", {
       type: "PASS",
       baseVersion: 0,
-    });
+    }, "client-action-wrong-player");
 
     if (result.ok) throw new Error("expected action to be rejected");
     expect(result.error?.code).toBe("wrong_player");
@@ -114,7 +114,7 @@ describe("OnlineGameRoom", () => {
     const result = room.submitAction("white-token", {
       type: "PASS",
       baseVersion: 1,
-    });
+    }, "client-action-stale");
 
     if (result.ok) throw new Error("expected action to be rejected");
     expect(result.error?.code).toBe("stale_action");
@@ -127,12 +127,135 @@ describe("OnlineGameRoom", () => {
     const result = room.submitAction("white-token", {
       type: "PASS",
       baseVersion: 0,
-    });
+    }, "client-action-legal-pass");
 
     expect(result.ok).toBe(true);
     expect(result.snapshot.version).toBe(1);
     expect(result.snapshot.state.turnCounter).toBeGreaterThan(0);
     expect(result.snapshot.moveHistory.at(-1)?.notation).toBe("Pass");
+  });
+
+  it("treats an exact client action id retry as the already-accepted action", () => {
+    const room = createRoom();
+
+    const first = room.submitAction(
+      "white-token",
+      {
+        type: "PASS",
+        baseVersion: 0,
+      },
+      "client-action-1"
+    );
+    const retry = room.submitAction(
+      "white-token",
+      {
+        type: "PASS",
+        baseVersion: 0,
+      },
+      "client-action-1"
+    );
+
+    expect(first.ok).toBe(true);
+    expect(retry.ok).toBe(true);
+    expect(retry.snapshot.version).toBe(1);
+    expect(room.toRecord().acceptedActions).toHaveLength(1);
+    expect(room.toRecord().acceptedActions[0]).toMatchObject({
+      clientActionId: "client-action-1",
+      action: { type: "PASS", baseVersion: 0 },
+    });
+  });
+
+  it("rejects a reused client action id with a different action without advancing", () => {
+    const room = createRoom();
+
+    const first = room.submitAction(
+      "white-token",
+      {
+        type: "PASS",
+        baseVersion: 0,
+      },
+      "client-action-1"
+    );
+    const conflicting = room.submitAction(
+      "white-token",
+      {
+        type: "RESIGN",
+        baseVersion: 0,
+      },
+      "client-action-1"
+    );
+
+    expect(first.ok).toBe(true);
+    if (conflicting.ok) throw new Error("expected conflicting retry to be rejected");
+    expect(conflicting.error.code).toBe("duplicate_action");
+    expect(conflicting.snapshot.version).toBe(1);
+    expect(room.toRecord().acceptedActions).toHaveLength(1);
+  });
+
+  it("returns a terminal accepted action retry before reporting game over", () => {
+    const room = createRoom();
+
+    const resigned = room.submitAction(
+      "white-token",
+      {
+        type: "RESIGN",
+        baseVersion: 0,
+      },
+      "client-action-resign"
+    );
+    const retry = room.submitAction(
+      "white-token",
+      {
+        type: "RESIGN",
+        baseVersion: 0,
+      },
+      "client-action-resign"
+    );
+
+    expect(resigned.ok).toBe(true);
+    expect(retry.ok).toBe(true);
+    expect(retry.snapshot).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "resignation" },
+    });
+    expect(room.toRecord().acceptedActions).toHaveLength(1);
+  });
+
+  it("returns the terminal timeout snapshot for an already-adjudicated action retry", () => {
+    let now = 0;
+    const room = createRoom({
+      now: () => now,
+      timeControl: { initial: 1, increment: 0 },
+    });
+
+    now = 1_000;
+    const first = room.submitAction(
+      "white-token",
+      {
+        type: "PASS",
+        baseVersion: 0,
+      },
+      "client-action-timeout-retry"
+    );
+    now = 120_000;
+    const timeout = room.adjudicateTimeout();
+    const retry = room.submitAction(
+      "white-token",
+      {
+        type: "PASS",
+        baseVersion: 0,
+      },
+      "client-action-timeout-retry"
+    );
+
+    expect(first.ok).toBe(true);
+    expect(timeout).toMatchObject({ version: 2, result: { reason: "timeout" } });
+    expect(retry.ok).toBe(true);
+    expect(retry.snapshot).toMatchObject({
+      version: 2,
+      result: { reason: "timeout" },
+    });
+    expect(room.toRecord().acceptedActions).toHaveLength(1);
   });
 
   it("includes authoritative server clock state for clocked online games", () => {
@@ -161,7 +284,7 @@ describe("OnlineGameRoom", () => {
     const result = room.submitAction("white-token", {
       type: "PASS",
       baseVersion: 0,
-    });
+    }, "client-action-clock-1");
 
     expect(result.ok).toBe(true);
     expect(result.snapshot.version).toBe(1);
@@ -176,7 +299,7 @@ describe("OnlineGameRoom", () => {
     const secondResult = room.submitAction(activeToken, {
       type: "PASS",
       baseVersion: 1,
-    });
+    }, "client-action-clock-2");
 
     expect(secondResult.ok).toBe(true);
     expect(secondResult.snapshot.clock?.activeColor).not.toBeNull();
@@ -219,6 +342,7 @@ describe("OnlineGameRoom", () => {
       acceptedActions: [
         {
           playerColor: "w",
+          clientActionId: "client-action-replay-pass",
           action: { type: "PASS", baseVersion: 0 },
           version: 1,
           playedAt: 11_000,
@@ -248,7 +372,7 @@ describe("OnlineGameRoom", () => {
     const result = room.submitAction("white-token", {
       type: "UNKNOWN",
       baseVersion: 0,
-    } as any);
+    } as any, "client-action-unknown");
 
     if (result.ok) throw new Error("expected action to be rejected");
     expect(result.error.code).toBe("illegal_action");
@@ -275,7 +399,7 @@ describe("OnlineGameRoom", () => {
     const result = room.submitAction("white-token", {
       type: "PASS",
       baseVersion: 0,
-    });
+    }, "client-action-game-over");
 
     if (result.ok) throw new Error("expected action to be rejected");
     expect(result.error.code).toBe("game_over");

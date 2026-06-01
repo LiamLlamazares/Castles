@@ -16,9 +16,10 @@ Current private-link beta:
 - Setup/action/message DTOs are validated before hydration.
 - The existing TypeScript rules engine validates turn, ownership, legal moves, and terminal state.
 - Accepted game events are persisted to PostgreSQL before authoritative snapshot broadcast.
-- Startup replay rebuilds rooms from an append-only v1 event log and fails loudly on corrupt or unsupported events.
+- Startup replay rebuilds rooms from an append-only v2 event log and fails loudly on corrupt or unsupported events.
 - Game creation events are token-free; player credentials are stored separately as token hashes keyed by game and seat.
 - Accepted actions are serialized per game in the single Node process.
+- Action submissions carry required `clientActionId` values; exact retries are idempotent and conflicting id reuse is rejected.
 - Server-authoritative clocks support timeout adjudication and reconnect-safe snapshots.
 - Private white/black bearer invite tokens are removed from URLs and stored in `sessionStorage`.
 - Online API/token-bearing responses bypass browser, service worker, and HTTP caching.
@@ -89,7 +90,7 @@ Work:
 
 - Expand and stress-test the current per-game PostgreSQL transaction/lock path.
 - Keep accepted action writes, version checks, and summary refreshes atomic under realistic contention.
-- Define duplicate submit, reconnect race, timeout race, and simultaneous resign/draw behavior.
+- Stress duplicate submit, reconnect race, timeout race, and simultaneous resign/draw behavior.
 - Prepare the event flow for later pub/sub or worker separation.
 
 Tests/review/deploy gates:
@@ -210,7 +211,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Add retry-safe action idempotency primitives before broader online UX.
-2. Create the UI benchmarking checklist template required before challenge, spectator, archive, lobby, matchmaking, and analysis screens.
-3. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.
-4. Begin the Phase 6A navigation/tutorial/save polish pass once the current backend hardening chunk is committed.
+1. Create the UI benchmarking checklist template required before challenge, spectator, archive, lobby, matchmaking, and analysis screens.
+2. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.
+3. Begin the Phase 6A navigation/tutorial/save polish pass once the current backend hardening chunk is committed.

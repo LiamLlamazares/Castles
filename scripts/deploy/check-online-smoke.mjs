@@ -28,7 +28,7 @@ async function main() {
   const healthBody = await readJson(health);
   assert(health.ok, `Health check failed with ${health.status}`);
   assert(healthBody.ok === true, "Health body did not report ok=true");
-  assert(healthBody.online?.eventSchemaVersion === 1, "Health did not report event schema v1");
+  assert(healthBody.online?.eventSchemaVersion === 2, "Health did not report event schema v2");
   if (expectedCommit) {
     assert(
       healthBody.build?.commit === expectedCommit,
@@ -67,7 +67,13 @@ async function main() {
     assertDefaultOnlineClock(joinedMessage.snapshot, "Joined snapshot");
 
     const snapshot = nextSocketMessage(socket, "post-action snapshot");
-    socket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } }));
+    socket.send(
+      JSON.stringify({
+        type: "action",
+        clientActionId: "smoke-pass-1",
+        action: { type: "PASS", baseVersion: 0 },
+      })
+    );
     const snapshotMessage = await snapshot;
     assert(snapshotMessage.type === "snapshot", "Pass action did not produce a snapshot");
     assert(snapshotMessage.snapshot?.version === 1, "Pass action did not advance to version 1");

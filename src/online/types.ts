@@ -14,6 +14,7 @@ export type OnlineRejectCode =
   | "stale_action"
   | "wrong_player"
   | "illegal_action"
+  | "duplicate_action"
   | "game_over"
   | "not_found"
   | "bad_request"

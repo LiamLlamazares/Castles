@@ -5,7 +5,11 @@ import { getStartingBoard, getStartingPieces } from "../../../ConstantImports";
 import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
-import { createOnlineActionAcceptedEvent, OnlineGameEvent } from "../../events";
+import {
+  createOnlineActionAcceptedEvent,
+  ONLINE_EVENT_SCHEMA_VERSION,
+  OnlineGameEvent,
+} from "../../events";
 import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
@@ -311,7 +315,7 @@ describe("createOnlineHttpServer", () => {
         commit: "abc123",
       },
       online: {
-        eventSchemaVersion: 1,
+        eventSchemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
         store: {
           ok: true,
           backend: "postgres",
@@ -574,7 +578,13 @@ describe("createOnlineHttpServer", () => {
         snapshot: { version: 0 },
       });
 
-      socket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 99 } }));
+      socket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-log-reject",
+          action: { type: "PASS", baseVersion: 99 },
+        })
+      );
       await expect(nextSocketMessage(socket, "logged action rejection")).resolves.toMatchObject({
         type: "rejected",
         error: { code: "stale_action" },
@@ -792,7 +802,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       spectatorSocket.send(
-        JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } })
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-spectator",
+          action: { type: "PASS", baseVersion: 0 },
+        })
       );
       await expect(nextSocketMessage(spectatorSocket, "spectator action rejection")).resolves.toMatchObject({
         type: "error",
@@ -813,7 +827,11 @@ describe("createOnlineHttpServer", () => {
 
       const spectatorSnapshot = nextSocketMessage(spectatorSocket, "spectator broadcast");
       playerSocket.send(
-        JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } })
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-spectator-broadcast",
+          action: { type: "PASS", baseVersion: 0 },
+        })
       );
 
       await expect(nextSocketMessage(playerSocket, "white action broadcast")).resolves.toMatchObject({
@@ -871,7 +889,13 @@ describe("createOnlineHttpServer", () => {
       const whiteBroadcast = nextSocketMessage(whiteSocket, "white resignation broadcast");
       const blackBroadcast = nextSocketMessage(blackSocket, "black resignation broadcast");
 
-      blackSocket.send(JSON.stringify({ type: "action", action: { type: "RESIGN", baseVersion: 0 } }));
+      blackSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-resign-broadcast",
+          action: { type: "RESIGN", baseVersion: 0 },
+        })
+      );
 
       await expect(whiteBroadcast).resolves.toMatchObject({
         type: "snapshot",
@@ -1016,6 +1040,7 @@ describe("createOnlineHttpServer", () => {
       socket.send(
         JSON.stringify({
           type: "action",
+          clientActionId: "client-action-persistence-failure",
           action: { type: "PASS", baseVersion: 0 },
         })
       );
@@ -1089,6 +1114,7 @@ describe("createOnlineHttpServer", () => {
       socket.send(
         JSON.stringify({
           type: "action",
+          clientActionId: "client-action-events",
           action: { type: "PASS", baseVersion: 0 },
         })
       );
@@ -1099,13 +1125,14 @@ describe("createOnlineHttpServer", () => {
       });
       expect(events).toHaveLength(2);
       expect(events[1]).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
         eventId: expect.any(String),
         createdAt: expect.any(String),
         rulesetVersion: "castles-beta-v1",
         type: "action_accepted",
         gameId: "game_events",
         playerColor: "w",
+        clientActionId: "client-action-events",
         version: 1,
         action: { type: "PASS", baseVersion: 0 },
       });
@@ -1190,6 +1217,7 @@ describe("createOnlineHttpServer", () => {
         expect(input).toMatchObject({
           gameId: "game_canonical_action",
           token: "w-token",
+          clientActionId: "client-action-canonical",
           action: { type: "RESIGN", baseVersion: 1 },
         });
         const localRecord = service.getRoom(input.gameId)?.toRecord();
@@ -1197,8 +1225,12 @@ describe("createOnlineHttpServer", () => {
           throw new Error("Expected local room record.");
         }
         const canonicalRoom = OnlineGameRoom.create(localRecord);
-        canonicalRoom.submitAction(input.token, { type: "PASS", baseVersion: 0 });
-        const actionResult = canonicalRoom.submitAction(input.token, input.action);
+        canonicalRoom.submitAction(input.token, { type: "PASS", baseVersion: 0 }, "client-action-canonical-prior");
+        const actionResult = canonicalRoom.submitAction(
+          input.token,
+          input.action,
+          input.clientActionId
+        );
         if (!actionResult.ok) {
           throw new Error(actionResult.error.message);
         }
@@ -1209,6 +1241,7 @@ describe("createOnlineHttpServer", () => {
             type: "action_accepted",
             gameId: input.gameId,
             playerColor: accepted.playerColor,
+            clientActionId: accepted.clientActionId,
             version: actionResult.snapshot.version,
             playedAt: accepted.playedAt,
             action: accepted.action,
@@ -1246,7 +1279,13 @@ describe("createOnlineHttpServer", () => {
         snapshot: { version: 0 },
       });
 
-      socket.send(JSON.stringify({ type: "action", action: { type: "RESIGN", baseVersion: 1 } }));
+      socket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-canonical",
+          action: { type: "RESIGN", baseVersion: 1 },
+        })
+      );
 
       await expect(nextSocketMessage(socket, "canonical action result")).resolves.toMatchObject({
         type: "snapshot",
@@ -1316,8 +1355,20 @@ describe("createOnlineHttpServer", () => {
         whiteMessages.push(JSON.parse(data.toString("utf8")));
       });
 
-      whiteSocket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } }));
-      whiteSocket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } }));
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-serialized-1",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      );
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-serialized-2",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      );
 
       await delay(25);
       expect(persistedActionVersions).toEqual([1]);
@@ -1346,6 +1397,298 @@ describe("createOnlineHttpServer", () => {
       expect(persistedActionVersions).toEqual([1]);
     } finally {
       releaseFirstAction();
+      whiteSocket.close();
+    }
+  });
+
+  it("treats queued duplicate action ids as harmless retries in the in-memory path", async () => {
+    const persistedClientActionIds: string[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_duplicate_retry",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onGameEvent: (event) => {
+        if (event.type !== "action_accepted") return;
+        persistedClientActionIds.push(event.clientActionId);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const whiteSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const whiteJoined = nextSocketMessage(whiteSocket);
+
+    whiteSocket.on("open", () => {
+      whiteSocket.send(
+        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+      );
+    });
+    try {
+      await expect(whiteJoined).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      const whiteMessages: any[] = [];
+      whiteSocket.on("message", (data) => {
+        whiteMessages.push(JSON.parse(data.toString("utf8")));
+      });
+
+      const message = {
+        type: "action",
+        clientActionId: "client-action-duplicate",
+        action: { type: "PASS", baseVersion: 0 },
+      };
+      whiteSocket.send(JSON.stringify(message));
+      whiteSocket.send(JSON.stringify(message));
+
+      await waitForCondition(
+        () => whiteMessages.length >= 2,
+        "both duplicate action messages to receive canonical snapshots"
+      );
+      expect(whiteMessages[0]).toMatchObject({ type: "snapshot", snapshot: { version: 1 } });
+      expect(whiteMessages[1]).toMatchObject({ type: "snapshot", snapshot: { version: 1 } });
+      expect(persistedClientActionIds).toEqual(["client-action-duplicate"]);
+    } finally {
+      whiteSocket.close();
+    }
+  });
+
+  it("rejects same-id different-action retries in the in-memory websocket path", async () => {
+    const persistedClientActionIds: string[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_duplicate_conflict",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onGameEvent: (event) => {
+        if (event.type !== "action_accepted") return;
+        persistedClientActionIds.push(event.clientActionId);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const whiteSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const whiteJoined = nextSocketMessage(whiteSocket);
+
+    whiteSocket.on("open", () => {
+      whiteSocket.send(
+        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+      );
+    });
+    try {
+      await expect(whiteJoined).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-conflict",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      );
+      await expect(nextSocketMessage(whiteSocket, "first duplicate-conflict action")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-conflict",
+          action: { type: "RESIGN", baseVersion: 0 },
+        })
+      );
+      await expect(nextSocketMessage(whiteSocket, "same-id changed action rejection")).resolves.toMatchObject({
+        type: "rejected",
+        error: { code: "duplicate_action" },
+        snapshot: { version: 1 },
+      });
+      expect(persistedClientActionIds).toEqual(["client-action-conflict"]);
+    } finally {
+      whiteSocket.close();
+    }
+  });
+
+  it("adjudicates timeout before returning an exact duplicate action retry", async () => {
+    let now = 0;
+    const persistedEvents: string[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_duplicate_timeout",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => now,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      now: () => now,
+      onGameEvent: (event) => {
+        persistedEvents.push(event.type);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+    const whiteSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const whiteJoined = nextSocketMessage(whiteSocket);
+
+    whiteSocket.on("open", () => {
+      whiteSocket.send(
+        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+      );
+    });
+    try {
+      await expect(whiteJoined).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      now = 1_000;
+      const duplicateMessage = {
+        type: "action",
+        clientActionId: "client-action-duplicate-timeout",
+        action: { type: "PASS", baseVersion: 0 },
+      };
+      whiteSocket.send(JSON.stringify(duplicateMessage));
+      await expect(nextSocketMessage(whiteSocket, "first action before timeout")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+
+      now = 120_000;
+      whiteSocket.send(JSON.stringify(duplicateMessage));
+      await expect(nextSocketMessage(whiteSocket, "duplicate retry timeout snapshot")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: {
+          version: 2,
+          result: { reason: "timeout" },
+        },
+      });
+      expect(persistedEvents).toEqual([
+        "game_created",
+        "action_accepted",
+        "timeout_adjudicated",
+      ]);
+    } finally {
+      whiteSocket.close();
+    }
+  });
+
+  it("adjudicates timeout before rejecting a conflicting duplicate action id", async () => {
+    let now = 0;
+    const persistedEvents: string[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_duplicate_conflict_timeout",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => now,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      now: () => now,
+      onGameEvent: (event) => {
+        persistedEvents.push(event.type);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+    const whiteSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const whiteJoined = nextSocketMessage(whiteSocket);
+
+    whiteSocket.on("open", () => {
+      whiteSocket.send(
+        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+      );
+    });
+    try {
+      await expect(whiteJoined).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      now = 1_000;
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-conflict-timeout",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      );
+      await expect(nextSocketMessage(whiteSocket, "first conflict-timeout action")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+
+      now = 120_000;
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-conflict-timeout",
+          action: { type: "RESIGN", baseVersion: 0 },
+        })
+      );
+      await expect(nextSocketMessage(whiteSocket, "conflicting duplicate timeout rejection")).resolves.toMatchObject({
+        type: "rejected",
+        error: { code: "game_over" },
+        snapshot: {
+          version: 2,
+          result: { reason: "timeout" },
+        },
+      });
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-conflict-timeout",
+          action: { type: "RESIGN", baseVersion: 0 },
+        })
+      );
+      await expect(nextSocketMessage(whiteSocket, "repeated conflict after timeout")).resolves.toMatchObject({
+        type: "rejected",
+        error: { code: "game_over" },
+        snapshot: {
+          version: 2,
+          result: { reason: "timeout" },
+        },
+      });
+      expect(persistedEvents).toEqual([
+        "game_created",
+        "action_accepted",
+        "timeout_adjudicated",
+      ]);
+    } finally {
       whiteSocket.close();
     }
   });
@@ -1399,7 +1742,13 @@ describe("createOnlineHttpServer", () => {
         snapshot: { version: 0 },
       });
 
-      whiteSocket.send(JSON.stringify({ type: "action", action: { type: "PASS", baseVersion: 0 } }));
+      whiteSocket.send(
+        JSON.stringify({
+          type: "action",
+          clientActionId: "client-action-pending-read",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      );
       await waitForCondition(
         () => persistedActionVersions.length === 1,
         "the first action to reach persistence"
@@ -1519,7 +1868,7 @@ describe("createOnlineHttpServer", () => {
         return {
           ok: true,
           event: {
-            schemaVersion: 1,
+            schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
             eventId: "evt-canonical-timeout",
             createdAt: "2026-05-31T12:00:01.000Z",
             rulesetVersion: "castles-beta-v1",

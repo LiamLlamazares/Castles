@@ -13,6 +13,7 @@ import {
   ONLINE_EVENT_SCHEMA_VERSION,
   ONLINE_RULESET_VERSION,
 } from "../events";
+import { sameOnlineAction } from "../actionIdempotency";
 import {
   OnlineGameSummary,
   isOnlineGameSummaryListed,
@@ -263,6 +264,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const persistActionAccepted = async (
     gameId: string,
     playerColor: Extract<OnlineGameEvent, { type: "action_accepted" }>["playerColor"],
+    clientActionId: string,
     version: number,
     action: Extract<OnlineGameEvent, { type: "action_accepted" }>["action"],
     playedAt: number,
@@ -273,6 +275,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         type: "action_accepted",
         gameId,
         playerColor,
+        clientActionId,
         version,
         action,
         playedAt,
@@ -1004,6 +1007,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             const transition = await options.applyGameAction({
               gameId: currentConnection.gameId,
               token: currentConnection.token,
+              clientActionId: message.clientActionId,
               action: message.action,
               now: options.now,
             });
@@ -1115,6 +1119,20 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
+        const existingAction = room.getAcceptedActionByClientId(
+          playerColor,
+          message.clientActionId
+        );
+        let exactExistingAction = false;
+        let duplicateConflict = false;
+        if (existingAction) {
+          if (!sameOnlineAction(existingAction.action, message.action)) {
+            duplicateConflict = true;
+          } else {
+            exactExistingAction = true;
+          }
+        }
+
         const timeout = await adjudicateTimeoutForRoom(currentConnection.gameId, room);
         if (!timeout.ok) {
           log({
@@ -1132,6 +1150,17 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
         if (timeout.timeout) {
+          if (exactExistingAction) {
+            log({
+              event: "online.action",
+              gameId: currentConnection.gameId,
+              role: "player",
+              action: existingAction!.action.type,
+              status: "accepted",
+            });
+            broadcastSnapshot(currentConnection.gameId);
+            return;
+          }
           const snapshot = (service.getRoom(currentConnection.gameId) ?? room).getSnapshot();
           log({
             event: "online.action",
@@ -1153,8 +1182,66 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
+        const snapshotAfterTimeoutCheck = (service.getRoom(currentConnection.gameId) ?? room).getSnapshot();
+        if (duplicateConflict && snapshotAfterTimeoutCheck.result?.reason === "timeout") {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "game_over",
+          });
+          sendJson(socket, {
+            type: "rejected",
+            error: {
+              code: "game_over",
+              message: "This game is already over on time.",
+            },
+            snapshot: snapshotAfterTimeoutCheck,
+          });
+          return;
+        }
+
+        if (duplicateConflict) {
+          const snapshot = room.getSnapshot();
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "duplicate_action",
+          });
+          sendJson(socket, {
+            type: "rejected",
+            error: {
+              code: "duplicate_action",
+              message: "This client action id has already been used for a different action.",
+            },
+            snapshot,
+          });
+          return;
+        }
+
+        if (exactExistingAction) {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: existingAction!.action.type,
+            status: "accepted",
+          });
+          broadcastSnapshot(currentConnection.gameId);
+          return;
+        }
+
         const beforeAction = room.toRecord();
-        const result = room.submitAction(currentConnection.token, message.action);
+        const result = room.submitAction(
+          currentConnection.token,
+          message.action,
+          message.clientActionId
+        );
         if (!result.ok) {
           log({
             event: "online.action",
@@ -1187,6 +1274,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           await persistActionAccepted(
             currentConnection.gameId,
             playerColor,
+            acceptedAction.clientActionId,
             result.snapshot.version,
             acceptedAction.action,
             acceptedAction.playedAt,

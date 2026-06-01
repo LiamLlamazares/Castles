@@ -8,11 +8,13 @@ This document records the current contract decisions for online multiplayer. The
 
 ### Disposable Beta Events
 
-`OnlineGameEvent` schema v1 is a private-beta event stream. It is valid for the current single-node beta, but it is not a permanent public contract yet. Creation events are token-free: `game_created` stores only `gameId`, setup, and optional clock state.
+`OnlineGameEvent` schema v2 is a private-beta event stream. It is valid for the current single-node beta, but it is not a permanent public contract yet. Creation events are token-free: `game_created` stores only `gameId`, setup, and optional clock state. Version 2 requires `clientActionId` on every `action_accepted` event; because there are no production users, old beta event logs can be reset instead of migrated.
 
 Player credentials live outside the event stream in private server-side credential records keyed by `gameId + seat`. Those records store token hashes, not raw invite tokens. Because the app has no production users, incompatible beta data can be reset rather than migrated.
 
 Unsupported event schema versions must fail replay loudly. Silent partial replay is not allowed.
+
+Accepted action events include a required `clientActionId`. Clients send this id with each action message, and the server persists it on the corresponding `action_accepted` event. For a given game and player, retrying the same `clientActionId` with the same action is idempotent and must not append another action event; if the clock has expired, the retry may still trigger timeout adjudication and return the current terminal snapshot. Reusing the same id with a different action is rejected as `duplicate_action` unless server timeout adjudication has already ended the game. The PostgreSQL store enforces a unique accepted-action index over `game_id + playerColor + clientActionId`.
 
 ### Durable Public Read Model
 
@@ -62,6 +64,5 @@ The current access helper is a contract helper, not complete authorization. Curr
 
 ## Next Contract Changes
 
-1. Add idempotency primitives such as `clientActionId` for retry-safe action submission.
-2. Add durable challenge and visibility lifecycle events before public lobby/challenge UI.
-3. Add a public account/session ownership layer before private challenge authorization.
+1. Add durable challenge and visibility lifecycle events before public lobby/challenge UI.
+2. Add a public account/session ownership layer before private challenge authorization.

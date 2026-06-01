@@ -269,7 +269,7 @@ sudo nginx -t || {
 sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
 ```
 
-The config check replays the online store before the live service is stopped. If it fails with old beta event rows or missing credential rows, reset disposable beta online data after confirming the backup above exists and only while the app still has no real users:
+The config check replays the online store before the live service is stopped. If it fails with old beta event rows, v1 action events missing `clientActionId`, or missing credential rows, reset disposable beta online data after confirming the backup above exists and only while the app still has no real users:
 
 ```bash
 load_castles_db_env

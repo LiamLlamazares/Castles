@@ -6,13 +6,14 @@ import type {
 import { OnlineGameRoom } from "./OnlineGameRoom";
 import { Color } from "../Constants";
 import { OnlineActionDTO, OnlineGameResultDTO, OnlineGameSetupDTO } from "./types";
+import { isValidClientActionId } from "./actionIdempotency";
 import {
   validateOnlineAction,
   validateOnlineGameSetup,
   type ValidationResult,
 } from "./validation";
 
-export const ONLINE_EVENT_SCHEMA_VERSION = 1;
+export const ONLINE_EVENT_SCHEMA_VERSION = 2;
 export const ONLINE_RULESET_VERSION = "castles-beta-v1";
 
 interface OnlineGameEventEnvelope {
@@ -33,6 +34,7 @@ export type OnlineGameEvent =
       type: "action_accepted";
       gameId: string;
       playerColor: Color;
+      clientActionId: string;
       version: number;
       playedAt: number;
       clock?: OnlineClockRecord;
@@ -284,6 +286,9 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     if (!isColor(value.playerColor)) {
       return bad("event.playerColor must be w or b.");
     }
+    if (!isValidClientActionId(value.clientActionId)) {
+      return bad("event.clientActionId is invalid.");
+    }
     if (!isPositiveSafeInteger(value.version)) {
       return bad("event.version must be a positive integer.");
     }
@@ -308,6 +313,7 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
         type: "action_accepted",
         gameId: value.gameId,
         playerColor: value.playerColor,
+        clientActionId: value.clientActionId,
         version: value.version,
         playedAt: value.playedAt,
         clock,
@@ -420,8 +426,19 @@ export function onlineGameEventsToRecords(
       }
 
       if (event.type === "action_accepted") {
+        const duplicateClientAction = room.acceptedActions.find(
+          (acceptedAction) =>
+            acceptedAction.playerColor === event.playerColor &&
+            acceptedAction.clientActionId === event.clientActionId
+        );
+        if (duplicateClientAction) {
+          throw new Error(
+            `Online event for ${event.gameId} reuses client action id ${event.clientActionId}.`
+          );
+        }
         room.acceptedActions.push({
           playerColor: event.playerColor,
+          clientActionId: event.clientActionId,
           action: event.action,
           version: event.version,
           playedAt: event.playedAt,
