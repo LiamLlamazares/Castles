@@ -11,6 +11,7 @@ import {
   OnlineConnectionStatus,
   OnlineGameSnapshotDTO,
 } from "../online/types";
+import { validateOnlineServerMessage } from "../online/protocol";
 
 interface UseOnlineGameConnectionResult {
   status: OnlineConnectionStatus;
@@ -108,33 +109,51 @@ export function useOnlineGameConnection(
         try {
           message = JSON.parse(event.data);
         } catch {
+          setStatus("error");
           setLastError("Online server sent an invalid message.");
           return;
         }
 
-        if (message.type === "joined" || message.type === "snapshot") {
+        const validation = validateOnlineServerMessage(message);
+        if (!validation.ok) {
+          setStatus("error");
+          setLastError(`Online server sent an invalid message: ${validation.error.message}`);
+          return;
+        }
+        const serverMessage = validation.value;
+
+        if (serverMessage.type === "joined" || serverMessage.type === "snapshot") {
           reconnectAttempt = 0;
           setStatus("connected");
           setLastError(undefined);
-          applySnapshot(message.snapshot);
+          applySnapshot(serverMessage.snapshot);
           return;
         }
 
-        if (message.type === "pong") {
+        if (serverMessage.type === "pong") {
           return;
         }
 
-        if (message.type === "rejected") {
-          setLastError(message.error?.message ?? "Online action was rejected.");
-          if (message.snapshot) {
-            applySnapshot(message.snapshot);
+        if (serverMessage.type === "spectating") {
+          setStatus("error");
+          setLastError("Online server sent a spectator message to a player connection.");
+          return;
+        }
+
+        if (serverMessage.type === "rejected") {
+          setLastError(serverMessage.error.message);
+          if (serverMessage.snapshot) {
+            applySnapshot(serverMessage.snapshot);
           }
           return;
         }
 
-        if (message.type === "error") {
+        if (serverMessage.type === "error") {
           setStatus("error");
-          setLastError(message.error?.message ?? "Online connection error.");
+          setLastError(serverMessage.error.message);
+          if (serverMessage.snapshot) {
+            applySnapshot(serverMessage.snapshot);
+          }
         }
       };
 

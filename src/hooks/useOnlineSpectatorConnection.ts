@@ -9,6 +9,7 @@ import {
   OnlineConnectionStatus,
   OnlineGameSnapshotDTO,
 } from "../online/types";
+import { validateOnlineServerMessage } from "../online/protocol";
 
 interface UseOnlineSpectatorConnectionResult {
   status: OnlineConnectionStatus;
@@ -105,33 +106,51 @@ export function useOnlineSpectatorConnection(
         try {
           message = JSON.parse(event.data);
         } catch {
+          setStatus("error");
           setLastError("Online server sent an invalid message.");
           return;
         }
 
-        if (message.type === "spectating" || message.type === "snapshot") {
+        const validation = validateOnlineServerMessage(message);
+        if (!validation.ok) {
+          setStatus("error");
+          setLastError(`Online server sent an invalid message: ${validation.error.message}`);
+          return;
+        }
+        const serverMessage = validation.value;
+
+        if (serverMessage.type === "spectating" || serverMessage.type === "snapshot") {
           reconnectAttempt = 0;
           setStatus("connected");
           setLastError(undefined);
-          applySnapshot(message.snapshot);
+          applySnapshot(serverMessage.snapshot);
           return;
         }
 
-        if (message.type === "pong") {
+        if (serverMessage.type === "pong") {
           return;
         }
 
-        if (message.type === "rejected") {
-          setLastError(message.error?.message ?? "Spectator action was rejected.");
-          if (message.snapshot) {
-            applySnapshot(message.snapshot);
+        if (serverMessage.type === "joined") {
+          setStatus("error");
+          setLastError("Online server sent a player message to a spectator connection.");
+          return;
+        }
+
+        if (serverMessage.type === "rejected") {
+          setLastError(serverMessage.error.message);
+          if (serverMessage.snapshot) {
+            applySnapshot(serverMessage.snapshot);
           }
           return;
         }
 
-        if (message.type === "error") {
+        if (serverMessage.type === "error") {
           setStatus("error");
-          setLastError(message.error?.message ?? "Online spectator connection error.");
+          setLastError(serverMessage.error.message);
+          if (serverMessage.snapshot) {
+            applySnapshot(serverMessage.snapshot);
+          }
         }
       };
 

@@ -8,6 +8,7 @@ import {
 import {
   BoardDTO,
   CastleDTO,
+  GameStateDTO,
   HexDTO,
   OnlineActionDTO,
   OnlineGameSetupDTO,
@@ -345,6 +346,99 @@ export function validateOnlineGameSetup(value: unknown): ValidationResult<Online
       initialPoolTypes,
       pieceTheme,
       timeControl,
+    },
+  };
+}
+
+function validatePhoenixRecord(value: unknown, path: string): ValidationResult<GameStateDTO["phoenixRecords"][number]> {
+  if (!isRecord(value)) return bad(`${path} must be a phoenix record object.`);
+  if (!isNonNegativeInteger(value.respawnTurn)) {
+    return bad(`${path}.respawnTurn must be a non-negative integer.`);
+  }
+  if (!isColor(value.owner)) return bad(`${path}.owner must be w or b.`);
+  return {
+    ok: true,
+    value: {
+      respawnTurn: value.respawnTurn,
+      owner: value.owner,
+    },
+  };
+}
+
+export function validateOnlineGameState(value: unknown): ValidationResult<GameStateDTO> {
+  if (!isRecord(value)) return bad("state must be an object.");
+
+  const pieces = validateArray(value.pieces, "state.pieces", MAX_PIECES, validatePiece);
+  if (!pieces.ok) return pieces;
+  const castles = validateArray(value.castles, "state.castles", MAX_CASTLES, validateCastle);
+  if (!castles.ok) return castles;
+  const sanctuaries = validateArray(
+    value.sanctuaries,
+    "state.sanctuaries",
+    MAX_SANCTUARIES,
+    validateSanctuary
+  );
+  if (!sanctuaries.ok) return sanctuaries;
+  if (!isNonNegativeInteger(value.turnCounter)) {
+    return bad("state.turnCounter must be a non-negative integer.");
+  }
+
+  if (!Array.isArray(value.sanctuaryPool) || value.sanctuaryPool.length > MAX_SANCTUARIES) {
+    return bad("state.sanctuaryPool must be a small array.");
+  }
+  const sanctuaryPool: SanctuaryType[] = [];
+  for (const type of value.sanctuaryPool) {
+    if (typeof type !== "string" || !SANCTUARY_TYPES.has(type as SanctuaryType)) {
+      return bad("state.sanctuaryPool contains an unknown sanctuary type.");
+    }
+    sanctuaryPool.push(type as SanctuaryType);
+  }
+
+  const graveyard = validateArray(value.graveyard, "state.graveyard", MAX_PIECES, validatePiece);
+  if (!graveyard.ok) return graveyard;
+  const phoenixRecords = validateArray(
+    value.phoenixRecords,
+    "state.phoenixRecords",
+    MAX_PIECES,
+    validatePhoenixRecord
+  );
+  if (!phoenixRecords.ok) return phoenixRecords;
+
+  let promotionPending: GameStateDTO["promotionPending"];
+  if (value.promotionPending === null) {
+    promotionPending = null;
+  } else if (value.promotionPending === undefined) {
+    return bad("state.promotionPending must be null or a piece object.");
+  } else {
+    const pending = validatePiece(value.promotionPending, "state.promotionPending");
+    if (!pending.ok) return pending;
+    promotionPending = pending.value;
+  }
+
+  let victoryPoints: GameStateDTO["victoryPoints"];
+  if (value.victoryPoints !== undefined) {
+    if (!isRecord(value.victoryPoints)) return bad("state.victoryPoints must be an object.");
+    if (
+      !isNonNegativeInteger(value.victoryPoints.w) ||
+      !isNonNegativeInteger(value.victoryPoints.b)
+    ) {
+      return bad("state.victoryPoints must contain non-negative w and b scores.");
+    }
+    victoryPoints = { w: value.victoryPoints.w, b: value.victoryPoints.b };
+  }
+
+  return {
+    ok: true,
+    value: {
+      pieces: pieces.value,
+      castles: castles.value,
+      sanctuaries: sanctuaries.value,
+      turnCounter: value.turnCounter,
+      sanctuaryPool,
+      graveyard: graveyard.value,
+      phoenixRecords: phoenixRecords.value,
+      promotionPending,
+      victoryPoints,
     },
   };
 }

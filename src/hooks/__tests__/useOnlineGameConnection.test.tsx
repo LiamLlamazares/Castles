@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useOnlineSpectatorConnection } from "../useOnlineSpectatorConnection";
+import { useOnlineGameConnection } from "../useOnlineGameConnection";
 
 class MockWebSocket {
   static readonly OPEN = 1;
@@ -46,7 +46,7 @@ function snapshot(version = 0) {
   };
 }
 
-describe("useOnlineSpectatorConnection", () => {
+describe("useOnlineGameConnection", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     vi.stubGlobal("WebSocket", MockWebSocket);
@@ -63,33 +63,42 @@ describe("useOnlineSpectatorConnection", () => {
     vi.unstubAllGlobals();
   });
 
-  it("fetches a public spectator snapshot and joins the websocket as a spectator", async () => {
+  it("fetches a player snapshot and joins the websocket as that player", async () => {
     const snapshots: Array<{ version: number }> = [];
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
 
     const { result } = renderHook(() =>
-      useOnlineSpectatorConnection("game_123", (snapshot) => {
-        snapshots.push(snapshot as { version: number });
-      })
+      useOnlineGameConnection(
+        join,
+        (nextSnapshot) => {
+          snapshots.push(nextSnapshot as { version: number });
+        }
+      )
     );
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith("/api/online/games/game_123/spectator");
+      expect(fetch).toHaveBeenCalledWith("/api/online/games/game_123", {
+        headers: { authorization: "Bearer white-token" },
+      });
     });
     expect(snapshots.at(-1)).toMatchObject({ version: 0 });
 
-    act(() => {
-      MockWebSocket.instances[0].onopen?.();
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onopen?.();
     });
 
-    expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toEqual({
-      type: "spectate",
+    expect(JSON.parse(socket.sent[0])).toEqual({
+      type: "join",
       gameId: "game_123",
+      token: "white-token",
     });
 
-    act(() => {
-      MockWebSocket.instances[0].onmessage?.({
+    await act(async () => {
+      socket.onmessage?.({
         data: JSON.stringify({
-          type: "spectating",
+          type: "joined",
+          color: "w",
           snapshot: snapshot(1),
         }),
       });
@@ -101,19 +110,23 @@ describe("useOnlineSpectatorConnection", () => {
     expect(snapshots.at(-1)).toMatchObject({ version: 1 });
   });
 
-  it("turns malformed spectator messages into controlled errors", async () => {
+  it("turns malformed server messages into controlled connection errors", async () => {
     const snapshots: Array<{ version: number }> = [];
-
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
     const { result } = renderHook(() =>
-      useOnlineSpectatorConnection("game_123", (snapshot) => {
-        snapshots.push(snapshot as { version: number });
-      })
+      useOnlineGameConnection(
+        join,
+        (nextSnapshot) => {
+          snapshots.push(nextSnapshot as { version: number });
+        }
+      )
     );
 
     await waitFor(() => expect(snapshots).toHaveLength(1));
-    act(() => {
-      MockWebSocket.instances[0].onmessage?.({
-        data: JSON.stringify({ type: "spectating" }),
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({ type: "joined", color: "w" }),
       });
     });
 
@@ -124,18 +137,19 @@ describe("useOnlineSpectatorConnection", () => {
     expect(snapshots).toHaveLength(1);
   });
 
-  it("turns non-json spectator frames into controlled errors", async () => {
+  it("turns non-json server frames into controlled connection errors", async () => {
     const snapshots: Array<{ version: number }> = [];
-
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
     const { result } = renderHook(() =>
-      useOnlineSpectatorConnection("game_123", (nextSnapshot) => {
+      useOnlineGameConnection(join, (nextSnapshot) => {
         snapshots.push(nextSnapshot as { version: number });
       })
     );
 
     await waitFor(() => expect(snapshots).toHaveLength(1));
-    act(() => {
-      MockWebSocket.instances[0].onmessage?.({ data: "not-json" });
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onmessage?.({ data: "not-json" });
     });
 
     await waitFor(() => {
@@ -147,9 +161,9 @@ describe("useOnlineSpectatorConnection", () => {
 
   it("handles snapshot, pong, rejected, error, and wrong-role frames predictably", async () => {
     const snapshots: Array<{ version: number }> = [];
-
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
     const { result } = renderHook(() =>
-      useOnlineSpectatorConnection("game_123", (nextSnapshot) => {
+      useOnlineGameConnection(join, (nextSnapshot) => {
         snapshots.push(nextSnapshot as { version: number });
       })
     );
@@ -157,32 +171,32 @@ describe("useOnlineSpectatorConnection", () => {
     await waitFor(() => expect(snapshots).toHaveLength(1));
     const socket = MockWebSocket.instances.at(-1)!;
 
-    act(() => {
+    await act(async () => {
       socket.onmessage?.({ data: JSON.stringify({ type: "snapshot", snapshot: snapshot(1) }) });
     });
     await waitFor(() => expect(result.current.status).toBe("connected"));
     expect(snapshots.at(-1)).toMatchObject({ version: 1 });
 
-    act(() => {
+    await act(async () => {
       socket.onmessage?.({ data: JSON.stringify({ type: "pong", clientTime: 123, serverTime: 456 }) });
     });
     expect(result.current.status).toBe("connected");
     expect(snapshots.at(-1)).toMatchObject({ version: 1 });
 
-    act(() => {
+    await act(async () => {
       socket.onmessage?.({
         data: JSON.stringify({
           type: "rejected",
-          error: { code: "bad_request", message: "Spectators cannot move." },
+          error: { code: "stale_action", message: "Old action." },
           snapshot: snapshot(2),
         }),
       });
     });
-    await waitFor(() => expect(result.current.lastError).toBe("Spectators cannot move."));
+    await waitFor(() => expect(result.current.lastError).toBe("Old action."));
     expect(result.current.status).toBe("connected");
     expect(snapshots.at(-1)).toMatchObject({ version: 2 });
 
-    act(() => {
+    await act(async () => {
       socket.onmessage?.({
         data: JSON.stringify({
           type: "error",
@@ -195,14 +209,12 @@ describe("useOnlineSpectatorConnection", () => {
     expect(result.current.lastError).toBe("Server problem.");
     expect(snapshots.at(-1)).toMatchObject({ version: 3 });
 
-    act(() => {
-      socket.onmessage?.({
-        data: JSON.stringify({ type: "joined", color: "w", snapshot: snapshot(4) }),
-      });
+    await act(async () => {
+      socket.onmessage?.({ data: JSON.stringify({ type: "spectating", snapshot: snapshot(4) }) });
     });
     await waitFor(() => {
       expect(result.current.status).toBe("error");
-      expect(result.current.lastError).toContain("player message");
+      expect(result.current.lastError).toContain("spectator message");
     });
     expect(snapshots.at(-1)).toMatchObject({ version: 3 });
   });

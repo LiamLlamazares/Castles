@@ -1,4 +1,5 @@
 import type { CreatedOnlineGame } from "./OnlineGameService";
+import { validateOnlineGameSnapshot } from "./protocol";
 import { validateOnlineGameSummary, type OnlineGameSummary } from "./readModel";
 import { OnlineGameResultDTO, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from "./types";
 
@@ -258,7 +259,7 @@ export async function fetchOnlineSnapshot(
   }
 
   const body = await response.json();
-  return body.snapshot;
+  return validateSnapshotResponse(body, "Online snapshot");
 }
 
 export async function fetchOnlineSpectatorSnapshot(
@@ -274,7 +275,22 @@ export async function fetchOnlineSpectatorSnapshot(
   }
 
   const body = await response.json();
-  return body.snapshot;
+  return validateSnapshotResponse(body, "Online spectator snapshot");
+}
+
+function validateSnapshotResponse(
+  body: unknown,
+  label: string
+): OnlineGameSnapshotDTO {
+  const snapshot =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as { snapshot?: unknown }).snapshot
+      : undefined;
+  const validation = validateOnlineGameSnapshot(snapshot);
+  if (!validation.ok) {
+    throw new Error(`${label} response was malformed: ${validation.error.message}`);
+  }
+  return validation.value;
 }
 
 export async function fetchOnlineGameSummaries(

@@ -4,6 +4,7 @@ import {
   buildSpectatorUrl,
   copyOnlineInviteUrl,
   fetchOnlineGameSummaries,
+  fetchOnlineSnapshot,
   fetchOnlineSpectatorSnapshot,
   formatOnlineGameResult,
   parseOnlineJoinParams,
@@ -16,6 +17,27 @@ import {
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
 } from "../client";
+
+function snapshot(version = 0) {
+  return {
+    gameId: "game_123",
+    version,
+    setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+    state: {
+      pieces: [],
+      castles: [],
+      sanctuaries: [],
+      turnCounter: 0,
+      sanctuaryPool: [],
+      graveyard: [],
+      phoenixRecords: [],
+      promotionPending: null,
+    },
+    moveHistory: [],
+    playerToMove: "w",
+    turnPhase: "Movement",
+  };
+}
 
 describe("online client helpers", () => {
   it("parses private online invite URLs", () => {
@@ -194,7 +216,7 @@ describe("online client helpers", () => {
   it("fetches spectator snapshots without authorization headers", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ snapshot: { gameId: "game_123", version: 2 } }),
+      json: async () => ({ snapshot: snapshot(2) }),
     });
 
     await expect(fetchOnlineSpectatorSnapshot("game_123", fetchImpl as any)).resolves.toMatchObject({
@@ -203,6 +225,53 @@ describe("online client helpers", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledWith("/api/online/games/game_123/spectator");
+  });
+
+  it("fetches player snapshots with authorization and validates the response", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ snapshot: snapshot(3) }),
+    });
+
+    await expect(
+      fetchOnlineSnapshot(
+        { gameId: "game_123", seat: "w", token: "white-token" },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      gameId: "game_123",
+      version: 3,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games/game_123", {
+      headers: { authorization: "Bearer white-token" },
+    });
+  });
+
+  it("rejects malformed player and spectator snapshot responses", async () => {
+    const malformedSnapshot = {
+      gameId: "game_123",
+      version: 1,
+      setup: {},
+      state: {},
+      moveHistory: [],
+      playerToMove: "w",
+      turnPhase: "Movement",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ snapshot: malformedSnapshot }),
+    });
+
+    await expect(
+      fetchOnlineSnapshot(
+        { gameId: "game_123", seat: "w", token: "white-token" },
+        fetchImpl as any
+      )
+    ).rejects.toThrow(/snapshot response was malformed/);
+    await expect(fetchOnlineSpectatorSnapshot("game_123", fetchImpl as any)).rejects.toThrow(
+      /snapshot response was malformed/
+    );
   });
 
   it("fetches validated game summaries without player authorization", async () => {
