@@ -4,6 +4,9 @@ import { isValidClientActionId, sameOnlineAction } from "../actionIdempotency";
 import {
   type OnlineChallengeEvent,
   type OnlineChallengeSummary,
+  canIdentityAcceptChallenge,
+  createChallengeAcceptedEvent,
+  isSameOnlineIdentity,
   projectOnlineChallengeSummaries,
   validateOnlineChallengeEvent,
   validateOnlineChallengeSummary,
@@ -17,17 +20,23 @@ import {
   validateOnlineGameEvent,
 } from "../events";
 import {
+  type OnlineIdentity,
   OnlineGameSummary,
   projectOnlineGameSummaries,
+  validateOnlineIdentity,
   validateOnlineGameSummary,
 } from "../readModel";
 import type {
+  OnlineChallengeAcceptInput,
+  OnlineChallengeAcceptResult,
+  OnlineChallengeCredentials,
   OnlineGameStore,
   OnlineGameStoreActionInput,
   OnlineGameStoreActionResult,
   OnlineGameStoreLoadOptions,
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
+  ResolvedOnlineChallengeCredential,
 } from "./OnlineGameStore";
 import { isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
 
@@ -182,10 +191,181 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
-  async appendChallengeEvent(
-    event: Exclude<OnlineChallengeEvent, { type: "challenge_accepted" }>
+  async appendChallengeCreated(
+    event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
+    credentials: OnlineChallengeCredentials
   ): Promise<OnlineChallengeSummary> {
     const validated = this.validateChallenge(event);
+    if (validated.type !== "challenge_created") {
+      throw new Error("appendChallengeCreated only accepts challenge_created events.");
+    }
+    const normalizedCredentials = this.validateChallengeCredentials(
+      validated.challengeId,
+      validated,
+      credentials
+    );
+    await this.ensureSchema();
+    return this.withChallengeTransaction(validated.challengeId, async (client) => {
+      await this.insertChallengeEvent(validated, client);
+      await this.insertChallengeCredentials(validated.challengeId, normalizedCredentials, client);
+      const summary = await this.refreshChallengeSummaryForChallenge(validated.challengeId, client);
+      if (!summary) {
+        throw new Error(`Online challenge summary was not refreshed for ${validated.challengeId}.`);
+      }
+      return summary;
+    });
+  }
+
+  async resolveChallengeCredential(
+    challengeId: string,
+    token: string
+  ): Promise<ResolvedOnlineChallengeCredential | null> {
+    if (typeof challengeId !== "string" || !challengeId || typeof token !== "string" || !token) {
+      return null;
+    }
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        SELECT role, token_hash, identity
+        FROM online_challenge_credentials
+        WHERE challenge_id = $1
+      `,
+      [challengeId]
+    );
+
+    for (const row of result.rows) {
+      const role = row.role;
+      if (role !== "challenger" && role !== "challenged") {
+        throw new Error(`Invalid online challenge credential role for ${challengeId}.`);
+      }
+      const tokenHash = row.token_hash;
+      if (typeof tokenHash !== "string" || !isOnlineTokenCredentialHash(tokenHash)) {
+        throw new Error(`Invalid online challenge credential hash for ${challengeId}.`);
+      }
+      const identity = validateOnlineIdentity(row.identity, "challenge credential identity");
+      if (!identity.ok) {
+        throw new Error(identity.error.message);
+      }
+      if (!verifyOnlineToken(token, tokenHash)) continue;
+      return {
+        challengeId,
+        role,
+        identity: identity.value as ResolvedOnlineChallengeCredential["identity"],
+      };
+    }
+    return null;
+  }
+
+  async acceptChallengeAndCreateGame(
+    input: OnlineChallengeAcceptInput
+  ): Promise<OnlineChallengeAcceptResult> {
+    const gameCreatedEvent = this.validate(input.gameCreatedEvent);
+    if (gameCreatedEvent.type !== "game_created") {
+      throw new Error("acceptChallengeAndCreateGame requires a game_created event.");
+    }
+    if (gameCreatedEvent.createdAt !== input.acceptedAt) {
+      throw new Error("Accepted game event createdAt must equal challenge acceptedAt.");
+    }
+    this.validateAcceptInput(input, gameCreatedEvent);
+
+    await this.ensureSchema();
+    return this.withChallengeAcceptTransaction(
+      input.challengeId,
+      gameCreatedEvent.gameId,
+      async (client) => {
+        const challengeEvents = await this.loadChallengeEventsForChallenge(input.challengeId, client);
+        const [summary] = projectOnlineChallengeSummaries(challengeEvents);
+        if (!summary || summary.challengeId !== input.challengeId) {
+          throw new Error(`Online challenge ${input.challengeId} was not found.`);
+        }
+        if (summary.status !== "pending") {
+          throw new Error(`Online challenge ${input.challengeId} is already terminal.`);
+        }
+        if (!canIdentityAcceptChallenge(summary, input.acceptedBy.identity, input.acceptedAt)) {
+          throw new Error(`Resolved challenged role cannot accept online challenge ${input.challengeId}.`);
+        }
+        if (!this.sameJson(summary.setup, gameCreatedEvent.setup)) {
+          throw new Error(`Accepted online game setup must match challenge ${input.challengeId}.`);
+        }
+        const challengeCredentials = await this.loadChallengeCredentialsForChallenge(
+          input.challengeId,
+          client
+        );
+        if (!isSameOnlineIdentity(challengeCredentials.challengerIdentity, summary.challengerIdentity)) {
+          throw new Error(`Challenge credentials for ${input.challengeId} do not match challenger identity.`);
+        }
+        if (!isSameOnlineIdentity(challengeCredentials.challengedIdentity, summary.challengedIdentity)) {
+          throw new Error(`Challenge credentials for ${input.challengeId} do not match challenged identity.`);
+        }
+        const gameSeats = this.resolveAcceptedGameSeats(summary, input);
+        const gameCredentials: OnlineGameCredentials =
+          gameSeats.challenger === "w"
+            ? {
+                whiteCredential: challengeCredentials.challengerCredential,
+                blackCredential: challengeCredentials.challengedCredential,
+              }
+            : {
+                whiteCredential: challengeCredentials.challengedCredential,
+                blackCredential: challengeCredentials.challengerCredential,
+              };
+        const gameRecord: OnlineGameRoomRecord = {
+          gameId: gameCreatedEvent.gameId,
+          setup: gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: gameCreatedEvent.clock,
+          acceptedActions: [],
+        };
+
+        const challengeEvent = createChallengeAcceptedEvent(
+          {
+            type: "challenge_accepted",
+            challengeId: input.challengeId,
+            acceptedBy: input.acceptedBy.identity,
+            acceptedAt: input.acceptedAt,
+            gameId: gameCreatedEvent.gameId,
+            whiteIdentity: input.whiteIdentity,
+            blackIdentity: input.blackIdentity,
+          },
+          { createdAt: input.acceptedAt }
+        );
+
+        await this.insertEvent(gameCreatedEvent, client);
+        await this.insertCredentials(gameCreatedEvent.gameId, gameCredentials, client);
+        await this.insertChallengeEvent(challengeEvent, client);
+        const gameSummary = await this.refreshSummaryForGame(gameCreatedEvent.gameId, client);
+        if (!gameSummary) {
+          throw new Error(`Online game summary was not refreshed for ${gameCreatedEvent.gameId}.`);
+        }
+        const challengeSummary = await this.refreshChallengeSummaryForChallenge(input.challengeId, client);
+        if (!challengeSummary) {
+          throw new Error(`Online challenge summary was not refreshed for ${input.challengeId}.`);
+        }
+
+        return {
+          challengeEvent,
+          challengeSummary,
+          gameSummary,
+          gameCredentials,
+          gameRecord,
+          gameSeats,
+        };
+      }
+    );
+  }
+
+  async appendChallengeEvent(
+    event: Exclude<
+      OnlineChallengeEvent,
+      { type: "challenge_created" } | { type: "challenge_accepted" }
+    >
+  ): Promise<OnlineChallengeSummary> {
+    const validated = this.validateChallenge(event);
+    if (validated.type === "challenge_created") {
+      throw new Error(
+        "challenge_created must be persisted through appendChallengeCreated so credentials are stored atomically."
+      );
+    }
     if (validated.type === "challenge_accepted") {
       throw new Error(
         "challenge_accepted must be persisted through acceptChallengeAndCreateGame so game creation and challenge acceptance are atomic."
@@ -549,6 +729,31 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         ON online_challenge_events (id)
     `);
     await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_challenge_credentials (
+        challenge_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('challenger', 'challenged')),
+        token_hash TEXT NOT NULL CONSTRAINT online_challenge_credentials_token_hash_shape CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$'),
+        identity JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (challenge_id, role)
+      )
+    `);
+    await this.queryable.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE online_challenge_credentials
+          ADD CONSTRAINT online_challenge_credentials_token_hash_shape
+          CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$;
+    `);
+    await this.queryable.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS online_challenge_credentials_one_role_per_hash
+        ON online_challenge_credentials (challenge_id, token_hash)
+    `);
+    await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_challenge_summaries (
         challenge_id TEXT PRIMARY KEY,
         status TEXT NOT NULL,
@@ -642,6 +847,33 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         VALUES ($1, $2, $3), ($1, $4, $5)
       `,
       [gameId, "w", credentials.whiteCredential, "b", credentials.blackCredential]
+    );
+  }
+
+  private async insertChallengeCredentials(
+    challengeId: string,
+    credentials: OnlineChallengeCredentials,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_challenge_credentials (
+          challenge_id,
+          role,
+          token_hash,
+          identity
+        )
+        VALUES ($1, $2, $3, $4), ($1, $5, $6, $7)
+      `,
+      [
+        challengeId,
+        "challenger",
+        credentials.challengerCredential,
+        credentials.challengerIdentity,
+        "challenged",
+        credentials.challengedCredential,
+        credentials.challengedIdentity,
+      ]
     );
   }
 
@@ -761,6 +993,144 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     }
   }
 
+  private validateChallengeCredentials(
+    challengeId: string,
+    event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
+    credentials: OnlineChallengeCredentials
+  ): OnlineChallengeCredentials {
+    if (
+      typeof credentials.challengerCredential !== "string" ||
+      !isOnlineTokenCredentialHash(credentials.challengerCredential) ||
+      typeof credentials.challengedCredential !== "string" ||
+      !isOnlineTokenCredentialHash(credentials.challengedCredential)
+    ) {
+      throw new Error(`Invalid online challenge credential hash for ${challengeId}.`);
+    }
+    if (credentials.challengerCredential === credentials.challengedCredential) {
+      throw new Error(`Online challenge credentials for ${challengeId} must be distinct by role.`);
+    }
+    const challengerIdentity = validateOnlineIdentity(
+      credentials.challengerIdentity,
+      "challenge credentials.challengerIdentity"
+    );
+    if (!challengerIdentity.ok) {
+      throw new Error(challengerIdentity.error.message);
+    }
+    const challengedIdentity = validateOnlineIdentity(
+      credentials.challengedIdentity,
+      "challenge credentials.challengedIdentity"
+    );
+    if (!challengedIdentity.ok) {
+      throw new Error(challengedIdentity.error.message);
+    }
+    if (!isSameOnlineIdentity(challengerIdentity.value, event.challengerIdentity)) {
+      throw new Error(`Challenge credentials for ${challengeId} do not match the challenger identity.`);
+    }
+    if (!isSameOnlineIdentity(challengedIdentity.value, event.challengedIdentity)) {
+      throw new Error(`Challenge credentials for ${challengeId} do not match the challenged identity.`);
+    }
+    return {
+      challengerCredential: credentials.challengerCredential,
+      challengedCredential: credentials.challengedCredential,
+      challengerIdentity: challengerIdentity.value,
+      challengedIdentity: challengedIdentity.value,
+    };
+  }
+
+  private async loadChallengeCredentialsForChallenge(
+    challengeId: string,
+    queryable: PostgresQueryable
+  ): Promise<OnlineChallengeCredentials> {
+    const result = await queryable.query(
+      `
+        SELECT role, token_hash, identity
+        FROM online_challenge_credentials
+        WHERE challenge_id = $1
+      `,
+      [challengeId]
+    );
+
+    const credentials: Partial<OnlineChallengeCredentials> = {};
+    for (const row of result.rows) {
+      const role = row.role;
+      if (role !== "challenger" && role !== "challenged") {
+        throw new Error(`Invalid online challenge credential role for ${challengeId}.`);
+      }
+      const tokenHash = row.token_hash;
+      if (typeof tokenHash !== "string" || !isOnlineTokenCredentialHash(tokenHash)) {
+        throw new Error(`Invalid online challenge credential hash for ${challengeId}.`);
+      }
+      const identity = validateOnlineIdentity(row.identity, "challenge credential identity");
+      if (!identity.ok) {
+        throw new Error(identity.error.message);
+      }
+      if (role === "challenger") {
+        credentials.challengerCredential = tokenHash;
+        credentials.challengerIdentity = identity.value;
+      } else {
+        credentials.challengedCredential = tokenHash;
+        credentials.challengedIdentity = identity.value;
+      }
+    }
+
+    if (
+      !credentials.challengerCredential ||
+      !credentials.challengedCredential ||
+      !credentials.challengerIdentity ||
+      !credentials.challengedIdentity
+    ) {
+      throw new Error(`Missing online challenge credentials for ${challengeId}.`);
+    }
+    return credentials as OnlineChallengeCredentials;
+  }
+
+  private validateAcceptInput(
+    input: OnlineChallengeAcceptInput,
+    gameCreatedEvent: Extract<OnlineGameEvent, { type: "game_created" }>
+  ): void {
+    if (input.acceptedBy.challengeId !== input.challengeId) {
+      throw new Error(`Resolved challenge credential does not match challenge ${input.challengeId}.`);
+    }
+    if (input.acceptedBy.role !== "challenged") {
+      throw new Error(`Only the challenged role can accept online challenge ${input.challengeId}.`);
+    }
+    const whiteIdentity = validateOnlineIdentity(input.whiteIdentity, "accept.whiteIdentity");
+    if (!whiteIdentity.ok) {
+      throw new Error(whiteIdentity.error.message);
+    }
+    const blackIdentity = validateOnlineIdentity(input.blackIdentity, "accept.blackIdentity");
+    if (!blackIdentity.ok) {
+      throw new Error(blackIdentity.error.message);
+    }
+    if (isSameOnlineIdentity(whiteIdentity.value, blackIdentity.value)) {
+      throw new Error(`Accepted challenge ${input.challengeId} must bind two distinct seats.`);
+    }
+  }
+
+  private resolveAcceptedGameSeats(
+    summary: OnlineChallengeSummary,
+    input: OnlineChallengeAcceptInput
+  ): { challenger: "w" | "b"; challenged: "w" | "b" } {
+    const challengerSeat = isSameOnlineIdentity(input.whiteIdentity, summary.challengerIdentity)
+      ? "w"
+      : isSameOnlineIdentity(input.blackIdentity, summary.challengerIdentity)
+        ? "b"
+        : null;
+    const challengedSeat = isSameOnlineIdentity(input.whiteIdentity, summary.challengedIdentity)
+      ? "w"
+      : isSameOnlineIdentity(input.blackIdentity, summary.challengedIdentity)
+        ? "b"
+        : null;
+    if (!challengerSeat || !challengedSeat || challengerSeat === challengedSeat) {
+      throw new Error(`Accepted challenge ${summary.challengeId} must bind challenger and challenged seats.`);
+    }
+    return { challenger: challengerSeat, challenged: challengedSeat };
+  }
+
+  private sameJson(a: unknown, b: unknown): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
   private async loadEventsForGame(
     gameId: string,
     queryable: PostgresQueryable
@@ -829,14 +1199,15 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   private async refreshSummaryForGame(
     gameId: string,
     queryable: PostgresQueryable
-  ): Promise<void> {
+  ): Promise<OnlineGameSummary | null> {
     const summaries = projectOnlineGameSummaries(await this.loadEventsForGame(gameId, queryable));
     const summary = summaries.find((candidate) => candidate.gameId === gameId);
     if (!summary) {
       await queryable.query("DELETE FROM online_game_summaries WHERE game_id = $1", [gameId]);
-      return;
+      return null;
     }
     await this.upsertSummary(summary, queryable);
+    return summary;
   }
 
   private async refreshChallengeSummaryForChallenge(
@@ -996,6 +1367,33 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         "SELECT challenge_id FROM online_challenge_locks WHERE challenge_id = $1 FOR UPDATE",
         [challengeId]
       );
+      await this.acquireChallengeSummaryLock(queryable);
+    });
+  }
+
+  private async withChallengeAcceptTransaction<T>(
+    challengeId: string,
+    gameId: string,
+    operation: (queryable: PostgresQueryable) => Promise<T>
+  ): Promise<T> {
+    return this.withTransaction(operation, async (queryable) => {
+      await queryable.query(
+        "INSERT INTO online_challenge_locks (challenge_id) VALUES ($1) ON CONFLICT (challenge_id) DO NOTHING",
+        [challengeId]
+      );
+      await queryable.query(
+        "SELECT challenge_id FROM online_challenge_locks WHERE challenge_id = $1 FOR UPDATE",
+        [challengeId]
+      );
+      await queryable.query(
+        "INSERT INTO online_game_locks (game_id) VALUES ($1) ON CONFLICT (game_id) DO NOTHING",
+        [gameId]
+      );
+      await queryable.query(
+        "SELECT game_id FROM online_game_locks WHERE game_id = $1 FOR UPDATE",
+        [gameId]
+      );
+      await this.acquireSummaryLock(queryable);
       await this.acquireChallengeSummaryLock(queryable);
     });
   }

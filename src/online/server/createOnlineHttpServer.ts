@@ -1,9 +1,30 @@
 import http from "node:http";
+import { randomBytes } from "node:crypto";
 import express, { NextFunction, Request, Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RawData } from "ws";
 import { OnlineGameService } from "../OnlineGameService";
-import type { AcceptedOnlineTimeoutRecord } from "../OnlineGameRoom";
+import {
+  OnlineGameRoom,
+  type AcceptedOnlineTimeoutRecord,
+  type OnlineGameRoomRecord,
+} from "../OnlineGameRoom";
+import {
+  canSystemExpireChallenge,
+  canIdentityAcceptChallenge,
+  canIdentityCancelChallenge,
+  canIdentityDeclineChallenge,
+  createChallengeAcceptedEvent,
+  createChallengeCreatedEvent,
+  createChallengeCancelledEvent,
+  createChallengeDeclinedEvent,
+  createChallengeExpiredEvent,
+  isSameOnlineIdentity,
+  projectOnlineChallengeSummaries,
+  validateOnlineChallengeSummary,
+  type OnlineChallengeEvent,
+  type OnlineChallengeSummary,
+} from "../challenges";
 import {
   createOnlineActionAcceptedEvent,
   createOnlineGameCreatedEvent,
@@ -16,13 +37,14 @@ import {
 import { sameOnlineAction } from "../actionIdempotency";
 import {
   OnlineGameSummary,
+  projectOnlineGameSummaries,
   validateOnlineGameSummary,
 } from "../readModel";
 import {
   canListOnlineGameSummary,
   canSpectateOnlineGameSummary,
 } from "../accessPolicy";
-import { OnlineReject } from "../types";
+import { OnlineGameSetupDTO, OnlineReject } from "../types";
 import {
   OnlineClientMessage,
   validateClientMessage,
@@ -31,10 +53,15 @@ import {
 } from "../validation";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import type {
+  OnlineChallengeAcceptInput,
+  OnlineChallengeAcceptResult,
+  OnlineChallengeCredentials,
+  OnlineChallengeRole,
   OnlineGameStoreActionInput,
   OnlineGameStoreActionResult,
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
+  ResolvedOnlineChallengeCredential,
 } from "./OnlineGameStore";
 import {
   hashOnlineToken,
@@ -57,6 +84,9 @@ export type OnlineServerLogEvent = {
 
 const DEFAULT_ONLINE_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const DEFAULT_HEALTH_READINESS_TIMEOUT_MS = 1_500;
+const DEFAULT_CHALLENGE_EXPIRES_IN_MS = 24 * 60 * 60 * 1000;
+const MIN_CHALLENGE_EXPIRES_IN_MS = 5 * 60 * 1000;
+const MAX_CHALLENGE_EXPIRES_IN_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
@@ -66,6 +96,24 @@ export interface CreateOnlineHttpServerOptions {
     credentials: OnlineGameCredentials
   ) => void | Promise<void>;
   onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
+  appendChallengeCreated?: (
+    event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
+    credentials: OnlineChallengeCredentials
+  ) => OnlineChallengeSummary | Promise<OnlineChallengeSummary>;
+  appendChallengeEvent?: (
+    event: Exclude<
+      OnlineChallengeEvent,
+      { type: "challenge_created" } | { type: "challenge_accepted" }
+    >
+  ) => OnlineChallengeSummary | Promise<OnlineChallengeSummary>;
+  loadChallengeSummaries?: () => OnlineChallengeSummary[] | Promise<OnlineChallengeSummary[]>;
+  resolveChallengeCredential?: (
+    challengeId: string,
+    token: string
+  ) => ResolvedOnlineChallengeCredential | null | Promise<ResolvedOnlineChallengeCredential | null>;
+  acceptChallengeAndCreateGame?: (
+    input: OnlineChallengeAcceptInput
+  ) => OnlineChallengeAcceptResult | Promise<OnlineChallengeAcceptResult>;
   applyGameAction?: (
     input: OnlineGameStoreActionInput
   ) => OnlineGameStoreActionResult | Promise<OnlineGameStoreActionResult>;
@@ -203,6 +251,82 @@ function spectatorNotFoundError(): OnlineReject {
   };
 }
 
+function challengeNotFoundError(): OnlineReject {
+  return {
+    code: "not_found",
+    message: "No online challenge was found for that id and token.",
+  };
+}
+
+function defaultChallengeIdFactory(): string {
+  return `challenge_${randomBytes(9).toString("base64url")}`;
+}
+
+function defaultChallengeTokenFactory(): string {
+  return randomBytes(18).toString("base64url");
+}
+
+function buildChallengeUrl(
+  publicBaseUrl: string,
+  challengeId: string,
+  role: OnlineChallengeRole,
+  token: string
+): string {
+  const url = new URL(publicBaseUrl);
+  url.searchParams.set("onlineChallenge", challengeId);
+  url.searchParams.set("challengeRole", role);
+  url.hash = new URLSearchParams({ challengeToken: token }).toString();
+  return url.toString();
+}
+
+function buildOnlineGameInviteUrl(
+  publicBaseUrl: string,
+  gameId: string,
+  seat: "w" | "b",
+  token: string
+): string {
+  const url = new URL(publicBaseUrl);
+  url.searchParams.set("onlineGame", gameId);
+  url.searchParams.set("seat", seat);
+  url.searchParams.set("token", token);
+  return url.toString();
+}
+
+function parseChallengeExpiry(value: unknown): { ok: true; value: number } | { ok: false; error: OnlineReject } {
+  if (value === undefined) return { ok: true, value: DEFAULT_CHALLENGE_EXPIRES_IN_MS };
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    return {
+      ok: false,
+      error: { code: "bad_request", message: "Challenge expiry must be a whole number of milliseconds." },
+    };
+  }
+  if (value < MIN_CHALLENGE_EXPIRES_IN_MS || value > MAX_CHALLENGE_EXPIRES_IN_MS) {
+    return {
+      ok: false,
+      error: {
+        code: "bad_request",
+        message: "Challenge expiry must be between 5 minutes and 7 days.",
+      },
+    };
+  }
+  return { ok: true, value };
+}
+
+function normalizeChallengeSeat(value: unknown): "w" | "b" | "random" | null {
+  if (value === undefined) return "random";
+  return value === "w" || value === "b" || value === "random" ? value : null;
+}
+
+function normalizeChallengeVisibility(value: unknown): "private" | "unlisted" | null {
+  if (value === undefined) return "unlisted";
+  return value === "private" || value === "unlisted" ? value : null;
+}
+
+function challengeTerminalError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /already terminal|no longer pending|must be before expiry|expired|expiry/i.test(message);
+}
+
 async function checkStoreReadyWithTimeout(
   checkStoreReady: () => boolean | Promise<boolean>,
   timeoutMs: number
@@ -238,8 +362,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const disconnectedSockets = new WeakSet<WebSocket>();
   const actionQueues = new Map<string, Promise<void>>();
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
+  const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
+  const challengeActionLimiter = new FixedWindowRateLimiter(120, 10_000);
   const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
+  const memoryChallengeEvents: OnlineChallengeEvent[] = [];
+  const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
 
   const log = (event: OnlineServerLogEvent): void => {
     try {
@@ -320,6 +448,238 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
     return { ok: true };
   };
+
+  const loadChallengeSummaries = async (): Promise<OnlineChallengeSummary[]> => {
+    const summaries = options.loadChallengeSummaries
+      ? await options.loadChallengeSummaries()
+      : projectOnlineChallengeSummaries(memoryChallengeEvents);
+    return summaries.map((summary, index) => {
+      const validation = validateOnlineChallengeSummary(summary);
+      if (!validation.ok) {
+        throw new Error(`Invalid online challenge summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+  };
+
+  const loadChallengeSummary = async (challengeId: string): Promise<OnlineChallengeSummary | null> => {
+    return (await loadChallengeSummaries()).find((summary) => summary.challengeId === challengeId) ?? null;
+  };
+
+  const appendChallengeCreated = async (
+    event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
+    credentials: OnlineChallengeCredentials
+  ): Promise<OnlineChallengeSummary> => {
+    if (options.appendChallengeCreated) {
+      return options.appendChallengeCreated(event, credentials);
+    }
+    const eventLength = memoryChallengeEvents.length;
+    const previousCredentials = memoryChallengeCredentials.get(event.challengeId);
+    try {
+      memoryChallengeEvents.push(event);
+      memoryChallengeCredentials.set(event.challengeId, credentials);
+      const summary = projectOnlineChallengeSummaries(memoryChallengeEvents).find(
+        (candidate) => candidate.challengeId === event.challengeId
+      );
+      if (!summary) throw new Error(`Online challenge summary was not refreshed for ${event.challengeId}.`);
+      return summary;
+    } catch (error) {
+      memoryChallengeEvents.splice(eventLength);
+      if (previousCredentials) {
+        memoryChallengeCredentials.set(event.challengeId, previousCredentials);
+      } else {
+        memoryChallengeCredentials.delete(event.challengeId);
+      }
+      throw error;
+    }
+  };
+
+  const appendChallengeLifecycleEvent = async (
+    event: Exclude<
+      OnlineChallengeEvent,
+      { type: "challenge_created" } | { type: "challenge_accepted" }
+    >
+  ): Promise<OnlineChallengeSummary> => {
+    if (options.appendChallengeEvent) {
+      return options.appendChallengeEvent(event);
+    }
+    const eventLength = memoryChallengeEvents.length;
+    try {
+      memoryChallengeEvents.push(event);
+      const summary = projectOnlineChallengeSummaries(memoryChallengeEvents).find(
+        (candidate) => candidate.challengeId === event.challengeId
+      );
+      if (!summary) throw new Error(`Online challenge summary was not refreshed for ${event.challengeId}.`);
+      return summary;
+    } catch (error) {
+      memoryChallengeEvents.splice(eventLength);
+      throw error;
+    }
+  };
+
+  const resolveChallengeCredential = async (
+    challengeId: string,
+    token: string
+  ): Promise<ResolvedOnlineChallengeCredential | null> => {
+    if (options.resolveChallengeCredential) {
+      return options.resolveChallengeCredential(challengeId, token);
+    }
+    const credentials = memoryChallengeCredentials.get(challengeId);
+    if (!credentials) return null;
+    if (verifyOnlineToken(token, credentials.challengerCredential)) {
+      return {
+        challengeId,
+        role: "challenger",
+        identity: credentials.challengerIdentity as ResolvedOnlineChallengeCredential["identity"],
+      };
+    }
+    if (verifyOnlineToken(token, credentials.challengedCredential)) {
+      return {
+        challengeId,
+        role: "challenged",
+        identity: credentials.challengedIdentity as ResolvedOnlineChallengeCredential["identity"],
+      };
+    }
+    return null;
+  };
+
+  const getAuthorizedChallenge = async (
+    req: Request
+  ): Promise<
+    | { ok: true; token: string; credential: ResolvedOnlineChallengeCredential; summary: OnlineChallengeSummary }
+    | { ok: false; status: number; error: OnlineReject; reason: string }
+  > => {
+    const challengeId = validateOnlineGameId(req.params.challengeId, "challenge.challengeId");
+    if (!challengeId.ok) {
+      return { ok: false, status: 400, error: challengeId.error, reason: challengeId.error.code };
+    }
+    const token = getBearerToken(req.headers.authorization);
+    if (!token) {
+      return { ok: false, status: 404, error: challengeNotFoundError(), reason: "missing_token" };
+    }
+    const credential = await resolveChallengeCredential(challengeId.value, token);
+    if (!credential) {
+      return { ok: false, status: 404, error: challengeNotFoundError(), reason: "bad_token" };
+    }
+    const summary = await loadChallengeSummary(challengeId.value);
+    if (!summary) {
+      return { ok: false, status: 404, error: challengeNotFoundError(), reason: "summary_missing" };
+    }
+    return { ok: true, token, credential, summary };
+  };
+
+  const seatForChallengeIdentity = (
+    summary: OnlineChallengeSummary,
+    identity: ResolvedOnlineChallengeCredential["identity"]
+  ): "w" | "b" | null => {
+    if (summary.status !== "accepted") return null;
+    if (summary.whiteIdentity && isSameOnlineIdentity(summary.whiteIdentity, identity)) return "w";
+    if (summary.blackIdentity && isSameOnlineIdentity(summary.blackIdentity, identity)) return "b";
+    return null;
+  };
+
+  const gameInviteForChallenge = (
+    summary: OnlineChallengeSummary,
+    credential: ResolvedOnlineChallengeCredential,
+    token: string
+  ) => {
+    if (summary.status !== "accepted" || !summary.gameId) return undefined;
+    const seat = seatForChallengeIdentity(summary, credential.identity);
+    if (!seat) return undefined;
+    return {
+      gameId: summary.gameId,
+      seat,
+      token,
+      url: buildOnlineGameInviteUrl(options.publicBaseUrl, summary.gameId, seat, token),
+    };
+  };
+
+  const createInitialClockRecord = (setup: OnlineGameSetupDTO, gameId: string) => {
+    const room = OnlineGameRoom.create({
+      setup,
+      gameId,
+      whiteCredential: "",
+      blackCredential: "",
+      now: options.now,
+    });
+    return room.toRecord().clock;
+  };
+
+  const createMemoryChallengeAcceptedGame = async (
+    input: OnlineChallengeAcceptInput
+  ): Promise<OnlineChallengeAcceptResult> => {
+    const summary = await loadChallengeSummary(input.challengeId);
+    if (!summary) throw new Error(`Online challenge ${input.challengeId} was not found.`);
+    if (summary.status !== "pending") throw new Error(`Online challenge ${input.challengeId} is already terminal.`);
+    if (!canIdentityAcceptChallenge(summary, input.acceptedBy.identity, input.acceptedAt)) {
+      throw new Error(`Resolved challenged role cannot accept online challenge ${input.challengeId}.`);
+    }
+    if (JSON.stringify(summary.setup) !== JSON.stringify(input.gameCreatedEvent.setup)) {
+      throw new Error(`Accepted online game setup must match challenge ${input.challengeId}.`);
+    }
+    const credentials = memoryChallengeCredentials.get(input.challengeId);
+    if (!credentials) throw new Error(`Missing online challenge credentials for ${input.challengeId}.`);
+    const challengerSeat = isSameOnlineIdentity(input.whiteIdentity, summary.challengerIdentity) ? "w" : "b";
+    const challengedSeat = challengerSeat === "w" ? "b" : "w";
+    const gameCredentials: OnlineGameCredentials =
+      challengerSeat === "w"
+        ? {
+            whiteCredential: credentials.challengerCredential,
+            blackCredential: credentials.challengedCredential,
+          }
+        : {
+            whiteCredential: credentials.challengedCredential,
+            blackCredential: credentials.challengerCredential,
+          };
+    const challengeEvent = createChallengeAcceptedEvent(
+      {
+        type: "challenge_accepted",
+        challengeId: input.challengeId,
+        acceptedBy: input.acceptedBy.identity,
+        acceptedAt: input.acceptedAt,
+        gameId: input.gameCreatedEvent.gameId,
+        whiteIdentity: input.whiteIdentity,
+        blackIdentity: input.blackIdentity,
+      },
+      { createdAt: input.acceptedAt }
+    );
+    const eventLength = memoryChallengeEvents.length;
+    try {
+      memoryChallengeEvents.push(challengeEvent);
+      const challengeSummary = projectOnlineChallengeSummaries(memoryChallengeEvents).find(
+        (candidate) => candidate.challengeId === input.challengeId
+      );
+      if (!challengeSummary) throw new Error(`Online challenge summary was not refreshed for ${input.challengeId}.`);
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      if (!gameSummary) throw new Error(`Online game summary was not refreshed for ${input.gameCreatedEvent.gameId}.`);
+      const gameRecord: OnlineGameRoomRecord = {
+        gameId: input.gameCreatedEvent.gameId,
+        setup: input.gameCreatedEvent.setup,
+        whiteCredential: gameCredentials.whiteCredential,
+        blackCredential: gameCredentials.blackCredential,
+        clock: input.gameCreatedEvent.clock,
+        acceptedActions: [],
+      };
+      return {
+        challengeEvent,
+        challengeSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord,
+        gameSeats: { challenger: challengerSeat, challenged: challengedSeat },
+      };
+    } catch (error) {
+      memoryChallengeEvents.splice(eventLength);
+      throw error;
+    }
+  };
+
+  const acceptChallengeAndCreateGame = async (
+    input: OnlineChallengeAcceptInput
+  ): Promise<OnlineChallengeAcceptResult> =>
+    options.acceptChallengeAndCreateGame
+      ? options.acceptChallengeAndCreateGame(input)
+      : createMemoryChallengeAcceptedGame(input);
 
   const persistActionAccepted = async (
     gameId: string,
@@ -538,6 +898,357 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.use("/api/online", (_req, res, next) => {
     setOnlineNoStoreHeaders(res);
     next();
+  });
+
+  const expireChallengeIfNeeded = async (
+    summary: OnlineChallengeSummary,
+    expiredAt = new Date(options.now?.() ?? Date.now()).toISOString()
+  ): Promise<OnlineChallengeSummary> => {
+    if (!canSystemExpireChallenge(summary, expiredAt)) return summary;
+    try {
+      return await appendChallengeLifecycleEvent(
+        createChallengeExpiredEvent(
+          {
+            type: "challenge_expired",
+            challengeId: summary.challengeId,
+            expiredBy: "system",
+            expiredAt,
+          },
+          { createdAt: expiredAt }
+        )
+      );
+    } catch (error) {
+      if (challengeTerminalError(error)) {
+        const current = await loadChallengeSummary(summary.challengeId);
+        if (current && current.status !== "pending") return current;
+      }
+      throw error;
+    }
+  };
+
+  app.post("/api/online/challenges", async (req, res) => {
+    if (!createChallengeLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many online challenges have been created from this client. Try again shortly.",
+        },
+      });
+      return;
+    }
+
+    const setup = validateOnlineGameSetup(req.body?.setup);
+    if (!setup.ok) {
+      res.status(400).json({ error: setup.error });
+      return;
+    }
+    const challengerSeat = normalizeChallengeSeat(req.body?.challengerSeat);
+    if (!challengerSeat) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Challenge challengerSeat must be w, b, or random." },
+      });
+      return;
+    }
+    const visibility = normalizeChallengeVisibility(req.body?.visibility);
+    if (!visibility) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Challenge visibility must be private or unlisted." },
+      });
+      return;
+    }
+    const expiry = parseChallengeExpiry(req.body?.expiresInMs);
+    if (!expiry.ok) {
+      res.status(400).json({ error: expiry.error });
+      return;
+    }
+
+    const normalizedSetup = setup.value.timeControl
+      ? setup.value
+      : {
+          ...setup.value,
+          timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL },
+        };
+    let challengeId = defaultChallengeIdFactory();
+    while (await loadChallengeSummary(challengeId)) {
+      challengeId = defaultChallengeIdFactory();
+    }
+    const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+    const expiresAt = new Date(Date.parse(createdAt) + expiry.value).toISOString();
+    let challengerToken = defaultChallengeTokenFactory();
+    let challengedToken = defaultChallengeTokenFactory();
+    while (challengerToken === challengedToken) {
+      challengedToken = defaultChallengeTokenFactory();
+    }
+    const challengerIdentity = { kind: "session" as const, id: `${challengeId}_challenger` };
+    const challengedIdentity = { kind: "session" as const, id: `${challengeId}_challenged` };
+
+    try {
+      const event = createChallengeCreatedEvent(
+        {
+          type: "challenge_created",
+          challengeId,
+          challengerIdentity,
+          challengedIdentity,
+          challengerSeat,
+          visibility,
+          setup: normalizedSetup,
+          expiresAt,
+        },
+        { createdAt }
+      );
+      const summary = await appendChallengeCreated(event, {
+        challengerCredential: hashOnlineToken(challengerToken),
+        challengedCredential: hashOnlineToken(challengedToken),
+        challengerIdentity,
+        challengedIdentity,
+      });
+      res.status(201).json({
+        challengeId,
+        summary,
+        challenger: {
+          url: buildChallengeUrl(options.publicBaseUrl, challengeId, "challenger", challengerToken),
+        },
+        challenged: {
+          url: buildChallengeUrl(options.publicBaseUrl, challengeId, "challenged", challengedToken),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to create online challenge", error);
+      res.status(503).json({
+        error: {
+          code: "persistence_failed",
+          message: "The online challenge could not be saved.",
+        },
+      });
+    }
+  });
+
+  app.get("/api/online/challenges/:challengeId", async (req, res) => {
+    if (!challengeActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many online challenge requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const auth = await getAuthorizedChallenge(req);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const summary = await expireChallengeIfNeeded(auth.summary);
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: auth.credential.role,
+        summary,
+        gameInvite: gameInviteForChallenge(summary, auth.credential, auth.token),
+      });
+    } catch (error) {
+      console.error("Failed to load online challenge", error);
+      res.status(503).json({
+        error: {
+          code: "persistence_failed",
+          message: "The online challenge could not be loaded.",
+        },
+      });
+    }
+  });
+
+  app.post("/api/online/challenges/:challengeId/accept", async (req, res) => {
+    if (!challengeActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many online challenge requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const auth = await getAuthorizedChallenge(req);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const summary = await expireChallengeIfNeeded(auth.summary);
+      if (summary.status !== "pending") {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      if (auth.credential.role !== "challenged") {
+        res.status(404).json({ error: challengeNotFoundError() });
+        return;
+      }
+
+      const challengerSeat =
+        summary.challengerSeat === "random"
+          ? randomBytes(1)[0] % 2 === 0
+            ? "w"
+            : "b"
+          : summary.challengerSeat;
+      const whiteIdentity = challengerSeat === "w" ? summary.challengerIdentity : summary.challengedIdentity;
+      const blackIdentity = challengerSeat === "w" ? summary.challengedIdentity : summary.challengerIdentity;
+      let gameId = `game_${randomBytes(9).toString("base64url")}`;
+      while (service.getRoom(gameId)) {
+        gameId = `game_${randomBytes(9).toString("base64url")}`;
+      }
+      const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const clock = createInitialClockRecord(summary.setup, gameId);
+      const gameCreatedEvent = createOnlineGameCreatedEvent(
+        {
+          type: "game_created",
+          gameId,
+          setup: summary.setup,
+          clock,
+        },
+        { createdAt: acceptedAt }
+      );
+      const result = await acceptChallengeAndCreateGame({
+        challengeId: summary.challengeId,
+        acceptedBy: auth.credential,
+        acceptedAt,
+        gameCreatedEvent,
+        whiteIdentity,
+        blackIdentity,
+      });
+      service.replaceRoom(result.gameRecord);
+      const gameInvite = gameInviteForChallenge(result.challengeSummary, auth.credential, auth.token);
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: auth.credential.role,
+        summary: result.challengeSummary,
+        gameInvite,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      res.status(/terminal|pending|expiry|expired/i.test(message) ? 409 : 503).json({
+        error: {
+          code: /terminal|pending|expiry|expired/i.test(message) ? "game_over" : "persistence_failed",
+          message: /terminal|pending|expiry|expired/i.test(message)
+            ? "This challenge is no longer pending."
+            : "The online challenge could not be accepted.",
+        },
+      });
+    }
+  });
+
+  app.post("/api/online/challenges/:challengeId/decline", async (req, res) => {
+    if (!challengeActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many online challenge requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const auth = await getAuthorizedChallenge(req);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const declinedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const summary = await expireChallengeIfNeeded(auth.summary, declinedAt);
+      if (summary.status !== "pending") {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      if (auth.credential.role !== "challenged") {
+        res.status(404).json({ error: challengeNotFoundError() });
+        return;
+      }
+      if (!canIdentityDeclineChallenge(summary, auth.credential.identity, declinedAt)) {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      const declinedSummary = await appendChallengeLifecycleEvent(
+        createChallengeDeclinedEvent(
+          {
+            type: "challenge_declined",
+            challengeId: summary.challengeId,
+            declinedBy: auth.credential.identity,
+            declinedAt,
+          },
+          { createdAt: declinedAt }
+        )
+      );
+      res.json({ protocolVersion: ONLINE_PROTOCOL_VERSION, role: auth.credential.role, summary: declinedSummary });
+    } catch (error) {
+      res.status(challengeTerminalError(error) ? 409 : 503).json({
+        error: challengeTerminalError(error)
+          ? { code: "game_over", message: "This challenge is no longer pending." }
+          : { code: "persistence_failed", message: "The online challenge could not be declined." },
+      });
+    }
+  });
+
+  app.post("/api/online/challenges/:challengeId/cancel", async (req, res) => {
+    if (!challengeActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many online challenge requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const auth = await getAuthorizedChallenge(req);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const cancelledAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const summary = await expireChallengeIfNeeded(auth.summary, cancelledAt);
+      if (summary.status !== "pending") {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      if (auth.credential.role !== "challenger") {
+        res.status(404).json({ error: challengeNotFoundError() });
+        return;
+      }
+      if (!canIdentityCancelChallenge(summary, auth.credential.identity, cancelledAt)) {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      const cancelledSummary = await appendChallengeLifecycleEvent(
+        createChallengeCancelledEvent(
+          {
+            type: "challenge_cancelled",
+            challengeId: summary.challengeId,
+            cancelledBy: auth.credential.identity,
+            cancelledAt,
+          },
+          { createdAt: cancelledAt }
+        )
+      );
+      res.json({ protocolVersion: ONLINE_PROTOCOL_VERSION, role: auth.credential.role, summary: cancelledSummary });
+    } catch (error) {
+      res.status(challengeTerminalError(error) ? 409 : 503).json({
+        error: challengeTerminalError(error)
+          ? { code: "game_over", message: "This challenge is no longer pending." }
+          : { code: "persistence_failed", message: "The online challenge could not be cancelled." },
+      });
+    }
   });
 
   app.get("/api/online/games", async (_req, res) => {

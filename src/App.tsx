@@ -25,14 +25,26 @@ import {
 } from './online/serialization';
 import {
   buildSpectatorUrl,
+  acceptOnlineChallenge,
+  cancelOnlineChallenge,
+  createOnlineChallenge,
+  declineOnlineChallenge,
+  fetchOnlineChallenge,
   createOnlineGame,
   formatOnlinePendingConnectionMessage,
+  forgetOnlineChallengeParams,
+  rememberOnlineChallengeParams,
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
+  removeOnlineChallengeTokenFromUrl,
   removeOnlineTokenFromUrl,
+  resolveOnlineChallengeParams,
   parseOnlineSpectatorParams,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
+  OnlineChallengeParams,
+  OnlineChallengeResponse,
+  OnlineChallengeGameInvite,
   OnlineJoinParams,
   OnlineSpectatorParams,
 } from './online/client';
@@ -48,7 +60,7 @@ import {
 import { loadPGNText } from './Classes/Services/PGNLoadService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
-type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge';
 
 interface GameConfig {
   board?: Board;
@@ -92,6 +104,13 @@ function App() {
   const [onlineOpponentInviteUrl, setOnlineOpponentInviteUrl] = useState<string | null>(() =>
     onlineJoin?.seat === "w" ? resolveOnlineOpponentInviteUrl(onlineJoin.gameId) : null
   );
+  const [onlineChallenge, setOnlineChallenge] = useState<OnlineChallengeParams | null>(() =>
+    resolveOnlineChallengeParams(window.location.href)
+  );
+  const [onlineChallengeResponse, setOnlineChallengeResponse] = useState<OnlineChallengeResponse | null>(null);
+  const [onlineChallengeShareUrl, setOnlineChallengeShareUrl] = useState<string | null>(null);
+  const [onlineChallengeStatus, setOnlineChallengeStatus] = useState<"idle" | "loading" | "acting" | "error">("idle");
+  const [onlineChallengeError, setOnlineChallengeError] = useState<string | null>(null);
 
   const clearAutosave = () => {
     localStorage.removeItem('castles_autosave');
@@ -102,10 +121,13 @@ function App() {
     url.searchParams.delete("onlineGame");
     url.searchParams.delete("seat");
     url.searchParams.delete("token");
+    url.searchParams.delete("onlineChallenge");
+    url.searchParams.delete("challengeRole");
     url.searchParams.delete("view");
     url.searchParams.delete("pgn");
     url.searchParams.delete("game");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    url.hash = "";
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   };
 
   const clearOnlineTokenFromUrl = () => {
@@ -114,18 +136,60 @@ function App() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
+  const clearOnlineChallengeTokenFromUrl = () => {
+    if (!window.location.hash.includes("challengeToken=")) return;
+    const url = new URL(removeOnlineChallengeTokenFromUrl(window.location.href));
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
   useEffect(() => {
     if (!onlineJoin) return;
     setOnlineSpectator(null);
+    setOnlineChallenge(null);
     rememberOnlineJoinParams(onlineJoin);
     clearOnlineTokenFromUrl();
   }, [onlineJoin]);
 
+  useEffect(() => {
+    if (!onlineChallenge) return;
+    setView('challenge');
+    rememberOnlineChallengeParams(onlineChallenge);
+    clearOnlineChallengeTokenFromUrl();
+    let cancelled = false;
+    setOnlineChallengeStatus("loading");
+    setOnlineChallengeError(null);
+    fetchOnlineChallenge(onlineChallenge)
+      .then((response) => {
+        if (cancelled) return;
+        setOnlineChallengeResponse(response);
+        setOnlineChallengeStatus("idle");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("Failed to load online challenge", error);
+        setOnlineChallengeStatus("error");
+        setOnlineChallengeError(
+          error instanceof Error && error.message.includes("(404)")
+            ? "Access denied."
+            : "Could not load this challenge."
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [onlineChallenge]);
+
   const handleNewGameClick = () => {
     clearAutosave();
     clearOnlineUrl();
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
     setOnlineJoin(null);
     setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     const backTarget = view === 'game' || view === 'setup' ? 'game' : view;
@@ -185,8 +249,14 @@ function App() {
 
     clearAutosave();
     clearOnlineUrl();
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
     setOnlineJoin(null);
     setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
@@ -207,7 +277,13 @@ function App() {
   ) => {
     try {
       clearAutosave();
+      if (onlineChallenge) {
+        forgetOnlineChallengeParams(onlineChallenge);
+      }
       setOnlineSpectator(null);
+      setOnlineChallenge(null);
+      setOnlineChallengeResponse(null);
+      setOnlineChallengeShareUrl(null);
       const created = await createOnlineGame(
         serializeOnlineGameSetup({
           board,
@@ -245,6 +321,163 @@ function App() {
     }
   };
 
+  const enterOnlineGameFromInvite = (invite: OnlineChallengeGameInvite) => {
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
+    const join = {
+      gameId: invite.gameId,
+      seat: invite.seat,
+      token: invite.token,
+    };
+    rememberOnlineJoinParams(join);
+    const joinUrl = new URL(removeOnlineTokenFromUrl(invite.url));
+    window.history.pushState(
+      {},
+      "",
+      `${window.location.pathname}?${joinUrl.searchParams.toString()}`
+    );
+    setOnlineJoin(join);
+    setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
+    setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
+    setView('game');
+  };
+
+  const handleCreateOnlineChallenge = async (
+    board: Board,
+    pieces: Piece[],
+    timeControl?: { initial: number, increment: number },
+    sanctuaries?: Sanctuary[],
+    _selectedSanctuaryTypes?: SanctuaryType[],
+    sanctuarySettings?: { unlockTurn: number, cooldown: number },
+    gameRules?: { vpModeEnabled: boolean },
+    initialPoolTypes?: SanctuaryType[],
+    pieceTheme?: PieceTheme
+  ) => {
+    try {
+      clearAutosave();
+      const created = await createOnlineChallenge(
+        serializeOnlineGameSetup({
+          board,
+          pieces,
+          sanctuaries: sanctuaries ?? [],
+          timeControl,
+          sanctuarySettings,
+          gameRules,
+          initialPoolTypes,
+          pieceTheme,
+        }),
+        { challengerSeat: "w", visibility: "unlisted" }
+      );
+      const challenge = resolveOnlineChallengeParams(created.challenger.url);
+      if (!challenge) {
+        throw new Error("Challenge creator link was malformed.");
+      }
+      rememberOnlineChallengeParams(challenge);
+      const challengeUrl = new URL(removeOnlineChallengeTokenFromUrl(created.challenger.url));
+      window.history.pushState(
+        {},
+        "",
+        `${window.location.pathname}?${challengeUrl.searchParams.toString()}`
+      );
+      setOnlineJoin(null);
+      setOnlineSpectator(null);
+      setOnlineSnapshot(null);
+      setOnlineOpponentInviteUrl(null);
+      setOnlineChallenge(challenge);
+      setOnlineChallengeResponse({
+        role: "challenger",
+        summary: created.summary,
+      });
+      setOnlineChallengeShareUrl(created.challenged.url);
+      setOnlineChallengeStatus("idle");
+      setOnlineChallengeError(null);
+      setView('challenge');
+    } catch (error) {
+      console.error("Failed to create online challenge", error);
+      alert("Could not create an online challenge. Make sure the Node server is running.");
+    }
+  };
+
+  const handleAcceptOnlineChallenge = async () => {
+    if (!onlineChallenge) return;
+    setOnlineChallengeStatus("acting");
+    setOnlineChallengeError(null);
+    try {
+      const response = await acceptOnlineChallenge(onlineChallenge);
+      setOnlineChallengeResponse(response);
+      setOnlineChallengeStatus("idle");
+      if (response.gameInvite) {
+        enterOnlineGameFromInvite(response.gameInvite);
+      }
+    } catch (error) {
+      console.error("Failed to accept online challenge", error);
+      setOnlineChallengeStatus("error");
+      setOnlineChallengeError("Could not accept this challenge.");
+    }
+  };
+
+  const handleDeclineOnlineChallenge = async () => {
+    if (!onlineChallenge) return;
+    setOnlineChallengeStatus("acting");
+    setOnlineChallengeError(null);
+    try {
+      const response = await declineOnlineChallenge(onlineChallenge);
+      forgetOnlineChallengeParams(onlineChallenge);
+      setOnlineChallengeResponse(response);
+      setOnlineChallengeShareUrl(null);
+      setOnlineChallengeStatus("idle");
+    } catch (error) {
+      console.error("Failed to decline online challenge", error);
+      setOnlineChallengeStatus("error");
+      setOnlineChallengeError(
+        error instanceof Error && error.message.includes("(404)")
+          ? "Access denied."
+          : "Could not decline this challenge."
+      );
+    }
+  };
+
+  const handleCancelOnlineChallenge = async () => {
+    if (!onlineChallenge) return;
+    setOnlineChallengeStatus("acting");
+    setOnlineChallengeError(null);
+    try {
+      const response = await cancelOnlineChallenge(onlineChallenge);
+      forgetOnlineChallengeParams(onlineChallenge);
+      setOnlineChallengeResponse(response);
+      setOnlineChallengeShareUrl(null);
+      setOnlineChallengeStatus("idle");
+    } catch (error) {
+      console.error("Failed to cancel online challenge", error);
+      setOnlineChallengeStatus("error");
+      setOnlineChallengeError(
+        error instanceof Error && error.message.includes("(404)")
+          ? "Access denied."
+          : "Could not cancel this challenge."
+      );
+    }
+  };
+
+  const handleRefreshOnlineChallenge = async () => {
+    if (!onlineChallenge) return;
+    setOnlineChallengeStatus("loading");
+    setOnlineChallengeError(null);
+    try {
+      const response = await fetchOnlineChallenge(onlineChallenge);
+      setOnlineChallengeResponse(response);
+      setOnlineChallengeStatus("idle");
+    } catch (error) {
+      console.error("Failed to refresh online challenge", error);
+      setOnlineChallengeStatus("error");
+      setOnlineChallengeError("Could not refresh this challenge.");
+    }
+  };
+
   const handleRestartGame = () => {
     clearAutosave();
     setGameKey(prev => prev + 1);
@@ -264,8 +497,14 @@ function App() {
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
     clearOnlineUrl();
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
     setOnlineJoin(null);
     setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, sanctuarySettings, initialPoolTypes, isAnalysisMode: true });
@@ -434,6 +673,9 @@ function App() {
     clearOnlineUrl();
     setOnlineJoin(null);
     setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
@@ -458,10 +700,169 @@ function App() {
         <GameSetup 
           onPlay={handleStartGame} 
           onCreateOnlineGame={handleCreateOnlineGame}
+          onCreateOnlineChallenge={handleCreateOnlineChallenge}
           onBack={returnToPreviousView}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
         />
+      )}
+
+      {view === 'challenge' && (
+        <div
+          style={{
+            minHeight: '100vh',
+            width: '100vw',
+            background: '#151515',
+            color: '#f5f5f5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <section
+            style={{
+              width: 'min(640px, 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+            }}
+            aria-label="Online challenge"
+          >
+            <button
+              type="button"
+              onClick={handleNewGameClick}
+              style={{
+                alignSelf: 'flex-start',
+                minHeight: '38px',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                border: '1px solid rgba(255,255,255,0.24)',
+                background: 'transparent',
+                color: '#f5f5f5',
+                cursor: 'pointer',
+              }}
+            >
+              Back to play
+            </button>
+            <h1 style={{ margin: 0, fontSize: '1.6rem', letterSpacing: 0 }}>
+              Online Challenge
+            </h1>
+            <div role="status" aria-live="polite">
+              {onlineChallengeStatus === "loading"
+                ? "Loading challenge..."
+                : onlineChallengeStatus === "acting"
+                  ? "Updating challenge..."
+                  : onlineChallengeError ?? `Status: ${onlineChallengeResponse?.summary.status ?? "pending"}`}
+            </div>
+            {onlineChallengeShareUrl && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                Challenge link
+                <input
+                  readOnly
+                  value={onlineChallengeShareUrl}
+                  onFocus={(event) => event.currentTarget.select()}
+                  style={{
+                    minHeight: '42px',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.24)',
+                  }}
+                />
+              </label>
+            )}
+            {onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenged" && (
+              <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                <button
+                  type="button"
+                  onClick={handleAcceptOnlineChallenge}
+                  disabled={onlineChallengeStatus === "acting"}
+                  style={{
+                    minHeight: '44px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: '#2f855a',
+                    color: '#fff',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Accept Challenge
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeclineOnlineChallenge}
+                  disabled={onlineChallengeStatus === "acting"}
+                  style={{
+                    minHeight: '44px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.24)',
+                    background: '#7f1d1d',
+                    color: '#fff',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Decline Challenge
+                </button>
+              </div>
+            )}
+            {onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenger" && (
+              <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                <button
+                  type="button"
+                  onClick={handleRefreshOnlineChallenge}
+                  disabled={onlineChallengeStatus === "loading"}
+                  style={{
+                    minHeight: '44px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.24)',
+                    background: '#f7f1d6',
+                    color: '#141414',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Refresh Challenge
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelOnlineChallenge}
+                  disabled={onlineChallengeStatus === "acting"}
+                  style={{
+                    minHeight: '44px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.24)',
+                    background: '#7f1d1d',
+                    color: '#fff',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel Challenge
+                </button>
+              </div>
+            )}
+            {onlineChallengeResponse?.gameInvite && (
+              <button
+                type="button"
+                onClick={() => onlineChallengeResponse.gameInvite && enterOnlineGameFromInvite(onlineChallengeResponse.gameInvite)}
+                style={{
+                  minHeight: '44px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: '#2b6cb0',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Join Game
+              </button>
+            )}
+          </section>
+        </div>
       )}
 
       {view === 'game' && (onlineJoin || activeOnlineSpectator) && !onlineSnapshot && (

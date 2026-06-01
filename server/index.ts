@@ -99,6 +99,11 @@ async function main() {
         console.error(`Invalid online event store entry ${line}`, error);
       },
     });
+    await store.rebuildChallengeSummaries({
+      onEventError: (line, error) => {
+        console.error(`Invalid online challenge event store entry ${line}`, error);
+      },
+    });
     const service = OnlineGameService.fromRecords(records, {
       credentialFactory: hashOnlineToken,
       verifyToken: verifyOnlineToken,
@@ -108,6 +113,14 @@ async function main() {
       service,
       onGameCreated: (event, credentials) => store.appendGameCreated(event, credentials),
       onGameEvent: (event) => store.appendEvent(event),
+      appendChallengeCreated: (event, credentials) =>
+        store.appendChallengeCreated(event, credentials),
+      appendChallengeEvent: (event) => store.appendChallengeEvent(event),
+      loadChallengeSummaries: () => store.loadChallengeSummaries(),
+      resolveChallengeCredential: (challengeId, token) =>
+        store.resolveChallengeCredential(challengeId, token),
+      acceptChallengeAndCreateGame: (input) =>
+        store.acceptChallengeAndCreateGame(input),
       applyGameAction: (input) => store.applyGameAction(input),
       adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),
       loadGameSummaries: () => store.loadSummaries(),

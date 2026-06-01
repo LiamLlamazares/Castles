@@ -737,7 +737,7 @@ async function createOnlineGameFromUi(white) {
   let startScreen;
   try {
     startScreen = await waitUntil("setup screen or game controls", async () => {
-      if (await white.hasButton("CREATE ONLINE GAME")) return "setup";
+      if (await white.hasButton("CREATE PRIVATE ROOM")) return "setup";
       if (await white.hasButton("New Game")) return "game";
       return null;
     });
@@ -752,11 +752,11 @@ async function createOnlineGameFromUi(white) {
     await white.waitForButton("New Game");
     await white.clickButton("New Game");
   }
-  await white.waitForButton("CREATE ONLINE GAME");
+  await white.waitForButton("CREATE PRIVATE ROOM");
   if (await white.hasButton("quick")) {
     await white.clickButton("quick");
   }
-  await white.clickButton("CREATE ONLINE GAME");
+  await white.clickButton("CREATE PRIVATE ROOM");
   await white.waitForButton("Copy Opponent Invite");
   await white.waitForButton("Copy Spectator Link");
   await white.clickButton("Copy Opponent Invite");
@@ -777,6 +777,85 @@ async function createOnlineGameFromUi(white) {
   const gameId = new URL(await white.url()).searchParams.get("onlineGame");
   assert(gameId, "White URL did not include onlineGame after create");
   return { gameId, opponentInvite, spectatorUrl };
+}
+
+async function openSetupFromBase(page) {
+  await page.goto(baseUrl);
+  let startScreen;
+  try {
+    startScreen = await waitUntil("setup screen or game controls", async () => {
+      if (await page.hasButton("CREATE PRIVATE ROOM")) return "setup";
+      if (await page.hasButton("New Game")) return "game";
+      return null;
+    });
+  } catch (error) {
+    const currentUrl = await page.url().catch(() => "<unknown>");
+    const bodyText = await page.bodyText().catch(() => "");
+    throw new Error(
+      `${error.message}; current URL ${currentUrl}; body text: ${bodyText.slice(0, 500)}`
+    );
+  }
+  if (startScreen === "game") {
+    await page.clickButton("New Game");
+  }
+  await page.waitForButton("CREATE PRIVATE ROOM");
+}
+
+async function createChallengeFromUi(challenger) {
+  await openSetupFromBase(challenger);
+  await challenger.waitForButton("CHALLENGE A FRIEND");
+  if (await challenger.hasButton("quick")) {
+    await challenger.clickButton("quick");
+  }
+  await challenger.clickButton("CHALLENGE A FRIEND");
+  await challenger.waitForText("Online Challenge");
+  await challenger.waitForButton("Refresh Challenge");
+  const challengedUrl = await waitUntil("challenge share URL", () =>
+    challenger.evaluate(`
+      Array.from(document.querySelectorAll("input"))
+        .map((input) => input.value || "")
+        .find((value) => value.includes("onlineChallenge=") && value.includes("challengeRole=challenged") && value.includes("challengeToken="))
+        || null
+    `)
+  );
+  assert(
+    !new URL(challengedUrl).searchParams.has("token"),
+    `Challenge share URL leaked a query token: ${challengedUrl}`
+  );
+  assert(
+    new URLSearchParams(new URL(challengedUrl).hash.slice(1)).has("challengeToken"),
+    `Challenge share URL did not include a fragment token: ${challengedUrl}`
+  );
+  return { challengedUrl };
+}
+
+async function verifyBrowserChallengeFlow(driver) {
+  const challenger = await driver.newPage();
+  const challenged = await driver.newPage();
+  const { challengedUrl } = await createChallengeFromUi(challenger);
+
+  await challenged.goto(challengedUrl);
+  await challenged.waitForText("Online Challenge");
+  await challenged.waitForButton("Accept Challenge");
+  await challenged.waitForButton("Decline Challenge");
+  assert(
+    !new URL(await challenged.url()).hash.includes("challengeToken="),
+    `Challenged browser URL still contained the fragment token: ${await challenged.url()}`
+  );
+  await challenged.clickButton("Accept Challenge");
+  await challenged.waitForText("Online Black");
+  await challenged.waitForButton("Copy Spectator Link");
+
+  await challenger.clickButton("Refresh Challenge");
+  await challenger.waitForButton("Join Game");
+  await challenger.clickButton("Join Game");
+  await challenger.waitForText("Online White");
+  await challenger.waitForButton("Copy Spectator Link");
+
+  const gameId = new URL(await challenger.url()).searchParams.get("onlineGame");
+  assert(gameId, "Challenger URL did not include an online game after challenge accept");
+  await fetchSpectatorSnapshot(gameId, 0);
+  return gameId;
 }
 
 async function verifyBrowserStaleActionUi(page, gameId) {
@@ -893,7 +972,7 @@ async function verifyAccessDeniedRecovery(driver, gameId) {
   await waitUntil("access-denied recovery URL to clear online params", async () =>
     !urlHasOnlineParams(await denied.url())
   );
-  await denied.waitForButton("CREATE ONLINE GAME");
+  await denied.waitForButton("CREATE PRIVATE ROOM");
 }
 
 async function runFlow(driver) {
@@ -978,6 +1057,8 @@ async function runFlow(driver) {
     normalizeUrl(await spectator.url()) === normalizeUrl(baseUrl),
     `Spectator Configure New Game did not return to base URL: ${await spectator.url()}`
   );
+
+  await verifyBrowserChallengeFlow(driver);
 
   return gameId;
 }

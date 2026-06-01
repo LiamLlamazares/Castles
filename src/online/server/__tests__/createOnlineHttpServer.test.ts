@@ -14,6 +14,11 @@ import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import {
+  ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+  type AuthenticatedOnlineIdentity,
+  type OnlineChallengeSummary,
+} from "../../challenges";
+import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   type OnlineGameSummary,
 } from "../../readModel";
@@ -94,6 +99,60 @@ function versionedMessage<T extends Record<string, unknown>>(
   };
 }
 
+function fragmentChallengeToken(url: string): string {
+  const fragment = new URL(url).hash.slice(1);
+  const token = new URLSearchParams(fragment).get("challengeToken");
+  if (!token) throw new Error(`Missing challenge token in ${url}`);
+  return token;
+}
+
+function bearer(token: string): HeadersInit {
+  return { authorization: `Bearer ${token}` };
+}
+
+function pendingChallengeSummary(
+  challengeId: string,
+  overrides: Partial<OnlineChallengeSummary> = {}
+): OnlineChallengeSummary {
+  const challengerIdentity = {
+    kind: "session" as const,
+    id: `${challengeId}_challenger`,
+  };
+  const challengedIdentity = {
+    kind: "session" as const,
+    id: `${challengeId}_challenged`,
+  };
+
+  return {
+    schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+    challengeId,
+    challengerIdentity,
+    challengedIdentity,
+    challengerSeat: "w",
+    visibility: "unlisted",
+    setup: createSetup(),
+    createdAt: "2026-06-01T12:00:00.000Z",
+    updatedAt: "2026-06-01T12:00:00.000Z",
+    expiresAt: "2026-06-01T12:05:00.000Z",
+    status: "pending",
+    lastEventId: `${challengeId}_created`,
+    ...overrides,
+  };
+}
+
+function challengeCredentialFor(
+  summary: OnlineChallengeSummary,
+  role: "challenger" | "challenged"
+) {
+  return {
+    challengeId: summary.challengeId,
+    role,
+    identity: (
+      role === "challenger" ? summary.challengerIdentity : summary.challengedIdentity
+    ) as AuthenticatedOnlineIdentity,
+  };
+}
+
 function summaryForGame(
   gameId: string,
   visibility: OnlineGameSummary["visibility"]
@@ -170,6 +229,284 @@ afterEach(async () => {
 });
 
 describe("createOnlineHttpServer", () => {
+  it("creates private challenge links with fragment tokens and bearer-only API auth", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(body.summary).toMatchObject({
+      status: "pending",
+      challengerSeat: "w",
+      setup: {
+        ...setup,
+        timeControl: { initial: 20, increment: 20 },
+      },
+    });
+    expect(body.challenger.url).toContain("onlineChallenge=");
+    expect(body.challenged.url).toContain("onlineChallenge=");
+    expect(new URL(body.challenger.url).searchParams.get("challengeRole")).toBe("challenger");
+    expect(new URL(body.challenged.url).searchParams.get("challengeRole")).toBe("challenged");
+    expect(new URL(body.challenger.url).searchParams.has("token")).toBe(false);
+    expect(new URL(body.challenger.url).hash).toContain("challengeToken=");
+
+    const challengedToken = fragmentChallengeToken(body.challenged.url);
+    const queryTokenResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${body.challengeId}?token=${challengedToken}`
+    );
+    expect(queryTokenResponse.status).toBe(404);
+
+    const viewResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${body.challengeId}`,
+      { headers: bearer(challengedToken) }
+    );
+    const viewBody = await viewResponse.json();
+
+    expect(viewResponse.status).toBe(200);
+    expect(viewBody).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "challenged",
+      summary: {
+        challengeId: body.challengeId,
+        status: "pending",
+      },
+    });
+    expect(viewBody.gameInvite).toBeUndefined();
+  });
+
+  it("accepts a private challenge and lets both sides immediately join the created game", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+      }),
+    });
+    const created = await createResponse.json();
+    const challengerToken = fragmentChallengeToken(created.challenger.url);
+    const challengedToken = fragmentChallengeToken(created.challenged.url);
+
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}/accept`,
+      { method: "POST", headers: bearer(challengedToken) }
+    );
+    const accepted = await acceptResponse.json();
+
+    expect(acceptResponse.status).toBe(200);
+    expect(accepted).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "challenged",
+      summary: {
+        challengeId: created.challengeId,
+        status: "accepted",
+      },
+      gameInvite: {
+        seat: "b",
+        token: challengedToken,
+      },
+    });
+    const gameId = accepted.gameInvite.gameId;
+
+    const challengerViewResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}`,
+      { headers: bearer(challengerToken) }
+    );
+    const challengerView = await challengerViewResponse.json();
+
+    expect(challengerViewResponse.status).toBe(200);
+    expect(challengerView).toMatchObject({
+      role: "challenger",
+      summary: { status: "accepted", gameId },
+      gameInvite: {
+        gameId,
+        seat: "w",
+        token: challengerToken,
+      },
+    });
+
+    const whiteJoinResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${gameId}`,
+      { headers: bearer(challengerToken) }
+    );
+    const blackJoinResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${gameId}`,
+      { headers: bearer(challengedToken) }
+    );
+    const whiteJoin = await whiteJoinResponse.json();
+    const blackJoin = await blackJoinResponse.json();
+
+    expect(whiteJoinResponse.status).toBe(200);
+    expect(blackJoinResponse.status).toBe(200);
+    expect(whiteJoin.color).toBe("w");
+    expect(blackJoin.color).toBe("b");
+  });
+
+  it.each(["decline", "cancel"] as const)(
+    "rate limits challenge %s actions before auth",
+    async (action) => {
+      const { server } = createOnlineHttpServer({
+        publicBaseUrl: "https://castles.example/play",
+      });
+      servers.push(server);
+      const port = await listen(server);
+
+      let response: Response | undefined;
+      for (let index = 0; index < 121; index += 1) {
+        response = await fetch(
+          `http://127.0.0.1:${port}/api/online/challenges/challenge_rate_${action}/${action}`,
+          { method: "POST" }
+        );
+      }
+
+      expect(response?.status).toBe(429);
+      await expect(response?.json()).resolves.toMatchObject({
+        error: { code: "rate_limited" },
+      });
+    }
+  );
+
+  it.each([
+    ["decline", "challenged"],
+    ["cancel", "challenger"],
+  ] as const)("expires stale challenges before %s actions", async (action, role) => {
+    const challengeId = `challenge_expired_${action}`;
+    let summary = pendingChallengeSummary(challengeId);
+    const appendedTypes: string[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:06:00.000Z"),
+      loadChallengeSummaries: () => [summary],
+      resolveChallengeCredential: (_challengeId, token) =>
+        token === `${role}-token` ? challengeCredentialFor(summary, role) : null,
+      appendChallengeEvent: (event) => {
+        appendedTypes.push(event.type);
+        if (event.type !== "challenge_expired") {
+          throw new Error(`Unexpected ${event.type} event`);
+        }
+        summary = {
+          ...summary,
+          status: "expired",
+          updatedAt: event.createdAt,
+          expiredAt: event.expiredAt,
+          expiredBy: "system",
+          lastEventId: event.eventId,
+        };
+        return summary;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${challengeId}/${action}`,
+      { method: "POST", headers: bearer(`${role}-token`) }
+    );
+
+    expect(response.status).toBe(409);
+    expect(appendedTypes).toEqual(["challenge_expired"]);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "game_over" },
+    });
+  });
+
+  it("returns persistence failure when declining a pending challenge cannot be saved", async () => {
+    const challengeId = "challenge_decline_persistence";
+    const summary = pendingChallengeSummary(challengeId, {
+      expiresAt: "2026-06-01T12:10:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:01:00.000Z"),
+      loadChallengeSummaries: () => [summary],
+      resolveChallengeCredential: (_challengeId, token) =>
+        token === "challenged-token" ? challengeCredentialFor(summary, "challenged") : null,
+      appendChallengeEvent: () => {
+        throw new Error("database is unavailable");
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${challengeId}/decline`,
+      { method: "POST", headers: bearer("challenged-token") }
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "persistence_failed" },
+    });
+  });
+
+  it("returns the current summary when concurrent lazy expiry has already won", async () => {
+    const challengeId = "challenge_expiry_race";
+    let summary = pendingChallengeSummary(challengeId);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:06:00.000Z"),
+      loadChallengeSummaries: () => [summary],
+      resolveChallengeCredential: (_challengeId, token) =>
+        token === "challenged-token" ? challengeCredentialFor(summary, "challenged") : null,
+      appendChallengeEvent: (event) => {
+        if (event.type !== "challenge_expired") {
+          throw new Error(`Unexpected ${event.type} event`);
+        }
+        summary = {
+          ...summary,
+          status: "expired",
+          updatedAt: event.createdAt,
+          expiredAt: event.expiredAt,
+          expiredBy: "system",
+          lastEventId: event.eventId,
+        };
+        throw new Error("Online challenge was already terminal.");
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${challengeId}`,
+      { headers: bearer("challenged-token") }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "challenged",
+      summary: {
+        challengeId,
+        status: "expired",
+      },
+    });
+  });
+
   it("marks online HTTP responses as private no-store responses", async () => {
     const service = new OnlineGameService({
       idFactory: () => "game_headers",

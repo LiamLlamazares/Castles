@@ -113,7 +113,7 @@ Identity `id` values in public summaries are never authentication secrets. Do no
 
 ## Challenge Lifecycle Contract
 
-`OnlineChallengeEvent` schema v1 is the durable contract for direct challenges. It is intentionally endpoint-free in this slice: no HTTP route, database table, or UI should depend on challenge behavior until the event contract and projection rules are stable.
+`OnlineChallengeEvent` schema v1 is the durable contract for direct challenges. The current private challenge HTTP routes, browser links, and materialized summaries are built on this contract; broader public lobby/open-seek behavior remains deferred until separate visibility and accept-policy contracts exist.
 
 Challenge v1 is direct-only. Public/open seeks are deferred to a later contract because they need a different accept policy and lobby exposure model.
 
@@ -125,7 +125,7 @@ Challenge event envelope:
 
 Challenge events:
 
-- `challenge_created`: `challengeId`, `challengerIdentity`, `challengedIdentity`, `challengerSeat`, `visibility`, and `expiresAt`.
+- `challenge_created`: `challengeId`, `challengerIdentity`, `challengedIdentity`, `challengerSeat`, `visibility`, immutable `setup`, and `expiresAt`.
 - `challenge_accepted`: `challengeId`, `acceptedBy`, `acceptedAt`, `gameId`, `whiteIdentity`, and `blackIdentity`.
 - `challenge_declined`: `challengeId`, `declinedBy`, and `declinedAt`.
 - `challenge_cancelled`: `challengeId`, `cancelledBy`, and `cancelledAt`.
@@ -152,13 +152,19 @@ Challenge authorization helpers compare identity by `kind + id`; registered disp
 
 Durable challenge events must not contain bearer secrets. Validation rejects token/credential/session/auth/cookie-like fields recursively, bearer/auth/cookie-looking string values, raw invite URLs, and absolute or relative URL strings with token-bearing query parameters or fragments. As with game summaries, `OnlineIdentity.id` is a public non-secret surrogate; obvious bearer, cookie, session, auth, or token material is invalid.
 
+Challenge setup terms are immutable. Accept endpoints must create the game from the `setup` stored in `challenge_created` and must reject any attempt to accept with different game terms.
+
 ### Challenge Persistence
 
 Challenge events are persisted in the append-only `online_challenge_events` table. Challenge summaries are materialized in `online_challenge_summaries` and can be rebuilt from the challenge event stream. Challenge persistence uses its own row-lock table and advisory summary lock, separate from game summary locking, so challenge rebuilds do not block ordinary game action summary refreshes.
 
 Appending a non-accepted challenge event validates and canonicalizes the event first, inserts it, projects the affected challenge summary, and upserts that summary inside one transaction. If summary refresh or projection fails, the event insert rolls back.
 
-This persistence slice still does not introduce challenge bearer credentials, public HTTP challenge routes, or game creation from accepted challenges. The generic challenge append API intentionally rejects `challenge_accepted`. The future accept endpoint must use a dedicated atomic store method that creates the online game, stores the game credentials, appends `challenge_accepted`, and refreshes both game and challenge summaries in one transaction. It must not create the game and append the challenge event as two independent operations.
+Challenge bearer credentials are stored separately from durable events in `online_challenge_credentials`. The table stores token hashes and normalized public identities keyed by `challenge_id + role`; raw challenge tokens are never stored. Challenge creation must go through `appendChallengeCreated` so `challenge_created`, credential rows, and the pending summary are written atomically. The low-level `appendChallengeEvent` path is limited to decline, cancel, and lazy/internal expiry events.
+
+Accepting a challenge uses `acceptChallengeAndCreateGame`, a dedicated atomic store method. It locks the challenge and new game, verifies the challenged role, creates the online game event from the immutable challenge setup, derives white/black game credential hashes from the private challenge credential hashes, appends `challenge_accepted`, and refreshes both game and challenge summaries in one transaction. The original challenger/challenged challenge bearer tokens become the corresponding game bearer tokens after acceptance, which lets either side retrieve only its own game invite later without storing raw game tokens.
+
+Browser challenge links put bearer material in the URL fragment, not the query string: `onlineChallenge` and `challengeRole` are query parameters, while `challengeToken` is a fragment parameter captured into `sessionStorage` and stripped from the visible URL before API calls. Challenge API routes authenticate only with `Authorization: Bearer`; query-token authentication is rejected.
 
 ## Visibility And Access
 
@@ -189,7 +195,6 @@ For this low-scale foundation slice, server spectator authorization scans `loadG
 
 ## Next Contract Changes
 
-1. Add challenge endpoint/auth flows that write `OnlineChallengeEvent` records and atomically create games from accepted challenges.
-2. Add durable visibility lifecycle events before public lobby/archive UI can change exposure mid-game.
-3. Add a public account/session ownership layer before private challenge authorization.
-4. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes.
+1. Add durable visibility lifecycle events before public lobby/archive UI can change exposure mid-game.
+2. Add a public account/session ownership layer before account-bound private challenges, ratings, and moderation.
+3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes.

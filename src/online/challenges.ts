@@ -3,7 +3,11 @@ import {
   type OnlineIdentity,
 } from "./readModel";
 import { containsDurableSecret } from "./secretSafety";
-import type { ValidationResult } from "./validation";
+import {
+  validateOnlineGameSetup,
+  type ValidationResult,
+} from "./validation";
+import type { OnlineGameSetupDTO } from "./types";
 
 export const ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION = 1;
 export const ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION = 1;
@@ -31,6 +35,7 @@ export type OnlineChallengeEvent =
       challengedIdentity: OnlineIdentity;
       challengerSeat: OnlineChallengeSeat;
       visibility: OnlineChallengeVisibility;
+      setup: OnlineGameSetupDTO;
       expiresAt: string;
     })
   | (OnlineChallengeEventEnvelope & {
@@ -68,6 +73,7 @@ export interface OnlineChallengeSummary {
   challengedIdentity: OnlineIdentity;
   challengerSeat: OnlineChallengeSeat;
   visibility: OnlineChallengeVisibility;
+  setup: OnlineGameSetupDTO;
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
@@ -276,6 +282,8 @@ export function validateOnlineChallengeEvent(value: unknown): ValidationResult<O
     if (!isChallengeVisibility(value.visibility)) {
       return bad("event.visibility must be private or unlisted.");
     }
+    const setup = validateOnlineGameSetup(value.setup);
+    if (!setup.ok) return setup;
     if (!isIsoDateString(value.expiresAt)) {
       return bad("event.expiresAt must be a valid timestamp.");
     }
@@ -292,6 +300,7 @@ export function validateOnlineChallengeEvent(value: unknown): ValidationResult<O
         challengedIdentity: challengedIdentity.value,
         challengerSeat: value.challengerSeat,
         visibility: value.visibility,
+        setup: setup.value,
         expiresAt: value.expiresAt,
       },
     };
@@ -468,6 +477,7 @@ export function projectOnlineChallengeSummaries(
         challengedIdentity: event.challengedIdentity,
         challengerSeat: event.challengerSeat,
         visibility: event.visibility,
+        setup: event.setup,
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
         expiresAt: event.expiresAt,
@@ -606,6 +616,8 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
   if (!isChallengeVisibility(value.visibility)) {
     return bad("summary.visibility must be private or unlisted.");
   }
+  const setup = validateOnlineGameSetup(value.setup);
+  if (!setup.ok) return setup;
   if (!isIsoDateString(value.createdAt)) {
     return bad("summary.createdAt must be a valid timestamp.");
   }
@@ -654,6 +666,7 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
     challengedIdentity: challengedIdentity.value,
     challengerSeat: value.challengerSeat,
     visibility: value.visibility,
+    setup: setup.value,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     expiresAt: value.expiresAt,

@@ -123,7 +123,7 @@ Tests/review/deploy gates:
 
 Goal: support intentional game creation and joining flows before public discovery.
 
-Status: access-policy foundation and the direct challenge lifecycle contract are in place. The current challenge slice is persistence-only: storing challenge events and rebuilding challenge summaries without adding public routes or bearer challenge credentials. The following slice is challenge endpoint/auth flow: create, accept, decline, cancel, expire, and atomically create games from accepted challenges. Visibility-change rules still need their own durable event contract before public lobby/archive screens can change exposure mid-game.
+Status: access-policy foundation, the direct challenge lifecycle contract, challenge credential persistence, private challenge HTTP routes, and atomic accept into online games are in place locally. Challenge creation stores immutable setup terms and private credential hashes; accepted challenges derive game credentials from the challenge credentials so each side can retrieve only its own game link. Accept, decline, cancel, lazy expiry, access-denied, fragment-token capture, and post-accept challenger retrieval are covered by focused tests. Local and browser smoke checks cover challenge create, bearer view, accept, challenger retrieval, and immediate two-player join. A minimal browser challenge surface exists before the broader UI polish tranche. Visibility-change rules still need their own durable event contract before public lobby/archive screens can change exposure mid-game.
 
 Work:
 
@@ -223,6 +223,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Complete and push the Phase 5 challenge persistence foundation slice.
-2. Plan challenge endpoint/auth flow for create, accept, decline, cancel, expire, access-denied, and atomic game creation from accepted challenges.
-3. Pull Phase 6A UI shell polish forward once challenge/access endpoint surfaces are sketched, so sidebar, tutorial placement, save/progress navigation, go-back overlap, and mobile layout defects are fixed before broader lobby/archive work.
+1. Finish verification, reviewer fixes, docs, smoke updates, commit, and push the Phase 5 challenge endpoint/auth flow.
+2. Pull Phase 6A UI shell polish forward immediately after this challenge/access endpoint slice, so sidebar, tutorial placement, save/progress navigation, go-back overlap, and mobile layout defects are fixed before broader lobby/archive work.
+3. After the UI shell pass, continue Phase 6 with spectator/archive/lobby surfaces on top of the stable challenge and navigation contracts.

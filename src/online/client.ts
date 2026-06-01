@@ -1,4 +1,8 @@
 import type { CreatedOnlineGame } from "./OnlineGameService";
+import {
+  validateOnlineChallengeSummary,
+  type OnlineChallengeSummary,
+} from "./challenges";
 import { validateOnlineGameSnapshot } from "./protocol";
 import { ONLINE_PROTOCOL_VERSION, isSupportedOnlineProtocolVersion } from "./protocolVersion";
 import { validateOnlineGameSummary, type OnlineGameSummary } from "./readModel";
@@ -17,6 +21,32 @@ export interface OnlineJoinParams {
 
 export interface OnlineSpectatorParams {
   gameId: string;
+}
+
+export interface OnlineChallengeParams {
+  challengeId: string;
+  role: "challenger" | "challenged";
+  token: string;
+}
+
+export interface OnlineChallengeGameInvite {
+  gameId: string;
+  seat: "w" | "b";
+  token: string;
+  url: string;
+}
+
+export interface OnlineChallengeResponse {
+  role: "challenger" | "challenged";
+  summary: OnlineChallengeSummary;
+  gameInvite?: OnlineChallengeGameInvite;
+}
+
+export interface CreatedOnlineChallenge {
+  challengeId: string;
+  summary: OnlineChallengeSummary;
+  challenger: { url: string };
+  challenged: { url: string };
 }
 
 interface OnlineJoinStorage {
@@ -39,6 +69,10 @@ function storageKey(gameId: string, seat: "w" | "b"): string {
 
 function opponentInviteStorageKey(gameId: string): string {
   return `castles_online_opponent_invite:${gameId}`;
+}
+
+function challengeStorageKey(challengeId: string, role: "challenger" | "challenged"): string {
+  return `castles_online_challenge:${challengeId}:${role}`;
 }
 
 const ANONYMOUS_SESSION_STORAGE_KEY = "castles_online_anonymous_session_id";
@@ -80,6 +114,19 @@ export function parseOnlineSpectatorParams(urlText: string): OnlineSpectatorPara
   return { gameId };
 }
 
+export function parseOnlineChallengeParams(urlText: string): OnlineChallengeParams | null {
+  const url = new URL(urlText);
+  const challengeId = url.searchParams.get("onlineChallenge");
+  const role = url.searchParams.get("challengeRole");
+  const token = new URLSearchParams(url.hash.slice(1)).get("challengeToken");
+
+  if (!challengeId || !token || (role !== "challenger" && role !== "challenged")) {
+    return null;
+  }
+
+  return { challengeId, role, token };
+}
+
 export function buildSpectatorUrl(originOrUrl: string, gameId: string): string {
   const url = new URL(originOrUrl);
   url.searchParams.delete("seat");
@@ -106,6 +153,20 @@ export function rememberOnlineOpponentInviteUrl(
   storage?.setItem(opponentInviteStorageKey(gameId), inviteUrl);
 }
 
+export function rememberOnlineChallengeParams(
+  challenge: OnlineChallengeParams,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.setItem(challengeStorageKey(challenge.challengeId, challenge.role), challenge.token);
+}
+
+export function forgetOnlineChallengeParams(
+  challenge: OnlineChallengeParams,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.removeItem(challengeStorageKey(challenge.challengeId, challenge.role));
+}
+
 export function resolveOnlineOpponentInviteUrl(
   gameId: string,
   storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
@@ -128,6 +189,26 @@ export function resolveOnlineAnonymousSessionId(
   }
   storage?.setItem(ANONYMOUS_SESSION_STORAGE_KEY, nextId);
   return nextId;
+}
+
+export function resolveOnlineChallengeParams(
+  urlText: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): OnlineChallengeParams | null {
+  const parsed = parseOnlineChallengeParams(urlText);
+  if (parsed) {
+    rememberOnlineChallengeParams(parsed, storage);
+    return parsed;
+  }
+
+  const url = new URL(urlText);
+  const challengeId = url.searchParams.get("onlineChallenge");
+  const role = url.searchParams.get("challengeRole");
+  if (!challengeId || (role !== "challenger" && role !== "challenged")) {
+    return null;
+  }
+  const token = storage?.getItem(challengeStorageKey(challengeId, role));
+  return token ? { challengeId, role, token } : null;
 }
 
 export function resolveOnlineJoinParams(
@@ -154,6 +235,15 @@ export function resolveOnlineJoinParams(
 export function removeOnlineTokenFromUrl(urlText: string): string {
   const url = new URL(urlText);
   url.searchParams.delete("token");
+  return url.toString();
+}
+
+export function removeOnlineChallengeTokenFromUrl(urlText: string): string {
+  const url = new URL(urlText);
+  const hashParams = new URLSearchParams(url.hash.slice(1));
+  hashParams.delete("challengeToken");
+  const nextHash = hashParams.toString();
+  url.hash = nextHash ? nextHash : "";
   return url.toString();
 }
 
@@ -300,6 +390,159 @@ export async function createOnlineGame(
   }
 
   return response.json();
+}
+
+export async function createOnlineChallenge(
+  setup: OnlineGameSetupDTO,
+  options: { challengerSeat?: "w" | "b" | "random"; visibility?: "private" | "unlisted" } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<CreatedOnlineChallenge> {
+  const response = await fetchImpl("/api/online/challenges", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ setup, ...options }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not create online challenge (${response.status})`);
+  }
+
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online challenge creation response was malformed.");
+  }
+  const summary = validateOnlineChallengeSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`Online challenge creation response was malformed: ${summary.error.message}`);
+  }
+  const challengeId = (body as { challengeId?: unknown }).challengeId;
+  const challenger = (body as { challenger?: unknown }).challenger;
+  const challenged = (body as { challenged?: unknown }).challenged;
+  if (
+    typeof challengeId !== "string" ||
+    !challenger ||
+    typeof challenger !== "object" ||
+    Array.isArray(challenger) ||
+    typeof (challenger as { url?: unknown }).url !== "string" ||
+    !challenged ||
+    typeof challenged !== "object" ||
+    Array.isArray(challenged) ||
+    typeof (challenged as { url?: unknown }).url !== "string"
+  ) {
+    throw new Error("Online challenge creation response was malformed.");
+  }
+  return {
+    challengeId,
+    summary: summary.value,
+    challenger: { url: (challenger as { url: string }).url },
+    challenged: { url: (challenged as { url: string }).url },
+  };
+}
+
+function validateOnlineChallengeResponse(
+  body: unknown,
+  label: string
+): OnlineChallengeResponse {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} response was malformed: response body must be an object.`);
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(`${label} response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
+  const role = (body as { role?: unknown }).role;
+  if (role !== "challenger" && role !== "challenged") {
+    throw new Error(`${label} response was malformed: role is invalid.`);
+  }
+  const summary = validateOnlineChallengeSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`${label} response was malformed: ${summary.error.message}`);
+  }
+  const gameInvite = (body as { gameInvite?: unknown }).gameInvite;
+  if (gameInvite === undefined) {
+    return { role, summary: summary.value };
+  }
+  if (!gameInvite || typeof gameInvite !== "object" || Array.isArray(gameInvite)) {
+    throw new Error(`${label} response was malformed: gameInvite must be an object.`);
+  }
+  const invite = gameInvite as {
+    gameId?: unknown;
+    seat?: unknown;
+    token?: unknown;
+    url?: unknown;
+  };
+  if (
+    typeof invite.gameId !== "string" ||
+    (invite.seat !== "w" && invite.seat !== "b") ||
+    typeof invite.token !== "string" ||
+    typeof invite.url !== "string"
+  ) {
+    throw new Error(`${label} response was malformed: gameInvite is invalid.`);
+  }
+  return {
+    role,
+    summary: summary.value,
+    gameInvite: {
+      gameId: invite.gameId,
+      seat: invite.seat,
+      token: invite.token,
+      url: invite.url,
+    },
+  };
+}
+
+export async function fetchOnlineChallenge(
+  challenge: OnlineChallengeParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineChallengeResponse> {
+  const response = await fetchImpl(`/api/online/challenges/${encodeURIComponent(challenge.challengeId)}`, {
+    headers: { authorization: `Bearer ${challenge.token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch online challenge (${response.status})`);
+  }
+
+  return validateOnlineChallengeResponse(await response.json(), "Online challenge");
+}
+
+export async function acceptOnlineChallenge(
+  challenge: OnlineChallengeParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineChallengeResponse> {
+  return postOnlineChallengeAction(challenge, "accept", fetchImpl);
+}
+
+export async function declineOnlineChallenge(
+  challenge: OnlineChallengeParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineChallengeResponse> {
+  return postOnlineChallengeAction(challenge, "decline", fetchImpl);
+}
+
+export async function cancelOnlineChallenge(
+  challenge: OnlineChallengeParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineChallengeResponse> {
+  return postOnlineChallengeAction(challenge, "cancel", fetchImpl);
+}
+
+async function postOnlineChallengeAction(
+  challenge: OnlineChallengeParams,
+  action: "accept" | "decline" | "cancel",
+  fetchImpl: typeof fetch
+): Promise<OnlineChallengeResponse> {
+  const response = await fetchImpl(
+    `/api/online/challenges/${encodeURIComponent(challenge.challengeId)}/${action}`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${challenge.token}` },
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Could not ${action} online challenge (${response.status})`);
+  }
+
+  return validateOnlineChallengeResponse(await response.json(), `Online challenge ${action}`);
 }
 
 export async function fetchOnlineSnapshot(

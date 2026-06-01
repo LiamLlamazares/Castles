@@ -20,16 +20,29 @@ class FakePostgresClient {
   eventRows: Array<{ payload: OnlineGameEvent }> = [];
   challengeEventRows: Array<{ payload: OnlineChallengeEvent }> = [];
   credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }> = [];
+  challengeCredentialRows: Array<{
+    challengeId: string;
+    role: "challenger" | "challenged";
+    tokenHash: string;
+    identity: unknown;
+  }> = [];
   summaryRows: Array<{ payload: unknown }> = [];
   challengeSummaryRows: Array<{ payload: unknown }> = [];
   failNextCreateTable = false;
   failNextSummaryInsert = false;
+  failNextChallengeCredentialInsert = false;
   failNextChallengeSummaryInsert = false;
   failRollback = false;
   private transactionSnapshot: {
     eventRows: Array<{ payload: OnlineGameEvent }>;
     challengeEventRows: Array<{ payload: OnlineChallengeEvent }>;
     credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }>;
+    challengeCredentialRows: Array<{
+      challengeId: string;
+      role: "challenger" | "challenged";
+      tokenHash: string;
+      identity: unknown;
+    }>;
     summaryRows: Array<{ payload: unknown }>;
     challengeSummaryRows: Array<{ payload: unknown }>;
   } | null = null;
@@ -41,6 +54,7 @@ class FakePostgresClient {
         eventRows: this.eventRows.map((row) => ({ payload: row.payload })),
         challengeEventRows: this.challengeEventRows.map((row) => ({ payload: row.payload })),
         credentialRows: this.credentialRows.map((row) => ({ ...row })),
+        challengeCredentialRows: this.challengeCredentialRows.map((row) => ({ ...row })),
         summaryRows: this.summaryRows.map((row) => ({ payload: row.payload })),
         challengeSummaryRows: this.challengeSummaryRows.map((row) => ({ payload: row.payload })),
       };
@@ -58,6 +72,7 @@ class FakePostgresClient {
         this.eventRows = this.transactionSnapshot.eventRows.map((row) => ({ payload: row.payload }));
         this.challengeEventRows = this.transactionSnapshot.challengeEventRows.map((row) => ({ payload: row.payload }));
         this.credentialRows = this.transactionSnapshot.credentialRows.map((row) => ({ ...row }));
+        this.challengeCredentialRows = this.transactionSnapshot.challengeCredentialRows.map((row) => ({ ...row }));
         this.summaryRows = this.transactionSnapshot.summaryRows.map((row) => ({ payload: row.payload }));
         this.challengeSummaryRows = this.transactionSnapshot.challengeSummaryRows.map((row) => ({ payload: row.payload }));
         this.transactionSnapshot = null;
@@ -100,6 +115,37 @@ class FakePostgresClient {
           (row) => !(row.gameId === credential.gameId && row.seat === credential.seat)
         );
         this.credentialRows.push(credential);
+      }
+    }
+    if (/insert into online_challenge_credentials/i.test(text) && values) {
+      if (this.failNextChallengeCredentialInsert) {
+        this.failNextChallengeCredentialInsert = false;
+        throw new Error("challenge credential insert unavailable");
+      }
+      const challengeId = values[0] as string;
+      const rows = [
+        {
+          challengeId,
+          role: values[1] as "challenger" | "challenged",
+          tokenHash: values[2] as string,
+          identity: values[3],
+        },
+        {
+          challengeId,
+          role: values[4] as "challenger" | "challenged",
+          tokenHash: values[5] as string,
+          identity: values[6],
+        },
+      ];
+      for (const credential of rows) {
+        if (
+          this.challengeCredentialRows.some(
+            (row) => row.challengeId === credential.challengeId && row.role === credential.role
+          )
+        ) {
+          throw new Error("duplicate challenge credential");
+        }
+        this.challengeCredentialRows.push(credential);
       }
     }
     if (/delete\s+from\s+online_game_summaries/i.test(text)) {
@@ -161,6 +207,17 @@ class FakePostgresClient {
     }
     if (/select\s+payload\s+from\s+online_challenge_events/i.test(text)) {
       return { rows: this.challengeEventRows };
+    }
+    if (/select\s+role,\s*token_hash,\s*identity\s+from\s+online_challenge_credentials\s+where\s+challenge_id/i.test(text)) {
+      return {
+        rows: this.challengeCredentialRows
+          .filter((row) => row.challengeId === values?.[0])
+          .map((row) => ({
+            role: row.role,
+            token_hash: row.tokenHash,
+            identity: row.identity,
+          })),
+      };
     }
     if (/select\s+payload\s+from\s+online_game_events\s+where\s+game_id/i.test(text)) {
       return {
@@ -244,6 +301,15 @@ function createGameCredentials() {
   };
 }
 
+function createChallengeCredentials() {
+  return {
+    challengerCredential: hashOnlineToken("challenger-token"),
+    challengedCredential: hashOnlineToken("challenged-token"),
+    challengerIdentity: challengeChallenger,
+    challengedIdentity: challengeChallenged,
+  };
+}
+
 function createCredentialRows(gameId: string) {
   const credentials = createGameCredentials();
   return [
@@ -264,21 +330,24 @@ const challengeChallenger = { kind: "session", id: "session_challenger" } as con
 const challengeChallenged = { kind: "session", id: "session_challenged" } as const;
 
 function createChallengeCreated(
-  challengeId = "challenge_pg"
+  challengeId = "challenge_pg",
+  overrides: Partial<Extract<OnlineChallengeEvent, { type: "challenge_created" }>> = {}
 ): Extract<OnlineChallengeEvent, { type: "challenge_created" }> {
+  const setup = createGameCreatedEvent(`game_terms_${challengeId}`).setup;
   return createChallengeCreatedEvent(
     {
       type: "challenge_created",
       challengeId,
       challengerIdentity: challengeChallenger,
       challengedIdentity: challengeChallenged,
-      challengerSeat: "w",
+      challengerSeat: overrides.challengerSeat ?? "w",
       visibility: "unlisted",
-      expiresAt: "2026-06-01T12:10:00.000Z",
+      setup: overrides.setup ?? setup,
+      expiresAt: overrides.expiresAt ?? "2026-06-01T12:10:00.000Z",
     },
     {
       eventId: `challenge-evt-${challengeId}-create`,
-      createdAt: "2026-06-01T12:00:00.000Z",
+      createdAt: overrides.createdAt ?? "2026-06-01T12:00:00.000Z",
     }
   );
 }
@@ -320,6 +389,47 @@ function createChallengeCancelled(
   );
 }
 
+function createChallengeAcceptInput(
+  challenge: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
+  overrides: {
+    gameId?: string;
+    acceptedAt?: string;
+    acceptedByRole?: "challenger" | "challenged";
+    whiteIdentity?: typeof challengeChallenger | typeof challengeChallenged;
+    blackIdentity?: typeof challengeChallenger | typeof challengeChallenged;
+    setup?: Extract<OnlineGameEvent, { type: "game_created" }>["setup"];
+  } = {}
+) {
+  const gameId = overrides.gameId ?? `game_${challenge.challengeId}_accepted`;
+  const acceptedAt = overrides.acceptedAt ?? "2026-06-01T12:05:00.000Z";
+  const challengerIsWhite =
+    challenge.challengerSeat === "w" ||
+    (challenge.challengerSeat === "random" && overrides.whiteIdentity !== challengeChallenged);
+  const whiteIdentity =
+    overrides.whiteIdentity ?? (challengerIsWhite ? challengeChallenger : challengeChallenged);
+  const blackIdentity =
+    overrides.blackIdentity ?? (challengerIsWhite ? challengeChallenged : challengeChallenger);
+  const gameCreatedEvent: Extract<OnlineGameEvent, { type: "game_created" }> = {
+    ...createGameCreatedEvent(gameId),
+    eventId: `evt-${gameId}-create`,
+    createdAt: acceptedAt,
+    gameId,
+    setup: overrides.setup ?? challenge.setup,
+  };
+  return {
+    challengeId: challenge.challengeId,
+    acceptedBy: {
+      challengeId: challenge.challengeId,
+      role: overrides.acceptedByRole ?? "challenged",
+      identity: (overrides.acceptedByRole === "challenger" ? challengeChallenger : challengeChallenged) as any,
+    },
+    acceptedAt,
+    gameCreatedEvent,
+    whiteIdentity,
+    blackIdentity,
+  };
+}
+
 describe("PostgresOnlineGameStore", () => {
   it("closes its database connection when a closer is provided", async () => {
     const client = new FakePostgresClient();
@@ -341,6 +451,7 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /create table if not exists online_game_summaries/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_challenge_events/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_challenge_summaries/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_challenge_credentials/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_challenge_locks/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create unique index if not exists/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /online_challenge_events_one_create_per_challenge/i.test(query.text))).toBe(true);
@@ -1105,7 +1216,7 @@ describe("PostgresOnlineGameStore", () => {
     const store = new PostgresOnlineGameStore({ queryable: client });
     const created = createChallengeCreated("challenge_append_pending");
 
-    const summary = await store.appendChallengeEvent(created);
+    const summary = await store.appendChallengeCreated(created, createChallengeCredentials());
 
     expect(summary).toMatchObject({
       schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -1122,6 +1233,7 @@ describe("PostgresOnlineGameStore", () => {
     const rowLockIndex = queryTexts.findIndex((text) => /from\s+online_challenge_locks/i.test(text) && /for update/i.test(text));
     const summaryLockIndex = queryTexts.findIndex((text) => /pg_advisory_xact_lock/i.test(text));
     const eventInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_events/i.test(text));
+    const credentialInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_credentials/i.test(text));
     const summaryInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_summaries/i.test(text));
     const commitIndex = queryTexts.findIndex((text) => /^\s*commit\s*$/i.test(text));
 
@@ -1132,14 +1244,363 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries[rowLockIndex].values).toEqual(["challenge_append_pending"]);
     expect(summaryLockIndex).toBeGreaterThan(rowLockIndex);
     expect(eventInsertIndex).toBeGreaterThan(summaryLockIndex);
-    expect(summaryInsertIndex).toBeGreaterThan(eventInsertIndex);
+    expect(credentialInsertIndex).toBeGreaterThan(eventInsertIndex);
+    expect(summaryInsertIndex).toBeGreaterThan(credentialInsertIndex);
     expect(commitIndex).toBeGreaterThan(summaryInsertIndex);
+  });
+
+  it("persists challenge creation events with private credential hashes", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createChallengeCreated("challenge_created_credentials");
+    const credentials = createChallengeCredentials();
+
+    const summary = await store.appendChallengeCreated(created, credentials);
+
+    expect(summary).toMatchObject({
+      challengeId: "challenge_created_credentials",
+      status: "pending",
+    });
+    expect(client.challengeEventRows.map((row) => row.payload)).toEqual([created]);
+    expect(client.challengeCredentialRows).toEqual([
+      {
+        challengeId: "challenge_created_credentials",
+        role: "challenger",
+        tokenHash: credentials.challengerCredential,
+        identity: challengeChallenger,
+      },
+      {
+        challengeId: "challenge_created_credentials",
+        role: "challenged",
+        tokenHash: credentials.challengedCredential,
+        identity: challengeChallenged,
+      },
+    ]);
+    expect(JSON.stringify(client.challengeEventRows)).not.toContain("challenger-token");
+    expect(JSON.stringify(client.challengeSummaryRows)).not.toContain("challenger-token");
+  });
+
+  it("resolves challenge bearer tokens to authenticated roles and identities", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    await store.appendChallengeCreated(
+      createChallengeCreated("challenge_resolve_credentials"),
+      createChallengeCredentials()
+    );
+
+    await expect(
+      store.resolveChallengeCredential("challenge_resolve_credentials", "challenger-token")
+    ).resolves.toEqual({
+      challengeId: "challenge_resolve_credentials",
+      role: "challenger",
+      identity: challengeChallenger,
+    });
+    await expect(
+      store.resolveChallengeCredential("challenge_resolve_credentials", "challenged-token")
+    ).resolves.toEqual({
+      challengeId: "challenge_resolve_credentials",
+      role: "challenged",
+      identity: challengeChallenged,
+    });
+    await expect(
+      store.resolveChallengeCredential("challenge_resolve_credentials", "wrong-token")
+    ).resolves.toBeNull();
+    await expect(
+      store.resolveChallengeCredential("challenge_missing_credentials", "challenger-token")
+    ).resolves.toBeNull();
+  });
+
+  it("rejects raw challenge credentials before inserting", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createChallengeCreated("challenge_raw_credentials");
+
+    await expect(
+      store.appendChallengeCreated(created, {
+        ...createChallengeCredentials(),
+        challengerCredential: "challenger-token",
+      })
+    ).rejects.toThrow(/credential hash/);
+
+    expect(client.challengeEventRows).toHaveLength(0);
+    expect(client.challengeCredentialRows).toHaveLength(0);
+    expect(client.challengeSummaryRows).toHaveLength(0);
+  });
+
+  it("normalizes stored challenge credential identities", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createChallengeCreated("challenge_normalized_credentials");
+
+    await store.appendChallengeCreated(created, {
+      ...createChallengeCredentials(),
+      challengerIdentity: {
+        ...challengeChallenger,
+        token: "secret",
+        displayName: "ignored",
+      } as any,
+    });
+
+    expect(client.challengeCredentialRows.find((row) => row.role === "challenger")?.identity).toEqual(
+      challengeChallenger
+    );
+  });
+
+  it("rejects duplicate challenge credential hashes for different roles", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createChallengeCreated("challenge_duplicate_credentials");
+    const duplicateHash = hashOnlineToken("same-token");
+
+    await expect(
+      store.appendChallengeCreated(created, {
+        ...createChallengeCredentials(),
+        challengerCredential: duplicateHash,
+        challengedCredential: duplicateHash,
+      })
+    ).rejects.toThrow(/distinct/);
+
+    expect(client.challengeEventRows).toHaveLength(0);
+    expect(client.challengeCredentialRows).toHaveLength(0);
+  });
+
+  it("rolls back challenge creation when credential insert fails", async () => {
+    const client = new FakePostgresClient();
+    client.failNextChallengeCredentialInsert = true;
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.appendChallengeCreated(
+        createChallengeCreated("challenge_credential_rollback"),
+        createChallengeCredentials()
+      )
+    ).rejects.toThrow(/challenge credential insert unavailable/);
+
+    expect(client.challengeEventRows).toHaveLength(0);
+    expect(client.challengeCredentialRows).toHaveLength(0);
+    expect(client.challengeSummaryRows).toHaveLength(0);
+    expect(client.queries.some((query) => /^\s*rollback\s*$/i.test(query.text))).toBe(true);
+  });
+
+  it("atomically accepts a challenge and creates the game in one locked transaction", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_atomic_accept");
+    const challengeCredentials = createChallengeCredentials();
+    await store.appendChallengeCreated(challenge, challengeCredentials);
+    client.queries.length = 0;
+    const input = createChallengeAcceptInput(challenge);
+    const expectedGameCredentials = {
+      whiteCredential: challengeCredentials.challengerCredential,
+      blackCredential: challengeCredentials.challengedCredential,
+    };
+    const expectedGameRecord = {
+      gameId: input.gameCreatedEvent.gameId,
+      setup: input.gameCreatedEvent.setup,
+      whiteCredential: expectedGameCredentials.whiteCredential,
+      blackCredential: expectedGameCredentials.blackCredential,
+      clock: input.gameCreatedEvent.clock,
+      acceptedActions: [],
+    };
+
+    const result = await store.acceptChallengeAndCreateGame(input);
+
+    expect(result.challengeEvent).toMatchObject({
+      type: "challenge_accepted",
+      challengeId: "challenge_atomic_accept",
+      acceptedBy: challengeChallenged,
+      gameId: input.gameCreatedEvent.gameId,
+      whiteIdentity: challengeChallenger,
+      blackIdentity: challengeChallenged,
+    });
+    expect(result.challengeSummary).toMatchObject({
+      challengeId: "challenge_atomic_accept",
+      status: "accepted",
+      gameId: input.gameCreatedEvent.gameId,
+    });
+    expect(result.gameSummary).toMatchObject({
+      gameId: input.gameCreatedEvent.gameId,
+      status: "active",
+    });
+    expect(result.gameCredentials).toEqual(expectedGameCredentials);
+    expect(result.gameRecord).toEqual(expectedGameRecord);
+    expect(result.gameSeats).toEqual({ challenger: "w", challenged: "b" });
+    expect(client.eventRows.map((row) => row.payload)).toEqual([input.gameCreatedEvent]);
+    expect(client.credentialRows).toEqual([
+      {
+        gameId: input.gameCreatedEvent.gameId,
+        seat: "w",
+        tokenHash: expectedGameCredentials.whiteCredential,
+      },
+      {
+        gameId: input.gameCreatedEvent.gameId,
+        seat: "b",
+        tokenHash: expectedGameCredentials.blackCredential,
+      },
+    ]);
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual([
+      "challenge_created",
+      "challenge_accepted",
+    ]);
+
+    const queryTexts = client.queries.map((query) => query.text);
+    const beginIndex = queryTexts.findIndex((text) => /^\s*begin\s*$/i.test(text));
+    const challengeLockIndex = queryTexts.findIndex((text) => /from\s+online_challenge_locks/i.test(text) && /for update/i.test(text));
+    const gameLockIndex = queryTexts.findIndex((text) => /from\s+online_game_locks/i.test(text) && /for update/i.test(text));
+    const gameSummaryLockIndex = client.queries.findIndex(
+      (query) => /pg_advisory_xact_lock/i.test(query.text) && query.values?.[0] === 1_431_903_351
+    );
+    const challengeSummaryLockIndex = client.queries.findIndex(
+      (query) => /pg_advisory_xact_lock/i.test(query.text) && query.values?.[0] === 1_431_903_352
+    );
+    const gameEventInsertIndex = queryTexts.findIndex((text) => /insert into online_game_events/i.test(text));
+    const gameCredentialInsertIndex = queryTexts.findIndex((text) => /insert into online_game_credentials/i.test(text));
+    const acceptedEventInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_events/i.test(text));
+    const gameSummaryInsertIndex = queryTexts.findIndex((text) => /insert into online_game_summaries/i.test(text));
+    const challengeSummaryInsertIndex = queryTexts.findIndex((text) => /insert into online_challenge_summaries/i.test(text));
+    const commitIndex = queryTexts.findIndex((text) => /^\s*commit\s*$/i.test(text));
+
+    expect(beginIndex).toBeGreaterThanOrEqual(0);
+    expect(challengeLockIndex).toBeGreaterThan(beginIndex);
+    expect(gameLockIndex).toBeGreaterThan(challengeLockIndex);
+    expect(gameSummaryLockIndex).toBeGreaterThan(gameLockIndex);
+    expect(challengeSummaryLockIndex).toBeGreaterThan(gameSummaryLockIndex);
+    expect(gameEventInsertIndex).toBeGreaterThan(challengeSummaryLockIndex);
+    expect(gameCredentialInsertIndex).toBeGreaterThan(gameEventInsertIndex);
+    expect(acceptedEventInsertIndex).toBeGreaterThan(gameCredentialInsertIndex);
+    expect(gameSummaryInsertIndex).toBeGreaterThan(acceptedEventInsertIndex);
+    expect(challengeSummaryInsertIndex).toBeGreaterThan(gameSummaryInsertIndex);
+    expect(commitIndex).toBeGreaterThan(challengeSummaryInsertIndex);
+  });
+
+  it("rejects challenge acceptance from the challenger role", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_challenger_cannot_accept");
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+
+    await expect(
+      store.acceptChallengeAndCreateGame(
+        createChallengeAcceptInput(challenge, { acceptedByRole: "challenger" })
+      )
+    ).rejects.toThrow(/challenged role/);
+
+    expect(client.eventRows).toHaveLength(0);
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual(["challenge_created"]);
+  });
+
+  it("rejects accept attempts that change the challenge setup", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_setup_mismatch");
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+
+    await expect(
+      store.acceptChallengeAndCreateGame(
+        createChallengeAcceptInput(challenge, {
+          setup: {
+            ...challenge.setup,
+            pieceTheme: "Chess",
+          },
+        })
+      )
+    ).rejects.toThrow(/setup/);
+
+    expect(client.eventRows).toHaveLength(0);
+    expect(client.credentialRows).toHaveLength(0);
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual(["challenge_created"]);
+  });
+
+  it("rejects accept attempts whose game event timestamp differs from acceptedAt", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_accept_timestamp_mismatch");
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+    const input = createChallengeAcceptInput(challenge);
+
+    await expect(
+      store.acceptChallengeAndCreateGame({
+        ...input,
+        gameCreatedEvent: {
+          ...input.gameCreatedEvent,
+          createdAt: "2026-06-01T12:05:01.000Z",
+        },
+      })
+    ).rejects.toThrow(/acceptedAt/);
+
+    expect(client.eventRows).toHaveLength(0);
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual(["challenge_created"]);
+  });
+
+  it("rolls back accepted challenge and game rows when challenge summary refresh fails", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_accept_rollback");
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+    const pendingSummary = client.challengeSummaryRows[0];
+    client.failNextChallengeSummaryInsert = true;
+
+    await expect(
+      store.acceptChallengeAndCreateGame(createChallengeAcceptInput(challenge))
+    ).rejects.toThrow(/challenge summary insert unavailable/);
+
+    expect(client.eventRows).toHaveLength(0);
+    expect(client.credentialRows).toHaveLength(0);
+    expect(client.summaryRows).toHaveLength(0);
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual(["challenge_created"]);
+    expect(client.challengeSummaryRows).toEqual([pendingSummary]);
+  });
+
+  it("persists resolved random challenge seats during accept", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_random_accept", { challengerSeat: "random" });
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+
+    const result = await store.acceptChallengeAndCreateGame(
+      createChallengeAcceptInput(challenge, {
+        whiteIdentity: challengeChallenged,
+        blackIdentity: challengeChallenger,
+      })
+    );
+
+    expect(result.challengeSummary).toMatchObject({
+      status: "accepted",
+      whiteIdentity: challengeChallenged,
+      blackIdentity: challengeChallenger,
+    });
+    expect(result.gameSeats).toEqual({ challenger: "b", challenged: "w" });
+    expect(result.gameCredentials).toEqual({
+      whiteCredential: createChallengeCredentials().challengedCredential,
+      blackCredential: createChallengeCredentials().challengerCredential,
+    });
+  });
+
+  it("allows only one accept to commit", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_double_accept");
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+
+    await expect(
+      store.acceptChallengeAndCreateGame(createChallengeAcceptInput(challenge, { gameId: "game_first_accept" }))
+    ).resolves.toMatchObject({
+      challengeSummary: { status: "accepted", gameId: "game_first_accept" },
+    });
+    await expect(
+      store.acceptChallengeAndCreateGame(createChallengeAcceptInput(challenge, { gameId: "game_second_accept" }))
+    ).rejects.toThrow(/already terminal/);
+    expect(client.challengeEventRows.filter((row) => row.payload.type === "challenge_accepted")).toHaveLength(1);
+    expect(client.eventRows.filter((row) => row.payload.type === "game_created")).toHaveLength(1);
   });
 
   it("rejects accepted challenge events until atomic game creation is implemented", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
-    await store.appendChallengeEvent(createChallengeCreated("challenge_append_accepted"));
+    await store.appendChallengeCreated(
+      createChallengeCreated("challenge_append_accepted"),
+      createChallengeCredentials()
+    );
 
     await expect(
       store.appendChallengeEvent(createChallengeAccepted("challenge_append_accepted") as any)
@@ -1152,16 +1613,29 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.challengeSummaryRows[0].payload).toMatchObject({ status: "pending" });
   });
 
+  it("rejects low-level challenge creation without credentials", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.appendChallengeEvent(createChallengeCreated("challenge_low_level_created") as any)
+    ).rejects.toThrow(/appendChallengeCreated/);
+
+    expect(client.challengeEventRows).toHaveLength(0);
+    expect(client.challengeCredentialRows).toHaveLength(0);
+    expect(client.challengeSummaryRows).toHaveLength(0);
+  });
+
   it("rejects invalid challenge events before inserting", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     await expect(store.appendChallengeEvent({ type: "challenge_created" } as any)).rejects.toThrow(/schemaVersion/);
     await expect(
-      store.appendChallengeEvent({
+      store.appendChallengeCreated({
         ...createChallengeCreated("challenge_secret_reject"),
         note: "access_token=secret",
-      } as any)
+      } as any, createChallengeCredentials())
     ).rejects.toThrow(/token|credential|session|auth|cookie|invite/i);
 
     expect(client.challengeEventRows).toHaveLength(0);
@@ -1173,7 +1647,10 @@ describe("PostgresOnlineGameStore", () => {
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     await expect(
-      store.appendChallengeEvent(createChallengeCreated("challenge_append_rollback"))
+      store.appendChallengeCreated(
+        createChallengeCreated("challenge_append_rollback"),
+        createChallengeCredentials()
+      )
     ).rejects.toThrow(/challenge summary insert unavailable/);
 
     expect(client.challengeEventRows).toHaveLength(0);
@@ -1196,7 +1673,7 @@ describe("PostgresOnlineGameStore", () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
     const created = createChallengeCreated("challenge_duplicates");
-    const firstSummary = await store.appendChallengeEvent(created);
+    const firstSummary = await store.appendChallengeCreated(created, createChallengeCredentials());
 
     await expect(
       store.appendChallengeEvent({
@@ -1205,10 +1682,10 @@ describe("PostgresOnlineGameStore", () => {
       })
     ).rejects.toThrow(/duplicate challenge event id/);
     await expect(
-      store.appendChallengeEvent({
+      store.appendChallengeCreated({
         ...createChallengeCreated("challenge_duplicates"),
         eventId: "challenge-evt-duplicate-create-new-id",
-      })
+      }, createChallengeCredentials())
     ).rejects.toThrow(/duplicate challenge creation/);
 
     expect(client.challengeEventRows).toHaveLength(1);
@@ -1218,7 +1695,10 @@ describe("PostgresOnlineGameStore", () => {
   it("rolls back terminal-after-terminal challenge events", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
-    await store.appendChallengeEvent(createChallengeCreated("challenge_terminal_again"));
+    await store.appendChallengeCreated(
+      createChallengeCreated("challenge_terminal_again"),
+      createChallengeCredentials()
+    );
     const cancelledSummary = await store.appendChallengeEvent(createChallengeCancelled("challenge_terminal_again"));
 
     await expect(
@@ -1240,7 +1720,10 @@ describe("PostgresOnlineGameStore", () => {
   it("loads existing challenge summaries without reading challenge events", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
-    const summary = await store.appendChallengeEvent(createChallengeCreated("challenge_summary_loaded"));
+    const summary = await store.appendChallengeCreated(
+      createChallengeCreated("challenge_summary_loaded"),
+      createChallengeCredentials()
+    );
     client.queries.length = 0;
 
     const summaries = await store.loadChallengeSummaries();
@@ -1300,6 +1783,7 @@ describe("PostgresOnlineGameStore", () => {
       challengedIdentity: challengeChallenged,
       challengerSeat: "w",
       visibility: "unlisted",
+      setup: createGameCreatedEvent("game_existing_challenge_terms").setup,
       createdAt: "2026-06-01T12:00:00.000Z",
       updatedAt: "2026-06-01T12:00:00.000Z",
       expiresAt: "2026-06-01T12:10:00.000Z",

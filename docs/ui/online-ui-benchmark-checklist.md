@@ -34,6 +34,8 @@ Reference pages checked:
 - Setup is the Play destination until lobby/challenges exist.
 - Board editor and analysis board remain Tools.
 - Online player links, spectator links, and local share/export stay visually distinct.
+- Challenge links are distinct from immediate private-room links: a challenge has pending, accept/decline, cancel, accepted, expired, and access-denied states.
+- Challenge accept pages show side selection result, time control, board/game terms, and who can act next without adding accounts, ratings, chat, or community UI.
 - Navigation must never expose or persist bearer invite tokens.
 
 ## Screenshot QA Matrix
@@ -47,6 +49,7 @@ Capture before and after screenshots at these viewport sizes:
 - Mobile tutorial: 430 x 932
 - Library desktop/mobile after at least one long save name
 - Online player and spectator game states once a temporary local online server is running
+- Challenge pending as challenger, challenged accept page, accepted redirect/retrieval, expired, declined, and cancelled states once challenge UI exists
 - Terminal state after resign/timeout/result
 
 For every screenshot, check:
@@ -68,4 +71,3 @@ For every screenshot, check:
 - Hamburger menu test: opening the drawer reports open state so game-level transient hints can be suppressed.
 - CSS/static assertion where practical: mobile drawer z-index is above hint banners and action controls.
 - Browser smoke: create/join/spectate/terminal flow still passes after shell changes.
-

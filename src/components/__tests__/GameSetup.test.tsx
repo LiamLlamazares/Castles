@@ -38,7 +38,7 @@ describe("GameSetup", () => {
     ]);
   });
 
-  it("passes the preview setup through when creating an online game", () => {
+  it("passes the preview setup through when creating a private online room", () => {
     const previewSanctuaries = [
       new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
       new Sanctuary(new Hex(1, -1, 0), SanctuaryType.WolfCovenant, "b"),
@@ -50,7 +50,7 @@ describe("GameSetup", () => {
     const onCreateOnlineGame = vi.fn();
     const { container } = render(<GameSetup onPlay={vi.fn()} onCreateOnlineGame={onCreateOnlineGame} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "CREATE ONLINE GAME" }));
+    fireEvent.click(screen.getByRole("button", { name: "CREATE PRIVATE ROOM" }));
 
     expect(container.querySelector(".game-setup-shell")).toBeInTheDocument();
     expect(container.querySelector(".setup-preview")).toBeInTheDocument();

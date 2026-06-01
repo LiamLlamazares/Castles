@@ -41,6 +41,17 @@ interface GameSetupProps {
         initialPoolTypes?: SanctuaryType[],
         pieceTheme?: PieceTheme
     ) => void;
+    onCreateOnlineChallenge?: (
+        board: Board,
+        pieces: Piece[],
+        timeControl?: { initial: number, increment: number },
+        sanctuaries?: Sanctuary[],
+        selectedSanctuaryTypes?: SanctuaryType[],
+        sanctuarySettings?: { unlockTurn: number, cooldown: number },
+        gameRules?: { vpModeEnabled: boolean },
+        initialPoolTypes?: SanctuaryType[],
+        pieceTheme?: PieceTheme
+    ) => void;
     onBack?: () => void;
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
@@ -96,7 +107,7 @@ const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     }
 };
 
-const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onBack, onTutorial, onOpenLibrary }) => {
+const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onCreateOnlineChallenge, onBack, onTutorial, onOpenLibrary }) => {
     // Game Mode State
     const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
     
@@ -252,6 +263,20 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onBac
 
     const handleCreateOnlineGame = () => {
         onCreateOnlineGame?.(
+            board,
+            pieces,
+            { initial: timeInitial, increment: timeIncrement },
+            sanctuaries,
+            Array.from(selectedSanctuaries),
+            { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
+            { vpModeEnabled },
+            Array.from(selectedPoolTypes),
+            pieceTheme
+        );
+    };
+
+    const handleCreateOnlineChallenge = () => {
+        onCreateOnlineChallenge?.(
             board,
             pieces,
             { initial: timeInitial, increment: timeIncrement },
@@ -422,7 +447,27 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onBac
                             marginBottom: '10px'
                         }}
                     >
-                        CREATE ONLINE GAME
+                        CREATE PRIVATE ROOM
+                    </button>
+                )}
+                {onCreateOnlineChallenge && (
+                    <button
+                        onClick={handleCreateOnlineChallenge}
+                        style={{
+                            padding: '13px',
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            borderRadius: '8px',
+                            border: `1px solid ${Colors.Primary}`,
+                            background: '#2b6cb0',
+                            color: 'white',
+                            fontWeight: 'bold',
+                            width: '100%',
+                            marginTop: '-4px',
+                            marginBottom: '10px'
+                        }}
+                    >
+                        CHALLENGE A FRIEND
                     </button>
                 )}
                 

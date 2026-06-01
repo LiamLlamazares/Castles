@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OnlineIdentity } from "../readModel";
+import type { OnlineGameSetupDTO } from "../types";
 import {
   ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -37,6 +38,23 @@ const challenged: OnlineIdentity = {
 };
 const unrelated: OnlineIdentity = { kind: "anonymous", id: "anon_unrelated" };
 
+function setupFixture(overrides: Partial<OnlineGameSetupDTO> = {}): OnlineGameSetupDTO {
+  return {
+    board: {
+      config: { nSquares: 6 },
+      castles: [],
+    },
+    pieces: [],
+    sanctuaries: [],
+    sanctuarySettings: { unlockTurn: 0, cooldown: 10 },
+    gameRules: { vpModeEnabled: false },
+    initialPoolTypes: [],
+    pieceTheme: "Castles",
+    timeControl: { initial: 20, increment: 20 },
+    ...overrides,
+  };
+}
+
 function authenticated(identity: OnlineIdentity): AuthenticatedOnlineIdentity {
   return identity as AuthenticatedOnlineIdentity;
 }
@@ -52,6 +70,7 @@ function createdEvent(
       challengedIdentity: challenged,
       challengerSeat: "random",
       visibility: "unlisted",
+      setup: setupFixture(),
       expiresAt: EXPIRES_AT,
     },
     {
@@ -196,9 +215,28 @@ describe("online challenge event validation", () => {
       challengedIdentity: challenged,
       challengerSeat: "random",
       visibility: "private",
+      setup: setupFixture(),
       expiresAt: EXPIRES_AT,
     });
     expect(validateOnlineChallengeEvent(event).ok).toBe(true);
+  });
+
+  it("requires immutable setup terms on challenge creation events", () => {
+    const event = createdEvent({ setup: setupFixture({ timeControl: { initial: 12, increment: 3 } }) });
+    const { setup: _missingSetup, ...missingSetup } = event;
+
+    expect(validateOnlineChallengeEvent(event)).toEqual({
+      ok: true,
+      value: event,
+    });
+    expectInvalid(missingSetup);
+    expectInvalid({
+      ...event,
+      setup: {
+        ...event.setup,
+        board: { config: { nSquares: 99 }, castles: [] },
+      },
+    });
   });
 
   it("accepts all valid challenge lifecycle event variants", () => {
@@ -302,6 +340,7 @@ describe("online challenge event validation", () => {
           challengedIdentity: challenged,
           challengerSeat: "random",
           visibility: "unlisted",
+          setup: setupFixture(),
           expiresAt: EXPIRES_AT,
           inviteUrl: "https://castles.example/play?token=secret",
         } as any,
@@ -317,6 +356,7 @@ describe("online challenge event validation", () => {
         challengedIdentity: challenged,
         challengerSeat: "random",
         visibility: "unlisted",
+        setup: setupFixture(),
         expiresAt: EXPIRES_AT,
         note: "drop me",
       } as any,
@@ -392,12 +432,14 @@ describe("online challenge projection", () => {
       challengedIdentity: challenged,
       challengerSeat: "random",
       visibility: "unlisted",
+      setup: setupFixture(),
       createdAt: CREATED_AT,
       updatedAt: CREATED_AT,
       expiresAt: EXPIRES_AT,
       status: "pending",
       lastEventId: "challenge_evt_created",
     });
+    expect(summary.setup).toEqual(setupFixture());
   });
 
   it("projects accepted challenges with game and resolved seat bindings", () => {
@@ -419,6 +461,8 @@ describe("online challenge projection", () => {
   });
 
   it("projects declined, cancelled, and expired terminal states", () => {
+    const setup = setupFixture({ timeControl: { initial: 7, increment: 2 } });
+    expect(projectOnlineChallengeSummaries([createdEvent({ setup }), acceptedEvent()])[0].setup).toEqual(setup);
     expect(projectOnlineChallengeSummaries([createdEvent(), declinedEvent()])[0]).toMatchObject({
       status: "declined",
       declinedAt: DECLINED_AT,
@@ -617,6 +661,24 @@ describe("online challenge summary validation", () => {
     expect(validateOnlineChallengeSummary(declinedSummary()).ok).toBe(true);
     expect(validateOnlineChallengeSummary(cancelledSummary()).ok).toBe(true);
     expect(validateOnlineChallengeSummary(expiredSummary()).ok).toBe(true);
+  });
+
+  it("requires immutable setup terms in challenge summaries", () => {
+    const summary = pendingSummary({ setup: setupFixture({ timeControl: { initial: 5, increment: 1 } }) });
+    const { setup: _missingSetup, ...missingSetup } = summary;
+
+    expect(validateOnlineChallengeSummary(summary)).toEqual({
+      ok: true,
+      value: summary,
+    });
+    expectInvalidSummary(missingSetup);
+    expectInvalidSummary({
+      ...summary,
+      setup: {
+        ...summary.setup,
+        pieces: "not pieces",
+      },
+    });
   });
 
   it("rejects malformed common summary fields", () => {

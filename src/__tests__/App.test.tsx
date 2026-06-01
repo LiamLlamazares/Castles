@@ -109,6 +109,7 @@ describe("App game setup lifecycle", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/");
   });
 
@@ -212,5 +213,105 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByText("Setup Ready")).toBeInTheDocument();
     expect(window.location.search).not.toContain("onlineGame=");
     expect(window.location.search).not.toContain("token=");
+  });
+
+  it("shows access denied for an invalid challenge link", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_denied&challengeRole=challenged#challengeToken=bad-token"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { code: "not_found", message: "No challenge." } }),
+          { status: 404, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Access denied");
+    expect(window.location.hash).not.toContain("challengeToken=");
+  });
+
+  it("shows challenged players accept and decline actions", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_123&challengeRole=challenged#challengeToken=secret"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            role: "challenged",
+            summary: {
+              schemaVersion: 1,
+              challengeId: "challenge_123",
+              challengerIdentity: { kind: "session", id: "challenge_123_challenger" },
+              challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+              challengerSeat: "w",
+              visibility: "unlisted",
+              setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+              createdAt: "2026-06-01T12:00:00.000Z",
+              updatedAt: "2026-06-01T12:00:00.000Z",
+              expiresAt: "2026-06-02T12:00:00.000Z",
+              status: "pending",
+              lastEventId: "challenge_evt_created",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Accept Challenge" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Decline Challenge" })).toBeInTheDocument();
+  });
+
+  it("shows challengers refresh and cancel actions", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_123&challengeRole=challenger#challengeToken=secret"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            role: "challenger",
+            summary: {
+              schemaVersion: 1,
+              challengeId: "challenge_123",
+              challengerIdentity: { kind: "session", id: "challenge_123_challenger" },
+              challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+              challengerSeat: "w",
+              visibility: "unlisted",
+              setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+              createdAt: "2026-06-01T12:00:00.000Z",
+              updatedAt: "2026-06-01T12:00:00.000Z",
+              expiresAt: "2026-06-02T12:00:00.000Z",
+              status: "pending",
+              lastEventId: "challenge_evt_created",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Refresh Challenge" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel Challenge" })).toBeInTheDocument();
   });
 });

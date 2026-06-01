@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
   buildSpectatorUrl,
+  acceptOnlineChallenge,
+  cancelOnlineChallenge,
   copyOnlineInviteUrl,
+  declineOnlineChallenge,
+  fetchOnlineChallenge,
   fetchOnlineGameSummaries,
   fetchOnlineSnapshot,
   fetchOnlineSpectatorSnapshot,
@@ -10,14 +14,19 @@ import {
   formatOnlinePendingConnectionMessage,
   formatOnlineGameResult,
   parseOnlineJoinParams,
+  parseOnlineChallengeParams,
   parseOnlineSpectatorParams,
+  rememberOnlineChallengeParams,
   rememberOnlineOpponentInviteUrl,
+  removeOnlineChallengeTokenFromUrl,
+  resolveOnlineChallengeParams,
   removeOnlineTokenFromUrl,
   resolveOnlineAnonymousSessionId,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
+  forgetOnlineChallengeParams,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import type { OnlineConnectionStatus } from "../types";
@@ -104,6 +113,210 @@ describe("online client helpers", () => {
         storageAdapter
       )
     ).toEqual(join);
+  });
+
+  it("stores challenge fragment tokens outside the URL and resolves tokenless reload URLs", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+    const url =
+      "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged#challengeToken=secret";
+
+    expect(parseOnlineChallengeParams(url)).toEqual({
+      challengeId: "challenge_123",
+      role: "challenged",
+      token: "secret",
+    });
+    expect(resolveOnlineChallengeParams(url, storageAdapter)).toEqual({
+      challengeId: "challenge_123",
+      role: "challenged",
+      token: "secret",
+    });
+    expect(removeOnlineChallengeTokenFromUrl(url)).toBe(
+      "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged"
+    );
+    expect(
+      resolveOnlineChallengeParams(
+        "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged",
+        storageAdapter
+      )
+    ).toEqual({
+      challengeId: "challenge_123",
+      role: "challenged",
+      token: "secret",
+    });
+  });
+
+  it("fetches and accepts challenges with bearer authorization", async () => {
+    const challenge = {
+      challengeId: "challenge_123",
+      role: "challenged" as const,
+      token: "challenge-token",
+    };
+    const body = {
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "challenged",
+      summary: {
+        schemaVersion: 1,
+        challengeId: "challenge_123",
+        challengerIdentity: { kind: "session", id: "challenge_123_challenger" },
+        challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+        challengerSeat: "w",
+        visibility: "unlisted",
+        setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+        createdAt: "2026-06-01T12:00:00.000Z",
+        updatedAt: "2026-06-01T12:00:00.000Z",
+        expiresAt: "2026-06-02T12:00:00.000Z",
+        status: "pending",
+        lastEventId: "challenge_evt_created",
+      },
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => body })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ...body,
+          summary: {
+            ...body.summary,
+            status: "accepted",
+            updatedAt: "2026-06-01T12:05:00.000Z",
+            acceptedAt: "2026-06-01T12:05:00.000Z",
+            acceptedBy: body.summary.challengedIdentity,
+            gameId: "game_from_challenge",
+            whiteIdentity: body.summary.challengerIdentity,
+            blackIdentity: body.summary.challengedIdentity,
+          },
+          gameInvite: {
+            gameId: "game_from_challenge",
+            seat: "b",
+            token: "challenge-token",
+            url: "https://castles.example/?onlineGame=game_from_challenge&seat=b&token=challenge-token",
+          },
+        }),
+      });
+
+    await expect(fetchOnlineChallenge(challenge, fetchImpl as any)).resolves.toMatchObject({
+      role: "challenged",
+      summary: { challengeId: "challenge_123", status: "pending" },
+    });
+    await expect(acceptOnlineChallenge(challenge, fetchImpl as any)).resolves.toMatchObject({
+      role: "challenged",
+      summary: { status: "accepted", gameId: "game_from_challenge" },
+      gameInvite: { seat: "b", token: "challenge-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/api/online/challenges/challenge_123", {
+      headers: { authorization: "Bearer challenge-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/challenges/challenge_123/accept", {
+      method: "POST",
+      headers: { authorization: "Bearer challenge-token" },
+    });
+  });
+
+  it("declines and cancels challenges with bearer authorization", async () => {
+    const baseSummary = {
+      schemaVersion: 1,
+      challengeId: "challenge_123",
+      challengerIdentity: { kind: "session", id: "challenge_123_challenger" },
+      challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+      challengerSeat: "w",
+      visibility: "unlisted",
+      setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+      createdAt: "2026-06-01T12:00:00.000Z",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+      expiresAt: "2026-06-02T12:00:00.000Z",
+      status: "pending",
+      lastEventId: "challenge_evt_created",
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "challenged",
+          summary: {
+            ...baseSummary,
+            status: "declined",
+            updatedAt: "2026-06-01T12:02:00.000Z",
+            declinedAt: "2026-06-01T12:02:00.000Z",
+            declinedBy: baseSummary.challengedIdentity,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "challenger",
+          summary: {
+            ...baseSummary,
+            status: "cancelled",
+            updatedAt: "2026-06-01T12:03:00.000Z",
+            cancelledAt: "2026-06-01T12:03:00.000Z",
+            cancelledBy: baseSummary.challengerIdentity,
+          },
+        }),
+      });
+
+    await expect(
+      declineOnlineChallenge(
+        { challengeId: "challenge_123", role: "challenged", token: "challenged-token" },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      role: "challenged",
+      summary: { status: "declined" },
+    });
+    await expect(
+      cancelOnlineChallenge(
+        { challengeId: "challenge_123", role: "challenger", token: "challenger-token" },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      role: "challenger",
+      summary: { status: "cancelled" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/api/online/challenges/challenge_123/decline", {
+      method: "POST",
+      headers: { authorization: "Bearer challenged-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/challenges/challenge_123/cancel", {
+      method: "POST",
+      headers: { authorization: "Bearer challenger-token" },
+    });
+  });
+
+  it("forgets stored challenge tokens when leaving a challenge", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+    const challenge = {
+      challengeId: "challenge_123",
+      role: "challenger" as const,
+      token: "challenge-token",
+    };
+
+    rememberOnlineChallengeParams(challenge, storageAdapter);
+    expect(resolveOnlineChallengeParams(
+      "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenger",
+      storageAdapter
+    )).toEqual(challenge);
+
+    forgetOnlineChallengeParams(challenge, storageAdapter);
+
+    expect(resolveOnlineChallengeParams(
+      "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenger",
+      storageAdapter
+    )).toBeNull();
   });
 
   it("stores creator opponent invites for same-session reloads", () => {
