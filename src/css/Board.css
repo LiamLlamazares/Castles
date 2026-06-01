@@ -1466,6 +1466,17 @@ body {
   flex-wrap: wrap;
 }
 
+.tutorial-lesson-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.tutorial-module-chip,
+.tutorial-progress-saved-chip,
 .tutorial-lesson-progress-summary {
   flex: 0 0 auto;
   padding: 5px 9px;
@@ -1477,6 +1488,22 @@ body {
   font-weight: 800;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.tutorial-module-chip {
+  color: #102018;
+  background: #70d6a1;
+  border-color: #70d6a1;
+}
+
+.tutorial-progress-saved-chip {
+  color: #f7f1d6;
+  background: rgba(112, 214, 161, 0.12);
+  border-color: rgba(112, 214, 161, 0.28);
+}
+
+.tutorial-reset-short {
+  display: none;
 }
 
 /* =========== SETUP, TUTORIAL, AND RESPONSIVE SHELLS =========== */
@@ -1945,7 +1972,7 @@ body {
     margin-bottom: 10px;
   }
 
-  .tutorial-sidebar .app-shell-title-block p {
+  .tutorial-sidebar .app-shell-title-block {
     display: none;
   }
 
@@ -1962,9 +1989,23 @@ body {
     padding: 4px 7px;
   }
 
+  .tutorial-module-chip,
+  .tutorial-progress-saved-chip {
+    font-size: 0.66rem;
+    padding: 4px 7px;
+  }
+
   .tutorial-progress-controls {
     gap: 6px;
     padding: 6px 0 8px;
+  }
+
+  .tutorial-reset-full {
+    display: none;
+  }
+
+  .tutorial-reset-short {
+    display: inline;
   }
 
   .tutorial-step-button,

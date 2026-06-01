@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import Tutorial from "../Tutorial";
 import GameBoard from "../Game";
 import { ThemeProvider } from "../../contexts/ThemeContext";
@@ -75,7 +75,9 @@ describe("Tutorial", () => {
 
     const lessonHeader = screen.getByRole("group", { name: "Current lesson" });
     expect(lessonHeader).toContainElement(screen.getByRole("heading", { level: 2 }));
+    expect(lessonHeader).toContainElement(screen.getByText("Getting started"));
     expect(lessonHeader).toContainElement(screen.getByText("Lesson 1 of 35"));
+    expect(lessonHeader).toContainElement(screen.getByText("Progress saved"));
 
     const controlStrip = screen.getByRole("toolbar", { name: "Lesson controls" });
     expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Previous" }));
@@ -147,6 +149,7 @@ describe("Tutorial", () => {
 
     expect(screen.getByRole("group", { name: "Terrain lessons" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Castles" })).toBeInTheDocument();
+    expect(screen.getByText("Terrain")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Rivers" }));
 
@@ -175,7 +178,7 @@ describe("Tutorial", () => {
     expect(screen.getByRole("button", { name: "Archer" })).toBeInTheDocument();
   });
 
-  it("keeps working when tutorial progress storage is unavailable", () => {
+  it("keeps working when tutorial progress storage is unavailable", async () => {
     const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation((key: string) => {
       if (key === "castles_tutorial_lesson_index") {
         throw new DOMException("blocked", "SecurityError");
@@ -197,6 +200,10 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 35");
+    expect(screen.getByText("Session only")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Progress saved")).not.toBeInTheDocument();
+    });
     expect(getItem).toHaveBeenCalled();
     expect(setItem).toHaveBeenCalled();
   });

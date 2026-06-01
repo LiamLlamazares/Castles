@@ -27,6 +27,11 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).toContain(".tutorial-quick-nav");
     expect(css).toContain(".tutorial-description");
     expect(css).toContain(".tutorial-callout");
+    expect(css).toMatch(/@media \(max-width: 760px\) and \(max-height: 720px\)\s*\{[\s\S]*\.tutorial-sidebar \.app-shell-title-block\s*\{[^}]*display:\s*none;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\) and \(max-height: 720px\)\s*\{[\s\S]*\.tutorial-module-chip,[\s\S]*\.tutorial-progress-saved-chip\s*\{[^}]*font-size:\s*0\.66rem;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\) and \(max-height: 720px\)\s*\{[\s\S]*\.tutorial-reset-full\s*\{[^}]*display:\s*none;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\) and \(max-height: 720px\)\s*\{[\s\S]*\.tutorial-reset-short\s*\{[^}]*display:\s*inline;/s);
+    expect(css).not.toMatch(/\.tutorial-sidebar \.app-shell-title-block p\s*\{\s*display:\s*none;\s*\}/);
   });
 
   it("keeps shared mobile shell spacing aligned inside online state pages", () => {

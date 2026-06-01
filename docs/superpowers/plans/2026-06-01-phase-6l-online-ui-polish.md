@@ -13,6 +13,7 @@ Make the post-Quick-Match UI easier to navigate by treating Online as a first-cl
 - Rename the in-game spectator share button from "Spectate" to "Spectator Link" so it does not conflict with Watch-row spectating.
 - Fix first-pass layout risks: 100dvh scrollports for Online/Library/online-state pages, modal layers above the install prompt, and full-width VP scoring on mobile.
 - Tighten the game side panel into a contained sidebar, rename the save/review group to Local Library, add a compact visible save-status chip, and make the drawer distinguish local named saves from Online Archive.
+- Make Learn feel more like a course surface by adding module and progress-storage chips, compacting the short-mobile chrome, and keeping the first lesson sentence visible above the board at 360 x 640.
 
 ## Review Findings Accepted
 
@@ -25,12 +26,15 @@ Make the post-Quick-Match UI easier to navigate by treating Online as a first-cl
 - The game shell still hid save progress behind button titles and assistive text; it now shows ready/autosaved/saved-to-Library/not-in-Library state directly in the side panel.
 - The first save-status draft mixed online server persistence into the Local Library chip; review accepted and changed online games to say "Not in Library" until the user creates a local named save.
 - A reviewer flagged stale local-save markers when switching online games; accepted and fixed with a game-id keyed reset plus an integration test.
+- The short-mobile Learn screen hid lesson text behind navigation and controls; accepted and fixed by removing the redundant page title on short mobile, keeping a compact module/progress row, and showing the lesson sentence before the board.
+- The first Learn progress chip claimed "Progress saved" even when browser storage failed; accepted and fixed by tracking actual write success and showing "Session only" when progress cannot be persisted.
 
 ## Audit Artifacts
 
 - Broad pass: `artifacts/ui-audit/phase6l-full-pass-1` and `artifacts/ui-audit/phase6l-mobile-pass-2`.
 - Challenge-link fix verification: `artifacts/ui-audit/phase6l-challenge-link-fix-2`; 430 x 932, 390 x 844, and 360 x 640 passed with no horizontal overflow, clipped controls, or interactive overlaps.
 - Save-status/sidebar verification: `artifacts/ui-audit/phase6l-save-status-2`; desktop game, 430 x 932 mobile game, 360 x 640 short-mobile game, 430 x 932 drawer-open, and 430 x 932 save-modal passed with no horizontal overflow, clipped controls, or interactive overlaps.
+- Learn polish verification: `artifacts/ui-audit/phase6l-learn-polish-2`; desktop, tablet, 430 x 932, 390 x 844, and 360 x 640 Learn states passed with no horizontal overflow, clipped controls, or interactive overlaps. Mobile stacked layouts show lesson text before the board.
 
 ## Remaining Phase 6L Work
 

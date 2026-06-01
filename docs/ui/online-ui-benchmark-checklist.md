@@ -120,6 +120,8 @@ Phase 6L first implementation slice, 2026-06-01:
 - The game sidebar is now a contained panel with a visible Local Library save-status chip. Local games show ready/autosaved/saved-to-Library state; online games show "Not in Library" until the user creates a local named save.
 - The game drawer now labels local saves as "Local named saves on this device", demotes duplicate Save to Library, and keeps Online Archive conceptually separate from the local Library.
 - Screenshot artifacts for this sidebar/save slice are in `artifacts/ui-audit/phase6l-save-status-2`; desktop, mobile, short-mobile, drawer-open, and save-modal states passed overflow, clipping, and interactive-overlap checks.
+- Learn now shows the current module, lesson count, and storage-aware progress chip. At 360 x 640 it hides the redundant page title, shortens the visual Restart label, and keeps the lesson sentence above the board.
+- Screenshot artifacts for this Learn slice are in `artifacts/ui-audit/phase6l-learn-polish-2`; desktop, tablet, 430 x 932, 390 x 844, and 360 x 640 Learn states passed overflow, clipping, and interactive-overlap checks.
 
 Reference pages checked:
 

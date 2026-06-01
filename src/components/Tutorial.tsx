@@ -21,25 +21,42 @@ interface TutorialProps {
 
 const TUTORIAL_PROGRESS_KEY = "castles_tutorial_lesson_index";
 
-function readStoredLessonIndex(lessonCount: number): number {
+interface StoredLessonProgress {
+  lessonIndex: number;
+  canStoreProgress: boolean;
+}
+
+function readStoredLessonProgress(lessonCount: number): StoredLessonProgress {
   try {
     const stored = Number(localStorage.getItem(TUTORIAL_PROGRESS_KEY));
     if (!Number.isInteger(stored) || stored < 0 || stored >= lessonCount) {
-      return 0;
+      return { lessonIndex: 0, canStoreProgress: true };
     }
-    return stored;
+    return { lessonIndex: stored, canStoreProgress: true };
   } catch (error) {
     console.error("Failed to load tutorial progress", error);
-    return 0;
+    return { lessonIndex: 0, canStoreProgress: false };
   }
 }
 
-function saveStoredLessonIndex(lessonIndex: number): void {
+function saveStoredLessonIndex(lessonIndex: number): boolean {
   try {
     localStorage.setItem(TUTORIAL_PROGRESS_KEY, String(lessonIndex));
+    return true;
   } catch (error) {
     console.error("Failed to save tutorial progress", error);
+    return false;
   }
+}
+
+function getLessonModuleLabel(lessonId: string): string {
+  if (lessonId.startsWith("m0_")) return "Getting started";
+  if (lessonId.startsWith("m1_")) return "Terrain";
+  if (lessonId.startsWith("m2_")) return "Pieces";
+  if (lessonId.startsWith("m3_")) return "Combat";
+  if (lessonId.startsWith("m4_")) return "Castles";
+  if (lessonId.startsWith("m5_")) return "Advanced units";
+  return "Course";
 }
 
 const Tutorial: React.FC<TutorialProps> = ({
@@ -51,11 +68,13 @@ const Tutorial: React.FC<TutorialProps> = ({
 }) => {
   const { isDark } = useTheme();
   const lessons = useMemo(() => getAllLessons(), []);
-  const [currentLessonIndex, setCurrentLessonIndex] = useState(() => readStoredLessonIndex(lessons.length));
+  const initialProgress = useMemo(() => readStoredLessonProgress(lessons.length), [lessons.length]);
+  const [currentLessonIndex, setCurrentLessonIndex] = useState(initialProgress.lessonIndex);
+  const [canStoreProgress, setCanStoreProgress] = useState(initialProgress.canStoreProgress);
   const lesson: TutorialLesson = lessons[currentLessonIndex];
 
   React.useEffect(() => {
-    saveStoredLessonIndex(currentLessonIndex);
+    setCanStoreProgress(saveStoredLessonIndex(currentLessonIndex));
   }, [currentLessonIndex]);
 
   const PIECE_LESSONS = [
@@ -105,6 +124,8 @@ const Tutorial: React.FC<TutorialProps> = ({
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
   const lessonProgressLabel = `Lesson ${currentLessonIndex + 1} of ${lessons.length}`;
+  const lessonModuleLabel = getLessonModuleLabel(lesson.id);
+  const progressStorageLabel = canStoreProgress ? "Progress saved" : "Session only";
 
   return (
     <div className="tutorial-container">
@@ -122,7 +143,11 @@ const Tutorial: React.FC<TutorialProps> = ({
 
         <div className="tutorial-lesson-header" role="group" aria-label="Current lesson">
           <h2 className="tutorial-title">{lesson.title}</h2>
-          <span className="tutorial-lesson-progress-summary">{lessonProgressLabel}</span>
+          <div className="tutorial-lesson-meta" aria-label="Lesson position">
+            <span className="tutorial-module-chip">{lessonModuleLabel}</span>
+            <span className="tutorial-lesson-progress-summary">{lessonProgressLabel}</span>
+            <span className="tutorial-progress-saved-chip">{progressStorageLabel}</span>
+          </div>
         </div>
 
         <div className="tutorial-progress-controls" role="group" aria-label="Lesson progress controls">
@@ -143,8 +168,10 @@ const Tutorial: React.FC<TutorialProps> = ({
               type="button"
               onClick={restartTutorial}
               className="tutorial-reset-button"
+              aria-label="Restart Tutorial"
             >
-              Restart Tutorial
+              <span className="tutorial-reset-full">Restart Tutorial</span>
+              <span className="tutorial-reset-short" aria-hidden="true">Restart</span>
             </button>
             <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
               Next
