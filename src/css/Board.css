@@ -507,6 +507,11 @@ body {
   color: #211a08;
 }
 
+.control-button.analysis-return {
+  background: #f4d98c;
+  color: #1f2423;
+}
+
 .play-controls .control-button-row {
   grid-template-columns: 1fr;
 }

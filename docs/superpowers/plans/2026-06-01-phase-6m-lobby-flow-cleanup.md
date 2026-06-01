@@ -20,7 +20,7 @@ Remove the confusing and unsafe edges found after Phase 6L: challenge creator li
 - Cancelled/expired owned listings could remain as a confusing owner panel.
 - The next product slice should separate Find listings from Play from current setup more strongly, not only with copy.
 - Learn progress is currently resume position, not true lesson completion; the next Learn slice should add completed lesson IDs and checkable objectives before claiming lichess-style progress.
-- Analysis mode needs a visible return-to-game path.
+- Analysis mode needs a visible return-to-game path. Implemented in Phase 6N.
 - Drawer actions need real distinct icons or the icon column should be removed consistently.
 
 ## Audit Artifacts
@@ -40,4 +40,4 @@ Remove the confusing and unsafe edges found after Phase 6L: challenge creator li
 
 - Lobby visual redesign: more minimal/list-like layout, separate "Find listings" filters from "Play from current setup", improve live Watch prominence, and decide default public spectatability for lobby games.
 - Learn course redesign: module index, completed lesson IDs, checkable objectives, and mobile layout that prioritizes objectives without unsupported engine grading.
-- Navigation clarity: streamline setup labels into Play Local, Invite Friend, and Find Match; standardize "New Game" wording; add analysis return-to-game; fix drawer icons.
+- Navigation clarity: streamline setup labels into Play Local, Invite Friend, and Find Match; standardize "New Game" wording; fix drawer icons.

@@ -640,6 +640,31 @@ describe("Game ability integration", () => {
     expect(screen.getByText("Online White · Complete · White wins by resignation")).toBeInTheDocument();
   });
 
+  test("active online players do not get a drawer analysis escape hatch", () => {
+    const onLoadGame = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_active_player_no_drawer_analysis",
+            role: "player",
+            playerColor: "w",
+            version: 1,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_active_player_no_drawer_analysis&view=spectator",
+            submitAction: vi.fn(),
+          }}
+          onLoadGame={onLoadGame}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.queryByRole("button", { name: "Analysis Board" })).not.toBeInTheDocument();
+  });
+
   test("online spectator analysis opens from current state without PGN round trip", () => {
     const onLoadGame = vi.fn();
     const generatePGN = vi.spyOn(PGNService, "generatePGN");
@@ -665,6 +690,7 @@ describe("Game ability integration", () => {
 
     expect(generatePGN).not.toHaveBeenCalled();
     expect(onLoadGame).toHaveBeenCalledOnce();
+    expect(onLoadGame.mock.calls[0][1]).toEqual({ source: "analysis" });
     expect(onLoadGame.mock.calls[0][0]).toMatchObject({
       turnCounter: 0,
     });

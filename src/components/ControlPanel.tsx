@@ -34,6 +34,8 @@ interface ControlPanelProps {
   onSaveGame?: () => void;
   onOpenLibrary?: () => void;
   saveStatusLabel?: string;
+  onReturnFromAnalysis?: () => void;
+  analysisReturnLabel?: string;
   onEnableAnalysis?: () => void;
   shareLabel?: string;
   shareTitle?: string;
@@ -207,6 +209,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onSaveGame,
   onOpenLibrary,
   saveStatusLabel,
+  onReturnFromAnalysis,
+  analysisReturnLabel = "Return to Game",
   onEnableAnalysis,
   shareLabel = "Share",
   shareTitle = "Share Game URL",
@@ -359,6 +363,16 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   Open saved games in Library.
                 </span>
               </>
+            )}
+            {onReturnFromAnalysis && (
+              <button
+                type="button"
+                className="control-button analysis-return"
+                onClick={onReturnFromAnalysis}
+                title={analysisReturnLabel}
+              >
+                {analysisReturnLabel}
+              </button>
             )}
             {onEnableAnalysis && (
               <button

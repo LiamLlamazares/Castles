@@ -146,6 +146,27 @@ describe("ControlPanel", () => {
     expect(onEnableAnalysis).toHaveBeenCalledOnce();
   });
 
+  it("shows an analysis return action in the review controls", () => {
+    const onReturnFromAnalysis = vi.fn();
+
+    render(
+      <ControlPanel
+        {...baseProps}
+        onReturnFromAnalysis={onReturnFromAnalysis}
+        analysisReturnLabel="Back to Live Game"
+      />
+    );
+
+    const saveControls = screen.getByRole("group", { name: "Local Library and review" });
+    const returnButton = screen.getByRole("button", { name: "Back to Live Game" });
+
+    expect(saveControls).toContainElement(returnButton);
+
+    fireEvent.click(returnButton);
+
+    expect(onReturnFromAnalysis).toHaveBeenCalledOnce();
+  });
+
   it("renders online clocks from server state instead of starting local browser clocks", () => {
     render(
       <ControlPanel

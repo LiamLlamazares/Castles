@@ -83,11 +83,13 @@ interface GameBoardProps {
     pieceTheme?: PieceTheme,
     timeControl?: { initial: number, increment: number },
     victoryPoints?: { w: number; b: number }
-  }) => void;
+  }, options?: { source?: "analysis" | "import" | "library" }) => void;
   onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onReturnFromAnalysis?: () => void;
+  analysisReturnLabel?: string;
   onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<SaveGameToLibraryResult> | SaveGameToLibraryResult;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
@@ -135,6 +137,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onTutorial,
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onReturnFromAnalysis,
+  analysisReturnLabel,
   onSaveGameToLibrary,
   timeControl,
   isTutorialMode = false,
@@ -440,6 +444,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
       : formatOnlineConnectionStatus(onlineSession.status);
     return `${roleLabel} · ${stateLabel}${onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}`;
   }, [onlineSession]);
+  const canOpenAnalysisBoard =
+    !isAnalysisMode &&
+    (!onlineSession || onlineSession.role === "spectator" || !!onlineSession.result);
   const canOpenOnlineAnalysis =
     !isAnalysisMode &&
     !!onlineSession &&
@@ -617,22 +624,25 @@ const InnerGame: React.FC<GameBoardProps> = ({
       }
     }
 
-    onLoadGame({
-      board: new Board({ ...board.config }, castles.map((castle) => castle.clone())),
-      pieces: piecesSnapshot,
-      turnCounter,
-      sanctuaries: sanctuaries.map((sanctuary) => sanctuary.clone()),
-      moveTree: analysisMoveTree,
-      sanctuarySettings,
-      initialPoolTypes: [...sanctuaryPool],
-      graveyard: graveyard.map((piece) => piece.clone()),
-      phoenixRecords: phoenixRecords.map((record) => ({ ...record })),
-      promotionPending: promotionPending ? promotionPending.clone() : null,
-      gameRules,
-      pieceTheme,
-      timeControl,
-      victoryPoints: viewedVictoryPoints ? { ...viewedVictoryPoints } : undefined,
-    });
+    onLoadGame(
+      {
+        board: new Board({ ...board.config }, castles.map((castle) => castle.clone())),
+        pieces: piecesSnapshot,
+        turnCounter,
+        sanctuaries: sanctuaries.map((sanctuary) => sanctuary.clone()),
+        moveTree: analysisMoveTree,
+        sanctuarySettings,
+        initialPoolTypes: [...sanctuaryPool],
+        graveyard: graveyard.map((piece) => piece.clone()),
+        phoenixRecords: phoenixRecords.map((record) => ({ ...record })),
+        promotionPending: promotionPending ? promotionPending.clone() : null,
+        gameRules,
+        pieceTheme,
+        timeControl,
+        victoryPoints: viewedVictoryPoints ? { ...viewedVictoryPoints } : undefined,
+      },
+      { source: "analysis" }
+    );
   }, [
     onLoadGame,
     board,
@@ -736,14 +746,16 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onToggleCoordinates={viewState.toggleCoordinates}
           onShowRules={() => setShowRulesModal(true)}
           onNewGame={handleNewGame}
-          onEnableAnalysis={handleEnterAnalysis}
           onSaveGameToLibrary={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
           onOpenOnlineBrowser={onOpenOnlineBrowser}
+          onReturnFromAnalysis={onReturnFromAnalysis}
+          analysisReturnLabel={analysisReturnLabel}
           onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
           onTutorial={onTutorial}
           onOpenChange={setNavigationMenuOpen}
           isAnalysisMode={isAnalysisMode}
+          onEnableAnalysis={canOpenAnalysisBoard ? handleEnterAnalysis : undefined}
           onToggleShields={viewState.toggleShields}
           onToggleCastleRecruitment={viewState.toggleCastleRecruitment}
           onToggleTerrainIcons={viewState.toggleTerrainIcons}
@@ -812,6 +824,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
           saveStatusLabel={saveStatusLabel}
+          onReturnFromAnalysis={onReturnFromAnalysis}
+          analysisReturnLabel={analysisReturnLabel}
           onEnableAnalysis={canOpenOnlineAnalysis ? handleEnterAnalysis : undefined}
           moveHistory={moveHistory || []}
           moveTree={moveTree}

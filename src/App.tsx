@@ -110,6 +110,47 @@ interface GameConfig {
   opponentConfig?: AIOpponentConfig;
 }
 
+interface LoadGameData {
+  board: Board;
+  pieces: Piece[];
+  turnCounter: number;
+  sanctuaries: Sanctuary[];
+  moveTree?: MoveTree;
+  sanctuarySettings?: { unlockTurn: number; cooldown: number };
+  initialPoolTypes?: SanctuaryType[];
+  graveyard?: Piece[];
+  phoenixRecords?: PhoenixRecord[];
+  promotionPending?: Piece | null;
+  gameRules?: { vpModeEnabled: boolean };
+  pieceTheme?: PieceTheme;
+  timeControl?: { initial: number; increment: number };
+  victoryPoints?: { w: number; b: number };
+}
+
+interface LoadGameOptions {
+  source?: "analysis" | "import" | "library";
+}
+
+type AnalysisReturnState =
+  | {
+      kind: "local-game";
+      label: string;
+      config: GameConfig;
+    }
+  | {
+      kind: "online-game";
+      label: string;
+      onlineJoin: OnlineJoinParams | null;
+      onlineSpectator: OnlineSpectatorParams | null;
+      onlineSnapshot: OnlineGameSnapshotDTO;
+      opponentInviteUrl: string | null;
+    }
+  | {
+      kind: "online-browser";
+      label: string;
+      tab: OnlineBrowserInitialTab;
+    };
+
 interface EditorConfig {
   board?: Board;
   pieces?: Piece[];
@@ -159,6 +200,27 @@ function createGameConfigFromOnlineSnapshot(
     victoryPoints: state.victoryPoints,
     pieceTheme: setup.pieceTheme,
     timeControl: setup.timeControl,
+    isAnalysisMode,
+  };
+}
+
+function createGameConfigFromLoadData(data: LoadGameData, isAnalysisMode: boolean): GameConfig {
+  return {
+    board: data.board,
+    pieces: data.pieces,
+    layout: getStartingLayout(data.board),
+    moveTree: data.moveTree,
+    turnCounter: data.turnCounter,
+    sanctuaries: data.sanctuaries,
+    sanctuarySettings: data.sanctuarySettings,
+    initialPoolTypes: data.initialPoolTypes,
+    graveyard: data.graveyard,
+    phoenixRecords: data.phoenixRecords,
+    promotionPending: data.promotionPending,
+    gameRules: data.gameRules,
+    pieceTheme: data.pieceTheme,
+    timeControl: data.timeControl,
+    victoryPoints: data.victoryPoints,
     isAnalysisMode,
   };
 }
@@ -249,6 +311,7 @@ function App() {
   );
   const [openSeekResponse, setOpenSeekResponse] = useState<OpenSeekResponse | null>(null);
   const [onlineBrowserTab, setOnlineBrowserTab] = useState<OnlineBrowserInitialTab>("lobby");
+  const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
   const replayRequestIdRef = useRef(0);
   const isSaveDialogOpen = saveGameDialog !== null;
 
@@ -326,6 +389,10 @@ function App() {
     }
     setOpenSeekCreator(null);
     setOpenSeekResponse(null);
+  };
+
+  const clearAnalysisReturn = () => {
+    setAnalysisReturn(null);
   };
 
   const forgetOnlineChallengeStorage = useCallback((challenge: OnlineChallengeParams | null) => {
@@ -458,6 +525,7 @@ function App() {
 
   const handleNewGameClick = () => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     clearAutosave();
     clearOnlineUrl();
     forgetOnlineChallengeStorage(onlineChallenge);
@@ -563,6 +631,7 @@ function App() {
     opponentConfig?: AIOpponentConfig
   ) => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     const layout = getStartingLayout(board);
 
     clearAutosave();
@@ -601,6 +670,7 @@ function App() {
   ) => {
     try {
       cancelPendingReplay();
+      clearAnalysisReturn();
       clearAutosave();
       forgetOnlineChallengeStorage(onlineChallenge);
       clearOpenSeekState();
@@ -651,6 +721,7 @@ function App() {
 
   const enterOnlineGameFromInvite = (invite: OnlineChallengeGameInvite) => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     forgetOnlineChallengeStorage(onlineChallenge);
     clearOpenSeekState();
     const join = {
@@ -681,6 +752,7 @@ function App() {
 
   const handleSpectateOnlineGame = (gameId: string) => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     forgetOnlineChallengeStorage(onlineChallenge);
     const url = new URL(buildSpectatorUrl(window.location.href, gameId));
     window.history.pushState(
@@ -715,6 +787,11 @@ function App() {
       const snapshot = await fetchOnlineSpectatorSnapshot(gameId);
       if (replayRequestIdRef.current !== requestId) return;
       const replayConfig = createReplayGameConfigFromOnlineSnapshot(snapshot);
+      setAnalysisReturn({
+        kind: "online-browser",
+        label: "Back to Online Archive",
+        tab: "archive",
+      });
       setGameConfig(replayConfig);
       setGameKey(prev => prev + 1);
       enterGameView();
@@ -738,6 +815,7 @@ function App() {
   ) => {
     try {
       cancelPendingReplay();
+      clearAnalysisReturn();
       clearAutosave();
       clearOpenSeekState();
       const created = await createOnlineChallenge(
@@ -797,6 +875,7 @@ function App() {
   ) => {
     try {
       cancelPendingReplay();
+      clearAnalysisReturn();
       clearAutosave();
       clearOnlineUrl();
       forgetOnlineChallengeStorage(onlineChallenge);
@@ -849,6 +928,7 @@ function App() {
 
   const handleAcceptOpenSeek = async (seekId: string) => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     const response = await acceptOpenSeek(seekId);
     enterOnlineGameFromInvite(response.gameInvite);
   };
@@ -858,6 +938,7 @@ function App() {
       throw new Error("No current game setup is available for quick match.");
     }
     cancelPendingReplay();
+    clearAnalysisReturn();
     const response = await startQuickMatch(quickMatchSetup);
     if (response.outcome === "matched") {
       window.setTimeout(() => {
@@ -942,6 +1023,7 @@ function App() {
   const handleAcceptOnlineChallenge = async () => {
     if (!onlineChallenge) return;
     cancelPendingReplay();
+    clearAnalysisReturn();
     setOnlineChallengeStatus("acting");
     setOnlineChallengeError(null);
     try {
@@ -1020,47 +1102,39 @@ function App() {
 
   const handleRestartGame = () => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     clearAutosave();
     setViewStack([]);
     setGameKey(prev => prev + 1);
   };
 
-  const handleLoadGame = (data: {
-    board: Board, 
-    pieces: Piece[], 
-    turnCounter: number, 
-    sanctuaries: Sanctuary[], 
-    moveTree?: MoveTree,
-    sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    initialPoolTypes?: SanctuaryType[],
-    graveyard?: Piece[],
-    phoenixRecords?: PhoenixRecord[],
-    promotionPending?: Piece | null,
-    gameRules?: { vpModeEnabled: boolean },
-    pieceTheme?: PieceTheme,
-    timeControl?: { initial: number, increment: number },
-    victoryPoints?: { w: number; b: number }
-  }) => {
+  const handleLoadGame = (data: LoadGameData, options: LoadGameOptions = {}) => {
     cancelPendingReplay();
-    const {
-      board,
-      pieces,
-      turnCounter,
-      sanctuaries,
-      moveTree,
-      sanctuarySettings,
-      initialPoolTypes,
-      graveyard,
-      phoenixRecords,
-      promotionPending,
-      gameRules,
-      pieceTheme,
-      timeControl,
-      victoryPoints,
-    } = data;
-    // Reset layout based on new board size
-    const layout = getStartingLayout(board);
-    // PGN imports should always start in analysis mode so users can navigate the game
+    const nextAnalysisConfig = createGameConfigFromLoadData(data, true);
+    const localReturnConfig = {
+      ...createGameConfigFromLoadData(data, false),
+      opponentConfig: gameConfig.opponentConfig,
+    };
+    if (options.source === "analysis" && onlineSnapshot && (onlineJoin || onlineSpectator)) {
+      setAnalysisReturn({
+        kind: "online-game",
+        label: onlineJoin ? "Back to Online Game" : "Back to Live Game",
+        onlineJoin,
+        onlineSpectator: onlineJoin ? null : onlineSpectator,
+        onlineSnapshot,
+        opponentInviteUrl: onlineOpponentInviteUrl,
+      });
+    } else if (options.source === "analysis" && !gameConfig.isAnalysisMode) {
+      setAnalysisReturn({
+        kind: "local-game",
+        label: "Return to Game",
+        config: localReturnConfig,
+      });
+    } else {
+      clearAnalysisReturn();
+    }
+
+    // PGN imports and analysis handoffs should start in analysis mode so users can navigate the game.
     clearOnlineUrl();
     forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
@@ -1077,27 +1151,70 @@ function App() {
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
-    setGameConfig({
-      board,
-      pieces,
-      layout,
-      moveTree,
-      turnCounter,
-      sanctuaries,
-      sanctuarySettings,
-      initialPoolTypes,
-      graveyard,
-      phoenixRecords,
-      promotionPending,
-      gameRules,
-      pieceTheme,
-      timeControl,
-      victoryPoints,
-      isAnalysisMode: true,
-    });
+    setGameConfig(nextAnalysisConfig);
     setGameKey(prev => prev + 1); // Force remount
     enterGameView();
   };
+
+  const handleReturnFromAnalysis = useCallback(() => {
+    if (!analysisReturn) return;
+    cancelPendingReplay();
+
+    if (analysisReturn.kind === "local-game") {
+      clearOnlineUrl();
+      setOnlineJoin(null);
+      setOnlineSpectator(null);
+      setOnlineSnapshot(null);
+      setOnlineOpponentInviteUrl(null);
+      setGameConfig(analysisReturn.config);
+      clearAnalysisReturn();
+      setGameKey(prev => prev + 1);
+      enterGameView();
+      return;
+    }
+
+    if (analysisReturn.kind === "online-game") {
+      if (analysisReturn.onlineJoin) {
+        rememberOnlineJoinParams(analysisReturn.onlineJoin);
+        if (analysisReturn.opponentInviteUrl) {
+          rememberOnlineOpponentInviteUrl(
+            analysisReturn.onlineJoin.gameId,
+            analysisReturn.opponentInviteUrl
+          );
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.set("onlineGame", analysisReturn.onlineJoin.gameId);
+        url.searchParams.set("seat", analysisReturn.onlineJoin.seat);
+        url.searchParams.delete("view");
+        url.searchParams.delete("token");
+        url.searchParams.delete("onlineChallenge");
+        url.searchParams.delete("challengeRole");
+        url.searchParams.delete("challengeToken");
+        url.searchParams.delete("pgn");
+        url.searchParams.delete("game");
+        url.hash = "";
+        window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+      } else if (analysisReturn.onlineSpectator) {
+        const url = new URL(buildSpectatorUrl(window.location.href, analysisReturn.onlineSpectator.gameId));
+        window.history.replaceState({}, "", `${window.location.pathname}?${url.searchParams.toString()}`);
+      }
+
+      setOnlineJoin(analysisReturn.onlineJoin);
+      setOnlineSpectator(analysisReturn.onlineSpectator);
+      setOnlineSnapshot(analysisReturn.onlineSnapshot);
+      setOnlineOpponentInviteUrl(analysisReturn.opponentInviteUrl);
+      setGameConfig(createGameConfigFromOnlineSnapshot(analysisReturn.onlineSnapshot, false));
+      clearAnalysisReturn();
+      setGameKey(prev => prev + 1);
+      enterGameView();
+      return;
+    }
+
+    setOnlineBrowserTab(analysisReturn.tab);
+    clearAnalysisReturn();
+    setViewStack(['game']);
+    setView('online');
+  }, [analysisReturn]);
 
   const handleLoadSavedGame = (record: SavedGameRecord) => {
     const result = loadPGNText(record.pgn);
@@ -1329,6 +1446,7 @@ function App() {
 
   const clearTransientOnlineState = useCallback(() => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     clearAutosave();
     clearOnlineUrl();
     forgetOnlineChallengeStorage(onlineChallenge);
@@ -1407,6 +1525,7 @@ function App() {
 
   const handlePlayFromEditor = (board: Board, pieces: Piece[], sanctuaries: Sanctuary[]) => {
     cancelPendingReplay();
+    clearAnalysisReturn();
     clearAutosave();
     const layout = getStartingLayout(board);
     clearOnlineUrl();
@@ -1608,6 +1727,8 @@ function App() {
               onTutorial={handleTutorialClick}
               onOpenLibrary={handleOpenLibrary}
               onOpenOnlineBrowser={handleOpenOnlineBrowser}
+              onReturnFromAnalysis={analysisReturn ? handleReturnFromAnalysis : undefined}
+              analysisReturnLabel={analysisReturn?.label}
               onSaveGameToLibrary={handleSaveGameToLibrary}
               pieceTheme={gameConfig.pieceTheme}
               opponentConfig={gameConfig.opponentConfig}

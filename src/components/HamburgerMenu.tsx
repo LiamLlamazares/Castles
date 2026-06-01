@@ -23,6 +23,8 @@ interface HamburgerMenuProps {
   onSaveGameToLibrary?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onReturnFromAnalysis?: () => void;
+  analysisReturnLabel?: string;
   onEditPosition?: () => void;
   onTutorial?: () => void;
   onOpenChange?: (isOpen: boolean) => void;
@@ -50,6 +52,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onSaveGameToLibrary,
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onReturnFromAnalysis,
+  analysisReturnLabel = "Return to Game",
   onEditPosition,
   onTutorial,
   onOpenChange,
@@ -318,9 +322,19 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             <section className="menu-section" aria-labelledby="menu-section-play">
               <div id="menu-section-play" className="menu-section-label">Play</div>
 
-              {onNewGame && (
+              {onReturnFromAnalysis && (
                 <button
                   className="menu-item primary"
+                  onClick={() => handleMenuItemClick(onReturnFromAnalysis)}
+                >
+                  {renderMarker()}
+                  <span>{analysisReturnLabel}</span>
+                </button>
+              )}
+
+              {onNewGame && (
+                <button
+                  className={`menu-item ${onReturnFromAnalysis ? "" : "primary"}`}
                   onClick={() => handleMenuItemClick(onNewGame)}
                 >
                   {renderMarker()}

@@ -59,6 +59,8 @@ vi.mock("../components/Game", () => ({
     onTutorial: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
+    onReturnFromAnalysis?: () => void;
+    analysisReturnLabel?: string;
     onSaveGameToLibrary?: (pgn: string, status: "ongoing" | "complete" | "analysis") => Promise<unknown> | unknown;
     onLoadGame: (data: {
       board: unknown;
@@ -71,7 +73,7 @@ vi.mock("../components/Game", () => ({
       gameRules?: { vpModeEnabled: boolean };
       pieceTheme?: string;
       timeControl?: { initial: number; increment: number };
-    }) => void;
+    }, options?: { source?: "analysis" | "import" | "library" }) => void;
   }) => (
     <div>
       <div>Game Ready</div>
@@ -117,6 +119,11 @@ vi.mock("../components/Game", () => ({
       <button type="button" onClick={props.onOpenOnlineBrowser}>
         Open Online
       </button>
+      {props.onReturnFromAnalysis && (
+        <button type="button" onClick={props.onReturnFromAnalysis}>
+          {props.analysisReturnLabel ?? "Return to Game"}
+        </button>
+      )}
       {props.onSaveGameToLibrary && (
         <button
           type="button"
@@ -146,15 +153,18 @@ vi.mock("../components/Game", () => ({
       )}
       <button
         type="button"
-        onClick={() => props.onLoadGame({
-          board: props.initialBoard,
-          pieces: props.initialPieces ?? [],
-          turnCounter: props.initialTurnCounter ?? 0,
-          sanctuaries: props.initialSanctuaries ?? [],
-          moveTree: props.initialMoveTree,
-          sanctuarySettings: props.sanctuarySettings,
-          initialPoolTypes: props.initialPoolTypes,
-        })}
+        onClick={() => props.onLoadGame(
+          {
+            board: props.initialBoard,
+            pieces: props.initialPieces ?? [],
+            turnCounter: props.initialTurnCounter ?? 0,
+            sanctuaries: props.initialSanctuaries ?? [],
+            moveTree: props.initialMoveTree,
+            sanctuarySettings: props.sanctuarySettings,
+            initialPoolTypes: props.initialPoolTypes,
+          },
+          { source: "analysis" }
+        )}
         disabled={!props.initialBoard}
       >
         Mock Open Analysis
@@ -1246,6 +1256,11 @@ describe("App game setup lifecycle", () => {
       null,
       expect.any(Function)
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Online Archive" }));
+
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+    expect(screen.getByText("Active tab: archive")).toBeInTheDocument();
   });
 
   it("clears stale return paths after Online spectate, replay, Play, and restart entries", async () => {
@@ -1352,6 +1367,19 @@ describe("App game setup lifecycle", () => {
     expect(screen.queryByText("Analysis mode: yes")).not.toBeInTheDocument();
   });
 
+  it("does not expose a stale archive return after cancelling an archived replay load", () => {
+    const pendingFetch = deferredResponse();
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(pendingFetch.promise));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
+
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Online Archive" })).not.toBeInTheDocument();
+  });
+
   it("uses replay setup metadata for archived games with move history", async () => {
     const archiveSnapshot = spectatorSnapshot("game_archive_public");
     const fetchMock = vi.fn().mockResolvedValue(
@@ -1420,6 +1448,17 @@ describe("App game setup lifecycle", () => {
     expect(window.location.hash).toBe("");
     expect(onlineHookMocks.useOnlineSpectatorConnection).toHaveBeenLastCalledWith(
       null,
+      expect.any(Function)
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Live Game" }));
+
+    expect(screen.getByText("Online session: spectator")).toBeInTheDocument();
+    expect(screen.getByText("Analysis mode: no")).toBeInTheDocument();
+    expect(window.location.search).toContain("onlineGame=game_analysis");
+    expect(window.location.search).toContain("view=spectator");
+    expect(onlineHookMocks.useOnlineSpectatorConnection).toHaveBeenLastCalledWith(
+      "game_analysis",
       expect.any(Function)
     );
   });

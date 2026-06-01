@@ -118,6 +118,28 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "Open Library" })).toHaveClass("primary");
   });
 
+  it("promotes the analysis return action above New Game when available", () => {
+    const onReturnFromAnalysis = vi.fn();
+    renderMenu({
+      onReturnFromAnalysis,
+      analysisReturnLabel: "Back to Online Archive",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    const playSection = screen.getByRole("region", { name: "Play" });
+    const returnButton = screen.getByRole("button", { name: "Back to Online Archive" });
+    const newGameButton = screen.getByRole("button", { name: "New Game" });
+
+    expect(playSection).toContainElement(returnButton);
+    expect(returnButton).toHaveClass("primary");
+    expect(newGameButton).not.toHaveClass("primary");
+
+    fireEvent.click(returnButton);
+
+    expect(onReturnFromAnalysis).toHaveBeenCalledOnce();
+  });
+
   it("uses non-text icon markers for drawer items and keeps the full menu scrollable", () => {
     const { container } = renderMenu({
       onEnableAnalysis: vi.fn(),
