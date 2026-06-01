@@ -66,6 +66,7 @@ $env:DATABASE_URL="postgresql://castles_local:castles_local_dev@localhost:5432/c
 npm run build
 npm run server:build
 npm run online:smoke:local
+npm run online:smoke:local:concurrency
 ```
 
 The smoke script refuses non-local database hosts by default. Do not point `DATABASE_URL` at the live server database. If you intentionally use a disposable remote test database, set:
@@ -78,6 +79,7 @@ Expected result:
 
 ```text
 Local restart smoke passed on http://127.0.0.1:<port> using game <game-id>
+Local PostgreSQL concurrency smoke passed using game <game-id>
 ```
 
 What this checks:
@@ -91,6 +93,14 @@ What this checks:
 - asks the local server to run its graceful shutdown path,
 - restarts the server,
 - fetches the same game and confirms version 1 is still there.
+
+The concurrency smoke additionally:
+
+- opens two independent PostgreSQL store connections,
+- creates one disposable game in the local database,
+- submits the same base-version action concurrently from both stores,
+- confirms exactly one action is accepted and the other returns a stale-action snapshot at the committed version,
+- submits a follow-up action from the second store and confirms the event log and summary reach version 2.
 
 Do not point this script at the live database. The live server check remains:
 
