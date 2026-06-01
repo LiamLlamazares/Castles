@@ -6,16 +6,19 @@ import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../../readModel";
+import { hashOnlineToken } from "../onlineTokenCredentials";
 
 class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
   eventRows: Array<{ payload: OnlineGameEvent }> = [];
+  credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }> = [];
   summaryRows: Array<{ payload: unknown }> = [];
   failNextCreateTable = false;
   failNextSummaryInsert = false;
   failRollback = false;
   private transactionSnapshot: {
     eventRows: Array<{ payload: OnlineGameEvent }>;
+    credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }>;
     summaryRows: Array<{ payload: unknown }>;
   } | null = null;
 
@@ -24,6 +27,7 @@ class FakePostgresClient {
     if (/^\s*begin\s*$/i.test(text)) {
       this.transactionSnapshot = {
         eventRows: this.eventRows.map((row) => ({ payload: row.payload })),
+        credentialRows: this.credentialRows.map((row) => ({ ...row })),
         summaryRows: this.summaryRows.map((row) => ({ payload: row.payload })),
       };
       return { rows: [] };
@@ -38,6 +42,7 @@ class FakePostgresClient {
       }
       if (this.transactionSnapshot) {
         this.eventRows = this.transactionSnapshot.eventRows.map((row) => ({ payload: row.payload }));
+        this.credentialRows = this.transactionSnapshot.credentialRows.map((row) => ({ ...row }));
         this.summaryRows = this.transactionSnapshot.summaryRows.map((row) => ({ payload: row.payload }));
         this.transactionSnapshot = null;
       }
@@ -52,6 +57,19 @@ class FakePostgresClient {
     }
     if (/insert into online_game_events/i.test(text) && values?.[5]) {
       this.eventRows.push({ payload: values[5] as OnlineGameEvent });
+    }
+    if (/insert into online_game_credentials/i.test(text) && values) {
+      const gameId = values[0] as string;
+      const rows = [
+        { gameId, seat: values[1] as "w" | "b", tokenHash: values[2] as string },
+        { gameId, seat: values[3] as "w" | "b", tokenHash: values[4] as string },
+      ];
+      for (const credential of rows) {
+        this.credentialRows = this.credentialRows.filter(
+          (row) => !(row.gameId === credential.gameId && row.seat === credential.seat)
+        );
+        this.credentialRows.push(credential);
+      }
     }
     if (/delete\s+from\s+online_game_summaries/i.test(text)) {
       if (/where\s+game_id/i.test(text)) {
@@ -87,6 +105,22 @@ class FakePostgresClient {
     if (/select\s+payload\s+from\s+online_game_events/i.test(text)) {
       return { rows: this.eventRows };
     }
+    if (/select\s+game_id,\s*seat,\s*token_hash\s+from\s+online_game_credentials\s+where\s+game_id/i.test(text)) {
+      return {
+        rows: this.credentialRows
+          .filter((row) => row.gameId === values?.[0])
+          .map((row) => ({ game_id: row.gameId, seat: row.seat, token_hash: row.tokenHash })),
+      };
+    }
+    if (/select\s+game_id,\s*seat,\s*token_hash\s+from\s+online_game_credentials/i.test(text)) {
+      return {
+        rows: this.credentialRows.map((row) => ({
+          game_id: row.gameId,
+          seat: row.seat,
+          token_hash: row.tokenHash,
+        })),
+      };
+    }
     return { rows: [] };
   }
 }
@@ -108,8 +142,6 @@ function createGameCreatedEvent(
     rulesetVersion: ONLINE_RULESET_VERSION,
     type: "game_created",
     gameId,
-    whiteToken: "w-token",
-    blackToken: "b-token",
     setup: serializeOnlineGameSetup({
       board,
       pieces,
@@ -138,6 +170,29 @@ function createClockedGameCreatedEvent(
       runningSince: 0,
     },
   };
+}
+
+function createGameCredentials() {
+  return {
+    whiteCredential: hashOnlineToken("w-token"),
+    blackCredential: hashOnlineToken("b-token"),
+  };
+}
+
+function createCredentialRows(gameId: string) {
+  const credentials = createGameCredentials();
+  return [
+    { gameId, seat: "w" as const, tokenHash: credentials.whiteCredential },
+    { gameId, seat: "b" as const, tokenHash: credentials.blackCredential },
+  ];
+}
+
+function seedCreatedGame(
+  client: FakePostgresClient,
+  event: Extract<OnlineGameEvent, { type: "game_created" }>
+) {
+  client.eventRows = [{ payload: event }];
+  client.credentialRows = createCredentialRows(event.gameId);
 }
 
 describe("PostgresOnlineGameStore", () => {
@@ -181,7 +236,7 @@ describe("PostgresOnlineGameStore", () => {
     const store = new PostgresOnlineGameStore({ queryable: client });
     const event = createGameCreatedEvent();
 
-    await store.appendEvent(event);
+    await store.appendGameCreated(event, createGameCredentials());
 
     const insert = client.queries.find((query) => /insert into online_game_events/i.test(query.text));
     expect(insert?.values).toEqual([
@@ -194,12 +249,61 @@ describe("PostgresOnlineGameStore", () => {
     ]);
   });
 
+  it("stores creation events without raw bearer tokens and saves seat credential hashes separately", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const event = createGameCreatedEvent("game_credentials");
+    const credentials = {
+      whiteCredential: hashOnlineToken("white-token"),
+      blackCredential: hashOnlineToken("black-token"),
+    };
+
+    await store.appendGameCreated(event, credentials);
+
+    expect(JSON.stringify(client.eventRows)).not.toContain("white-token");
+    expect(JSON.stringify(client.eventRows)).not.toContain("black-token");
+    expect(client.credentialRows).toEqual([
+      { gameId: "game_credentials", seat: "w", tokenHash: credentials.whiteCredential },
+      { gameId: "game_credentials", seat: "b", tokenHash: credentials.blackCredential },
+    ]);
+  });
+
+  it("rejects raw credential strings before inserting created games", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.appendGameCreated(createGameCreatedEvent("game_raw_credentials"), {
+        whiteCredential: "w-token",
+        blackCredential: "b-token",
+      })
+    ).rejects.toThrow(/credential hash/);
+
+    expect(client.credentialRows).toHaveLength(0);
+    expect(client.eventRows).toHaveLength(0);
+  });
+
+  it("rejects fake prefixed credential hashes before inserting created games", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.appendGameCreated(createGameCreatedEvent("game_fake_hash"), {
+        whiteCredential: "sha256:white-token-hash",
+        blackCredential: "sha256:black-token-hash",
+      })
+    ).rejects.toThrow(/credential hash/);
+
+    expect(client.credentialRows).toHaveLength(0);
+    expect(client.eventRows).toHaveLength(0);
+  });
+
   it("refreshes the materialized summary after appending each event", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
     const created = createGameCreatedEvent("game_append_summary");
 
-    await store.appendEvent(created);
+    await store.appendGameCreated(created, createGameCredentials());
     await store.appendEvent({
       schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
       eventId: "evt-append-resign",
@@ -236,7 +340,7 @@ describe("PostgresOnlineGameStore", () => {
   it("applies accepted actions against the locked persisted game state", async () => {
     const client = new FakePostgresClient();
     const created = createGameCreatedEvent("game_apply_action");
-    client.eventRows = [{ payload: created }];
+    seedCreatedGame(client, created);
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     const result = await store.applyGameAction({
@@ -292,7 +396,7 @@ describe("PostgresOnlineGameStore", () => {
 
   it("returns rejected action snapshots from the locked persisted game without appending", async () => {
     const client = new FakePostgresClient();
-    client.eventRows = [{ payload: createGameCreatedEvent("game_apply_reject") }];
+    seedCreatedGame(client, createGameCreatedEvent("game_apply_reject"));
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     const result = await store.applyGameAction({
@@ -316,7 +420,7 @@ describe("PostgresOnlineGameStore", () => {
 
   it("rolls back accepted actions when the locked summary refresh fails", async () => {
     const client = new FakePostgresClient();
-    client.eventRows = [{ payload: createGameCreatedEvent("game_apply_rollback") }];
+    seedCreatedGame(client, createGameCreatedEvent("game_apply_rollback"));
     client.failNextSummaryInsert = true;
     const store = new PostgresOnlineGameStore({ queryable: client });
 
@@ -336,7 +440,7 @@ describe("PostgresOnlineGameStore", () => {
 
   it("persists timeout adjudication in the locked action transaction before rejecting the action", async () => {
     const client = new FakePostgresClient();
-    client.eventRows = [{ payload: createClockedGameCreatedEvent("game_apply_timeout") }];
+    seedCreatedGame(client, createClockedGameCreatedEvent("game_apply_timeout"));
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     const result = await store.applyGameAction({
@@ -374,7 +478,7 @@ describe("PostgresOnlineGameStore", () => {
 
   it("adjudicates timeouts against the locked persisted game state", async () => {
     const client = new FakePostgresClient();
-    client.eventRows = [{ payload: createClockedGameCreatedEvent("game_timeout_lock") }];
+    seedCreatedGame(client, createClockedGameCreatedEvent("game_timeout_lock"));
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     const result = await store.adjudicateGameTimeout({
@@ -415,7 +519,7 @@ describe("PostgresOnlineGameStore", () => {
 
   it("returns the locked persisted snapshot without appending when no timeout has occurred", async () => {
     const client = new FakePostgresClient();
-    client.eventRows = [{ payload: createClockedGameCreatedEvent("game_timeout_none") }];
+    seedCreatedGame(client, createClockedGameCreatedEvent("game_timeout_none"));
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     const result = await store.adjudicateGameTimeout({
@@ -439,7 +543,7 @@ describe("PostgresOnlineGameStore", () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
 
-    await store.appendEvent(createGameCreatedEvent("game_transaction"));
+    await store.appendGameCreated(createGameCreatedEvent("game_transaction"), createGameCredentials());
 
     const queryTexts = client.queries.map((query) => query.text);
     const beginIndex = queryTexts.findIndex((text) => /^\s*begin\s*$/i.test(text));
@@ -460,7 +564,9 @@ describe("PostgresOnlineGameStore", () => {
     client.failNextSummaryInsert = true;
     const store = new PostgresOnlineGameStore({ queryable: client });
 
-    await expect(store.appendEvent(createGameCreatedEvent("game_append_rollback"))).rejects.toThrow(
+    await expect(
+      store.appendGameCreated(createGameCreatedEvent("game_append_rollback"), createGameCredentials())
+    ).rejects.toThrow(
       /summary insert unavailable/
     );
 
@@ -477,7 +583,10 @@ describe("PostgresOnlineGameStore", () => {
 
     let caught: unknown;
     try {
-      await store.appendEvent(createGameCreatedEvent("game_rollback_failure"));
+      await store.appendGameCreated(
+        createGameCreatedEvent("game_rollback_failure"),
+        createGameCredentials()
+      );
     } catch (error) {
       caught = error;
     }
@@ -521,6 +630,7 @@ describe("PostgresOnlineGameStore", () => {
         },
       },
     ];
+    client.credentialRows = createCredentialRows("game_replay");
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     const records = await store.load();
@@ -580,7 +690,7 @@ describe("PostgresOnlineGameStore", () => {
 
   it("rebuilds summaries from inside the locked transaction", async () => {
     const client = new FakePostgresClient();
-    client.eventRows = [{ payload: createGameCreatedEvent("game_locked_rebuild") }];
+    seedCreatedGame(client, createGameCreatedEvent("game_locked_rebuild"));
     const store = new PostgresOnlineGameStore({ queryable: client });
 
     await store.rebuildSummaries();
@@ -603,7 +713,7 @@ describe("PostgresOnlineGameStore", () => {
 
   it("rolls back summary rebuilds when an upsert fails", async () => {
     const client = new FakePostgresClient();
-    client.eventRows = [{ payload: createGameCreatedEvent("game_rebuild_rollback") }];
+    seedCreatedGame(client, createGameCreatedEvent("game_rebuild_rollback"));
     client.summaryRows = [
       {
         payload: {

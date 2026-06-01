@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   OnlineGameRoom,
   OnlineGameRoomRecord,
+  type OnlineTokenVerifier,
 } from "./OnlineGameRoom";
 import { OnlineGameSetupDTO } from "./types";
 
@@ -23,6 +24,8 @@ export interface CreateOnlineGameOptions {
 export interface OnlineGameServiceOptions {
   idFactory?: () => string;
   tokenFactory?: (seat: "w" | "b") => string;
+  credentialFactory?: (token: string) => string;
+  verifyToken?: OnlineTokenVerifier;
   now?: () => number;
 }
 
@@ -51,18 +54,28 @@ export class OnlineGameService {
   private readonly rooms = new Map<string, OnlineGameRoom>();
   private readonly idFactory: () => string;
   private readonly tokenFactory: (seat: "w" | "b") => string;
+  private readonly credentialFactory: (token: string) => string;
+  private readonly verifyToken: OnlineTokenVerifier;
   private readonly now: () => number;
 
   constructor(options: OnlineGameServiceOptions = {}) {
     this.idFactory = options.idFactory ?? defaultIdFactory;
     this.tokenFactory = options.tokenFactory ?? defaultTokenFactory;
+    this.credentialFactory = options.credentialFactory ?? ((token) => token);
+    this.verifyToken = options.verifyToken ?? ((token, credential) => token === credential);
     this.now = options.now ?? Date.now;
   }
 
-  static fromRecords(records: OnlineGameRoomRecord[]): OnlineGameService {
-    const service = new OnlineGameService();
+  static fromRecords(
+    records: OnlineGameRoomRecord[],
+    options: OnlineGameServiceOptions = {}
+  ): OnlineGameService {
+    const service = new OnlineGameService(options);
     for (const record of records) {
-      service.rooms.set(record.gameId, OnlineGameRoom.create(record));
+      service.rooms.set(
+        record.gameId,
+        OnlineGameRoom.create({ ...record, verifyToken: service.verifyToken })
+      );
     }
     return service;
   }
@@ -81,8 +94,9 @@ export class OnlineGameService {
     const room = OnlineGameRoom.create({
       setup,
       gameId,
-      whiteToken,
-      blackToken,
+      whiteCredential: this.credentialFactory(whiteToken),
+      blackCredential: this.credentialFactory(blackToken),
+      verifyToken: this.verifyToken,
       now: this.now,
     });
 
@@ -110,7 +124,10 @@ export class OnlineGameService {
   }
 
   replaceRoom(record: OnlineGameRoomRecord): void {
-    this.rooms.set(record.gameId, OnlineGameRoom.create({ ...record, now: this.now }));
+    this.rooms.set(
+      record.gameId,
+      OnlineGameRoom.create({ ...record, verifyToken: this.verifyToken, now: this.now })
+    );
   }
 
   getRoomForToken(gameId: string, token: string): OnlineGameRoom | null {

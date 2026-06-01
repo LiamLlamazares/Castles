@@ -13,6 +13,7 @@ import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   type OnlineGameSummary,
 } from "../../readModel";
+import { verifyOnlineToken } from "../onlineTokenCredentials";
 
 const servers: Array<{ close: (callback: () => void) => void }> = [];
 
@@ -1064,9 +1065,9 @@ describe("createOnlineHttpServer", () => {
     expect(events[0]).toMatchObject({
       type: "game_created",
       gameId: "game_events",
-      whiteToken: "w-token",
-      blackToken: "b-token",
     });
+    expect(JSON.stringify(events[0])).not.toContain("w-token");
+    expect(JSON.stringify(events[0])).not.toContain("b-token");
 
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     socket.on("open", () => {
@@ -1111,6 +1112,68 @@ describe("createOnlineHttpServer", () => {
     } finally {
       socket.close();
     }
+  });
+
+  it("persists game creation as a token-free event with separate credential hashes", async () => {
+    const events: OnlineGameEvent[] = [];
+    const credentials: Array<{ whiteCredential: string; blackCredential: string }> = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      onGameCreated: (event, eventCredentials) => {
+        events.push(event);
+        credentials.push(eventCredentials);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "game_created",
+      gameId: created.gameId,
+    });
+    expect(JSON.stringify(events[0])).not.toContain(created.white.token);
+    expect(JSON.stringify(events[0])).not.toContain(created.black.token);
+    expect(credentials).toHaveLength(1);
+    expect(credentials[0].whiteCredential).not.toContain(created.white.token);
+    expect(credentials[0].blackCredential).not.toContain(created.black.token);
+    expect(verifyOnlineToken(created.white.token, credentials[0].whiteCredential)).toBe(true);
+    expect(verifyOnlineToken(created.black.token, credentials[0].blackCredential)).toBe(true);
+  });
+
+  it("rejects created-game persistence when an injected service supplies non-hash credentials", async () => {
+    const onGameCreated = vi.fn();
+    const service = new OnlineGameService({
+      idFactory: () => "game_raw_credentials",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onGameCreated,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const body = await createResponse.json();
+
+    expect(createResponse.status).toBe(503);
+    expect(body.error).toMatchObject({ code: "persistence_failed" });
+    expect(onGameCreated).not.toHaveBeenCalled();
+    expect(service.getRoom("game_raw_credentials")).toBeNull();
   });
 
   it("uses the canonical store action result when local room state is stale", async () => {
@@ -1559,11 +1622,11 @@ describe("createOnlineHttpServer", () => {
           ok: true,
           room: {
             ...localRecord,
-            whiteToken: "canonical-white-token",
+            whiteCredential: "canonical-white-token",
           },
           snapshot: OnlineGameRoom.create({
             ...localRecord,
-            whiteToken: "canonical-white-token",
+            whiteCredential: "canonical-white-token",
           }).getSnapshot(),
         };
       },

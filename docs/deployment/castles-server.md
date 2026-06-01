@@ -267,6 +267,26 @@ sudo nginx -t || {
   exit 1
 }
 sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
+```
+
+The config check replays the online store before the live service is stopped. If it fails with old beta event rows or missing credential rows, reset disposable beta online data after confirming the backup above exists and only while the app still has no real users:
+
+```bash
+load_castles_db_env
+psql -v ON_ERROR_STOP=1 <<'SQL'
+truncate table
+  online_game_events,
+  online_game_credentials,
+  online_game_summaries,
+  online_game_locks
+restart identity;
+SQL
+sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
+```
+
+Only stop and restart the service after `server:check-config` passes:
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl stop castles-node.service
 sudo systemctl start castles-node.service
@@ -298,6 +318,7 @@ Confirm health reports `"backend":"postgres"` and inspect the table without prin
 curl -sS https://castles.ls314.com/api/health | grep postgres
 load_castles_db_env
 psql -c "select count(*) from online_game_events;"
+psql -c "select count(*) from online_game_credentials;"
 ```
 
 ## 5. Emergency Disable

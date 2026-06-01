@@ -24,8 +24,16 @@ async function main() {
   assertServerRuntimeFiles(config);
 
   const { backend, healthStorePath, store } = createOnlineGameStoreFromEnv(env);
+  let replayedRooms = 0;
   try {
     await store.checkReady();
+    replayedRooms = (
+      await store.load({
+        onEventError: (line, error) => {
+          console.error(`Invalid online event store entry ${line}`, error);
+        },
+      })
+    ).length;
   } finally {
     await store.close();
   }
@@ -41,6 +49,8 @@ async function main() {
         onlineStore: {
           backend,
           path: healthStorePath,
+          replayChecked: true,
+          replayedRooms,
         },
         build: {
           buildId: config.buildId ?? "development",

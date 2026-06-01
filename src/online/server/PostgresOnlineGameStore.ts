@@ -3,6 +3,7 @@ import { OnlineGameRoom, type OnlineGameRoomRecord } from "../OnlineGameRoom";
 import {
   createOnlineActionAcceptedEvent,
   createOnlineTimeoutAdjudicatedEvent,
+  type OnlineGameCredentials,
   OnlineGameEvent,
   onlineGameEventsToRecords,
   validateOnlineGameEvent,
@@ -20,6 +21,7 @@ import type {
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
 } from "./OnlineGameStore";
+import { isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
 
 interface PostgresQueryable {
   query(text: string, values?: unknown[]): Promise<{ rows: any[] }>;
@@ -71,8 +73,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   async load(options: OnlineGameStoreLoadOptions = {}): Promise<OnlineGameRoomRecord[]> {
     await this.ensureSchema();
     const events = await this.loadEvents(options);
+    const credentials = await this.loadCredentials();
 
     return onlineGameEventsToRecords(events, {
+      credentials,
       onEventError: (eventIndex, error) => {
         options.onEventError?.(eventIndex + 1, error);
       },
@@ -108,8 +112,28 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  async appendGameCreated(
+    event: Extract<OnlineGameEvent, { type: "game_created" }>,
+    credentials: OnlineGameCredentials
+  ): Promise<void> {
+    const validated = this.validate(event);
+    if (validated.type !== "game_created") {
+      throw new Error("appendGameCreated only accepts game_created events.");
+    }
+    this.validateCredentials(validated.gameId, credentials);
+    await this.ensureSchema();
+    await this.withTransaction(async (client) => {
+      await this.insertEvent(validated, client);
+      await this.insertCredentials(validated.gameId, credentials, client);
+      await this.refreshSummaryForGame(validated.gameId, client);
+    });
+  }
+
   async appendEvent(event: OnlineGameEvent): Promise<void> {
     const validated = this.validate(event);
+    if (validated.type === "game_created") {
+      throw new Error("Use appendGameCreated to persist game credentials atomically.");
+    }
     await this.ensureSchema();
     await this.withTransaction(async (client) => {
       await this.insertEvent(validated, client);
@@ -133,7 +157,11 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         };
       }
 
-      const room = OnlineGameRoom.create({ ...record, now: input.now });
+      const room = OnlineGameRoom.create({
+        ...record,
+        verifyToken: verifyOnlineToken,
+        now: input.now,
+      });
       const playerColor = room.authenticate(input.token);
       if (!playerColor) {
         return {
@@ -228,7 +256,11 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         };
       }
 
-      const room = OnlineGameRoom.create({ ...record, now: input.now });
+      const room = OnlineGameRoom.create({
+        ...record,
+        verifyToken: verifyOnlineToken,
+        now: input.now,
+      });
       const timeout = room.adjudicateTimeout();
       if (!timeout) {
         return {
@@ -308,6 +340,26 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         WHERE game_version IS NOT NULL
     `);
     await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_game_credentials (
+        game_id TEXT NOT NULL,
+        seat TEXT NOT NULL CHECK (seat IN ('w', 'b')),
+        token_hash TEXT NOT NULL CONSTRAINT online_game_credentials_token_hash_shape CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$'),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (game_id, seat)
+      )
+    `);
+    await this.queryable.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE online_game_credentials
+          ADD CONSTRAINT online_game_credentials_token_hash_shape
+          CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$;
+    `);
+    await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_game_events_order_idx
         ON online_game_events (id)
     `);
@@ -365,6 +417,20 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     );
   }
 
+  private async insertCredentials(
+    gameId: string,
+    credentials: OnlineGameCredentials,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_game_credentials (game_id, seat, token_hash)
+        VALUES ($1, $2, $3), ($1, $4, $5)
+      `,
+      [gameId, "w", credentials.whiteCredential, "b", credentials.blackCredential]
+    );
+  }
+
   private gameVersion(event: OnlineGameEvent): number | null {
     if (event.type === "action_accepted" || event.type === "timeout_adjudicated") {
       return event.version;
@@ -394,6 +460,71 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     return events;
   }
 
+  private async loadCredentials(
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<Map<string, OnlineGameCredentials>> {
+    const result = await queryable.query(
+      "SELECT game_id, seat, token_hash FROM online_game_credentials"
+    );
+    return this.credentialsFromRows(result.rows);
+  }
+
+  private async loadCredentialsForGame(
+    gameId: string,
+    queryable: PostgresQueryable
+  ): Promise<Map<string, OnlineGameCredentials>> {
+    const result = await queryable.query(
+      "SELECT game_id, seat, token_hash FROM online_game_credentials WHERE game_id = $1",
+      [gameId]
+    );
+    return this.credentialsFromRows(result.rows);
+  }
+
+  private credentialsFromRows(rows: any[]): Map<string, OnlineGameCredentials> {
+    const entries = new Map<string, Partial<OnlineGameCredentials>>();
+    for (const row of rows) {
+      const gameId = row.game_id;
+      const seat = row.seat;
+      const tokenHash = row.token_hash;
+      if (typeof gameId !== "string" || (seat !== "w" && seat !== "b")) {
+        throw new Error("Invalid online game credential row.");
+      }
+      if (typeof tokenHash !== "string" || !isOnlineTokenCredentialHash(tokenHash)) {
+        throw new Error(`Invalid online game credential for ${gameId}.`);
+      }
+      const entry = entries.get(gameId) ?? {};
+      if (seat === "w") {
+        entry.whiteCredential = tokenHash;
+      } else {
+        entry.blackCredential = tokenHash;
+      }
+      entries.set(gameId, entry);
+    }
+
+    const credentials = new Map<string, OnlineGameCredentials>();
+    for (const [gameId, entry] of entries) {
+      if (!entry.whiteCredential || !entry.blackCredential) {
+        throw new Error(`Missing online game credentials for ${gameId}.`);
+      }
+      credentials.set(gameId, {
+        whiteCredential: entry.whiteCredential,
+        blackCredential: entry.blackCredential,
+      });
+    }
+    return credentials;
+  }
+
+  private validateCredentials(gameId: string, credentials: OnlineGameCredentials): void {
+    if (
+      typeof credentials.whiteCredential !== "string" ||
+      !isOnlineTokenCredentialHash(credentials.whiteCredential) ||
+      typeof credentials.blackCredential !== "string" ||
+      !isOnlineTokenCredentialHash(credentials.blackCredential)
+    ) {
+      throw new Error(`Invalid online game credential hash for ${gameId}.`);
+    }
+  }
+
   private async loadEventsForGame(
     gameId: string,
     queryable: PostgresQueryable
@@ -420,7 +551,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     queryable: PostgresQueryable
   ): Promise<OnlineGameRoomRecord | null> {
     const events = await this.loadEventsForGame(gameId, queryable);
-    const records = onlineGameEventsToRecords(events);
+    const credentials = await this.loadCredentialsForGame(gameId, queryable);
+    const records = onlineGameEventsToRecords(events, {
+      credentials,
+    });
     if (records.length === 0) return null;
     if (records.length > 1) {
       throw new Error(`Expected one online game record for ${gameId}, found ${records.length}.`);

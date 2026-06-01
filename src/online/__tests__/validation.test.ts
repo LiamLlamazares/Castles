@@ -125,6 +125,40 @@ describe("online validation", () => {
     const result = validateOnlineGameEvent({
       type: "game_created",
       gameId: "game_test",
+      setup: createSetup(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("schemaVersion");
+    }
+  });
+
+  it("accepts token-free game creation events", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-create",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_test",
+      setup: createSetup(),
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(JSON.stringify(result.value)).not.toContain("token");
+    }
+  });
+
+  it("rejects raw player tokens in durable creation events", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: 1,
+      eventId: "evt-create-with-tokens",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_test",
       whiteToken: "w-token",
       blackToken: "b-token",
       setup: createSetup(),
@@ -132,7 +166,7 @@ describe("online validation", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.message).toContain("schemaVersion");
+      expect(result.error.message).toContain("tokens");
     }
   });
 
@@ -144,8 +178,6 @@ describe("online validation", () => {
       rulesetVersion: "castles-beta-v1",
       type: "game_created",
       gameId: "game_test",
-      whiteToken: "w-token",
-      blackToken: "b-token",
       setup: createSetup(),
     });
 
@@ -163,8 +195,6 @@ describe("online validation", () => {
       rulesetVersion: "castles-beta-v1",
       type: "game_created",
       gameId: "game_test",
-      whiteToken: "w-token",
-      blackToken: "b-token",
       setup: createSetup(),
       clock: {
         remainingMs: { w: 60_000, b: 60_000 },
@@ -187,8 +217,6 @@ describe("online validation", () => {
       rulesetVersion: "castles-beta-v1",
       type: "game_created",
       gameId: "game_test",
-      whiteToken: "w-token",
-      blackToken: "b-token",
       setup: {
         ...createSetup(),
         timeControl: { initial: 1, increment: 0 },
@@ -228,8 +256,6 @@ describe("online validation", () => {
       rulesetVersion: "castles-beta-v1",
       type: "game_created",
       gameId: "game_test",
-      whiteToken: "w-token",
-      blackToken: "b-token",
       setup: createSetup(),
     });
 

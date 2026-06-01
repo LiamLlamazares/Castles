@@ -9,6 +9,7 @@ import {
   createOnlineGameCreatedEvent,
   createOnlineTimeoutAdjudicatedEvent,
   OnlineGameEvent,
+  type OnlineGameCredentials,
   ONLINE_EVENT_SCHEMA_VERSION,
   ONLINE_RULESET_VERSION,
 } from "../events";
@@ -30,6 +31,11 @@ import type {
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
 } from "./OnlineGameStore";
+import {
+  hashOnlineToken,
+  isOnlineTokenCredentialHash,
+  verifyOnlineToken,
+} from "./onlineTokenCredentials";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -50,6 +56,10 @@ const DEFAULT_HEALTH_READINESS_TIMEOUT_MS = 1_500;
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
+  onGameCreated?: (
+    event: Extract<OnlineGameEvent, { type: "game_created" }>,
+    credentials: OnlineGameCredentials
+  ) => void | Promise<void>;
   onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
   applyGameAction?: (
     input: OnlineGameStoreActionInput
@@ -199,7 +209,13 @@ async function checkStoreReadyWithTimeout(
 export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const app = express();
   app.set("trust proxy", "loopback");
-  const service = options.service ?? new OnlineGameService({ now: options.now });
+  const service =
+    options.service ??
+    new OnlineGameService({
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+      now: options.now,
+    });
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
   const connections = new Map<WebSocket, OnlineConnection>();
@@ -527,16 +543,27 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         throw new Error(`Created online game ${created.gameId} is missing from service.`);
       }
       const record = room.toRecord();
-      await options.onGameEvent?.(
-        createOnlineGameCreatedEvent({
-          type: "game_created",
-          gameId: record.gameId,
-          whiteToken: record.whiteToken,
-          blackToken: record.blackToken,
-          setup: record.setup,
-          clock: record.clock,
-        })
-      );
+      const event = createOnlineGameCreatedEvent({
+        type: "game_created",
+        gameId: record.gameId,
+        setup: record.setup,
+        clock: record.clock,
+      });
+      const credentials: OnlineGameCredentials = {
+        whiteCredential: record.whiteCredential,
+        blackCredential: record.blackCredential,
+      };
+      if (options.onGameCreated) {
+        if (
+          !isOnlineTokenCredentialHash(credentials.whiteCredential) ||
+          !isOnlineTokenCredentialHash(credentials.blackCredential)
+        ) {
+          throw new Error(`Created online game ${created.gameId} has invalid credential hashes.`);
+        }
+        await options.onGameCreated(event, credentials);
+      } else {
+        await options.onGameEvent?.(event);
+      }
     } catch (error) {
       service.deleteGame(created.gameId);
       log({

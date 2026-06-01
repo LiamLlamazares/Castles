@@ -54,8 +54,6 @@ function createEvent(
     ...envelope(0),
     type: "game_created",
     gameId,
-    whiteToken: "white-secret-token",
-    blackToken: "black-secret-token",
     setup: createSetup(),
     clock: {
       remainingMs: { w: 1_200_000, b: 1_200_000 },

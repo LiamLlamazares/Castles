@@ -1,5 +1,5 @@
 import type { OnlineGameRoomRecord } from "../OnlineGameRoom";
-import type { OnlineGameEvent } from "../events";
+import type { OnlineGameCredentials, OnlineGameEvent } from "../events";
 import type { OnlineGameSummary } from "../readModel";
 import type {
   OnlineActionDTO,
@@ -15,6 +15,10 @@ export interface OnlineGameStore {
   load(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameRoomRecord[]>;
   loadSummaries(): Promise<OnlineGameSummary[]>;
   rebuildSummaries(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameSummary[]>;
+  appendGameCreated(
+    event: Extract<OnlineGameEvent, { type: "game_created" }>,
+    credentials: OnlineGameCredentials
+  ): Promise<void>;
   appendEvent(event: OnlineGameEvent): Promise<void>;
   applyGameAction(input: OnlineGameStoreActionInput): Promise<OnlineGameStoreActionResult>;
   adjudicateGameTimeout(

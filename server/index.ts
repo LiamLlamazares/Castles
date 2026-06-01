@@ -11,6 +11,10 @@ import {
   parseServerRuntimeConfig,
 } from "../src/online/server/serverRuntimeConfig";
 import { OnlineGameService } from "../src/online/OnlineGameService";
+import {
+  hashOnlineToken,
+  verifyOnlineToken,
+} from "../src/online/server/onlineTokenCredentials";
 
 function resolveOnce<T>(settle: (resolve: (value: T) => void, reject: (error: unknown) => void) => void): Promise<T> {
   let settled = false;
@@ -95,10 +99,14 @@ async function main() {
         console.error(`Invalid online event store entry ${line}`, error);
       },
     });
-    const service = OnlineGameService.fromRecords(records);
+    const service = OnlineGameService.fromRecords(records, {
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+    });
     const { app, server, wss } = createOnlineHttpServer({
       publicBaseUrl: config.publicBaseUrl,
       service,
+      onGameCreated: (event, credentials) => store.appendGameCreated(event, credentials),
       onGameEvent: (event) => store.appendEvent(event),
       applyGameAction: (input) => store.applyGameAction(input),
       adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),

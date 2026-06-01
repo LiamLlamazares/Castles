@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -22,6 +23,14 @@ const eventsModulePath = path.join(
   "src",
   "online",
   "events.js"
+);
+const credentialsModulePath = path.join(
+  repoRoot,
+  "server-build",
+  "src",
+  "online",
+  "server",
+  "onlineTokenCredentials.js"
 );
 
 function isLocalDatabaseHost(databaseUrlText) {
@@ -50,7 +59,7 @@ function requireLocalInputs() {
       "Refusing to run local concurrency smoke against a non-local DATABASE_URL host. Use a localhost database, or set CASTLES_ALLOW_NONLOCAL_SMOKE_DB=1 only for a disposable non-production database."
     );
   }
-  if (!existsSync(storeModulePath) || !existsSync(eventsModulePath)) {
+  if (!existsSync(storeModulePath) || !existsSync(eventsModulePath) || !existsSync(credentialsModulePath)) {
     throw new Error("Built server modules were not found. Run npm run server:build first.");
   }
 }
@@ -65,27 +74,30 @@ async function main() {
   requireLocalInputs();
   const { PostgresOnlineGameStore } = require(storeModulePath);
   const { createOnlineGameCreatedEvent } = require(eventsModulePath);
+  const { hashOnlineToken } = require(credentialsModulePath);
 
   const gameId = createGameId();
-  const whiteToken = `${gameId}_white`;
-  const blackToken = `${gameId}_black`;
+  const whiteToken = randomBytes(18).toString("base64url");
+  const blackToken = randomBytes(18).toString("base64url");
   const storeA = new PostgresOnlineGameStore({ connectionString: process.env.DATABASE_URL });
   const storeB = new PostgresOnlineGameStore({ connectionString: process.env.DATABASE_URL });
 
   try {
-    await storeA.appendEvent(
+    await storeA.appendGameCreated(
       createOnlineGameCreatedEvent(
         {
           type: "game_created",
           gameId,
-          whiteToken,
-          blackToken,
           setup: makeSmokeSetup(),
         },
         {
           eventId: `${gameId}_create`,
         }
-      )
+      ),
+      {
+        whiteCredential: hashOnlineToken(whiteToken),
+        blackCredential: hashOnlineToken(blackToken),
+      }
     );
 
     const [first, second] = await Promise.all([

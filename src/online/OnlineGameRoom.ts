@@ -30,8 +30,9 @@ import {
 export interface OnlineGameRoomCreateInput {
   setup: OnlineGameSetupDTO;
   gameId: string;
-  whiteToken: string;
-  blackToken: string;
+  whiteCredential: string;
+  blackCredential: string;
+  verifyToken?: OnlineTokenVerifier;
   clock?: OnlineClockRecord;
   acceptedActions?: AcceptedOnlineActionRecord[];
   timeout?: AcceptedOnlineTimeoutRecord;
@@ -64,14 +65,18 @@ export interface AcceptedOnlineTimeoutRecord {
 
 export interface OnlineGameRoomRecord {
   gameId: string;
-  whiteToken: string;
-  blackToken: string;
+  whiteCredential: string;
+  blackCredential: string;
   setup: OnlineGameSetupDTO;
   clock?: OnlineClockRecord;
   acceptedActions: AcceptedOnlineActionRecord[];
   timeout?: AcceptedOnlineTimeoutRecord;
   result?: OnlineGameResultDTO;
 }
+
+export type OnlineTokenVerifier = (token: string, credential: string) => boolean;
+
+const defaultTokenVerifier: OnlineTokenVerifier = (token, credential) => token === credential;
 
 function reject(
   snapshot: OnlineGameSnapshotDTO,
@@ -105,8 +110,9 @@ export class OnlineGameRoom {
   private constructor(
     private readonly setup: OnlineGameSetupDTO,
     private readonly gameId: string,
-    private readonly whiteToken: string,
-    private readonly blackToken: string,
+    private readonly whiteCredential: string,
+    private readonly blackCredential: string,
+    private readonly verifyToken: OnlineTokenVerifier,
     private readonly now: () => number
   ) {
     const hydrated = createInitialStateFromSetupDTO(setup);
@@ -123,8 +129,9 @@ export class OnlineGameRoom {
     const room = new OnlineGameRoom(
       input.setup,
       input.gameId,
-      input.whiteToken,
-      input.blackToken,
+      input.whiteCredential,
+      input.blackCredential,
+      input.verifyToken ?? defaultTokenVerifier,
       input.now ?? Date.now
     );
     room.clockState = room.cloneClockRecord(input.clock) ?? room.clockState;
@@ -146,8 +153,9 @@ export class OnlineGameRoom {
   }
 
   authenticate(token: string): Color | null {
-    if (token === this.whiteToken) return "w";
-    if (token === this.blackToken) return "b";
+    if (!token) return null;
+    if (this.whiteCredential && this.verifyToken(token, this.whiteCredential)) return "w";
+    if (this.blackCredential && this.verifyToken(token, this.blackCredential)) return "b";
     return null;
   }
 
@@ -231,8 +239,8 @@ export class OnlineGameRoom {
   toRecord(): OnlineGameRoomRecord {
     return {
       gameId: this.gameId,
-      whiteToken: this.whiteToken,
-      blackToken: this.blackToken,
+      whiteCredential: this.whiteCredential,
+      blackCredential: this.blackCredential,
       setup: this.setup,
       clock: this.cloneClockRecord(this.clockState),
       acceptedActions: [...this.acceptedActions],
@@ -409,10 +417,6 @@ export class OnlineGameRoom {
       runningSince: clock.runningSince,
       flag: clock.flag ? { ...clock.flag } : undefined,
     };
-  }
-
-  private tokenForColor(color: Color): string {
-    return color === "w" ? this.whiteToken : this.blackToken;
   }
 
   private accept(playerColor: Color, action: OnlineActionDTO, playedAt: number): AcceptedOnlineActionRecord {

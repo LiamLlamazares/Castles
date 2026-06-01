@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
 import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
@@ -32,8 +32,8 @@ function createRoom(options: {
       timeControl: options.timeControl,
     }),
     gameId: "game-test",
-    whiteToken: "white-token",
-    blackToken: "black-token",
+    whiteCredential: "white-token",
+    blackCredential: "black-token",
     acceptedActions: options.acceptedActions,
     timeout: options.timeout,
     now: options.now,
@@ -41,6 +41,45 @@ function createRoom(options: {
 }
 
 describe("OnlineGameRoom", () => {
+  it("authenticates opaque stored credentials through the supplied verifier", () => {
+    const verifier = vi.fn((token: string, credential: string) => {
+      return `${token}-hash` === credential;
+    });
+    const board = getStartingBoard(6);
+    const pieces = getStartingPieces(6);
+    const sanctuaries = SanctuaryGenerator.generateRandomSanctuaries(board, [
+      SanctuaryType.WolfCovenant,
+      SanctuaryType.SacredSpring,
+    ]);
+
+    const room = OnlineGameRoom.create({
+      setup: serializeOnlineGameSetup({
+        board,
+        pieces,
+        sanctuaries,
+        sanctuarySettings: { unlockTurn: 0, cooldown: 10 },
+        gameRules: { vpModeEnabled: false },
+        initialPoolTypes: [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
+        pieceTheme: "Castles",
+      }),
+      gameId: "game-credential-test",
+      whiteCredential: "white-token-hash",
+      blackCredential: "black-token-hash",
+      verifyToken: verifier,
+    } as any);
+
+    expect(room.authenticate("white-token")).toBe("w");
+    expect(room.authenticate("black-token")).toBe("b");
+    expect(room.authenticate("wrong-token")).toBeNull();
+    expect(room.toRecord()).toMatchObject({
+      gameId: "game-credential-test",
+      whiteCredential: "white-token-hash",
+      blackCredential: "black-token-hash",
+    });
+    expect(room.toRecord()).not.toHaveProperty("whiteToken");
+    expect(verifier).toHaveBeenCalledWith("white-token", "white-token-hash");
+  });
+
   it("creates private player links and exposes a versioned initial snapshot", () => {
     const room = createRoom();
 

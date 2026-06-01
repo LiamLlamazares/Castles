@@ -38,6 +38,15 @@ function eventEnvelope(index: number) {
   } as const;
 }
 
+function eventCredentials(gameId: string) {
+  return {
+    [gameId]: {
+      whiteCredential: "w-token",
+      blackCredential: "b-token",
+    },
+  };
+}
+
 describe("OnlineGameService", () => {
   it("creates private invite URLs and stores reconnectable rooms", () => {
     const service = new OnlineGameService();
@@ -66,8 +75,6 @@ describe("OnlineGameService", () => {
           ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_fixed",
-          whiteToken: "w-token",
-          blackToken: "b-token",
           setup,
         },
         {
@@ -79,7 +86,7 @@ describe("OnlineGameService", () => {
           playedAt: 2_000,
           action: { type: "PASS", baseVersion: 0 },
         },
-      ])
+      ], { credentials: eventCredentials("game_fixed") })
     );
     const restoredRoom = restored.getRoomForToken("game_fixed", "w-token");
 
@@ -94,8 +101,6 @@ describe("OnlineGameService", () => {
           ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_resign",
-          whiteToken: "w-token",
-          blackToken: "b-token",
           setup: createSetup(),
         },
         {
@@ -107,10 +112,42 @@ describe("OnlineGameService", () => {
           playedAt: 2_000,
           action: { type: "RESIGN", baseVersion: 0 },
         },
-      ])
+      ], { credentials: eventCredentials("game_resign") })
     );
 
     expect(restored.getRoom("game_resign")?.getSnapshot().result?.winner).toBe("w");
+  });
+
+  it("does not make projection-only event replay authenticate players", () => {
+    const records = onlineGameEventsToRecords(
+      [
+        {
+          ...eventEnvelope(1),
+          type: "game_created",
+          gameId: "game_projection",
+          setup: createSetup(),
+        },
+      ],
+      { allowMissingCredentialsForProjection: true }
+    );
+    const restored = OnlineGameService.fromRecords(records);
+
+    expect(restored.getRoom("game_projection")?.getSnapshot().version).toBe(0);
+    expect(restored.getRoomForToken("game_projection", "missing-online-game-credential")).toBeNull();
+    expect(restored.getRoomForToken("game_projection", "")).toBeNull();
+  });
+
+  it("requires credentials by default when replaying game creation events", () => {
+    expect(() =>
+      onlineGameEventsToRecords([
+        {
+          ...eventEnvelope(1),
+          type: "game_created",
+          gameId: "game_missing_credentials",
+          setup: createSetup(),
+        },
+      ])
+    ).toThrow(/Missing online game credentials/);
   });
 
   it("rejects replay events after a resignation has ended the game", () => {
@@ -120,8 +157,6 @@ describe("OnlineGameService", () => {
           ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_resign_terminal",
-          whiteToken: "w-token",
-          blackToken: "b-token",
           setup: createSetup(),
         },
         {
@@ -142,7 +177,7 @@ describe("OnlineGameService", () => {
           playedAt: 3_000,
           action: { type: "PASS", baseVersion: 1 },
         },
-      ])
+      ], { credentials: eventCredentials("game_resign_terminal") })
     ).toThrow(/already-finished/);
   });
 
@@ -153,8 +188,6 @@ describe("OnlineGameService", () => {
           ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_action_terminal",
-          whiteToken: "w-token",
-          blackToken: "b-token",
           setup: {
             ...createSetup(),
             pieces: [
@@ -206,7 +239,7 @@ describe("OnlineGameService", () => {
           playedAt: 3_000,
           action: { type: "PASS", baseVersion: 1 },
         },
-      ] as any)
+      ] as any, { credentials: eventCredentials("game_action_terminal") })
     ).toThrow(/already-finished/);
   });
 
@@ -217,8 +250,6 @@ describe("OnlineGameService", () => {
           ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_timeout",
-          whiteToken: "w-token",
-          blackToken: "b-token",
           setup: {
             ...createSetup(),
             timeControl: { initial: 1, increment: 0 },
@@ -244,7 +275,7 @@ describe("OnlineGameService", () => {
             flag: { color: "w", at: 61_000 },
           },
         },
-      ] as any)
+      ] as any, { credentials: eventCredentials("game_timeout") })
     );
 
     expect(restored.getRoom("game_timeout")?.getSnapshot()).toMatchObject({
@@ -264,8 +295,6 @@ describe("OnlineGameService", () => {
           ...eventEnvelope(1),
           type: "game_created",
           gameId: "game_created_clock",
-          whiteToken: "w-token",
-          blackToken: "b-token",
           setup: {
             ...createSetup(),
             timeControl: { initial: 1, increment: 0 },
@@ -276,7 +305,7 @@ describe("OnlineGameService", () => {
             runningSince: 12_345,
           },
         },
-      ] as any)
+      ] as any, { credentials: eventCredentials("game_created_clock") })
     );
 
     expect(restored.getRoom("game_created_clock")?.getSnapshot().clock).toMatchObject({
@@ -293,14 +322,12 @@ describe("OnlineGameService", () => {
         ...eventEnvelope(1),
         type: "game_created",
         gameId: "game_missing_clock",
-        whiteToken: "w-token",
-        blackToken: "b-token",
         setup: {
           ...createSetup(),
           timeControl: { initial: 1, increment: 0 },
         },
       },
-      ])
+      ], { credentials: eventCredentials("game_missing_clock") })
     ).toThrow(/missing persisted clock/);
   });
 });

@@ -26,8 +26,6 @@ export type OnlineGameEvent =
   | (OnlineGameEventEnvelope & {
       type: "game_created";
       gameId: string;
-      whiteToken: string;
-      blackToken: string;
       setup: OnlineGameSetupDTO;
       clock?: OnlineClockRecord;
     })
@@ -51,11 +49,22 @@ export type OnlineGameEvent =
     });
 
 export interface OnlineGameEventReplayOptions {
+  credentials?: OnlineGameCredentialMap;
+  allowMissingCredentialsForProjection?: boolean;
   onEventError?: (eventIndex: number, error: unknown) => void;
 }
 
+export interface OnlineGameCredentials {
+  whiteCredential: string;
+  blackCredential: string;
+}
+
+export type OnlineGameCredentialMap =
+  | ReadonlyMap<string, OnlineGameCredentials>
+  | Readonly<Record<string, OnlineGameCredentials | undefined>>;
+
 const MAX_ID_LENGTH = 128;
-const MAX_TOKEN_LENGTH = 256;
+const PROJECTION_ONLY_CREDENTIAL = "";
 const COLORS = new Set<Color>(["w", "b"]);
 let nextEventSequence = 0;
 
@@ -123,6 +132,17 @@ export function createOnlineGameCreatedEvent(
     ...event,
     ...createEnvelope(metadata),
   };
+}
+
+function getCredentials(
+  credentials: OnlineGameCredentialMap | undefined,
+  gameId: string
+): OnlineGameCredentials | undefined {
+  if (!credentials) return undefined;
+  if (typeof (credentials as ReadonlyMap<string, OnlineGameCredentials>).get === "function") {
+    return (credentials as ReadonlyMap<string, OnlineGameCredentials>).get(gameId);
+  }
+  return (credentials as Readonly<Record<string, OnlineGameCredentials | undefined>>)[gameId];
 }
 
 export function createOnlineActionAcceptedEvent(
@@ -232,11 +252,8 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
   };
 
   if (value.type === "game_created") {
-    if (!isBoundedString(value.whiteToken, MAX_TOKEN_LENGTH)) {
-      return bad("event.whiteToken is invalid.");
-    }
-    if (!isBoundedString(value.blackToken, MAX_TOKEN_LENGTH)) {
-      return bad("event.blackToken is invalid.");
+    if ("whiteToken" in value || "blackToken" in value) {
+      return bad("event.game_created must not contain raw player tokens.");
     }
     const setup = validateOnlineGameSetup(value.setup);
     if (!setup.ok) return setup;
@@ -257,8 +274,6 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
         ...envelope,
         type: "game_created",
         gameId: value.gameId,
-        whiteToken: value.whiteToken,
-        blackToken: value.blackToken,
         setup: setup.value,
         clock,
       },
@@ -353,10 +368,14 @@ export function onlineGameEventsToRecords(
         if (event.setup.timeControl && !event.clock) {
           throw new Error(`Clocked creation event for ${event.gameId} is missing persisted clock.`);
         }
+        const credentials = getCredentials(options.credentials, event.gameId);
+        if (!credentials && !options.allowMissingCredentialsForProjection) {
+          throw new Error(`Missing online game credentials for ${event.gameId}.`);
+        }
         rooms.set(event.gameId, {
           gameId: event.gameId,
-          whiteToken: event.whiteToken,
-          blackToken: event.blackToken,
+          whiteCredential: credentials?.whiteCredential ?? PROJECTION_ONLY_CREDENTIAL,
+          blackCredential: credentials?.blackCredential ?? PROJECTION_ONLY_CREDENTIAL,
           setup: event.setup,
           clock: event.clock,
           acceptedActions: [],

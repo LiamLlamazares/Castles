@@ -8,12 +8,9 @@ This document records the current contract decisions for online multiplayer. The
 
 ### Disposable Beta Events
 
-`OnlineGameEvent` schema v1 is a private-beta event stream. It is valid for the current single-node beta, but it is not a permanent public contract because `game_created` still contains bearer invite tokens.
+`OnlineGameEvent` schema v1 is a private-beta event stream. It is valid for the current single-node beta, but it is not a permanent public contract yet. Creation events are token-free: `game_created` stores only `gameId`, setup, and optional clock state.
 
-Before public launch, either:
-
-- replace v1 with a token-free event schema and reset the beta database, or
-- write an explicit one-time migration that extracts credentials from events and deletes raw token payloads.
+Player credentials live outside the event stream in private server-side credential records keyed by `gameId + seat`. Those records store token hashes, not raw invite tokens. Because the app has no production users, incompatible beta data can be reset rather than migrated.
 
 Unsupported event schema versions must fail replay loudly. Silent partial replay is not allowed.
 
@@ -65,7 +62,6 @@ The current access helper is a contract helper, not complete authorization. Curr
 
 ## Next Contract Changes
 
-1. Move raw player credentials out of durable game events.
-2. Add credential records keyed by `gameId + seat`, storing token hashes rather than raw tokens.
-3. Add idempotency primitives such as `clientActionId` for retry-safe action submission.
-4. Add durable challenge and visibility lifecycle events before public lobby/challenge UI.
+1. Add idempotency primitives such as `clientActionId` for retry-safe action submission.
+2. Add durable challenge and visibility lifecycle events before public lobby/challenge UI.
+3. Add a public account/session ownership layer before private challenge authorization.

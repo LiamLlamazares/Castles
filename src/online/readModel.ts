@@ -222,7 +222,9 @@ export function isOnlineGameSummaryListed(
 }
 
 export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGameSummary[] {
-  const records = onlineGameEventsToRecords(events);
+  const records = onlineGameEventsToRecords(events, {
+    allowMissingCredentialsForProjection: true,
+  });
   const metadataByGame = new Map<string, SummaryMetadata>();
 
   for (const event of events) {
