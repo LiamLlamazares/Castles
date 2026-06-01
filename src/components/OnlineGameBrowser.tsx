@@ -3,16 +3,32 @@ import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import {
   buildSpectatorUrl,
   copyOnlineInviteUrl,
-  fetchOnlineGameSummaries,
+  fetchOnlineGameDirectory,
   formatOnlineGameResult,
+  type FetchOnlineGameSummariesOptions,
 } from "../online/client";
-import type { OnlineGameSummary, OnlineGameSummaryParticipant } from "../online/readModel";
+import type {
+  OnlineGameDirectoryResponse,
+  OnlineGameSummary,
+  OnlineGameSummaryParticipant,
+} from "../online/readModel";
 import "../css/OnlineGameBrowser.css";
 
 type OnlineBrowserTab = "watch" | "archive";
+type OnlineBrowserSort = "newest" | "moves";
+type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
+type OnlineBrowserResultFilter =
+  | "all"
+  | "white"
+  | "black"
+  | "resignation"
+  | "timeout"
+  | "castle_control"
+  | "victory_points"
+  | "monarch_captured";
 
 interface OnlineGameBrowserProps {
-  loadGames?: () => Promise<OnlineGameSummary[]>;
+  loadGames?: (options?: FetchOnlineGameSummariesOptions) => Promise<OnlineGameDirectoryResponse>;
   onBack: () => void;
   onOpenGame?: () => void;
   onTutorial?: () => void;
@@ -59,8 +75,26 @@ function searchText(summary: OnlineGameSummary): string {
   ].join(" ").toLowerCase();
 }
 
+function compareNewest(left: OnlineGameSummary, right: OnlineGameSummary): number {
+  if (left.updatedAt !== right.updatedAt) return right.updatedAt.localeCompare(left.updatedAt);
+  return left.gameId.localeCompare(right.gameId);
+}
+
+function compareMostMoves(left: OnlineGameSummary, right: OnlineGameSummary): number {
+  if (left.version !== right.version) return right.version - left.version;
+  return compareNewest(left, right);
+}
+
+function matchesResultFilter(summary: OnlineGameSummary, resultFilter: OnlineBrowserResultFilter): boolean {
+  if (resultFilter === "all") return true;
+  if (!summary.result) return false;
+  if (resultFilter === "white") return summary.result.winner === "w";
+  if (resultFilter === "black") return summary.result.winner === "b";
+  return summary.result.reason === resultFilter;
+}
+
 const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
-  loadGames = fetchOnlineGameSummaries,
+  loadGames = fetchOnlineGameDirectory,
   onBack,
   onOpenGame,
   onTutorial,
@@ -73,21 +107,68 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [tab, setTab] = React.useState<OnlineBrowserTab>(initialTab);
   const [games, setGames] = React.useState<OnlineGameSummary[]>([]);
   const [query, setQuery] = React.useState("");
+  const [sort, setSort] = React.useState<OnlineBrowserSort>("newest");
+  const [timeFilter, setTimeFilter] = React.useState<OnlineBrowserTimeFilter>("all");
+  const [resultFilter, setResultFilter] = React.useState<OnlineBrowserResultFilter>("all");
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false);
+  const [nextCursor, setNextCursor] = React.useState<string | undefined>();
   const [copyMessage, setCopyMessage] = React.useState("");
+  const requestIdRef = React.useRef(0);
 
-  const refreshGames = React.useCallback(async () => {
-    setStatus("loading");
+  const directoryState = tab === "watch" ? "active" : "archived";
+
+  React.useEffect(() => {
+    if (tab === "watch" && resultFilter !== "all") {
+      setResultFilter("all");
+    }
+  }, [resultFilter, tab]);
+
+  const loadPage = React.useCallback(async (
+    mode: "replace" | "append",
+    cursor?: string
+  ) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    if (mode === "replace") {
+      setStatus("loading");
+    } else {
+      setIsLoadingMore(true);
+    }
     setCopyMessage("");
     try {
-      setGames(await loadGames());
+      const response = await loadGames({
+        state: directoryState,
+        limit: 50,
+        cursor,
+      });
+      if (requestIdRef.current !== requestId) return;
+      setGames((current) => mode === "append" ? [...current, ...response.games] : response.games);
+      setNextCursor(response.nextCursor);
       setStatus("ready");
     } catch (error) {
+      if (requestIdRef.current !== requestId) return;
       console.error("[OnlineGameBrowser] Failed to load public games", error);
-      setGames([]);
+      if (mode === "replace") {
+        setGames([]);
+        setNextCursor(undefined);
+      }
       setStatus("error");
+    } finally {
+      if (requestIdRef.current === requestId) {
+        setIsLoadingMore(false);
+      }
     }
-  }, [loadGames]);
+  }, [directoryState, loadGames]);
+
+  const refreshGames = React.useCallback(() => {
+    void loadPage("replace");
+  }, [loadPage]);
+
+  const loadMoreGames = React.useCallback(() => {
+    if (!nextCursor) return;
+    void loadPage("append", nextCursor);
+  }, [loadPage, nextCursor]);
 
   React.useEffect(() => {
     refreshGames();
@@ -100,22 +181,24 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const visibleGames = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return publicGames.filter((game) => {
+    const filtered = publicGames.filter((game) => {
       const tabMatches =
         tab === "watch"
           ? game.status === "active"
           : game.status === "complete" && game.archiveState === "archived";
       if (!tabMatches) return false;
+      if (timeFilter === "timed" && !game.hasTimeControl) return false;
+      if (timeFilter === "casual" && game.hasTimeControl) return false;
+      if (tab === "archive" && !matchesResultFilter(game, resultFilter)) return false;
       return !normalizedQuery || searchText(game).includes(normalizedQuery);
     });
-  }, [publicGames, query, tab]);
+    return filtered.sort(sort === "moves" ? compareMostMoves : compareNewest);
+  }, [publicGames, query, resultFilter, sort, tab, timeFilter]);
 
-  const activeCount = publicGames.filter((game) => game.status === "active").length;
-  const archiveCount = publicGames.filter(
-    (game) => game.status === "complete" && game.archiveState === "archived"
-  ).length;
   const emptyTitle =
     tab === "watch" ? "No public live games yet." : "No public completed games yet.";
+  const hasActiveFilters =
+    query.trim() !== "" || timeFilter !== "all" || (tab === "archive" && resultFilter !== "all");
 
   const copySpectatorLink = async (gameId: string) => {
     try {
@@ -155,7 +238,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             className={tab === "watch" ? "active" : ""}
             onClick={() => setTab("watch")}
           >
-            Watch <span aria-hidden="true">{activeCount}</span>
+            Watch
           </button>
           <button
             type="button"
@@ -163,8 +246,52 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             className={tab === "archive" ? "active" : ""}
             onClick={() => setTab("archive")}
           >
-            Online Archive <span aria-hidden="true">{archiveCount}</span>
+            Online Archive
           </button>
+        </div>
+        <div className="online-browser-filter-grid">
+          <label className="online-browser-select">
+            <span>Sort</span>
+            <select
+              aria-label="Sort public games"
+              value={sort}
+              onChange={(event) => setSort(event.currentTarget.value as OnlineBrowserSort)}
+            >
+              <option value="newest">Newest</option>
+              <option value="moves">Most moves</option>
+            </select>
+          </label>
+          <label className="online-browser-select">
+            <span>Clock</span>
+            <select
+              aria-label="Time control filter"
+              value={timeFilter}
+              onChange={(event) => setTimeFilter(event.currentTarget.value as OnlineBrowserTimeFilter)}
+            >
+              <option value="all">All clocks</option>
+              <option value="timed">Timed</option>
+              <option value="casual">Casual</option>
+            </select>
+          </label>
+          {tab === "archive" && (
+            <label className="online-browser-select">
+              <span>Result</span>
+              <select
+                aria-label="Result filter"
+                value={resultFilter}
+                onChange={(event) => setResultFilter(event.currentTarget.value as OnlineBrowserResultFilter)}
+              >
+                <option value="all">All results</option>
+                <option value="white">White wins</option>
+                <option value="black">Black wins</option>
+                <option value="resignation">Resignation</option>
+                <option value="timeout">Timeout</option>
+                <option value="castle_control">Castle control</option>
+                <option value="victory_points">Victory points</option>
+                <option value="monarch_captured">Monarch captured</option>
+              </select>
+            </label>
+          )}
         </div>
         <label className="online-browser-search">
           <span>Search</span>
@@ -183,7 +310,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           ? "Loading public games..."
           : status === "error"
             ? "Could not load public games."
-            : copyMessage || `${visibleGames.length} public ${tab === "watch" ? "live" : "archived"} games`}
+            : copyMessage ||
+              `${visibleGames.length} public ${tab === "watch" ? "live" : "archived"} games shown${nextCursor ? "; more available" : ""}`}
       </div>
 
       {status === "error" ? (
@@ -192,15 +320,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         </button>
       ) : (
         <main className="online-browser-list" aria-label={tab === "watch" ? "Public live games" : "Public archived games"}>
-          {visibleGames.length === 0 && status === "ready" ? (
-            <section className="online-browser-empty">
-              <h2>{emptyTitle}</h2>
-              <p>
-                Private and unlisted games stay off this page. Shared spectator links still work for people who already have them.
-              </p>
-            </section>
-          ) : (
-            visibleGames.map((game) => {
+          <>
+            {visibleGames.length === 0 && status === "ready" ? (
+              <section className="online-browser-empty">
+                <h2>{hasActiveFilters && publicGames.length > 0 ? "No public games match these filters." : emptyTitle}</h2>
+                <p>
+                  {hasActiveFilters && publicGames.length > 0
+                    ? "Try a different search, clock, or result setting."
+                    : "Private and unlisted games stay off this page. Shared spectator links still work for people who already have them."}
+                </p>
+              </section>
+            ) : visibleGames.map((game) => {
               const white = participantName(game.participants, "w");
               const black = participantName(game.participants, "b");
               const resultLabel = game.result ? formatOnlineGameResult(game.result) : null;
@@ -245,19 +375,31 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     >
                       {primaryActionLabel}
                     </button>
-                    <button
-                      type="button"
-                      className="online-browser-button neutral"
-                      onClick={() => copySpectatorLink(game.gameId)}
-                      aria-label={`Copy spectator link for ${game.gameId}`}
-                    >
-                      Copy Link
-                    </button>
+                    {!isArchivedGame && (
+                      <button
+                        type="button"
+                        className="online-browser-button neutral"
+                        onClick={() => copySpectatorLink(game.gameId)}
+                        aria-label={`Copy spectator link for ${game.gameId}`}
+                      >
+                        Copy Link
+                      </button>
+                    )}
                   </div>
                 </article>
               );
-            })
-          )}
+            })}
+            {nextCursor && status === "ready" && (
+              <button
+                type="button"
+                className="online-browser-button neutral online-browser-load-more"
+                onClick={loadMoreGames}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? "Loading..." : "Load more"}
+              </button>
+            )}
+          </>
         </main>
       )}
     </div>

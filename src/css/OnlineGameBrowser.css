@@ -16,7 +16,7 @@
 
 .online-browser-toolbar {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(220px, 320px);
+  grid-template-columns: minmax(240px, 0.8fr) minmax(280px, 1.1fr) minmax(220px, 320px);
   gap: 16px;
   align-items: end;
   margin-bottom: 14px;
@@ -40,7 +40,8 @@
 }
 
 .online-browser-page button:focus-visible,
-.online-browser-search input:focus-visible {
+.online-browser-search input:focus-visible,
+.online-browser-select select:focus-visible {
   outline: 3px solid #91d6c5;
   outline-offset: 3px;
   box-shadow: 0 0 0 2px rgba(10, 16, 18, 0.9);
@@ -69,12 +70,29 @@
   font-size: 0.9rem;
 }
 
-.online-browser-search input {
+.online-browser-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.online-browser-select {
+  display: grid;
+  gap: 6px;
+  color: #d9d0b8;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.online-browser-search input,
+.online-browser-select select {
   min-height: 42px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 9px 12px;
   font: inherit;
+  min-width: 0;
 }
 
 .online-browser-status-line {
@@ -180,6 +198,11 @@
   opacity: 0.5;
 }
 
+.online-browser-load-more {
+  justify-self: center;
+  min-width: min(260px, 100%);
+}
+
 .online-browser-empty h2 {
   margin: 0 0 8px;
 }
@@ -189,13 +212,17 @@
   color: #d9d0b8;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .online-browser-page {
     padding: 20px;
   }
 
   .online-browser-toolbar,
   .online-game-row {
+    grid-template-columns: 1fr;
+  }
+
+  .online-browser-filter-grid {
     grid-template-columns: 1fr;
   }
 

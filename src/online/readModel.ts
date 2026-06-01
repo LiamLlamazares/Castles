@@ -21,10 +21,14 @@ import {
 import { stringContainsDurableSecret } from "./secretSafety";
 
 export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 1;
+export const ONLINE_GAME_DIRECTORY_SCHEMA_VERSION = 1;
+export const ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT = 25;
+export const ONLINE_GAME_DIRECTORY_MAX_LIMIT = 100;
 
 export type { OnlineGameVisibility } from "./visibility";
 export type OnlineArchiveState = "active" | "archived";
 export type OnlineGameSummaryStatus = "active" | "complete";
+export type OnlineGameDirectoryState = "active" | "archived" | "all";
 
 export {
   canAccessOnlineGameSummary,
@@ -82,6 +86,24 @@ export interface OnlineGameSummary {
   lastEventId: string;
 }
 
+export interface OnlineGameDirectoryCursor {
+  updatedAt: string;
+  gameId: string;
+}
+
+export interface OnlineGameDirectoryListOptions {
+  visibility: "public";
+  state: OnlineGameDirectoryState;
+  limit: number;
+  cursor?: string;
+}
+
+export interface OnlineGameDirectoryResponse {
+  schemaVersion: typeof ONLINE_GAME_DIRECTORY_SCHEMA_VERSION;
+  games: OnlineGameSummary[];
+  nextCursor?: string;
+}
+
 interface SummaryMetadata {
   gameId: string;
   rulesetVersion: typeof ONLINE_RULESET_VERSION;
@@ -98,6 +120,11 @@ const SUMMARY_ROLES = new Set(["white", "black"]);
 const ACCESS_VISIBILITIES = ONLINE_GAME_VISIBILITIES;
 const ARCHIVE_STATES = new Set<OnlineArchiveState>(["active", "archived"]);
 const SUMMARY_STATUSES = new Set<OnlineGameSummaryStatus>(["active", "complete"]);
+export const ONLINE_GAME_DIRECTORY_STATES = new Set<OnlineGameDirectoryState>([
+  "active",
+  "archived",
+  "all",
+]);
 const RESULT_REASONS = new Set<OnlineGameResultDTO["reason"]>([
   "monarch_captured",
   "castle_control",
@@ -141,6 +168,60 @@ function isIsoDateString(value: unknown): value is string {
 
 function timestamp(value: string): number {
   return Date.parse(value);
+}
+
+function encodeBase64Url(value: string): string {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeBase64Url(value: string): string | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(
+    Math.ceil(value.length / 4) * 4,
+    "="
+  );
+  try {
+    return atob(padded);
+  } catch {
+    return null;
+  }
+}
+
+export function encodeOnlineGameDirectoryCursor(
+  value: OnlineGameDirectoryCursor
+): string {
+  return encodeBase64Url(JSON.stringify([value.updatedAt, value.gameId]));
+}
+
+export function decodeOnlineGameDirectoryCursor(
+  value: unknown
+): ValidationResult<OnlineGameDirectoryCursor> {
+  if (!isBoundedString(value, 512)) return bad("directory cursor is invalid.");
+  const decoded = decodeBase64Url(value);
+  if (!decoded) return bad("directory cursor is invalid.");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoded);
+  } catch {
+    return bad("directory cursor is invalid.");
+  }
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length !== 2 ||
+    !isIsoDateString(parsed[0]) ||
+    !isBoundedString(parsed[1], 128) ||
+    !/^[A-Za-z0-9_-]+$/.test(parsed[1]) ||
+    stringContainsDurableSecret(parsed[1])
+  ) {
+    return bad("directory cursor is invalid.");
+  }
+  return {
+    ok: true,
+    value: {
+      updatedAt: parsed[0],
+      gameId: parsed[1],
+    },
+  };
 }
 
 function validateResult(value: unknown): ValidationResult<OnlineGameResultDTO> {
@@ -399,6 +480,41 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
       participants: normalizedParticipants,
       result,
       lastEventId: value.lastEventId,
+    },
+  };
+}
+
+export function validateOnlineGameDirectoryResponse(
+  value: unknown
+): ValidationResult<OnlineGameDirectoryResponse> {
+  if (!isRecord(value)) return bad("directory response must be an object.");
+  if (value.schemaVersion !== ONLINE_GAME_DIRECTORY_SCHEMA_VERSION) {
+    return bad(`directory.schemaVersion must be ${ONLINE_GAME_DIRECTORY_SCHEMA_VERSION}.`);
+  }
+  if (!Array.isArray(value.games)) {
+    return bad("directory.games must be an array.");
+  }
+  const games = value.games.map(validateOnlineGameSummary);
+  const invalidGame = games.find((game) => !game.ok);
+  if (invalidGame && !invalidGame.ok) return invalidGame;
+  const normalizedGames = games.map((game) => {
+    if (!game.ok) throw new Error("unreachable invalid game summary.");
+    return game.value;
+  });
+
+  let nextCursor: string | undefined;
+  if (value.nextCursor !== undefined) {
+    const cursor = decodeOnlineGameDirectoryCursor(value.nextCursor);
+    if (!cursor.ok) return cursor;
+    nextCursor = value.nextCursor as string;
+  }
+
+  return {
+    ok: true,
+    value: {
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: normalizedGames,
+      nextCursor,
     },
   };
 }

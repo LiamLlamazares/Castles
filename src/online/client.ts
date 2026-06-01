@@ -5,7 +5,14 @@ import {
 } from "./challenges";
 import { validateOnlineGameSnapshot } from "./protocol";
 import { ONLINE_PROTOCOL_VERSION, isSupportedOnlineProtocolVersion } from "./protocolVersion";
-import { validateOnlineGameSummary, type OnlineGameSummary } from "./readModel";
+import {
+  ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+  validateOnlineGameDirectoryResponse,
+  validateOnlineGameSummary,
+  type OnlineGameDirectoryResponse,
+  type OnlineGameDirectoryState,
+  type OnlineGameSummary,
+} from "./readModel";
 import {
   OnlineConnectionStatus,
   OnlineGameResultDTO,
@@ -619,27 +626,71 @@ function validateSnapshotResponse(
   return validation.value;
 }
 
-export async function fetchOnlineGameSummaries(
+export interface FetchOnlineGameSummariesOptions {
+  state?: OnlineGameDirectoryState;
+  limit?: number;
+  cursor?: string;
+}
+
+function buildOnlineDirectoryPath(options: FetchOnlineGameSummariesOptions = {}): string {
+  const params = new URLSearchParams();
+  if (options.state) params.set("state", options.state);
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
+  const query = params.toString();
+  return query ? `/api/online/games?${query}` : "/api/online/games";
+}
+
+export async function fetchOnlineGameDirectory(
+  options: FetchOnlineGameSummariesOptions = {},
   fetchImpl: typeof fetch = fetch
-): Promise<OnlineGameSummary[]> {
-  const response = await fetchImpl("/api/online/games");
+): Promise<OnlineGameDirectoryResponse> {
+  const response = await fetchImpl(buildOnlineDirectoryPath(options));
 
   if (!response.ok) {
     throw new Error(`Could not fetch online game summaries (${response.status})`);
   }
 
   const body = await response.json();
-  if (!body || !Array.isArray(body.games)) {
-    throw new Error("Online game summary response was malformed.");
+  const validation = validateOnlineGameDirectoryResponse(body);
+  if (!validation.ok) {
+    throw new Error(`Online game summary response was malformed: ${validation.error.message}`);
+  }
+  return validation.value;
+}
+
+export async function fetchOnlineGameSummaries(
+  options: FetchOnlineGameSummariesOptions = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameSummary[]> {
+  const directory = await fetchOnlineGameDirectory(options, fetchImpl);
+  return directory.games;
+}
+
+export async function fetchOnlineGameSummary(
+  gameId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameSummary> {
+  const response = await fetchImpl(`/api/online/games/${encodeURIComponent(gameId)}/summary`);
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch online game summary (${response.status})`);
   }
 
-  return body.games.map((summary: unknown, index: number) => {
-    const validation = validateOnlineGameSummary(summary);
-    if (!validation.ok) {
-      throw new Error(`Online game summary ${index + 1} was malformed: ${validation.error.message}`);
-    }
-    return validation.value;
-  });
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online game summary response was malformed.");
+  }
+  if ((body as { schemaVersion?: unknown }).schemaVersion !== ONLINE_GAME_DIRECTORY_SCHEMA_VERSION) {
+    throw new Error(
+      `Online game summary response was malformed: schemaVersion must be ${ONLINE_GAME_DIRECTORY_SCHEMA_VERSION}.`
+    );
+  }
+  const summary = validateOnlineGameSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`Online game summary response was malformed: ${summary.error.message}`);
+  }
+  return summary.value;
 }
 
 export async function updateOnlineGameVisibility(

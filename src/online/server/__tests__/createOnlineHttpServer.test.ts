@@ -778,7 +778,7 @@ describe("createOnlineHttpServer", () => {
     expect(body.black.url).toContain("seat=b");
   });
 
-  it("lists only public token-free online game summaries", async () => {
+  it("lists only public token-free online game summaries through the directory contract", async () => {
     const summaries: OnlineGameSummary[] = [
       {
         schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
@@ -841,16 +841,190 @@ describe("createOnlineHttpServer", () => {
     servers.push(server);
     const port = await listen(server);
 
-    const response = await fetch(`http://127.0.0.1:${port}/api/online/games?token=secret`);
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games`);
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("no-store");
-    expect(body).toEqual({ games: [summaries[0]] });
+    expect(body).toEqual({ schemaVersion: 1, games: [summaries[0]] });
     expect(JSON.stringify(body)).not.toContain("secret");
     expect(JSON.stringify(body)).not.toContain("token");
     expect(JSON.stringify(body)).not.toContain("game_unlisted_summary_http");
     expect(JSON.stringify(body)).not.toContain("game_private_summary_http");
+  });
+
+  it("supports public directory state filters limits and cursors", async () => {
+    const publicActiveNew = {
+      ...summaryForGame("game_public_active_new", "public"),
+      updatedAt: "2026-05-31T12:03:00.000Z",
+    };
+    const publicActiveOld = {
+      ...summaryForGame("game_public_active_old", "public"),
+      updatedAt: "2026-05-31T12:02:00.000Z",
+    };
+    const publicArchive = {
+      ...summaryForGame("game_public_archive", "public"),
+      updatedAt: "2026-05-31T12:01:00.000Z",
+      endedAt: "2026-05-31T12:01:00.000Z",
+      status: "complete" as const,
+      archiveState: "archived" as const,
+      result: { winner: "w" as const, reason: "resignation" as const },
+    };
+    const summaries: OnlineGameSummary[] = [
+      publicActiveOld,
+      publicArchive,
+      summaryForGame("game_unlisted_hidden", "unlisted"),
+      publicActiveNew,
+    ];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummaries: async () => summaries,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const firstPageResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games?state=active&limit=1`
+    );
+    const firstPage = await firstPageResponse.json();
+
+    expect(firstPageResponse.status).toBe(200);
+    expect(firstPage.games.map((game: OnlineGameSummary) => game.gameId)).toEqual([
+      "game_public_active_new",
+    ]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const secondPageResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games?state=active&limit=1&cursor=${encodeURIComponent(firstPage.nextCursor)}`
+    );
+    const secondPage = await secondPageResponse.json();
+
+    expect(secondPage.games.map((game: OnlineGameSummary) => game.gameId)).toEqual([
+      "game_public_active_old",
+    ]);
+    expect(secondPage.nextCursor).toBeUndefined();
+
+    const archiveResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games?state=archived`
+    );
+    const archiveBody = await archiveResponse.json();
+
+    expect(archiveBody.games.map((game: OnlineGameSummary) => game.gameId)).toEqual([
+      "game_public_archive",
+    ]);
+
+    const allResponse = await fetch(`http://127.0.0.1:${port}/api/online/games?state=all`);
+    const allBody = await allResponse.json();
+
+    expect(allBody.games.map((game: OnlineGameSummary) => game.gameId)).toEqual([
+      "game_public_active_new",
+      "game_public_active_old",
+      "game_public_archive",
+    ]);
+  });
+
+  it("rejects invalid public directory query parameters and secret-looking queries", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummaries: async () => [summaryForGame("game_public_directory_http", "public")],
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    for (const query of [
+      "state=waiting",
+      "limit=0",
+      "limit=101",
+      "cursor=not-valid-cursor",
+      "token=secret",
+      "sid=secret",
+      "secret=value",
+      "bearer=value",
+      "api_key=value",
+      "authorization=Bearer%20secret",
+      "q=Bearer%20abc123",
+    ]) {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/games?${query}`);
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(body)).not.toContain("secret");
+    }
+  });
+
+  it("rate limits public directory reads", async () => {
+    const publicSummary = summaryForGame("game_public_directory_limited_http", "public");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummaries: async () => [publicSummary],
+      loadGameSummary: async (gameId: string) => gameId === publicSummary.gameId ? publicSummary : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const clientHeader = { "x-forwarded-for": "198.51.100.99, 203.0.113.60" };
+
+    for (let i = 0; i < 240; i += 1) {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+        headers: clientHeader,
+      });
+      expect(response.status).toBe(200);
+    }
+
+    const limitedListResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      headers: { "x-forwarded-for": "203.0.113.60" },
+    });
+    const limitedDetailResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${publicSummary.gameId}/summary`,
+      { headers: { "x-forwarded-for": "203.0.113.60" } }
+    );
+    const otherClientResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      headers: { "x-forwarded-for": "203.0.113.61" },
+    });
+
+    expect(limitedListResponse.status).toBe(429);
+    expect(limitedDetailResponse.status).toBe(429);
+    expect(otherClientResponse.status).toBe(200);
+  });
+
+  it("loads single public summaries without exposing hidden games", async () => {
+    const publicSummary = summaryForGame("game_public_detail_http", "public");
+    const privateSummary = summaryForGame("game_private_detail_http", "private");
+    const loadGameSummary = vi.fn(async (gameId: string) => {
+      if (gameId === publicSummary.gameId) return publicSummary;
+      if (gameId === privateSummary.gameId) return privateSummary;
+      return null;
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummary,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const publicResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${publicSummary.gameId}/summary`
+    );
+    const publicBody = await publicResponse.json();
+
+    expect(publicResponse.status).toBe(200);
+    expect(publicBody).toEqual({ schemaVersion: 1, summary: publicSummary });
+
+    const privateResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${privateSummary.gameId}/summary`
+    );
+    const privateBody = await privateResponse.json();
+
+    expect(privateResponse.status).toBe(404);
+    expect(JSON.stringify(privateBody)).not.toContain(privateSummary.gameId);
+    expect(loadGameSummary).toHaveBeenCalledWith(publicSummary.gameId);
+
+    const secretQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${publicSummary.gameId}/summary?api_key=value`
+    );
+    const secretQueryBody = await secretQueryResponse.json();
+
+    expect(secretQueryResponse.status).toBe(400);
+    expect(JSON.stringify(secretQueryBody)).not.toContain("value");
   });
 
   it("lets an authenticated player publish an unlisted game without exposing bearer tokens", async () => {

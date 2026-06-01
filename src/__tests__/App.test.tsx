@@ -782,7 +782,7 @@ describe("App game setup lifecycle", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ games: [summary] }),
+          JSON.stringify({ schemaVersion: 1, games: [summary] }),
           { status: 200, headers: { "content-type": "application/json" } }
         )
       )

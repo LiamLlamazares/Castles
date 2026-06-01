@@ -5,7 +5,12 @@ import type {
   OnlineChallengeSummary,
 } from "../challenges";
 import type { OnlineGameCredentials, OnlineGameEvent } from "../events";
-import type { OnlineGameSummary, OnlineIdentity } from "../readModel";
+import type {
+  OnlineGameDirectoryListOptions,
+  OnlineGameDirectoryResponse,
+  OnlineGameSummary,
+  OnlineIdentity,
+} from "../readModel";
 import type {
   OnlineActionDTO,
   OnlineGameSnapshotDTO,
@@ -24,6 +29,8 @@ export interface OnlineGameStoreLoadOptions {
 export interface OnlineGameStore {
   load(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameRoomRecord[]>;
   loadSummaries(): Promise<OnlineGameSummary[]>;
+  listGameSummaries(options: OnlineGameDirectoryListOptions): Promise<OnlineGameDirectoryResponse>;
+  loadGameSummary(gameId: string): Promise<OnlineGameSummary | null>;
   loadChallengeSummaries(): Promise<OnlineChallengeSummary[]>;
   rebuildSummaries(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameSummary[]>;
   rebuildChallengeSummaries(options?: OnlineGameStoreLoadOptions): Promise<OnlineChallengeSummary[]>;

@@ -5,7 +5,7 @@ import { SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
-import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../../readModel";
+import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION, type OnlineGameSummary } from "../../readModel";
 import { hashOnlineToken } from "../onlineTokenCredentials";
 import {
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -195,7 +195,45 @@ class FakePostgresClient {
       this.challengeSummaryRows.push({ payload: values[5] });
     }
     if (/select\s+payload\s+from\s+online_game_summaries/i.test(text)) {
-      return { rows: this.summaryRows };
+      let rows = [...this.summaryRows];
+      if (/where\s+game_id\s*=\s*\$1/i.test(text)) {
+        rows = rows.filter((row) => (row.payload as { gameId?: string }).gameId === values?.[0]);
+        return { rows };
+      }
+      if (/where\s+visibility\s*=/i.test(text)) {
+        const visibility = values?.[0];
+        rows = rows.filter((row) => (row.payload as { visibility?: string }).visibility === visibility);
+        if (/status\s*=\s*'active'/i.test(text)) {
+          rows = rows.filter((row) => (row.payload as { status?: string }).status === "active");
+        }
+        if (/archive_state\s*=\s*'archived'/i.test(text)) {
+          rows = rows.filter((row) => (row.payload as { archiveState?: string }).archiveState === "archived");
+        }
+        if (/updated_at\s*</i.test(text)) {
+          const cursorUpdatedAt = values?.[1] as string;
+          const cursorGameId = values?.[2] as string;
+          rows = rows.filter((row) => {
+            const payload = row.payload as { updatedAt?: string; gameId?: string };
+            return (
+              typeof payload.updatedAt === "string" &&
+              typeof payload.gameId === "string" &&
+              (payload.updatedAt < cursorUpdatedAt ||
+                (payload.updatedAt === cursorUpdatedAt && payload.gameId > cursorGameId))
+            );
+          });
+        }
+        rows.sort((a, b) => {
+          const left = a.payload as { updatedAt?: string; gameId?: string };
+          const right = b.payload as { updatedAt?: string; gameId?: string };
+          if (left.updatedAt !== right.updatedAt) {
+            return (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "");
+          }
+          return (left.gameId ?? "").localeCompare(right.gameId ?? "");
+        });
+        const limit = values?.[values.length - 1] as number | undefined;
+        return { rows: typeof limit === "number" ? rows.slice(0, limit) : rows };
+      }
+      return { rows };
     }
     if (/select\s+payload\s+from\s+online_challenge_summaries/i.test(text)) {
       return { rows: this.challengeSummaryRows };
@@ -307,6 +345,30 @@ function createVisibilityChangedEvent(
     gameId,
     visibility,
   } as any;
+}
+
+function createSummary(
+  gameId: string,
+  overrides: Partial<OnlineGameSummary> = {}
+): OnlineGameSummary {
+  return {
+    schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+    gameId,
+    rulesetVersion: ONLINE_RULESET_VERSION,
+    createdAt: "2026-05-31T12:00:00.000Z",
+    updatedAt: "2026-05-31T12:00:00.000Z",
+    version: 0,
+    status: "active",
+    visibility: "public",
+    archiveState: "active",
+    hasTimeControl: true,
+    participants: [
+      { seat: "w", role: "white", identity: { kind: "anonymous", id: `anon_${gameId}_w` } },
+      { seat: "b", role: "black", identity: { kind: "anonymous", id: `anon_${gameId}_b` } },
+    ],
+    lastEventId: `evt-${gameId}`,
+    ...overrides,
+  };
 }
 
 function createGameCredentials() {
@@ -1281,6 +1343,70 @@ describe("PostgresOnlineGameStore", () => {
 
     expect(summaries).toHaveLength(1);
     expect(summaries[0].gameId).toBe("game_summary_loaded");
+    expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
+  });
+
+  it("lists public summaries by state with limit and cursor without replaying events", async () => {
+    const client = new FakePostgresClient();
+    const activeNew = createSummary("game_public_active_new", {
+      updatedAt: "2026-05-31T12:03:00.000Z",
+    });
+    const activeOld = createSummary("game_public_active_old", {
+      updatedAt: "2026-05-31T12:02:00.000Z",
+    });
+    const archive = createSummary("game_public_archive", {
+      updatedAt: "2026-05-31T12:01:00.000Z",
+      endedAt: "2026-05-31T12:01:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      result: { winner: "w", reason: "resignation" },
+    });
+    client.summaryRows = [
+      { payload: activeOld },
+      { payload: createSummary("game_unlisted_hidden", { visibility: "unlisted" }) },
+      { payload: archive },
+      { payload: activeNew },
+    ];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const firstPage = await store.listGameSummaries({
+      visibility: "public",
+      state: "active",
+      limit: 1,
+    });
+    const secondPage = await store.listGameSummaries({
+      visibility: "public",
+      state: "active",
+      limit: 1,
+      cursor: firstPage.nextCursor,
+    });
+    const archivePage = await store.listGameSummaries({
+      visibility: "public",
+      state: "archived",
+      limit: 25,
+    });
+
+    expect(firstPage.games.map((summary) => summary.gameId)).toEqual(["game_public_active_new"]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(secondPage.games.map((summary) => summary.gameId)).toEqual(["game_public_active_old"]);
+    expect(secondPage.nextCursor).toBeUndefined();
+    expect(archivePage.games.map((summary) => summary.gameId)).toEqual(["game_public_archive"]);
+    expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
+  });
+
+  it("loads a single materialized game summary without replaying events", async () => {
+    const client = new FakePostgresClient();
+    client.summaryRows = [
+      { payload: createSummary("game_single_summary") },
+      { payload: createSummary("game_other_summary") },
+    ];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const summary = await store.loadGameSummary("game_single_summary");
+    const missing = await store.loadGameSummary("game_missing_summary");
+
+    expect(summary?.gameId).toBe("game_single_summary");
+    expect(missing).toBeNull();
     expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
   });
 

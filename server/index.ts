@@ -135,6 +135,8 @@ async function main() {
       applyGameAction: (input) => store.applyGameAction(input),
       adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),
       loadGameSummaries: () => store.loadSummaries(),
+      listGameSummaries: (options) => store.listGameSummaries(options),
+      loadGameSummary: (gameId) => store.loadGameSummary(gameId),
       onLog: (event) => {
         console.log(formatOnlineServerLogEvent(event));
       },

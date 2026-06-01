@@ -14,10 +14,11 @@ const SECRET_QUERY_PARAMS = new Set([
   "sessionid",
   "sid",
   "secret",
+  "apikey",
 ]);
 
 const SECRET_ASSIGNMENT =
-  /(^|[?&#;\s;])(token|white_?token|black_?token|bearer_?token|access_?token|refresh_?token|authorization|auth|auth_?header|cookie|credential|session|session_?id|sid|secret)\s*=/i;
+  /(^|[?&#;\s;])(token|white_?token|black_?token|bearer_?token|access_?token|refresh_?token|authorization|auth|auth_?header|api_?key|cookie|credential|session|session_?id|sid|secret)\s*=/i;
 const SECRET_HEADER = /\b(authorization|cookie|set-cookie)\s*:/i;
 const BEARER_VALUE = /\bbearer\s+[a-z0-9._~+/=-]+/i;
 
@@ -59,8 +60,10 @@ export function isSecretLikeKey(key: string): boolean {
     normalized.includes("token") ||
     normalized.includes("credential") ||
     normalized.includes("authorization") ||
+    normalized.includes("apikey") ||
     normalized.includes("cookie") ||
     normalized.includes("session") ||
+    normalized === "sid" ||
     normalized.includes("bearer") ||
     normalized.includes("secret") ||
     normalized.includes("inviteurl") ||

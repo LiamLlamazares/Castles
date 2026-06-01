@@ -101,6 +101,16 @@ Summary payloads must include:
 - token-free participants and result
 - `lastEventId`
 
+Public directory list responses wrap summaries in schema v1:
+
+- `schemaVersion: 1`
+- `games: OnlineGameSummary[]`
+- optional `nextCursor`
+
+`GET /api/online/games` accepts `state=active|archived|all`, `limit=1..100`, and an opaque `cursor`. It returns only public summaries. Token/auth/credential/api-key-looking query parameters or values are rejected instead of ignored, and public directory reads are lightly rate limited. `GET /api/online/games/:gameId/summary` returns one public summary or the same not-found shape for missing, private, or unlisted games.
+
+Directory ordering is by recent public activity: `updatedAt DESC`, then `gameId ASC`. Cursors are opaque keyset cursors over that ordering; clients must not parse them or treat them as durable identifiers. Cursor payloads reject malformed or secret-looking game ids.
+
 ## Identity Primitive
 
 Online summaries support three identity kinds:
@@ -193,10 +203,10 @@ The `challenged` role is provisional until challenge identity binding exists. It
 
 Initial HTTP and WebSocket spectator joins are checked against the shared policy. Existing spectator sockets are not re-authorized on every broadcast. Before any future visibility change can make a game private mid-game, broadcasts must either revalidate spectator sockets or disconnect sockets that no longer satisfy the policy.
 
-For this low-scale foundation slice, server spectator authorization scans `loadGameSummaries()` for the requested game id. A later `loadGameSummary(gameId)` store method can replace that scan when challenge/lobby scale requires it.
+Server spectator authorization now prefers `loadGameSummary(gameId)` when the configured store exposes it, falling back to the older low-scale summary scan only in memory/dev configurations.
 
 ## Next Contract Changes
 
-1. Add archive search/detail read models on top of the now-durable public/unlisted visibility boundary.
+1. Add archive detail/search read models if the summary payload stops being enough for richer analysis pages.
 2. Add a public account/session ownership layer before account-bound private challenges, ratings, and moderation.
 3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes to `private`.

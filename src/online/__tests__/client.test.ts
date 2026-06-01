@@ -8,6 +8,7 @@ import {
   declineOnlineChallenge,
   fetchOnlineChallenge,
   fetchOnlineGameSummaries,
+  fetchOnlineGameSummary,
   fetchOnlineSnapshot,
   fetchOnlineSpectatorSnapshot,
   formatOnlineConnectionStatus,
@@ -579,7 +580,7 @@ describe("online client helpers", () => {
     );
   });
 
-  it("fetches validated game summaries without player authorization", async () => {
+  it("fetches validated game directory summaries without player authorization", async () => {
     const summary = {
       schemaVersion: 1,
       gameId: "game_123",
@@ -599,13 +600,46 @@ describe("online client helpers", () => {
     };
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ games: [summary] }),
+      json: async () => ({ schemaVersion: 1, games: [summary], nextCursor: "WyIyMDI2LTA1LTMxVDEyOjAwOjAwLjAwMFoiLCJnYW1lXzEyMyJd" }),
     });
 
-    await expect(fetchOnlineGameSummaries(fetchImpl as any)).resolves.toEqual([summary]);
+    await expect(
+      fetchOnlineGameSummaries(
+        { state: "active", limit: 25, cursor: "cursor_abc" },
+        fetchImpl as any
+      )
+    ).resolves.toEqual([summary]);
 
-    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games");
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games?state=active&limit=25&cursor=cursor_abc");
     expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain("authorization");
+  });
+
+  it("fetches a single public game summary by id", async () => {
+    const summary = {
+      schemaVersion: 1,
+      gameId: "game_123",
+      rulesetVersion: "castles-beta-v1",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      updatedAt: "2026-05-31T12:00:00.000Z",
+      version: 0,
+      status: "active",
+      visibility: "public",
+      archiveState: "active",
+      hasTimeControl: true,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_123_w" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_123_b" } },
+      ],
+      lastEventId: "evt-create",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ schemaVersion: 1, summary }),
+    });
+
+    await expect(fetchOnlineGameSummary("game_123", fetchImpl as any)).resolves.toEqual(summary);
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games/game_123/summary");
   });
 
   it("updates game visibility with bearer authorization and validates the summary response", async () => {
@@ -652,9 +686,9 @@ describe("online client helpers", () => {
   it("rejects malformed game summary responses", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ games: [{ gameId: "game_123", version: 0 }] }),
+      json: async () => ({ schemaVersion: 1, games: [{ gameId: "game_123", version: 0 }] }),
     });
 
-    await expect(fetchOnlineGameSummaries(fetchImpl as any)).rejects.toThrow(/summary/);
+    await expect(fetchOnlineGameSummaries(undefined, fetchImpl as any)).rejects.toThrow(/summary/);
   });
 });

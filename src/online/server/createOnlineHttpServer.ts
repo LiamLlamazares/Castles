@@ -37,9 +37,18 @@ import {
 } from "../events";
 import { sameOnlineAction } from "../actionIdempotency";
 import {
+  ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT,
+  ONLINE_GAME_DIRECTORY_MAX_LIMIT,
+  ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+  ONLINE_GAME_DIRECTORY_STATES,
+  type OnlineGameDirectoryListOptions,
+  type OnlineGameDirectoryResponse,
   OnlineGameSummary,
+  decodeOnlineGameDirectoryCursor,
+  encodeOnlineGameDirectoryCursor,
   projectOnlineGameSummaries,
   validateOnlineGameSummary,
+  validateOnlineGameDirectoryResponse,
 } from "../readModel";
 import {
   canListOnlineGameSummary,
@@ -73,6 +82,10 @@ import {
   isOnlinePlayerSettableGameVisibility,
   type OnlinePlayerSettableGameVisibility,
 } from "../visibility";
+import {
+  isSecretLikeKey,
+  stringContainsDurableSecret,
+} from "../secretSafety";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -129,6 +142,10 @@ export interface CreateOnlineHttpServerOptions {
     input: OnlineGameStoreTimeoutInput
   ) => OnlineGameStoreTimeoutResult | Promise<OnlineGameStoreTimeoutResult>;
   loadGameSummaries?: () => OnlineGameSummary[] | Promise<OnlineGameSummary[]>;
+  listGameSummaries?: (
+    options: OnlineGameDirectoryListOptions
+  ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
+  loadGameSummary?: (gameId: string) => OnlineGameSummary | null | Promise<OnlineGameSummary | null>;
   onLog?: (event: OnlineServerLogEvent) => void;
   now?: () => number;
   health?: {
@@ -178,6 +195,123 @@ function sendJson(socket: WebSocket, payload: unknown): void {
         : payload;
     socket.send(JSON.stringify(versionedPayload));
   }
+}
+
+function hasSensitivePublicDirectoryQuery(searchParams: URLSearchParams): boolean {
+  for (const [key, value] of searchParams.entries()) {
+    if (isSecretLikeKey(key) || stringContainsDurableSecret(value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getSingleSearchParam(searchParams: URLSearchParams, name: string): string | null {
+  const values = searchParams.getAll(name);
+  return values.length === 1 ? values[0] : null;
+}
+
+function parsePublicDirectoryOptions(
+  originalUrl: string
+): { ok: true; options: OnlineGameDirectoryListOptions } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Public directory query is invalid." };
+  }
+
+  for (const name of ["state", "limit", "cursor"]) {
+    if (url.searchParams.getAll(name).length > 1) {
+      return { ok: false, message: "Public directory query is invalid." };
+    }
+  }
+
+  const state = getSingleSearchParam(url.searchParams, "state") ?? "all";
+  if (!ONLINE_GAME_DIRECTORY_STATES.has(state as OnlineGameDirectoryListOptions["state"])) {
+    return { ok: false, message: "Public directory state is invalid." };
+  }
+
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > ONLINE_GAME_DIRECTORY_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Public directory limit is invalid." };
+  }
+
+  const cursor = getSingleSearchParam(url.searchParams, "cursor") ?? undefined;
+  if (cursor) {
+    const decoded = decodeOnlineGameDirectoryCursor(cursor);
+    if (!decoded.ok) {
+      return { ok: false, message: "Public directory cursor is invalid." };
+    }
+  }
+
+  return {
+    ok: true,
+    options: {
+      visibility: "public",
+      state: state as OnlineGameDirectoryListOptions["state"],
+      limit,
+      cursor,
+    },
+  };
+}
+
+function compareDirectorySummaries(left: OnlineGameSummary, right: OnlineGameSummary): number {
+  if (left.updatedAt !== right.updatedAt) {
+    return right.updatedAt.localeCompare(left.updatedAt);
+  }
+  return left.gameId.localeCompare(right.gameId);
+}
+
+function summaryMatchesDirectoryState(
+  summary: OnlineGameSummary,
+  state: OnlineGameDirectoryListOptions["state"]
+): boolean {
+  if (state === "all") return true;
+  if (state === "active") return summary.status === "active";
+  return summary.status === "complete" && summary.archiveState === "archived";
+}
+
+function applyDirectoryCursor(
+  summaries: OnlineGameSummary[],
+  cursor: string | undefined
+): OnlineGameSummary[] {
+  if (!cursor) return summaries;
+  const decoded = decodeOnlineGameDirectoryCursor(cursor);
+  if (!decoded.ok) {
+    throw new Error(decoded.error.message);
+  }
+  return summaries.filter((summary) =>
+    summary.updatedAt < decoded.value.updatedAt ||
+    (summary.updatedAt === decoded.value.updatedAt && summary.gameId > decoded.value.gameId)
+  );
+}
+
+function paginateDirectorySummaries(
+  summaries: OnlineGameSummary[],
+  options: OnlineGameDirectoryListOptions
+): OnlineGameDirectoryResponse {
+  const filtered = applyDirectoryCursor(
+    summaries
+      .filter((summary) => summary.visibility === options.visibility)
+      .filter((summary) => summaryMatchesDirectoryState(summary, options.state))
+      .sort(compareDirectorySummaries),
+    options.cursor
+  );
+  const games = filtered.slice(0, options.limit);
+  const nextCursor =
+    filtered.length > options.limit && games.length > 0
+      ? encodeOnlineGameDirectoryCursor(games[games.length - 1])
+      : undefined;
+  return {
+    schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+    games,
+    nextCursor,
+  };
 }
 
 function sendSocketError(socket: WebSocket, error: OnlineReject): void {
@@ -376,6 +510,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
   const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
   const challengeActionLimiter = new FixedWindowRateLimiter(120, 10_000);
+  const publicDirectoryLimiter = new FixedWindowRateLimiter(240, 10_000);
   const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
   const memoryChallengeEvents: OnlineChallengeEvent[] = [];
@@ -422,6 +557,21 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     | { ok: true; summary: OnlineGameSummary | null }
     | { ok: false; reason: "summary_load_failed" | "summary_invalid" }
   > => {
+    if (options.loadGameSummary) {
+      let summary: OnlineGameSummary | null;
+      try {
+        summary = await options.loadGameSummary(gameId);
+      } catch {
+        return { ok: false, reason: "summary_load_failed" };
+      }
+      if (!summary) return { ok: true, summary: null };
+      const validation = validateOnlineGameSummary(summary);
+      if (!validation.ok) {
+        return { ok: false, reason: "summary_invalid" };
+      }
+      return { ok: true, summary: validation.value };
+    }
+
     if (!options.loadGameSummaries) return { ok: true, summary: null };
     let summaries: OnlineGameSummary[];
     try {
@@ -444,7 +594,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const checkSpectatorAccess = async (
     gameId: string
   ): Promise<{ ok: true } | { ok: false; error: OnlineReject; reason: string }> => {
-    if (!options.loadGameSummaries) {
+    if (!options.loadGameSummary && !options.loadGameSummaries) {
       return { ok: true };
     }
 
@@ -472,6 +622,34 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
       return validation.value;
     });
+  };
+
+  const listPublicGameDirectory = async (
+    directoryOptions: OnlineGameDirectoryListOptions
+  ): Promise<OnlineGameDirectoryResponse> => {
+    if (options.listGameSummaries) {
+      const response = await options.listGameSummaries(directoryOptions);
+      const validation = validateOnlineGameDirectoryResponse(response);
+      if (!validation.ok) {
+        throw new Error(validation.error.message);
+      }
+      if (validation.value.games.some((summary) => !canListOnlineGameSummary(summary))) {
+        throw new Error("Public directory returned a hidden game summary.");
+      }
+      return {
+        ...validation.value,
+      };
+    }
+
+    const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
+    const validated = summaries.map((summary, index) => {
+      const validation = validateOnlineGameSummary(summary);
+      if (!validation.ok) {
+        throw new Error(`Invalid online game summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+    return paginateDirectorySummaries(validated, directoryOptions);
   };
 
   const loadChallengeSummary = async (challengeId: string): Promise<OnlineChallengeSummary | null> => {
@@ -1263,21 +1441,31 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   });
 
-  app.get("/api/online/games", async (_req, res) => {
+  app.get("/api/online/games", async (req, res) => {
+    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many public directory requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
     try {
-      const summaries = await options.loadGameSummaries?.() ?? [];
-      const games: OnlineGameSummary[] = [];
-      for (const summary of summaries) {
-        const validation = validateOnlineGameSummary(summary);
-        if (!validation.ok) {
-          throw new Error(validation.error.message);
-        }
-        if (canListOnlineGameSummary(validation.value)) {
-          games.push(validation.value);
-        }
+      const parsed = parsePublicDirectoryOptions(req.originalUrl);
+      if (!parsed.ok) {
+        res.status(400).json({
+          error: {
+            code: "bad_request",
+            message: parsed.message,
+          },
+        });
+        return;
       }
 
-      res.json({ games });
+      const directory = await listPublicGameDirectory(parsed.options);
+      res.json(directory);
       log({ event: "online.summary.list", status: "accepted" });
     } catch (error) {
       log({ event: "online.summary.list", status: "failed", reason: "summary_load_failed" });
@@ -1286,6 +1474,70 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         error: {
           code: "persistence_failed",
           message: "Online game summaries could not be loaded.",
+        },
+      });
+    }
+  });
+
+  app.get("/api/online/games/:gameId/summary", async (req, res) => {
+    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many public directory requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    if (hasSensitivePublicDirectoryQuery(new URL(req.originalUrl, "http://localhost").searchParams)) {
+      res.status(400).json({
+        error: {
+          code: "bad_request",
+          message: "Public summary query is invalid.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const validation = validateOnlineGameId(req.params.gameId, "gameId");
+      if (!validation.ok) {
+        res.status(400).json({ error: validation.error });
+        return;
+      }
+      const lookup = await loadValidatedSummaryForGame(validation.value);
+      if (!lookup.ok) {
+        res.status(503).json({
+          error: {
+            code: "persistence_failed",
+            message: "Online game summary could not be loaded.",
+          },
+        });
+        return;
+      }
+      if (!lookup.summary || !canListOnlineGameSummary(lookup.summary)) {
+        res.status(404).json({
+          error: {
+            code: "not_found",
+            message: "Online game summary was not found.",
+          },
+        });
+        return;
+      }
+
+      res.json({
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        summary: lookup.summary,
+      });
+      log({ event: "online.summary.detail", gameId: validation.value, status: "accepted" });
+    } catch (error) {
+      log({ event: "online.summary.detail", status: "failed", reason: "summary_load_failed" });
+      console.error("Failed to load online game summary", error);
+      res.status(503).json({
+        error: {
+          code: "persistence_failed",
+          message: "Online game summary could not be loaded.",
         },
       });
     }

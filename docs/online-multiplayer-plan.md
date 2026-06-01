@@ -147,7 +147,7 @@ Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI 
 
 Goal: add discovery and post-game surfaces on top of stable contracts.
 
-Status: Phase 6D is implemented and locally verified on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by token-free `OnlineGameSummary` read models. It lists only summaries marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Phase 6E adds durable player publish/unlist controls through `visibility_changed` events and `PATCH /api/online/games/:gameId/visibility`; `private` changes remain deferred until spectator socket reauthorization exists. Open seeks, matchmaking, accounts, ratings, and chat remain deferred.
+Status: Phase 6F is implemented and locally verified on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by token-free `OnlineGameSummary` read models. It lists only summaries marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Phase 6E adds durable player publish/unlist controls through `visibility_changed` events and `PATCH /api/online/games/:gameId/visibility`; `private` changes remain deferred until spectator socket reauthorization exists. Phase 6F adds Public Directory v1: state-filtered public list responses, bounded limits, opaque cursors, single-summary lookup, store-level public list queries, rate-limited public directory reads, and Watch/Archive sort/time/result controls. Open seeks, matchmaking, accounts, ratings, and chat remain deferred.
 
 Work:
 
@@ -198,6 +198,24 @@ Tests/review/deploy gates:
 - Review: spectator/archive UX and correctness review focused on not accidentally opening WebSocket spectator mode, preserving state, clearing stale URL secrets, and keeping copy/link labels honest.
 - Deploy: existing online smoke must still pass through create/join/action/spectate/terminal flows.
 
+## Phase 6F: Public Directory V1
+
+Goal: make Watch and Online Archive use a bounded public-directory contract before any lobby or matchmaking concepts.
+
+Work:
+
+- Add `GET /api/online/games?state=active|archived|all&limit=...&cursor=...` with schema-versioned responses and opaque keyset cursors.
+- Add `GET /api/online/games/:gameId/summary` for one public summary.
+- Move public listing to store-level queries where available, while keeping memory/dev fallback behavior.
+- Reject token/auth/credential-looking query parameters on public directory endpoints.
+- Add Watch/Archive scan controls for sort, clock type, and result filters without adding lobby/open-seek semantics.
+
+Tests/review/deploy gates:
+
+- Tests: read-model/client response validation, server query parsing, Postgres list/load queries, UI filter/sort coverage, App navigation coverage, full suite/build/server build, and browser smoke.
+- Review: data-contract/security review for public-only listing and UX/accessibility review for Watch/Archive scan density on mobile.
+- Deploy: existing online smoke must still pass through create/join/action/spectate/terminal flows.
+
 ## Phase 6A: UI Shell, Navigation, Tutorial, and Save UX Polish
 
 Goal: make the app feel navigable and sturdy before broader public discovery.
@@ -238,6 +256,26 @@ Tests/review/deploy gates:
 - Review: UX/accessibility review focused on navigation clarity, keyboard/focus order, mobile ergonomics, and consistency with Lichess-inspired expectations adapted for Castles.
 - Deploy: UI shell changes are shipped only after online smoke still passes and no local-save data is lost.
 
+## Phase 6G: Navigation, Tutorial, and Save UX Refinement
+
+Goal: substantially improve the app shell after the online directory foundation, using Lichess as the primary navigation-density benchmark with Castles-specific changes where the game differs.
+
+Work:
+
+- Take fresh screenshots of Lichess navigation/game/learn/watch patterns and compare them against Castles desktop, tablet, short mobile, and drawer-open states.
+- Audit all current routes and states for the issues the user reported: awkward sidebar shape, tutorial placement, unclear return navigation, weak save/progress affordances, and overlapping controls such as go-back/navigation actions.
+- Redesign the sidebar/drawer so top destinations are easy to scan and do not compete with turn controls, clocks, online status, or save/review actions.
+- Make Learn/Tutorial reachable from natural entry points while keeping the board-first game screen primary.
+- Make save, saved-game progress, and return-to-game flows obvious without using destructive navigation or accidental resets.
+- Scan for similar layout defects across setup, game, tutorial/rules, Library, Watch/Archive, online active/spectator, pending action, disconnected/resyncing, access-denied, challenge, and terminal states before stopping.
+
+Tests/review/deploy gates:
+
+- Tests: app navigation return-path tests, tutorial progress persistence tests, save/progress tests, and responsive assertions where practical.
+- Browser QA: Playwright screenshots at desktop, tablet, 430 x 932, 390 x 844, and 360 x 640 for all changed states, with overflow and overlap metrics.
+- Review: UI/UX/accessibility reviewer pass before implementation and again before commit, focused on Lichess-style density, keyboard/focus order, mobile ergonomics, and no hidden destructive resets.
+- Deploy: full automated suite, builds, browser online smoke, and screenshot audit must pass before push.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -274,7 +312,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish verification, review, commit, and push the Phase 6A third UI polish pass.
-2. Continue Phase 6 archive/lobby work: archive search/detail pages, replay URLs if needed, lobby presence, and simple matchmaking.
-3. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.
-4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts and drawer-open states.
+1. Commit and push Public Directory v1.
+2. Execute Phase 6G next: sidebar/drawer, tutorial placement, return navigation, save/progress discoverability, and overlap scanning.
+3. Continue Phase 6 archive/lobby work only after the UI shell remains stable: archive detail pages if summaries are insufficient, then lobby presence, then simple matchmaking.
+4. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.
+5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts and drawer-open states.

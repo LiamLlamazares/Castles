@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import OnlineGameBrowser from "../OnlineGameBrowser";
 import {
+  ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+  type OnlineGameDirectoryResponse,
   type OnlineGameSummary,
 } from "../../online/readModel";
 import { ONLINE_RULESET_VERSION } from "../../online/events";
@@ -28,11 +30,50 @@ function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary 
   };
 }
 
+function directory(
+  games: OnlineGameSummary[],
+  nextCursor?: string
+): OnlineGameDirectoryResponse {
+  return {
+    schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+    games,
+    nextCursor,
+  };
+}
+
+function deferredDirectory() {
+  let resolve!: (value: OnlineGameDirectoryResponse) => void;
+  const promise = new Promise<OnlineGameDirectoryResponse>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("OnlineGameBrowser", () => {
+  it("loads the public directory for the active tab state", async () => {
+    const loadGames = vi.fn().mockResolvedValue(directory([]));
+    render(
+      <OnlineGameBrowser
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("No public live games yet.")).toBeInTheDocument();
+    expect(loadGames).toHaveBeenLastCalledWith({ state: "active", limit: 50 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
+
+    expect(await screen.findByText("No public completed games yet.")).toBeInTheDocument();
+    expect(loadGames).toHaveBeenLastCalledWith({ state: "archived", limit: 50 });
+  });
+
   it("shows an honest empty Watch state while only public games are listable", async () => {
     render(
       <OnlineGameBrowser
-        loadGames={vi.fn().mockResolvedValue([])}
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
@@ -50,7 +91,7 @@ describe("OnlineGameBrowser", () => {
     const onSpectate = vi.fn();
     render(
       <OnlineGameBrowser
-        loadGames={vi.fn().mockResolvedValue([summary()])}
+        loadGames={vi.fn().mockResolvedValue(directory([summary()]))}
         onBack={vi.fn()}
         onSpectate={onSpectate}
         onReplay={vi.fn()}
@@ -70,11 +111,11 @@ describe("OnlineGameBrowser", () => {
   it("defensively hides non-public summaries even if a loader returns them", async () => {
     render(
       <OnlineGameBrowser
-        loadGames={vi.fn().mockResolvedValue([
+        loadGames={vi.fn().mockResolvedValue(directory([
           summary({ gameId: "game_public_visible", visibility: "public" }),
           summary({ gameId: "game_unlisted_hidden", visibility: "unlisted" }),
           summary({ gameId: "game_private_hidden", visibility: "private" }),
-        ])}
+        ]))}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
@@ -93,7 +134,7 @@ describe("OnlineGameBrowser", () => {
     render(
       <OnlineGameBrowser
         initialTab="archive"
-        loadGames={vi.fn().mockResolvedValue([
+        loadGames={vi.fn().mockResolvedValue(directory([
           summary({
             gameId: "game_public_archive",
             status: "complete",
@@ -102,7 +143,7 @@ describe("OnlineGameBrowser", () => {
             updatedAt: "2026-06-01T12:05:00.000Z",
             result: { winner: "w", reason: "resignation" },
           }),
-        ])}
+        ]))}
         onBack={vi.fn()}
         onSpectate={onSpectate}
         onReplay={onReplay}
@@ -117,13 +158,13 @@ describe("OnlineGameBrowser", () => {
 
     expect(onReplay).toHaveBeenCalledWith("game_public_archive");
     expect(onSpectate).not.toHaveBeenCalled();
-    expect(within(row).getByRole("button", { name: "Copy spectator link for game_public_archive" })).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Copy spectator link for game_public_archive" })).not.toBeInTheDocument();
   });
 
   it("filters public summaries by player name and game id", async () => {
     render(
       <OnlineGameBrowser
-        loadGames={vi.fn().mockResolvedValue([
+        loadGames={vi.fn().mockResolvedValue(directory([
           summary({ gameId: "game_ada_public" }),
           summary({
             gameId: "game_caro_public",
@@ -132,7 +173,7 @@ describe("OnlineGameBrowser", () => {
               { seat: "b", role: "black", identity: { kind: "registered", id: "dani_b", displayName: "Dani" } },
             ],
           }),
-        ])}
+        ]))}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
@@ -148,11 +189,260 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByText("game_caro_public")).toBeInTheDocument();
   });
 
+  it("sorts and filters live public games without exposing hidden summaries", async () => {
+    render(
+      <OnlineGameBrowser
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({
+            gameId: "game_newer_few_moves",
+            updatedAt: "2026-06-01T12:05:00.000Z",
+            version: 2,
+            hasTimeControl: true,
+          }),
+          summary({
+            gameId: "game_older_many_moves",
+            updatedAt: "2026-06-01T12:01:00.000Z",
+            version: 9,
+            hasTimeControl: false,
+          }),
+          summary({ gameId: "game_hidden_unlisted", visibility: "unlisted", version: 99 }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_newer_few_moves");
+    expect(screen.queryByText("game_hidden_unlisted")).not.toBeInTheDocument();
+
+    let rows = screen.getAllByRole("article");
+    expect(rows[0]).toHaveTextContent("game_newer_few_moves");
+    expect(rows[1]).toHaveTextContent("game_older_many_moves");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
+      target: { value: "moves" },
+    });
+    rows = screen.getAllByRole("article");
+    expect(rows[0]).toHaveTextContent("game_older_many_moves");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
+      target: { value: "timed" },
+    });
+
+    expect(screen.getByText("game_newer_few_moves")).toBeInTheDocument();
+    expect(screen.queryByText("game_older_many_moves")).not.toBeInTheDocument();
+  });
+
+  it("filters archived games by result and reports filtered no-results honestly", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({
+            gameId: "game_white_archive",
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-06-01T12:05:00.000Z",
+            result: { winner: "w", reason: "resignation" },
+          }),
+          summary({
+            gameId: "game_black_archive",
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-06-01T12:06:00.000Z",
+            result: { winner: "b", reason: "timeout" },
+          }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_white_archive");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
+      target: { value: "black" },
+    });
+
+    expect(screen.getByText("game_black_archive")).toBeInTheDocument();
+    expect(screen.queryByText("game_white_archive")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+      target: { value: "no-such-game" },
+    });
+
+    expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
+  });
+
+  it("hides archive-only result filters on Watch and resets them when returning to live games", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({
+            gameId: "game_black_archive",
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-06-01T12:06:00.000Z",
+            result: { winner: "b", reason: "timeout" },
+          }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_black_archive");
+    fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
+      target: { value: "black" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Live public games" }));
+
+    expect(screen.queryByRole("combobox", { name: "Result filter" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Result filter" })).toHaveValue("all");
+    });
+  });
+
+  it("keeps long public rows actionable on narrow layouts", async () => {
+    const longId = "game_public_archive_with_a_very_long_identifier_that_should_wrap_without_hiding_actions";
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({
+            gameId: longId,
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-06-01T12:05:00.000Z",
+            result: { winner: "w", reason: "castle_control" },
+            participants: [
+              { seat: "w", role: "white", identity: { kind: "registered", id: "very_long_w", displayName: "A Very Long White Player Name That Wraps" } },
+              { seat: "b", role: "black", identity: { kind: "registered", id: "very_long_b", displayName: "A Very Long Black Player Name That Wraps" } },
+            ],
+          }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: new RegExp(longId) });
+
+    expect(row).toHaveTextContent(longId);
+    expect(within(row).getByRole("button", { name: new RegExp(`Analyze replay .*${longId}`) })).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: `Copy spectator link for ${longId}` })).not.toBeInTheDocument();
+  });
+
+  it("loads additional public directory pages on demand", async () => {
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_first_page" })], "cursor-next"))
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_second_page" })]));
+    render(
+      <OnlineGameBrowser
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("game_first_page")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(await screen.findByText("game_second_page")).toBeInTheDocument();
+    expect(loadGames).toHaveBeenLastCalledWith({
+      state: "active",
+      limit: 50,
+      cursor: "cursor-next",
+    });
+  });
+
+  it("keeps pagination reachable when filters hide the loaded page", async () => {
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([
+        summary({ gameId: "game_casual_first_page", hasTimeControl: false }),
+      ], "cursor-filtered"))
+      .mockResolvedValueOnce(directory([
+        summary({ gameId: "game_timed_second_page", hasTimeControl: true }),
+      ]));
+    render(
+      <OnlineGameBrowser
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("game_casual_first_page")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
+      target: { value: "timed" },
+    });
+
+    expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(await screen.findByText("game_timed_second_page")).toBeInTheDocument();
+    expect(loadGames).toHaveBeenLastCalledWith({
+      state: "active",
+      limit: 50,
+      cursor: "cursor-filtered",
+    });
+  });
+
+  it("ignores stale tab load responses after a newer tab request wins", async () => {
+    const watch = deferredDirectory();
+    const archive = deferredDirectory();
+    const loadGames = vi
+      .fn()
+      .mockReturnValueOnce(watch.promise)
+      .mockReturnValueOnce(archive.promise);
+    render(
+      <OnlineGameBrowser
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
+    archive.resolve(directory([
+      summary({
+        gameId: "game_archive_wins_race",
+        status: "complete",
+        archiveState: "archived",
+        endedAt: "2026-06-01T12:06:00.000Z",
+        result: { winner: "b", reason: "timeout" },
+      }),
+    ]));
+    expect(await screen.findByText("game_archive_wins_race")).toBeInTheDocument();
+
+    watch.resolve(directory([summary({ gameId: "game_stale_watch" })]));
+
+    expect(screen.queryByText("game_stale_watch")).not.toBeInTheDocument();
+    expect(screen.getByText("game_archive_wins_race")).toBeInTheDocument();
+  });
+
   it("shows a retryable failure state when public summaries cannot load", async () => {
     const loadGames = vi
       .fn()
       .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce([summary()]);
+      .mockResolvedValueOnce(directory([summary()]));
     render(
       <OnlineGameBrowser
         loadGames={loadGames}

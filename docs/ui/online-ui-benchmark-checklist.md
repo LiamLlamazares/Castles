@@ -36,6 +36,17 @@ Phase 6A third-pass implementation status, 2026-06-01:
 - Reviewer follow-ups were fixed for drawer-trigger focus escape, install-prompt overlay risk, AppShellNav negative-margin overflow inside online state panels, and stale autosave/session-credential cleanup.
 - Screenshot artifacts for this pass are in `artifacts/ui-audit/phase6c-third-pass`.
 
+Public Directory v1 implementation status, 2026-06-01:
+
+- Watch and Online Archive now use a schema-versioned public directory contract instead of an unbounded public list.
+- Directory responses support `state=active|archived|all`, bounded limits, and opaque cursors while still returning only public summaries.
+- Public directory endpoints reject token/auth/credential-looking query parameters.
+- Store-level listing and single-summary lookup are available so public discovery does not require replaying events or loading credentials.
+- Watch/Archive scan controls now include sort, clock filter, and result filter; filtered no-results states are distinct from truly empty public lists.
+- Focused Playwright screenshot audit covered desktop 1440 x 900, tablet 820 x 700, and mobile 430 x 932 Watch/Archive/filtered-empty states with no horizontal overflow. Artifacts are in `artifacts/ui-audit/phase6f-public-directory`.
+- Review follow-ups were fixed for filtered-empty pagination reachability, shown-count copy, archive result-filter reset coverage, and mid-width toolbar overflow risk.
+- Open seeks, matchmaking, accounts, ratings, chat, and public lobby creation remain deferred.
+
 Next UI polish audit:
 
 - Keep lichess-style top destinations simple: Play, Learn, Watch, Library, and later Tools/Lobby when backed by server contracts.
@@ -43,7 +54,8 @@ Next UI polish audit:
 - Recheck tutorial mobile compactness after adding new lessons or tutorial controls.
 - Keep the game side panel contextual to clocks, turn phase, history, save/review, online links, and analysis; do not use it as general app navigation.
 - Check long online status/error text at 360 px, 390 px, and 430 px widths whenever challenge or connection copy changes.
-- Add the next navigation pass when Lobby, open seeks, account identity, or matchmaking adds genuinely new top-level destinations.
+- Run the next navigation pass before lobby work: fix the awkward sidebar/drawer shape, tutorial placement, return navigation, save/progress discoverability, and any go-back/navigation overlap.
+- Keep Watch/Archive dense and read-only until open-seek contracts exist; do not label public directory browsing as matchmaking.
 
 Reference pages checked:
 
@@ -126,3 +138,5 @@ For every screenshot, check:
 - Online state navigation test: failed pending online and challenge states expose shared navigation, clear stale online state when leaving, and keep long status text inside the responsive status block.
 - Hamburger menu test: drawer open state is a modal dialog with focus trap, Escape close, focus restoration, and background inerting.
 - Tutorial layout test: short mobile viewports use the compact split and stable quick-nav/text classes.
+- Public directory tests: list response validation, state filters, limits/cursors, single-summary lookup, secret-query rejection, and hidden-game exclusion.
+- Watch/Archive tests: tab-state loading, sort/time/result filters, filtered no-results, filtered-empty pagination reachability, and long-row action reachability.

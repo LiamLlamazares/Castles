@@ -10,11 +10,15 @@ import {
   type OnlineGameEvent,
 } from "../events";
 import {
+  ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   canAccessOnlineGameSummary,
   canListOnlineGameSummary,
+  decodeOnlineGameDirectoryCursor,
+  encodeOnlineGameDirectoryCursor,
   projectOnlineGameSummaries,
   roleForOnlineSeat,
+  validateOnlineGameDirectoryResponse,
   validateOnlineGameSummary,
   type OnlineGameSummary,
 } from "../readModel";
@@ -86,6 +90,68 @@ function validSummary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSum
 }
 
 describe("online read model", () => {
+  it("rejects secret-looking public directory cursors", () => {
+    const secretCursor = btoa(JSON.stringify([
+      "2026-05-31T12:00:01.000Z",
+      "token=secret",
+    ])).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+
+    expect(decodeOnlineGameDirectoryCursor(secretCursor).ok).toBe(false);
+    expect(
+      validateOnlineGameDirectoryResponse({
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        games: [],
+        nextCursor: secretCursor,
+      }).ok
+    ).toBe(false);
+  });
+
+  it("validates public directory response envelopes", () => {
+    const active = validSummary({
+      gameId: "game_directory_active",
+      visibility: "public",
+      status: "active",
+      archiveState: "active",
+    });
+    const cursor = encodeOnlineGameDirectoryCursor(active);
+
+    const validation = validateOnlineGameDirectoryResponse({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [active],
+      nextCursor: cursor,
+    });
+
+    expect(validation).toEqual({
+      ok: true,
+      value: {
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        games: [active],
+        nextCursor: cursor,
+      },
+    });
+    expect(decodeOnlineGameDirectoryCursor(cursor)).toEqual({
+      ok: true,
+      value: { updatedAt: active.updatedAt, gameId: active.gameId },
+    });
+  });
+
+  it("rejects malformed public directory response envelopes", () => {
+    expect(validateOnlineGameDirectoryResponse({ games: [] }).ok).toBe(false);
+    expect(
+      validateOnlineGameDirectoryResponse({
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        games: [{ gameId: "game_bad" }],
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameDirectoryResponse({
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        games: [],
+        nextCursor: "not-valid-cursor",
+      }).ok
+    ).toBe(false);
+  });
+
   it("projects a stable game summary from the append-only event log", () => {
     const events: OnlineGameEvent[] = [
       createEvent(),
