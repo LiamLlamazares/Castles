@@ -77,6 +77,7 @@ interface GameConfig {
   graveyard?: Piece[];
   phoenixRecords?: PhoenixRecord[];
   promotionPending?: Piece | null;
+  victoryPoints?: { w: number; b: number };
   pieceTheme?: PieceTheme;
   isAnalysisMode?: boolean;
   opponentConfig?: AIOpponentConfig;
@@ -124,6 +125,7 @@ function App() {
     url.searchParams.delete("token");
     url.searchParams.delete("onlineChallenge");
     url.searchParams.delete("challengeRole");
+    url.searchParams.delete("challengeToken");
     url.searchParams.delete("view");
     url.searchParams.delete("pgn");
     url.searchParams.delete("game");
@@ -520,9 +522,31 @@ function App() {
     sanctuaries: Sanctuary[], 
     moveTree?: MoveTree,
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    initialPoolTypes?: SanctuaryType[]
+    initialPoolTypes?: SanctuaryType[],
+    graveyard?: Piece[],
+    phoenixRecords?: PhoenixRecord[],
+    promotionPending?: Piece | null,
+    gameRules?: { vpModeEnabled: boolean },
+    pieceTheme?: PieceTheme,
+    timeControl?: { initial: number, increment: number },
+    victoryPoints?: { w: number; b: number }
   }) => {
-    const { board, pieces, turnCounter, sanctuaries, moveTree, sanctuarySettings, initialPoolTypes } = data;
+    const {
+      board,
+      pieces,
+      turnCounter,
+      sanctuaries,
+      moveTree,
+      sanctuarySettings,
+      initialPoolTypes,
+      graveyard,
+      phoenixRecords,
+      promotionPending,
+      gameRules,
+      pieceTheme,
+      timeControl,
+      victoryPoints,
+    } = data;
     // Reset layout based on new board size
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
@@ -537,7 +561,24 @@ function App() {
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
-    setGameConfig({ board, pieces, layout, moveTree, turnCounter, sanctuaries, sanctuarySettings, initialPoolTypes, isAnalysisMode: true });
+    setGameConfig({
+      board,
+      pieces,
+      layout,
+      moveTree,
+      turnCounter,
+      sanctuaries,
+      sanctuarySettings,
+      initialPoolTypes,
+      graveyard,
+      phoenixRecords,
+      promotionPending,
+      gameRules,
+      pieceTheme,
+      timeControl,
+      victoryPoints,
+      isAnalysisMode: true,
+    });
     setGameKey(prev => prev + 1); // Force remount
     setView('game');
   };
@@ -614,6 +655,7 @@ function App() {
       graveyard: state.graveyard,
       phoenixRecords: state.phoenixRecords,
       promotionPending: state.promotionPending,
+      victoryPoints: state.victoryPoints,
       pieceTheme: setup.pieceTheme,
       timeControl: setup.timeControl,
       isAnalysisMode: false,
@@ -678,12 +720,6 @@ function App() {
     pendingOnlineConnection.status === "protocol-error" ||
     pendingOnlineConnection.status === "server-error" ||
     pendingOnlineConnection.status === "terminal";
-
-  const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
-    const layout = getStartingLayout(board);
-    setGameConfig({ board, pieces, layout, turnCounter, sanctuaries, isAnalysisMode: true });
-    setGameKey(prev => prev + 1); // Force remount with new setting
-  };
 
   // Editor handlers
   const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
@@ -952,11 +988,11 @@ function App() {
               initialGraveyard={gameConfig.graveyard}
               initialPhoenixRecords={gameConfig.phoenixRecords}
               initialPromotionPending={gameConfig.promotionPending}
+              initialVictoryPoints={gameConfig.victoryPoints}
               timeControl={gameConfig.timeControl}
               sanctuarySettings={gameConfig.sanctuarySettings}
               gameRules={gameConfig.gameRules}
               isAnalysisMode={gameConfig.isAnalysisMode}
-              onEnableAnalysis={handleEnableAnalysis}
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}

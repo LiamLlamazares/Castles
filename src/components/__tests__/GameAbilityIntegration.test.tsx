@@ -1,10 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import GameBoard from "../Game";
+import { MoveTree } from "../../Classes/Core/MoveTree";
 import { Hex } from "../../Classes/Entities/Hex";
 import { PieceFactory } from "../../Classes/Entities/PieceFactory";
+import { Sanctuary } from "../../Classes/Entities/Sanctuary";
 import { PGNService } from "../../Classes/Services/PGNService";
-import { PieceType } from "../../Constants";
+import { PieceType, SanctuaryType, type MoveRecord } from "../../Constants";
 import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
+import { createPieceMap } from "../../utils/PieceMap";
 import { createM5L2 } from "../../tutorial/lessons/m5_02_wolf";
 import { createM5L5 } from "../../tutorial/lessons/m5_05_wizard";
 import { ThemeProvider } from "../../contexts/ThemeContext";
@@ -46,6 +49,35 @@ const getHexPolygon = (
 
   return polygon as SVGPolygonElement;
 };
+
+function createSnapshot(
+  turnCounter: number,
+  sanctuary: Sanctuary,
+  pool: SanctuaryType[],
+  victoryPoints?: { w: number; b: number }
+) {
+  const pieces = getStartingPieces(6);
+  return {
+    pieces,
+    pieceMap: createPieceMap(pieces),
+    castles: getStartingBoard(6).castles,
+    sanctuaries: [sanctuary],
+    sanctuaryPool: pool,
+    turnCounter,
+    graveyard: [],
+    phoenixRecords: [],
+    victoryPoints,
+  };
+}
+
+function moveRecord(notation: string, turnNumber: number): MoveRecord {
+  return {
+    notation,
+    turnNumber,
+    color: "w",
+    phase: "Movement",
+  };
+}
 
 describe("Game ability integration", () => {
   beforeEach(() => {
@@ -373,6 +405,135 @@ describe("Game ability integration", () => {
     );
 
     expect(screen.getByText("Online White · Complete · White wins by resignation")).toBeInTheDocument();
+  });
+
+  test("online spectator analysis opens from current state without PGN round trip", () => {
+    const onLoadGame = vi.fn();
+    const generatePGN = vi.spyOn(PGNService, "generatePGN");
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={getStartingPieces(6)}
+          onlineSession={{
+            gameId: "game_online_analysis",
+            role: "spectator",
+            version: 2,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_online_analysis&view=spectator",
+          }}
+          onLoadGame={onLoadGame}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Analysis" }));
+
+    expect(generatePGN).not.toHaveBeenCalled();
+    expect(onLoadGame).toHaveBeenCalledOnce();
+    expect(onLoadGame.mock.calls[0][0]).toMatchObject({
+      turnCounter: 0,
+    });
+    expect(onLoadGame.mock.calls[0][0].moveTree).toBeDefined();
+  });
+
+  test("analysis handoff uses the coherent viewed history snapshot", () => {
+    const firstSanctuary = new Sanctuary(
+      new Hex(-2, 1, 1),
+      SanctuaryType.WolfCovenant,
+      "w",
+      "w"
+    );
+    const liveSanctuary = new Sanctuary(
+      new Hex(2, -1, -1),
+      SanctuaryType.SacredSpring,
+      "b",
+      "b"
+    );
+    const firstSnapshot = createSnapshot(
+      1,
+      firstSanctuary,
+      [SanctuaryType.WolfCovenant],
+      { w: 3, b: 1 }
+    );
+    const liveSnapshot = createSnapshot(
+      2,
+      liveSanctuary,
+      [SanctuaryType.SacredSpring],
+      { w: 7, b: 5 }
+    );
+    const moveTree = new MoveTree();
+    moveTree.rootNode.snapshot = createSnapshot(0, firstSanctuary, []);
+    moveTree.addMove(moveRecord("H12H11", 1), firstSnapshot);
+    moveTree.addMove(moveRecord("G13G12", 1), liveSnapshot);
+    const onLoadGame = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={liveSnapshot.pieces}
+          initialMoveTree={moveTree}
+          initialTurnCounter={2}
+          initialSanctuaries={liveSnapshot.sanctuaries}
+          initialPoolTypes={liveSnapshot.sanctuaryPool}
+          onlineSession={{
+            gameId: "game_history_analysis",
+            role: "spectator",
+            version: 2,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_history_analysis&view=spectator",
+          }}
+          onLoadGame={onLoadGame}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1. H12H11" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analysis" }));
+
+    expect(onLoadGame).toHaveBeenCalledOnce();
+    expect(onLoadGame.mock.calls[0][0].turnCounter).toBe(1);
+    expect(onLoadGame.mock.calls[0][0].sanctuaries[0].type).toBe(SanctuaryType.WolfCovenant);
+    expect(onLoadGame.mock.calls[0][0].initialPoolTypes).toEqual([SanctuaryType.WolfCovenant]);
+    expect(onLoadGame.mock.calls[0][0].victoryPoints).toEqual({ w: 3, b: 1 });
+  });
+
+  test("online sparse analysis handoff avoids broken historical navigation", () => {
+    const onLoadGame = vi.fn();
+    const moveTree = new MoveTree();
+    moveTree.addMove(moveRecord("H12H11", 1));
+    moveTree.current.snapshot = createSnapshot(
+      1,
+      new Sanctuary(new Hex(-2, 1, 1), SanctuaryType.WolfCovenant, "w"),
+      [SanctuaryType.WolfCovenant]
+    );
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={getStartingPieces(6)}
+          initialMoveTree={moveTree}
+          initialTurnCounter={1}
+          onlineSession={{
+            gameId: "game_sparse_analysis",
+            role: "spectator",
+            version: 1,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_sparse_analysis&view=spectator",
+          }}
+          onLoadGame={onLoadGame}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Analysis" }));
+
+    const analysisTree = onLoadGame.mock.calls[0][0].moveTree as MoveTree;
+    expect(analysisTree.rootNode.children).toHaveLength(0);
+    expect(analysisTree.rootNode.snapshot?.turnCounter).toBe(1);
   });
 
   test("online session badges use readable state labels", () => {

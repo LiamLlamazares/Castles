@@ -87,9 +87,11 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
         if (currentNodeId === null) {
           // Currently live - go to parent of current position
           if (currentNode.parent && currentNode.parent !== tree.rootNode) {
+            if (!currentNode.parent.snapshot) return prev;
             return { ...prev, viewNodeId: currentNode.parent.id };
           } else if (currentNode !== tree.rootNode && currentNode.parent) {
             // At first move, go to root
+            if (!tree.rootNode.snapshot) return prev;
             return { ...prev, viewNodeId: tree.rootNode.id };
           }
           return prev;
@@ -97,6 +99,7 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
         
         // Viewing history - go to parent
         if (currentNode.parent) {
+          if (!currentNode.parent.snapshot) return prev;
           return { ...prev, viewNodeId: currentNode.parent.id };
         }
         return prev;
@@ -105,6 +108,7 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
         // Stepping forward (+1)
         if (currentNode.children.length > 0) {
           const selectedChild = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
+          if (!selectedChild.snapshot) return prev;
           return { ...prev, viewNodeId: selectedChild.id };
         }
         

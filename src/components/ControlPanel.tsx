@@ -26,6 +26,7 @@ interface ControlPanelProps {
   onCopySpectator?: () => void;
   onSaveGame?: () => void;
   onOpenLibrary?: () => void;
+  onEnableAnalysis?: () => void;
   onOpenOnlineBrowser?: () => void;
   onTutorial?: () => void;
   shareLabel?: string;
@@ -196,6 +197,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onCopySpectator,
   onSaveGame,
   onOpenLibrary,
+  onEnableAnalysis,
   onOpenOnlineBrowser,
   onTutorial,
   shareLabel = "Share",
@@ -321,6 +323,16 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
             {onOpenLibrary && (
               <button className="control-button library" onClick={onOpenLibrary}>
                 Library
+              </button>
+            )}
+            {onEnableAnalysis && (
+              <button
+                type="button"
+                className="control-button analysis"
+                onClick={onEnableAnalysis}
+                title="Open local analysis board"
+              >
+                Analysis
               </button>
             )}
             {!onCopyOpponentInvite && !onCopySpectator && (

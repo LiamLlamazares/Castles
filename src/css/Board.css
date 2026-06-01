@@ -461,6 +461,11 @@ body {
   color: #0b2030;
 }
 
+.control-button.analysis {
+  background: #d9c27a;
+  color: #211a08;
+}
+
 .control-button.tutorial {
   background: #f4d287;
   color: #201812;

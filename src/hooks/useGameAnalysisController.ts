@@ -48,6 +48,7 @@ export const useGameAnalysisController = ({
         turnCounter: analysisState.turnCounter,
         graveyard: analysisState.graveyard.map((p: Piece) => p.clone()),
         phoenixRecords: [...analysisState.phoenixRecords],
+        victoryPoints: analysisState.victoryPoints ? { ...analysisState.victoryPoints } : undefined,
         movingPiece: null,
         moveTree: state.moveTree,
         viewNodeId: state.viewNodeId
@@ -66,6 +67,7 @@ export const useGameAnalysisController = ({
         moveTree: state.moveTree,
         graveyard: [],
         phoenixRecords: [],
+        victoryPoints: state.victoryPoints ? { ...state.victoryPoints } : undefined,
         viewNodeId: null,
       } as unknown as GameState;
     }
@@ -84,6 +86,7 @@ export const useGameAnalysisController = ({
               turnCounter: analysisState.turnCounter,
               graveyard: analysisState.graveyard,
               phoenixRecords: analysisState.phoenixRecords,
+              victoryPoints: analysisState.victoryPoints,
               movingPiece: null,
               moveTree: state.moveTree,
               viewNodeId: state.viewNodeId
@@ -102,6 +105,7 @@ export const useGameAnalysisController = ({
               moveTree: state.moveTree,
               graveyard: [],
               phoenixRecords: [],
+              victoryPoints: state.victoryPoints,
               viewNodeId: state.viewNodeId
           };
       }

@@ -128,6 +128,34 @@ describe("useOnlineSpectatorConnection", () => {
     expect(snapshots).toHaveLength(1);
   });
 
+  it("ignores websocket snapshots after the spectator connection is cleared", async () => {
+    const snapshots: Array<{ version: number }> = [];
+
+    const { unmount } = renderHook(() =>
+      useOnlineSpectatorConnection("game_123", (nextSnapshot) => {
+        snapshots.push(nextSnapshot as { version: number });
+      })
+    );
+
+    await waitFor(() => expect(snapshots).toHaveLength(1));
+    const socket = MockWebSocket.instances[0];
+
+    unmount();
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "spectating",
+          snapshot: snapshot(1),
+        }),
+      });
+    });
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({ version: 0 });
+  });
+
   it("turns non-json spectator frames into controlled errors", async () => {
     const snapshots: Array<{ version: number }> = [];
 

@@ -144,6 +144,7 @@ export function useOnlineSpectatorConnection(
       };
 
       socket.onmessage = (event) => {
+        if (cancelled) return;
         let message: any;
         try {
           message = JSON.parse(event.data);
@@ -200,6 +201,7 @@ export function useOnlineSpectatorConnection(
       };
 
       socket.onerror = () => {
+        if (cancelled) return;
         setLastError("Online spectator connection failed.");
       };
 

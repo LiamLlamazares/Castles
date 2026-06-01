@@ -35,6 +35,7 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
     for (let i = 0; i < nodes.length; i++) {
         const node = nodes[i];
         const isSelected = node.id === highlightedId;
+        const canJumpToNode = !!node.snapshot;
         
         // Render move number if it's white's move OR if it's the start of a variation
         const shouldShowNumber = node.move.color === 'w' || i === 0;
@@ -45,17 +46,24 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
             <button
                 key={node.id}
                 type="button"
-                onClick={() => onJumpToNode?.(node.id)}
+                onClick={() => {
+                  if (canJumpToNode) {
+                    onJumpToNode?.(node.id);
+                  }
+                }}
                 className={`history-move ${isSelected ? 'selected' : ''}`}
                 aria-current={isSelected ? "step" : undefined}
                 aria-label={moveLabel}
+                disabled={!canJumpToNode}
+                title={canJumpToNode ? undefined : "Replay is not available for this move yet."}
                 style={{
-                    cursor: "pointer",
+                    cursor: canJumpToNode ? "pointer" : "not-allowed",
                     padding: "3px 8px",
                     borderRadius: "4px",
                     border: isSelected ? "1px solid #4a90e2" : "0",
                     background: isSelected ? "#fff" : "rgba(255, 255, 255, 0.9)",
                     color: "#000",
+                    opacity: canJumpToNode ? 1 : 0.55,
                     fontWeight: isSelected ? "800" : "500",
                     display: "inline-flex",
                     alignItems: "center",

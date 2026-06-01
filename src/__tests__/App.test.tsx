@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import App from "../App";
+import type { OnlineGameSnapshotDTO } from "../online/types";
 
 const onlineHookMocks = vi.hoisted(() => ({
   submitAction: vi.fn(),
@@ -16,30 +17,60 @@ vi.mock("../hooks/useOnlineSpectatorConnection", () => ({
 }));
 
 vi.mock("../components/Game", () => ({
-  default: ({
-    onSetup,
-    onTutorial,
-    onOpenLibrary,
-    onOpenOnlineBrowser,
-  }: {
+  default: (props: {
+    initialBoard?: unknown;
+    initialPieces?: unknown[];
+    initialMoveTree?: unknown;
+    initialTurnCounter?: number;
+    initialSanctuaries?: unknown[];
+    isAnalysisMode?: boolean;
+    onlineSession?: { role: string };
+    sanctuarySettings?: { unlockTurn: number; cooldown: number };
+    initialPoolTypes?: unknown[];
     onSetup: () => void;
     onTutorial: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
+    onLoadGame: (data: {
+      board: unknown;
+      pieces: unknown[];
+      turnCounter: number;
+      sanctuaries: unknown[];
+      moveTree?: unknown;
+      sanctuarySettings?: { unlockTurn: number; cooldown: number };
+      initialPoolTypes?: unknown[];
+    }) => void;
   }) => (
     <div>
       <div>Game Ready</div>
-      <button type="button" onClick={onSetup}>
+      <div>Online session: {props.onlineSession?.role ?? "none"}</div>
+      <div>Analysis mode: {props.isAnalysisMode ? "yes" : "no"}</div>
+      <button type="button" onClick={props.onSetup}>
         Configure New Game
       </button>
-      <button type="button" onClick={onTutorial}>
+      <button type="button" onClick={props.onTutorial}>
         Open Tutorial
       </button>
-      <button type="button" onClick={onOpenLibrary}>
+      <button type="button" onClick={props.onOpenLibrary}>
         Open Library
       </button>
-      <button type="button" onClick={onOpenOnlineBrowser}>
+      <button type="button" onClick={props.onOpenOnlineBrowser}>
         Open Watch
+      </button>
+      <button
+        type="button"
+        onClick={() => props.onLoadGame({
+          board: props.initialBoard,
+          pieces: props.initialPieces ?? [],
+          turnCounter: props.initialTurnCounter ?? 0,
+          sanctuaries: props.initialSanctuaries ?? [],
+          moveTree: props.initialMoveTree,
+          sanctuarySettings: props.sanctuarySettings,
+          initialPoolTypes: props.initialPoolTypes,
+        })}
+        disabled={!props.initialBoard}
+      >
+        Mock Open Analysis
       </button>
     </div>
   ),
@@ -122,6 +153,31 @@ vi.mock("../components/Tutorial", () => ({
 vi.mock("../components/InstallAppHint", () => ({
   default: () => null,
 }));
+
+function spectatorSnapshot(gameId: string): OnlineGameSnapshotDTO {
+  return {
+    gameId,
+    version: 3,
+    setup: {
+      board: { config: { nSquares: 6 }, castles: [] },
+      pieces: [],
+      sanctuaries: [],
+    },
+    state: {
+      pieces: [],
+      castles: [],
+      sanctuaries: [],
+      turnCounter: 0,
+      sanctuaryPool: [],
+      graveyard: [],
+      phoenixRecords: [],
+      promotionPending: null,
+    },
+    moveHistory: [],
+    playerToMove: "w",
+    turnPhase: "Movement",
+  };
+}
 
 describe("App game setup lifecycle", () => {
   beforeEach(() => {
@@ -239,6 +295,40 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Connecting online game");
     expect(onlineHookMocks.useOnlineSpectatorConnection).toHaveBeenLastCalledWith(
       "game_watch_public",
+      expect.any(Function)
+    );
+  });
+
+  it("opens an online spectator game as local analysis and clears online URL state", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_analysis&view=spectator&token=stale-token&onlineChallenge=old&challengeRole=challenged&challengeToken=query-secret&pgn=stale-pgn&game=stale-game#stale-fragment"
+    );
+    render(<App />);
+
+    const spectatorCallback = onlineHookMocks.useOnlineSpectatorConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      spectatorCallback(spectatorSnapshot("game_analysis"));
+    });
+
+    expect(screen.getByText("Online session: spectator")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Open Analysis" }));
+
+    expect(screen.getByText("Online session: none")).toBeInTheDocument();
+    expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("onlineGame=");
+    expect(window.location.search).not.toContain("view=spectator");
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.search).not.toContain("onlineChallenge=");
+    expect(window.location.search).not.toContain("challengeRole=");
+    expect(window.location.search).not.toContain("challengeToken=");
+    expect(window.location.search).not.toContain("pgn=");
+    expect(window.location.search).not.toContain("game=");
+    expect(window.location.hash).toBe("");
+    expect(onlineHookMocks.useOnlineSpectatorConnection).toHaveBeenLastCalledWith(
+      null,
       expect.any(Function)
     );
   });

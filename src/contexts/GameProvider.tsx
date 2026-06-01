@@ -65,6 +65,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const initialGraveyard = config?.graveyard ?? [];
   const initialPhoenixRecords = config?.phoenixRecords ?? [];
   const initialPromotionPending = config?.promotionPending ?? null;
+  const initialVictoryPoints = config?.victoryPoints;
   
   // Extract rules
   const sanctuarySettings = rules?.sanctuarySettings;
@@ -89,7 +90,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     initialPoolTypes,
     initialGraveyard,
     initialPhoenixRecords,
-    initialPromotionPending
+    initialPromotionPending,
+    initialVictoryPoints
   );
 
   // =========== COMPOSED HOOKS ===========
@@ -252,7 +254,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     return {
       pieces,
       castles,
-      sanctuaries: state.sanctuaries || [],
+      sanctuaries: viewState.sanctuaries || [],
       turnCounter,
       pieceMap: viewState.pieceMap,
       movingPiece,
@@ -269,14 +271,15 @@ export const GameProvider: React.FC<GameProviderProps> = ({
       moveTree: state.moveTree,
       moveHistory: currentLine,
       history: [], // History object array now legacy or empty
-      sanctuaryPool: state.sanctuaryPool,
-      graveyard: state.graveyard,
-      phoenixRecords: state.phoenixRecords,
+      sanctuaryPool: viewState.sanctuaryPool,
+      graveyard: viewState.graveyard,
+      phoenixRecords: viewState.phoenixRecords,
+      victoryPoints: viewState.victoryPoints,
       hasGameStarted,
       isAnalysisMode,
       isViewingHistory,
       viewNodeId: state.viewNodeId,
-      promotionPending: state.promotionPending ?? null,
+      promotionPending: isViewingHistory ? null : state.promotionPending ?? null,
       aiIntegration: {
         gameEngine,
         board: gameEngine.board,
@@ -287,10 +290,10 @@ export const GameProvider: React.FC<GameProviderProps> = ({
       onlineSession
     };
   }, [
-    pieces, castles, state.sanctuaries, turnCounter, viewState.pieceMap, movingPiece,
+    pieces, castles, viewState.sanctuaries, turnCounter, viewState.pieceMap, movingPiece,
     turnPhase, currentPlayer, hexagons, legalMoveSet, legalAttackSet, victoryMessage, winner,
     isRecruitmentSpot, isPledgeSpot, gameEngine, state.moveTree,
-    state.sanctuaryPool, state.graveyard, state.phoenixRecords,
+    viewState.sanctuaryPool, viewState.graveyard, viewState.phoenixRecords, viewState.victoryPoints,
     hasGameStarted, isAnalysisMode, isViewingHistory, state.viewNodeId, state.promotionPending, state, setState,
     onlineSession
   ]);

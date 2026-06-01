@@ -17,6 +17,8 @@ import { BoardContainer } from "./Board/BoardContainer";
 import { GameHUD } from "./HUD/GameHUD";
 import { GameOverlays } from "./Overlays/GameOverlays";
 import { Board } from "../Classes/Core/Board";
+import { MoveNode, MoveTree } from "../Classes/Core/MoveTree";
+import type { PositionSnapshot } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
@@ -31,6 +33,7 @@ import {
   formatOnlineGameResult,
 } from "../online/client";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
+import { createPieceMap } from "../utils/PieceMap";
 import PromotionModal from "./PromotionModal";
 import "../css/Board.css";
 
@@ -60,7 +63,14 @@ interface GameBoardProps {
     sanctuaries: Sanctuary[],
     moveTree?: import('../Classes/Core/MoveTree').MoveTree,
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    initialPoolTypes?: import('../Constants').SanctuaryType[]
+    initialPoolTypes?: import('../Constants').SanctuaryType[],
+    graveyard?: Piece[],
+    phoenixRecords?: PhoenixRecord[],
+    promotionPending?: Piece | null,
+    gameRules?: { vpModeEnabled: boolean },
+    pieceTheme?: PieceTheme,
+    timeControl?: { initial: number, increment: number },
+    victoryPoints?: { w: number; b: number }
   }) => void;
   onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
   onTutorial?: () => void;
@@ -69,14 +79,29 @@ interface GameBoardProps {
   onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<void> | void;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
-  onEnableAnalysis?: (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => void;
   isTutorialMode?: boolean;
   initialPoolTypes?: import('../Constants').SanctuaryType[];
   pieceTheme?: PieceTheme;
   opponentConfig?: AIOpponentConfig;
   onlineSession?: OnlineClientSession;
+  initialVictoryPoints?: { w: number; b: number };
   showNavigationMenu?: boolean;
   showTooltipHint?: boolean;
+}
+
+function moveTreeHasCompleteSnapshots(tree: MoveTree): boolean {
+  if (!tree.rootNode.snapshot) return false;
+
+  const nodeHasSnapshots = (node: MoveNode): boolean =>
+    node.children.every((child) => !!child.snapshot && nodeHasSnapshots(child));
+
+  return nodeHasSnapshots(tree.rootNode);
+}
+
+function createCurrentPositionAnalysisTree(snapshot: PositionSnapshot): MoveTree {
+  const tree = new MoveTree();
+  tree.rootNode.snapshot = snapshot;
+  return tree;
 }
 
 /**
@@ -100,8 +125,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onOpenOnlineBrowser,
   onSaveGameToLibrary,
   timeControl,
-  onEnableAnalysis = () => {},
   isTutorialMode = false,
+  initialVictoryPoints,
   pieceTheme = "Castles",
   opponentConfig,
   onlineSession,
@@ -142,8 +167,13 @@ const InnerGame: React.FC<GameBoardProps> = ({
   // Consume Contexts
   const {
       pieces,
+      board,
       castles,
       sanctuaries,
+      sanctuaryPool,
+      graveyard,
+      phoenixRecords,
+      victoryPoints: viewedVictoryPoints,
       turnCounter,
       turnPhase,
       currentPlayer,
@@ -263,7 +293,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
   // Victory Points (only used when VP mode is enabled)
   const [victoryPoints, setVictoryPoints] = React.useState<{ w: number, b: number } | undefined>(
-    gameRules?.vpModeEnabled ? { w: 0, b: 0 } : undefined
+    gameRules?.vpModeEnabled ? initialVictoryPoints ?? { w: 0, b: 0 } : undefined
   );
 
   // Track previous turn counter for VP calculation
@@ -317,6 +347,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
       : formatOnlineConnectionStatus(onlineSession.status);
     return `${roleLabel} · ${stateLabel}${onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}`;
   }, [onlineSession]);
+  const canOpenOnlineAnalysis =
+    !isAnalysisMode &&
+    !!onlineSession &&
+    (onlineSession.role === "spectator" || !!onlineSession.result);
 
   // Reset overlay when game restarts
   React.useEffect(() => {
@@ -371,20 +405,65 @@ const InnerGame: React.FC<GameBoardProps> = ({
   };
 
   const handleEnterAnalysis = React.useCallback(() => {
-    const pgn = getPGN();
-    const result = loadPGN(pgn);
-    if (result && onLoadGame) {
-      onLoadGame({
-        board: result.board,
-        pieces: result.pieces,
-        turnCounter: result.turnCounter,
-        sanctuaries: result.sanctuaries,
-        moveTree: result.moveTree,
-        sanctuarySettings: result.sanctuarySettings,
-        initialPoolTypes: result.sanctuaryPool
-      });
+    if (!onLoadGame) return;
+    const piecesSnapshot = pieces.map((piece) => piece.clone());
+    const analysisSnapshot: PositionSnapshot = {
+      pieces: piecesSnapshot,
+      pieceMap: createPieceMap(piecesSnapshot),
+      castles: castles.map((castle) => castle.clone()),
+      sanctuaries: sanctuaries.map((sanctuary) => sanctuary.clone()),
+      sanctuaryPool: [...sanctuaryPool],
+      turnCounter,
+      graveyard: graveyard.map((piece) => piece.clone()),
+      phoenixRecords: phoenixRecords.map((record) => ({ ...record })),
+      victoryPoints: viewedVictoryPoints ? { ...viewedVictoryPoints } : undefined,
+    };
+    const hasCompleteMoveSnapshots = moveTreeHasCompleteSnapshots(moveTree);
+    const analysisMoveTree = hasCompleteMoveSnapshots
+      ? moveTree.clone()
+      : createCurrentPositionAnalysisTree(analysisSnapshot);
+    if (hasCompleteMoveSnapshots && viewNodeId) {
+      const viewedNode = analysisMoveTree.findNodeById(viewNodeId);
+      if (viewedNode) {
+        analysisMoveTree.setCurrentNode(viewedNode);
+      }
     }
-  }, [getPGN, loadPGN, onLoadGame]);
+
+    onLoadGame({
+      board: new Board({ ...board.config }, castles.map((castle) => castle.clone())),
+      pieces: piecesSnapshot,
+      turnCounter,
+      sanctuaries: sanctuaries.map((sanctuary) => sanctuary.clone()),
+      moveTree: analysisMoveTree,
+      sanctuarySettings,
+      initialPoolTypes: [...sanctuaryPool],
+      graveyard: graveyard.map((piece) => piece.clone()),
+      phoenixRecords: phoenixRecords.map((record) => ({ ...record })),
+      promotionPending: promotionPending ? promotionPending.clone() : null,
+      gameRules,
+      pieceTheme,
+      timeControl,
+      victoryPoints: viewedVictoryPoints ? { ...viewedVictoryPoints } : undefined,
+    });
+  }, [
+    onLoadGame,
+    board,
+    castles,
+    pieces,
+    turnCounter,
+    sanctuaries,
+    sanctuaryPool,
+    moveTree,
+    sanctuarySettings,
+    graveyard,
+    phoenixRecords,
+    viewedVictoryPoints,
+    promotionPending,
+    gameRules,
+    pieceTheme,
+    timeControl,
+    viewNodeId,
+  ]);
 
   useInputHandler({
     onPass: isReadOnlyOnline || isOnlineActionPaused ? () => {} : handlePass,
@@ -521,6 +600,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
           onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
+          onEnableAnalysis={canOpenOnlineAnalysis ? handleEnterAnalysis : undefined}
           onOpenOnlineBrowser={onOpenOnlineBrowser}
           onTutorial={onTutorial}
           moveHistory={moveHistory || []}
@@ -601,6 +681,7 @@ const GameBoard: React.FC<GameBoardProps> = (props) => {
         graveyard: props.initialGraveyard,
         phoenixRecords: props.initialPhoenixRecords,
         promotionPending: props.initialPromotionPending,
+        victoryPoints: props.initialVictoryPoints,
         moveTree: props.initialMoveTree,
         poolTypes: props.initialPoolTypes,
       }}

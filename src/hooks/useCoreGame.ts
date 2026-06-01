@@ -38,7 +38,8 @@ export const useCoreGame = (
   initialPoolTypes?: import("../Constants").SanctuaryType[],
   initialGraveyard: Piece[] = [],
   initialPhoenixRecords: import("../Classes/Core/GameState").PhoenixRecord[] = [],
-  initialPromotionPending: Piece | null = null
+  initialPromotionPending: Piece | null = null,
+  initialVictoryPoints?: { w: number; b: number }
 ) => {
   // Create game engine instance (stable reference)
   const gameEngine = useMemo(() => new GameEngine(initialBoard), [initialBoard]);
@@ -77,11 +78,12 @@ export const useCoreGame = (
       turnCounter: 0,
       sanctuaryPool: initialPool,
       graveyard: initialGraveyard,
-      phoenixRecords: initialPhoenixRecords
+      phoenixRecords: initialPhoenixRecords,
+      victoryPoints: initialVictoryPoints ? { ...initialVictoryPoints } : undefined,
     };
     
     return tree;
-  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries, initialGraveyard, initialPhoenixRecords]);
+  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries, initialGraveyard, initialPhoenixRecords, initialVictoryPoints]);
 
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>(() => {
@@ -112,7 +114,8 @@ export const useCoreGame = (
       // History Navigation (node-based)
       viewNodeId: null,  // Node ID for tree navigation (null = live)
       graveyard: initialGraveyard,
-      phoenixRecords: initialPhoenixRecords
+      phoenixRecords: initialPhoenixRecords,
+      victoryPoints: initialVictoryPoints ? { ...initialVictoryPoints } : undefined,
     };
 
     return gameEngine.normalizeForcedTurns(initialState) as GameBoardState;

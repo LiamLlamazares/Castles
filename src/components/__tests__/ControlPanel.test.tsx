@@ -95,6 +95,29 @@ describe("ControlPanel", () => {
     expect(onOpenLibrary).toHaveBeenCalledOnce();
   });
 
+  it("shows analysis in save and review controls for review-only online games", () => {
+    const onEnableAnalysis = vi.fn();
+
+    render(
+      <ControlPanel
+        {...baseProps}
+        hasGameStarted
+        isOnline
+        isReadOnly
+        onEnableAnalysis={onEnableAnalysis}
+      />
+    );
+
+    const saveControls = screen.getByRole("group", { name: "Save and review" });
+    const analysisButton = screen.getByRole("button", { name: "Analysis" });
+
+    expect(saveControls).toContainElement(analysisButton);
+
+    fireEvent.click(analysisButton);
+
+    expect(onEnableAnalysis).toHaveBeenCalledOnce();
+  });
+
   it("renders online clocks from server state instead of starting local browser clocks", () => {
     render(
       <ControlPanel

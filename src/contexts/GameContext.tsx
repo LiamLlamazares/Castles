@@ -37,6 +37,7 @@ export interface GameConfig {
   graveyard?: Piece[];
   phoenixRecords?: PhoenixRecord[];
   promotionPending?: Piece | null;
+  victoryPoints?: { w: number; b: number };
 }
 
 /**

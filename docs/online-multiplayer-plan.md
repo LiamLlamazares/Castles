@@ -147,12 +147,12 @@ Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI 
 
 Goal: add discovery and post-game surfaces on top of stable contracts.
 
-Status: Phase 6B is implemented locally on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models and the existing spectator flow. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
+Status: Phase 6B is implemented locally on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models and the existing spectator flow. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
 
 Work:
 
 - Benchmark spectator, archive, lobby, matchmaking, and analysis entry points before screen design.
-- Polish spectator experience, archived-game labels, result display, move list, share/export entry points, and analysis launch.
+- Polish spectator experience, archived-game labels, result display, move list, share/export entry points, and remaining archive-first replay launch.
 - Build archive browse/search read models before broad public lobby.
 - Add lobby presence and simple matchmaking only after archive/spectator contracts are stable.
 
