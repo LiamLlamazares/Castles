@@ -3,12 +3,14 @@ import {
   buildOnlineWebSocketUrl,
   buildSpectatorUrl,
   copyOnlineInviteUrl,
+  fetchOnlineGameSummaries,
   fetchOnlineSpectatorSnapshot,
   formatOnlineGameResult,
   parseOnlineJoinParams,
   parseOnlineSpectatorParams,
   rememberOnlineOpponentInviteUrl,
   removeOnlineTokenFromUrl,
+  resolveOnlineAnonymousSessionId,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   shouldApplyOnlineSnapshot,
@@ -98,6 +100,36 @@ describe("online client helpers", () => {
     expect(resolveOnlineOpponentInviteUrl("game_other", storageAdapter)).toBeNull();
   });
 
+  it("stores a stable anonymous session id outside URLs", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+
+    const first = resolveOnlineAnonymousSessionId(storageAdapter, () => "anon_browser_123");
+    const second = resolveOnlineAnonymousSessionId(storageAdapter, () => {
+      throw new Error("stored id should be reused");
+    });
+
+    expect(first).toBe("anon_browser_123");
+    expect(second).toBe("anon_browser_123");
+  });
+
+  it("replaces malformed anonymous session ids", () => {
+    const storage = new Map<string, string>([["castles_online_anonymous_session_id", ""]]);
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+
+    expect(resolveOnlineAnonymousSessionId(storageAdapter, () => "anon_repaired")).toBe(
+      "anon_repaired"
+    );
+  });
+
   it("ignores stale or duplicate snapshot versions during reconnect resync", () => {
     expect(shouldApplyOnlineSnapshotVersion(null, 0)).toBe(true);
     expect(shouldApplyOnlineSnapshotVersion(0, 0)).toBe(false);
@@ -171,5 +203,42 @@ describe("online client helpers", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledWith("/api/online/games/game_123/spectator");
+  });
+
+  it("fetches validated game summaries without player authorization", async () => {
+    const summary = {
+      gameId: "game_123",
+      rulesetVersion: "castles-beta-v1",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      updatedAt: "2026-05-31T12:00:00.000Z",
+      version: 0,
+      status: "active",
+      visibility: "public",
+      archiveState: "active",
+      hasTimeControl: true,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_123_w" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_123_b" } },
+      ],
+      lastEventId: "evt-create",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ games: [summary] }),
+    });
+
+    await expect(fetchOnlineGameSummaries(fetchImpl as any)).resolves.toEqual([summary]);
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games");
+    expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain("authorization");
+  });
+
+  it("rejects malformed game summary responses", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ games: [{ gameId: "game_123", version: 0 }] }),
+    });
+
+    await expect(fetchOnlineGameSummaries(fetchImpl as any)).rejects.toThrow(/summary/);
   });
 });

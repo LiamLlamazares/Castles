@@ -87,11 +87,17 @@ async function main() {
         console.error(`Invalid online event store entry ${line}`, error);
       },
     });
+    await store.rebuildSummaries({
+      onEventError: (line, error) => {
+        console.error(`Invalid online event store entry ${line}`, error);
+      },
+    });
     const service = OnlineGameService.fromRecords(records);
     const { app, server, wss } = createOnlineHttpServer({
       publicBaseUrl,
       service,
       onGameEvent: (event) => store.appendEvent(event),
+      loadGameSummaries: () => store.loadSummaries(),
       onLog: (event) => {
         console.log(formatOnlineServerLogEvent(event));
       },

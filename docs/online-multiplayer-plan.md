@@ -1,6 +1,6 @@
 # Online Multiplayer Master Roadmap
 
-Last refreshed: 2026-05-31
+Last refreshed: 2026-06-01
 
 This document is the source of truth for Castles online multiplayer work. The current direction assumes no legacy compatibility burden: old online drafts, incomplete protocols, and pre-roadmap UI assumptions may be replaced instead of preserved.
 
@@ -144,6 +144,29 @@ Tests/review/deploy gates:
 - Review: UX/accessibility review for scanning, empty states, mobile layouts, and analysis handoff.
 - Deploy: discovery features can be rate-limited, disabled, and monitored independently.
 
+## Phase 6A: UI Shell, Navigation, Tutorial, and Save UX Polish
+
+Goal: make the app feel navigable and sturdy before broader public discovery.
+
+This phase is required before calling the online experience Lichess-like. The current app shell has known rough edges: the side bar can feel awkward, the tutorial entry point is not placed naturally, routes/views can be hard to return from, save/progress affordances are not prominent enough, and some controls may overlap on smaller layouts.
+
+Work:
+
+- Benchmark Lichess navigation, game-page side panels, tutorial/help entry points, archive/lobby affordances, and mobile layouts; compare with at least one other mature online board-game service.
+- Audit the current app shell with screenshots across desktop and mobile viewports, including setup, game, tutorial/rules, library/save/progress, online spectator, and terminal states.
+- Rework the side bar/navigation so users can reliably move between setup, game, tutorial/rules, saved games/library, online links, and future lobby/archive screens.
+- Place tutorial/help where a new player naturally expects it, while keeping the actual game screen primary.
+- Make save/progress controls discoverable without crowding turn controls or online status.
+- Fix overlapping controls, especially go-back/navigation affordances and mobile bottom controls.
+- Preserve game-state safety: navigation must not accidentally reset an online or local game without a clear explicit action.
+
+Tests/review/deploy gates:
+
+- Tests: route/view navigation tests, save/progress interaction tests, responsive layout assertions where practical, and browser smoke through create/join/spectate/terminal flows after shell changes.
+- Manual browser QA: Playwright screenshots for desktop and mobile before/after, with explicit checks that controls do not overlap and important text fits.
+- Review: UX/accessibility review focused on navigation clarity, keyboard/focus order, mobile ergonomics, and consistency with Lichess-inspired expectations adapted for Castles.
+- Deploy: UI shell changes are shipped only after online smoke still passes and no local-save data is lost.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -184,3 +207,4 @@ Tests/review/deploy gates:
 2. Run the private beta smoke suite against local PostgreSQL and one HTTPS-like deployed environment.
 3. Record Phase 2 data-contract decisions: durable/disposable events, game summary read model, identity primitive, and access roles.
 4. Create the UI benchmarking checklist template required before challenge, spectator, archive, lobby, matchmaking, and analysis screens.
+5. Before public lobby/archive work, run Phase 6A UI shell polish with Lichess-guided screenshots and responsive overlap checks.

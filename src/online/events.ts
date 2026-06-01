@@ -3,6 +3,7 @@ import type {
   OnlineClockRecord,
   OnlineGameRoomRecord,
 } from "./OnlineGameRoom";
+import { OnlineGameRoom } from "./OnlineGameRoom";
 import { Color } from "../Constants";
 import { OnlineActionDTO, OnlineGameResultDTO, OnlineGameSetupDTO } from "./types";
 import {
@@ -78,6 +79,10 @@ function isBoundedString(value: unknown, maxLength: number): value is string {
 
 function isColor(value: unknown): value is Color {
   return typeof value === "string" && COLORS.has(value as Color);
+}
+
+function opposite(color: Color): Color {
+  return color === "w" ? "b" : "w";
 }
 
 function isPositiveSafeInteger(value: unknown): value is number {
@@ -366,6 +371,9 @@ export function onlineGameEventsToRecords(
       if (room.timeout) {
         throw new Error(`Online event references already-finished game ${event.gameId}.`);
       }
+      if (room.result) {
+        throw new Error(`Online event references already-finished game ${event.gameId}.`);
+      }
       if (event.type === "action_accepted" && event.clock && !room.setup.timeControl) {
         throw new Error(`Clocked action event references no-clock game ${event.gameId}.`);
       }
@@ -400,6 +408,11 @@ export function onlineGameEventsToRecords(
           playedAt: event.playedAt,
           clock: event.clock,
         });
+        if (event.action.type === "RESIGN") {
+          room.result = { winner: opposite(event.playerColor), reason: "resignation" };
+        } else {
+          room.result = OnlineGameRoom.create(room).getSnapshot().result;
+        }
         return;
       }
 

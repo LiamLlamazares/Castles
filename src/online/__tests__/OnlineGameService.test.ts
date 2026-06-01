@@ -113,6 +113,103 @@ describe("OnlineGameService", () => {
     expect(restored.getRoom("game_resign")?.getSnapshot().result?.winner).toBe("w");
   });
 
+  it("rejects replay events after a resignation has ended the game", () => {
+    expect(() =>
+      onlineGameEventsToRecords([
+        {
+          ...eventEnvelope(1),
+          type: "game_created",
+          gameId: "game_resign_terminal",
+          whiteToken: "w-token",
+          blackToken: "b-token",
+          setup: createSetup(),
+        },
+        {
+          ...eventEnvelope(2),
+          type: "action_accepted",
+          gameId: "game_resign_terminal",
+          playerColor: "b",
+          version: 1,
+          playedAt: 2_000,
+          action: { type: "RESIGN", baseVersion: 0 },
+        },
+        {
+          ...eventEnvelope(3),
+          type: "action_accepted",
+          gameId: "game_resign_terminal",
+          playerColor: "w",
+          version: 2,
+          playedAt: 3_000,
+          action: { type: "PASS", baseVersion: 1 },
+        },
+      ])
+    ).toThrow(/already-finished/);
+  });
+
+  it("rejects replay events after a normal action has ended the game", () => {
+    expect(() =>
+      onlineGameEventsToRecords([
+        {
+          ...eventEnvelope(1),
+          type: "game_created",
+          gameId: "game_action_terminal",
+          whiteToken: "w-token",
+          blackToken: "b-token",
+          setup: {
+            ...createSetup(),
+            pieces: [
+              {
+                hex: { q: 0, r: 0, s: 0 },
+                color: "w",
+                type: "Monarch",
+                canMove: true,
+                canAttack: true,
+                damage: 0,
+                abilityUsed: false,
+                souls: 0,
+                isRevived: false,
+              },
+              {
+                hex: { q: 1, r: -1, s: 0 },
+                color: "b",
+                type: "Monarch",
+                canMove: true,
+                canAttack: true,
+                damage: 0,
+                abilityUsed: false,
+                souls: 0,
+                isRevived: false,
+              },
+            ],
+          },
+        },
+        {
+          ...eventEnvelope(2),
+          type: "action_accepted",
+          gameId: "game_action_terminal",
+          playerColor: "w",
+          version: 1,
+          playedAt: 2_000,
+          action: {
+            type: "ATTACK",
+            baseVersion: 0,
+            from: { q: 0, r: 0, s: 0 },
+            target: { q: 1, r: -1, s: 0 },
+          },
+        },
+        {
+          ...eventEnvelope(3),
+          type: "action_accepted",
+          gameId: "game_action_terminal",
+          playerColor: "b",
+          version: 2,
+          playedAt: 3_000,
+          action: { type: "PASS", baseVersion: 1 },
+        },
+      ] as any)
+    ).toThrow(/already-finished/);
+  });
+
   it("rebuilds terminal timeout results from timeout adjudication events", () => {
     const restored = OnlineGameService.fromRecords(
       onlineGameEventsToRecords([

@@ -12,6 +12,10 @@ import {
   ONLINE_EVENT_SCHEMA_VERSION,
   ONLINE_RULESET_VERSION,
 } from "../events";
+import {
+  OnlineGameSummary,
+  validateOnlineGameSummary,
+} from "../readModel";
 import { OnlineReject } from "../types";
 import {
   OnlineClientMessage,
@@ -39,6 +43,7 @@ export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
   onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
+  loadGameSummaries?: () => OnlineGameSummary[] | Promise<OnlineGameSummary[]>;
   onLog?: (event: OnlineServerLogEvent) => void;
   now?: () => number;
   health?: {
@@ -319,6 +324,34 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.use("/api/online", (_req, res, next) => {
     setOnlineNoStoreHeaders(res);
     next();
+  });
+
+  app.get("/api/online/games", async (_req, res) => {
+    try {
+      const summaries = await options.loadGameSummaries?.() ?? [];
+      const games: OnlineGameSummary[] = [];
+      for (const summary of summaries) {
+        const validation = validateOnlineGameSummary(summary);
+        if (!validation.ok) {
+          throw new Error(validation.error.message);
+        }
+        if (validation.value.visibility === "public") {
+          games.push(validation.value);
+        }
+      }
+
+      res.json({ games });
+      log({ event: "online.summary.list", status: "accepted" });
+    } catch (error) {
+      log({ event: "online.summary.list", status: "failed", reason: "summary_load_failed" });
+      console.error("Failed to load online game summaries", error);
+      res.status(503).json({
+        error: {
+          code: "persistence_failed",
+          message: "Online game summaries could not be loaded.",
+        },
+      });
+    }
   });
 
   app.post("/api/online/games", async (req, res) => {

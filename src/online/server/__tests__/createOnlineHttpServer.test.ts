@@ -8,6 +8,7 @@ import { serializeOnlineGameSetup } from "../../serialization";
 import { OnlineGameEvent } from "../../events";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
+import type { OnlineGameSummary } from "../../readModel";
 
 const servers: Array<{ close: (callback: () => void) => void }> = [];
 
@@ -335,6 +336,78 @@ describe("createOnlineHttpServer", () => {
     expect(body.gameId).toMatch(/^game_/);
     expect(body.white.url).toContain("seat=w");
     expect(body.black.url).toContain("seat=b");
+  });
+
+  it("lists only public token-free online game summaries", async () => {
+    const summaries: OnlineGameSummary[] = [
+      {
+        gameId: "game_public_summary_http",
+        rulesetVersion: "castles-beta-v1",
+        createdAt: "2026-05-31T12:00:00.000Z",
+        updatedAt: "2026-05-31T12:00:01.000Z",
+        endedAt: "2026-05-31T12:00:01.000Z",
+        version: 1,
+        status: "complete",
+        visibility: "public",
+        archiveState: "archived",
+        hasTimeControl: true,
+        participants: [
+          { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_public_summary_http_w" } },
+          { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_public_summary_http_b" } },
+        ],
+        result: { winner: "w", reason: "resignation" },
+        lastEventId: "evt-summary",
+      },
+      {
+        gameId: "game_unlisted_summary_http",
+        rulesetVersion: "castles-beta-v1",
+        createdAt: "2026-05-31T12:00:00.000Z",
+        updatedAt: "2026-05-31T12:00:00.000Z",
+        version: 0,
+        status: "active",
+        visibility: "unlisted",
+        archiveState: "active",
+        hasTimeControl: true,
+        participants: [
+          { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_unlisted_summary_http_w" } },
+          { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_unlisted_summary_http_b" } },
+        ],
+        lastEventId: "evt-unlisted",
+      },
+      {
+        gameId: "game_private_summary_http",
+        rulesetVersion: "castles-beta-v1",
+        createdAt: "2026-05-31T12:00:00.000Z",
+        updatedAt: "2026-05-31T12:00:00.000Z",
+        version: 0,
+        status: "active",
+        visibility: "private",
+        archiveState: "active",
+        hasTimeControl: true,
+        participants: [
+          { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_private_summary_http_w" } },
+          { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_private_summary_http_b" } },
+        ],
+        lastEventId: "evt-private",
+      },
+    ];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummaries: async () => summaries,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games?token=secret`);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(body).toEqual({ games: [summaries[0]] });
+    expect(JSON.stringify(body)).not.toContain("secret");
+    expect(JSON.stringify(body)).not.toContain("token");
+    expect(JSON.stringify(body)).not.toContain("game_unlisted_summary_http");
+    expect(JSON.stringify(body)).not.toContain("game_private_summary_http");
   });
 
   it("logs structured create and join events without leaking player tokens", async () => {

@@ -1,4 +1,5 @@
 import type { CreatedOnlineGame } from "./OnlineGameService";
+import { validateOnlineGameSummary, type OnlineGameSummary } from "./readModel";
 import { OnlineGameResultDTO, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from "./types";
 
 export interface OnlineJoinParams {
@@ -27,6 +28,20 @@ function storageKey(gameId: string, seat: "w" | "b"): string {
 
 function opponentInviteStorageKey(gameId: string): string {
   return `castles_online_opponent_invite:${gameId}`;
+}
+
+const ANONYMOUS_SESSION_STORAGE_KEY = "castles_online_anonymous_session_id";
+
+function defaultAnonymousSessionIdFactory(): string {
+  const randomId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  return `anon_${randomId}`;
+}
+
+function isValidAnonymousSessionId(value: string | null): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 128;
 }
 
 export function parseOnlineJoinParams(urlText: string): OnlineJoinParams | null {
@@ -85,6 +100,23 @@ export function resolveOnlineOpponentInviteUrl(
   storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
 ): string | null {
   return storage?.getItem(opponentInviteStorageKey(gameId)) ?? null;
+}
+
+export function resolveOnlineAnonymousSessionId(
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage,
+  idFactory: () => string = defaultAnonymousSessionIdFactory
+): string {
+  const stored = storage?.getItem(ANONYMOUS_SESSION_STORAGE_KEY) ?? null;
+  if (isValidAnonymousSessionId(stored)) {
+    return stored;
+  }
+
+  const nextId = idFactory();
+  if (!isValidAnonymousSessionId(nextId)) {
+    throw new Error("Generated online anonymous session id is invalid.");
+  }
+  storage?.setItem(ANONYMOUS_SESSION_STORAGE_KEY, nextId);
+  return nextId;
 }
 
 export function resolveOnlineJoinParams(
@@ -243,4 +275,27 @@ export async function fetchOnlineSpectatorSnapshot(
 
   const body = await response.json();
   return body.snapshot;
+}
+
+export async function fetchOnlineGameSummaries(
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameSummary[]> {
+  const response = await fetchImpl("/api/online/games");
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch online game summaries (${response.status})`);
+  }
+
+  const body = await response.json();
+  if (!body || !Array.isArray(body.games)) {
+    throw new Error("Online game summary response was malformed.");
+  }
+
+  return body.games.map((summary: unknown, index: number) => {
+    const validation = validateOnlineGameSummary(summary);
+    if (!validation.ok) {
+      throw new Error(`Online game summary ${index + 1} was malformed: ${validation.error.message}`);
+    }
+    return validation.value;
+  });
 }
