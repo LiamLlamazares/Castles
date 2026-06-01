@@ -43,17 +43,20 @@ import {
   fetchOnlineSpectatorSnapshot,
   formatOnlinePendingConnectionMessage,
   forgetOnlineChallengeParams,
+  forgetOnlineChallengeShareUrl,
   forgetOnlineJoinParams,
   forgetOnlineOpponentInviteUrl,
   forgetOpenSeekCreatorParams,
   listOpenSeekCreatorParams,
   rememberOnlineChallengeParams,
+  rememberOnlineChallengeShareUrl,
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
   rememberOpenSeekCreatorParams,
   removeOnlineChallengeTokenFromUrl,
   removeOnlineTokenFromUrl,
   resolveOnlineChallengeParams,
+  resolveOnlineChallengeShareUrl,
   parseOnlineSpectatorParams,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
@@ -233,7 +236,11 @@ function App() {
     resolveOnlineChallengeParams(window.location.href)
   );
   const [onlineChallengeResponse, setOnlineChallengeResponse] = useState<OnlineChallengeResponse | null>(null);
-  const [onlineChallengeShareUrl, setOnlineChallengeShareUrl] = useState<string | null>(null);
+  const [onlineChallengeShareUrl, setOnlineChallengeShareUrl] = useState<string | null>(() =>
+    onlineChallenge?.role === "challenger"
+      ? resolveOnlineChallengeShareUrl(onlineChallenge.challengeId)
+      : null
+  );
   const [onlineChallengeShareMessage, setOnlineChallengeShareMessage] = useState("");
   const [onlineChallengeStatus, setOnlineChallengeStatus] = useState<"idle" | "loading" | "acting" | "error">("idle");
   const [onlineChallengeError, setOnlineChallengeError] = useState<string | null>(null);
@@ -321,17 +328,24 @@ function App() {
     setOpenSeekResponse(null);
   };
 
+  const forgetOnlineChallengeStorage = useCallback((challenge: OnlineChallengeParams | null) => {
+    if (!challenge) return;
+    forgetOnlineChallengeParams(challenge);
+    forgetOnlineChallengeShareUrl(challenge.challengeId);
+  }, []);
+
   useEffect(() => {
     setOnlineChallengeShareMessage("");
   }, [onlineChallengeShareUrl]);
 
   useEffect(() => {
     if (!onlineJoin) return;
+    forgetOnlineChallengeStorage(onlineChallenge);
     setOnlineSpectator(null);
     setOnlineChallenge(null);
     rememberOnlineJoinParams(onlineJoin);
     clearOnlineTokenFromUrl();
-  }, [onlineJoin]);
+  }, [forgetOnlineChallengeStorage, onlineChallenge, onlineJoin]);
 
   useEffect(() => {
     if (!onlineJoin) return;
@@ -367,6 +381,11 @@ function App() {
     if (!onlineChallenge) return;
     setView('challenge');
     rememberOnlineChallengeParams(onlineChallenge);
+    setOnlineChallengeShareUrl(
+      onlineChallenge.role === "challenger"
+        ? resolveOnlineChallengeShareUrl(onlineChallenge.challengeId)
+        : null
+    );
     clearOnlineChallengeTokenFromUrl();
     let cancelled = false;
     setOnlineChallengeStatus("loading");
@@ -398,11 +417,13 @@ function App() {
     fetchOpenSeek(openSeekCreator)
       .then((response) => {
         if (cancelled) return;
-        setOpenSeekResponse(response);
         if (response.summary.status === "cancelled" || response.summary.status === "expired") {
           forgetOpenSeekCreatorParams(openSeekCreator);
           setOpenSeekCreator(null);
+          setOpenSeekResponse(null);
+          return;
         }
+        setOpenSeekResponse(response);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -439,9 +460,7 @@ function App() {
     cancelPendingReplay();
     clearAutosave();
     clearOnlineUrl();
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
       forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
@@ -548,9 +567,7 @@ function App() {
 
     clearAutosave();
     clearOnlineUrl();
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
       forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
@@ -585,9 +602,7 @@ function App() {
     try {
       cancelPendingReplay();
       clearAutosave();
-      if (onlineChallenge) {
-        forgetOnlineChallengeParams(onlineChallenge);
-      }
+      forgetOnlineChallengeStorage(onlineChallenge);
       clearOpenSeekState();
       setOnlineSpectator(null);
       setOnlineChallenge(null);
@@ -636,9 +651,7 @@ function App() {
 
   const enterOnlineGameFromInvite = (invite: OnlineChallengeGameInvite) => {
     cancelPendingReplay();
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     clearOpenSeekState();
     const join = {
       gameId: invite.gameId,
@@ -668,9 +681,7 @@ function App() {
 
   const handleSpectateOnlineGame = (gameId: string) => {
     cancelPendingReplay();
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     const url = new URL(buildSpectatorUrl(window.location.href, gameId));
     window.history.pushState(
       {},
@@ -690,9 +701,7 @@ function App() {
   const handleReplayOnlineGame = async (gameId: string) => {
     const requestId = replayRequestIdRef.current + 1;
     replayRequestIdRef.current = requestId;
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     clearOnlineUrl();
     setOnlineJoin(null);
     setOnlineSpectator(null);
@@ -749,6 +758,7 @@ function App() {
         throw new Error("Challenge creator link was malformed.");
       }
       rememberOnlineChallengeParams(challenge);
+      rememberOnlineChallengeShareUrl(challenge.challengeId, created.challenged.url);
       const challengeUrl = new URL(removeOnlineChallengeTokenFromUrl(created.challenger.url));
       window.history.pushState(
         {},
@@ -789,9 +799,7 @@ function App() {
       cancelPendingReplay();
       clearAutosave();
       clearOnlineUrl();
-      if (onlineChallenge) {
-        forgetOnlineChallengeParams(onlineChallenge);
-      }
+      forgetOnlineChallengeStorage(onlineChallenge);
       if (onlineJoin) {
         forgetOnlineJoinParams(onlineJoin);
         forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
@@ -860,9 +868,7 @@ function App() {
 
     clearAutosave();
     clearOnlineUrl();
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
       forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
@@ -902,7 +908,7 @@ function App() {
     const response = await cancelOpenSeek(storedCreator);
     forgetOpenSeekCreatorParams(storedCreator);
     setOpenSeekCreator(null);
-    setOpenSeekResponse(response);
+    setOpenSeekResponse(response.summary.status === "accepted" ? response : null);
   };
 
   const handleCopyOnlineChallengeShareUrl = useCallback(async () => {
@@ -919,11 +925,13 @@ function App() {
   const handleRefreshOwnedOpenSeek = async () => {
     if (!openSeekCreator) return;
     const response = await fetchOpenSeek(openSeekCreator);
-    setOpenSeekResponse(response);
     if (response.summary.status === "cancelled" || response.summary.status === "expired") {
       forgetOpenSeekCreatorParams(openSeekCreator);
       setOpenSeekCreator(null);
+      setOpenSeekResponse(null);
+      return;
     }
+    setOpenSeekResponse(response);
   };
 
   const handleJoinOwnedOpenSeek = () => {
@@ -957,7 +965,7 @@ function App() {
     setOnlineChallengeError(null);
     try {
       const response = await declineOnlineChallenge(onlineChallenge);
-      forgetOnlineChallengeParams(onlineChallenge);
+      forgetOnlineChallengeStorage(onlineChallenge);
       setOnlineChallengeResponse(response);
       setOnlineChallengeShareUrl(null);
       setOnlineChallengeStatus("idle");
@@ -979,7 +987,7 @@ function App() {
     setOnlineChallengeError(null);
     try {
       const response = await cancelOnlineChallenge(onlineChallenge);
-      forgetOnlineChallengeParams(onlineChallenge);
+      forgetOnlineChallengeStorage(onlineChallenge);
       setOnlineChallengeResponse(response);
       setOnlineChallengeShareUrl(null);
       setOnlineChallengeStatus("idle");
@@ -1054,9 +1062,7 @@ function App() {
     const layout = getStartingLayout(board);
     // PGN imports should always start in analysis mode so users can navigate the game
     clearOnlineUrl();
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
       forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
@@ -1325,9 +1331,7 @@ function App() {
     cancelPendingReplay();
     clearAutosave();
     clearOnlineUrl();
-    if (onlineChallenge) {
-      forgetOnlineChallengeParams(onlineChallenge);
-    }
+    forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
       forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
@@ -1347,7 +1351,14 @@ function App() {
     setOnlineOpponentInviteUrl(null);
     setOpenSeekCreator(null);
     setOpenSeekResponse(null);
-  }, [cancelPendingReplay, onlineChallenge, onlineJoin, onlineSnapshot, openSeekCreator]);
+  }, [
+    cancelPendingReplay,
+    forgetOnlineChallengeStorage,
+    onlineChallenge,
+    onlineJoin,
+    onlineSnapshot,
+    openSeekCreator,
+  ]);
 
   const handleOnlineStateBackToPlay = useCallback(() => {
     clearTransientOnlineState();
@@ -1399,6 +1410,7 @@ function App() {
     clearAutosave();
     const layout = getStartingLayout(board);
     clearOnlineUrl();
+    forgetOnlineChallengeStorage(onlineChallenge);
     clearOpenSeekState();
     setOnlineJoin(null);
     setOnlineSpectator(null);

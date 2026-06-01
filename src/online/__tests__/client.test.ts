@@ -23,10 +23,12 @@ import {
   parseOnlineChallengeParams,
   parseOnlineSpectatorParams,
   rememberOnlineChallengeParams,
+  rememberOnlineChallengeShareUrl,
   rememberOnlineOpponentInviteUrl,
   rememberOnlineJoinParams,
   removeOnlineChallengeTokenFromUrl,
   resolveOnlineChallengeParams,
+  resolveOnlineChallengeShareUrl,
   removeOnlineTokenFromUrl,
   resolveOnlineAnonymousSessionId,
   resolveOnlineOpponentInviteUrl,
@@ -36,6 +38,7 @@ import {
   startQuickMatch,
   updateOnlineGameVisibility,
   forgetOnlineChallengeParams,
+  forgetOnlineChallengeShareUrl,
   forgetOnlineJoinParams,
   forgetOnlineOpponentInviteUrl,
   forgetOpenSeekCreatorParams,
@@ -194,6 +197,13 @@ describe("online client helpers", () => {
       role: "challenged",
       token: "secret",
     });
+
+    const shareUrl =
+      "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged#challengeToken=friend-secret";
+    rememberOnlineChallengeShareUrl("challenge_123", shareUrl, storageAdapter);
+    expect(resolveOnlineChallengeShareUrl("challenge_123", storageAdapter)).toBe(shareUrl);
+    forgetOnlineChallengeShareUrl("challenge_123", storageAdapter);
+    expect(resolveOnlineChallengeShareUrl("challenge_123", storageAdapter)).toBeNull();
   });
 
   it("fetches and accepts challenges with bearer authorization", async () => {

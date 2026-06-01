@@ -199,7 +199,7 @@ describe("OnlineGameBrowser", () => {
     expect(within(setupSummary).getByText("Radius 7")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Timed 20+20")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Victory points")).toBeInTheDocument();
-    expect(screen.getByText(/Current board, pieces, sanctuaries, pool, theme, clock, and scoring mode must match/i))
+    expect(screen.getByText(/Filters search existing listings\. Quick Match and List Current Setup use your current board/i))
       .toBeInTheDocument();
 
     const quickMatch = screen.getByRole("button", {
@@ -209,7 +209,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(onQuickMatch).toHaveBeenCalledOnce();
     expect(quickMatch).toBeDisabled();
-    expect(screen.getByRole("button", { name: "List in Lobby" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "List current Play setup in Lobby" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("Checking compatible lobby listings");
 
     await act(async () => {
@@ -243,7 +243,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("button", {
       name: "Quick Match: accept a compatible lobby listing or list yours",
     })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "List in Lobby" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "List current Play setup in Lobby" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Refresh lobby listings" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeDisabled();
   });
@@ -962,6 +962,46 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Join accepted game" }));
     expect(onJoinOwnedSeek).toHaveBeenCalledOnce();
   });
+
+  it.each(["cancelled", "expired"] as const)(
+    "does not render dead owner controls for %s lobby listings",
+    async (status) => {
+      const terminalSeek = openSeek({
+        seekId: `seek_${status}`,
+        status,
+        updatedAt: status === "expired" ? "2026-06-01T12:11:00.000Z" : "2026-06-01T12:04:00.000Z",
+        ...(status === "cancelled"
+          ? {
+              cancelledAt: "2026-06-01T12:04:00.000Z",
+              cancelledBy: { kind: "session" as const, id: "seek_cancelled_creator" },
+            }
+          : {
+              expiredAt: "2026-06-01T12:11:00.000Z",
+              expiredBy: "system" as const,
+            }),
+      });
+
+      render(
+        <OnlineGameBrowser
+          initialTab="lobby"
+          loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+          ownedSeekIds={[terminalSeek.seekId]}
+          ownedSeekResponse={{ role: "creator", summary: terminalSeek }}
+          onBack={vi.fn()}
+          onSpectate={vi.fn()}
+          onReplay={vi.fn()}
+          onAcceptSeek={vi.fn()}
+          onCancelSeek={vi.fn()}
+          onRefreshOwnedSeek={vi.fn()}
+        />
+      );
+
+      await screen.findByText("No lobby listings yet.");
+      expect(screen.queryByRole("region", { name: "Your lobby listing" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Refresh your lobby listing" })).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("Your lobby listing is no longer open.");
+    }
+  );
 
   it("loads the public directory for the active tab state", async () => {
     const loadGames = vi.fn().mockResolvedValue(directory([]));

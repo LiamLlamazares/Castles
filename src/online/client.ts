@@ -132,6 +132,10 @@ function challengeStorageKey(challengeId: string, role: "challenger" | "challeng
   return `castles_online_challenge:${challengeId}:${role}`;
 }
 
+function challengeShareUrlStorageKey(challengeId: string): string {
+  return `castles_online_challenge_share:${challengeId}`;
+}
+
 function openSeekCreatorStorageKey(seekId: string): string {
   return `castles_online_seek_creator:${seekId}`;
 }
@@ -245,6 +249,28 @@ export function forgetOnlineChallengeParams(
   storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
 ): void {
   storage?.removeItem(challengeStorageKey(challenge.challengeId, challenge.role));
+}
+
+export function rememberOnlineChallengeShareUrl(
+  challengeId: string,
+  shareUrl: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.setItem(challengeShareUrlStorageKey(challengeId), shareUrl);
+}
+
+export function resolveOnlineChallengeShareUrl(
+  challengeId: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): string | null {
+  return storage?.getItem(challengeShareUrlStorageKey(challengeId)) ?? null;
+}
+
+export function forgetOnlineChallengeShareUrl(
+  challengeId: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  storage?.removeItem(challengeShareUrlStorageKey(challengeId));
 }
 
 export function rememberOpenSeekCreatorParams(

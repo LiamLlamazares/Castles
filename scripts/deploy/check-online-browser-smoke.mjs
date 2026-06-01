@@ -859,7 +859,7 @@ async function verifyOnlineBrowserSurface(driver) {
   await openSetupFromBase(online);
   await online.clickButton("Online");
   await online.waitForText("Lobby, Watch, Archive");
-  await online.waitForButton("List in Lobby");
+  await online.waitForButton("List current Play setup in Lobby");
   await waitUntil("Online browser to default to Lobby", () =>
     online.evaluate(
       `window.__castlesSmokeFindButton("Lobby games")?.getAttribute("aria-pressed") === "true"`

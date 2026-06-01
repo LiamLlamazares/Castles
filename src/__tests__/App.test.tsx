@@ -10,7 +10,12 @@ import {
   ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
   type OpenSeekSummary,
 } from "../online/seeks";
-import { rememberOpenSeekCreatorParams } from "../online/client";
+import {
+  rememberOnlineChallengeParams,
+  rememberOnlineChallengeShareUrl,
+  rememberOpenSeekCreatorParams,
+  resolveOnlineChallengeShareUrl,
+} from "../online/client";
 
 const onlineHookMocks = vi.hoisted(() => ({
   submitAction: vi.fn(),
@@ -1704,6 +1709,55 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByRole("button", { name: "Cancel Challenge" })).toBeInTheDocument();
   });
 
+  it("restores the challenger share link after a tokenless challenge reload", async () => {
+    const challenge = {
+      challengeId: "challenge_restore",
+      role: "challenger" as const,
+      token: "creator-secret",
+    };
+    const challengedUrl =
+      "https://castles.example/?onlineChallenge=challenge_restore&challengeRole=challenged#challengeToken=friend-secret";
+    rememberOnlineChallengeParams(challenge);
+    rememberOnlineChallengeShareUrl(challenge.challengeId, challengedUrl);
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_restore&challengeRole=challenger"
+    );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          role: "challenger",
+          summary: {
+            schemaVersion: 1,
+            challengeId: "challenge_restore",
+            challengerIdentity: { kind: "session", id: "challenge_restore_challenger" },
+            challengedIdentity: { kind: "session", id: "challenge_restore_challenged" },
+            challengerSeat: "w",
+            visibility: "unlisted",
+            setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+            createdAt: "2026-06-01T12:00:00.000Z",
+            updatedAt: "2026-06-01T12:00:00.000Z",
+            expiresAt: "2026-06-02T12:00:00.000Z",
+            status: "pending",
+            lastEventId: "challenge_evt_created",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const linkRegion = await screen.findByRole("region", { name: "Challenge link" });
+    expect(linkRegion).toHaveTextContent(challengedUrl);
+    expect(fetchMock).toHaveBeenCalledWith("/api/online/challenges/challenge_restore", {
+      headers: { authorization: "Bearer creator-secret" },
+    });
+  });
+
   it("shows a wrapped challenge link preview with a copy action", async () => {
     const challengedUrl =
       "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged#challengeToken=challenged-secret";
@@ -1761,6 +1815,10 @@ describe("App game setup lifecycle", () => {
   });
 
   it("uses shared navigation on challenge screens", async () => {
+    rememberOnlineChallengeShareUrl(
+      "challenge_123",
+      "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged#challengeToken=friend-secret"
+    );
     window.history.replaceState(
       {},
       "",
@@ -1804,5 +1862,65 @@ describe("App game setup lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Online" }));
 
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+    expect(resolveOnlineChallengeShareUrl("challenge_123")).toBeNull();
+  });
+
+  it("clears restored challenge share links when joining an accepted challenge game", async () => {
+    rememberOnlineChallengeShareUrl(
+      "challenge_join",
+      "https://castles.example/?onlineChallenge=challenge_join&challengeRole=challenged#challengeToken=friend-secret"
+    );
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_join&challengeRole=challenger#challengeToken=creator-secret"
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            role: "challenger",
+            summary: {
+              schemaVersion: 1,
+              challengeId: "challenge_join",
+              challengerIdentity: { kind: "session", id: "challenge_join_challenger" },
+              challengedIdentity: { kind: "session", id: "challenge_join_challenged" },
+              challengerSeat: "w",
+              visibility: "unlisted",
+              setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+              createdAt: "2026-06-01T12:00:00.000Z",
+              updatedAt: "2026-06-01T12:01:00.000Z",
+              expiresAt: "2026-06-02T12:00:00.000Z",
+              status: "accepted",
+              gameId: "game_from_challenge_join",
+              acceptedAt: "2026-06-01T12:01:00.000Z",
+              acceptedBy: { kind: "session", id: "challenge_join_challenged" },
+              whiteIdentity: { kind: "session", id: "challenge_join_challenger" },
+              blackIdentity: { kind: "session", id: "challenge_join_challenged" },
+              lastEventId: "challenge_evt_accepted",
+            },
+            gameInvite: {
+              gameId: "game_from_challenge_join",
+              seat: "w",
+              token: "join-token",
+              url: "https://castles.example/?onlineGame=game_from_challenge_join&seat=w&token=join-token",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Join Game" }));
+
+    expect(resolveOnlineChallengeShareUrl("challenge_join")).toBeNull();
+    expect(sessionStorage.getItem("castles_online_join:game_from_challenge_join:w")).toBe("join-token");
+    expect(window.location.search).toContain("onlineGame=game_from_challenge_join");
+    expect(window.location.search).not.toContain("onlineChallenge=");
+    expect(window.location.hash).toBe("");
   });
 });

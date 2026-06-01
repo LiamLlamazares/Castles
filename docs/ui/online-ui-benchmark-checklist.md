@@ -123,6 +123,19 @@ Phase 6L first implementation slice, 2026-06-01:
 - Learn now shows the current module, lesson count, and storage-aware progress chip. At 360 x 640 it hides the redundant page title, shortens the visual Restart label, and keeps the lesson sentence above the board.
 - Screenshot artifacts for this Learn slice are in `artifacts/ui-audit/phase6l-learn-polish-2`; desktop, tablet, 430 x 932, 390 x 844, and 360 x 640 Learn states passed overflow, clipping, and interactive-overlap checks.
 
+Phase 6M lobby flow cleanup, 2026-06-01:
+
+- Challenger challenge share links now survive same-tab tokenless reloads, but challenge share-link storage is cleared with the challenge token on every challenge exit and online/local handoff path.
+- Cancelled and expired owned lobby listings no longer render a stale "Your lobby listing" owner panel or dead Refresh action; App clears them during restore/refresh and the Online browser hides them defensively.
+- Lobby copy now distinguishes existing-list filters from current-setup actions. The browser action is "List Current Setup" because it uses the current Play setup, while filters only search visible listings.
+- Screenshot artifacts are in `artifacts/ui-audit/phase6m-safety-lobby-cleanup`; desktop, 430 x 932, 390 x 844, 360 x 640 Lobby, 360 x 640 restored challenge link, and 390 x 844 cancelled-owned-seek states passed overflow and interactive-overlap checks.
+
+Next product slices accepted from reviewers:
+
+- Redesign Lobby toward a quieter, more list-like page: split "Find listings" filters from "Play from current setup" actions, reduce card/shadow weight, keep actual listings/live games prominent, and decide whether lobby-created games should be public in Watch by default.
+- Redesign Learn as a course surface: separate resume position from completed lesson IDs, add checkable objectives first, and only add engine-graded objectives when the target board state is explicit and tested.
+- Improve navigation clarity: streamline setup entry points around Play Local, Invite Friend, and Find Match; add a visible return path from analysis; standardize New Game/Configure wording; and replace generic drawer markers with real icons or remove the icon column consistently.
+
 Reference pages checked:
 
 - Lichess home, TV, analysis, and learn pages: https://lichess.org/, https://lichess.org/tv, https://lichess.org/analysis, https://lichess.org/learn
