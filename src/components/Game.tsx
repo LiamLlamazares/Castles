@@ -151,6 +151,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [showQuickStart, setShowQuickStart] = React.useState(false);
   const [showTooltipHint, setShowTooltipHint] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
+  const [lastLibrarySavedPgn, setLastLibrarySavedPgn] = React.useState<string | null>(null);
   const [isNavigationMenuOpen, setNavigationMenuOpen] = React.useState(false);
   const [onlineVisibilityOverride, setOnlineVisibilityOverride] =
     React.useState<OnlineGameVisibility | null>(null);
@@ -164,6 +165,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const confirmDialogRef = React.useRef<HTMLElement>(null);
   const keepPlayingButtonRef = React.useRef<HTMLButtonElement>(null);
   const focusBeforeDialogRef = React.useRef<HTMLElement | null>(null);
+  const lastOnlineGameIdRef = React.useRef<string | null | undefined>(undefined);
 
   const showStatusMessage = React.useCallback((message: string) => {
     if (statusTimeoutRef.current !== null) {
@@ -442,6 +444,48 @@ const InnerGame: React.FC<GameBoardProps> = ({
     !isAnalysisMode &&
     !!onlineSession &&
     (onlineSession.role === "spectator" || !!onlineSession.result);
+  const currentSavePgn = React.useMemo(() => {
+    if (!onSaveGameToLibrary) return "";
+    try {
+      return getPGN();
+    } catch {
+      return "";
+    }
+  }, [displayedWinner, getPGN, moveHistory.length, onSaveGameToLibrary, turnCounter]);
+  const saveStatusLabel = React.useMemo(() => {
+    if (!onSaveGameToLibrary) return undefined;
+    if (lastLibrarySavedPgn && currentSavePgn && lastLibrarySavedPgn === currentSavePgn) {
+      return "Saved to Library";
+    }
+    if (onlineSession) {
+      return "Not in Library";
+    }
+    if (moveHistory.length > 0 || hasGameStarted || displayedWinner || isAnalysisMode) {
+      return "Autosaved locally";
+    }
+    return "Ready to save locally";
+  }, [
+    currentSavePgn,
+    displayedWinner,
+    hasGameStarted,
+    isAnalysisMode,
+    lastLibrarySavedPgn,
+    moveHistory.length,
+    onlineSession,
+    onSaveGameToLibrary,
+  ]);
+
+  React.useEffect(() => {
+    const nextOnlineGameId = onlineSession?.gameId ?? null;
+    if (lastOnlineGameIdRef.current === undefined) {
+      lastOnlineGameIdRef.current = nextOnlineGameId;
+      return;
+    }
+    if (lastOnlineGameIdRef.current !== nextOnlineGameId) {
+      setLastLibrarySavedPgn(null);
+      lastOnlineGameIdRef.current = nextOnlineGameId;
+    }
+  }, [onlineSession?.gameId]);
 
   // Reset overlay when game restarts
   React.useEffect(() => {
@@ -481,6 +525,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const confirmNewGame = React.useCallback(() => {
     focusBeforeDialogRef.current = null;
     setNewGameConfirmation(null);
+    setLastLibrarySavedPgn(null);
     clearSave();
     clearUrlParams();
     onSetup();
@@ -651,12 +696,14 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const handleSaveGameToLibrary = React.useCallback(async () => {
     if (!onSaveGameToLibrary) return;
     const status: SavedGameStatus = isAnalysisMode ? "analysis" : displayedWinner ? "complete" : "ongoing";
+    const pgn = getPGN();
     try {
-      const saveResult = await onSaveGameToLibrary(getPGN(), status);
+      const saveResult = await onSaveGameToLibrary(pgn, status);
       const didSave = typeof saveResult === "object" && saveResult !== null
         ? saveResult.saved
         : saveResult !== false;
       if (didSave) {
+        setLastLibrarySavedPgn(pgn);
         const message = typeof saveResult === "object" && saveResult !== null && saveResult.message
           ? saveResult.message
           : "Saved to Library.";
@@ -764,6 +811,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           isOnlineVisibilityPending={isOnlineVisibilityPending}
           onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
+          saveStatusLabel={saveStatusLabel}
           onEnableAnalysis={canOpenOnlineAnalysis ? handleEnterAnalysis : undefined}
           moveHistory={moveHistory || []}
           moveTree={moveTree}

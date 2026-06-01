@@ -12,6 +12,7 @@ Make the post-Quick-Match UI easier to navigate by treating Online as a first-cl
 - Replace player-facing "open seek" wording with "lobby listing" and "List in Lobby"; leave protocol/store terms unchanged.
 - Rename the in-game spectator share button from "Spectate" to "Spectator Link" so it does not conflict with Watch-row spectating.
 - Fix first-pass layout risks: 100dvh scrollports for Online/Library/online-state pages, modal layers above the install prompt, and full-width VP scoring on mobile.
+- Tighten the game side panel into a contained sidebar, rename the save/review group to Local Library, add a compact visible save-status chip, and make the drawer distinguish local named saves from Online Archive.
 
 ## Review Findings Accepted
 
@@ -21,14 +22,16 @@ Make the post-Quick-Match UI easier to navigate by treating Online as a first-cl
 - The spectator link copy control used the same visible verb as opening a spectator view.
 - Short-mobile page scrollports, install prompt z-index, and VP mobile layout needed regression coverage.
 - The full audit pass found the challenge creator link was a single clipped input on mobile; it now wraps in a readable preview and has an explicit copy action.
+- The game shell still hid save progress behind button titles and assistive text; it now shows ready/autosaved/saved-to-Library/not-in-Library state directly in the side panel.
+- The first save-status draft mixed online server persistence into the Local Library chip; review accepted and changed online games to say "Not in Library" until the user creates a local named save.
+- A reviewer flagged stale local-save markers when switching online games; accepted and fixed with a game-id keyed reset plus an integration test.
 
 ## Audit Artifacts
 
 - Broad pass: `artifacts/ui-audit/phase6l-full-pass-1` and `artifacts/ui-audit/phase6l-mobile-pass-2`.
 - Challenge-link fix verification: `artifacts/ui-audit/phase6l-challenge-link-fix-2`; 430 x 932, 390 x 844, and 360 x 640 passed with no horizontal overflow, clipped controls, or interactive overlaps.
+- Save-status/sidebar verification: `artifacts/ui-audit/phase6l-save-status-2`; desktop game, 430 x 932 mobile game, 360 x 640 short-mobile game, 430 x 932 drawer-open, and 430 x 932 save-modal passed with no horizontal overflow, clipped controls, or interactive overlaps.
 
 ## Remaining Phase 6L Work
 
-- Use the screenshot results to tighten the game side panel shape and any remaining overlapping controls.
-- Improve save/autosave progress clarity beyond the existing named-save modal if the audit shows users still cannot tell what is stored locally.
 - Re-run UI/accessibility and code reviewers after each broad UI surface change.

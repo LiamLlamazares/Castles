@@ -372,14 +372,14 @@ Goal: after Quick Match lands, substantially improve the app shell and online su
 
 Trigger: start immediately after Phase 6K is committed and pushed.
 
-Status: first implementation slice is in progress on 2026-06-01. The slice makes Online a top-level destination, keeps Lobby/Watch/Archive as tabs inside it, preserves the selected Online tab across Learn/Library return paths, removes player-facing "seek" wording from the main UI, and fixes the first layout risks found by review.
+Status: first Phase 6L slices are implemented and locally verified on 2026-06-01. Online is now a top-level destination, Lobby/Watch/Archive are tabs inside it, the selected Online tab persists across Learn/Library return paths, player-facing "seek" wording is removed from the main UI, the challenge creator link wraps safely on mobile, and the game sidebar now exposes Local Library save status without mixing it with Online Archive. The remaining Phase 6L work is narrower: recheck tutorial/Learn ergonomics and long online status/error copy as later online surfaces grow.
 
 Work:
 
 - Take fresh Lichess reference screenshots for play, lobby, watch, analysis, and learn flows, then compare them against Castles screenshots rather than copying the UI directly.
-- Fix the awkward side bar shape and make top destinations easy to find without competing with clocks, turn controls, online status, or save/review actions.
+- Keep the game side panel contextual to clocks, turn controls, online status, save/review actions, and local Library state; recheck it whenever new online banners or actions are added.
 - Move tutorial/Learn entry and progress to a more natural place, and verify users can return to Play, setup, Online, and Library without confusion.
-- Make save progress and local Library state obvious, including named saves, autosave, tutorial progress, and the distinction between local Library and Online Archive.
+- Keep save progress and local Library state obvious, including named saves, autosave, tutorial progress, and the distinction between local Library and Online Archive.
 - Audit and fix overlapping controls, especially back/go-back buttons, drawer/menu controls, tutorial controls, online banners, quick-match/lobby status, and mobile bottom controls.
 - Scan every page and important state for similar layout failures: game, setup, tutorial, Library, Lobby, Watch, Archive, private challenge, pending online, disconnected/resyncing, spectator, terminal game, save modal, and drawer-open states.
 - Keep no-legacy-support discipline: remove defensive old UI paths that no current flow uses if they make navigation harder to reason about.

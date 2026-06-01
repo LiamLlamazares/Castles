@@ -152,4 +152,14 @@ describe("Tutorial mobile layout CSS", () => {
     expect(libraryCss).toMatch(/\.library-dialog-backdrop\s*\{[^}]*z-index:\s*3000;/s);
     expect(boardCss).toMatch(/\.vp-scoreboard\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
   });
+
+  it("keeps the game sidebar contained and exposes compact save status on mobile", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(boardCss).toMatch(/\.game-panel\s*\{[^}]*background:\s*rgba\(246,\s*241,\s*209,\s*0\.78\);[^}]*border-left:\s*1px solid rgba\(31,\s*36,\s*35,\s*0\.12\);/s);
+    expect(boardCss).toMatch(/\.control-section-header\s*\{[^}]*justify-content:\s*space-between;[^}]*min-width:\s*0;/s);
+    expect(boardCss).toMatch(/\.save-status-chip\s*\{[^}]*white-space:\s*nowrap;/s);
+    expect(boardCss).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.save-status-chip\s*\{[^}]*font-size:\s*0\.62rem;/s);
+  });
 });

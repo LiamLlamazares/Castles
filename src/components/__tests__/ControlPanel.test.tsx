@@ -47,7 +47,7 @@ describe("ControlPanel", () => {
     );
 
     const turnControls = screen.getByRole("group", { name: "Turn controls" });
-    const saveControls = screen.getByRole("group", { name: "Save and review" });
+    const saveControls = screen.getByRole("group", { name: "Local Library and review" });
     const playControls = screen.getByRole("group", { name: "Play" });
 
     expect(turnControls).toContainElement(screen.getByRole("button", { name: "Pass" }));
@@ -105,6 +105,24 @@ describe("ControlPanel", () => {
     expect(libraryButton).toHaveAccessibleDescription("Open saved games in Library.");
   });
 
+  it("shows visible local save progress in the side panel", () => {
+    render(
+      <ControlPanel
+        {...baseProps}
+        onSaveGame={vi.fn()}
+        onOpenLibrary={vi.fn()}
+        saveStatusLabel="Autosaved locally"
+      />
+    );
+
+    const saveControls = screen.getByRole("group", { name: "Local Library and review" });
+    const saveStatus = screen.getByLabelText("Save status: Autosaved locally");
+
+    expect(saveControls).toContainElement(saveStatus);
+    expect(screen.getByText("Local Library")).toBeInTheDocument();
+    expect(saveStatus).toHaveTextContent("Autosaved locally");
+  });
+
   it("shows analysis in save and review controls for review-only online games", () => {
     const onEnableAnalysis = vi.fn();
 
@@ -118,7 +136,7 @@ describe("ControlPanel", () => {
       />
     );
 
-    const saveControls = screen.getByRole("group", { name: "Save and review" });
+    const saveControls = screen.getByRole("group", { name: "Local Library and review" });
     const analysisButton = screen.getByRole("button", { name: "Analysis" });
 
     expect(saveControls).toContainElement(analysisButton);

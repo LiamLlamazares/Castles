@@ -117,6 +117,9 @@ Phase 6L first implementation slice, 2026-06-01:
 - Player-facing Lobby copy says "lobby listing" and "List in Lobby"; backend and tests may still use the open-seek domain term where it describes the protocol.
 - The in-game spectator share control now says "Spectator Link" while Watch rows still use "Spectate" for opening a live spectator view.
 - Page-level Online, Library, and online-state screens now use their own 100dvh scrollports; save/confirm/library dialogs sit above the install prompt; VP scoring spans the full mobile panel width.
+- The game sidebar is now a contained panel with a visible Local Library save-status chip. Local games show ready/autosaved/saved-to-Library state; online games show "Not in Library" until the user creates a local named save.
+- The game drawer now labels local saves as "Local named saves on this device", demotes duplicate Save to Library, and keeps Online Archive conceptually separate from the local Library.
+- Screenshot artifacts for this sidebar/save slice are in `artifacts/ui-audit/phase6l-save-status-2`; desktop, mobile, short-mobile, drawer-open, and save-modal states passed overflow, clipping, and interactive-overlap checks.
 
 Reference pages checked:
 

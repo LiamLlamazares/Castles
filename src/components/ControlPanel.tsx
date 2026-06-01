@@ -33,6 +33,7 @@ interface ControlPanelProps {
   isOnlineVisibilityPending?: boolean;
   onSaveGame?: () => void;
   onOpenLibrary?: () => void;
+  saveStatusLabel?: string;
   onEnableAnalysis?: () => void;
   shareLabel?: string;
   shareTitle?: string;
@@ -205,6 +206,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   isOnlineVisibilityPending = false,
   onSaveGame,
   onOpenLibrary,
+  saveStatusLabel,
   onEnableAnalysis,
   shareLabel = "Share",
   shareTitle = "Share Game URL",
@@ -318,8 +320,15 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           </div>
         </section>
 
-        <section className="control-section save-controls" role="group" aria-label="Save and review">
-          <div className="control-section-label">Save and review</div>
+        <section className="control-section save-controls" role="group" aria-label="Local Library and review">
+          <div className="control-section-header">
+            <div className="control-section-label">Local Library</div>
+            {saveStatusLabel && (
+              <span className="save-status-chip" aria-label={`Save status: ${saveStatusLabel}`}>
+                {saveStatusLabel}
+              </span>
+            )}
+          </div>
           <div className="control-button-row">
             {onSaveGame && (
               <>

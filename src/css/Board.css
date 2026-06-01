@@ -361,7 +361,9 @@ body {
   position: relative;
   width: auto;
   height: 100dvh;
-  background: transparent;
+  background: rgba(246, 241, 209, 0.78);
+  border-left: 1px solid rgba(31, 36, 35, 0.12);
+  box-shadow: inset 10px 0 22px rgba(31, 36, 35, 0.04);
   display: flex;
   flex-direction: column;
   padding: 18px 18px;
@@ -405,12 +407,37 @@ body {
   gap: 6px;
 }
 
+.control-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
 .control-section-label {
   color: rgba(31, 36, 35, 0.72);
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
+}
+
+.save-status-chip {
+  min-width: 0;
+  max-width: 150px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(31, 36, 35, 0.14);
+  background: rgba(255, 248, 223, 0.86);
+  color: rgba(31, 36, 35, 0.78);
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .control-button-row {
@@ -1678,6 +1705,7 @@ body {
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     gap: 7px;
     background: rgba(246, 241, 209, 0.97);
+    border-left: 0;
     border-top: 1px solid rgba(0, 0, 0, 0.16);
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
     overflow-y: auto;
@@ -1727,12 +1755,24 @@ body {
     gap: 8px;
   }
 
+  .control-section-header {
+    margin-bottom: 5px;
+    justify-content: flex-start;
+  }
+
   .control-section {
     gap: 0;
   }
 
   .control-section-label {
     display: none;
+  }
+
+  .save-status-chip {
+    max-width: 100%;
+    padding: 3px 7px;
+    font-size: 0.62rem;
+    text-align: left;
   }
 
   .control-button-row {

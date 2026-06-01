@@ -369,15 +369,15 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             {(onSaveGameToLibrary || onOpenLibrary) && (
               <section className="menu-section" aria-labelledby="menu-section-library">
                 <div id="menu-section-library" className="menu-section-label">Library</div>
-                <p className="menu-section-note">Saved games</p>
+                <p className="menu-section-note">Local named saves on this device</p>
 
                 {onSaveGameToLibrary && (
                   <button
-                    className="menu-item primary"
+                    className="menu-item"
                     onClick={() => handleMenuItemClick(onSaveGameToLibrary)}
                   >
                     {renderImageIcon(scrollIcon)}
-                    <span>Save Game</span>
+                    <span>Save to Library</span>
                   </button>
                 )}
 
@@ -387,7 +387,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                     onClick={() => handleMenuItemClick(onOpenLibrary)}
                   >
                     {renderImageIcon(scrollsIcon)}
-                    <span>Game Library</span>
+                    <span>Open Library</span>
                   </button>
                 )}
               </section>

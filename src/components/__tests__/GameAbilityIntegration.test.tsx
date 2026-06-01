@@ -462,9 +462,14 @@ describe("Game ability integration", () => {
       </ThemeProvider>
     );
 
+    expect(screen.getByLabelText("Save status: Ready to save locally")).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Save Game" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Saved to Library.");
+    await waitFor(() => {
+      expect(screen.getByLabelText("Save status: Saved to Library")).toBeInTheDocument();
+    });
     expect(onSaveGameToLibrary).toHaveBeenCalledWith(expect.stringContaining("[Event"), "ongoing");
   });
 
@@ -483,6 +488,68 @@ describe("Game ability integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Game" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent('Saved "Opening study" to Library.');
+  });
+
+  test("online games show local Library status before local named saves", () => {
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onSaveGameToLibrary={vi.fn()}
+          onlineSession={{
+            gameId: "game_server_saved_chip",
+            role: "player",
+            playerColor: "w",
+            version: 0,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_server_saved_chip&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByLabelText("Save status: Not in Library")).toBeInTheDocument();
+  });
+
+  test("changing online games clears the local Library saved marker", async () => {
+    const onSaveGameToLibrary = vi.fn().mockResolvedValue(true);
+    const createSession = (gameId: string) => ({
+      gameId,
+      role: "player" as const,
+      playerColor: "w" as const,
+      version: 0,
+      status: "connected" as const,
+      spectatorUrl: `https://castles.example/?onlineGame=${gameId}&view=spectator`,
+      submitAction: vi.fn(),
+    });
+
+    const { rerender } = render(
+      <ThemeProvider>
+        <GameBoard
+          onSaveGameToLibrary={onSaveGameToLibrary}
+          onlineSession={createSession("game_saved_marker_one")}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Game" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Save status: Saved to Library")).toBeInTheDocument();
+    });
+
+    rerender(
+      <ThemeProvider>
+        <GameBoard
+          onSaveGameToLibrary={onSaveGameToLibrary}
+          onlineSession={createSession("game_saved_marker_two")}
+        />
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Save status: Not in Library")).toBeInTheDocument();
+    });
   });
 
   test("PGN export reports clipboard status in the app instead of using alerts", async () => {

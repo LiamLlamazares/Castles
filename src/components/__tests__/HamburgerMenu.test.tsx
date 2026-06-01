@@ -53,14 +53,14 @@ describe("HamburgerMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
 
     expect(screen.getByRole("button", { name: "New Game" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save Game" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Game Library" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save to Library" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online Lobby" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tutorial" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "New Game" }));
     expect(screen.getByRole("region", { name: "Online" })).toContainElement(screen.getByRole("button", { name: "Online Lobby" }));
-    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Game Library" }));
+    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Open Library" }));
     expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Learn" }));
 
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
@@ -101,12 +101,21 @@ describe("HamburgerMenu", () => {
 
     expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Learn" }));
     expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Rules" }));
-    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Save Game" }));
-    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Game Library" }));
+    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Save to Library" }));
+    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Open Library" }));
     expect(screen.getByRole("region", { name: "Board" })).toContainElement(screen.getByRole("button", { name: "Flip Board" }));
     expect(screen.getByRole("region", { name: "Tools" })).toContainElement(screen.getByRole("button", { name: "Analysis Board" }));
     expect(screen.getByText("Lessons and rules")).toBeInTheDocument();
-    expect(screen.getByText("Saved games")).toBeInTheDocument();
+    expect(screen.getByText("Local named saves on this device")).toBeInTheDocument();
+  });
+
+  it("does not promote duplicate drawer save action as primary navigation", () => {
+    renderMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.getByRole("button", { name: "Save to Library" })).not.toHaveClass("primary");
+    expect(screen.getByRole("button", { name: "Open Library" })).toHaveClass("primary");
   });
 
   it("uses non-text icon markers for drawer items and keeps the full menu scrollable", () => {
