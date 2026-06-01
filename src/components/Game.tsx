@@ -46,14 +46,14 @@ interface GameBoardProps {
   initialPromotionPending?: Piece | null;
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
   gameRules?: { vpModeEnabled: boolean };
-  onResign?: () => void; 
+  onResign?: () => void;
   onSetup?: () => void;
   onRestart?: () => void;
   onLoadGame?: (data: {
-    board: Board, 
-    pieces: Piece[], 
-    turnCounter: number, 
-    sanctuaries: Sanctuary[], 
+    board: Board,
+    pieces: Piece[],
+    turnCounter: number,
+    sanctuaries: Sanctuary[],
     moveTree?: import('../Classes/Core/MoveTree').MoveTree,
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     initialPoolTypes?: import('../Constants').SanctuaryType[]
@@ -70,6 +70,8 @@ interface GameBoardProps {
   pieceTheme?: PieceTheme;
   opponentConfig?: AIOpponentConfig;
   onlineSession?: OnlineClientSession;
+  showNavigationMenu?: boolean;
+  showTooltipHint?: boolean;
 }
 
 /**
@@ -96,7 +98,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
   isTutorialMode = false,
   pieceTheme = "Castles",
   opponentConfig,
-  onlineSession
+  onlineSession,
+  showNavigationMenu = true,
+  showTooltipHint: shouldShowTooltipHint = true
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [showRulesModal, setShowRulesModal] = React.useState(false);
@@ -208,7 +212,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
             sanctuarySettings: result.sanctuarySettings,
             initialPoolTypes: result.sanctuaryPool
           });
-          return; 
+          return;
         }
         clearUrlParams();
       } catch (e) {
@@ -218,11 +222,11 @@ const InnerGame: React.FC<GameBoardProps> = ({
     }
 
     const isBeginning = turnCounter === 0 && (!moveTree || moveTree.getHistoryLine().length === 0);
-    
+
     if (isBeginning) {
       const savedPgn = loadFromLocalStorage();
       const currentPgn = getPGN();
-      
+
       if (savedPgn && savedPgn !== currentPgn) {
         try {
           const result = loadPGN(savedPgn);
@@ -251,18 +255,18 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [victoryPoints, setVictoryPoints] = React.useState<{ w: number, b: number } | undefined>(
     gameRules?.vpModeEnabled ? { w: 0, b: 0 } : undefined
   );
-  
+
   // Track previous turn counter for VP calculation
   const prevTurnCounterRef = React.useRef(0);
-  
+
   // Disable transitions after first render cycle
   React.useEffect(() => {
     const timer = setTimeout(() => setIsInitialLoad(false), 100);
     return () => clearTimeout(timer);
   }, []);
-  
+
   useSoundEffects();
-  
+
   // Decoupled View State
   const viewState = useGameView();
 
@@ -279,7 +283,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     enabled: opponentConfig?.type !== 'human' && opponentConfig?.type != null,
     opponentType: opponentConfig?.type ?? 'human',
     aiColor: opponentConfig?.aiColor ?? 'b',
-    gameEngine: aiIntegrationSafe?.gameEngine!, 
+    gameEngine: aiIntegrationSafe?.gameEngine!,
     board: aiIntegrationSafe?.board!,
     gameState: aiIntegrationSafe?.gameState!,
     onStateChange: aiIntegrationSafe?.onStateChange!,
@@ -314,11 +318,11 @@ const InnerGame: React.FC<GameBoardProps> = ({
     if (!victoryPoints || !gameRules?.vpModeEnabled) return;
     const currentRound = Math.floor(turnCounter / 10);
     const prevRound = Math.floor(prevTurnCounterRef.current / 10);
-    
+
     if (currentRound > prevRound && currentRound > 0) {
       const whiteGain = WinCondition.calculateVPGain(castles, 'w');
       const blackGain = WinCondition.calculateVPGain(castles, 'b');
-      
+
       if (whiteGain > 0 || blackGain > 0) {
         setVictoryPoints(prev => prev ? {
           w: prev.w + whiteGain,
@@ -330,6 +334,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
   }, [turnCounter, castles, victoryPoints, gameRules?.vpModeEnabled]);
 
   const handleNewGame = () => {
+    if (onlineSession && !onlineSession.result) {
+      if (window.confirm("Leave this online game and start a new game?")) {
+        clearSave();
+        clearUrlParams();
+        onSetup();
+      }
+      return;
+    }
+
     const safeToReset = !hasGameStarted || displayedWinner || isAnalysisMode;
 
     if (safeToReset) {
@@ -413,30 +426,33 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [activeAbility, setActiveAbility] = React.useState<import('../Constants').AbilityType | null>(null);
 
   return (
-    <>
-      <HamburgerMenu
-        onExportPGN={handleExportPGN}
-        onImportPGN={handleImportPGN}
-        onFlipBoard={viewState.handleFlipBoard}
-        onToggleCoordinates={viewState.toggleCoordinates}
-        onShowRules={() => setShowRulesModal(true)}
-        onEnableAnalysis={handleEnterAnalysis}
-        onSaveGameToLibrary={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
-        onOpenLibrary={onOpenLibrary}
-        onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
-        onTutorial={onTutorial}
-        isAnalysisMode={isAnalysisMode}
-        onToggleShields={viewState.toggleShields}
-        onToggleCastleRecruitment={viewState.toggleCastleRecruitment}
-        onToggleTerrainIcons={viewState.toggleTerrainIcons}
-        onToggleSanctuaryIcons={viewState.toggleSanctuaryIcons}
-        onSetAllIcons={viewState.setAllIcons}
-        showShields={viewState.showShields}
-        showCastleRecruitment={viewState.showCastleRecruitment}
-        showTerrainIcons={viewState.showTerrainIcons}
-        showSanctuaryIcons={viewState.showSanctuaryIcons}
-        showCoordinates={viewState.showCoordinates}
-      />
+    <div className={`game-shell ${isTutorialMode ? "tutorial-game-shell" : ""}`}>
+      {showNavigationMenu && (
+        <HamburgerMenu
+          onExportPGN={handleExportPGN}
+          onImportPGN={handleImportPGN}
+          onFlipBoard={viewState.handleFlipBoard}
+          onToggleCoordinates={viewState.toggleCoordinates}
+          onShowRules={() => setShowRulesModal(true)}
+          onNewGame={handleNewGame}
+          onEnableAnalysis={handleEnterAnalysis}
+          onSaveGameToLibrary={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
+          onOpenLibrary={onOpenLibrary}
+          onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
+          onTutorial={onTutorial}
+          isAnalysisMode={isAnalysisMode}
+          onToggleShields={viewState.toggleShields}
+          onToggleCastleRecruitment={viewState.toggleCastleRecruitment}
+          onToggleTerrainIcons={viewState.toggleTerrainIcons}
+          onToggleSanctuaryIcons={viewState.toggleSanctuaryIcons}
+          onSetAllIcons={viewState.setAllIcons}
+          showShields={viewState.showShields}
+          showCastleRecruitment={viewState.showCastleRecruitment}
+          showTerrainIcons={viewState.showTerrainIcons}
+          showSanctuaryIcons={viewState.showSanctuaryIcons}
+          showCoordinates={viewState.showCoordinates}
+        />
+      )}
 
       {promotionPending && !isReadOnlyOnline && (
         <PromotionModal
@@ -462,7 +478,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         showTooltipHint={showTooltipHint}
         onDismissTooltipHint={dismissTooltipHint}
       />
-      
+
       {/* Game Panel (Right Side) - Hidden in tutorial mode */}
       {!isTutorialMode && (
         <ControlPanel
@@ -499,6 +515,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
       {onlineSession && (
         <div
+          className="online-session-badge"
           style={{
             position: "absolute",
             top: "10px",
@@ -526,31 +543,35 @@ const InnerGame: React.FC<GameBoardProps> = ({
           {statusMessage}
         </div>
       )}
-      
-      {/* Board Container */}
-      <BoardContainer 
-        layout={initialLayout}
-        pieceTheme={pieceTheme || "Castles"}
-        isInitialLoad={isInitialLoad}
-        tooltip={tooltip}
-        viewState={viewState}
-        activeAbility={activeAbility}
-        onAbilitySelect={setActiveAbility}
-        onActiveAbilityChange={setActiveAbility}
-        containerStyle={{
-          position: 'relative', // Override absolute
-          float: 'left',
-          width: isTutorialMode ? '100%' : 'calc(100vw - 300px)',
-        }}
-      />
 
-      <GameHUD 
+      {/* Board Container */}
+      <div className="game-board-stage">
+        <BoardContainer
+          layout={initialLayout}
+          pieceTheme={pieceTheme || "Castles"}
+          isInitialLoad={isInitialLoad}
+          tooltip={tooltip}
+          viewState={viewState}
+          activeAbility={activeAbility}
+          onAbilitySelect={setActiveAbility}
+          onActiveAbilityChange={setActiveAbility}
+          containerStyle={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+          }}
+        />
+      </div>
+
+      <GameHUD
         tooltip={tooltip}
         activeAbility={activeAbility}
         onAbilitySelect={setActiveAbility}
         sanctuarySettings={sanctuarySettings}
+        showDiscoveryHint={shouldShowTooltipHint && !isTutorialMode}
       />
-    </>
+    </div>
   );
 };
 

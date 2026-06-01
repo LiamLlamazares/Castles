@@ -24,10 +24,12 @@ describe("GameSetup", () => {
       .mockReturnValue(previewSanctuaries);
 
     const onPlay = vi.fn();
-    render(<GameSetup onPlay={onPlay} />);
+    const { container } = render(<GameSetup onPlay={onPlay} />);
 
     fireEvent.click(screen.getByRole("button", { name: "PLAY GAME" }));
 
+    expect(container.querySelector(".game-setup-shell")).toBeInTheDocument();
+    expect(container.querySelector(".setup-preview")).toBeInTheDocument();
     expect(onPlay).toHaveBeenCalledTimes(1);
     expect(onPlay.mock.calls[0][3]).toBe(previewSanctuaries);
     expect(onPlay.mock.calls[0][4]).toEqual([
@@ -46,10 +48,12 @@ describe("GameSetup", () => {
       .mockReturnValue(previewSanctuaries);
 
     const onCreateOnlineGame = vi.fn();
-    render(<GameSetup onPlay={vi.fn()} onCreateOnlineGame={onCreateOnlineGame} />);
+    const { container } = render(<GameSetup onPlay={vi.fn()} onCreateOnlineGame={onCreateOnlineGame} />);
 
     fireEvent.click(screen.getByRole("button", { name: "CREATE ONLINE GAME" }));
 
+    expect(container.querySelector(".game-setup-shell")).toBeInTheDocument();
+    expect(container.querySelector(".setup-preview")).toBeInTheDocument();
     expect(onCreateOnlineGame).toHaveBeenCalledTimes(1);
     expect(onCreateOnlineGame.mock.calls[0][3]).toBe(previewSanctuaries);
     expect(onCreateOnlineGame.mock.calls[0][4]).toEqual([

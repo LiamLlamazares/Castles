@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import GameBoard from "../Game";
 import { Hex } from "../../Classes/Entities/Hex";
 import { PieceFactory } from "../../Classes/Entities/PieceFactory";
@@ -236,6 +236,40 @@ describe("Game ability integration", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Spectator link copied.");
     expect(alert).not.toHaveBeenCalled();
   }, INTEGRATION_TIMEOUT_MS);
+
+  test("online New Game requires confirmation even before the first move", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onSetup = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_turn_zero",
+            role: "player",
+            playerColor: "w",
+            version: 0,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_turn_zero&view=spectator",
+            submitAction: vi.fn(),
+          }}
+          onSetup={onSetup}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(within(screen.getByText("Play").closest(".hamburger-menu") as HTMLElement).getByRole("button", { name: "New Game" }));
+
+    expect(confirm).toHaveBeenCalledWith("Leave this online game and start a new game?");
+    expect(onSetup).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(within(screen.getByText("Play").closest(".hamburger-menu") as HTMLElement).getByRole("button", { name: "New Game" }));
+
+    expect(onSetup).toHaveBeenCalledOnce();
+  });
 
   test("PGN export reports clipboard status in the app instead of using alerts", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);

@@ -17,13 +17,15 @@ interface GameHUDProps {
   activeAbility: AbilityType | null;
   onAbilitySelect: (ability: AbilityType | null) => void;
   sanctuarySettings?: { unlockTurn: number, cooldown: number };
+  showDiscoveryHint?: boolean;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
   tooltip,
   activeAbility,
   onAbilitySelect,
-  sanctuarySettings
+  sanctuarySettings,
+  showDiscoveryHint = true
 }) => {
   const {
       sanctuaries,
@@ -45,8 +47,19 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
   // Tooltip Discovery Hint
   const [showTooltipHint, setShowTooltipHint] = React.useState(() => {
-    return !localStorage.getItem('hasSeenTooltipHint');
+    return showDiscoveryHint && !localStorage.getItem('hasSeenTooltipHint');
   });
+
+  React.useEffect(() => {
+    if (!showDiscoveryHint) {
+      setShowTooltipHint(false);
+      return;
+    }
+
+    if (!localStorage.getItem('hasSeenTooltipHint')) {
+      setShowTooltipHint(true);
+    }
+  }, [showDiscoveryHint]);
   
   const dismissTooltipHint = () => {
     localStorage.setItem('hasSeenTooltipHint', 'true');
@@ -142,7 +155,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       )}
       
       {/* Tooltip Discovery Hint Banner */}
-      {showTooltipHint && (
+      {showDiscoveryHint && showTooltipHint && (
         <div className="tooltip-hint-banner">
           <img src={lightbulbIcon} alt="" style={{ width: '16px', height: '16px', verticalAlign: 'middle', marginRight: '4px', filter: 'invert(1)' }} /> Tip: Right-click any piece or hex for detailed information!
           <button className="hint-dismiss-btn" onClick={dismissTooltipHint}>

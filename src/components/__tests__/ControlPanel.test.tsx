@@ -36,6 +36,17 @@ describe("ControlPanel", () => {
     expect(container.querySelectorAll('[data-testid="vp-pip-b"][data-filled="true"]')).toHaveLength(1);
   });
 
+  it("groups the main game action buttons for accessible responsive layout", () => {
+    render(<ControlPanel {...baseProps} onShare={vi.fn()} />);
+
+    const controls = screen.getByRole("group", { name: "Game actions" });
+
+    expect(controls).toContainElement(screen.getByRole("button", { name: "Pass" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "Resign" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "Share" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "New Game" }));
+  });
+
   it("renders online clocks from server state instead of starting local browser clocks", () => {
     render(
       <ControlPanel

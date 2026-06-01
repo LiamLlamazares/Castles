@@ -8,7 +8,6 @@ import { useTheme } from "../contexts/ThemeContext";
 // SVG icon imports
 import scrollIcon from "../Assets/Images/misc/scroll.svg";
 import rotateIcon from "../Assets/Images/Board/rotate.svg";
-import flagIcon from "../Assets/Images/misc/flag.svg";
 import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
 
 const menuIconStyle: React.CSSProperties = { width: '18px', height: '18px', verticalAlign: 'middle' };
@@ -19,6 +18,7 @@ interface HamburgerMenuProps {
   onFlipBoard: () => void;
   onToggleCoordinates: () => void;
   onShowRules: () => void;
+  onNewGame?: () => void;
   onEnableAnalysis?: () => void;
   onSaveGameToLibrary?: () => void;
   onOpenLibrary?: () => void;
@@ -43,6 +43,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onFlipBoard,
   onToggleCoordinates,
   onShowRules,
+  onNewGame,
   onEnableAnalysis,
   onSaveGameToLibrary,
   onOpenLibrary,
@@ -99,10 +100,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
 
   const handleMenuItemClick = (action: () => void) => {
     action();
-    // Keep menu open for toggles if desired, but standard behavior is close. 
-    // For toggles, it might be annoying to reopen. Let's keep it closing for now unless user complains.
-    // Actually, for checkboxes, users often want to toggle multiple things. 
-    // Let's NOT close for the toggle items.
+    setIsOpen(false);
   };
 
   const handleToggleClick = (action: () => void) => {
@@ -110,11 +108,21 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     // Do not close menu
   };
 
+  const renderIcon = (icon: React.ReactNode) => (
+    <span className="menu-item-icon" aria-hidden="true">
+      {icon}
+    </span>
+  );
+
+  const renderImageIcon = (src: string, alt = "") => (
+    <img src={src} alt={alt} style={menuIconStyle} />
+  );
+
   return (
     <div className="hamburger-container" ref={menuRef}>
       {/* Hamburger Icon */}
-      <button 
-        className="hamburger-button" 
+      <button
+        className="hamburger-button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label="Menu"
         aria-expanded={isOpen}
@@ -123,193 +131,210 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
       </button>
 
       {/* Slide-out Menu */}
-      <div className={`hamburger-menu ${isOpen ? "open" : ""}`}>
-        <div className="menu-header">
-          <span>Menu</span>
-          <button className="menu-close" onClick={() => setIsOpen(false)}>×</button>
-        </div>
-        
-        <div className="menu-items">
-          {/* Theme Toggle */}
-          <button 
-            className="menu-item" 
-            onClick={() => toggleTheme()}
-            style={{ justifyContent: 'space-between' }}
-          >
-            <span>{isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}</span>
-          </button>
-          
-          <div className="menu-divider" />
-          
-          <button 
-            className="menu-item" 
-            onClick={() => handleMenuItemClick(onExportPGN)}
-          >
-            Export PGN
-          </button>
-          
-          <button 
-            className="menu-item" 
-            onClick={() => handleMenuItemClick(onImportPGN)}
-          >
-            Import PGN
-          </button>
+      {isOpen && (
+        <div className="hamburger-menu open">
+          <div className="menu-header">
+            <span>Castles</span>
+            <button className="menu-close" onClick={() => setIsOpen(false)} aria-label="Close menu">×</button>
+          </div>
 
-          {onSaveGameToLibrary && (
-            <button 
-              className="menu-item" 
-              onClick={() => handleMenuItemClick(onSaveGameToLibrary)}
+          <div className="menu-items">
+            <div className="menu-section-label">Play</div>
+
+            {onNewGame && (
+              <button
+                className="menu-item primary"
+                onClick={() => handleMenuItemClick(onNewGame)}
+              >
+                {renderIcon("+")}
+                <span>New Game</span>
+              </button>
+            )}
+
+            {onSaveGameToLibrary && (
+              <button
+                className="menu-item primary"
+                onClick={() => handleMenuItemClick(onSaveGameToLibrary)}
+              >
+                {renderImageIcon(scrollIcon)}
+                <span>Save Game</span>
+              </button>
+            )}
+
+            {onOpenLibrary && (
+              <button
+                className="menu-item primary"
+                onClick={() => handleMenuItemClick(onOpenLibrary)}
+              >
+                {renderImageIcon(scrollsIcon)}
+                <span>Game Library</span>
+              </button>
+            )}
+
+            {onTutorial && (
+              <button
+                className="menu-item"
+                onClick={() => handleMenuItemClick(onTutorial)}
+              >
+                {renderIcon("?")}
+                <span>Tutorial</span>
+              </button>
+            )}
+
+            <button
+              className="menu-item"
+              onClick={() => handleMenuItemClick(onShowRules)}
             >
-              Save Game
+              {renderIcon("i")}
+              <span>Rules</span>
             </button>
-          )}
 
-          {onOpenLibrary && (
-            <button 
-              className="menu-item" 
-              onClick={() => handleMenuItemClick(onOpenLibrary)}
+            <div className="menu-divider" />
+            <div className="menu-section-label">Board</div>
+
+            {/* Theme Toggle */}
+            <button
+              className="menu-item"
+              onClick={() => toggleTheme()}
+              style={{ justifyContent: 'space-between' }}
             >
-              Game Library
+              <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
             </button>
-          )}
-          
-          <div className="menu-divider" />
-          
-          <button 
-            className="menu-item" 
-            onClick={() => handleMenuItemClick(onFlipBoard)}
-          >
-            Flip Board
-          </button>
-          
-          {/* Icon Settings Collapsible */}
-          <button 
-             className="menu-item"
-             onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
-             style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
-          >
-             <span>Icon Settings</span>
-             <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
-          </button>
 
-          {isIconsMenuOpen && (
-            <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-               {/* Show All / Hide All */}
-               {onSetAllIcons && (
-                 <div style={{ display: 'flex', gap: '8px', padding: '8px 12px 8px 12px' }}>
-                    <button 
-                      onClick={() => onSetAllIcons(true)}
-                      style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
-                    > 
-                      Show All
-                    </button>
-                    <button 
-                      onClick={() => onSetAllIcons(false)}
-                      style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
-                    > 
-                      Hide All
-                    </button>
-                 </div>
-               )}
+            <button
+              className="menu-item"
+              onClick={() => handleMenuItemClick(onExportPGN)}
+            >
+              {renderImageIcon(scrollIcon)}
+              <span>Export PGN</span>
+            </button>
 
-               <button 
-                  className="menu-item" 
-                  onClick={() => handleToggleClick(onToggleCoordinates)}
-                  style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
-                >
-                  <input type="checkbox" checked={showCoordinates} readOnly style={{ marginRight: '8px' }} />
+            <button
+              className="menu-item"
+              onClick={() => handleMenuItemClick(onImportPGN)}
+            >
+              {renderImageIcon(scrollsIcon)}
+              <span>Import PGN</span>
+            </button>
+
+            <button
+              className="menu-item"
+              onClick={() => handleMenuItemClick(onFlipBoard)}
+            >
+              {renderImageIcon(rotateIcon)}
+              <span>Flip Board</span>
+            </button>
+
+            {/* Icon Settings Collapsible */}
+            <button
+              className="menu-item"
+              onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
+              style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
+            >
+              <span>{renderIcon("Ic")} Icon Settings</span>
+              <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
+            </button>
+
+            {isIconsMenuOpen && (
+              <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                {/* Show All / Hide All */}
+                {onSetAllIcons && (
+                  <div style={{ display: 'flex', gap: '8px', padding: '8px 12px 8px 12px' }}>
+                      <button
+                        onClick={() => onSetAllIcons(true)}
+                        style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
+                      >
+                        Show All
+                      </button>
+                      <button
+                        onClick={() => onSetAllIcons(false)}
+                        style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
+                      >
+                        Hide All
+                      </button>
+                  </div>
+                )}
+
+                <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={showCoordinates}
+                    onChange={() => handleToggleClick(onToggleCoordinates)}
+                  />
                   Coordinates
-                </button>
+                </label>
 
-               {onToggleTerrainIcons && (
-                 <button 
-                    className="menu-item" 
-                    onClick={() => handleToggleClick(onToggleTerrainIcons)}
-                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
-                  >
-                    <input type="checkbox" checked={showTerrainIcons} readOnly style={{ marginRight: '8px' }} />
+                {onToggleTerrainIcons && (
+                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={showTerrainIcons}
+                      onChange={() => handleToggleClick(onToggleTerrainIcons)}
+                    />
                     Terrain
-                 </button>
-               )}
-               
-               {onToggleSanctuaryIcons && (
-                 <button 
-                    className="menu-item" 
-                    onClick={() => handleToggleClick(onToggleSanctuaryIcons)}
-                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
-                  >
-                    <input type="checkbox" checked={showSanctuaryIcons} readOnly style={{ marginRight: '8px' }} />
+                  </label>
+                )}
+
+                {onToggleSanctuaryIcons && (
+                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={showSanctuaryIcons}
+                      onChange={() => handleToggleClick(onToggleSanctuaryIcons)}
+                    />
                     Sanctuary Icons
-                 </button>
-               )}
-               
-               {onToggleShields && (
-                 <button 
-                    className="menu-item" 
-                    onClick={() => handleToggleClick(onToggleShields)}
-                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
-                  >
-                    <input type="checkbox" checked={showShields} readOnly style={{ marginRight: '8px' }} />
+                  </label>
+                )}
+
+                {onToggleShields && (
+                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={showShields}
+                      onChange={() => handleToggleClick(onToggleShields)}
+                    />
                     Protected Shields
-                 </button>
-               )}
+                  </label>
+                )}
 
-               {onToggleCastleRecruitment && (
-                 <button 
-                    className="menu-item" 
-                    onClick={() => handleToggleClick(onToggleCastleRecruitment)}
-                    style={{ paddingLeft: '24px', fontSize: '0.9rem' }}
-                  >
-                    <input type="checkbox" checked={showCastleRecruitment} readOnly style={{ marginRight: '8px' }} />
+                {onToggleCastleRecruitment && (
+                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={showCastleRecruitment}
+                      onChange={() => handleToggleClick(onToggleCastleRecruitment)}
+                    />
                     Castle Recruitment
-                 </button>
-               )}
-            </div>
-          )}
-          
-          <div className="menu-divider" />
-          
-          <button 
-            className="menu-item" 
-            onClick={() => handleMenuItemClick(onShowRules)}
-          >
-            Rules
-          </button>
+                  </label>
+                )}
+              </div>
+            )}
 
-          {onTutorial && (
-            <button 
-              className="menu-item" 
-              onClick={() => handleMenuItemClick(onTutorial)}
-            >
-              Tutorial
-            </button>
-          )}
-          
-          {onEnableAnalysis && !isAnalysisMode && (
-            <>
-              <div className="menu-divider" />
-              <button 
-                className="menu-item" 
+            <div className="menu-divider" />
+            <div className="menu-section-label">Tools</div>
+
+            {onEnableAnalysis && !isAnalysisMode && (
+              <button
+                className="menu-item"
                 onClick={() => handleMenuItemClick(onEnableAnalysis)}
               >
-                Analysis Board
+                {renderIcon("A")}
+                <span>Analysis Board</span>
               </button>
-            </>
-          )}
-          
-          {onEditPosition && (
-            <>
-              <div className="menu-divider" />
-              <button 
-                className="menu-item" 
+            )}
+
+            {onEditPosition && (
+              <button
+                className="menu-item"
                 onClick={() => handleMenuItemClick(onEditPosition)}
               >
-                Edit Position
+                {renderIcon("E")}
+                <span>Edit Position</span>
               </button>
-            </>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Backdrop */}
       {isOpen && <div className="menu-backdrop" onClick={() => setIsOpen(false)} />}

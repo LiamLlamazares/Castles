@@ -316,14 +316,39 @@ body {
     opacity: 0.75;
 }
 
-/* =========== GAME PANEL (Right Side - Lichess Style) =========== */
+/* =========== GAME SHELL (Lichess-style board + side panel) =========== */
+
+.game-shell {
+  height: 100dvh;
+  width: 100vw;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  background: var(--backgroundColor);
+  overflow: hidden;
+  position: relative;
+}
+
+.game-board-stage {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.tutorial-game-shell {
+  height: 100%;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
 
 .game-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 280px;
-  height: 100vh;
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  width: auto;
+  height: 100dvh;
   background: transparent;
   display: flex;
   flex-direction: column;
@@ -331,6 +356,7 @@ body {
   z-index: 200;
   gap: 16px;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 /* Player sections (clock + phase icon) */
@@ -354,10 +380,10 @@ body {
 
 /* Game control buttons */
 .game-controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   justify-content: center;
-  flex-wrap: wrap;
   padding-top: 12px;
   border-top: 1px solid rgba(0,0,0,0.1);
 }
@@ -372,13 +398,14 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .control-button.pass {
   background: rgba(40, 40, 40, 0.9);
   color: #fff;
-  flex: 1;
 }
 
 .control-button.pass:hover {
@@ -397,6 +424,11 @@ body {
 .control-button.new-game {
   background: #3498db;
   color: #fff;
+}
+
+.control-button.share {
+  background: #f7f1d6;
+  color: #1f2423;
 }
 
 .control-button.new-game:hover:not(:disabled) {
@@ -748,6 +780,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
 }
 
 .menu-item {
@@ -763,6 +796,51 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: left;
+}
+
+.menu-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: var(--panel-text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.menu-toggle-item:hover {
+  background: var(--panel-border);
+}
+
+.menu-toggle-item input {
+  margin: 0;
+}
+
+.menu-item.primary {
+  background: rgba(74, 144, 217, 0.16);
+  border: 1px solid rgba(74, 144, 217, 0.34);
+}
+
+.menu-item-icon,
+.menu-item > img {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: var(--icon-filter);
+  font-weight: 800;
+}
+
+.menu-section-label {
+  padding: 10px 16px 4px;
+  color: var(--panel-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .menu-item:hover {
@@ -927,4 +1005,227 @@ body {
 
 .tutorial-title {
   color: var(--tutorial-title-color);
+}
+
+/* =========== SETUP, TUTORIAL, AND RESPONSIVE SHELLS =========== */
+
+.game-setup-shell {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  height: 100dvh;
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  overflow: hidden;
+}
+
+.setup-sidebar {
+  width: 380px;
+  height: 100%;
+  padding: 20px;
+  background: var(--tutorial-sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.setup-preview {
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background: #181a1a;
+  height: 100%;
+}
+
+.setup-preview-label {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  color: #d9d0b8;
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+
+.tutorial-container {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--backgroundColor);
+}
+
+.tutorial-sidebar {
+  width: 100%;
+  min-width: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  background-color: var(--tutorial-sidebar-bg);
+  color: var(--tutorial-text-light);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 10;
+}
+
+.tutorial-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tutorial-back-button {
+  min-height: 40px;
+  padding: 8px 14px;
+  background: var(--button-bg);
+  color: var(--panel-text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.tutorial-progress {
+  font-size: 0.85rem;
+  color: var(--panel-text-muted);
+  font-weight: 700;
+}
+
+.tutorial-board-stage {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  height: 100dvh;
+}
+
+@media (max-width: 760px) {
+  .game-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .game-board-stage {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .game-panel {
+    grid-column: 1;
+    grid-row: 2;
+    height: auto;
+    max-height: 42dvh;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    gap: 8px;
+    background: rgba(246, 241, 209, 0.97);
+    border-top: 1px solid rgba(0, 0, 0, 0.16);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .notation-section {
+    display: none;
+  }
+
+  .player-section {
+    gap: 4px;
+  }
+
+  .clock-box {
+    min-width: 104px;
+    padding: 8px 12px;
+    font-size: 1rem;
+  }
+
+  .phase-badge img {
+    width: 32px;
+    height: 32px;
+  }
+
+  .phase-counter {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+  }
+
+  .game-controls {
+    grid-template-columns: 1fr 1fr;
+    padding-top: 8px;
+  }
+
+  .control-button {
+    min-height: 36px;
+    padding: 8px 10px;
+    font-size: 0.76rem;
+    line-height: 1.15;
+  }
+
+  .hamburger-container {
+    top: 12px;
+    left: 12px;
+  }
+
+  .hamburger-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .hamburger-menu {
+    width: min(320px, 88vw);
+    left: min(-320px, -88vw);
+  }
+
+  .game-status-toast,
+  .tooltip-hint-banner {
+    top: 64px;
+    max-width: calc(100vw - 28px);
+  }
+
+  .tooltip-hint-banner {
+    padding: 12px 14px;
+    gap: 10px;
+    font-size: 0.85rem;
+  }
+
+  .game-setup-shell {
+    display: block;
+    height: 100dvh;
+    overflow-y: auto;
+    background: var(--tutorial-sidebar-bg);
+  }
+
+  .setup-sidebar {
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+    border-right: 0;
+    padding: 20px;
+  }
+
+  .setup-preview {
+    display: none;
+  }
+
+  .tutorial-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(250px, 42dvh) minmax(0, 1fr);
+  }
+
+  .tutorial-sidebar {
+    padding: 16px 20px;
+  }
+
+  .tutorial-board-stage {
+    height: auto;
+  }
+
+  .tutorial-title {
+    font-size: 1.25rem;
+  }
 }

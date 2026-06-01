@@ -57,34 +57,16 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="tutorial-container" style={{ display: 'flex', height: '100vh', width: '100vw' }}>
-      <div className="tutorial-sidebar" style={{
-        width: '300px',
-        minWidth: '300px',
-        padding: '20px',
-        backgroundColor: isDark ? '#1a1a2e' : '#f5f5f5',
-        color: isDark ? '#e0e0e0' : '#1a1a1a',
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        zIndex: 10
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div className="tutorial-container">
+      <div className="tutorial-sidebar">
+        <div className="tutorial-topbar">
           <button
             onClick={onBack}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: isDark ? '#333' : '#e0e0e0',
-              color: isDark ? '#fff' : '#1a1a1a',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
+            className="tutorial-back-button"
           >
-            Back
+            Back to game
           </button>
-          <span style={{ fontSize: '14px', color: '#aaa' }}>
+          <span className="tutorial-progress">
             {currentLessonIndex + 1} / {lessons.length}
           </span>
         </div>
@@ -157,7 +139,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
         </div>
       </div>
 
-      <div style={{ flex: 1, position: 'relative', height: '100vh' }}>
+      <div className="tutorial-board-stage">
         <GameBoard
           key={lesson.id}
           initialBoard={lesson.board}
@@ -169,6 +151,8 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
           initialPhoenixRecords={lesson.phoenixRecords}
           isTutorialMode={true}
           isAnalysisMode={true}
+          showNavigationMenu={false}
+          showTooltipHint={false}
           onSetup={() => {}}
           onRestart={() => {}}
         />

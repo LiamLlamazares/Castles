@@ -268,7 +268,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       {/* Game Controls */}
-      <div className="game-controls">
+      <div className="game-controls" role="group" aria-label="Game actions">
         <button
           className="control-button pass"
           onClick={onPass}

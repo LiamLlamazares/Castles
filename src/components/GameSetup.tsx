@@ -263,21 +263,9 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame }) => 
 
     return (
         <>
-            <div className="game-setup" style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: Palette.PanelBackground, color: Palette.TextPrimary, overflow: 'hidden' }}>
+            <div className="game-setup-shell">
                 {/* Sidebar Controls */}
-                <div className="setup-sidebar" style={{ 
-                    width: '380px',
-                    height: '100%',
-                    padding: '20px', 
-                    background: Palette.SidebarBackground, 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '20px', 
-                overflowY: 'auto',
-                borderRight: `1px solid ${Palette.BorderLight}`,
-                boxSizing: 'border-box',
-                flexShrink: 0
-            }}>
+                <div className="setup-sidebar">
                 <h2 style={{ margin: '0 0 10px 0', fontSize: '1.5rem', textAlign: 'center', color: '#fff' }}>Game Setup</h2>
 
                 {/* Game Mode Selector */}
@@ -464,8 +452,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame }) => 
 
             {/* Preview Area */}
             <div 
-                className="editor-preview" 
-                style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#1a1a1a', height: '100%' }}
+                className="setup-preview"
             >
                  <svg className="board" height="100%" width="100%" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
                     <HexGrid
@@ -482,7 +469,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame }) => 
                         board={board}
                     />
                  </svg>
-                 <div style={{ position: 'absolute', bottom: '20px', left: '20px', color: '#888', fontStyle: 'italic', background: 'rgba(0,0,0,0.5)', padding: '5px 10px', borderRadius: '4px' }}>
+                 <div className="setup-preview-label">
                     Preview Mode
                  </div>
             </div>
