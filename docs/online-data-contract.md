@@ -30,6 +30,62 @@ When a player receives `rejected` with a snapshot, the client applies the author
 
 Because the app has no production users, old beta clients are not supported. Missing or unsupported protocol versions are rejected with a controlled `bad_request` error instead of being downgraded or guessed. REST snapshot reads also reject unversioned snapshot envelopes on the client before applying the snapshot.
 
+## Client State Machine
+
+Player and spectator hooks expose the same connection states. Pending action is an orthogonal player-only overlay, exposed as `isActionPending` while the connection status remains `connected`.
+
+```mermaid
+stateDiagram-v2
+  state "connected + isActionPending" as connected_with_pending_action
+  state "access-denied" as access_denied
+  state "protocol-error" as protocol_error
+  state "server-error" as server_error
+
+  [*] --> idle
+  idle --> connecting: online invite or spectator URL
+  connecting --> connected: REST snapshot and socket join/spectate
+  connecting --> terminal: REST snapshot or socket reports result
+  connecting --> access_denied: not found or unauthorized
+  connecting --> protocol_error: malformed or wrong-role message
+  connecting --> server_error: server operation failure
+
+  connected --> connected_with_pending_action: player sends action
+  connected_with_pending_action --> connected: accepted snapshot or stale rejection with snapshot
+  connected_with_pending_action --> terminal: terminal snapshot
+  connected_with_pending_action --> disconnected: socket closes before confirmation
+  connected_with_pending_action --> access_denied: authorization rejection
+  connected_with_pending_action --> protocol_error: unexpected action rejection
+  connected_with_pending_action --> server_error: non-access rejection or error
+
+  connected --> disconnected: unexpected socket close
+  disconnected --> resyncing: reconnect backoff expires
+  resyncing --> connecting: REST snapshot is non-terminal or fetch fails
+  resyncing --> terminal: REST snapshot is terminal
+
+  connected --> terminal: terminal snapshot
+  connected --> access_denied: access error
+  connected --> protocol_error: malformed or wrong-role message
+  connected --> server_error: server operation failure
+
+  terminal --> [*]
+  access_denied --> idle: user configures a new game
+  protocol_error --> idle: user configures a new game
+  server_error --> idle: user configures a new game
+```
+
+| State | Meaning | User action policy | Next transitions |
+| --- | --- | --- | --- |
+| `idle` | No online game is selected. | Local play is allowed. | `connecting` when an invite/spectator URL is opened. |
+| `connecting` | REST snapshot or WebSocket join is in flight. | Online play controls are paused. | `connected`, `terminal`, `access-denied`, `protocol-error`, or `server-error`. |
+| `connected` | The socket is live and snapshots are authoritative. | Player actions are allowed only for the side to move and only when no action is pending; spectators remain read-only. | `disconnected`, `terminal`, `server-error`, `access-denied`, or `protocol-error`. |
+| `connected` with `isActionPending` | A player action has been sent and the browser is waiting for the server. This is not an `OnlineConnectionStatus`; it is a player-only overlay on `connected`. | Board clicks, pass, promotion, and resign are paused; the badge says `Waiting for server`. | A newer/terminal snapshot, matching `rejected`, `error`, or socket close clears the pending action. |
+| `disconnected` | The live socket closed unexpectedly. | Online play controls are paused. | `resyncing` after reconnect backoff. |
+| `resyncing` | The client is pulling a REST snapshot before reconnecting. | Online play controls are paused. | `connecting` for non-terminal snapshots or after a failed fetch attempt, and `terminal` for terminal snapshots. |
+| `terminal` | The authoritative game result is known. | Play controls are disabled; analysis/new-game actions may be offered. | No automatic reconnect. |
+| `access-denied` | The game or token is invalid or unavailable. | Show recovery actions such as `Configure New Game`. | User leaves the failed online URL or opens a valid invite. |
+| `protocol-error` | The server sent malformed or wrong-role data. | Stop reconnecting; require reload/new game. | User leaves the failed online URL or reloads after a fixed deploy. |
+| `server-error` | The server reported a non-access operational failure. | Stop reconnecting and show recovery actions. | User leaves the failed online URL or retries after server recovery. |
+
 ### Durable Public Read Model
 
 `OnlineGameSummary` schema v1 is the public read-model boundary for lobby/archive-style features. It is token-free, rebuildable from the event log, and safe to return from unauthenticated public listing endpoints when `visibility === "public"`.

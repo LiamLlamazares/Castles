@@ -197,10 +197,156 @@ async function verifyStaleActionContract(setup) {
   }
 }
 
+async function submitRawPlayerAction(gameId, token, clientActionId, action) {
+  const { WebSocket } = require("ws");
+  const socket = new WebSocket(buildWebSocketUrl(baseUrl));
+  try {
+    const joined = nextSocketMessage(socket, `raw action ${clientActionId} join response`);
+    await waitForSocketOpen(socket);
+    socket.send(
+      JSON.stringify(
+        versionedSocketMessage({
+          type: "join",
+          gameId,
+          token,
+        })
+      )
+    );
+    const joinedMessage = await joined;
+    assertProtocolVersionedBody(joinedMessage, `Raw action ${clientActionId} join response`);
+    assert(joinedMessage.type === "joined", `Raw action ${clientActionId} did not join`);
+
+    const actionResponse = nextSocketMessage(socket, `raw action ${clientActionId} response`);
+    socket.send(
+      JSON.stringify(
+        versionedSocketMessage({
+          type: "action",
+          clientActionId,
+          action,
+        })
+      )
+    );
+    const actionMessage = await actionResponse;
+    assertProtocolVersionedBody(actionMessage, `Raw action ${clientActionId} response`);
+    assert(actionMessage.type === "snapshot", `Raw action ${clientActionId} was not accepted`);
+    return actionMessage.snapshot;
+  } finally {
+    socket.close();
+  }
+}
+
 function clipboardInitScript() {
   return `
     (() => {
       ${browserButtonHelpers()}
+      const NativeWebSocket = window.WebSocket;
+      const nativeFetch = window.fetch.bind(window);
+      const sockets = [];
+      const originalSend = NativeWebSocket.prototype.send;
+      window.__castlesHoldActionSends = false;
+      window.__castlesHeldActionSends = [];
+      window.__castlesHoldOnlineSnapshotFetches = false;
+      window.__castlesHeldOnlineSnapshotFetches = [];
+      window.__castlesSmokeSocketCount = () => sockets.length;
+      window.__castlesSmokeOpenSocketCount = () =>
+        sockets.filter((socket) => socket.readyState === NativeWebSocket.OPEN).length;
+      window.__castlesSmokeHoldActionSends = () => {
+        window.__castlesHoldActionSends = true;
+        window.__castlesHeldActionSends = [];
+      };
+      window.__castlesSmokeDiscardHeldActionSends = () => {
+        const count = window.__castlesHeldActionSends.length;
+        window.__castlesHeldActionSends = [];
+        window.__castlesHoldActionSends = false;
+        return count;
+      };
+      window.__castlesSmokeReleaseHeldActionSends = () => {
+        const held = window.__castlesHeldActionSends.splice(0);
+        window.__castlesHoldActionSends = false;
+        for (const entry of held) {
+          originalSend.call(entry.socket, entry.data);
+        }
+        return held.length;
+      };
+      window.__castlesSmokeHeldActionCount = () => window.__castlesHeldActionSends.length;
+      window.__castlesSmokeHoldOnlineSnapshotFetches = () => {
+        window.__castlesHoldOnlineSnapshotFetches = true;
+        window.__castlesHeldOnlineSnapshotFetches = [];
+      };
+      window.__castlesSmokeHeldOnlineSnapshotFetchCount = () =>
+        window.__castlesHeldOnlineSnapshotFetches.length;
+      window.__castlesSmokeReleaseHeldOnlineSnapshotFetches = () => {
+        const held = window.__castlesHeldOnlineSnapshotFetches.splice(0);
+        window.__castlesHoldOnlineSnapshotFetches = false;
+        for (const entry of held) {
+          nativeFetch(entry.input, entry.init).then(entry.resolve, entry.reject);
+        }
+        return held.length;
+      };
+      window.__castlesSmokeDiscardHeldOnlineSnapshotFetches = () => {
+        const held = window.__castlesHeldOnlineSnapshotFetches.splice(0);
+        window.__castlesHoldOnlineSnapshotFetches = false;
+        for (const entry of held) {
+          entry.reject(new Error("Smoke discarded held online snapshot fetch."));
+        }
+        return held.length;
+      };
+      window.__castlesSmokeCloseOpenSockets = () => {
+        let closed = 0;
+        for (const socket of sockets) {
+          if (socket.readyState === NativeWebSocket.OPEN) {
+            socket.close(4000, "smoke reconnect");
+            closed += 1;
+          }
+        }
+        return closed;
+      };
+      NativeWebSocket.prototype.send = function(data) {
+        if (window.__castlesHoldActionSends) {
+          try {
+            const message = JSON.parse(String(data));
+            if (message?.type === "action") {
+              window.__castlesHeldActionSends.push({ socket: this, data });
+              return;
+            }
+          } catch {
+            // Non-JSON frames should pass through unchanged.
+          }
+        }
+        return originalSend.call(this, data);
+      };
+      window.fetch = function(input, init) {
+        if (window.__castlesHoldOnlineSnapshotFetches) {
+          const method = String(
+            init?.method ?? (input instanceof Request ? input.method : "GET")
+          ).toUpperCase();
+          const rawUrl =
+            typeof input === "string" || input instanceof URL
+              ? String(input)
+              : input?.url;
+          const url = new URL(rawUrl, window.location.href);
+          if (method === "GET" && /^\\/api\\/online\\/games\\/[^/]+$/.test(url.pathname)) {
+            return new Promise((resolve, reject) => {
+              window.__castlesHeldOnlineSnapshotFetches.push({ input, init, resolve, reject });
+            });
+          }
+        }
+        return nativeFetch(input, init);
+      };
+      function SmokeWebSocket(...args) {
+        const socket = new NativeWebSocket(...args);
+        sockets.push(socket);
+        return socket;
+      }
+      SmokeWebSocket.prototype = NativeWebSocket.prototype;
+      Object.setPrototypeOf(SmokeWebSocket, NativeWebSocket);
+      for (const key of ["CONNECTING", "OPEN", "CLOSING", "CLOSED"]) {
+        Object.defineProperty(SmokeWebSocket, key, {
+          value: NativeWebSocket[key],
+          configurable: true
+        });
+      }
+      window.WebSocket = SmokeWebSocket;
       let clipboardText = "";
       Object.defineProperty(window, "__castlesClipboard", {
         get: () => clipboardText,
@@ -261,6 +407,10 @@ class PlaywrightPageDriver {
 
   async waitForNoButton(text) {
     await waitUntil(`button ${text} to be absent`, async () => !(await this.hasButton(text)));
+  }
+
+  async evaluate(expression) {
+    return this.page.evaluate(expression);
   }
 
   async getClipboard() {
@@ -629,6 +779,123 @@ async function createOnlineGameFromUi(white) {
   return { gameId, opponentInvite, spectatorUrl };
 }
 
+async function verifyBrowserStaleActionUi(page, gameId) {
+  const whiteTokenStorageKey = JSON.stringify(`castles_online_join:${gameId}:w`);
+  const whiteToken = await page.evaluate(`sessionStorage.getItem(${whiteTokenStorageKey})`);
+  assert(whiteToken, "Browser stale-action smoke could not read the stored white token");
+
+  let released = false;
+  try {
+    await page.evaluate("window.__castlesSmokeHoldActionSends()");
+    await page.clickButton("Pass");
+    await waitUntil("held browser action send", () =>
+      page.evaluate("window.__castlesSmokeHeldActionCount() > 0")
+    );
+    await page.waitForText("Waiting for server");
+    assert(
+      !(await page.hasEnabledButton("Pass")),
+      "Pass should be disabled while a browser action is waiting for the server"
+    );
+    assert(
+      !(await page.hasEnabledButton("Resign")),
+      "Resign should be disabled while a browser action is waiting for the server"
+    );
+
+    const rawSnapshot = await submitRawPlayerAction(
+      gameId,
+      whiteToken,
+      "browser-smoke-raw-advance",
+      { type: "PASS", baseVersion: 0 }
+    );
+    assert(
+      rawSnapshot?.version === 1,
+      `Raw browser stale-action setup returned version ${rawSnapshot?.version}`
+    );
+
+    const releaseCount = await page.evaluate("window.__castlesSmokeReleaseHeldActionSends()");
+    released = true;
+    assert(releaseCount === 1, `Expected to release one held action, released ${releaseCount}`);
+    await waitUntil("browser stale-action rejection UI", async () => {
+      const text = await page.bodyText();
+      return (
+        text.includes("Online White") &&
+        text.includes("Live") &&
+        text.includes("Position updated from server. Try again.") &&
+        !text.includes("Waiting for server")
+      );
+    });
+    await fetchSpectatorSnapshot(gameId, 1);
+  } finally {
+    if (!released) {
+      await page.evaluate("window.__castlesSmokeDiscardHeldActionSends()").catch(() => {});
+    }
+  }
+}
+
+async function verifyBrowserReconnect(page) {
+  await waitUntil("browser websocket to be open before reconnect smoke", () =>
+    page.evaluate("window.__castlesSmokeOpenSocketCount() > 0")
+  );
+  await page.evaluate("window.__castlesSmokeHoldOnlineSnapshotFetches()");
+  const beforeCount = await page.evaluate("window.__castlesSmokeSocketCount()");
+  const closed = await page.evaluate("window.__castlesSmokeCloseOpenSockets()");
+  assert(closed > 0, "Reconnect smoke did not find an open browser WebSocket to close");
+  let released = false;
+  try {
+    await page.waitForText("Disconnected");
+    assert(
+      !(await page.hasEnabledButton("Pass")),
+      "Pass should be disabled while the browser is disconnected"
+    );
+    assert(
+      !(await page.hasEnabledButton("Resign")),
+      "Resign should be disabled while the browser is disconnected"
+    );
+    await page.waitForText("Resyncing");
+    await waitUntil("held reconnect REST snapshot fetch", () =>
+      page.evaluate("window.__castlesSmokeHeldOnlineSnapshotFetchCount() > 0")
+    );
+    assert(
+      !(await page.hasEnabledButton("Pass")),
+      "Pass should be disabled while the browser is resyncing"
+    );
+    assert(
+      !(await page.hasEnabledButton("Resign")),
+      "Resign should be disabled while the browser is resyncing"
+    );
+    const releasedFetches = await page.evaluate(
+      "window.__castlesSmokeReleaseHeldOnlineSnapshotFetches()"
+    );
+    released = true;
+    assert(releasedFetches > 0, "Reconnect smoke did not release a held snapshot fetch");
+    await waitUntil("browser websocket reconnect", async () => {
+      const afterCount = await page.evaluate("window.__castlesSmokeSocketCount()");
+      const text = await page.bodyText();
+      return afterCount > beforeCount && text.includes("Online White") && text.includes("Live");
+    });
+  } finally {
+    if (!released) {
+      await page.evaluate("window.__castlesSmokeDiscardHeldOnlineSnapshotFetches()").catch(() => {});
+    }
+  }
+}
+
+async function verifyAccessDeniedRecovery(driver, gameId) {
+  const denied = await driver.newPage();
+  await denied.goto(`${baseUrl}/?onlineGame=${encodeURIComponent(gameId)}&seat=w&token=bad-token`);
+  await denied.waitForText("Access denied");
+  assert(
+    !new URL(await denied.url()).searchParams.has("token"),
+    `Access-denied URL still contained a token: ${await denied.url()}`
+  );
+  await denied.waitForButton("Configure New Game");
+  await denied.clickButton("Configure New Game");
+  await waitUntil("access-denied recovery URL to clear online params", async () =>
+    !urlHasOnlineParams(await denied.url())
+  );
+  await denied.waitForButton("CREATE ONLINE GAME");
+}
+
 async function runFlow(driver) {
   await verifyHealth();
   const white = await driver.newPage();
@@ -637,6 +904,7 @@ async function runFlow(driver) {
 
   const { gameId, opponentInvite, spectatorUrl } = await createOnlineGameFromUi(white);
   const initialSnapshot = await fetchSpectatorSnapshot(gameId, 0);
+  await verifyAccessDeniedRecovery(driver, gameId);
   await verifyStaleActionContract(initialSnapshot.setup);
 
   await black.goto(opponentInvite);
@@ -660,7 +928,7 @@ async function runFlow(driver) {
     "Spectator should not have an enabled Resign control"
   );
 
-  await white.clickButton("Pass");
+  await verifyBrowserStaleActionUi(white, gameId);
   await waitUntil("white pass to persist", async () => {
     const snapshot = await fetchSpectatorSnapshot(gameId);
     return snapshot.version >= 1 ? snapshot : null;
@@ -670,6 +938,7 @@ async function runFlow(driver) {
   await white.waitForText("Online White");
   await white.waitForButton("Copy Opponent Invite");
   await white.waitForButton("Copy Spectator Link");
+  await verifyBrowserReconnect(white);
 
   await black.clickButton("Resign");
   await waitUntil("black resignation result", async () => {

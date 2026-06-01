@@ -104,13 +104,13 @@ Tests/review/deploy gates:
 
 Goal: formalize the client/server online protocol and make client state resilient.
 
-Status: started. The protocol envelope now requires `protocolVersion: 1` on WebSocket client messages, WebSocket server messages, and REST snapshot responses. The browser client now distinguishes live, resyncing, access-denied, protocol-error, server-error, terminal, disconnected, and connecting states instead of flattening every problem into a generic error. Action-scoped `rejected` frames now carry `clientActionId`, stale-action rejections keep the client live after applying the authoritative snapshot, play controls pause while reconnecting or waiting for action confirmation, and terminal REST resyncs stop reconnect attempts. Current smoke coverage verifies the stale-action server contract; remaining Phase 4 work is dedicated browser-client stale-action UX smoke, fuller browser smoke coverage for reconnect/access-denied paths, and a documented transition diagram.
+Status: in final verification. The protocol envelope now requires `protocolVersion: 1` on WebSocket client messages, WebSocket server messages, and REST snapshot responses. The browser client now distinguishes connected, resyncing, access-denied, protocol-error, server-error, terminal, disconnected, and connecting states instead of flattening every problem into a generic error. Action-scoped `rejected` frames now carry `clientActionId`, stale-action rejections keep the client live after applying the authoritative snapshot, play controls pause while reconnecting or waiting for action confirmation, and terminal REST resyncs stop reconnect attempts. Browser smoke coverage now checks stale-action server contracts, browser-client stale-action UX, real-game bad-token recovery, and forced WebSocket reconnects with visible disconnected/resyncing states. The client transition diagram is documented in [online-data-contract.md](online-data-contract.md).
 
 Work:
 
 - Version WebSocket and REST messages with explicit error, resync, stale-version, and reconnect semantics.
 - Separate local optimistic UI from authoritative online state.
-- Define client state machines for offline, connecting, joined, resyncing, terminal, and access-denied states. Current hooks expose explicit state labels and action-pending guards; a fuller transition diagram should be documented before public challenge/lobby launch.
+- Define client state machines for idle, connecting, connected, disconnected, resyncing, terminal, access-denied, protocol-error, and server-error states. Current hooks expose explicit state labels and action-pending guards, and the transition diagram is documented in the online data contract.
 - Add protocol documentation close to DTO definitions.
 
 Tests/review/deploy gates:
@@ -126,6 +126,8 @@ Goal: support intentional game creation and joining flows before public discover
 Work:
 
 - Benchmark challenge UX before implementation.
+- Add durable challenge and visibility lifecycle events before private challenges, public challenges, lobby listings, or archives depend on them.
+- Introduce a shared access-policy module so HTTP, WebSocket, spectator, challenge, and future lobby routes enforce the same visibility and role rules.
 - Build challenge creation, accept/decline/expire, copied links, access-denied, and pending states.
 - Define private, unlisted, and public visibility semantics.
 - Add clear UI for player link, spectator link, and challenged-user access.
@@ -133,7 +135,7 @@ Work:
 Tests/review/deploy gates:
 
 - Tests: challenge lifecycle, expiration, access roles, link handling, and browser e2e tests.
-- Review: UX/security review for confusing links, accidental public exposure, and unauthorized joins.
+- Review: contract/security review for challenge events, visibility changes, shared access policy, confusing links, accidental public exposure, and unauthorized joins.
 - Deploy: challenge records are observable, expirable, and recoverable after restart.
 
 ## Phase 6: Spectator, Archive, Lobby, Matchmaking
@@ -157,24 +159,25 @@ Tests/review/deploy gates:
 
 Goal: make the app feel navigable and sturdy before broader public discovery.
 
-Status: implemented for the current shell. Keep this phase as a regression checklist when adding future lobby, archive, challenge, spectator, or analysis screens.
+Status: partially implemented for the current shell and queued for a dedicated UI polish tranche. Keep this phase as a regression checklist when adding future lobby, archive, challenge, spectator, or analysis screens.
 
 This phase is required before calling the online experience Lichess-like. The current app shell has known rough edges: the side bar can feel awkward, the tutorial entry point is not placed naturally, routes/views can be hard to return from, save/progress affordances are not prominent enough, and some controls may overlap on smaller layouts.
 
 Work:
 
 - Benchmark Lichess navigation, game-page side panels, tutorial/help entry points, archive/lobby affordances, and mobile layouts; compare with at least one other mature online board-game service.
-- Audit the current app shell with screenshots across desktop and mobile viewports, including setup, game, tutorial/rules, library/save/progress, online spectator, and terminal states.
+- Audit the current app shell with screenshots across desktop and mobile viewports, including setup, game, tutorial/rules, library/save/progress, online spectator, pending action, access-denied, disconnected, resyncing, and terminal states.
 - Rework the side bar/navigation so users can reliably move between setup, game, tutorial/rules, saved games/library, online links, and future lobby/archive screens.
 - Place tutorial/help where a new player naturally expects it, while keeping the actual game screen primary.
 - Make save/progress controls discoverable without crowding turn controls or online status.
-- Fix overlapping controls, especially go-back/navigation affordances and mobile bottom controls.
+- Fix overlapping controls, especially go-back/navigation affordances, tutorial navigation, online status, and mobile bottom controls.
+- Scan for similar layout and navigation problems across all current pages before stopping at the first visible overlap.
 - Preserve game-state safety: navigation must not accidentally reset an online or local game without a clear explicit action.
 
 Tests/review/deploy gates:
 
 - Tests: route/view navigation tests, save/progress interaction tests, responsive layout assertions where practical, and browser smoke through create/join/spectate/terminal flows after shell changes.
-- Manual browser QA: Playwright screenshots for desktop and mobile before/after, with explicit checks that controls do not overlap and important text fits.
+- Manual browser QA: Playwright screenshots for desktop and mobile before/after, including access-denied, pending-action, disconnected, resyncing, and terminal online states, with explicit checks that controls do not overlap and important text fits.
 - Review: UX/accessibility review focused on navigation clarity, keyboard/focus order, mobile ergonomics, and consistency with Lichess-inspired expectations adapted for Castles.
 - Deploy: UI shell changes are shipped only after online smoke still passes and no local-save data is lost.
 
@@ -214,6 +217,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Expand browser smoke coverage for reconnect, access-denied recovery, and browser-client stale-action/double-submit UX behavior.
-2. Document the client state transition diagram next to the protocol contract before public challenge/lobby launch.
-3. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.
+1. Finish Phase 4 verification and review for protocol/client-state coverage, then commit and push.
+2. Begin Phase 5 challenge/access UX planning with Lichess-style challenge flows adapted to Castles.
+3. Pull Phase 6A UI shell polish forward once challenge/access surfaces are sketched, so sidebar, tutorial placement, save/progress navigation, go-back overlap, and mobile layout defects are fixed before broader lobby/archive work.
