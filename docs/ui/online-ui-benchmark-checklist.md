@@ -24,7 +24,7 @@ Phase 6B implementation status, 2026-06-01:
 - The first version lists only `visibility: "public"` summaries returned by `/api/online/games`; private and unlisted games remain off public browse surfaces.
 - Online players can deliberately publish an unlisted game to Watch and unlist it again; the control uses durable server state and does not expose bearer tokens.
 - Spectate handoff uses `?onlineGame=<id>&view=spectator` and strips player tokens, challenge parameters, PGN parameters, and URL fragments.
-- Public lobby creation, open seeks, accounts, ratings, chat, and matchmaking stay deferred until the backend contracts exist.
+- Public lobby creation, open seeks, accounts, ratings, chat, and matchmaking stayed deferred until their backend contracts existed; open seeks and Quick Match now remain limited to those contracts.
 
 Phase 6A third-pass implementation status, 2026-06-01:
 
@@ -45,7 +45,7 @@ Public Directory v1 implementation status, 2026-06-01:
 - Watch/Archive scan controls now include sort, clock filter, and result filter; filtered no-results states are distinct from truly empty public lists.
 - Focused Playwright screenshot audit covered desktop 1440 x 900, tablet 820 x 700, and mobile 430 x 932 Watch/Archive/filtered-empty states with no horizontal overflow. Artifacts are in `artifacts/ui-audit/phase6f-public-directory`.
 - Review follow-ups were fixed for filtered-empty pagination reachability, shown-count copy, archive result-filter reset coverage, and mid-width toolbar overflow risk.
-- Open seeks, matchmaking, accounts, ratings, chat, and public lobby creation remain deferred.
+- Accounts, ratings, chat, and broader matchmaking remain deferred until their backend contracts exist.
 
 Phase 6H Open Lobby Seeks implementation status, 2026-06-01:
 
@@ -80,6 +80,14 @@ Phase 6J Lobby refresh and filters status, 2026-06-01:
 - Full Playwright screenshot/layout audit covered owner-open Lobby, public Lobby row, pending accept, all-filters-active filtered empty, Watch, Archive, and owner-accepted states at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640 with no horizontal overflow, clipped controls, or interactive overlaps.
 - Screenshot artifacts and layout metrics are in `artifacts/ui-audit/phase6j-after`.
 
+Phase 6K Quick Match status, 2026-06-01:
+
+- Quick Match is a Lobby action that accepts a compatible open seek or lists the current setup as a normal open seek when no compatible seek exists.
+- The UI states the strict setup-matching rule instead of implying a broad player pool: current board, pieces, sanctuaries, pool, theme, clock, and scoring mode must match.
+- Quick Match uses the existing owned-seek panel for waiting games and the existing token-stripped online handoff for matched games.
+- Pending Quick Match disables conflicting Lobby actions, failure returns focus to the Quick Match button, and waiting moves keyboard focus to the owned-seek panel.
+- Final screenshot artifacts and layout metrics are in `artifacts/ui-audit/phase6k-quick-match`; desktop, tablet, large-mobile, 390 x 844, and 360 x 640 states passed with no horizontal overflow, clipped controls, or interactive overlaps.
+
 Phase 6G implementation status, 2026-06-01:
 
 - Navigation return paths now use explicit app helpers, and game-entry flows clear stale back stacks when opening live game, loaded analysis, spectator snapshots, archive replay, editor play, or restart.
@@ -94,12 +102,13 @@ Phase 6G implementation status, 2026-06-01:
 Next UI polish audit:
 
 - Keep lichess-style top destinations simple: Play, Learn, Watch, Library, and later Tools/Lobby when backed by server contracts.
+- After Phase 6K lands, run the Phase 6L full UI pass: compare Castles against fresh Lichess play/lobby/watch/learn screenshots, then fix sidebar shape, tutorial/Learn placement, return navigation, save/progress clarity, and overlapping go-back/menu/status controls.
 - Recheck drawer modal behavior after any new menu destination or banner is added.
 - Recheck tutorial mobile compactness after adding new lessons or tutorial controls.
 - Keep the game side panel contextual to clocks, turn phase, history, save/review, online links, and analysis; do not use it as general app navigation.
 - Check long online status/error text at 360 px, 390 px, and 430 px widths whenever challenge or connection copy changes.
 - Re-run the full navigation pass whenever Lobby, matchmaking, accounts, ratings, chat, or moderation add new destinations or persistent banners.
-- Keep Watch/Archive read-only and Lobby seek-based until matchmaking automation, accounts, ratings, and chat contracts exist.
+- Keep Watch/Archive read-only and Lobby seek/Quick-Match based until deeper matchmaking, accounts, ratings, and chat contracts exist.
 
 Reference pages checked:
 

@@ -140,6 +140,8 @@ const DEFAULT_CHALLENGE_EXPIRES_IN_MS = 24 * 60 * 60 * 1000;
 const MIN_CHALLENGE_EXPIRES_IN_MS = 5 * 60 * 1000;
 const MAX_CHALLENGE_EXPIRES_IN_MS = 7 * 24 * 60 * 60 * 1000;
 
+type PublicSessionIdentity = { kind: "session"; id: string };
+
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
@@ -645,6 +647,30 @@ function normalizeOpenSeekSeat(value: unknown): "w" | "b" | "random" | null {
   return value === "w" || value === "b" || value === "random" ? value : null;
 }
 
+function normalizeOnlineSetupForCreation(setup: OnlineGameSetupDTO): OnlineGameSetupDTO {
+  return setup.timeControl
+    ? setup
+    : { ...setup, timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL } };
+}
+
+function sortObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortObjectKeys);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, sortObjectKeys(entry)])
+  );
+}
+
+function canonicalSetupSignature(setup: OnlineGameSetupDTO): string {
+  return JSON.stringify(sortObjectKeys(setup));
+}
+
 function normalizePublicSessionIdentity(
   value: unknown,
   label: string
@@ -720,6 +746,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
   const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
   const createOpenSeekLimiter = new FixedWindowRateLimiter(20, 60_000);
+  const quickMatchLimiter = new FixedWindowRateLimiter(20, 60_000);
   const challengeActionLimiter = new FixedWindowRateLimiter(120, 10_000);
   const openSeekActionLimiter = new FixedWindowRateLimiter(120, 10_000);
   const publicDirectoryLimiter = new FixedWindowRateLimiter(240, 10_000);
@@ -729,12 +756,35 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
   const memoryOpenSeekEvents: OpenSeekEvent[] = [];
   const memoryOpenSeekCredentials = new Map<string, OpenSeekCredentials>();
+  const quickMatchSessionQueues = new Map<string, Promise<void>>();
 
   const log = (event: OnlineServerLogEvent): void => {
     try {
       options.onLog?.(event);
     } catch (error) {
       console.error("Online server log hook failed", error);
+    }
+  };
+
+  const runQuickMatchForSession = async <T>(
+    sessionId: string,
+    task: () => Promise<T>
+  ): Promise<T> => {
+    const previous = quickMatchSessionQueues.get(sessionId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.catch(() => undefined).then(() => gate);
+    quickMatchSessionQueues.set(sessionId, queued);
+    await previous.catch(() => undefined);
+    try {
+      return await task();
+    } finally {
+      release();
+      if (quickMatchSessionQueues.get(sessionId) === queued) {
+        quickMatchSessionQueues.delete(sessionId);
+      }
     }
   };
 
@@ -1119,6 +1169,30 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return paginateOpenSeekSummaries(await loadOpenSeekSummaries(), directoryOptions, now);
   };
 
+  const listQuickMatchOpenSeekCandidates = async (): Promise<OpenSeekSummary[]> => {
+    const candidates: OpenSeekSummary[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    do {
+      const directoryOptions: OpenSeekDirectoryListOptions = {
+        state: "open",
+        limit: ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
+        ...(cursor ? { cursor } : {}),
+      };
+      const directory = await listPublicOpenSeekDirectory(directoryOptions);
+      candidates.push(...directory.seeks);
+      if (!directory.nextCursor) break;
+      if (seenCursors.has(directory.nextCursor)) {
+        throw new Error("Open seek directory returned a repeated cursor.");
+      }
+      seenCursors.add(directory.nextCursor);
+      cursor = directory.nextCursor;
+    } while (cursor);
+
+    return candidates;
+  };
+
   const appendOpenSeekCreated = async (
     event: Extract<OpenSeekEvent, { type: "seek_created" }>,
     credentials: OpenSeekCredentials
@@ -1145,6 +1219,37 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
       throw error;
     }
+  };
+
+  const createOpenSeekForIdentity = async (
+    setup: OnlineGameSetupDTO,
+    creatorSeat: OpenSeekSeat,
+    creatorIdentity: PublicSessionIdentity,
+    expiresInMs: number,
+    createdAt: string
+  ): Promise<{ seekId: string; summary: OpenSeekSummary; token: string }> => {
+    let seekId = defaultOpenSeekIdFactory();
+    while (await loadOpenSeekSummary(seekId)) {
+      seekId = defaultOpenSeekIdFactory();
+    }
+    const expiresAt = new Date(Date.parse(createdAt) + expiresInMs).toISOString();
+    const creatorToken = defaultOpenSeekTokenFactory();
+    const event = createOpenSeekCreatedEvent(
+      {
+        type: "seek_created",
+        seekId,
+        creatorIdentity,
+        creatorSeat,
+        setup,
+        expiresAt,
+      },
+      { createdAt }
+    );
+    const summary = await appendOpenSeekCreated(event, {
+      creatorCredential: hashOnlineToken(creatorToken),
+      creatorIdentity,
+    });
+    return { seekId, summary, token: creatorToken };
   };
 
   const appendOpenSeekLifecycleEvent = async (
@@ -1351,6 +1456,95 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     options.acceptOpenSeekAndCreateGame
       ? options.acceptOpenSeekAndCreateGame(input)
       : createMemoryOpenSeekAcceptedGame(input);
+
+  const isActiveSeekForSession = (
+    summary: OpenSeekSummary,
+    identity: PublicSessionIdentity,
+    now: string
+  ): boolean => {
+    if (summary.status !== "open" && summary.status !== "accepted") return false;
+    if (summary.status === "open" && !canListOpenSeekSummary(summary, now)) return false;
+    return (
+      isSameOpenSeekIdentity(summary.creatorIdentity, identity) ||
+      (summary.acceptedBy ? isSameOpenSeekIdentity(summary.acceptedBy, identity) : false) ||
+      (summary.whiteIdentity ? isSameOpenSeekIdentity(summary.whiteIdentity, identity) : false) ||
+      (summary.blackIdentity ? isSameOpenSeekIdentity(summary.blackIdentity, identity) : false)
+    );
+  };
+
+  const loadActiveSeekForSession = async (
+    identity: PublicSessionIdentity,
+    now: string
+  ): Promise<OpenSeekSummary | null> => {
+    return (await loadOpenSeekSummaries()).find((summary) =>
+      isActiveSeekForSession(summary, identity, now)
+    ) ?? null;
+  };
+
+  const acceptOpenSeekSummary = async (
+    summary: OpenSeekSummary,
+    acceptorIdentity: PublicSessionIdentity,
+    acceptedAt: string
+  ) => {
+    if (
+      summary.status !== "open" ||
+      !canIdentityAcceptOpenSeek(summary, acceptorIdentity, acceptedAt)
+    ) {
+      throw new Error(`This open seek ${summary.seekId} is no longer open.`);
+    }
+    const creatorSeat =
+      summary.creatorSeat === "random"
+        ? randomBytes(1)[0] % 2 === 0
+          ? "w"
+          : "b"
+        : summary.creatorSeat;
+    const whiteIdentity = creatorSeat === "w" ? summary.creatorIdentity : acceptorIdentity;
+    const blackIdentity = creatorSeat === "w" ? acceptorIdentity : summary.creatorIdentity;
+    let gameId = `game_${randomBytes(9).toString("base64url")}`;
+    while (service.getRoom(gameId)) {
+      gameId = `game_${randomBytes(9).toString("base64url")}`;
+    }
+    const acceptorToken = defaultOpenSeekTokenFactory();
+    const clock = createInitialClockRecord(summary.setup, gameId);
+    const gameCreatedEvent = createOnlineGameCreatedEvent(
+      {
+        type: "game_created",
+        gameId,
+        setup: summary.setup,
+        clock,
+      },
+      { createdAt: acceptedAt }
+    );
+    const result = await acceptOpenSeekAndCreateGame({
+      seekId: summary.seekId,
+      acceptedBy: acceptorIdentity,
+      acceptedAt,
+      gameCreatedEvent,
+      whiteIdentity,
+      blackIdentity,
+      acceptorCredential: hashOnlineToken(acceptorToken),
+    });
+    service.replaceRoom(result.gameRecord);
+    const acceptedGameId = result.seekSummary.gameId;
+    if (!acceptedGameId) {
+      throw new Error(`Accepted open seek ${summary.seekId} did not include a game id.`);
+    }
+    return {
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "acceptor" as const,
+      summary: result.seekSummary,
+      gameInvite: {
+        gameId: acceptedGameId,
+        seat: result.gameSeats.acceptor,
+        token: acceptorToken,
+        url: buildTokenlessOnlineGameUrl(
+          options.publicBaseUrl,
+          acceptedGameId,
+          result.gameSeats.acceptor
+        ),
+      },
+    };
+  };
 
   const persistActionAccepted = async (
     gameId: string,
@@ -1662,39 +1856,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
-    const normalizedSetup = setup.value.timeControl
-      ? setup.value
-      : { ...setup.value, timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL } };
-    let seekId = defaultOpenSeekIdFactory();
-    while (await loadOpenSeekSummary(seekId)) {
-      seekId = defaultOpenSeekIdFactory();
-    }
+    const normalizedSetup = normalizeOnlineSetupForCreation(setup.value);
     const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
-    const expiresAt = new Date(Date.parse(createdAt) + expiry.value).toISOString();
-    const creatorToken = defaultOpenSeekTokenFactory();
 
     try {
-      const event = createOpenSeekCreatedEvent(
-        {
-          type: "seek_created",
-          seekId,
-          creatorIdentity: creatorIdentity.identity,
-          creatorSeat,
-          setup: normalizedSetup,
-          expiresAt,
-        },
-        { createdAt }
+      const created = await createOpenSeekForIdentity(
+        normalizedSetup,
+        creatorSeat,
+        creatorIdentity.identity,
+        expiry.value,
+        createdAt
       );
-      const summary = await appendOpenSeekCreated(event, {
-        creatorCredential: hashOnlineToken(creatorToken),
-        creatorIdentity: creatorIdentity.identity,
-      });
       res.status(201).json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        seekId,
-        summary,
+        seekId: created.seekId,
+        summary: created.summary,
         creator: {
-          token: creatorToken,
+          token: created.token,
         },
       });
     } catch (error) {
@@ -1834,54 +2012,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const creatorSeat =
-        summary.creatorSeat === "random"
-          ? randomBytes(1)[0] % 2 === 0
-            ? "w"
-            : "b"
-          : summary.creatorSeat;
-      const whiteIdentity = creatorSeat === "w" ? summary.creatorIdentity : acceptorIdentity.identity;
-      const blackIdentity = creatorSeat === "w" ? acceptorIdentity.identity : summary.creatorIdentity;
-      let gameId = `game_${randomBytes(9).toString("base64url")}`;
-      while (service.getRoom(gameId)) {
-        gameId = `game_${randomBytes(9).toString("base64url")}`;
-      }
-      const acceptorToken = defaultOpenSeekTokenFactory();
-      const clock = createInitialClockRecord(summary.setup, gameId);
-      const gameCreatedEvent = createOnlineGameCreatedEvent(
-        {
-          type: "game_created",
-          gameId,
-          setup: summary.setup,
-          clock,
-        },
-        { createdAt: acceptedAt }
-      );
-      const result = await acceptOpenSeekAndCreateGame({
-        seekId: summary.seekId,
-        acceptedBy: acceptorIdentity.identity,
-        acceptedAt,
-        gameCreatedEvent,
-        whiteIdentity,
-        blackIdentity,
-        acceptorCredential: hashOnlineToken(acceptorToken),
-      });
-      service.replaceRoom(result.gameRecord);
-      res.json({
-        protocolVersion: ONLINE_PROTOCOL_VERSION,
-        role: "acceptor",
-        summary: result.seekSummary,
-        gameInvite: {
-          gameId: result.seekSummary.gameId,
-          seat: result.gameSeats.acceptor,
-          token: acceptorToken,
-          url: buildTokenlessOnlineGameUrl(
-            options.publicBaseUrl,
-            result.seekSummary.gameId!,
-            result.gameSeats.acceptor
-          ),
-        },
-      });
+      res.json(await acceptOpenSeekSummary(summary, acceptorIdentity.identity, acceptedAt));
     } catch (error) {
       const terminal = openSeekTerminalError(error);
       res.status(terminal ? 409 : 503).json({
@@ -1890,6 +2021,114 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           message: terminal
             ? "This open seek is no longer open."
             : "The open seek could not be accepted.",
+        },
+      });
+    }
+  });
+
+  app.post("/api/online/matchmaking/quick", async (req, res) => {
+    if (!quickMatchLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many quick match requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    const setup = validateOnlineGameSetup(req.body?.setup);
+    if (!setup.ok) {
+      res.status(400).json({ error: setup.error });
+      return;
+    }
+    const sessionIdentity = normalizePublicSessionIdentity(req.body?.sessionId, "sessionId");
+    if (!sessionIdentity.ok) {
+      res.status(400).json({ error: sessionIdentity.error });
+      return;
+    }
+    const expiry = parseChallengeExpiry(req.body?.expiresInMs);
+    if (!expiry.ok) {
+      res.status(400).json({ error: expiry.error });
+      return;
+    }
+
+    const normalizedSetup = normalizeOnlineSetupForCreation(setup.value);
+    const setupSignature = canonicalSetupSignature(normalizedSetup);
+
+    try {
+      const response = await runQuickMatchForSession(sessionIdentity.identity.id, async () => {
+        const checkedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+        if (await loadActiveSeekForSession(sessionIdentity.identity, checkedAt)) {
+          return {
+            status: 409,
+            body: {
+              error: {
+                code: "existing_open_seek",
+                message: "This session already has an active open seek.",
+              },
+            },
+          };
+        }
+
+        const candidates = await listQuickMatchOpenSeekCandidates();
+        for (const candidate of candidates) {
+          if (isSameOpenSeekIdentity(candidate.creatorIdentity, sessionIdentity.identity)) continue;
+          if (canonicalSetupSignature(candidate.setup) !== setupSignature) continue;
+          const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+          try {
+            const accepted = await acceptOpenSeekSummary(candidate, sessionIdentity.identity, acceptedAt);
+            return {
+              status: 200,
+              body: {
+                ...accepted,
+                outcome: "matched",
+              },
+            };
+          } catch (error) {
+            if (openSeekTerminalError(error)) continue;
+            throw error;
+          }
+        }
+
+        const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+        if (await loadActiveSeekForSession(sessionIdentity.identity, createdAt)) {
+          return {
+            status: 409,
+            body: {
+              error: {
+                code: "existing_open_seek",
+                message: "This session already has an active open seek.",
+              },
+            },
+          };
+        }
+        const created = await createOpenSeekForIdentity(
+          normalizedSetup,
+          "random",
+          sessionIdentity.identity,
+          expiry.value,
+          createdAt
+        );
+        return {
+          status: 200,
+          body: {
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            outcome: "waiting",
+            role: "creator",
+            seekId: created.seekId,
+            summary: created.summary,
+            creator: { token: created.token },
+          },
+        };
+      });
+      res.status(response.status).json(response.body);
+    } catch (error) {
+      console.error("Failed to start quick match", error);
+      res.status(503).json({
+        error: {
+          code: "persistence_failed",
+          message: "Quick match could not be started.",
         },
       });
     }

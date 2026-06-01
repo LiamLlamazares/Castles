@@ -1,4 +1,6 @@
+import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import OnlineGameBrowser from "../OnlineGameBrowser";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
@@ -128,6 +130,349 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Timed 20+20");
     expect(row).toHaveTextContent("Victory points");
     expect(within(row).getByRole("button", { name: "Accept open seek seek_public_open" })).toBeInTheDocument();
+  });
+
+  it("runs quick match from the lobby with exact setup copy and pending controls", async () => {
+    let resolveQuickMatch!: () => void;
+    const quickMatchPromise = new Promise<"waiting">((resolve) => {
+      resolveQuickMatch = () => resolve("waiting");
+    });
+    const onQuickMatch = vi.fn().mockReturnValue(quickMatchPromise);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([openSeek()]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onCreateSeek={vi.fn()}
+        onQuickMatch={onQuickMatch}
+        quickMatchSetupSummary={{
+          boardRadius: 7,
+          clock: "Timed 20+20",
+          scoring: "Victory points",
+        }}
+      />
+    );
+
+    await screen.findByText("seek_public_open");
+    expect(screen.getByText("Uses your exact current Play setup")).toBeInTheDocument();
+    const setupSummary = screen.getByLabelText("Quick match setup summary");
+    expect(within(setupSummary).getByText("Radius 7")).toBeInTheDocument();
+    expect(within(setupSummary).getByText("Timed 20+20")).toBeInTheDocument();
+    expect(within(setupSummary).getByText("Victory points")).toBeInTheDocument();
+    expect(screen.getByText(/Current board, pieces, sanctuaries, pool, theme, clock, and scoring mode must match/i))
+      .toBeInTheDocument();
+
+    const quickMatch = screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    });
+    fireEvent.click(quickMatch);
+
+    expect(onQuickMatch).toHaveBeenCalledOnce();
+    expect(quickMatch).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create Open Seek" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking compatible open seeks");
+
+    await act(async () => {
+      resolveQuickMatch();
+      await quickMatchPromise;
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(/open seek is listed/i);
+  });
+
+  it("keeps conflicting lobby actions disabled after a matched quick match result", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([openSeek()]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onCreateSeek={vi.fn()}
+        onQuickMatch={vi.fn().mockResolvedValue("matched")}
+      />
+    );
+
+    await screen.findByText("seek_public_open");
+    fireEvent.click(screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Match found. Opening game...");
+    expect(screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create Open Seek" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh open seeks" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Accept open seek seek_public_open" })).toBeDisabled();
+  });
+
+  it("starts quick match from the keyboard and moves focus to the owned seek after waiting", async () => {
+    const user = userEvent.setup();
+    const waitingSeek = openSeek({ seekId: "seek_keyboard_waiting" });
+
+    function Harness() {
+      const [ownedSeekResponse, setOwnedSeekResponse] = React.useState<{
+        role: "creator";
+        summary: OpenSeekSummary;
+      } | null>(null);
+      return (
+        <OnlineGameBrowser
+          initialTab="lobby"
+          loadGames={vi.fn()}
+          loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+          onBack={vi.fn()}
+          onSpectate={vi.fn()}
+          onReplay={vi.fn()}
+          onAcceptSeek={vi.fn()}
+          onCreateSeek={vi.fn()}
+          ownedSeekIds={ownedSeekResponse ? [ownedSeekResponse.summary.seekId] : []}
+          ownedSeekResponse={ownedSeekResponse}
+          onQuickMatch={async (): Promise<"waiting"> => {
+            setOwnedSeekResponse({ role: "creator", summary: waitingSeek });
+            return "waiting";
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    await screen.findByText("No open seeks yet.");
+    const quickMatch = screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    });
+    quickMatch.focus();
+    await user.keyboard("{Enter}");
+
+    const ownerPanel = await screen.findByRole("region", { name: "Your open seek" });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "No compatible open seek found. Your open seek is listed for someone to accept."
+    );
+    expect(ownerPanel).toHaveFocus();
+  });
+
+  it("announces owned-seek actions after a waiting quick match", async () => {
+    const waitingSeek = openSeek({ seekId: "seek_waiting_cancel" });
+
+    function Harness() {
+      const [ownedSeekResponse, setOwnedSeekResponse] = React.useState<{
+        role: "creator";
+        summary: OpenSeekSummary;
+      } | null>(null);
+      return (
+        <OnlineGameBrowser
+          initialTab="lobby"
+          loadGames={vi.fn()}
+          loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+          onBack={vi.fn()}
+          onSpectate={vi.fn()}
+          onReplay={vi.fn()}
+          onAcceptSeek={vi.fn()}
+          onCancelSeek={async () => setOwnedSeekResponse(null)}
+          ownedSeekIds={ownedSeekResponse ? [ownedSeekResponse.summary.seekId] : []}
+          ownedSeekResponse={ownedSeekResponse}
+          onQuickMatch={async (): Promise<"waiting"> => {
+            setOwnedSeekResponse({ role: "creator", summary: waitingSeek });
+            return "waiting";
+          }}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    await screen.findByText("No open seeks yet.");
+    fireEvent.click(screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    }));
+    expect(await screen.findByRole("status")).toHaveTextContent("listed for someone to accept");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel your open seek" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Open seek cancelled.");
+  });
+
+  it("replaces waiting quick-match copy when a background refresh marks the owned seek accepted", async () => {
+    const waitingSeek = openSeek({ seekId: "seek_waiting_accepted" });
+    const acceptedSeek = openSeek({
+      seekId: "seek_waiting_accepted",
+      status: "accepted",
+      updatedAt: "2026-06-01T12:02:00.000Z",
+      acceptedAt: "2026-06-01T12:02:00.000Z",
+      acceptedBy: { kind: "session", id: "acceptor" },
+      gameId: "game_waiting_accepted",
+      whiteIdentity: waitingSeek.creatorIdentity,
+      blackIdentity: { kind: "session", id: "acceptor" },
+      lastEventId: "seek_waiting_accepted_evt_accepted",
+    });
+
+    function Harness() {
+      const [ownedSeekResponse, setOwnedSeekResponse] = React.useState<{
+        role: "creator";
+        summary: OpenSeekSummary;
+        gameInvite?: { gameId: string; seat: "w" | "b"; token: string; url: string };
+      } | null>(null);
+      return (
+        <>
+          <OnlineGameBrowser
+            initialTab="lobby"
+            loadGames={vi.fn()}
+            loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+            onBack={vi.fn()}
+            onSpectate={vi.fn()}
+            onReplay={vi.fn()}
+            onAcceptSeek={vi.fn()}
+            onJoinOwnedSeek={vi.fn()}
+            ownedSeekIds={ownedSeekResponse ? [ownedSeekResponse.summary.seekId] : []}
+            ownedSeekResponse={ownedSeekResponse}
+            onQuickMatch={async (): Promise<"waiting"> => {
+              setOwnedSeekResponse({ role: "creator", summary: waitingSeek });
+              return "waiting";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() =>
+              setOwnedSeekResponse({
+                role: "creator",
+                summary: acceptedSeek,
+                gameInvite: {
+                  gameId: "game_waiting_accepted",
+                  seat: "w",
+                  token: "join-token",
+                  url: "https://castles.example/?onlineGame=game_waiting_accepted&seat=w",
+                },
+              })
+            }
+          >
+            Mock accepted refresh
+          </button>
+        </>
+      );
+    }
+
+    render(<Harness />);
+
+    await screen.findByText("No open seeks yet.");
+    fireEvent.click(screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    }));
+    expect(await screen.findByRole("status")).toHaveTextContent("listed for someone to accept");
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock accepted refresh" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Your open seek was accepted. Join the game from your open seek panel."
+      );
+    });
+    expect(screen.getByRole("button", { name: "Join accepted game" })).toBeInTheDocument();
+  });
+
+  it("restores quick match focus after failures", async () => {
+    const onQuickMatch = vi.fn().mockRejectedValue(new Error("offline"));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onCreateSeek={vi.fn()}
+        onQuickMatch={onQuickMatch}
+      />
+    );
+
+    await screen.findByText("No open seeks yet.");
+    const quickMatch = screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    });
+    quickMatch.focus();
+    fireEvent.click(quickMatch);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Could not start quick match.");
+    expect(quickMatch).toHaveFocus();
+  });
+
+  it("disables quick match while an owned seek is restoring, open, or accepted", async () => {
+    const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([]));
+    const { rerender } = render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        ownedSeekIds={["seek_mine"]}
+        ownedSeekResponse={null}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onQuickMatch={vi.fn()}
+      />
+    );
+
+    await screen.findByText("No open seeks yet.");
+    expect(screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    })).toBeDisabled();
+
+    rerender(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        ownedSeekIds={["seek_mine"]}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: openSeek({ seekId: "seek_mine" }),
+        }}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onQuickMatch={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    })).toBeDisabled();
+
+    rerender(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        ownedSeekIds={["seek_mine"]}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: openSeek({
+            seekId: "seek_mine",
+            status: "accepted",
+            acceptedAt: "2026-06-01T12:04:00.000Z",
+            acceptedBy: { kind: "session", id: "acceptor" },
+            gameId: "game_mine",
+            whiteIdentity: { kind: "session", id: "creator" },
+            blackIdentity: { kind: "session", id: "acceptor" },
+          }),
+        }}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onQuickMatch={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", {
+      name: "Quick Match: accept a compatible open seek or list yours",
+    })).toBeDisabled();
   });
 
   it("refreshes the public open seek lobby on demand", async () => {

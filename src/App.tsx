@@ -56,6 +56,7 @@ import {
   parseOnlineSpectatorParams,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
+  startQuickMatch,
   updateOnlineGameVisibility,
   OnlineChallengeParams,
   OnlineChallengeResponse,
@@ -81,6 +82,9 @@ import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'watch';
 type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
+
+const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
+const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
 
 interface GameConfig {
   board?: Board;
@@ -488,6 +492,40 @@ function App() {
             ? 'Back to Library'
             : 'Back to game';
 
+  const quickMatchSetup = useMemo(() => {
+    if (!gameConfig.board || !gameConfig.pieces) return null;
+    const timeControl = gameConfig.timeControl ?? { ...DEFAULT_QUICK_MATCH_TIME_CONTROL };
+    return serializeOnlineGameSetup({
+      board: gameConfig.board,
+      pieces: gameConfig.pieces,
+      sanctuaries: gameConfig.sanctuaries ?? [],
+      timeControl,
+      sanctuarySettings: gameConfig.sanctuarySettings,
+      gameRules: gameConfig.gameRules,
+      initialPoolTypes: gameConfig.initialPoolTypes,
+      pieceTheme: gameConfig.pieceTheme,
+    });
+  }, [
+    gameConfig.board,
+    gameConfig.gameRules,
+    gameConfig.initialPoolTypes,
+    gameConfig.pieceTheme,
+    gameConfig.pieces,
+    gameConfig.sanctuaries,
+    gameConfig.sanctuarySettings,
+    gameConfig.timeControl,
+  ]);
+
+  const quickMatchSetupSummary = useMemo(() => {
+    if (!quickMatchSetup) return undefined;
+    const clock = quickMatchSetup.timeControl ?? DEFAULT_QUICK_MATCH_TIME_CONTROL;
+    return {
+      boardRadius: quickMatchSetup.board.config.nSquares,
+      clock: `Timed ${clock.initial}+${clock.increment}`,
+      scoring: quickMatchSetup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control",
+    };
+  }, [quickMatchSetup]);
+
   const handleStartGame = (
     board: Board, 
     pieces: Piece[], 
@@ -800,6 +838,55 @@ function App() {
     cancelPendingReplay();
     const response = await acceptOpenSeek(seekId);
     enterOnlineGameFromInvite(response.gameInvite);
+  };
+
+  const handleQuickMatch = async () => {
+    if (!quickMatchSetup) {
+      throw new Error("No current game setup is available for quick match.");
+    }
+    cancelPendingReplay();
+    const response = await startQuickMatch(quickMatchSetup);
+    if (response.outcome === "matched") {
+      window.setTimeout(() => {
+        enterOnlineGameFromInvite(response.gameInvite);
+      }, QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS);
+      return "matched" as const;
+    }
+
+    clearAutosave();
+    clearOnlineUrl();
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
+    if (onlineJoin) {
+      forgetOnlineJoinParams(onlineJoin);
+      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
+    }
+    if (onlineSnapshot) {
+      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
+    }
+    clearOpenSeekState();
+    const creator = {
+      seekId: response.seekId,
+      token: response.creator.token,
+    };
+    rememberOpenSeekCreatorParams(creator);
+    setOnlineJoin(null);
+    setOnlineSpectator(null);
+    setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
+    setOpenSeekCreator(creator);
+    setOpenSeekResponse({
+      role: "creator",
+      summary: response.summary,
+    });
+    setOnlineBrowserInitialTab("lobby");
+    setViewStack(['game']);
+    setView("watch");
+    return "waiting" as const;
   };
 
   const handleCancelOpenSeek = async (seekId: string) => {
@@ -1533,6 +1620,8 @@ function App() {
             setViewStack(['watch']);
             setView('setup');
           }}
+          onQuickMatch={quickMatchSetup ? handleQuickMatch : undefined}
+          quickMatchSetupSummary={quickMatchSetupSummary}
           onAcceptSeek={handleAcceptOpenSeek}
           onCancelSeek={handleCancelOpenSeek}
           ownedSeekIds={openSeekCreator ? [openSeekCreator.seekId] : []}

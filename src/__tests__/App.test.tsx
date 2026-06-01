@@ -1,3 +1,4 @@
+import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../App";
 import { SanctuaryType } from "../Constants";
@@ -62,6 +63,9 @@ vi.mock("../components/Game", () => ({
       moveTree?: unknown;
       sanctuarySettings?: { unlockTurn: number; cooldown: number };
       initialPoolTypes?: unknown[];
+      gameRules?: { vpModeEnabled: boolean };
+      pieceTheme?: string;
+      timeControl?: { initial: number; increment: number };
     }) => void;
   }) => (
     <div>
@@ -81,6 +85,23 @@ vi.mock("../components/Game", () => ({
       </button>
       <button type="button" onClick={props.onRestart}>
         Mock Restart Game
+      </button>
+      <button
+        type="button"
+        onClick={() => props.onLoadGame({
+          board: getStartingBoard(8),
+          pieces: getStartingPieces(8),
+          turnCounter: 0,
+          sanctuaries: [],
+          moveTree: new MoveTree(),
+          sanctuarySettings: { unlockTurn: 2, cooldown: 9 },
+          initialPoolTypes: [SanctuaryType.WolfCovenant],
+          gameRules: { vpModeEnabled: true },
+          pieceTheme: "Castles",
+          timeControl: { initial: 15, increment: 5 },
+        })}
+      >
+        Mock Load Rich Game
       </button>
       <button type="button" onClick={props.onTutorial}>
         Open Tutorial
@@ -203,6 +224,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onCreateSeek,
     onAcceptSeek,
     onCancelSeek,
+    onQuickMatch,
+    quickMatchSetupSummary,
     ownedSeekIds = [],
     ownedSeekResponse,
     onRefreshOwnedSeek,
@@ -219,17 +242,27 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onCreateSeek?: () => void;
     onAcceptSeek?: (seekId: string) => void;
     onCancelSeek?: (seekId: string) => void;
+    onQuickMatch?: () => "matched" | "waiting" | void | Promise<"matched" | "waiting" | void>;
+    quickMatchSetupSummary?: { boardRadius: number; clock: string; scoring: string };
     ownedSeekIds?: string[];
     ownedSeekResponse?: { summary: { status: string } };
     onRefreshOwnedSeek?: () => void;
     onJoinOwnedSeek?: () => void;
     backLabel?: string;
-  }) => (
+  }) => {
+    const [quickMatchStatus, setQuickMatchStatus] = React.useState("");
+    return (
     <div>
       <div>Online Browser Ready</div>
       <div>Initial tab: {initialTab ?? "none"}</div>
       <div>Owned seek ids: {ownedSeekIds.join(",") || "none"}</div>
       <div>Owned seek status: {ownedSeekResponse?.summary.status ?? "none"}</div>
+      {quickMatchStatus && <div>Mock quick match status: {quickMatchStatus}</div>}
+      <div>
+        Quick match summary: {quickMatchSetupSummary
+          ? `Radius ${quickMatchSetupSummary.boardRadius}; ${quickMatchSetupSummary.clock}; ${quickMatchSetupSummary.scoring}`
+          : "none"}
+      </div>
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
@@ -246,6 +279,28 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       {onCancelSeek && (
         <button type="button" onClick={() => onCancelSeek("seek_public_open")}>
           Cancel open seek
+        </button>
+      )}
+      {onQuickMatch && (
+        <button
+          type="button"
+          onClick={async () => {
+            setQuickMatchStatus("Checking compatible open seeks...");
+            const outcome = await onQuickMatch();
+            if (outcome === "matched") {
+              setQuickMatchStatus("Match found. Opening game...");
+            } else if (outcome === "waiting") {
+              setQuickMatchStatus("No compatible open seek found. Your open seek is listed for someone to accept.");
+            }
+          }}
+          disabled={
+            ownedSeekIds.length > 0 &&
+            (!ownedSeekResponse ||
+              ownedSeekResponse.summary.status === "open" ||
+              ownedSeekResponse.summary.status === "accepted")
+          }
+        >
+          Quick Match
         </button>
       )}
       {onRefreshOwnedSeek && (
@@ -280,7 +335,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
         Analyze archived game
       </button>
     </div>
-  ),
+    );
+  },
 }));
 
 vi.mock("../components/GameLibrary", () => ({
@@ -846,6 +902,141 @@ describe("App game setup lifecycle", () => {
     expect(window.location.search).not.toContain("onlineChallenge=");
     expect(window.location.hash).toBe("");
     expect(screen.getByRole("status")).toHaveTextContent("Connecting online game");
+  });
+
+  it("starts quick match from the current setup and lists a fallback seek without URL tokens", async () => {
+    const waitingSummary = openSeekSummary({
+      seekId: "seek_quick_waiting",
+      setup: {
+        board: { config: { nSquares: 7 }, castles: [] },
+        pieces: [],
+        sanctuaries: [],
+        timeControl: { initial: 15, increment: 5 },
+        sanctuarySettings: { unlockTurn: 2, cooldown: 9 },
+        gameRules: { vpModeEnabled: true },
+        initialPoolTypes: [SanctuaryType.WolfCovenant],
+        pieceTheme: "Castles",
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          outcome: "waiting",
+          role: "creator",
+          seekId: "seek_quick_waiting",
+          summary: waitingSummary,
+          creator: { token: "quick-creator-token" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    expect(screen.getByText("Quick match summary: Radius 7; Timed 15+5; Victory points")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Quick Match" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/matchmaking/quick",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(request.body));
+    expect(body.sessionId).toEqual(expect.any(String));
+    expect(body.setup.board.config.nSquares).toBe(7);
+    expect(body.setup.timeControl).toEqual({ initial: 15, increment: 5 });
+    expect(body.setup.sanctuarySettings).toEqual({ unlockTurn: 2, cooldown: 9 });
+    expect(body.setup.gameRules).toEqual({ vpModeEnabled: true });
+    expect(body.setup.initialPoolTypes).toEqual([SanctuaryType.WolfCovenant]);
+    expect(body.setup.pieceTheme).toBe("Castles");
+    expect(JSON.stringify(body)).not.toContain("quick-creator-token");
+    expect(sessionStorage.getItem("castles_online_seek_creator:seek_quick_waiting")).toBe("quick-creator-token");
+    expect(screen.getByText("Initial tab: lobby")).toBeInTheDocument();
+    expect(screen.getByText("Owned seek ids: seek_quick_waiting")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("opens quick matched games through the token-stripped online handoff", async () => {
+    const acceptedSummary = openSeekSummary({
+      seekId: "seek_quick_matched",
+      status: "accepted",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      acceptedAt: "2026-06-01T12:04:00.000Z",
+      acceptedBy: { kind: "session", id: "acceptor-session" },
+      gameId: "game_quick_matched",
+      whiteIdentity: { kind: "session", id: "creator-session" },
+      blackIdentity: { kind: "session", id: "acceptor-session" },
+      lastEventId: "seek_evt_quick_accepted",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            outcome: "matched",
+            role: "acceptor",
+            summary: acceptedSummary,
+            gameInvite: {
+              gameId: "game_quick_matched",
+              seat: "b",
+              token: "quick-join-token",
+              url: "https://castles.example/?onlineGame=game_quick_matched&seat=b",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ schemaVersion: 1, games: [] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quick Match" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/matchmaking/quick",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    expect(await screen.findByText("Mock quick match status: Match found. Opening game...")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("Connecting online game");
+    });
+    expect(sessionStorage.getItem("castles_online_join:game_quick_matched:b")).toBe("quick-join-token");
+    expect(window.location.search).toContain("onlineGame=game_quick_matched");
+    expect(window.location.search).toContain("seat=b");
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("keeps quick match disabled while a creator-owned seek is restoring", async () => {
+    rememberOpenSeekCreatorParams({ seekId: "seek_restore_pending", token: "creator-token" });
+    const pendingFetch = deferredResponse();
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(pendingFetch.promise));
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+
+    expect(screen.getByText("Owned seek ids: seek_restore_pending")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quick Match" })).toBeDisabled();
   });
 
   it("lets creators refresh an accepted lobby seek and join through the token-stripped handoff", async () => {

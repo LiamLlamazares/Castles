@@ -33,6 +33,7 @@ import {
   resolveOnlineJoinParams,
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
+  startQuickMatch,
   updateOnlineGameVisibility,
   forgetOnlineChallengeParams,
   forgetOnlineJoinParams,
@@ -563,6 +564,165 @@ describe("online client helpers", () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       "/api/online/seeks?state=open&limit=10&cursor=opaque-cursor&creatorSeat=w&clock=timed&vp=enabled"
     );
+  });
+
+  it("starts quick match and validates matched and waiting outcomes", async () => {
+    const setup = snapshot().setup;
+    const baseSummary = {
+      schemaVersion: 1,
+      seekId: "seek_quick",
+      creatorIdentity: { kind: "session", id: "anon_creator" },
+      creatorSeat: "random",
+      setup,
+      createdAt: "2026-06-01T12:00:00.000Z",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+      expiresAt: "2026-06-01T12:10:00.000Z",
+      status: "open",
+      lastEventId: "seek_quick_created",
+    };
+    const acceptedSummary = {
+      ...baseSummary,
+      status: "accepted",
+      updatedAt: "2026-06-01T12:01:00.000Z",
+      acceptedAt: "2026-06-01T12:01:00.000Z",
+      acceptedBy: { kind: "session", id: "anon_acceptor" },
+      gameId: "game_quick",
+      whiteIdentity: baseSummary.creatorIdentity,
+      blackIdentity: { kind: "session", id: "anon_acceptor" },
+      lastEventId: "seek_quick_accepted",
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          outcome: "matched",
+          role: "acceptor",
+          summary: acceptedSummary,
+          gameInvite: {
+            gameId: "game_quick",
+            seat: "b",
+            token: "acceptor-token",
+            url: "https://castles.example/?onlineGame=game_quick&seat=b",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          outcome: "waiting",
+          role: "creator",
+          seekId: "seek_quick",
+          summary: baseSummary,
+          creator: { token: "creator-token" },
+        }),
+      });
+
+    await expect(
+      startQuickMatch(setup, { sessionId: "anon_acceptor" }, fetchImpl as any)
+    ).resolves.toMatchObject({
+      outcome: "matched",
+      role: "acceptor",
+      gameInvite: {
+        gameId: "game_quick",
+        seat: "b",
+        token: "acceptor-token",
+        url: "https://castles.example/?onlineGame=game_quick&seat=b",
+      },
+    });
+    await expect(startQuickMatch(setup, {}, fetchImpl as any)).resolves.toMatchObject({
+      outcome: "waiting",
+      role: "creator",
+      seekId: "seek_quick",
+      creator: { token: "creator-token" },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "/api/online/matchmaking/quick",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: expect.any(String),
+      })
+    );
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toMatchObject({
+      setup,
+      sessionId: "anon_acceptor",
+    });
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toMatchObject({
+      setup,
+      sessionId: expect.any(String),
+    });
+  });
+
+  it("rejects malformed quick match responses and token-bearing invite URLs", async () => {
+    const setup = snapshot().setup;
+    const summary = {
+      schemaVersion: 1,
+      seekId: "seek_quick",
+      creatorIdentity: { kind: "session", id: "anon_creator" },
+      creatorSeat: "random",
+      setup,
+      createdAt: "2026-06-01T12:00:00.000Z",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+      expiresAt: "2026-06-01T12:10:00.000Z",
+      status: "open",
+      lastEventId: "seek_quick_created",
+    };
+    const matched = {
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      outcome: "matched",
+      role: "acceptor",
+      summary: {
+        ...summary,
+        status: "accepted",
+        acceptedAt: "2026-06-01T12:01:00.000Z",
+        acceptedBy: { kind: "session", id: "anon_acceptor" },
+        gameId: "game_quick",
+        whiteIdentity: summary.creatorIdentity,
+        blackIdentity: { kind: "session", id: "anon_acceptor" },
+      },
+      gameInvite: {
+        gameId: "game_quick",
+        seat: "b",
+        token: "acceptor-token",
+        url: "https://castles.example/?onlineGame=game_quick&seat=b",
+      },
+    };
+    const waiting = {
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      outcome: "waiting",
+      role: "creator",
+      seekId: "seek_quick",
+      summary,
+      creator: { token: "creator-token" },
+    };
+
+    for (const body of [
+      { ...matched, protocolVersion: undefined },
+      { ...matched, outcome: "bad_outcome" },
+      { ...matched, role: "creator" },
+      {
+        ...matched,
+        gameInvite: {
+          ...matched.gameInvite,
+          url: "https://castles.example/?onlineGame=game_quick&seat=b&token=secret",
+        },
+      },
+      { ...waiting, creator: {} },
+      { ...waiting, seekId: "seek_other" },
+    ]) {
+      const fetchImpl = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => body,
+      });
+
+      await expect(startQuickMatch(setup, { sessionId: "anon_acceptor" }, fetchImpl as any))
+        .rejects.toThrow(/quick match/i);
+    }
   });
 
   it("replaces malformed anonymous session ids", () => {

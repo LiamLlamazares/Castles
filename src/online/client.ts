@@ -5,6 +5,7 @@ import {
 } from "./challenges";
 import { validateOnlineGameSnapshot } from "./protocol";
 import { ONLINE_PROTOCOL_VERSION, isSupportedOnlineProtocolVersion } from "./protocolVersion";
+import { stringContainsDurableSecret } from "./secretSafety";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   validateOnlineGameDirectoryResponse,
@@ -70,6 +71,21 @@ export interface OpenSeekAcceptResponse {
   summary: OpenSeekSummary;
   gameInvite: OnlineChallengeGameInvite;
 }
+
+export type QuickMatchResponse =
+  | {
+      outcome: "matched";
+      role: "acceptor";
+      summary: OpenSeekSummary;
+      gameInvite: OnlineChallengeGameInvite;
+    }
+  | {
+      outcome: "waiting";
+      role: "creator";
+      seekId: string;
+      summary: OpenSeekSummary;
+      creator: { token: string };
+    };
 
 export interface OnlineChallengeResponse {
   role: "challenger" | "challenged";
@@ -742,6 +758,68 @@ function validateGameInvite(value: unknown, label: string): OnlineChallengeGameI
   };
 }
 
+function validateTokenlessGameInvite(value: unknown, label: string): OnlineChallengeGameInvite {
+  const invite = validateGameInvite(value, label);
+  if (stringContainsDurableSecret(invite.url)) {
+    throw new Error(`${label} response was malformed: gameInvite URL must not contain tokens.`);
+  }
+  return invite;
+}
+
+function validateQuickMatchResponse(body: unknown, label: string): QuickMatchResponse {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} response was malformed: response body must be an object.`);
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(`${label} response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
+  const outcome = (body as { outcome?: unknown }).outcome;
+  const role = (body as { role?: unknown }).role;
+  const summary = validateOpenSeekSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`${label} response was malformed: ${summary.error.message}`);
+  }
+
+  if (outcome === "matched") {
+    if (role !== "acceptor") {
+      throw new Error(`${label} response was malformed: role is invalid.`);
+    }
+    return {
+      outcome: "matched",
+      role: "acceptor",
+      summary: summary.value,
+      gameInvite: validateTokenlessGameInvite((body as { gameInvite?: unknown }).gameInvite, label),
+    };
+  }
+
+  if (outcome === "waiting") {
+    if (role !== "creator") {
+      throw new Error(`${label} response was malformed: role is invalid.`);
+    }
+    const seekId = (body as { seekId?: unknown }).seekId;
+    const creator = (body as { creator?: unknown }).creator;
+    if (
+      typeof seekId !== "string" ||
+      seekId !== summary.value.seekId ||
+      !creator ||
+      typeof creator !== "object" ||
+      Array.isArray(creator) ||
+      typeof (creator as { token?: unknown }).token !== "string"
+    ) {
+      throw new Error(`${label} response was malformed.`);
+    }
+    return {
+      outcome: "waiting",
+      role: "creator",
+      seekId,
+      summary: summary.value,
+      creator: { token: (creator as { token: string }).token },
+    };
+  }
+
+  throw new Error(`${label} response was malformed: outcome is invalid.`);
+}
+
 function validateOpenSeekCreatorResponse(body: unknown, label: string): OpenSeekResponse {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error(`${label} response was malformed: response body must be an object.`);
@@ -878,6 +956,25 @@ export async function acceptOpenSeek(
   }
 
   return validateOpenSeekAcceptResponse(await response.json(), "Open seek accept");
+}
+
+export async function startQuickMatch(
+  setup: OnlineGameSetupDTO,
+  options: { sessionId?: string; expiresInMs?: number } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<QuickMatchResponse> {
+  const sessionId = options.sessionId ?? resolveOnlineAnonymousSessionId();
+  const response = await fetchImpl("/api/online/matchmaking/quick", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ setup, ...options, sessionId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not start quick match (${response.status})`);
+  }
+
+  return validateQuickMatchResponse(await response.json(), "Quick match");
 }
 
 export interface FetchOpenSeekDirectoryOptions {

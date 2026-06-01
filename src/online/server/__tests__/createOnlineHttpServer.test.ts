@@ -8,6 +8,7 @@ import { serializeOnlineGameSetup } from "../../serialization";
 import {
   createOnlineActionAcceptedEvent,
   ONLINE_EVENT_SCHEMA_VERSION,
+  type OnlineGameCredentials,
   OnlineGameEvent,
 } from "../../events";
 import { OnlineGameRoom } from "../../OnlineGameRoom";
@@ -20,10 +21,15 @@ import {
 } from "../../challenges";
 import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+  projectOnlineGameSummaries,
   type OnlineGameSummary,
 } from "../../readModel";
 import {
+  ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
+  ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
   ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
+  createOpenSeekAcceptedEvent,
+  encodeOpenSeekDirectoryCursor,
   type OpenSeekSummary,
 } from "../../seeks";
 import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
@@ -54,6 +60,13 @@ function createClockedSetup() {
   return {
     ...createSetup(),
     timeControl: { initial: 1, increment: 0 },
+  };
+}
+
+function createTaggedClockedSetup(pieceTheme: "Castles" | "Chess" = "Castles") {
+  return {
+    ...createClockedSetup(),
+    pieceTheme,
   };
 }
 
@@ -463,6 +476,676 @@ describe("createOnlineHttpServer", () => {
     expect(acceptorJoin.status).toBe(200);
     await expect(creatorJoin.json()).resolves.toMatchObject({ color: "w" });
     await expect(acceptorJoin.json()).resolves.toMatchObject({ color: "b" });
+  });
+
+  it("quick matches by accepting a compatible open seek with a tokenless game URL", async () => {
+    const setup = createSetup();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup,
+        creatorSeat: "w",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_acceptor" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      outcome: "matched",
+      role: "acceptor",
+      summary: {
+        seekId: created.seekId,
+        status: "accepted",
+        acceptedBy: { kind: "session", id: "session_acceptor" },
+      },
+      gameInvite: {
+        seat: "b",
+        token: expect.any(String),
+      },
+    });
+    expect(quick.gameInvite.url).toContain(`onlineGame=${quick.gameInvite.gameId}`);
+    expect(quick.gameInvite.url).toContain("seat=b");
+    expect(quick.gameInvite.url).not.toContain("token=");
+  });
+
+  it("quick match creates a normalized fallback seek when no compatible seek exists", async () => {
+    const setup = createSetup();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_waiting" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      outcome: "waiting",
+      role: "creator",
+      seekId: expect.stringMatching(/^seek_/),
+      summary: {
+        status: "open",
+        creatorSeat: "random",
+        creatorIdentity: { kind: "session", id: "session_waiting" },
+        setup: {
+          timeControl: { initial: 20, increment: 20 },
+        },
+      },
+      creator: { token: expect.any(String) },
+    });
+    expect(quick.seekId).toBe(quick.summary.seekId);
+  });
+
+  it("quick match rejects same-session active seeks before matching another candidate", async () => {
+    const setup = createSetup();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, creatorSessionId: "session_same" }),
+    });
+    await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, creatorSessionId: "session_other" }),
+    });
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_same" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(409);
+    expect(quick.error).toMatchObject({
+      code: "existing_open_seek",
+    });
+    expect(JSON.stringify(quick)).not.toContain("session_same");
+  });
+
+  it("quick match serializes same-session fallback creation", async () => {
+    const setup = createSetup();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const requestQuickMatch = () =>
+      fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ setup, sessionId: "session_concurrent" }),
+      });
+    const responses = await Promise.all([requestQuickMatch(), requestQuickMatch()]);
+    const bodies = await Promise.all(responses.map((response) => response.json()));
+    const statuses = responses.map((response) => response.status).sort();
+
+    expect(statuses).toEqual([200, 409]);
+    expect(bodies.some((body) => body.outcome === "waiting")).toBe(true);
+    expect(bodies.some((body) => body.error?.code === "existing_open_seek")).toBe(true);
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
+    const list = await listResponse.json();
+    expect(list.seeks.filter((seek: OpenSeekSummary) => seek.creatorIdentity.id === "session_concurrent"))
+      .toHaveLength(1);
+  });
+
+  it("quick match falls back when the exact normalized setup signature differs", async () => {
+    const listedSetup = createTaggedClockedSetup("Castles");
+    const submittedSetup = createTaggedClockedSetup("Chess");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: listedSetup, creatorSessionId: "session_creator" }),
+    });
+    const created = await createResponse.json();
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: submittedSetup, sessionId: "session_waiting" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "waiting",
+      role: "creator",
+    });
+    expect(quick.seekId).not.toBe(created.seekId);
+  });
+
+  it("quick match rejects same-session accepted seeks before listing another fallback", async () => {
+    const setup = createTaggedClockedSetup();
+    const accepted = openSeekSummary("seek_accepted_same", {
+      setup,
+      creatorSeat: "w",
+      creatorIdentity: { kind: "session", id: "session_other" },
+      status: "accepted",
+      updatedAt: "2026-06-01T12:01:00.000Z",
+      acceptedAt: "2026-06-01T12:01:00.000Z",
+      acceptedBy: { kind: "session", id: "session_same" },
+      gameId: "game_same_active",
+      whiteIdentity: { kind: "session", id: "session_other" },
+      blackIdentity: { kind: "session", id: "session_same" },
+      lastEventId: "seek_accepted_same_evt",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:02:00.000Z"),
+      loadOpenSeekSummaries: async () => [accepted],
+      listOpenSeekSummaries: async () => ({
+        schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+        seeks: [],
+      }),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_same" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(409);
+    expect(quick.error).toEqual({
+      code: "existing_open_seek",
+      message: "This session already has an active open seek.",
+    });
+    expect(JSON.stringify(quick)).not.toContain("session_same");
+  });
+
+  it("quick match skips self-created seeks and accepts the next compatible seek", async () => {
+    const setup = createTaggedClockedSetup();
+    const selfSeek = openSeekSummary("seek_self", {
+      setup,
+      creatorSeat: "w",
+      creatorIdentity: { kind: "session", id: "session_quick" },
+    });
+    const otherSeek = openSeekSummary("seek_other_match", {
+      setup,
+      creatorSeat: "w",
+      creatorIdentity: { kind: "session", id: "session_other" },
+    });
+    const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      const seekEvent = createOpenSeekAcceptedEvent(
+        {
+          type: "seek_accepted",
+          seekId: input.seekId,
+          acceptedBy: input.acceptedBy,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: "seek_other_match_accepted", createdAt: input.acceptedAt }
+      );
+      const accepted: OpenSeekSummary = {
+        ...otherSeek,
+        status: "accepted",
+        updatedAt: seekEvent.createdAt,
+        acceptedAt: seekEvent.acceptedAt,
+        acceptedBy: seekEvent.acceptedBy,
+        gameId: seekEvent.gameId,
+        whiteIdentity: seekEvent.whiteIdentity,
+        blackIdentity: seekEvent.blackIdentity,
+        lastEventId: seekEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "creator-credential",
+        blackCredential: input.acceptorCredential,
+      };
+      return {
+        seekEvent,
+        seekSummary: accepted,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { creator: "w" as const, acceptor: "b" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      loadOpenSeekSummaries: async () => [],
+      listOpenSeekSummaries: async () => ({
+        schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+        seeks: [selfSeek, otherSeek],
+      }),
+      acceptOpenSeekAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_quick" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "matched",
+      summary: { seekId: "seek_other_match", status: "accepted" },
+    });
+    expect(acceptOpenSeekAndCreateGame).toHaveBeenCalledWith(
+      expect.objectContaining({ seekId: "seek_other_match" })
+    );
+  });
+
+  it("quick match retries after a terminal accept race and sanitizes request errors", async () => {
+    const setup = createTaggedClockedSetup();
+    const racedSeek = openSeekSummary("seek_raced", {
+      setup,
+      creatorSeat: "w",
+      creatorIdentity: { kind: "session", id: "session_raced_creator" },
+    });
+    const healthySeek = openSeekSummary("seek_after_race", {
+      setup,
+      creatorSeat: "w",
+      creatorIdentity: { kind: "session", id: "session_healthy_creator" },
+    });
+    const acceptOpenSeekAndCreateGame = vi.fn()
+      .mockRejectedValueOnce(new Error("This open seek seek_raced is no longer open. token=secret"))
+      .mockImplementation(async (input: any) => {
+        const target = healthySeek;
+        const seekEvent = createOpenSeekAcceptedEvent(
+          {
+            type: "seek_accepted",
+            seekId: input.seekId,
+            acceptedBy: input.acceptedBy,
+            acceptedAt: input.acceptedAt,
+            gameId: input.gameCreatedEvent.gameId,
+            whiteIdentity: input.whiteIdentity,
+            blackIdentity: input.blackIdentity,
+          },
+          { eventId: "seek_after_race_accepted", createdAt: input.acceptedAt }
+        );
+        const accepted: OpenSeekSummary = {
+          ...target,
+          status: "accepted",
+          updatedAt: seekEvent.createdAt,
+          acceptedAt: seekEvent.acceptedAt,
+          acceptedBy: seekEvent.acceptedBy,
+          gameId: seekEvent.gameId,
+          whiteIdentity: seekEvent.whiteIdentity,
+          blackIdentity: seekEvent.blackIdentity,
+          lastEventId: seekEvent.eventId,
+        };
+        const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+        const gameCredentials: OnlineGameCredentials = {
+          whiteCredential: "creator-credential",
+          blackCredential: input.acceptorCredential,
+        };
+        return {
+          seekEvent,
+          seekSummary: accepted,
+          gameSummary,
+          gameCredentials,
+          gameRecord: {
+            gameId: input.gameCreatedEvent.gameId,
+            setup: input.gameCreatedEvent.setup,
+            whiteCredential: gameCredentials.whiteCredential,
+            blackCredential: gameCredentials.blackCredential,
+            clock: input.gameCreatedEvent.clock,
+            acceptedActions: [],
+          },
+          gameSeats: { creator: "w" as const, acceptor: "b" as const },
+        };
+      });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      loadOpenSeekSummaries: async () => [],
+      listOpenSeekSummaries: async () => ({
+        schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+        seeks: [racedSeek, healthySeek],
+      }),
+      acceptOpenSeekAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_acceptor" }),
+    });
+    const quick = await quickResponse.json();
+    const badResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "token=secret-session" }),
+    });
+    const bad = await badResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "matched",
+      summary: { seekId: "seek_after_race" },
+    });
+    expect(acceptOpenSeekAndCreateGame).toHaveBeenCalledTimes(2);
+    expect(badResponse.status).toBe(400);
+    expect(JSON.stringify(bad)).not.toContain("token=secret-session");
+  });
+
+  it("quick match treats missing and explicit default time controls as compatible", async () => {
+    const listedSetup = createSetup();
+    const submittedSetup = {
+      ...listedSetup,
+      timeControl: { initial: 20, increment: 20 },
+    };
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: listedSetup, creatorSessionId: "session_creator", creatorSeat: "w" }),
+    });
+    const created = await createResponse.json();
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: submittedSetup, sessionId: "session_acceptor" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "matched",
+      summary: { seekId: created.seekId, status: "accepted" },
+    });
+  });
+
+  it("quick match uses injected store listing and accept boundaries", async () => {
+    const setup = createClockedSetup();
+    const listed = openSeekSummary("seek_store_quick", {
+      creatorSeat: "w",
+      creatorIdentity: { kind: "session", id: "session_creator" },
+      setup,
+    });
+    const listOpenSeekSummaries = vi.fn(async () => ({
+      schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION as typeof ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+      seeks: [listed],
+    }));
+    const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      const seekEvent = createOpenSeekAcceptedEvent(
+        {
+          type: "seek_accepted",
+          seekId: input.seekId,
+          acceptedBy: input.acceptedBy,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: "seek_store_quick_accepted", createdAt: input.acceptedAt }
+      );
+      const accepted: OpenSeekSummary = {
+        ...listed,
+        status: "accepted",
+        updatedAt: seekEvent.createdAt,
+        acceptedAt: seekEvent.acceptedAt,
+        acceptedBy: seekEvent.acceptedBy,
+        gameId: seekEvent.gameId,
+        whiteIdentity: seekEvent.whiteIdentity,
+        blackIdentity: seekEvent.blackIdentity,
+        lastEventId: seekEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "creator-credential",
+        blackCredential: input.acceptorCredential,
+      };
+      return {
+        seekEvent,
+        seekSummary: accepted,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { creator: "w" as const, acceptor: "b" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      loadOpenSeekSummaries: async () => [listed],
+      listOpenSeekSummaries,
+      acceptOpenSeekAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_acceptor" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "matched",
+      summary: { seekId: "seek_store_quick", status: "accepted" },
+      gameInvite: { seat: "b" },
+    });
+    expect(listOpenSeekSummaries).toHaveBeenCalledWith({
+      state: "open",
+      limit: ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
+    });
+    expect(acceptOpenSeekAndCreateGame).toHaveBeenCalledOnce();
+  });
+
+  it("quick match scans later open-seek pages before creating a fallback", async () => {
+    const compatibleSetup = createClockedSetup();
+    const incompatibleSetup = createTaggedClockedSetup("Chess");
+    const firstPage = Array.from({ length: ONLINE_SEEK_DIRECTORY_MAX_LIMIT }, (_value, index) =>
+      openSeekSummary(`seek_page_incompatible_${index.toString().padStart(3, "0")}`, {
+        creatorIdentity: { kind: "session", id: `creator_page_${index}` },
+        setup: incompatibleSetup,
+        updatedAt: `2026-06-01T12:00:${String(index % 60).padStart(2, "0")}.000Z`,
+      })
+    );
+    const compatible = openSeekSummary("seek_page_compatible", {
+      creatorSeat: "w",
+      creatorIdentity: { kind: "session", id: "creator_page_compatible" },
+      setup: compatibleSetup,
+      createdAt: "2026-06-01T11:57:00.000Z",
+      updatedAt: "2026-06-01T11:58:00.000Z",
+    });
+    const nextCursor = encodeOpenSeekDirectoryCursor({
+      updatedAt: firstPage[firstPage.length - 1].updatedAt,
+      seekId: firstPage[firstPage.length - 1].seekId,
+    });
+    const listOpenSeekSummaries = vi.fn(async (options: any) => {
+      if (!options.cursor) {
+        return {
+          schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION as typeof ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+          seeks: firstPage,
+          nextCursor,
+        };
+      }
+      expect(options.cursor).toBe(nextCursor);
+      return {
+        schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION as typeof ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+        seeks: [compatible],
+      };
+    });
+    const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      const seekEvent = createOpenSeekAcceptedEvent(
+        {
+          type: "seek_accepted",
+          seekId: input.seekId,
+          acceptedBy: input.acceptedBy,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: "seek_page_compatible_accepted", createdAt: input.acceptedAt }
+      );
+      const accepted: OpenSeekSummary = {
+        ...compatible,
+        status: "accepted",
+        updatedAt: seekEvent.createdAt,
+        acceptedAt: seekEvent.acceptedAt,
+        acceptedBy: seekEvent.acceptedBy,
+        gameId: seekEvent.gameId,
+        whiteIdentity: seekEvent.whiteIdentity,
+        blackIdentity: seekEvent.blackIdentity,
+        lastEventId: seekEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "creator-credential",
+        blackCredential: input.acceptorCredential,
+      };
+      return {
+        seekEvent,
+        seekSummary: accepted,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { creator: "w" as const, acceptor: "b" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:02:00.000Z"),
+      loadOpenSeekSummaries: async () => [...firstPage, compatible],
+      listOpenSeekSummaries,
+      acceptOpenSeekAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: compatibleSetup, sessionId: "session_acceptor" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "matched",
+      summary: { seekId: "seek_page_compatible", status: "accepted" },
+    });
+    expect(listOpenSeekSummaries).toHaveBeenCalledTimes(2);
+    expect(listOpenSeekSummaries).toHaveBeenNthCalledWith(1, {
+      state: "open",
+      limit: ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
+    });
+    expect(listOpenSeekSummaries).toHaveBeenNthCalledWith(2, {
+      state: "open",
+      limit: ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
+      cursor: nextCursor,
+    });
+    expect(acceptOpenSeekAndCreateGame).toHaveBeenCalledOnce();
+  });
+
+  it("rate limits quick match separately from public directory reads", async () => {
+    const setup = createSetup();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const headers = {
+      "content-type": "application/json",
+      "x-forwarded-for": "198.51.100.99, 203.0.113.77",
+    };
+
+    for (let index = 0; index < 20; index += 1) {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup, sessionId: `session_rate_${index}` }),
+      });
+      expect(response.status).not.toBe(429);
+    }
+    const limited = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { ...headers, "x-forwarded-for": "203.0.113.77" },
+      body: JSON.stringify({ setup, sessionId: "session_rate_limited" }),
+    });
+    const publicList = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      headers: { "x-forwarded-for": "203.0.113.77" },
+    });
+
+    expect(limited.status).toBe(429);
+    expect(publicList.status).toBe(200);
   });
 
   it("cancels creator-owned open seeks and keeps them off the public lobby", async () => {

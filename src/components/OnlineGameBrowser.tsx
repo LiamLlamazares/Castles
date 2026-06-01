@@ -36,6 +36,14 @@ type OnlineBrowserResultFilter =
   | "castle_control"
   | "victory_points"
   | "monarch_captured";
+type QuickMatchStatus = "idle" | "pending" | "matched" | "waiting" | "error";
+type QuickMatchOutcome = "matched" | "waiting" | void;
+
+interface QuickMatchSetupSummary {
+  boardRadius: number;
+  clock: string;
+  scoring: string;
+}
 
 const LOBBY_AUTO_REFRESH_MS = 30_000;
 const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
@@ -49,6 +57,8 @@ interface OnlineGameBrowserProps {
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
   onCreateSeek?: () => void;
+  onQuickMatch?: () => QuickMatchOutcome | Promise<QuickMatchOutcome>;
+  quickMatchSetupSummary?: QuickMatchSetupSummary;
   onAcceptSeek?: (seekId: string) => void | Promise<void>;
   onCancelSeek?: (seekId: string) => void | Promise<void>;
   ownedSeekResponse?: OpenSeekResponse | null;
@@ -180,6 +190,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onTutorial,
   onOpenLibrary,
   onCreateSeek,
+  onQuickMatch,
+  quickMatchSetupSummary,
   onAcceptSeek,
   onCancelSeek,
   ownedSeekResponse,
@@ -208,6 +220,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [seekStatus, setSeekStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [seekActionById, setSeekActionById] = React.useState<Record<string, "accept" | "cancel" | undefined>>({});
   const [seekActionMessage, setSeekActionMessage] = React.useState("");
+  const [quickMatchStatus, setQuickMatchStatus] = React.useState<QuickMatchStatus>("idle");
   const [ownedSeekAction, setOwnedSeekAction] = React.useState<"refresh" | "join" | undefined>();
   const [lastSeekCheckedAt, setLastSeekCheckedAt] = React.useState("");
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
@@ -218,10 +231,32 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const seekAutoRefreshPausedUntilRef = React.useRef(0);
   const seekActionByIdRef = React.useRef(seekActionById);
   const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
+  const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
+  const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
 
   React.useEffect(() => {
     seekActionByIdRef.current = seekActionById;
   }, [seekActionById]);
+
+  React.useEffect(() => {
+    if (quickMatchStatus !== "waiting") return;
+    if (!ownedSeekResponse?.summary) return;
+    ownedSeekPanelRef.current?.focus();
+  }, [ownedSeekResponse?.summary, quickMatchStatus]);
+
+  React.useEffect(() => {
+    const status = ownedSeekResponse?.summary.status;
+    if (!status || status === "open") return;
+    if (quickMatchStatus === "waiting") {
+      setQuickMatchStatus("idle");
+    }
+    setSeekActionMessage((current) =>
+      current ||
+      (status === "accepted"
+        ? "Your open seek was accepted. Join the game from your open seek panel."
+        : "Your open seek is no longer open.")
+    );
+  }, [ownedSeekResponse?.summary.status, quickMatchStatus]);
 
   const directoryState = tab === "archive" ? "archived" : "active";
 
@@ -331,6 +366,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (!background) {
       setSeekStatus("loading");
       setSeekActionMessage("");
+      setQuickMatchStatus("idle");
     }
     try {
       const response = await loadOpenSeeks(seekDirectoryOptionsRef.current);
@@ -424,6 +460,48 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     seekVpFilter !== "all";
   const hasActiveFilters =
     query.trim() !== "" || timeFilter !== "all" || (tab === "archive" && resultFilter !== "all");
+  const hasActiveOwnedSeek =
+    ownedSeekIds.length > 0 &&
+    (!ownedSeekResponse ||
+      ownedSeekResponse.summary.status === "open" ||
+      ownedSeekResponse.summary.status === "accepted");
+  const quickMatchPending = quickMatchStatus === "pending";
+  const quickMatchBlocking = quickMatchStatus === "pending" || quickMatchStatus === "matched";
+  const quickMatchDisabled =
+    !onQuickMatch ||
+    quickMatchBlocking ||
+    hasActiveOwnedSeek ||
+    seekStatus === "loading" ||
+    isSeekLoadInFlight;
+  const quickMatchMessage =
+    quickMatchStatus === "pending"
+      ? "Checking compatible open seeks..."
+      : quickMatchStatus === "matched"
+        ? "Match found. Opening game..."
+        : quickMatchStatus === "waiting"
+          ? "No compatible open seek found. Your open seek is listed for someone to accept."
+          : quickMatchStatus === "error"
+            ? "Could not start quick match."
+            : "";
+
+  const runQuickMatch = async () => {
+    if (!onQuickMatch || quickMatchDisabled) return;
+    setQuickMatchStatus("pending");
+    setSeekActionMessage("");
+    let shouldRestoreFocus = false;
+    try {
+      const outcome = await onQuickMatch();
+      setQuickMatchStatus(outcome === "matched" ? "matched" : "waiting");
+    } catch (error) {
+      console.error("[OnlineGameBrowser] Failed to start quick match", error);
+      shouldRestoreFocus = true;
+      setQuickMatchStatus("error");
+    } finally {
+      if (shouldRestoreFocus) {
+        window.setTimeout(() => quickMatchButtonRef.current?.focus(), 0);
+      }
+    }
+  };
 
   const runSeekAction = async (seekId: string, action: "accept" | "cancel") => {
     const handler = action === "accept" ? onAcceptSeek : onCancelSeek;
@@ -433,6 +511,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       seekActionByIdRef.current = next;
       return next;
     });
+    setQuickMatchStatus("idle");
     setSeekActionMessage("");
     try {
       await handler(seekId);
@@ -460,6 +539,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     ownedSeekRefreshInFlightRef.current = true;
     if (!background) {
       setOwnedSeekAction("refresh");
+      setQuickMatchStatus("idle");
       setSeekActionMessage("");
     }
     try {
@@ -610,16 +690,29 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               type="button"
               className="online-browser-button neutral"
               onClick={() => void loadOpenSeekPage({ background: false })}
-              disabled={seekStatus === "loading" || isSeekLoadInFlight}
+              disabled={seekStatus === "loading" || isSeekLoadInFlight || quickMatchBlocking}
               aria-label="Refresh open seeks"
             >
               {seekStatus === "loading" ? "Refreshing..." : "Refresh"}
             </button>
+            {onQuickMatch && (
+              <button
+                type="button"
+                ref={quickMatchButtonRef}
+                className="online-browser-button primary online-browser-quick-match"
+                onClick={() => void runQuickMatch()}
+                disabled={quickMatchDisabled}
+                aria-label="Quick Match: accept a compatible open seek or list yours"
+              >
+                {quickMatchPending ? "Matching..." : quickMatchStatus === "matched" ? "Opening..." : "Quick Match"}
+              </button>
+            )}
             {onCreateSeek && (
               <button
                 type="button"
                 className="online-browser-button primary online-browser-create-seek"
                 onClick={onCreateSeek}
+                disabled={quickMatchBlocking || hasActiveOwnedSeek}
               >
                 Create Open Seek
               </button>
@@ -689,7 +782,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             ? "Loading open seeks..."
             : seekStatus === "error"
               ? "Could not load open seeks."
-              : seekActionMessage || (
+              : seekActionMessage || quickMatchMessage || (
                 <>
                   {visibleOpenSeeks.length} open seeks shown
                   {lastSeekCheckedAt ? <span aria-hidden="true">; last checked {lastSeekCheckedAt}</span> : null}
@@ -719,10 +812,27 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </button>
         ) : (
           <main className="online-browser-list" aria-label="Open seek lobby">
+            {onQuickMatch && (
+              <section className="online-browser-quick-match-panel" aria-label="Quick match setup">
+                <div className="online-browser-quick-match-copy">
+                  <strong>Uses your exact current Play setup</strong>
+                  <p>Current board, pieces, sanctuaries, pool, theme, clock, and scoring mode must match before Quick Match accepts a seek.</p>
+                </div>
+                {quickMatchSetupSummary && (
+                  <div className="online-browser-quick-match-summary" aria-label="Quick match setup summary">
+                    <span>Radius {quickMatchSetupSummary.boardRadius}</span>
+                    <span>{quickMatchSetupSummary.clock}</span>
+                    <span>{quickMatchSetupSummary.scoring}</span>
+                  </div>
+                )}
+              </section>
+            )}
             {ownedSeekResponse?.summary && (
               <section
                 className="online-seek-owner-panel"
                 aria-label="Your open seek"
+                ref={ownedSeekPanelRef}
+                tabIndex={-1}
               >
                 <div className="online-game-row-main">
                   <div className="online-game-players">
@@ -743,7 +853,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     type="button"
                     className="online-browser-button neutral"
                     onClick={() => void runOwnedSeekRefresh()}
-                    disabled={!onRefreshOwnedSeek || ownedSeekAction !== undefined}
+                    disabled={!onRefreshOwnedSeek || ownedSeekAction !== undefined || quickMatchBlocking}
                     aria-label="Refresh your open seek"
                   >
                     {ownedSeekAction === "refresh" ? "Refreshing..." : "Refresh"}
@@ -753,7 +863,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       type="button"
                       className="online-browser-button neutral"
                       onClick={() => void runSeekAction(ownedSeekResponse.summary.seekId, "cancel")}
-                      disabled={!onCancelSeek || seekActionById[ownedSeekResponse.summary.seekId] !== undefined}
+                      disabled={!onCancelSeek || seekActionById[ownedSeekResponse.summary.seekId] !== undefined || quickMatchBlocking}
                       aria-label="Cancel your open seek"
                     >
                       {seekActionById[ownedSeekResponse.summary.seekId] === "cancel" ? "Cancelling..." : "Cancel"}
@@ -764,7 +874,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       type="button"
                       className="online-browser-button primary"
                       onClick={runOwnedSeekJoin}
-                      disabled={!onJoinOwnedSeek || ownedSeekAction !== undefined}
+                      disabled={!onJoinOwnedSeek || ownedSeekAction !== undefined || quickMatchBlocking}
                       aria-label="Join accepted game"
                     >
                       {ownedSeekAction === "join" ? "Joining..." : "Join Game"}
@@ -801,9 +911,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <div className="online-game-meta">
                       <span className="online-game-pill active">Open</span>
                       <span>Side {sideLabel}</span>
-                      <span>Radius {radius}</span>
-                      <span>{formatSeekClock(seek)}</span>
-                      {seek.setup.gameRules?.vpModeEnabled && <span>Victory points</span>}
+                      <span>Board Radius {radius}</span>
+                      <span>Clock {formatSeekClock(seek)}</span>
+                      {seek.setup.gameRules?.vpModeEnabled && <span>Scoring Victory points</span>}
                       <span>Expires {formatSeekExpiresAt(seek.expiresAt)}</span>
                     </div>
                   </div>
@@ -813,7 +923,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         type="button"
                         className="online-browser-button neutral"
                         onClick={() => void runSeekAction(seek.seekId, "cancel")}
-                        disabled={!onCancelSeek || pendingAction !== undefined}
+                        disabled={!onCancelSeek || pendingAction !== undefined || quickMatchBlocking}
                         aria-label={`Cancel open seek ${seek.seekId}`}
                       >
                         {pendingAction === "cancel" ? "Cancelling..." : "Cancel"}
@@ -823,7 +933,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         type="button"
                         className="online-browser-button primary"
                         onClick={() => void runSeekAction(seek.seekId, "accept")}
-                        disabled={!onAcceptSeek || pendingAction !== undefined}
+                        disabled={!onAcceptSeek || pendingAction !== undefined || quickMatchBlocking}
                         aria-label={`Accept open seek ${seek.seekId}`}
                       >
                         {pendingAction === "accept" ? "Accepting..." : "Accept"}
