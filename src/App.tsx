@@ -26,6 +26,7 @@ import {
 import {
   buildSpectatorUrl,
   createOnlineGame,
+  formatOnlinePendingConnectionMessage,
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
   removeOnlineTokenFromUrl,
@@ -398,6 +399,11 @@ function App() {
     onlineSpectatorConnection,
   ]);
 
+  const pendingOnlineConnection = onlineJoin ? onlineConnection : onlineSpectatorConnection;
+  const pendingOnlineMessage = formatOnlinePendingConnectionMessage(
+    pendingOnlineConnection.status
+  );
+
   const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
     setGameConfig({ board, pieces, layout, turnCounter, sanctuaries, isAnalysisMode: true });
@@ -454,6 +460,9 @@ function App() {
 
       {view === 'game' && (onlineJoin || activeOnlineSpectator) && !onlineSnapshot && (
         <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
           style={{
             height: '100vh',
             width: '100vw',
@@ -465,9 +474,9 @@ function App() {
             fontSize: '1rem',
           }}
         >
-          Connecting online game{
-            (onlineJoin ? onlineConnection.lastError : onlineSpectatorConnection.lastError)
-              ? `: ${onlineJoin ? onlineConnection.lastError : onlineSpectatorConnection.lastError}`
+          {pendingOnlineMessage}{
+            pendingOnlineConnection.lastError
+              ? `: ${pendingOnlineConnection.lastError}`
               : '...'
           }
         </div>

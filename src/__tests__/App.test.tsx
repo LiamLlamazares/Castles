@@ -1,6 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import App from "../App";
 
+const onlineHookMocks = vi.hoisted(() => ({
+  submitAction: vi.fn(),
+  useOnlineGameConnection: vi.fn(),
+  useOnlineSpectatorConnection: vi.fn(),
+}));
+
+vi.mock("../hooks/useOnlineGameConnection", () => ({
+  useOnlineGameConnection: onlineHookMocks.useOnlineGameConnection,
+}));
+
+vi.mock("../hooks/useOnlineSpectatorConnection", () => ({
+  useOnlineSpectatorConnection: onlineHookMocks.useOnlineSpectatorConnection,
+}));
+
 vi.mock("../components/Game", () => ({
   default: ({
     onSetup,
@@ -81,6 +95,16 @@ describe("App game setup lifecycle", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    onlineHookMocks.submitAction.mockReset();
+    onlineHookMocks.useOnlineGameConnection.mockReset();
+    onlineHookMocks.useOnlineSpectatorConnection.mockReset();
+    onlineHookMocks.useOnlineGameConnection.mockReturnValue({
+      status: "idle",
+      submitAction: onlineHookMocks.submitAction,
+    });
+    onlineHookMocks.useOnlineSpectatorConnection.mockReturnValue({
+      status: "idle",
+    });
     window.history.replaceState({}, "", "/?pgn=stale-pgn&game=stale-game");
   });
 
@@ -150,5 +174,22 @@ describe("App game setup lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
     expect(screen.getByText("Game Ready")).toBeInTheDocument();
+  });
+
+  it("shows readable pre-snapshot online connection states", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_denied&seat=w&token=bad-token"
+    );
+    onlineHookMocks.useOnlineGameConnection.mockReturnValue({
+      status: "access-denied",
+      lastError: "Invite link expired.",
+      submitAction: onlineHookMocks.submitAction,
+    });
+
+    render(<App />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("Access denied: Invite link expired.");
   });
 });

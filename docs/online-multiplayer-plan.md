@@ -104,13 +104,13 @@ Tests/review/deploy gates:
 
 Goal: formalize the client/server online protocol and make client state resilient.
 
-Status: started. The protocol envelope now requires `protocolVersion: 1` on WebSocket client messages, WebSocket server messages, and REST snapshot responses. Remaining Phase 4 work is the richer client state machine and explicit resync/access-denied semantics.
+Status: started. The protocol envelope now requires `protocolVersion: 1` on WebSocket client messages, WebSocket server messages, and REST snapshot responses. The browser client now distinguishes live, resyncing, access-denied, protocol-error, server-error, terminal, disconnected, and connecting states instead of flattening every problem into a generic error. Remaining Phase 4 work is explicit stale-action resync policy and fuller browser smoke coverage for reconnect/access-denied paths.
 
 Work:
 
 - Version WebSocket and REST messages with explicit error, resync, stale-version, and reconnect semantics.
 - Separate local optimistic UI from authoritative online state.
-- Define client state machines for offline, connecting, joined, resyncing, terminal, and access-denied states.
+- Define client state machines for offline, connecting, joined, resyncing, terminal, and access-denied states. Current hooks expose explicit state labels; a fuller transition diagram should be documented before public challenge/lobby launch.
 - Add protocol documentation close to DTO definitions.
 
 Tests/review/deploy gates:
@@ -214,6 +214,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish the Phase 4 client-state machine slice: named states for connecting, joined, resyncing, disconnected, access-denied, terminal, and malformed-protocol error handling.
-2. Add explicit stale-version/resync semantics for rejected actions and reconnects, including browser smoke coverage.
+1. Add explicit stale-version/resync semantics for rejected actions and reconnects, including browser smoke coverage.
+2. Document the client state transition diagram next to the protocol contract before public challenge/lobby launch.
 3. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.

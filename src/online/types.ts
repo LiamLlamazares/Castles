@@ -149,7 +149,11 @@ export type OnlineConnectionStatus =
   | "connecting"
   | "connected"
   | "disconnected"
-  | "error";
+  | "resyncing"
+  | "access-denied"
+  | "protocol-error"
+  | "server-error"
+  | "terminal";
 
 interface BaseOnlineClientSession {
   gameId: string;

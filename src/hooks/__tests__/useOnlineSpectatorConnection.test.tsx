@@ -61,6 +61,7 @@ describe("useOnlineSpectatorConnection", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -121,7 +122,7 @@ describe("useOnlineSpectatorConnection", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.status).toBe("error");
+      expect(result.current.status).toBe("protocol-error");
       expect(result.current.lastError).toContain("invalid");
     });
     expect(snapshots).toHaveLength(1);
@@ -142,7 +143,7 @@ describe("useOnlineSpectatorConnection", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.status).toBe("error");
+      expect(result.current.status).toBe("protocol-error");
       expect(result.current.lastError).toContain("invalid");
     });
     expect(snapshots).toHaveLength(1);
@@ -209,7 +210,7 @@ describe("useOnlineSpectatorConnection", () => {
         }),
       });
     });
-    await waitFor(() => expect(result.current.status).toBe("error"));
+    await waitFor(() => expect(result.current.status).toBe("server-error"));
     expect(result.current.lastError).toBe("Server problem.");
     expect(snapshots.at(-1)).toMatchObject({ version: 3 });
 
@@ -224,9 +225,238 @@ describe("useOnlineSpectatorConnection", () => {
       });
     });
     await waitFor(() => {
-      expect(result.current.status).toBe("error");
+      expect(result.current.status).toBe("protocol-error");
       expect(result.current.lastError).toContain("player message");
     });
     expect(snapshots.at(-1)).toMatchObject({ version: 3 });
+  });
+
+  it("marks missing spectator games as access denied", async () => {
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "error",
+          error: { code: "not_found", message: "This game no longer exists." },
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("access-denied");
+      expect(result.current.lastError).toBe("This game no longer exists.");
+    });
+  });
+
+  it("marks terminal spectator snapshots as terminal connection state", async () => {
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "snapshot",
+          snapshot: {
+            ...snapshot(4),
+            result: { winner: "w", reason: "resignation" },
+          },
+        }),
+      });
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("terminal"));
+  });
+
+  it("does not let stale non-terminal spectator snapshots overwrite terminal state", async () => {
+    const snapshots: Array<{ version: number; result?: unknown }> = [];
+    const { result } = renderHook(() =>
+      useOnlineSpectatorConnection("game_123", (nextSnapshot) => {
+        snapshots.push(nextSnapshot as { version: number; result?: unknown });
+      })
+    );
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "snapshot",
+          snapshot: {
+            ...snapshot(4),
+            result: { winner: "w", reason: "resignation" },
+          },
+        }),
+      });
+    });
+    await waitFor(() => expect(result.current.status).toBe("terminal"));
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "snapshot",
+          snapshot: snapshot(3),
+        }),
+      });
+    });
+
+    expect(result.current.status).toBe("terminal");
+    expect(snapshots.at(-1)).toMatchObject({ version: 4, result: { reason: "resignation" } });
+  });
+
+  it("does not reconnect spectator sockets after protected error states", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "error",
+          error: { code: "not_found", message: "Game not found." },
+        }),
+      });
+    });
+    expect(result.current.status).toBe("access-denied");
+
+    act(() => {
+      socket.onclose?.();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(20_000);
+      await Promise.resolve();
+    });
+
+    expect(result.current.status).toBe("access-denied");
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  it("does not let later snapshots clear protected spectator error states", async () => {
+    const snapshots: Array<{ version: number }> = [];
+    const { result } = renderHook(() =>
+      useOnlineSpectatorConnection("game_123", (nextSnapshot) => {
+        snapshots.push(nextSnapshot as { version: number });
+      })
+    );
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "error",
+          error: { code: "bad_request", message: "Server problem." },
+        }),
+      });
+    });
+    expect(result.current.status).toBe("server-error");
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "snapshot",
+          snapshot: snapshot(2),
+        }),
+      });
+    });
+
+    expect(result.current.status).toBe("server-error");
+    expect(result.current.lastError).toBe("Server problem.");
+    expect(snapshots.at(-1)).toMatchObject({ version: 0 });
+  });
+
+  it("marks terminal spectator REST snapshots as terminal before websocket frames", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          snapshot: {
+            ...snapshot(5),
+            result: { winner: "w", reason: "resignation" },
+          },
+        }),
+      })
+    );
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await waitFor(() => expect(result.current.status).toBe("terminal"));
+  });
+
+  it("reports disconnected and resyncing states before reconnecting spectators", async () => {
+    vi.useFakeTimers();
+    let resolveResync!: (response: { ok: true; json: () => Promise<unknown> }) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot: snapshot(0) }),
+        })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveResync = resolve;
+            })
+        )
+    );
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onclose?.();
+    });
+    expect(result.current.status).toBe("disconnected");
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+    expect(result.current.status).toBe("resyncing");
+
+    await act(async () => {
+      resolveResync({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          snapshot: snapshot(2),
+        }),
+      });
+      await Promise.resolve();
+    });
+
+    expect(MockWebSocket.instances.length).toBeGreaterThan(1);
+    expect(result.current.status).toBe("connecting");
   });
 });

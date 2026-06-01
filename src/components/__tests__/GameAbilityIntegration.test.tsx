@@ -374,4 +374,43 @@ describe("Game ability integration", () => {
 
     expect(screen.getByText("Online White · Complete · White wins by resignation")).toBeInTheDocument();
   });
+
+  test("online session badges use readable state labels", () => {
+    const { rerender } = render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_resyncing_label",
+            role: "player",
+            playerColor: "w",
+            version: 1,
+            status: "resyncing",
+            spectatorUrl: "https://castles.example/?onlineGame=game_resyncing_label&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByText("Online White · Resyncing")).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_access_denied_label",
+            role: "spectator",
+            version: 1,
+            status: "access-denied",
+            lastError: "This game no longer exists.",
+            spectatorUrl: "https://castles.example/?onlineGame=game_access_denied_label&view=spectator",
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(
+      screen.getByText("Spectating · Access denied · This game no longer exists.")
+    ).toBeInTheDocument();
+  });
 });

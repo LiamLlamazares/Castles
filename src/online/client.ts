@@ -2,7 +2,12 @@ import type { CreatedOnlineGame } from "./OnlineGameService";
 import { validateOnlineGameSnapshot } from "./protocol";
 import { ONLINE_PROTOCOL_VERSION, isSupportedOnlineProtocolVersion } from "./protocolVersion";
 import { validateOnlineGameSummary, type OnlineGameSummary } from "./readModel";
-import { OnlineGameResultDTO, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from "./types";
+import {
+  OnlineConnectionStatus,
+  OnlineGameResultDTO,
+  OnlineGameSetupDTO,
+  OnlineGameSnapshotDTO,
+} from "./types";
 
 export interface OnlineJoinParams {
   gameId: string;
@@ -22,6 +27,10 @@ interface OnlineJoinStorage {
 
 interface ClipboardWriter {
   writeText(text: string): Promise<void>;
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled online connection status: ${value}`);
 }
 
 function storageKey(gameId: string, seat: "w" | "b"): string {
@@ -213,6 +222,54 @@ export function formatOnlineGameResult(result: OnlineGameResultDTO): string {
     case "monarch_captured":
     default:
       return `${winner} wins`;
+  }
+}
+
+export function formatOnlineConnectionStatus(status: OnlineConnectionStatus): string {
+  switch (status) {
+    case "idle":
+      return "Idle";
+    case "connecting":
+      return "Connecting";
+    case "connected":
+      return "Live";
+    case "disconnected":
+      return "Disconnected";
+    case "resyncing":
+      return "Resyncing";
+    case "access-denied":
+      return "Access denied";
+    case "protocol-error":
+      return "Protocol error";
+    case "server-error":
+      return "Server error";
+    case "terminal":
+      return "Complete";
+    default:
+      return assertNever(status);
+  }
+}
+
+export function formatOnlinePendingConnectionMessage(
+  status: OnlineConnectionStatus
+): string {
+  switch (status) {
+    case "resyncing":
+      return "Resyncing online game";
+    case "access-denied":
+    case "protocol-error":
+    case "server-error":
+      return formatOnlineConnectionStatus(status);
+    case "disconnected":
+      return "Disconnected from online game";
+    case "terminal":
+      return "Online game complete";
+    case "idle":
+    case "connecting":
+    case "connected":
+      return "Connecting online game";
+    default:
+      return assertNever(status);
   }
 }
 

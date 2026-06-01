@@ -25,7 +25,11 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
 import { PieceTheme } from "../Constants";
 import type { OnlineClientSession } from "../online/types";
-import { copyOnlineInviteUrl, formatOnlineGameResult } from "../online/client";
+import {
+  copyOnlineInviteUrl,
+  formatOnlineConnectionStatus,
+  formatOnlineGameResult,
+} from "../online/client";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import PromotionModal from "./PromotionModal";
 import "../css/Board.css";
@@ -303,7 +307,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
       : "Spectating";
     const stateLabel = onlineSession.result
       ? `Complete · ${formatOnlineGameResult(onlineSession.result)}`
-      : onlineSession.status;
+      : formatOnlineConnectionStatus(onlineSession.status);
     return `${roleLabel} · ${stateLabel}${onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}`;
   }, [onlineSession]);
 
@@ -518,22 +522,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
       )}
 
       {onlineSession && (
-        <div
-          className="online-session-badge"
-          style={{
-            position: "absolute",
-            top: "10px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 20,
-            padding: "6px 10px",
-            borderRadius: "6px",
-            background: "rgba(0, 0, 0, 0.72)",
-            color: "#f5f5f5",
-            fontSize: "0.82rem",
-            border: "1px solid rgba(255,255,255,0.18)",
-          }}
-        >
+        <div className="online-session-badge">
           {onlineSessionLabel}
         </div>
       )}

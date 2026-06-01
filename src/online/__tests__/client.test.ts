@@ -6,6 +6,8 @@ import {
   fetchOnlineGameSummaries,
   fetchOnlineSnapshot,
   fetchOnlineSpectatorSnapshot,
+  formatOnlineConnectionStatus,
+  formatOnlinePendingConnectionMessage,
   formatOnlineGameResult,
   parseOnlineJoinParams,
   parseOnlineSpectatorParams,
@@ -18,6 +20,7 @@ import {
   shouldApplyOnlineSnapshotVersion,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
+import type { OnlineConnectionStatus } from "../types";
 
 function snapshot(version = 0) {
   return {
@@ -200,6 +203,39 @@ describe("online client helpers", () => {
     expect(formatOnlineGameResult({ winner: "w", reason: "resignation" })).toBe(
       "White wins by resignation"
     );
+  });
+
+  it("formats online connection states for UI labels", () => {
+    const expectedStatusLabels = {
+      idle: "Idle",
+      connecting: "Connecting",
+      connected: "Live",
+      disconnected: "Disconnected",
+      resyncing: "Resyncing",
+      "access-denied": "Access denied",
+      "protocol-error": "Protocol error",
+      "server-error": "Server error",
+      terminal: "Complete",
+    } satisfies Record<OnlineConnectionStatus, string>;
+
+    const expectedPendingMessages = {
+      idle: "Connecting online game",
+      connecting: "Connecting online game",
+      connected: "Connecting online game",
+      disconnected: "Disconnected from online game",
+      resyncing: "Resyncing online game",
+      "access-denied": "Access denied",
+      "protocol-error": "Protocol error",
+      "server-error": "Server error",
+      terminal: "Online game complete",
+    } satisfies Record<OnlineConnectionStatus, string>;
+
+    for (const [status, label] of Object.entries(expectedStatusLabels)) {
+      expect(formatOnlineConnectionStatus(status as OnlineConnectionStatus)).toBe(label);
+    }
+    for (const [status, message] of Object.entries(expectedPendingMessages)) {
+      expect(formatOnlinePendingConnectionMessage(status as OnlineConnectionStatus)).toBe(message);
+    }
   });
 
   it("copies online invite links to the supplied clipboard", async () => {

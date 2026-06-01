@@ -8,6 +8,7 @@ import {
 import {
   OnlineConnectionStatus,
   OnlineGameSnapshotDTO,
+  OnlineReject,
 } from "../online/types";
 import { ONLINE_PROTOCOL_VERSION, validateOnlineServerMessage } from "../online/protocol";
 
@@ -25,8 +26,26 @@ export function useOnlineSpectatorConnection(
   const reconnectTimerRef = useRef<number | null>(null);
   const heartbeatTimerRef = useRef<number | null>(null);
   const latestSnapshotRef = useRef<OnlineGameSnapshotDTO | null>(null);
+  const statusRef = useRef<OnlineConnectionStatus>("idle");
   const [status, setStatus] = useState<OnlineConnectionStatus>("idle");
   const [lastError, setLastError] = useState<string | undefined>();
+
+  const setConnectionStatus = (nextStatus: OnlineConnectionStatus) => {
+    statusRef.current = nextStatus;
+    setStatus(nextStatus);
+  };
+
+  const statusForSnapshot = (snapshot: OnlineGameSnapshotDTO): OnlineConnectionStatus =>
+    snapshot.result ? "terminal" : "connected";
+
+  const isAccessDeniedError = (error: OnlineReject): boolean =>
+    error.code === "unauthorized" || error.code === "not_found";
+
+  const isProtectedConnectionStatus = (nextStatus: OnlineConnectionStatus): boolean =>
+    nextStatus === "access-denied" ||
+    nextStatus === "protocol-error" ||
+    nextStatus === "server-error" ||
+    nextStatus === "terminal";
 
   useEffect(() => {
     onSnapshotRef.current = onSnapshot;
@@ -49,7 +68,7 @@ export function useOnlineSpectatorConnection(
       socketRef.current?.close();
       socketRef.current = null;
       latestSnapshotRef.current = null;
-      setStatus("idle");
+      setConnectionStatus("idle");
       setLastError(undefined);
       return;
     }
@@ -59,19 +78,32 @@ export function useOnlineSpectatorConnection(
     latestSnapshotRef.current = null;
     setLastError(undefined);
 
-    const applySnapshot = (snapshot: OnlineGameSnapshotDTO) => {
+    const applySnapshot = (snapshot: OnlineGameSnapshotDTO): "applied" | "duplicate" | "ignored" => {
+      if (isProtectedConnectionStatus(statusRef.current)) {
+        return "ignored";
+      }
+      if (latestSnapshotRef.current?.result && !snapshot.result) {
+        return "ignored";
+      }
+      if (latestSnapshotRef.current && snapshot.version < latestSnapshotRef.current.version) {
+        return "ignored";
+      }
       if (!shouldApplyOnlineSnapshot(latestSnapshotRef.current, snapshot)) {
-        return;
+        return "duplicate";
       }
       latestSnapshotRef.current = snapshot;
       onSnapshotRef.current(snapshot);
+      return "applied";
     };
 
     const pullSnapshot = async () => {
       try {
         const snapshot = await fetchOnlineSpectatorSnapshot(gameId);
         if (!cancelled) {
-          applySnapshot(snapshot);
+          const snapshotStatus = applySnapshot(snapshot);
+          if (snapshotStatus !== "ignored" && snapshot.result) {
+            setConnectionStatus("terminal");
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -83,7 +115,7 @@ export function useOnlineSpectatorConnection(
     const connect = () => {
       if (cancelled) return;
 
-      setStatus("connecting");
+      setConnectionStatus("connecting");
       const socket = new WebSocket(buildOnlineWebSocketUrl(window.location.href));
       socketRef.current = socket;
 
@@ -113,14 +145,14 @@ export function useOnlineSpectatorConnection(
         try {
           message = JSON.parse(event.data);
         } catch {
-          setStatus("error");
+          setConnectionStatus("protocol-error");
           setLastError("Online server sent an invalid message.");
           return;
         }
 
         const validation = validateOnlineServerMessage(message);
         if (!validation.ok) {
-          setStatus("error");
+          setConnectionStatus("protocol-error");
           setLastError(`Online server sent an invalid message: ${validation.error.message}`);
           return;
         }
@@ -128,9 +160,11 @@ export function useOnlineSpectatorConnection(
 
         if (serverMessage.type === "spectating" || serverMessage.type === "snapshot") {
           reconnectAttempt = 0;
-          setStatus("connected");
-          setLastError(undefined);
-          applySnapshot(serverMessage.snapshot);
+          const snapshotStatus = applySnapshot(serverMessage.snapshot);
+          if (snapshotStatus !== "ignored") {
+            setConnectionStatus(statusForSnapshot(serverMessage.snapshot));
+            setLastError(undefined);
+          }
           return;
         }
 
@@ -139,7 +173,7 @@ export function useOnlineSpectatorConnection(
         }
 
         if (serverMessage.type === "joined") {
-          setStatus("error");
+          setConnectionStatus("protocol-error");
           setLastError("Online server sent a player message to a spectator connection.");
           return;
         }
@@ -147,17 +181,24 @@ export function useOnlineSpectatorConnection(
         if (serverMessage.type === "rejected") {
           setLastError(serverMessage.error.message);
           if (serverMessage.snapshot) {
-            applySnapshot(serverMessage.snapshot);
+            if (applySnapshot(serverMessage.snapshot) !== "ignored") {
+              setConnectionStatus(statusForSnapshot(serverMessage.snapshot));
+            }
+          } else if (isAccessDeniedError(serverMessage.error)) {
+            setConnectionStatus("access-denied");
           }
           return;
         }
 
         if (serverMessage.type === "error") {
-          setStatus("error");
           setLastError(serverMessage.error.message);
           if (serverMessage.snapshot) {
-            applySnapshot(serverMessage.snapshot);
+            if (applySnapshot(serverMessage.snapshot) !== "ignored") {
+              setConnectionStatus(serverMessage.snapshot.result ? "terminal" : "server-error");
+            }
+            return;
           }
+          setConnectionStatus(isAccessDeniedError(serverMessage.error) ? "access-denied" : "server-error");
         }
       };
 
@@ -175,9 +216,16 @@ export function useOnlineSpectatorConnection(
         }
         if (cancelled) return;
 
-        setStatus((current) => (current === "error" ? "error" : "disconnected"));
+        if (isProtectedConnectionStatus(statusRef.current)) {
+          return;
+        }
+        setConnectionStatus("disconnected");
         const delay = getReconnectDelayMs(reconnectAttempt++);
         reconnectTimerRef.current = window.setTimeout(() => {
+          if (isProtectedConnectionStatus(statusRef.current)) {
+            return;
+          }
+          setConnectionStatus("resyncing");
           void pullSnapshot().finally(connect);
         }, delay);
       };
