@@ -5,6 +5,7 @@ import { SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
+import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../../readModel";
 
 class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
@@ -606,6 +607,7 @@ describe("PostgresOnlineGameStore", () => {
     client.summaryRows = [
       {
         payload: {
+          schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
           gameId: "game_existing_summary",
           rulesetVersion: ONLINE_RULESET_VERSION,
           createdAt: "2026-05-31T12:00:00.000Z",
@@ -638,6 +640,7 @@ describe("PostgresOnlineGameStore", () => {
     client.summaryRows = [
       {
         payload: {
+          schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
           gameId: "game_summary_loaded",
           rulesetVersion: ONLINE_RULESET_VERSION,
           createdAt: "2026-05-31T12:00:00.000Z",

@@ -9,7 +9,10 @@ import { createOnlineActionAcceptedEvent, OnlineGameEvent } from "../../events";
 import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
-import type { OnlineGameSummary } from "../../readModel";
+import {
+  ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+  type OnlineGameSummary,
+} from "../../readModel";
 
 const servers: Array<{ close: (callback: () => void) => void }> = [];
 
@@ -397,6 +400,7 @@ describe("createOnlineHttpServer", () => {
   it("lists only public token-free online game summaries", async () => {
     const summaries: OnlineGameSummary[] = [
       {
+        schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
         gameId: "game_public_summary_http",
         rulesetVersion: "castles-beta-v1",
         createdAt: "2026-05-31T12:00:00.000Z",
@@ -415,6 +419,7 @@ describe("createOnlineHttpServer", () => {
         lastEventId: "evt-summary",
       },
       {
+        schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
         gameId: "game_unlisted_summary_http",
         rulesetVersion: "castles-beta-v1",
         createdAt: "2026-05-31T12:00:00.000Z",
@@ -431,6 +436,7 @@ describe("createOnlineHttpServer", () => {
         lastEventId: "evt-unlisted",
       },
       {
+        schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
         gameId: "game_private_summary_http",
         rulesetVersion: "castles-beta-v1",
         createdAt: "2026-05-31T12:00:00.000Z",

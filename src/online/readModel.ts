@@ -8,6 +8,8 @@ import {
 import type { OnlineGameResultDTO } from "./types";
 import type { ValidationResult } from "./validation";
 
+export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 1;
+
 export type OnlineGameVisibility = "private" | "unlisted" | "public";
 export type OnlineArchiveState = "active" | "archived";
 export type OnlineGameSummaryStatus = "active" | "complete";
@@ -18,13 +20,34 @@ export interface OnlineAnonymousIdentity {
   id: string;
 }
 
+export interface OnlineSessionIdentity {
+  kind: "session";
+  /**
+   * Public, non-secret session surrogate. Never store browser cookies,
+   * bearer tokens, or auth session secrets in summary identities.
+   */
+  id: string;
+}
+
+export interface OnlineRegisteredIdentity {
+  kind: "registered";
+  id: string;
+  displayName?: string;
+}
+
+export type OnlineIdentity =
+  | OnlineAnonymousIdentity
+  | OnlineSessionIdentity
+  | OnlineRegisteredIdentity;
+
 export interface OnlineGameSummaryParticipant {
   seat: Color;
   role: "white" | "black";
-  identity: OnlineAnonymousIdentity;
+  identity: OnlineIdentity;
 }
 
 export interface OnlineGameSummary {
+  schemaVersion: typeof ONLINE_GAME_SUMMARY_SCHEMA_VERSION;
   gameId: string;
   rulesetVersion: typeof ONLINE_RULESET_VERSION;
   createdAt: string;
@@ -126,21 +149,43 @@ function validateParticipant(value: unknown): ValidationResult<OnlineGameSummary
     return bad("summary.participants[].role must match its seat.");
   }
   if (!isRecord(value.identity)) return bad("summary.participants[].identity must be an object.");
-  if (value.identity.kind !== "anonymous") {
-    return bad("summary.participants[].identity.kind must be anonymous.");
+  if (
+    value.identity.kind !== "anonymous" &&
+    value.identity.kind !== "session" &&
+    value.identity.kind !== "registered"
+  ) {
+    return bad("summary.participants[].identity.kind is invalid.");
   }
   if (!isBoundedString(value.identity.id)) {
     return bad("summary.participants[].identity.id is invalid.");
   }
+  if (
+    value.identity.kind === "registered" &&
+    value.identity.displayName !== undefined &&
+    !isBoundedString(value.identity.displayName, 64)
+  ) {
+    return bad("summary.participants[].identity.displayName is invalid.");
+  }
+  const identity: OnlineIdentity =
+    value.identity.kind === "registered"
+      ? {
+          kind: "registered",
+          id: value.identity.id,
+          displayName:
+            typeof value.identity.displayName === "string"
+              ? value.identity.displayName
+              : undefined,
+        }
+      : {
+          kind: value.identity.kind,
+          id: value.identity.id,
+        };
   return {
     ok: true,
     value: {
       seat: value.seat,
       role: value.role as "white" | "black",
-      identity: {
-        kind: "anonymous",
-        id: value.identity.id,
-      },
+      identity,
     },
   };
 }
@@ -168,6 +213,12 @@ export function canAccessOnlineGameSummary(
   if (role === "white" || role === "black") return true;
   if (summary.visibility !== "private") return true;
   return role === "challenged";
+}
+
+export function isOnlineGameSummaryListed(
+  summary: Pick<OnlineGameSummary, "visibility">
+): boolean {
+  return summary.visibility === "public";
 }
 
 export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGameSummary[] {
@@ -217,6 +268,7 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
     const endedAt = result ? metadata.endedAt ?? metadata.updatedAt : undefined;
 
     return {
+      schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
       gameId: metadata.gameId,
       rulesetVersion: metadata.rulesetVersion,
       createdAt: metadata.createdAt,
@@ -236,6 +288,9 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
 
 export function validateOnlineGameSummary(value: unknown): ValidationResult<OnlineGameSummary> {
   if (!isRecord(value)) return bad("summary must be an object.");
+  if (value.schemaVersion !== ONLINE_GAME_SUMMARY_SCHEMA_VERSION) {
+    return bad(`summary.schemaVersion must be ${ONLINE_GAME_SUMMARY_SCHEMA_VERSION}.`);
+  }
   if (!isBoundedString(value.gameId, 128)) return bad("summary.gameId is invalid.");
   if (value.rulesetVersion !== ONLINE_RULESET_VERSION) {
     return bad(`summary.rulesetVersion must be ${ONLINE_RULESET_VERSION}.`);
@@ -308,6 +363,7 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
   return {
     ok: true,
     value: {
+      schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
       gameId: value.gameId,
       rulesetVersion: ONLINE_RULESET_VERSION,
       createdAt: value.createdAt,

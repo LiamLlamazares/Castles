@@ -6,6 +6,8 @@ This document is the source of truth for Castles online multiplayer work. The cu
 
 Lichess is a UI/UX benchmark for clarity, speed, and chess-player expectations, not a product clone. Before designing or implementing lobby, archive, spectator, challenge, or analysis screens, benchmark Lichess and at least one other mature chess/board-game service, then record the concrete interaction patterns Castles will adopt or reject.
 
+Contract decisions that affect online storage and public read models are tracked in [online-data-contract.md](online-data-contract.md).
+
 ## Completed State
 
 Current private-link beta:
@@ -70,6 +72,7 @@ Work:
 - Introduce read models for game summaries, participants, result, timestamps, visibility, and archive state.
 - Add identity primitives for anonymous/session users and future accounts without forcing account launch.
 - Define access roles: player, spectator, challenged user, moderator/admin placeholder.
+- Move private bearer credentials out of durable game events before public lobby/challenge work.
 
 Tests/review/deploy gates:
 
@@ -206,8 +209,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish and verify Phase 1 runtime config validation, static-build checks, and deployment runbook updates.
-2. Run the private beta smoke suite against local PostgreSQL, including restart, concurrency, and browser create/join/spectate checks.
-3. Record Phase 2 data-contract decisions: durable/disposable events, game summary read model, identity primitive, and access roles.
+1. Finish the Phase 2 read-model schema version and identity primitive patch.
+2. Move raw bearer credentials out of durable game events and store token hashes separately.
+3. Add retry-safe action idempotency primitives before broader online UX.
 4. Create the UI benchmarking checklist template required before challenge, spectator, archive, lobby, matchmaking, and analysis screens.
 5. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.

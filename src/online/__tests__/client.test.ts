@@ -276,6 +276,7 @@ describe("online client helpers", () => {
 
   it("fetches validated game summaries without player authorization", async () => {
     const summary = {
+      schemaVersion: 1,
       gameId: "game_123",
       rulesetVersion: "castles-beta-v1",
       createdAt: "2026-05-31T12:00:00.000Z",

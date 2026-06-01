@@ -9,7 +9,9 @@ import {
   type OnlineGameEvent,
 } from "../events";
 import {
+  ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   canAccessOnlineGameSummary,
+  isOnlineGameSummaryListed,
   projectOnlineGameSummaries,
   roleForOnlineSeat,
   validateOnlineGameSummary,
@@ -65,6 +67,7 @@ function createEvent(
 
 function validSummary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
   return {
+    schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
     gameId: "game_valid_summary",
     rulesetVersion: ONLINE_RULESET_VERSION,
     createdAt: "2026-05-31T12:00:00.000Z",
@@ -106,6 +109,7 @@ describe("online read model", () => {
     const [summary] = projectOnlineGameSummaries(events);
 
     expect(summary).toMatchObject({
+      schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
       gameId: "game_summary",
       rulesetVersion: ONLINE_RULESET_VERSION,
       createdAt: "2026-05-31T12:00:00.000Z",
@@ -193,6 +197,49 @@ describe("online read model", () => {
     expect(canAccessOnlineGameSummary({ ...summary, visibility: "private" }, "challenged")).toBe(true);
     expect(canAccessOnlineGameSummary({ ...summary, visibility: "private" }, "moderator")).toBe(true);
     expect(canAccessOnlineGameSummary({ ...summary, visibility: "private" }, "admin")).toBe(true);
+    expect(isOnlineGameSummaryListed({ ...summary, visibility: "private" })).toBe(false);
+    expect(isOnlineGameSummaryListed({ ...summary, visibility: "unlisted" })).toBe(false);
+    expect(isOnlineGameSummaryListed({ ...summary, visibility: "public" })).toBe(true);
+  });
+
+  it("validates future-ready anonymous, session, and registered identities", () => {
+    expect(
+      validateOnlineGameSummary(
+        validSummary({
+          participants: [
+            { seat: "w", role: "white", identity: { kind: "session", id: "session_white" } },
+            {
+              seat: "b",
+              role: "black",
+              identity: {
+                kind: "registered",
+                id: "user_black",
+                displayName: "Black Player",
+              },
+            },
+          ],
+        })
+      ).ok
+    ).toBe(true);
+
+    expect(
+      validateOnlineGameSummary(
+        validSummary({
+          participants: [
+            { seat: "w", role: "white", identity: { kind: "bot", id: "bot_white" } as any },
+            { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b" } },
+          ],
+        })
+      ).ok
+    ).toBe(false);
+  });
+
+  it("rejects summaries without the supported summary schema version", () => {
+    const summary = validSummary();
+    const { schemaVersion: _schemaVersion, ...missingSchemaVersion } = summary;
+
+    expect(validateOnlineGameSummary(missingSchemaVersion).ok).toBe(false);
+    expect(validateOnlineGameSummary({ ...summary, schemaVersion: 99 }).ok).toBe(false);
   });
 
   it("rejects summaries with mismatched participant seats and roles", () => {

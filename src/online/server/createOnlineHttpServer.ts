@@ -14,6 +14,7 @@ import {
 } from "../events";
 import {
   OnlineGameSummary,
+  isOnlineGameSummaryListed,
   validateOnlineGameSummary,
 } from "../readModel";
 import { OnlineReject } from "../types";
@@ -469,7 +470,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         if (!validation.ok) {
           throw new Error(validation.error.message);
         }
-        if (validation.value.visibility === "public") {
+        if (isOnlineGameSummaryListed(validation.value)) {
           games.push(validation.value);
         }
       }
