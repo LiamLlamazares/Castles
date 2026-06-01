@@ -1,0 +1,242 @@
+.online-browser-page {
+  min-height: 100dvh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: clamp(20px, 4vw, 40px);
+  background:
+    linear-gradient(135deg, rgba(22, 27, 29, 0.97), rgba(27, 32, 38, 0.98)),
+    var(--backgroundColor);
+  color: #f7f1d6;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.online-browser-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.online-browser-kicker {
+  text-transform: uppercase;
+  color: #91d6c5;
+  letter-spacing: 0.16em;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.online-browser-header h1 {
+  margin: 6px 0 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.online-browser-header p {
+  margin: 10px 0 0;
+  max-width: 760px;
+  color: #d9d0b8;
+}
+
+.online-browser-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(220px, 320px);
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.online-browser-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.online-browser-tabs button,
+.online-browser-button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-height: 40px;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.online-browser-page button:focus-visible,
+.online-browser-search input:focus-visible {
+  outline: 3px solid #91d6c5;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px rgba(10, 16, 18, 0.9);
+}
+
+.online-browser-tabs button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f1d6;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.online-browser-tabs button.active {
+  background: #f4d287;
+  color: #201812;
+}
+
+.online-browser-tabs span {
+  margin-left: 6px;
+  opacity: 0.78;
+}
+
+.online-browser-search {
+  display: grid;
+  gap: 6px;
+  color: #d9d0b8;
+  font-size: 0.9rem;
+}
+
+.online-browser-search input {
+  min-height: 42px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 9px 12px;
+  font: inherit;
+}
+
+.online-browser-status-line {
+  min-height: 24px;
+  margin-bottom: 14px;
+  color: #d9d0b8;
+}
+
+.online-browser-list {
+  display: grid;
+  gap: 10px;
+}
+
+.online-game-row,
+.online-browser-empty {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+}
+
+.online-game-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.online-game-row-main,
+.online-game-players {
+  min-width: 0;
+}
+
+.online-game-players strong,
+.online-game-players span,
+.online-game-result {
+  overflow-wrap: anywhere;
+}
+
+.online-game-players strong {
+  display: block;
+  font-size: 1.08rem;
+}
+
+.online-game-players span {
+  display: block;
+  margin-top: 4px;
+  color: #aeb7b2;
+  font-size: 0.82rem;
+}
+
+.online-game-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  color: #d9d0b8;
+  font-size: 0.9rem;
+}
+
+.online-game-pill {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 800;
+}
+
+.online-game-pill.active {
+  background: rgba(112, 214, 161, 0.18);
+  color: #94f1be;
+}
+
+.online-game-pill.complete {
+  background: rgba(155, 211, 255, 0.16);
+  color: #b9e1ff;
+}
+
+.online-game-result {
+  margin-top: 8px;
+  color: #f4d287;
+  font-weight: 800;
+}
+
+.online-game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.online-browser-button.primary {
+  background: #70d6a1;
+  color: #102018;
+}
+
+.online-browser-button.neutral {
+  background: #f4d287;
+  color: #201812;
+}
+
+.online-browser-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.online-browser-empty h2 {
+  margin: 0 0 8px;
+}
+
+.online-browser-empty p {
+  margin: 0;
+  color: #d9d0b8;
+}
+
+@media (max-width: 760px) {
+  .online-browser-page {
+    padding: 20px;
+  }
+
+  .online-browser-header,
+  .online-browser-toolbar,
+  .online-game-row {
+    grid-template-columns: 1fr;
+  }
+
+  .online-browser-header {
+    display: grid;
+  }
+
+  .online-game-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .online-browser-button,
+  .online-game-actions button {
+    width: 100%;
+  }
+}

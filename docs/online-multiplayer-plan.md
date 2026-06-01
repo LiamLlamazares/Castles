@@ -147,6 +147,8 @@ Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI 
 
 Goal: add discovery and post-game surfaces on top of stable contracts.
 
+Status: Phase 6B is implemented locally on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models and the existing spectator flow. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
+
 Work:
 
 - Benchmark spectator, archive, lobby, matchmaking, and analysis entry points before screen design.
@@ -159,6 +161,24 @@ Tests/review/deploy gates:
 - Tests: archive rebuild/search tests, spectator e2e tests, lobby presence tests, matchmaking lifecycle tests.
 - Review: UX/accessibility review for scanning, empty states, mobile layouts, and analysis handoff.
 - Deploy: discovery features can be rate-limited, disabled, and monitored independently.
+
+## Phase 6B: Watch and Online Archive Browser
+
+Goal: make public online games discoverable without changing visibility semantics.
+
+Work:
+
+- Add a Watch/Online Archive screen that fetches `/api/online/games`, separates active public games from completed archived games, and shows result/time/move summary labels.
+- Add top-level Watch navigation from the game shell and setup surfaces while keeping local Library distinct from Online Archive.
+- Hand off row actions to the existing read-only spectator URL shape: `?onlineGame=<id>&view=spectator`.
+- Strip stale player tokens, challenge parameters, PGN parameters, and URL fragments during spectator handoff.
+- Keep empty states explicit: most current private-beta games are unlisted, so they will not appear until a later public visibility/open-lobby contract exists.
+
+Tests/review/deploy gates:
+
+- Tests: component coverage for empty/error/live/archive/search/spectate states, App navigation coverage for Watch return paths and token-free spectator handoff, and client coverage for spectator URL cleanup.
+- Review: data/access-policy review to confirm only public summaries are listed; UX/accessibility review for keyboard row actions, mobile list layout, and clear public/unlisted language.
+- Deploy: existing online browser smoke must still pass through create/join/spectate/terminal flows.
 
 ## Phase 6A: UI Shell, Navigation, Tutorial, and Save UX Polish
 

@@ -84,6 +84,12 @@ describe("online client helpers", () => {
     expect(buildSpectatorUrl("https://castles.example/?onlineGame=game_123&seat=w", "game_123")).toBe(
       "https://castles.example/?onlineGame=game_123&view=spectator"
     );
+    expect(
+      buildSpectatorUrl(
+        "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged&challengeToken=secret&seat=w&token=secret#challengeToken=old",
+        "game_456"
+      )
+    ).toBe("https://castles.example/?onlineGame=game_456&view=spectator");
   });
 
   it("stores invite tokens outside the URL and resolves tokenless reload URLs", () => {

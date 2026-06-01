@@ -133,8 +133,12 @@ export function buildSpectatorUrl(originOrUrl: string, gameId: string): string {
   url.searchParams.delete("token");
   url.searchParams.delete("pgn");
   url.searchParams.delete("game");
+  url.searchParams.delete("onlineChallenge");
+  url.searchParams.delete("challengeRole");
+  url.searchParams.delete("challengeToken");
   url.searchParams.set("onlineGame", gameId);
   url.searchParams.set("view", "spectator");
+  url.hash = "";
   return url.toString();
 }
 

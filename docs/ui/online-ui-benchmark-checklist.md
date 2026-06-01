@@ -13,6 +13,13 @@ Phase 6A implementation status, 2026-06-01:
 - Final Playwright viewport audit covered desktop/mobile game, setup, tutorial, and online game states with no clipped controls or top overlay collisions.
 - Full online browser smoke passed after the shell changes.
 
+Phase 6B implementation status, 2026-06-01:
+
+- Watch and Online Archive are first-class public-summary destinations, distinct from the local Library.
+- The first version lists only `visibility: "public"` summaries returned by `/api/online/games`; private and unlisted games remain off public browse surfaces.
+- Spectate handoff uses `?onlineGame=<id>&view=spectator` and strips player tokens, challenge parameters, PGN parameters, and URL fragments.
+- Public lobby creation, open seeks, accounts, ratings, chat, and matchmaking stay deferred until the backend contracts exist.
+
 Reference pages checked:
 
 - Lichess home, TV, analysis, and learn pages: https://lichess.org/, https://lichess.org/tv, https://lichess.org/analysis, https://lichess.org/learn
@@ -23,6 +30,7 @@ Reference pages checked:
 - Keep the live board as the primary visual surface.
 - Keep game controls and clocks close to the game, not buried in a general settings area.
 - Give top-level destinations stable names: Play, Learn, Library, Tools, and future Watch/Lobby/Archive.
+- Keep Watch and Online Archive dense, task-oriented, and separate from matchmaking or account surfaces until those systems exist.
 - Make learning entry points easy to find from both the game and setup surfaces.
 - Keep share/invite/spectator actions separate, because Castles has private player links and public read-only spectator links.
 - Keep mobile navigation as a drawer, but make it suppress or move transient banners so controls do not overlap.
@@ -46,6 +54,7 @@ Reference pages checked:
 - Challenge links are distinct from immediate private-room links: a challenge has pending, accept/decline, cancel, accepted, expired, and access-denied states.
 - Challenge accept pages show side selection result, time control, board/game terms, and who can act next without adding accounts, ratings, chat, or community UI.
 - Navigation must never expose or persist bearer invite tokens.
+- Online Archive must never imply local saved-game storage; local Library and public online summaries are separate concepts.
 
 ## Screenshot QA Matrix
 
@@ -58,6 +67,7 @@ Capture before and after screenshots at these viewport sizes:
 - Mobile tutorial: 430 x 932
 - Library desktop/mobile after at least one long save name
 - Online player and spectator game states once a temporary local online server is running
+- Watch and Online Archive desktop/mobile with empty lists, live public games, archived public results, search/filter states, and spectator handoff
 - Challenge pending as challenger, challenged accept page, accepted redirect/retrieval, expired, declined, and cancelled states once challenge UI exists
 - Terminal state after resign/timeout/result
 
@@ -81,3 +91,4 @@ For every screenshot, check:
 - CSS/static assertion where practical: mobile drawer z-index is above hint banners and action controls.
 - Browser smoke: create/join/spectate/terminal flow still passes after shell changes.
 - Accessibility check: move history entries are real buttons so keyboard users can jump through history in desktop and mobile history surfaces.
+- Online browser test: Watch -> Spectate enters a token-free spectator URL and clears stale player/challenge URL state.

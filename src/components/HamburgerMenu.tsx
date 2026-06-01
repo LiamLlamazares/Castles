@@ -22,6 +22,7 @@ interface HamburgerMenuProps {
   onEnableAnalysis?: () => void;
   onSaveGameToLibrary?: () => void;
   onOpenLibrary?: () => void;
+  onOpenOnlineBrowser?: () => void;
   onEditPosition?: () => void;
   onTutorial?: () => void;
   onOpenChange?: (isOpen: boolean) => void;
@@ -48,6 +49,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onEnableAnalysis,
   onSaveGameToLibrary,
   onOpenLibrary,
+  onOpenOnlineBrowser,
   onEditPosition,
   onTutorial,
   onOpenChange,
@@ -162,6 +164,19 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 </button>
               )}
             </section>
+
+            {onOpenOnlineBrowser && (
+              <section className="menu-section" aria-labelledby="menu-section-watch">
+                <div id="menu-section-watch" className="menu-section-label">Watch</div>
+                <button
+                  className="menu-item"
+                  onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
+                >
+                  {renderIcon("W")}
+                  <span>Watch</span>
+                </button>
+              </section>
+            )}
 
             {(onSaveGameToLibrary || onOpenLibrary) && (
               <section className="menu-section" aria-labelledby="menu-section-library">

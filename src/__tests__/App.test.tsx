@@ -20,10 +20,12 @@ vi.mock("../components/Game", () => ({
     onSetup,
     onTutorial,
     onOpenLibrary,
+    onOpenOnlineBrowser,
   }: {
     onSetup: () => void;
     onTutorial: () => void;
     onOpenLibrary: () => void;
+    onOpenOnlineBrowser: () => void;
   }) => (
     <div>
       <div>Game Ready</div>
@@ -36,6 +38,9 @@ vi.mock("../components/Game", () => ({
       <button type="button" onClick={onOpenLibrary}>
         Open Library
       </button>
+      <button type="button" onClick={onOpenOnlineBrowser}>
+        Open Watch
+      </button>
     </div>
   ),
 }));
@@ -45,10 +50,12 @@ vi.mock("../components/GameSetup", () => ({
     onBack,
     onTutorial,
     onOpenLibrary,
+    onOpenOnlineBrowser,
   }: {
     onBack: () => void;
     onTutorial: () => void;
     onOpenLibrary: () => void;
+    onOpenOnlineBrowser: () => void;
   }) => (
     <div>
       <div>Setup Ready</div>
@@ -60,6 +67,31 @@ vi.mock("../components/GameSetup", () => ({
       </button>
       <button type="button" onClick={onOpenLibrary}>
         Setup Library
+      </button>
+      <button type="button" onClick={onOpenOnlineBrowser}>
+        Setup Watch
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("../components/OnlineGameBrowser", () => ({
+  default: ({
+    onBack,
+    onSpectate,
+    backLabel = "Back to game",
+  }: {
+    onBack: () => void;
+    onSpectate: (gameId: string) => void;
+    backLabel?: string;
+  }) => (
+    <div>
+      <div>Online Browser Ready</div>
+      <button type="button" onClick={onBack}>
+        {backLabel}
+      </button>
+      <button type="button" onClick={() => onSpectate("game_watch_public")}>
+        Spectate public game
       </button>
     </div>
   ),
@@ -165,6 +197,50 @@ describe("App game setup lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
     expect(screen.getByText("Game Ready")).toBeInTheDocument();
+  });
+
+  it("returns from Watch to the view that opened it", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Setup Watch" }));
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to setup" }));
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+  });
+
+  it("opens public games from Watch through the token-free spectator flow", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=stale_player&seat=w&token=secret&onlineChallenge=old&challengeRole=challenged&challengeToken=query-secret#challengeToken=fragment-secret"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Spectate public game" }));
+
+    expect(window.location.search).toContain("onlineGame=game_watch_public");
+    expect(window.location.search).toContain("view=spectator");
+    expect(window.location.search).not.toContain("seat=");
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.search).not.toContain("challengeToken=");
+    expect(window.location.search).not.toContain("onlineChallenge=");
+    expect(window.location.hash).toBe("");
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting online game");
+    expect(onlineHookMocks.useOnlineSpectatorConnection).toHaveBeenLastCalledWith(
+      "game_watch_public",
+      expect.any(Function)
+    );
   });
 
   it("lets setup return to the existing game without starting a replacement game", () => {

@@ -5,6 +5,7 @@ import GameSetup from './components/GameSetup';
 import BoardEditor from './components/BoardEditor';
 import Tutorial from './components/Tutorial';
 import GameLibrary from './components/GameLibrary';
+import OnlineGameBrowser from './components/OnlineGameBrowser';
 import InstallAppHint from './components/InstallAppHint';
 import RulesManualPage from './components/RulesManualPage';
 import { Board } from './Classes/Core/Board';
@@ -60,7 +61,7 @@ import {
 import { loadPGNText } from './Classes/Services/PGNLoadService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
-type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'watch';
 
 interface GameConfig {
   board?: Board;
@@ -214,10 +215,18 @@ function App() {
     setView('library');
   };
 
+  const handleOpenOnlineBrowser = () => {
+    if (view !== 'watch') {
+      setViewStack(prev => [...prev, view]);
+      setPreviousView(view);
+    }
+    setView('watch');
+  };
+
   const returnToPreviousView = () => {
     setViewStack(prev => {
       if (prev.length === 0) {
-        const fallback = previousView === 'library' || previousView === 'tutorial' ? 'game' : previousView;
+        const fallback = previousView === 'library' || previousView === 'tutorial' || previousView === 'watch' ? 'game' : previousView;
         setView(fallback);
         setPreviousView('game');
         return [];
@@ -231,7 +240,7 @@ function App() {
     });
   };
 
-  const currentBackLabel = previousView === 'setup' ? 'Back to setup' : 'Back to game';
+  const currentBackLabel = previousView === 'setup' ? 'Back to setup' : previousView === 'watch' ? 'Back to Watch' : 'Back to game';
 
   const handleStartGame = (
     board: Board, 
@@ -344,6 +353,27 @@ function App() {
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
+    setView('game');
+  };
+
+  const handleSpectateOnlineGame = (gameId: string) => {
+    if (onlineChallenge) {
+      forgetOnlineChallengeParams(onlineChallenge);
+    }
+    const url = new URL(buildSpectatorUrl(window.location.href, gameId));
+    window.history.pushState(
+      {},
+      "",
+      `${window.location.pathname}?${url.searchParams.toString()}`
+    );
+    setOnlineJoin(null);
+    setOnlineSpectator({ gameId });
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
+    setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
+    setPreviousView('watch');
     setView('game');
   };
 
@@ -704,6 +734,7 @@ function App() {
           onBack={returnToPreviousView}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
+          onOpenOnlineBrowser={handleOpenOnlineBrowser}
         />
       )}
 
@@ -933,6 +964,7 @@ function App() {
               onEditPosition={handleEditPosition}
               onTutorial={handleTutorialClick}
               onOpenLibrary={handleOpenLibrary}
+              onOpenOnlineBrowser={handleOpenOnlineBrowser}
               onSaveGameToLibrary={handleSaveGameToLibrary}
               pieceTheme={gameConfig.pieceTheme}
               opponentConfig={gameConfig.opponentConfig}
@@ -966,6 +998,14 @@ function App() {
         <Tutorial
           onBack={returnToPreviousView}
           backLabel={currentBackLabel}
+        />
+      )}
+
+      {view === 'watch' && (
+        <OnlineGameBrowser
+          onBack={returnToPreviousView}
+          backLabel={currentBackLabel}
+          onSpectate={handleSpectateOnlineGame}
         />
       )}
 

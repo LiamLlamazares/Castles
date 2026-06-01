@@ -55,6 +55,7 @@ interface GameSetupProps {
     onBack?: () => void;
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
+    onOpenOnlineBrowser?: () => void;
 }
 
 // Opponent options for card-based selection
@@ -107,7 +108,7 @@ const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     }
 };
 
-const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onCreateOnlineChallenge, onBack, onTutorial, onOpenLibrary }) => {
+const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onCreateOnlineChallenge, onBack, onTutorial, onOpenLibrary, onOpenOnlineBrowser }) => {
     // Game Mode State
     const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
     
@@ -294,7 +295,7 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onCre
             <div className="game-setup-shell">
                 {/* Sidebar Controls */}
                 <div className="setup-sidebar">
-                {(onBack || onTutorial || onOpenLibrary) && (
+                {(onBack || onTutorial || onOpenLibrary || onOpenOnlineBrowser) && (
                     <nav className="setup-topbar" aria-label="Setup navigation">
                         {onBack && (
                             <button type="button" className="setup-nav-button" onClick={onBack}>
@@ -309,6 +310,11 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onCre
                         {onOpenLibrary && (
                             <button type="button" className="setup-nav-button" onClick={onOpenLibrary}>
                                 Library
+                            </button>
+                        )}
+                        {onOpenOnlineBrowser && (
+                            <button type="button" className="setup-nav-button" onClick={onOpenOnlineBrowser}>
+                                Watch
                             </button>
                         )}
                     </nav>

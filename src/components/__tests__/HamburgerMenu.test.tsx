@@ -12,7 +12,8 @@ const renderMenu = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu
     onToggleCoordinates: vi.fn(),
     onShowRules: vi.fn(),
     onNewGame: vi.fn(),
-    onOpenLibrary: vi.fn(),
+      onOpenLibrary: vi.fn(),
+      onOpenOnlineBrowser: vi.fn(),
       onSaveGameToLibrary: vi.fn(),
       onTutorial: vi.fn(),
       onOpenChange: vi.fn(),
@@ -39,8 +40,10 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "New Game" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Game" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Game Library" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "New Game" }));
+    expect(screen.getByRole("region", { name: "Watch" })).toContainElement(screen.getByRole("button", { name: "Watch" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Game Library" }));
     expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
 

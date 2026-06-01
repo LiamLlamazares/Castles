@@ -65,6 +65,7 @@ interface GameBoardProps {
   onEditPosition?: (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
+  onOpenOnlineBrowser?: () => void;
   onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<void> | void;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
@@ -96,6 +97,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onEditPosition,
   onTutorial,
   onOpenLibrary,
+  onOpenOnlineBrowser,
   onSaveGameToLibrary,
   timeControl,
   onEnableAnalysis = () => {},
@@ -454,6 +456,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onEnableAnalysis={handleEnterAnalysis}
           onSaveGameToLibrary={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
+          onOpenOnlineBrowser={onOpenOnlineBrowser}
           onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
           onTutorial={onTutorial}
           onOpenChange={setNavigationMenuOpen}
@@ -518,6 +521,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
           onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
+          onOpenOnlineBrowser={onOpenOnlineBrowser}
           onTutorial={onTutorial}
           moveHistory={moveHistory || []}
           moveTree={moveTree}
