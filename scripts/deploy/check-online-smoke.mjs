@@ -3,12 +3,14 @@ import { createRequire } from "node:module";
 import {
   assert,
   assertDefaultOnlineClock,
+  assertProtocolVersionedBody,
   assertSpectatorSnapshot,
   buildWebSocketUrl,
   createFetchWithTimeout,
   createWebSocketWaiters,
   makeSmokeSetup,
   readJson,
+  versionedSocketMessage,
 } from "./online-smoke-lib.mjs";
 
 const require = createRequire(import.meta.url);
@@ -54,27 +56,29 @@ async function main() {
     const joined = nextSocketMessage(socket, "join response");
     await waitForSocketOpen(socket);
     socket.send(
-      JSON.stringify({
+      JSON.stringify(versionedSocketMessage({
         type: "join",
         gameId: created.gameId,
         token: created.white.token,
-      })
+      }))
     );
 
     const joinedMessage = await joined;
+    assertProtocolVersionedBody(joinedMessage, "Join WebSocket response");
     assert(joinedMessage.type === "joined", "WebSocket did not join the created game");
     assert(joinedMessage.snapshot?.version === 0, "Created game did not start at version 0");
     assertDefaultOnlineClock(joinedMessage.snapshot, "Joined snapshot");
 
     const snapshot = nextSocketMessage(socket, "post-action snapshot");
     socket.send(
-      JSON.stringify({
+      JSON.stringify(versionedSocketMessage({
         type: "action",
         clientActionId: "smoke-pass-1",
         action: { type: "PASS", baseVersion: 0 },
-      })
+      }))
     );
     const snapshotMessage = await snapshot;
+    assertProtocolVersionedBody(snapshotMessage, "Post-action WebSocket response");
     assert(snapshotMessage.type === "snapshot", "Pass action did not produce a snapshot");
     assert(snapshotMessage.snapshot?.version === 1, "Pass action did not advance to version 1");
     assertDefaultOnlineClock(snapshotMessage.snapshot, "Post-action snapshot");
@@ -87,6 +91,7 @@ async function main() {
   });
   const readBody = await readJson(readResponse);
   assert(readResponse.status === 200, `Snapshot fetch failed with ${readResponse.status}`);
+  assertProtocolVersionedBody(readBody, "Player snapshot response");
   assert(readBody.snapshot?.version === 1, "Snapshot fetch did not return persisted version 1");
   assertDefaultOnlineClock(readBody.snapshot, "Persisted snapshot");
   await assertSpectatorSnapshot(fetchWithTimeout, baseUrl, created.gameId, 1);

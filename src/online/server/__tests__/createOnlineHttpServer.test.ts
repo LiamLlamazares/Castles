@@ -17,6 +17,7 @@ import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   type OnlineGameSummary,
 } from "../../readModel";
+import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
 import { verifyOnlineToken } from "../onlineTokenCredentials";
 
 const servers: Array<{ close: (callback: () => void) => void }> = [];
@@ -82,6 +83,15 @@ function nextSocketMessage(socket: WebSocket, description = "WebSocket message")
     socket.once("message", onMessage);
     socket.once("error", onError);
   });
+}
+
+function versionedMessage<T extends Record<string, unknown>>(
+  message: T
+): T & { protocolVersion: typeof ONLINE_PROTOCOL_VERSION } {
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    ...message,
+  };
 }
 
 function waitForSocketOpen(socket: WebSocket): Promise<void> {
@@ -163,10 +173,15 @@ describe("createOnlineHttpServer", () => {
       `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
       { headers: { authorization: `Bearer ${created.white.token}` } }
     );
+    const snapshotBody = await snapshotResponse.json();
 
     expect(snapshotResponse.status).toBe(200);
     expect(snapshotResponse.headers.get("cache-control")).toContain("no-store");
     expect(snapshotResponse.headers.get("vary")).toContain("Authorization");
+    expect(snapshotBody).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      snapshot: { gameId: "game_headers" },
+    });
   });
 
   it("does not accept snapshot tokens in the URL query string", async () => {
@@ -223,6 +238,7 @@ describe("createOnlineHttpServer", () => {
     expect(spectatorResponse.status).toBe(200);
     expect(spectatorResponse.headers.get("cache-control")).toContain("no-store");
     expect(spectatorBody).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
       role: "spectator",
       snapshot: {
         gameId: "game_spectator_rest",
@@ -503,11 +519,11 @@ describe("createOnlineHttpServer", () => {
 
     socket.on("open", () => {
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "join",
           gameId: created.gameId,
           token: created.white.token,
-        })
+        }))
       );
     });
 
@@ -564,11 +580,11 @@ describe("createOnlineHttpServer", () => {
 
     socket.on("open", () => {
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "join",
           gameId: created.gameId,
           token: created.white.token,
-        })
+        }))
       );
     });
 
@@ -579,11 +595,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-log-reject",
           action: { type: "PASS", baseVersion: 99 },
-        })
+        }))
       );
       await expect(nextSocketMessage(socket, "logged action rejection")).resolves.toMatchObject({
         type: "rejected",
@@ -757,18 +773,63 @@ describe("createOnlineHttpServer", () => {
 
     const pong = new Promise<unknown>((resolve, reject) => {
       socket.on("open", () => {
-        socket.send(JSON.stringify({ type: "ping", clientTime: 123 }));
+        socket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 123 })));
       });
       socket.on("message", (data) => resolve(JSON.parse(data.toString("utf8"))));
       socket.on("error", reject);
     });
 
     await expect(pong).resolves.toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
       type: "pong",
       clientTime: 123,
     });
 
     socket.close();
+  });
+
+  it("rejects websocket messages without the supported protocol version", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const unversionedSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const wrongVersionSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await Promise.all([
+        waitForSocketOpen(unversionedSocket),
+        waitForSocketOpen(wrongVersionSocket),
+      ]);
+
+      unversionedSocket.send(JSON.stringify({ type: "ping", clientTime: 1 }));
+      wrongVersionSocket.send(
+        JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION + 1,
+          type: "ping",
+          clientTime: 2,
+        })
+      );
+
+      await expect(
+        nextSocketMessage(unversionedSocket, "unversioned websocket rejection")
+      ).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "bad_request" },
+      });
+      await expect(
+        nextSocketMessage(wrongVersionSocket, "wrong-version websocket rejection")
+      ).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "bad_request" },
+      });
+    } finally {
+      unversionedSocket.close();
+      wrongVersionSocket.close();
+    }
   });
 
   it("allows websocket spectators to watch broadcasts but not submit actions", async () => {
@@ -794,7 +855,9 @@ describe("createOnlineHttpServer", () => {
 
     try {
       spectatorSocket.on("open", () => {
-        spectatorSocket.send(JSON.stringify({ type: "spectate", gameId: created.gameId }));
+        spectatorSocket.send(
+          JSON.stringify(versionedMessage({ type: "spectate", gameId: created.gameId }))
+        );
       });
       await expect(nextSocketMessage(spectatorSocket, "spectator join")).resolves.toMatchObject({
         type: "spectating",
@@ -802,11 +865,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       spectatorSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-spectator",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
       await expect(nextSocketMessage(spectatorSocket, "spectator action rejection")).resolves.toMatchObject({
         type: "error",
@@ -817,7 +880,9 @@ describe("createOnlineHttpServer", () => {
       whiteSocket = playerSocket;
       playerSocket.on("open", () => {
         playerSocket.send(
-          JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+          JSON.stringify(
+            versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+          )
         );
       });
       await expect(nextSocketMessage(playerSocket, "white join")).resolves.toMatchObject({
@@ -827,11 +892,11 @@ describe("createOnlineHttpServer", () => {
 
       const spectatorSnapshot = nextSocketMessage(spectatorSocket, "spectator broadcast");
       playerSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-spectator-broadcast",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
 
       await expect(nextSocketMessage(playerSocket, "white action broadcast")).resolves.toMatchObject({
@@ -871,10 +936,18 @@ describe("createOnlineHttpServer", () => {
 
     try {
       whiteSocket.on("open", () => {
-        whiteSocket.send(JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token }));
+        whiteSocket.send(
+          JSON.stringify(
+            versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+          )
+        );
       });
       blackSocket.on("open", () => {
-        blackSocket.send(JSON.stringify({ type: "join", gameId: created.gameId, token: created.black.token }));
+        blackSocket.send(
+          JSON.stringify(
+            versionedMessage({ type: "join", gameId: created.gameId, token: created.black.token })
+          )
+        );
       });
 
       await expect(nextSocketMessage(whiteSocket, "white join")).resolves.toMatchObject({
@@ -890,11 +963,11 @@ describe("createOnlineHttpServer", () => {
       const blackBroadcast = nextSocketMessage(blackSocket, "black resignation broadcast");
 
       blackSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-resign-broadcast",
           action: { type: "RESIGN", baseVersion: 0 },
-        })
+        }))
       );
 
       await expect(whiteBroadcast).resolves.toMatchObject({
@@ -956,32 +1029,32 @@ describe("createOnlineHttpServer", () => {
       ]);
 
       for (let i = 0; i < 120; i += 1) {
-        limitedSocket.send(JSON.stringify({ type: "ping", clientTime: i }));
+        limitedSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: i })));
         await expect(nextSocketMessage(limitedSocket, `limited ping ${i}`)).resolves.toMatchObject({
           type: "pong",
           clientTime: i,
         });
       }
 
-      limitedSocket.send(JSON.stringify({ type: "ping", clientTime: 120 }));
+      limitedSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 120 })));
       await expect(nextSocketMessage(limitedSocket, "limited websocket rate limit")).resolves.toMatchObject({
         type: "error",
         error: { code: "rate_limited" },
       });
 
-      sameRealClientSocket.send(JSON.stringify({ type: "ping", clientTime: 1 }));
+      sameRealClientSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 1 })));
       await expect(nextSocketMessage(sameRealClientSocket, "same real client rate limit")).resolves.toMatchObject({
         type: "error",
         error: { code: "rate_limited" },
       });
 
-      otherClientSocket.send(JSON.stringify({ type: "ping", clientTime: 1 }));
+      otherClientSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 1 })));
       await expect(nextSocketMessage(otherClientSocket, "other client ping")).resolves.toMatchObject({
         type: "pong",
         clientTime: 1,
       });
 
-      spoofedOnlySocket.send(JSON.stringify({ type: "ping", clientTime: 1 }));
+      spoofedOnlySocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 1 })));
       await expect(nextSocketMessage(spoofedOnlySocket, "spoofed-only client ping")).resolves.toMatchObject({
         type: "pong",
         clientTime: 1,
@@ -1023,11 +1096,11 @@ describe("createOnlineHttpServer", () => {
 
     socket.on("open", () => {
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "join",
           gameId: created.gameId,
           token: created.white.token,
-        })
+        }))
       );
     });
 
@@ -1038,11 +1111,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-persistence-failure",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
 
       await expect(nextSocketMessage(socket)).resolves.toMatchObject({
@@ -1097,11 +1170,11 @@ describe("createOnlineHttpServer", () => {
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     socket.on("open", () => {
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "join",
           gameId: created.gameId,
           token: created.white.token,
-        })
+        }))
       );
     });
 
@@ -1112,11 +1185,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-events",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
 
       await expect(nextSocketMessage(socket)).resolves.toMatchObject({
@@ -1265,11 +1338,11 @@ describe("createOnlineHttpServer", () => {
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     socket.on("open", () => {
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "join",
           gameId: created.gameId,
           token: created.white.token,
-        })
+        }))
       );
     });
 
@@ -1280,11 +1353,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       socket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-canonical",
           action: { type: "RESIGN", baseVersion: 1 },
-        })
+        }))
       );
 
       await expect(nextSocketMessage(socket, "canonical action result")).resolves.toMatchObject({
@@ -1341,7 +1414,9 @@ describe("createOnlineHttpServer", () => {
 
     whiteSocket.on("open", () => {
       whiteSocket.send(
-        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
       );
     });
     try {
@@ -1356,18 +1431,18 @@ describe("createOnlineHttpServer", () => {
       });
 
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-serialized-1",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-serialized-2",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
 
       await delay(25);
@@ -1429,7 +1504,9 @@ describe("createOnlineHttpServer", () => {
 
     whiteSocket.on("open", () => {
       whiteSocket.send(
-        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
       );
     });
     try {
@@ -1448,8 +1525,8 @@ describe("createOnlineHttpServer", () => {
         clientActionId: "client-action-duplicate",
         action: { type: "PASS", baseVersion: 0 },
       };
-      whiteSocket.send(JSON.stringify(message));
-      whiteSocket.send(JSON.stringify(message));
+      whiteSocket.send(JSON.stringify(versionedMessage(message)));
+      whiteSocket.send(JSON.stringify(versionedMessage(message)));
 
       await waitForCondition(
         () => whiteMessages.length >= 2,
@@ -1491,7 +1568,9 @@ describe("createOnlineHttpServer", () => {
 
     whiteSocket.on("open", () => {
       whiteSocket.send(
-        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
       );
     });
     try {
@@ -1501,11 +1580,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-conflict",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
       await expect(nextSocketMessage(whiteSocket, "first duplicate-conflict action")).resolves.toMatchObject({
         type: "snapshot",
@@ -1513,11 +1592,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-conflict",
           action: { type: "RESIGN", baseVersion: 0 },
-        })
+        }))
       );
       await expect(nextSocketMessage(whiteSocket, "same-id changed action rejection")).resolves.toMatchObject({
         type: "rejected",
@@ -1560,7 +1639,9 @@ describe("createOnlineHttpServer", () => {
 
     whiteSocket.on("open", () => {
       whiteSocket.send(
-        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
       );
     });
     try {
@@ -1575,14 +1656,14 @@ describe("createOnlineHttpServer", () => {
         clientActionId: "client-action-duplicate-timeout",
         action: { type: "PASS", baseVersion: 0 },
       };
-      whiteSocket.send(JSON.stringify(duplicateMessage));
+      whiteSocket.send(JSON.stringify(versionedMessage(duplicateMessage)));
       await expect(nextSocketMessage(whiteSocket, "first action before timeout")).resolves.toMatchObject({
         type: "snapshot",
         snapshot: { version: 1 },
       });
 
       now = 120_000;
-      whiteSocket.send(JSON.stringify(duplicateMessage));
+      whiteSocket.send(JSON.stringify(versionedMessage(duplicateMessage)));
       await expect(nextSocketMessage(whiteSocket, "duplicate retry timeout snapshot")).resolves.toMatchObject({
         type: "snapshot",
         snapshot: {
@@ -1630,7 +1711,9 @@ describe("createOnlineHttpServer", () => {
 
     whiteSocket.on("open", () => {
       whiteSocket.send(
-        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
       );
     });
     try {
@@ -1641,11 +1724,11 @@ describe("createOnlineHttpServer", () => {
 
       now = 1_000;
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-conflict-timeout",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
       await expect(nextSocketMessage(whiteSocket, "first conflict-timeout action")).resolves.toMatchObject({
         type: "snapshot",
@@ -1654,11 +1737,11 @@ describe("createOnlineHttpServer", () => {
 
       now = 120_000;
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-conflict-timeout",
           action: { type: "RESIGN", baseVersion: 0 },
-        })
+        }))
       );
       await expect(nextSocketMessage(whiteSocket, "conflicting duplicate timeout rejection")).resolves.toMatchObject({
         type: "rejected",
@@ -1669,11 +1752,11 @@ describe("createOnlineHttpServer", () => {
         },
       });
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-conflict-timeout",
           action: { type: "RESIGN", baseVersion: 0 },
-        })
+        }))
       );
       await expect(nextSocketMessage(whiteSocket, "repeated conflict after timeout")).resolves.toMatchObject({
         type: "rejected",
@@ -1731,7 +1814,9 @@ describe("createOnlineHttpServer", () => {
 
     whiteSocket.on("open", () => {
       whiteSocket.send(
-        JSON.stringify({ type: "join", gameId: created.gameId, token: created.white.token })
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
       );
     });
 
@@ -1743,11 +1828,11 @@ describe("createOnlineHttpServer", () => {
       });
 
       whiteSocket.send(
-        JSON.stringify({
+        JSON.stringify(versionedMessage({
           type: "action",
           clientActionId: "client-action-pending-read",
           action: { type: "PASS", baseVersion: 0 },
-        })
+        }))
       );
       await waitForCondition(
         () => persistedActionVersions.length === 1,
@@ -1763,7 +1848,9 @@ describe("createOnlineHttpServer", () => {
       const blackJoined = nextSocketMessage(pendingBlackSocket);
       pendingBlackSocket.on("open", () => {
         pendingBlackSocket.send(
-          JSON.stringify({ type: "join", gameId: created.gameId, token: created.black.token })
+          JSON.stringify(
+            versionedMessage({ type: "join", gameId: created.gameId, token: created.black.token })
+          )
         );
       });
 

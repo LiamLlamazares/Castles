@@ -4,6 +4,8 @@ export function assert(condition, message) {
   }
 }
 
+export const ONLINE_PROTOCOL_VERSION = 1;
+
 export async function readJson(response) {
   const text = await response.text();
   try {
@@ -11,6 +13,20 @@ export async function readJson(response) {
   } catch {
     throw new Error(`Expected JSON from ${response.url}, got: ${text.slice(0, 200)}`);
   }
+}
+
+export function assertProtocolVersionedBody(body, description = "Response body") {
+  assert(
+    body?.protocolVersion === ONLINE_PROTOCOL_VERSION,
+    `${description} did not report protocolVersion ${ONLINE_PROTOCOL_VERSION}`
+  );
+}
+
+export function versionedSocketMessage(message) {
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    ...message,
+  };
 }
 
 export function createFetchWithTimeout(requestTimeoutMs) {
@@ -41,6 +57,7 @@ export async function assertSpectatorSnapshot(
   );
   const body = await readJson(response);
   assert(response.status === 200, `Spectator snapshot fetch failed with ${response.status}`);
+  assertProtocolVersionedBody(body, "Spectator snapshot response");
   assert(body.role === "spectator", "Spectator snapshot did not report spectator role");
   assert(
     body.snapshot?.version === expectedVersion,

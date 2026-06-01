@@ -4,6 +4,7 @@ import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
 import { ONLINE_EVENT_SCHEMA_VERSION, validateOnlineGameEvent } from "../events";
+import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import { validateClientMessage, validateOnlineAction, validateOnlineGameSetup } from "../validation";
 
 function createSetup() {
@@ -95,17 +96,83 @@ describe("online validation", () => {
   });
 
   it("validates spectator websocket messages", () => {
-    expect(validateClientMessage({ type: "spectate", gameId: "game_test" })).toEqual({
+    expect(
+      validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "spectate",
+        gameId: "game_test",
+      })
+    ).toEqual({
       ok: true,
-      value: { type: "spectate", gameId: "game_test", lastSeenVersion: undefined },
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "spectate",
+        gameId: "game_test",
+        lastSeenVersion: undefined,
+      },
     });
-    expect(validateClientMessage({ type: "spectate", gameId: "" }).ok).toBe(false);
-    expect(validateClientMessage({ type: "spectate", gameId: "g", lastSeenVersion: -1 }).ok).toBe(false);
+    expect(
+      validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "spectate",
+        gameId: "",
+      }).ok
+    ).toBe(false);
+    expect(
+      validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "spectate",
+        gameId: "g",
+        lastSeenVersion: -1,
+      }).ok
+    ).toBe(false);
+  });
+
+  it("requires supported protocol versions on websocket client messages", () => {
+    expect(validateClientMessage({ type: "ping" }).ok).toBe(false);
+    expect(
+      validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION + 1,
+        type: "ping",
+      }).ok
+    ).toBe(false);
+    expect(
+      validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "ping",
+        clientTime: 123,
+      })
+    ).toEqual({
+      ok: true,
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "ping",
+        clientTime: 123,
+      },
+    });
+    expect(
+      validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "join",
+        gameId: "game_test",
+        token: "white-token",
+      })
+    ).toEqual({
+      ok: true,
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "join",
+        gameId: "game_test",
+        token: "white-token",
+        lastSeenVersion: undefined,
+      },
+    });
   });
 
   it("requires online action messages to include a bounded client action id", () => {
     expect(
       validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "action",
         clientActionId: "action_1",
         action: { type: "PASS", baseVersion: 0 },
@@ -113,6 +180,7 @@ describe("online validation", () => {
     ).toEqual({
       ok: true,
       value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "action",
         clientActionId: "action_1",
         action: { type: "PASS", baseVersion: 0 },
@@ -120,12 +188,14 @@ describe("online validation", () => {
     });
     expect(
       validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "action",
         action: { type: "PASS", baseVersion: 0 },
       }).ok
     ).toBe(false);
     expect(
       validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "action",
         clientActionId: "",
         action: { type: "PASS", baseVersion: 0 },
@@ -133,6 +203,7 @@ describe("online validation", () => {
     ).toBe(false);
     expect(
       validateClientMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "action",
         clientActionId: "x".repeat(129),
         action: { type: "PASS", baseVersion: 0 },

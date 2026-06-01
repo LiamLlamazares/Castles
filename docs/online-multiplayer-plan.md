@@ -24,6 +24,7 @@ Current private-link beta:
 - Private white/black bearer invite tokens are removed from URLs and stored in `sessionStorage`.
 - Online API/token-bearing responses bypass browser, service worker, and HTTP caching.
 - REST snapshot resync, heartbeat pings, reconnect backoff, and readiness health checks exist.
+- WebSocket client messages, WebSocket server messages, and REST snapshot envelopes require `protocolVersion: 1`; old disposable beta clients fail loudly.
 - Read-only public spectator URLs and WebSocket spectator joins exist; spectators cannot submit actions.
 - Local PostgreSQL restart smoke tooling verifies create, join, action persistence, shutdown, restart, and reload.
 - Local PostgreSQL concurrency smoke tooling verifies per-game locking and stale-action behavior.
@@ -102,6 +103,8 @@ Tests/review/deploy gates:
 ## Phase 4: Online Protocol and Client State
 
 Goal: formalize the client/server online protocol and make client state resilient.
+
+Status: started. The protocol envelope now requires `protocolVersion: 1` on WebSocket client messages, WebSocket server messages, and REST snapshot responses. Remaining Phase 4 work is the richer client state machine and explicit resync/access-denied semantics.
 
 Work:
 
@@ -211,6 +214,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Create the UI benchmarking checklist template required before challenge, spectator, archive, lobby, matchmaking, and analysis screens.
-2. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.
-3. Begin the Phase 6A navigation/tutorial/save polish pass once the current backend hardening chunk is committed.
+1. Finish the Phase 4 client-state machine slice: named states for connecting, joined, resyncing, disconnected, access-denied, terminal, and malformed-protocol error handling.
+2. Add explicit stale-version/resync semantics for rejected actions and reconnects, including browser smoke coverage.
+3. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.

@@ -8,18 +8,29 @@ import type {
 } from "./types";
 import type { ValidationResult } from "./validation";
 import {
+  ONLINE_PROTOCOL_VERSION,
+  type OnlineProtocolVersion,
+  isSupportedOnlineProtocolVersion,
+} from "./protocolVersion";
+import {
   validateOnlineGameId,
   validateOnlineGameSetup,
   validateOnlineGameState,
 } from "./validation";
 
+export { ONLINE_PROTOCOL_VERSION } from "./protocolVersion";
+
+type OnlineProtocolEnvelope = {
+  protocolVersion: OnlineProtocolVersion;
+};
+
 export type OnlineServerMessage =
-  | { type: "joined"; color: Color; snapshot: OnlineGameSnapshotDTO }
-  | { type: "spectating"; snapshot: OnlineGameSnapshotDTO }
-  | { type: "snapshot"; snapshot: OnlineGameSnapshotDTO }
-  | { type: "rejected"; error: OnlineReject; snapshot?: OnlineGameSnapshotDTO }
-  | { type: "error"; error: OnlineReject; snapshot?: OnlineGameSnapshotDTO }
-  | { type: "pong"; clientTime?: unknown; serverTime?: number };
+  | (OnlineProtocolEnvelope & { type: "joined"; color: Color; snapshot: OnlineGameSnapshotDTO })
+  | (OnlineProtocolEnvelope & { type: "spectating"; snapshot: OnlineGameSnapshotDTO })
+  | (OnlineProtocolEnvelope & { type: "snapshot"; snapshot: OnlineGameSnapshotDTO })
+  | (OnlineProtocolEnvelope & { type: "rejected"; error: OnlineReject; snapshot?: OnlineGameSnapshotDTO })
+  | (OnlineProtocolEnvelope & { type: "error"; error: OnlineReject; snapshot?: OnlineGameSnapshotDTO })
+  | (OnlineProtocolEnvelope & { type: "pong"; clientTime?: unknown; serverTime?: number });
 
 const REJECT_CODES = new Set<OnlineRejectCode>([
   "unauthorized",
@@ -251,6 +262,9 @@ export function validateOnlineServerMessage(
   value: unknown
 ): ValidationResult<OnlineServerMessage> {
   if (!isRecord(value)) return bad("message must be an object.");
+  if (!isSupportedOnlineProtocolVersion(value.protocolVersion)) {
+    return bad(`message.protocolVersion must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
   if (typeof value.type !== "string") return bad("message.type must be a string.");
 
   if (value.type === "joined") {
@@ -260,6 +274,7 @@ export function validateOnlineServerMessage(
     return {
       ok: true,
       value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "joined",
         color: value.color,
         snapshot: snapshot.value,
@@ -270,13 +285,27 @@ export function validateOnlineServerMessage(
   if (value.type === "spectating") {
     const snapshot = validateSnapshot(value.snapshot);
     if (!snapshot.ok) return snapshot;
-    return { ok: true, value: { type: "spectating", snapshot: snapshot.value } };
+    return {
+      ok: true,
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "spectating",
+        snapshot: snapshot.value,
+      },
+    };
   }
 
   if (value.type === "snapshot") {
     const snapshot = validateSnapshot(value.snapshot);
     if (!snapshot.ok) return snapshot;
-    return { ok: true, value: { type: "snapshot", snapshot: snapshot.value } };
+    return {
+      ok: true,
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "snapshot",
+        snapshot: snapshot.value,
+      },
+    };
   }
 
   if (value.type === "rejected" || value.type === "error") {
@@ -291,6 +320,7 @@ export function validateOnlineServerMessage(
     return {
       ok: true,
       value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: value.type,
         error: error.value,
         snapshot,
@@ -305,6 +335,7 @@ export function validateOnlineServerMessage(
     return {
       ok: true,
       value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "pong",
         clientTime: value.clientTime,
         serverTime: value.serverTime,

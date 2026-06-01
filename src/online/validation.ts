@@ -17,6 +17,11 @@ import {
   SanctuaryDTO,
 } from "./types";
 import { isValidClientActionId } from "./actionIdempotency";
+import {
+  ONLINE_PROTOCOL_VERSION,
+  type OnlineProtocolVersion,
+  isSupportedOnlineProtocolVersion,
+} from "./protocolVersion";
 
 type ValidationErrorCode = "bad_request";
 
@@ -25,10 +30,26 @@ export type ValidationResult<T> =
   | { ok: false; error: OnlineReject & { code: ValidationErrorCode } };
 
 export type OnlineClientMessage =
-  | { type: "join"; gameId: string; token: string; lastSeenVersion?: number }
-  | { type: "spectate"; gameId: string; lastSeenVersion?: number }
-  | { type: "action"; clientActionId: string; action: OnlineActionDTO }
-  | { type: "ping"; clientTime?: unknown };
+  | {
+      protocolVersion: OnlineProtocolVersion;
+      type: "join";
+      gameId: string;
+      token: string;
+      lastSeenVersion?: number;
+    }
+  | {
+      protocolVersion: OnlineProtocolVersion;
+      type: "spectate";
+      gameId: string;
+      lastSeenVersion?: number;
+    }
+  | {
+      protocolVersion: OnlineProtocolVersion;
+      type: "action";
+      clientActionId: string;
+      action: OnlineActionDTO;
+    }
+  | { protocolVersion: OnlineProtocolVersion; type: "ping"; clientTime?: unknown };
 
 const MAX_BOARD_SIZE = 12;
 const MAX_HEX_ABS = 32;
@@ -526,6 +547,9 @@ export function validateOnlineAction(value: unknown): ValidationResult<OnlineAct
 
 export function validateClientMessage(value: unknown): ValidationResult<OnlineClientMessage> {
   if (!isRecord(value)) return bad("message must be an object.");
+  if (!isSupportedOnlineProtocolVersion(value.protocolVersion)) {
+    return bad(`message.protocolVersion must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
   if (value.type === "join") {
     const gameId = validateOnlineGameId(value.gameId, "join.gameId");
     if (!gameId.ok) return gameId;
@@ -536,6 +560,7 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
     return {
       ok: true,
       value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "join",
         gameId: gameId.value,
         token: value.token,
@@ -553,6 +578,7 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
     return {
       ok: true,
       value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "spectate",
         gameId: gameId.value,
         lastSeenVersion: value.lastSeenVersion,
@@ -568,12 +594,24 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
     if (!action.ok) return action;
     return {
       ok: true,
-      value: { type: "action", clientActionId: value.clientActionId, action: action.value },
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "action",
+        clientActionId: value.clientActionId,
+        action: action.value,
+      },
     };
   }
 
   if (value.type === "ping") {
-    return { ok: true, value: { type: "ping", clientTime: value.clientTime } };
+    return {
+      ok: true,
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "ping",
+        clientTime: value.clientTime,
+      },
+    };
   }
 
   return bad("message.type is not supported.");

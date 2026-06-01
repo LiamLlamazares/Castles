@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   assert,
+  assertProtocolVersionedBody,
   createFetchWithTimeout,
   readJson,
 } from "./online-smoke-lib.mjs";
@@ -104,6 +105,7 @@ async function fetchSpectatorSnapshot(gameId, expectedVersion) {
   );
   const body = await readJson(response);
   assert(response.status === 200, `Spectator snapshot failed with ${response.status}`);
+  assertProtocolVersionedBody(body, "Browser smoke spectator snapshot response");
   assert(body.role === "spectator", "Spectator snapshot did not report spectator role");
   if (expectedVersion !== undefined) {
     assert(

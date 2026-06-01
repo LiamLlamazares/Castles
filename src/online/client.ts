@@ -1,5 +1,6 @@
 import type { CreatedOnlineGame } from "./OnlineGameService";
 import { validateOnlineGameSnapshot } from "./protocol";
+import { ONLINE_PROTOCOL_VERSION, isSupportedOnlineProtocolVersion } from "./protocolVersion";
 import { validateOnlineGameSummary, type OnlineGameSummary } from "./readModel";
 import { OnlineGameResultDTO, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from "./types";
 
@@ -282,10 +283,16 @@ function validateSnapshotResponse(
   body: unknown,
   label: string
 ): OnlineGameSnapshotDTO {
-  const snapshot =
-    body && typeof body === "object" && !Array.isArray(body)
-      ? (body as { snapshot?: unknown }).snapshot
-      : undefined;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} response was malformed: response body must be an object.`);
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `${label} response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+
+  const snapshot = (body as { snapshot?: unknown }).snapshot;
   const validation = validateOnlineGameSnapshot(snapshot);
   if (!validation.ok) {
     throw new Error(`${label} response was malformed: ${validation.error.message}`);

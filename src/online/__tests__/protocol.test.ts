@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateOnlineServerMessage } from "../protocol";
+import { ONLINE_PROTOCOL_VERSION, validateOnlineServerMessage } from "../protocol";
 import { OnlineGameService } from "../OnlineGameService";
 import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
 import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
@@ -58,6 +58,7 @@ describe("online server protocol validation", () => {
   it("accepts known server message envelopes", () => {
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "joined",
         color: "w",
         snapshot: snapshot(),
@@ -65,6 +66,7 @@ describe("online server protocol validation", () => {
     ).toEqual({
       ok: true,
       value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "joined",
         color: "w",
         snapshot: snapshot(),
@@ -72,14 +74,29 @@ describe("online server protocol validation", () => {
     });
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "spectating",
         snapshot: snapshot(),
       }).ok
     ).toBe(true);
-    expect(validateOnlineServerMessage({ type: "snapshot", snapshot: snapshot(2) }).ok).toBe(true);
-    expect(validateOnlineServerMessage({ type: "pong", clientTime: 123, serverTime: 456 }).ok).toBe(true);
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "snapshot",
+        snapshot: snapshot(2),
+      }).ok
+    ).toBe(true);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "pong",
+        clientTime: 123,
+        serverTime: 456,
+      }).ok
+    ).toBe(true);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "rejected",
         error: { code: "stale_action", message: "Old version." },
         snapshot: snapshot(),
@@ -87,6 +104,7 @@ describe("online server protocol validation", () => {
     ).toBe(true);
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "error",
         error: { code: "bad_request", message: "Nope." },
       }).ok
@@ -94,16 +112,50 @@ describe("online server protocol validation", () => {
   });
 
   it("rejects unknown or malformed server messages", () => {
+    expect(validateOnlineServerMessage({ type: "snapshot", snapshot: snapshot() }).ok).toBe(false);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION + 1,
+        type: "snapshot",
+        snapshot: snapshot(),
+      }).ok
+    ).toBe(false);
     expect(validateOnlineServerMessage({ type: "joined", color: "w" }).ok).toBe(false);
-    expect(validateOnlineServerMessage({ type: "joined", color: "green", snapshot: snapshot() }).ok).toBe(false);
-    expect(validateOnlineServerMessage({ type: "snapshot", snapshot: { gameId: "game_bad" } }).ok).toBe(false);
-    expect(validateOnlineServerMessage({ type: "error", error: { code: "bad_request" } }).ok).toBe(false);
-    expect(validateOnlineServerMessage({ type: "mystery", snapshot: snapshot() }).ok).toBe(false);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "joined",
+        color: "green",
+        snapshot: snapshot(),
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "snapshot",
+        snapshot: { gameId: "game_bad" },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "bad_request" },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "mystery",
+        snapshot: snapshot(),
+      }).ok
+    ).toBe(false);
   });
 
   it("rejects nested malformed snapshots before hooks can apply them", () => {
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "snapshot",
         snapshot: {
           ...snapshot(),
@@ -113,6 +165,7 @@ describe("online server protocol validation", () => {
     ).toBe(false);
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "snapshot",
         snapshot: {
           ...snapshot(),
@@ -122,6 +175,7 @@ describe("online server protocol validation", () => {
     ).toBe(false);
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "snapshot",
         snapshot: {
           ...snapshot(),
@@ -131,6 +185,7 @@ describe("online server protocol validation", () => {
     ).toBe(false);
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "snapshot",
         snapshot: {
           ...snapshot(),
@@ -143,6 +198,7 @@ describe("online server protocol validation", () => {
   it("rejects malformed optional result and clock snapshots", () => {
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "snapshot",
         snapshot: {
           ...snapshot(),
@@ -152,6 +208,7 @@ describe("online server protocol validation", () => {
     ).toBe(false);
     expect(
       validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "snapshot",
         snapshot: {
           ...snapshot(),
@@ -169,6 +226,7 @@ describe("online server protocol validation", () => {
 
   it("accepts snapshots produced by the online game service", () => {
     const result = validateOnlineServerMessage({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
       type: "snapshot",
       snapshot: createRealSnapshot(),
     });

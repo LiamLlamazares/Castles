@@ -12,7 +12,7 @@ import {
   OnlineGameSnapshotDTO,
 } from "../online/types";
 import { createClientActionId } from "../online/actionIdempotency";
-import { validateOnlineServerMessage } from "../online/protocol";
+import { ONLINE_PROTOCOL_VERSION, validateOnlineServerMessage } from "../online/protocol";
 
 interface UseOnlineGameConnectionResult {
   status: OnlineConnectionStatus;
@@ -93,6 +93,7 @@ export function useOnlineGameConnection(
       socket.onopen = () => {
         socket.send(
           JSON.stringify({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
             type: "join",
             gameId: join.gameId,
             token: join.token,
@@ -100,7 +101,13 @@ export function useOnlineGameConnection(
         );
         heartbeatTimerRef.current = window.setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
+            socket.send(
+              JSON.stringify({
+                protocolVersion: ONLINE_PROTOCOL_VERSION,
+                type: "ping",
+                clientTime: Date.now(),
+              })
+            );
           }
         }, 15_000);
       };
@@ -200,6 +207,7 @@ export function useOnlineGameConnection(
 
     socket.send(
       JSON.stringify({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "action",
         clientActionId: createClientActionId(),
         action,

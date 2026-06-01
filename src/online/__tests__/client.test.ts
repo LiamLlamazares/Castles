@@ -17,6 +17,7 @@ import {
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
 } from "../client";
+import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 
 function snapshot(version = 0) {
   return {
@@ -216,7 +217,7 @@ describe("online client helpers", () => {
   it("fetches spectator snapshots without authorization headers", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ snapshot: snapshot(2) }),
+      json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot: snapshot(2) }),
     });
 
     await expect(fetchOnlineSpectatorSnapshot("game_123", fetchImpl as any)).resolves.toMatchObject({
@@ -230,7 +231,7 @@ describe("online client helpers", () => {
   it("fetches player snapshots with authorization and validates the response", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ snapshot: snapshot(3) }),
+      json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot: snapshot(3) }),
     });
 
     await expect(
@@ -260,7 +261,10 @@ describe("online client helpers", () => {
     };
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ snapshot: malformedSnapshot }),
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        snapshot: malformedSnapshot,
+      }),
     });
 
     await expect(
@@ -271,6 +275,23 @@ describe("online client helpers", () => {
     ).rejects.toThrow(/snapshot response was malformed/);
     await expect(fetchOnlineSpectatorSnapshot("game_123", fetchImpl as any)).rejects.toThrow(
       /snapshot response was malformed/
+    );
+  });
+
+  it("rejects unversioned player and spectator snapshot responses", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ snapshot: snapshot(3) }),
+    });
+
+    await expect(
+      fetchOnlineSnapshot(
+        { gameId: "game_123", seat: "w", token: "white-token" },
+        fetchImpl as any
+      )
+    ).rejects.toThrow(/protocol version/);
+    await expect(fetchOnlineSpectatorSnapshot("game_123", fetchImpl as any)).rejects.toThrow(
+      /protocol version/
     );
   });
 

@@ -26,6 +26,7 @@ import {
   validateOnlineGameId,
   validateOnlineGameSetup,
 } from "../validation";
+import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import type {
   OnlineGameStoreActionInput,
   OnlineGameStoreActionResult,
@@ -112,7 +113,11 @@ class FixedWindowRateLimiter {
 
 function sendJson(socket: WebSocket, payload: unknown): void {
   if (socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify(payload));
+    const versionedPayload =
+      payload && typeof payload === "object" && !Array.isArray(payload) && "type" in payload
+        ? { ...payload, protocolVersion: ONLINE_PROTOCOL_VERSION }
+        : payload;
+    socket.send(JSON.stringify(versionedPayload));
   }
 }
 
@@ -184,8 +189,8 @@ function httpStatusForOnlineError(error: OnlineReject): number {
 function responseBodyWithOptionalSnapshot(
   error: OnlineReject,
   snapshot?: unknown
-): { error: OnlineReject; snapshot?: unknown } {
-  return snapshot ? { error, snapshot } : { error };
+): { error: OnlineReject; protocolVersion?: typeof ONLINE_PROTOCOL_VERSION; snapshot?: unknown } {
+  return snapshot ? { error, protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot } : { error };
 }
 
 async function checkStoreReadyWithTimeout(
@@ -661,6 +666,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
 
       res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         color,
         snapshot: currentRoom.getSnapshot(),
       });
@@ -737,6 +743,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       const currentRoom = service.getRoom(gameId.value) ?? room;
 
       res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
         role: "spectator",
         snapshot: currentRoom.getSnapshot(),
       });

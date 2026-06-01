@@ -9,7 +9,7 @@ import {
   OnlineConnectionStatus,
   OnlineGameSnapshotDTO,
 } from "../online/types";
-import { validateOnlineServerMessage } from "../online/protocol";
+import { ONLINE_PROTOCOL_VERSION, validateOnlineServerMessage } from "../online/protocol";
 
 interface UseOnlineSpectatorConnectionResult {
   status: OnlineConnectionStatus;
@@ -90,13 +90,20 @@ export function useOnlineSpectatorConnection(
       socket.onopen = () => {
         socket.send(
           JSON.stringify({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
             type: "spectate",
             gameId,
           })
         );
         heartbeatTimerRef.current = window.setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
+            socket.send(
+              JSON.stringify({
+                protocolVersion: ONLINE_PROTOCOL_VERSION,
+                type: "ping",
+                clientTime: Date.now(),
+              })
+            );
           }
         }, 15_000);
       };

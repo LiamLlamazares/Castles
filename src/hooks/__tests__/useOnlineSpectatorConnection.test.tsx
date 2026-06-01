@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useOnlineSpectatorConnection } from "../useOnlineSpectatorConnection";
+import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
 
 class MockWebSocket {
   static readonly OPEN = 1;
@@ -54,7 +55,7 @@ describe("useOnlineSpectatorConnection", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ snapshot: snapshot(0) }),
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot: snapshot(0) }),
       })
     );
   });
@@ -82,6 +83,7 @@ describe("useOnlineSpectatorConnection", () => {
     });
 
     expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
       type: "spectate",
       gameId: "game_123",
     });
@@ -89,6 +91,7 @@ describe("useOnlineSpectatorConnection", () => {
     act(() => {
       MockWebSocket.instances[0].onmessage?.({
         data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
           type: "spectating",
           snapshot: snapshot(1),
         }),
@@ -158,13 +161,26 @@ describe("useOnlineSpectatorConnection", () => {
     const socket = MockWebSocket.instances.at(-1)!;
 
     act(() => {
-      socket.onmessage?.({ data: JSON.stringify({ type: "snapshot", snapshot: snapshot(1) }) });
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "snapshot",
+          snapshot: snapshot(1),
+        }),
+      });
     });
     await waitFor(() => expect(result.current.status).toBe("connected"));
     expect(snapshots.at(-1)).toMatchObject({ version: 1 });
 
     act(() => {
-      socket.onmessage?.({ data: JSON.stringify({ type: "pong", clientTime: 123, serverTime: 456 }) });
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "pong",
+          clientTime: 123,
+          serverTime: 456,
+        }),
+      });
     });
     expect(result.current.status).toBe("connected");
     expect(snapshots.at(-1)).toMatchObject({ version: 1 });
@@ -173,6 +189,7 @@ describe("useOnlineSpectatorConnection", () => {
       socket.onmessage?.({
         data: JSON.stringify({
           type: "rejected",
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
           error: { code: "bad_request", message: "Spectators cannot move." },
           snapshot: snapshot(2),
         }),
@@ -186,6 +203,7 @@ describe("useOnlineSpectatorConnection", () => {
       socket.onmessage?.({
         data: JSON.stringify({
           type: "error",
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
           error: { code: "bad_request", message: "Server problem." },
           snapshot: snapshot(3),
         }),
@@ -197,7 +215,12 @@ describe("useOnlineSpectatorConnection", () => {
 
     act(() => {
       socket.onmessage?.({
-        data: JSON.stringify({ type: "joined", color: "w", snapshot: snapshot(4) }),
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "joined",
+          color: "w",
+          snapshot: snapshot(4),
+        }),
       });
     });
     await waitFor(() => {
