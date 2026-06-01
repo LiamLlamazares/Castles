@@ -39,15 +39,21 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
         // Render move number if it's white's move OR if it's the start of a variation
         const shouldShowNumber = node.move.color === 'w' || i === 0;
         
+        const moveLabel = `${shouldShowNumber ? `${node.move.turnNumber}. ` : ""}${node.move.notation}`;
+
         elements.push(
-            <span 
+            <button
                 key={node.id}
+                type="button"
                 onClick={() => onJumpToNode?.(node.id)}
                 className={`history-move ${isSelected ? 'selected' : ''}`}
+                aria-current={isSelected ? "step" : undefined}
+                aria-label={moveLabel}
                 style={{
                     cursor: "pointer",
                     padding: "3px 8px",
                     borderRadius: "4px",
+                    border: isSelected ? "1px solid #4a90e2" : "0",
                     background: isSelected ? "#fff" : "rgba(255, 255, 255, 0.9)",
                     color: "#000",
                     fontWeight: isSelected ? "800" : "500",
@@ -57,12 +63,14 @@ const HistoryTable: React.FC<HistoryTableProps> = ({ moveHistory, moveTree, onJu
                     marginBottom: "6px",
                     boxShadow: isSelected ? "0 0 0 2px #4a90e2, 0 4px 6px rgba(0,0,0,0.3)" : "0 2px 4px rgba(0,0,0,0.2)",
                     fontSize: "0.8rem",
+                    fontFamily: "inherit",
+                    lineHeight: "1.3",
                     transition: "all 0.2s ease"
                 }}
             >
                 {shouldShowNumber && <span style={{ opacity: 0.6, marginRight: "4px", fontWeight: "bold" }}>{node.move.turnNumber}.</span>}
                 {node.move.notation}
-            </span>
+            </button>
         );
 
         // Check for side variations (children other than the selected one)

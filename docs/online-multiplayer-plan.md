@@ -164,7 +164,7 @@ Tests/review/deploy gates:
 
 Goal: make the app feel navigable and sturdy before broader public discovery.
 
-Status: partially implemented for the current shell and queued for a dedicated UI polish tranche. Keep this phase as a regression checklist when adding future lobby, archive, challenge, spectator, or analysis screens.
+Status: implemented for the current shell on 2026-06-01. Keep this phase as a regression checklist when adding future lobby, archive, challenge, spectator, or analysis screens.
 
 This phase is required before calling the online experience Lichess-like. The current app shell has known rough edges: the side bar can feel awkward, the tutorial entry point is not placed naturally, routes/views can be hard to return from, save/progress affordances are not prominent enough, and some controls may overlap on smaller layouts.
 
@@ -179,6 +179,14 @@ Work:
 - Fix overlapping controls, especially go-back/navigation affordances, tutorial navigation, online status, and mobile bottom controls.
 - Scan for similar layout and navigation problems across all current pages before stopping at the first visible overlap.
 - Preserve game-state safety: navigation must not accidentally reset an online or local game without a clear explicit action.
+
+Implemented notes:
+
+- Game side-panel actions are grouped into turn controls, save/review, online links, and navigation on desktop; mobile keeps secondary navigation in the drawer so the board remains primary at 360 x 640.
+- Tutorial progress is labelled, persisted, and restartable from the tutorial topbar.
+- Mobile move history is reachable through a disclosure, and history moves are keyboard-accessible buttons.
+- Online invite/spectator controls use short visible labels while preserving full accessible names for tests and smoke automation.
+- Top online/status/hint overlays no longer collide with the hamburger/drawer; online games suppress the generic discovery hint.
 
 Tests/review/deploy gates:
 

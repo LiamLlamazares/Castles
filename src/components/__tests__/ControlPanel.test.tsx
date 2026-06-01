@@ -43,17 +43,37 @@ describe("ControlPanel", () => {
         onShare={vi.fn()}
         onSaveGame={vi.fn()}
         onOpenLibrary={vi.fn()}
+        onTutorial={vi.fn()}
       />
     );
 
-    const controls = screen.getByRole("group", { name: "Game actions" });
+    const turnControls = screen.getByRole("group", { name: "Turn controls" });
+    const saveControls = screen.getByRole("group", { name: "Save and review" });
+    const navigationControls = screen.getByRole("group", { name: "Navigation" });
 
-    expect(controls).toContainElement(screen.getByRole("button", { name: "Pass" }));
-    expect(controls).toContainElement(screen.getByRole("button", { name: "Resign" }));
-    expect(controls).toContainElement(screen.getByRole("button", { name: "Save" }));
-    expect(controls).toContainElement(screen.getByRole("button", { name: "Library" }));
-    expect(controls).toContainElement(screen.getByRole("button", { name: "Share" }));
-    expect(controls).toContainElement(screen.getByRole("button", { name: "New Game" }));
+    expect(turnControls).toContainElement(screen.getByRole("button", { name: "Pass" }));
+    expect(turnControls).toContainElement(screen.getByRole("button", { name: "Resign" }));
+    expect(saveControls).toContainElement(screen.getByRole("button", { name: "Save" }));
+    expect(saveControls).toContainElement(screen.getByRole("button", { name: "Library" }));
+    expect(saveControls).toContainElement(screen.getByRole("button", { name: "Share" }));
+    expect(navigationControls).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
+    expect(navigationControls).toContainElement(screen.getByRole("button", { name: "New Game" }));
+    expect(screen.getByRole("button", { name: "Move history" })).toBeInTheDocument();
+  });
+
+  it("opens tutorial from the game panel navigation controls", () => {
+    const onTutorial = vi.fn();
+
+    render(
+      <ControlPanel
+        {...baseProps}
+        onTutorial={onTutorial}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
+
+    expect(onTutorial).toHaveBeenCalledOnce();
   });
 
   it("calls visible save and library actions from the game panel", () => {
@@ -202,6 +222,8 @@ describe("ControlPanel", () => {
 
     const opponentButton = screen.getByRole("button", { name: "Copy Opponent Invite" });
     const spectatorButton = screen.getByRole("button", { name: "Copy Spectator Link" });
+    expect(opponentButton).toHaveTextContent("Invite");
+    expect(spectatorButton).toHaveTextContent("Spectate");
     expect(opponentButton).toHaveAttribute("title", "Copy move-enabled opponent invite link");
     expect(spectatorButton).toHaveAttribute("title", "Copy read-only spectator link");
 

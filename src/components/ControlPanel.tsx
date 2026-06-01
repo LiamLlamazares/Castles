@@ -26,6 +26,7 @@ interface ControlPanelProps {
   onCopySpectator?: () => void;
   onSaveGame?: () => void;
   onOpenLibrary?: () => void;
+  onTutorial?: () => void;
   shareLabel?: string;
   shareTitle?: string;
   moveHistory: MoveRecord[];
@@ -194,6 +195,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onCopySpectator,
   onSaveGame,
   onOpenLibrary,
+  onTutorial,
   shareLabel = "Share",
   shareTitle = "Share Game URL",
   moveHistory,
@@ -213,9 +215,19 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
   const isGameOver = !!winner;
   const arePlayControlsDisabled = isGameOver || isReadOnly || isActionPending;
+  const moveCount = moveHistory.length;
+  const renderHistory = () => (
+    <HistoryTable
+      moveHistory={moveHistory}
+      moveTree={moveTree}
+      onJumpToNode={onJumpToNode}
+      currentPlayer={currentPlayer}
+      viewNodeId={viewNodeId}
+    />
+  );
 
   return (
-    <div className="game-panel">
+    <div className="game-panel" aria-label="Game sidebar">
       {/* Black Player Section (Top) */}
       <div className="player-section black">
         {currentPlayer === "b" && !winner && (
@@ -242,14 +254,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       )}
 
       {/* Move History (Middle) */}
-      <div className="notation-section">
-        <HistoryTable 
-          moveHistory={moveHistory} 
-          moveTree={moveTree}
-          onJumpToNode={onJumpToNode}
-          currentPlayer={currentPlayer}
-          viewNodeId={viewNodeId}
-        />
+      <div className="notation-section" aria-label="Move history">
+        {renderHistory()}
       </div>
 
       {/* White Player Section (Bottom) */}
@@ -274,58 +280,100 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       {/* Game Controls */}
-      <div className="game-controls" role="group" aria-label="Game actions">
-        <button
-          className="control-button pass"
-          onClick={onPass}
-          title="Pass Turn (Space)"
-          disabled={arePlayControlsDisabled}
-        >
-          Pass
-        </button>
-        <button className="control-button resign" onClick={onResign} disabled={arePlayControlsDisabled}>
-          Resign
-        </button>
-        {onSaveGame && (
-          <button className="control-button save" onClick={onSaveGame}>
-            Save
-          </button>
+      <details className="mobile-move-history">
+        <summary role="button" aria-label="Move history">
+          Move history
+          <span>{moveCount} {moveCount === 1 ? "move" : "moves"}</span>
+        </summary>
+        <div className="mobile-move-history-body">
+          {renderHistory()}
+        </div>
+      </details>
+
+      <div className="game-controls" aria-label="Game controls">
+        <section className="control-section turn-controls" role="group" aria-label="Turn controls">
+          <div className="control-section-label">Turn</div>
+          <div className="control-button-row">
+            <button
+              className="control-button pass"
+              onClick={onPass}
+              title="Pass Turn (Space)"
+              disabled={arePlayControlsDisabled}
+            >
+              Pass
+            </button>
+            <button className="control-button resign" onClick={onResign} disabled={arePlayControlsDisabled}>
+              Resign
+            </button>
+          </div>
+        </section>
+
+        <section className="control-section save-controls" role="group" aria-label="Save and review">
+          <div className="control-section-label">Save and review</div>
+          <div className="control-button-row">
+            {onSaveGame && (
+              <button className="control-button save" onClick={onSaveGame}>
+                Save
+              </button>
+            )}
+            {onOpenLibrary && (
+              <button className="control-button library" onClick={onOpenLibrary}>
+                Library
+              </button>
+            )}
+            {!onCopyOpponentInvite && !onCopySpectator && (
+              <button className="control-button share" onClick={onShare} title={shareTitle}>
+                {shareLabel}
+              </button>
+            )}
+          </div>
+        </section>
+
+        {(onCopyOpponentInvite || onCopySpectator) && (
+          <section className="control-section online-link-controls" role="group" aria-label="Online links">
+            <div className="control-section-label">Online links</div>
+            <div className="control-button-row">
+              {onCopyOpponentInvite && (
+                <button
+                  className="control-button share"
+                  onClick={onCopyOpponentInvite}
+                  aria-label="Copy Opponent Invite"
+                  title="Copy move-enabled opponent invite link"
+                >
+                  Invite
+                </button>
+              )}
+              {onCopySpectator && (
+                <button
+                  className="control-button share"
+                  onClick={onCopySpectator}
+                  aria-label="Copy Spectator Link"
+                  title="Copy read-only spectator link"
+                >
+                  Spectate
+                </button>
+              )}
+            </div>
+          </section>
         )}
-        {onOpenLibrary && (
-          <button className="control-button library" onClick={onOpenLibrary}>
-            Library
-          </button>
-        )}
-        {onCopyOpponentInvite && (
-          <button
-            className="control-button share"
-            onClick={onCopyOpponentInvite}
-            title="Copy move-enabled opponent invite link"
-          >
-            Copy Opponent Invite
-          </button>
-        )}
-        {onCopySpectator && (
-          <button
-            className="control-button share"
-            onClick={onCopySpectator}
-            title="Copy read-only spectator link"
-          >
-            Copy Spectator Link
-          </button>
-        )}
-        {!onCopyOpponentInvite && !onCopySpectator && (
-          <button className="control-button share" onClick={onShare} title={shareTitle}>
-            {shareLabel}
-          </button>
-        )}
-        <button 
-          className="control-button new-game" 
-          onClick={onNewGame}
-          title="Start new game (N)"
-        >
-          New Game
-        </button>
+
+        <section className="control-section navigation-controls" role="group" aria-label="Navigation">
+          <div className="control-section-label">Navigation</div>
+          <div className="control-button-row">
+            {onTutorial && (
+              <button className="control-button tutorial" onClick={onTutorial}>
+                Tutorial
+              </button>
+            )}
+            <button
+              className="control-button new-game"
+              onClick={onNewGame}
+              title="Start new game (N)"
+            >
+              New Game
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );

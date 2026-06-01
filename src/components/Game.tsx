@@ -434,9 +434,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const dismissTooltipHint = () => setShowTooltipHint(false);
 
   const [activeAbility, setActiveAbility] = React.useState<import('../Constants').AbilityType | null>(null);
+  const shellClasses = [
+    "game-shell",
+    isTutorialMode ? "tutorial-game-shell" : "",
+    onlineSession ? "has-online-session" : "",
+    isNavigationMenuOpen ? "navigation-open" : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div className={`game-shell ${isTutorialMode ? "tutorial-game-shell" : ""}`}>
+    <div className={shellClasses}>
       {showNavigationMenu && (
         <HamburgerMenu
           onExportPGN={handleExportPGN}
@@ -512,6 +518,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
           onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
+          onTutorial={onTutorial}
           moveHistory={moveHistory || []}
           moveTree={moveTree}
           onJumpToNode={jumpToNode}
@@ -573,7 +580,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         activeAbility={activeAbility}
         onAbilitySelect={setActiveAbility}
         sanctuarySettings={sanctuarySettings}
-        showDiscoveryHint={shouldShowTooltipHint && !isTutorialMode && !isNavigationMenuOpen}
+        showDiscoveryHint={shouldShowTooltipHint && !isTutorialMode && !isNavigationMenuOpen && !onlineSession}
       />
     </div>
   );

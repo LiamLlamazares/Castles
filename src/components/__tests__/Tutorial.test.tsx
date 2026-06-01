@@ -53,11 +53,11 @@ describe("Tutorial", () => {
       </ThemeProvider>
     );
 
-    expect(screen.getByText("1 / 35")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 35");
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(screen.getByText("2 / 35")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 35");
     expect(localStorage.getItem("castles_tutorial_lesson_index")).toBe("1");
 
     unmount();
@@ -68,7 +68,23 @@ describe("Tutorial", () => {
       </ThemeProvider>
     );
 
-    expect(screen.getByText("2 / 35")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 35");
+  });
+
+  it("lets users restart persisted tutorial progress", () => {
+    render(
+      <ThemeProvider>
+        <Tutorial onBack={vi.fn()} />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(localStorage.getItem("castles_tutorial_lesson_index")).toBe("1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Restart Tutorial" }));
+
+    expect(localStorage.getItem("castles_tutorial_lesson_index")).toBe("0");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 35");
   });
 
   it("updates persisted progress when jumping through lesson shortcuts", () => {
@@ -116,7 +132,7 @@ describe("Tutorial", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(screen.getByText("2 / 35")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 35");
     expect(getItem).toHaveBeenCalled();
     expect(setItem).toHaveBeenCalled();
   });

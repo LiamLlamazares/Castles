@@ -57,9 +57,26 @@ function browserButtonHelpers() {
       window.__castlesSmokeFindButton = (text, mustBeEnabled = false) => {
         const target = window.__castlesSmokeNormalizeButtonText(text);
         return Array.from(document.querySelectorAll("button")).find((button) => {
+          const rect = button.getBoundingClientRect();
+          const style = window.getComputedStyle(button);
+          if (
+            rect.width <= 0 ||
+            rect.height <= 0 ||
+            style.visibility === "hidden" ||
+            style.display === "none"
+          ) {
+            return false;
+          }
           const rendered = window.__castlesSmokeNormalizeButtonText(button.innerText);
           const source = window.__castlesSmokeNormalizeButtonText(button.textContent);
-          return (rendered === target || source === target) && (!mustBeEnabled || !button.disabled);
+          const ariaLabel = window.__castlesSmokeNormalizeButtonText(button.getAttribute("aria-label"));
+          const title = window.__castlesSmokeNormalizeButtonText(button.getAttribute("title"));
+          return (
+            rendered === target ||
+            source === target ||
+            ariaLabel === target ||
+            title === target
+          ) && (!mustBeEnabled || !button.disabled);
         }) ?? null;
       };
   `;

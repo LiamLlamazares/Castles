@@ -4,6 +4,15 @@ Last refreshed: 2026-06-01
 
 This checklist turns the Lichess-style target into concrete Castles UI checks. Lichess is the benchmark for fast navigation, dense game panels, and clear play/learn/watch/tools entry points. Chess.com is a secondary benchmark for persistent category navigation and beginner learning entry points. Castles should adapt these patterns to a hex strategy game rather than copy either product.
 
+Phase 6A implementation status, 2026-06-01:
+
+- Current game shell follows the board-first benchmark on desktop, 390 x 844, and 360 x 640 viewports.
+- Game actions are grouped into turn controls, save/review, online links, and navigation; mobile keeps secondary navigation in the drawer to preserve board space.
+- Tutorial progress is visible, persisted, and restartable.
+- Mobile move history is available through a disclosure, and move entries are keyboard-accessible buttons.
+- Final Playwright viewport audit covered desktop/mobile game, setup, tutorial, and online game states with no clipped controls or top overlay collisions.
+- Full online browser smoke passed after the shell changes.
+
 Reference pages checked:
 
 - Lichess home, TV, analysis, and learn pages: https://lichess.org/, https://lichess.org/tv, https://lichess.org/analysis, https://lichess.org/learn
@@ -71,3 +80,4 @@ For every screenshot, check:
 - Hamburger menu test: opening the drawer reports open state so game-level transient hints can be suppressed.
 - CSS/static assertion where practical: mobile drawer z-index is above hint banners and action controls.
 - Browser smoke: create/join/spectate/terminal flow still passes after shell changes.
+- Accessibility check: move history entries are real buttons so keyboard users can jump through history in desktop and mobile history surfaces.

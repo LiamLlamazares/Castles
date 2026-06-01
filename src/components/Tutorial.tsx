@@ -79,6 +79,10 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" 
     }
   };
 
+  const restartTutorial = () => {
+    setCurrentLessonIndex(0);
+  };
+
   const jumpToLesson = (lessonId: string) => {
     const idx = lessons.findIndex(l => l.id === lessonId);
     if (idx !== -1) setCurrentLessonIndex(idx);
@@ -94,9 +98,21 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" 
           >
             {backLabel}
           </button>
-          <span className="tutorial-progress">
+          <span
+            className="tutorial-progress"
+            role="status"
+            aria-label="Tutorial progress"
+            aria-live="polite"
+          >
             {currentLessonIndex + 1} / {lessons.length}
           </span>
+          <button
+            type="button"
+            onClick={restartTutorial}
+            className="tutorial-reset-button"
+          >
+            Restart Tutorial
+          </button>
         </div>
 
         <h2 className="tutorial-title" style={{ margin: 0 }}>{lesson.title}</h2>
@@ -157,11 +173,11 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" 
           </div>
         )}
 
-        <div style={{ marginTop: 'auto', display: 'flex', gap: '12px', paddingTop: '16px' }}>
-          <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} style={{ flex: 1, padding: '10px', backgroundColor: currentLessonIndex === 0 ? '#333' : '#2a4a7a', color: currentLessonIndex === 0 ? '#666' : '#fff', border: 'none', borderRadius: '8px', cursor: currentLessonIndex === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+        <div className="tutorial-step-controls">
+          <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
             Previous
           </button>
-          <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} style={{ flex: 1, padding: '10px', backgroundColor: currentLessonIndex === lessons.length - 1 ? '#333' : '#2a4a7a', color: currentLessonIndex === lessons.length - 1 ? '#666' : '#fff', border: 'none', borderRadius: '8px', cursor: currentLessonIndex === lessons.length - 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+          <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
             Next
           </button>
         </div>
