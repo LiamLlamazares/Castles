@@ -43,7 +43,7 @@ BEGIN
   ELSE
     ALTER ROLE castles_local WITH PASSWORD 'castles_local_dev';
   END IF;
-END
+END;
 `$`$;
 SELECT 'CREATE DATABASE castles_local OWNER castles_local'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'castles_local')\gexec
@@ -63,8 +63,16 @@ Remove-Item Env:\PGPASSWORD
 
 ```powershell
 $env:DATABASE_URL="postgresql://castles_local:castles_local_dev@localhost:5432/castles_local"
+$env:ONLINE_STORE_BACKEND="postgres"
+$env:PUBLIC_BASE_URL="http://127.0.0.1:3000"
+$env:CASTLES_REQUIRE_STATIC_DIR="1"
+$env:NODE_ENV="production"
+$env:BUILD_ID="local-rehearsal"
+$env:GIT_COMMIT="0123456789abcdef0123456789abcdef01234567"
 npm run build
 npm run server:build
+npm run server:check-config
+$env:NODE_ENV="test"
 npm run online:smoke:local
 npm run online:smoke:local:concurrency
 ```
@@ -106,4 +114,5 @@ Do not point this script at the live database. The live server check remains:
 
 ```powershell
 node scripts/deploy/check-online-smoke.mjs https://castles.ls314.com <reviewed-commit-sha>
+npm run online:smoke:browser -- https://castles.ls314.com <reviewed-commit-sha>
 ```

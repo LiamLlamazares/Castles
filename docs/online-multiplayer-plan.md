@@ -22,11 +22,12 @@ Current private-link beta:
 - REST snapshot resync, heartbeat pings, reconnect backoff, and readiness health checks exist.
 - Read-only public spectator URLs and WebSocket spectator joins exist; spectators cannot submit actions.
 - Local PostgreSQL restart smoke tooling verifies create, join, action persistence, shutdown, restart, and reload.
+- Local PostgreSQL concurrency smoke tooling verifies per-game locking and stale-action behavior.
+- The game shell has responsive navigation, tutorial/rules/library access, save/load controls, and mobile overlap checks.
 
 Current constraints:
 
 - One writer process only; no cross-process coordination yet.
-- No explicit per-game database transaction/advisory lock around accepted actions.
 - Private invite links are bearer secrets and require HTTPS.
 - Public spectator URLs expose games to anyone with the random game id.
 - Accounts, ratings, matchmaking, moderation, anti-cheat, and admin tooling are not implemented.
@@ -47,7 +48,7 @@ Goal: make the existing private-link beta boring to run for a small trusted grou
 
 Work:
 
-- Tighten remote deploy notes, environment validation, HTTPS assumptions, and backup/restore steps.
+- Tighten remote deploy notes, environment validation, HTTPS assumptions, static-build checks, and backup/restore steps.
 - Keep invite creation, join, reconnect, spectator, timeout, terminal state, and restart paths smoke-tested.
 - Add minimal operator runbook entries for logs, health checks, database readiness, and emergency disable.
 - Fix beta-blocking UX defects without adding public-service concepts.
@@ -78,12 +79,12 @@ Tests/review/deploy gates:
 
 ## Phase 3: Concurrency Correctness
 
-Goal: make accepted game actions correct beyond one in-memory writer assumption.
+Goal: harden accepted game actions beyond the current single-node PostgreSQL writer path.
 
 Work:
 
-- Add per-game transaction/advisory-lock or equivalent database-backed serialization.
-- Make accepted action writes, version checks, and snapshot invalidation atomic.
+- Expand and stress-test the current per-game PostgreSQL transaction/lock path.
+- Keep accepted action writes, version checks, and summary refreshes atomic under realistic contention.
 - Define duplicate submit, reconnect race, timeout race, and simultaneous resign/draw behavior.
 - Prepare the event flow for later pub/sub or worker separation.
 
@@ -148,6 +149,8 @@ Tests/review/deploy gates:
 
 Goal: make the app feel navigable and sturdy before broader public discovery.
 
+Status: implemented for the current shell. Keep this phase as a regression checklist when adding future lobby, archive, challenge, spectator, or analysis screens.
+
 This phase is required before calling the online experience Lichess-like. The current app shell has known rough edges: the side bar can feel awkward, the tutorial entry point is not placed naturally, routes/views can be hard to return from, save/progress affordances are not prominent enough, and some controls may overlap on smaller layouts.
 
 Work:
@@ -203,8 +206,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish Phase 1 runbook and environment validation for the current single-node private beta.
-2. Run the private beta smoke suite against local PostgreSQL and one HTTPS-like deployed environment.
+1. Finish and verify Phase 1 runtime config validation, static-build checks, and deployment runbook updates.
+2. Run the private beta smoke suite against local PostgreSQL, including restart, concurrency, and browser create/join/spectate checks.
 3. Record Phase 2 data-contract decisions: durable/disposable events, game summary read model, identity primitive, and access roles.
 4. Create the UI benchmarking checklist template required before challenge, spectator, archive, lobby, matchmaking, and analysis screens.
-5. Before public lobby/archive work, run Phase 6A UI shell polish with Lichess-guided screenshots and responsive overlap checks.
+5. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.

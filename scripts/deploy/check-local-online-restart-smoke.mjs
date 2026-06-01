@@ -84,6 +84,7 @@ function startServer(port) {
     cwd: repoRoot,
     env: {
       ...process.env,
+      NODE_ENV: "test",
       PORT: String(port),
       PUBLIC_BASE_URL: baseUrl,
       ONLINE_STORE_BACKEND: "postgres",

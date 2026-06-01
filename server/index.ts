@@ -6,6 +6,10 @@ import type { WebSocketServer } from "ws";
 import { createOnlineHttpServer } from "../src/online/server/createOnlineHttpServer";
 import { createOnlineGameStoreFromEnv } from "../src/online/server/createOnlineGameStore";
 import { formatOnlineServerLogEvent } from "../src/online/server/onlineServerLogging";
+import {
+  assertServerRuntimeFiles,
+  parseServerRuntimeConfig,
+} from "../src/online/server/serverRuntimeConfig";
 import { OnlineGameService } from "../src/online/OnlineGameService";
 
 function resolveOnce<T>(settle: (resolve: (value: T) => void, reject: (error: unknown) => void) => void): Promise<T> {
@@ -73,9 +77,8 @@ function isLoopbackAddress(address: string | undefined): boolean {
 }
 
 async function main() {
-  const port = Number(process.env.PORT ?? 3000);
-  const publicBaseUrl = process.env.PUBLIC_BASE_URL ?? `http://localhost:${port}`;
-  const staticDir = process.env.CASTLES_STATIC_DIR ?? path.resolve(process.cwd(), "build");
+  const config = parseServerRuntimeConfig(process.env, process.cwd());
+  assertServerRuntimeFiles(config);
   const { backend: storeBackend, healthStorePath, store } = createOnlineGameStoreFromEnv(
     process.env
   );
@@ -94,7 +97,7 @@ async function main() {
     });
     const service = OnlineGameService.fromRecords(records);
     const { app, server, wss } = createOnlineHttpServer({
-      publicBaseUrl,
+      publicBaseUrl: config.publicBaseUrl,
       service,
       onGameEvent: (event) => store.appendEvent(event),
       applyGameAction: (input) => store.applyGameAction(input),
@@ -104,8 +107,8 @@ async function main() {
         console.log(formatOnlineServerLogEvent(event));
       },
       health: {
-        buildId: process.env.BUILD_ID,
-        commit: process.env.GIT_COMMIT,
+        buildId: config.buildId,
+        commit: config.commit,
         storePath: healthStorePath,
         storeBackend,
         checkStoreReady: () => store.checkReady(),
@@ -137,14 +140,13 @@ async function main() {
       }
     };
 
-    const localShutdownToken = process.env.CASTLES_LOCAL_SHUTDOWN_TOKEN;
-    if (process.env.CASTLES_ENABLE_LOCAL_SHUTDOWN === "1" && localShutdownToken) {
+    if (config.localShutdownEnabled && config.localShutdownToken) {
       app.post("/__local/shutdown", (req, res) => {
         if (!isLoopbackAddress(req.socket.remoteAddress)) {
           res.status(403).json({ error: "Local shutdown is only available from loopback." });
           return;
         }
-        if (req.get("x-castles-local-shutdown-token") !== localShutdownToken) {
+        if (req.get("x-castles-local-shutdown-token") !== config.localShutdownToken) {
           res.status(403).json({ error: "Invalid local shutdown token." });
           return;
         }
@@ -156,21 +158,21 @@ async function main() {
       });
     }
 
-    if (existsSync(staticDir)) {
-      app.use(express.static(staticDir));
+    if (existsSync(config.staticDir)) {
+      app.use(express.static(config.staticDir));
       app.use((req, res, next) => {
         if (req.method !== "GET" || req.path.startsWith("/api/")) {
           next();
           return;
         }
-        res.sendFile(path.join(staticDir, "index.html"));
+        res.sendFile(path.join(config.staticDir, "index.html"));
       });
     } else {
-      console.warn(`Static build directory not found: ${staticDir}`);
+      console.warn(`Static build directory not found: ${config.staticDir}`);
     }
 
-    server.listen(port, () => {
-      console.log(`Castles online server listening on ${publicBaseUrl}`);
+    server.listen(config.port, () => {
+      console.log(`Castles online server listening on ${config.publicBaseUrl}`);
       console.log(`Persisting online games with ${storeBackend} store at ${healthStorePath}`);
     });
 

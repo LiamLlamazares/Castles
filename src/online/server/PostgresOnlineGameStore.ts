@@ -29,6 +29,8 @@ interface PostgresTransactionClient extends PostgresQueryable {
   release(): void;
 }
 
+const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
+
 export interface PostgresOnlineGameStoreOptions {
   connectionString?: string;
   queryable?: PostgresQueryable;
@@ -55,7 +57,12 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       throw new Error("PostgresOnlineGameStore requires a connectionString or queryable.");
     }
 
-    const pool = new Pool({ connectionString: options.connectionString });
+    const pool = new Pool({
+      connectionString: options.connectionString,
+      connectionTimeoutMillis: DEFAULT_POSTGRES_TIMEOUT_MS,
+      query_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
+      statement_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
+    });
     this.queryable = pool;
     this.transactionClientFactory = () => pool.connect();
     this.closeConnection = () => pool.end();

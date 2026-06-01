@@ -44,6 +44,7 @@ export type OnlineServerLogEvent = {
 };
 
 const DEFAULT_ONLINE_TIME_CONTROL = { initial: 20, increment: 20 } as const;
+const DEFAULT_HEALTH_READINESS_TIMEOUT_MS = 1_500;
 
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
@@ -63,8 +64,15 @@ export interface CreateOnlineHttpServerOptions {
     commit?: string;
     storePath?: string;
     storeBackend?: string;
+    readinessTimeoutMs?: number;
     checkStoreReady?: () => boolean | Promise<boolean>;
   };
+}
+
+class StoreReadinessTimeoutError extends Error {
+  constructor() {
+    super("Store readiness check timed out.");
+  }
 }
 
 class FixedWindowRateLimiter {
@@ -166,6 +174,25 @@ function responseBodyWithOptionalSnapshot(
   snapshot?: unknown
 ): { error: OnlineReject; snapshot?: unknown } {
   return snapshot ? { error, snapshot } : { error };
+}
+
+async function checkStoreReadyWithTimeout(
+  checkStoreReady: () => boolean | Promise<boolean>,
+  timeoutMs: number
+): Promise<boolean> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(checkStoreReady),
+      new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => reject(new StoreReadinessTimeoutError()), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
@@ -396,11 +423,17 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     let storeError: string | undefined;
     try {
       storeOk = options.health?.checkStoreReady
-        ? await options.health.checkStoreReady()
+        ? await checkStoreReadyWithTimeout(
+            options.health.checkStoreReady,
+            options.health.readinessTimeoutMs ?? DEFAULT_HEALTH_READINESS_TIMEOUT_MS
+          )
         : true;
     } catch (error) {
       storeOk = false;
-      storeError = error instanceof Error ? error.message : "Store readiness check failed.";
+      storeError =
+        error instanceof StoreReadinessTimeoutError
+          ? "Store readiness check timed out."
+          : "Store readiness check failed.";
     }
 
     res.status(storeOk ? 200 : 503).json({

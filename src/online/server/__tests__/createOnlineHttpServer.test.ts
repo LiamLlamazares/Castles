@@ -318,6 +318,61 @@ describe("createOnlineHttpServer", () => {
     expect(body.online.rulesetVersion).toEqual(expect.any(String));
   });
 
+  it("sanitizes store readiness errors in public health checks", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      health: {
+        storeBackend: "postgres",
+        storePath: "postgres",
+        checkStoreReady: async () => {
+          throw new Error("postgresql://castles:secret@db.example/castles refused");
+        },
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.online.store).toMatchObject({
+      ok: false,
+      backend: "postgres",
+      path: "postgres",
+      error: "Store readiness check failed.",
+    });
+    expect(JSON.stringify(body)).not.toContain("secret");
+    expect(JSON.stringify(body)).not.toContain("db.example");
+  });
+
+  it("times out slow store readiness checks", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      health: {
+        storeBackend: "postgres",
+        storePath: "postgres",
+        readinessTimeoutMs: 5,
+        checkStoreReady: () => new Promise<boolean>(() => undefined),
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const startedAt = Date.now();
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    const body = await response.json();
+
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(response.status).toBe(503);
+    expect(body.online.store).toMatchObject({
+      ok: false,
+      backend: "postgres",
+      path: "postgres",
+      error: "Store readiness check timed out.",
+    });
+  });
+
   it("creates games through the HTTP API", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",

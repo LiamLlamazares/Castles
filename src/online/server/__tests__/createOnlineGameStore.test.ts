@@ -22,6 +22,29 @@ describe("createOnlineGameStoreFromEnv", () => {
     ).toThrow(/DATABASE_URL/);
   });
 
+  it("rejects malformed or placeholder PostgreSQL connection URLs", () => {
+    expect(() =>
+      createOnlineGameStoreFromEnv({
+        ONLINE_STORE_BACKEND: "postgres",
+        DATABASE_URL: "not-a-url",
+      })
+    ).toThrow(/DATABASE_URL/);
+
+    expect(() =>
+      createOnlineGameStoreFromEnv({
+        ONLINE_STORE_BACKEND: "postgres",
+        DATABASE_URL: "mysql://castles:secret@localhost:5432/castles",
+      })
+    ).toThrow(/PostgreSQL/);
+
+    expect(() =>
+      createOnlineGameStoreFromEnv({
+        ONLINE_STORE_BACKEND: "postgres",
+        DATABASE_URL: "postgresql://castles:replace-with-password@localhost:5432/castles",
+      })
+    ).toThrow(/placeholder/);
+  });
+
   it("requires explicit PostgreSQL persistence", () => {
     expect(() => createOnlineGameStoreFromEnv({})).toThrow(/ONLINE_STORE_BACKEND/);
   });

@@ -16,6 +16,7 @@
     "preview": "vite preview --host localhost --port 3000",
     "server:dev": "tsx server/index.ts",
     "server:build": "tsc -p tsconfig.server.json",
+    "server:check-config": "node server-build/server/check-config.js",
     "server:start": "node server-build/server/index.js",
     "online:smoke:local": "node scripts/deploy/check-local-online-restart-smoke.mjs",
     "online:smoke:local:concurrency": "node scripts/deploy/check-local-postgres-concurrency-smoke.mjs",

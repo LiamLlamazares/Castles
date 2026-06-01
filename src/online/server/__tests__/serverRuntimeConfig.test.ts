@@ -1,0 +1,185 @@
+import { describe, expect, it } from "vitest";
+import {
+  assertServerRuntimeFiles,
+  parseServerRuntimeConfig,
+} from "../serverRuntimeConfig";
+
+describe("parseServerRuntimeConfig", () => {
+  it("normalizes a complete production runtime configuration", () => {
+    const config = parseServerRuntimeConfig(
+      {
+        NODE_ENV: "production",
+        PORT: "3100",
+        PUBLIC_BASE_URL: "https://castles.example/",
+        CASTLES_STATIC_DIR: "/srv/castles/build",
+        CASTLES_REQUIRE_STATIC_DIR: "1",
+        CASTLES_ENABLE_LOCAL_SHUTDOWN: "1",
+        CASTLES_LOCAL_SHUTDOWN_TOKEN: "shutdown-token",
+        BUILD_ID: "20260601-010203",
+        GIT_COMMIT: "0123456789abcdef0123456789abcdef01234567",
+      },
+      "/srv/castles"
+    );
+
+    expect(config).toEqual({
+      port: 3100,
+      publicBaseUrl: "https://castles.example",
+      staticDir: "/srv/castles/build",
+      requireStaticDir: true,
+      localShutdownEnabled: true,
+      localShutdownToken: "shutdown-token",
+      buildId: "20260601-010203",
+      commit: "0123456789abcdef0123456789abcdef01234567",
+    });
+  });
+
+  it("uses loopback HTTP defaults outside production", () => {
+    const config = parseServerRuntimeConfig({}, "C:/repo/Castles");
+
+    expect(config.port).toBe(3000);
+    expect(config.publicBaseUrl).toBe("http://localhost:3000");
+    expect(config.staticDir).toBe("C:/repo/Castles/build");
+    expect(config.requireStaticDir).toBe(false);
+  });
+
+  it("rejects an invalid port before the server starts listening", () => {
+    expect(() => parseServerRuntimeConfig({ PORT: "abc" }, "/srv/castles")).toThrow(
+      /PORT/
+    );
+    expect(() => parseServerRuntimeConfig({ PORT: "70000" }, "/srv/castles")).toThrow(
+      /PORT/
+    );
+  });
+
+  it("requires an explicit PUBLIC_BASE_URL in production", () => {
+    expect(() =>
+      parseServerRuntimeConfig({ NODE_ENV: "production", PORT: "3000" }, "/srv/castles")
+    ).toThrow(/PUBLIC_BASE_URL/);
+  });
+
+  it("requires real build metadata in production", () => {
+    expect(() =>
+      parseServerRuntimeConfig(
+        {
+          NODE_ENV: "production",
+          PORT: "3000",
+          PUBLIC_BASE_URL: "https://castles.example",
+          BUILD_ID: "manual",
+          GIT_COMMIT: "replace-with-deployed-sha",
+        },
+        "/srv/castles"
+      )
+    ).toThrow(/BUILD_ID/);
+
+    expect(() =>
+      parseServerRuntimeConfig(
+        {
+          NODE_ENV: "production",
+          PORT: "3000",
+          PUBLIC_BASE_URL: "https://castles.example",
+          BUILD_ID: "20260601-010203",
+          GIT_COMMIT: "replace-with-deployed-sha",
+        },
+        "/srv/castles"
+      )
+    ).toThrow(/GIT_COMMIT/);
+  });
+
+  it("requires a full commit SHA in production", () => {
+    expect(() =>
+      parseServerRuntimeConfig(
+        {
+          NODE_ENV: "production",
+          PORT: "3000",
+          PUBLIC_BASE_URL: "https://castles.example",
+          BUILD_ID: "20260601-010203",
+          GIT_COMMIT: "feature-branch",
+        },
+        "/srv/castles"
+      )
+    ).toThrow(/GIT_COMMIT/);
+  });
+
+  it("rejects malformed public base URLs", () => {
+    expect(() =>
+      parseServerRuntimeConfig(
+        { PUBLIC_BASE_URL: "ftp://castles.example" },
+        "/srv/castles"
+      )
+    ).toThrow(/PUBLIC_BASE_URL/);
+    expect(() =>
+      parseServerRuntimeConfig(
+        { PUBLIC_BASE_URL: "https://castles.example/play?room=1" },
+        "/srv/castles"
+      )
+    ).toThrow(/PUBLIC_BASE_URL/);
+  });
+
+  it("rejects insecure non-loopback public URLs unless explicitly allowed", () => {
+    expect(() =>
+      parseServerRuntimeConfig(
+        { PUBLIC_BASE_URL: "http://castles.example" },
+        "/srv/castles"
+      )
+    ).toThrow(/HTTPS/);
+
+    expect(
+      parseServerRuntimeConfig(
+        {
+          PUBLIC_BASE_URL: "http://castles.example",
+          CASTLES_ALLOW_INSECURE_PUBLIC_BASE_URL: "1",
+        },
+        "/srv/castles"
+      ).publicBaseUrl
+    ).toBe("http://castles.example");
+  });
+
+  it("allows loopback HTTP for local smoke tests", () => {
+    expect(
+      parseServerRuntimeConfig(
+        { PUBLIC_BASE_URL: "http://127.0.0.1:4567" },
+        "/srv/castles"
+      ).publicBaseUrl
+    ).toBe("http://127.0.0.1:4567");
+  });
+
+  it("requires a local shutdown token only when the endpoint is enabled", () => {
+    expect(() =>
+      parseServerRuntimeConfig(
+        { CASTLES_ENABLE_LOCAL_SHUTDOWN: "1" },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_LOCAL_SHUTDOWN_TOKEN/);
+
+    expect(
+      parseServerRuntimeConfig(
+        {
+          CASTLES_ENABLE_LOCAL_SHUTDOWN: "0",
+          CASTLES_LOCAL_SHUTDOWN_TOKEN: "",
+        },
+        "/srv/castles"
+      ).localShutdownEnabled
+    ).toBe(false);
+  });
+
+  it("requires index.html when static assets are required", () => {
+    const config = parseServerRuntimeConfig(
+      {
+        PUBLIC_BASE_URL: "http://127.0.0.1:3000",
+        CASTLES_STATIC_DIR: "/srv/castles/build",
+        CASTLES_REQUIRE_STATIC_DIR: "1",
+      },
+      "/srv/castles"
+    );
+
+    expect(() =>
+      assertServerRuntimeFiles(config, (target) => target === "/srv/castles/build")
+    ).toThrow(/index\.html/);
+    expect(() =>
+      assertServerRuntimeFiles(
+        config,
+        (target) => target === "/srv/castles/build" || target === "/srv/castles/build/index.html"
+      )
+    ).not.toThrow();
+  });
+});

@@ -7,6 +7,7 @@ Type=simple
 User=lukasz
 WorkingDirectory=/home/lukasz/Castles
 EnvironmentFile=/etc/castles/castles.env
+ExecStartPre=/usr/bin/npm run server:check-config
 ExecStart=/usr/bin/npm run server:start
 Restart=always
 RestartSec=5

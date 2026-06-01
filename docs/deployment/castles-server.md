@@ -4,6 +4,20 @@ This runbook deploys one private-beta Node process behind nginx for `https://cas
 
 Do not deploy from a dirty worktree, a moving branch name, or an unreviewed commit. Use an exact commit SHA.
 
+Before copying commands to another host, replace these site-specific values everywhere they appear:
+
+```text
+linux user:        lukasz
+repo path:         /home/lukasz/Castles
+domain:            castles.ls314.com
+node port:         3000
+systemd env file:  /etc/castles/castles.env
+database name:     castles
+database user:     castles
+```
+
+The server must already have Node, npm, git, nginx, certbot, PostgreSQL, `psql`, and `pg_dump`.
+
 ## 1. Preflight
 
 On the server, set the reviewed commit SHA first:
@@ -128,6 +142,8 @@ if [ ! -f /etc/castles/castles.env ]; then
   sudo install -m 600 deploy/systemd/castles.env.example /etc/castles/castles.env
 fi
 sudo cp -a /etc/castles/castles.env "$backup/castles.env.predeploy"
+sudo grep -qx "NODE_ENV=production" /etc/castles/castles.env || sudo sh -c 'printf "\nNODE_ENV=production\n" >> /etc/castles/castles.env'
+sudo grep -qx "CASTLES_REQUIRE_STATIC_DIR=1" /etc/castles/castles.env || sudo sh -c 'printf "\nCASTLES_REQUIRE_STATIC_DIR=1\n" >> /etc/castles/castles.env'
 sudo sed -i "s/GIT_COMMIT=.*/GIT_COMMIT=$sha/" /etc/castles/castles.env
 sudo sed -i "s/BUILD_ID=.*/BUILD_ID=$(date -u +%Y%m%d-%H%M%S)/" /etc/castles/castles.env
 sudo chmod 600 /etc/castles/castles.env
@@ -144,19 +160,34 @@ sudo grep -q "^DATABASE_URL=postgresql://" /etc/castles/castles.env || {
 Review `/etc/castles/castles.env` before starting. It should contain:
 
 ```text
+NODE_ENV=production
 PORT=3000
 PUBLIC_BASE_URL=https://castles.ls314.com
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://castles:<password>@localhost:5432/castles
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
+CASTLES_REQUIRE_STATIC_DIR=1
+BUILD_ID=<timestamp>
+GIT_COMMIT=<reviewed-commit-sha>
 ```
 
-Create the database and app user before starting the service. Replace the password with the same value used in `DATABASE_URL`:
+Create or update the database and app user before starting the service. Replace the password with the same value used in `DATABASE_URL`.
+
+Use a URL-encoded password in `DATABASE_URL`. For example, a literal password `p@$&;#` becomes `p%40%24%26%3B%23` inside the URL. In the SQL block below, escape a single quote in the literal password by writing it twice.
 
 ```bash
 sudo -u postgres psql <<'SQL'
-CREATE DATABASE castles;
-CREATE USER castles WITH PASSWORD 'replace-with-password';
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'castles') THEN
+    CREATE ROLE castles LOGIN PASSWORD 'replace-with-password';
+  ELSE
+    ALTER ROLE castles WITH PASSWORD 'replace-with-password';
+  END IF;
+END;
+$$;
+SELECT 'CREATE DATABASE castles OWNER castles'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'castles')\gexec
 GRANT CONNECT ON DATABASE castles TO castles;
 \c castles
 GRANT USAGE, CREATE ON SCHEMA public TO castles;
@@ -193,6 +224,7 @@ select 1;
 create table castles_privilege_check (id integer);
 drop table castles_privilege_check;
 SQL
+sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
 ```
 
 The `load_castles_db_env` helper above is reused by the verification snippet below. Keep these PostgreSQL commands in the same shell session.
@@ -234,6 +266,7 @@ sudo nginx -t || {
   fi
   exit 1
 }
+sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
 sudo systemctl daemon-reload
 sudo systemctl stop castles-node.service
 sudo systemctl start castles-node.service
@@ -248,6 +281,7 @@ sudo journalctl -u castles-node.service -n 80 --no-pager
 curl -I http://castles.ls314.com/api/health
 curl -sS https://castles.ls314.com/api/health
 node scripts/deploy/check-online-smoke.mjs https://castles.ls314.com "$sha"
+npm run online:smoke:browser -- https://castles.ls314.com "$sha"
 ```
 
 Then manually open two browser sessions:
@@ -266,11 +300,40 @@ load_castles_db_env
 psql -c "select count(*) from online_game_events;"
 ```
 
-## 5. Rollback
+## 5. Emergency Disable
+
+Use this when the app is causing harm and the fastest safe action is to take it offline before a full rollback:
+
+```bash
+sudo systemctl stop castles-node.service
+sudo systemctl disable castles-node.service
+curl -sS -o /dev/null -w "%{http_code}\n" https://castles.ls314.com/api/health || true
+sudo journalctl -u castles-node.service -n 80 --no-pager
+```
+
+If nginx itself must stop serving the site:
+
+```bash
+sudo rm -f /etc/nginx/sites-enabled/castles
+sudo nginx -t
+sudo systemctl reload nginx
+curl -I https://castles.ls314.com || true
+```
+
+Re-enable only after a reviewed fix or rollback is ready:
+
+```bash
+sudo ln -sfn /etc/nginx/sites-available/castles /etc/nginx/sites-enabled/castles
+sudo systemctl enable castles-node.service
+sudo systemctl start castles-node.service
+sudo nginx -t
+sudo systemctl reload nginx
+curl -sS https://castles.ls314.com/api/health
+```
+
+## 6. Rollback
 
 Use the backup folder created in step 2:
-
-If rolling back from PostgreSQL to a pre-PostgreSQL commit, online games created after the switch only exist in PostgreSQL unless they are exported separately. Keep `$backup/postgres-online-events.sql` before rollback.
 
 ```bash
 backup="/home/lukasz/deploy-backups/castles-YYYYMMDD-HHMMSS"
