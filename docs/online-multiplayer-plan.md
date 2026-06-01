@@ -123,6 +123,8 @@ Tests/review/deploy gates:
 
 Goal: support intentional game creation and joining flows before public discovery.
 
+Status: access-policy foundation in progress. Public listing and spectator joins are moving behind a shared policy module before challenge lifecycle records and challenge UI are added. The next challenge slice must add durable lifecycle events, identity/session binding for challenged users, and visibility-change rules before any private challenge or lobby surface depends on those roles.
+
 Work:
 
 - Benchmark challenge UX before implementation.
@@ -137,6 +139,8 @@ Tests/review/deploy gates:
 - Tests: challenge lifecycle, expiration, access roles, link handling, and browser e2e tests.
 - Review: contract/security review for challenge events, visibility changes, shared access policy, confusing links, accidental public exposure, and unauthorized joins.
 - Deploy: challenge records are observable, expirable, and recoverable after restart.
+
+Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI shell polish forward before building broader lobby/archive surfaces. Sidebar navigation, tutorial placement, save/progress paths, go-back overlap, and mobile layout defects should be resolved while challenge UI is still small.
 
 ## Phase 6: Spectator, Archive, Lobby, Matchmaking
 
@@ -217,6 +221,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish Phase 4 verification and review for protocol/client-state coverage, then commit and push.
-2. Begin Phase 5 challenge/access UX planning with Lichess-style challenge flows adapted to Castles.
+1. Complete the Phase 5 access-policy foundation slice and push it.
+2. Plan the challenge lifecycle event and identity-binding slice.
 3. Pull Phase 6A UI shell polish forward once challenge/access surfaces are sketched, so sidebar, tutorial placement, save/progress navigation, go-back overlap, and mobile layout defects are fixed before broader lobby/archive work.

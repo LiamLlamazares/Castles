@@ -94,6 +94,29 @@ function versionedMessage<T extends Record<string, unknown>>(
   };
 }
 
+function summaryForGame(
+  gameId: string,
+  visibility: OnlineGameSummary["visibility"]
+): OnlineGameSummary {
+  return {
+    schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+    gameId,
+    rulesetVersion: "castles-beta-v1",
+    createdAt: "2026-05-31T12:00:00.000Z",
+    updatedAt: "2026-05-31T12:00:00.000Z",
+    version: 0,
+    status: "active",
+    visibility,
+    archiveState: "active",
+    hasTimeControl: true,
+    participants: [
+      { seat: "w", role: "white", identity: { kind: "anonymous", id: `anon_${gameId}_w` } },
+      { seat: "b", role: "black", identity: { kind: "anonymous", id: `anon_${gameId}_b` } },
+    ],
+    lastEventId: `evt-${gameId}`,
+  };
+}
+
 function waitForSocketOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
 
@@ -491,6 +514,292 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("token");
     expect(JSON.stringify(body)).not.toContain("game_unlisted_summary_http");
     expect(JSON.stringify(body)).not.toContain("game_private_summary_http");
+  });
+
+  it("allows HTTP spectator snapshots for unlisted summaries when summaries are configured", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_unlisted_spectator_http",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [summaryForGame("game_unlisted_spectator_http", "unlisted")],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/game_unlisted_spectator_http/spectator`
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "spectator",
+      snapshot: { gameId: "game_unlisted_spectator_http", version: 0 },
+    });
+  });
+
+  it("denies HTTP spectator snapshots for private summaries", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_private_spectator_http",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [summaryForGame("game_private_spectator_http", "private")],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/game_private_spectator_http/spectator`
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "No online game was found for that id.",
+      },
+    });
+  });
+
+  it("fails closed when configured summaries are missing for HTTP spectator snapshots", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_missing_summary_spectator_http",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/game_missing_summary_spectator_http/spectator`
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "No online game was found for that id.",
+      },
+    });
+  });
+
+  it("fails closed when configured summaries are invalid for HTTP spectator snapshots", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_invalid_summary_spectator_http",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [
+        {
+          ...summaryForGame("game_invalid_summary_spectator_http", "unlisted"),
+          schemaVersion: 99,
+        } as unknown as OnlineGameSummary,
+      ],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/game_invalid_summary_spectator_http/spectator`
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "No online game was found for that id.",
+      },
+    });
+  });
+
+  it("logs summary load failures separately while failing closed for spectator snapshots", async () => {
+    const logs: unknown[] = [];
+    const service = new OnlineGameService({
+      idFactory: () => "game_summary_load_failed_spectator_http",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => {
+        throw new Error("summary database unavailable");
+      },
+      onLog: (event) => {
+        logs.push(event);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/game_summary_load_failed_spectator_http/spectator`
+    );
+
+    expect(response.status).toBe(404);
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "online.http.spectate",
+          gameId: "game_summary_load_failed_spectator_http",
+          role: "spectator",
+          status: "rejected",
+          reason: "summary_load_failed",
+        }),
+      ])
+    );
+  });
+
+  it("allows WebSocket spectator joins for unlisted summaries when summaries are configured", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_unlisted_spectator_ws",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [summaryForGame("game_unlisted_spectator_ws", "unlisted")],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "spectate",
+            gameId: "game_unlisted_spectator_ws",
+          })
+        )
+      );
+      await expect(nextSocketMessage(socket, "unlisted spectator join")).resolves.toMatchObject({
+        type: "spectating",
+        snapshot: { gameId: "game_unlisted_spectator_ws", version: 0 },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("denies WebSocket spectator joins for private summaries", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_private_spectator_ws",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [summaryForGame("game_private_spectator_ws", "private")],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "spectate",
+            gameId: "game_private_spectator_ws",
+          })
+        )
+      );
+      await expect(nextSocketMessage(socket, "private spectator denial")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "not_found" },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("fails closed when configured summaries are missing for WebSocket spectator joins", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_missing_summary_spectator_ws",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "spectate",
+            gameId: "game_missing_summary_spectator_ws",
+          })
+        )
+      );
+      await expect(nextSocketMessage(socket, "missing summary spectator denial")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "not_found" },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("fails closed when configured summaries are invalid for WebSocket spectator joins", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_invalid_summary_spectator_ws",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: () => [
+        {
+          ...summaryForGame("game_invalid_summary_spectator_ws", "unlisted"),
+          schemaVersion: 99,
+        } as unknown as OnlineGameSummary,
+      ],
+    });
+    servers.push(server);
+    const port = await listen(server);
+    service.createGame(createClockedSetup(), { publicBaseUrl: "https://castles.example" });
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "spectate",
+            gameId: "game_invalid_summary_spectator_ws",
+          })
+        )
+      );
+      await expect(nextSocketMessage(socket, "invalid summary spectator denial")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "not_found" },
+      });
+    } finally {
+      socket.close();
+    }
   });
 
   it("logs structured create and join events without leaking player tokens", async () => {

@@ -11,7 +11,7 @@ import {
 import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   canAccessOnlineGameSummary,
-  isOnlineGameSummaryListed,
+  canListOnlineGameSummary,
   projectOnlineGameSummaries,
   roleForOnlineSeat,
   validateOnlineGameSummary,
@@ -198,9 +198,9 @@ describe("online read model", () => {
     expect(canAccessOnlineGameSummary({ ...summary, visibility: "private" }, "challenged")).toBe(true);
     expect(canAccessOnlineGameSummary({ ...summary, visibility: "private" }, "moderator")).toBe(true);
     expect(canAccessOnlineGameSummary({ ...summary, visibility: "private" }, "admin")).toBe(true);
-    expect(isOnlineGameSummaryListed({ ...summary, visibility: "private" })).toBe(false);
-    expect(isOnlineGameSummaryListed({ ...summary, visibility: "unlisted" })).toBe(false);
-    expect(isOnlineGameSummaryListed({ ...summary, visibility: "public" })).toBe(true);
+    expect(canListOnlineGameSummary({ ...summary, visibility: "private" })).toBe(false);
+    expect(canListOnlineGameSummary({ ...summary, visibility: "unlisted" })).toBe(false);
+    expect(canListOnlineGameSummary({ ...summary, visibility: "public" })).toBe(true);
   });
 
   it("validates future-ready anonymous, session, and registered identities", () => {

@@ -130,9 +130,16 @@ Role names:
 - `moderator`
 - `admin`
 
-The current access helper is a contract helper, not complete authorization. Current REST and WebSocket spectator routes still use random-id access and do not enforce summary visibility. Before private challenges or public lobby launch, those paths must enforce a shared access-policy module against visibility and identity binding.
+Summary listing and spectator authorization use `src/online/accessPolicy.ts`. Public listing returns only `public` summaries. Spectator access is allowed for `public` and `unlisted` games and denied for `private` games. If the server has a configured summary loader, missing or invalid summary data fails closed with the same public `not_found` response as a missing game. If no summary loader is configured, the current private-link beta keeps its allow-open spectator behavior so local/dev smoke flows still work.
+
+The `challenged` role is provisional until challenge identity binding exists. It must only be assigned after a separate challenge/session/account binding check proves the requester is the bound challenged user. It is not a permission that can be inferred from an unauthenticated HTTP or WebSocket request.
+
+Initial HTTP and WebSocket spectator joins are checked against the shared policy. Existing spectator sockets are not re-authorized on every broadcast because there are no visibility-change events yet. Before any future `visibility_changed` event can make a game private mid-game, broadcasts must either revalidate spectator sockets or disconnect sockets that no longer satisfy the policy.
+
+For this low-scale foundation slice, server spectator authorization scans `loadGameSummaries()` for the requested game id. A later `loadGameSummary(gameId)` store method can replace that scan when challenge/lobby scale requires it.
 
 ## Next Contract Changes
 
 1. Add durable challenge and visibility lifecycle events before public lobby/challenge UI.
 2. Add a public account/session ownership layer before private challenge authorization.
+3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes.

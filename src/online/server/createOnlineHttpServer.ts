@@ -16,9 +16,12 @@ import {
 import { sameOnlineAction } from "../actionIdempotency";
 import {
   OnlineGameSummary,
-  isOnlineGameSummaryListed,
   validateOnlineGameSummary,
 } from "../readModel";
+import {
+  canListOnlineGameSummary,
+  canSpectateOnlineGameSummary,
+} from "../accessPolicy";
 import { OnlineReject } from "../types";
 import {
   OnlineClientMessage,
@@ -193,6 +196,13 @@ function responseBodyWithOptionalSnapshot(
   return snapshot ? { error, protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot } : { error };
 }
 
+function spectatorNotFoundError(): OnlineReject {
+  return {
+    code: "not_found",
+    message: "No online game was found for that id.",
+  };
+}
+
 async function checkStoreReadyWithTimeout(
   checkStoreReady: () => boolean | Promise<boolean>,
   timeoutMs: number
@@ -264,6 +274,51 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
     });
     return next;
+  };
+
+  const loadValidatedSummaryForGame = async (
+    gameId: string
+  ): Promise<
+    | { ok: true; summary: OnlineGameSummary | null }
+    | { ok: false; reason: "summary_load_failed" | "summary_invalid" }
+  > => {
+    if (!options.loadGameSummaries) return { ok: true, summary: null };
+    let summaries: OnlineGameSummary[];
+    try {
+      summaries = await options.loadGameSummaries();
+    } catch {
+      return { ok: false, reason: "summary_load_failed" };
+    }
+
+    for (const summary of summaries) {
+      if (summary.gameId !== gameId) continue;
+      const validation = validateOnlineGameSummary(summary);
+      if (!validation.ok) {
+        return { ok: false, reason: "summary_invalid" };
+      }
+      return { ok: true, summary: validation.value };
+    }
+    return { ok: true, summary: null };
+  };
+
+  const checkSpectatorAccess = async (
+    gameId: string
+  ): Promise<{ ok: true } | { ok: false; error: OnlineReject; reason: string }> => {
+    if (!options.loadGameSummaries) {
+      return { ok: true };
+    }
+
+    const lookup = await loadValidatedSummaryForGame(gameId);
+    if (!lookup.ok) {
+      return { ok: false, error: spectatorNotFoundError(), reason: lookup.reason };
+    }
+    if (!lookup.summary) {
+      return { ok: false, error: spectatorNotFoundError(), reason: "summary_missing" };
+    }
+    if (!canSpectateOnlineGameSummary(lookup.summary)) {
+      return { ok: false, error: spectatorNotFoundError(), reason: "access_denied" };
+    }
+    return { ok: true };
   };
 
   const persistActionAccepted = async (
@@ -494,7 +549,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         if (!validation.ok) {
           throw new Error(validation.error.message);
         }
-        if (isOnlineGameSummaryListed(validation.value)) {
+        if (canListOnlineGameSummary(validation.value)) {
           games.push(validation.value);
         }
       }
@@ -705,6 +760,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
 
     await enqueueGameAction(gameId.value, async () => {
+      const access = await checkSpectatorAccess(gameId.value);
+      if (!access.ok) {
+        log({
+          event: "online.http.spectate",
+          gameId: gameId.value,
+          role: "spectator",
+          status: "rejected",
+          reason: access.reason,
+        });
+        res.status(404).json({ error: access.error });
+        return;
+      }
+
       const room = service.getRoom(gameId.value);
       if (!room) {
         log({
@@ -918,6 +986,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     if (message.type === "spectate") {
       await enqueueGameAction(message.gameId, async () => {
+        const access = await checkSpectatorAccess(message.gameId);
+        if (!access.ok) {
+          log({
+            event: "online.socket.spectate",
+            gameId: message.gameId,
+            role: "spectator",
+            status: "rejected",
+            reason: access.reason,
+          });
+          sendSocketError(socket, access.error);
+          return;
+        }
+
         const room = service.getRoom(message.gameId);
         if (!room) {
           log({

@@ -7,13 +7,27 @@ import {
 } from "./events";
 import type { OnlineGameResultDTO } from "./types";
 import type { ValidationResult } from "./validation";
+import {
+  canAccessOnlineGameSummary,
+  canListOnlineGameSummary,
+  canSpectateOnlineGameSummary,
+  roleForOnlineSeat,
+  type OnlineAccessRole,
+} from "./accessPolicy";
 
 export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 1;
 
 export type OnlineGameVisibility = "private" | "unlisted" | "public";
 export type OnlineArchiveState = "active" | "archived";
 export type OnlineGameSummaryStatus = "active" | "complete";
-export type OnlineAccessRole = "white" | "black" | "spectator" | "challenged" | "moderator" | "admin";
+
+export {
+  canAccessOnlineGameSummary,
+  canListOnlineGameSummary,
+  canSpectateOnlineGameSummary,
+  roleForOnlineSeat,
+  type OnlineAccessRole,
+};
 
 export interface OnlineAnonymousIdentity {
   kind: "anonymous";
@@ -199,26 +213,6 @@ function anonymousParticipant(gameId: string, seat: Color): OnlineGameSummaryPar
       id: `anon_${gameId}_${seat}`,
     },
   };
-}
-
-export function roleForOnlineSeat(seat: Color): "white" | "black" {
-  return seat === "w" ? "white" : "black";
-}
-
-export function canAccessOnlineGameSummary(
-  summary: Pick<OnlineGameSummary, "visibility">,
-  role: OnlineAccessRole
-): boolean {
-  if (role === "admin" || role === "moderator") return true;
-  if (role === "white" || role === "black") return true;
-  if (summary.visibility !== "private") return true;
-  return role === "challenged";
-}
-
-export function isOnlineGameSummaryListed(
-  summary: Pick<OnlineGameSummary, "visibility">
-): boolean {
-  return summary.visibility === "public";
 }
 
 export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGameSummary[] {
