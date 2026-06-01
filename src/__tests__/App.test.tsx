@@ -5,6 +5,11 @@ import { getStartingBoard, getStartingPieces } from "../ConstantImports";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import * as PGNLoadService from "../Classes/Services/PGNLoadService";
 import type { OnlineGameSnapshotDTO } from "../online/types";
+import {
+  ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
+  type OpenSeekSummary,
+} from "../online/seeks";
+import { rememberOpenSeekCreatorParams } from "../online/client";
 
 const onlineHookMocks = vi.hoisted(() => ({
   submitAction: vi.fn(),
@@ -139,12 +144,14 @@ vi.mock("../components/GameSetup", () => ({
     onTutorial,
     onOpenLibrary,
     onOpenOnlineBrowser,
+    onCreateOpenSeek,
   }: {
     onBack: () => void;
     backLabel?: string;
     onTutorial: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
+    onCreateOpenSeek?: (...args: unknown[]) => void;
   }) => (
     <div>
       <div>Setup Ready</div>
@@ -160,6 +167,26 @@ vi.mock("../components/GameSetup", () => ({
       <button type="button" onClick={onOpenOnlineBrowser}>
         Setup Watch
       </button>
+      {onCreateOpenSeek && (
+        <button
+          type="button"
+          onClick={() =>
+            onCreateOpenSeek(
+              { config: { nSquares: 6 }, castles: [] },
+              [],
+              { initial: 20, increment: 20 },
+              [],
+              [],
+              { unlockTurn: 0, cooldown: 10 },
+              { vpModeEnabled: true },
+              [],
+              "Castles"
+            )
+          }
+        >
+          Create Lobby Seek
+        </button>
+      )}
     </div>
   ),
 }));
@@ -172,6 +199,14 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onOpenLibrary,
     onReplay,
     onSpectate,
+    initialTab,
+    onCreateSeek,
+    onAcceptSeek,
+    onCancelSeek,
+    ownedSeekIds = [],
+    ownedSeekResponse,
+    onRefreshOwnedSeek,
+    onJoinOwnedSeek,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
@@ -180,13 +215,49 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onOpenLibrary?: () => void;
     onReplay: (gameId: string) => void;
     onSpectate: (gameId: string) => void;
+    initialTab?: string;
+    onCreateSeek?: () => void;
+    onAcceptSeek?: (seekId: string) => void;
+    onCancelSeek?: (seekId: string) => void;
+    ownedSeekIds?: string[];
+    ownedSeekResponse?: { summary: { status: string } };
+    onRefreshOwnedSeek?: () => void;
+    onJoinOwnedSeek?: () => void;
     backLabel?: string;
   }) => (
     <div>
       <div>Online Browser Ready</div>
+      <div>Initial tab: {initialTab ?? "none"}</div>
+      <div>Owned seek ids: {ownedSeekIds.join(",") || "none"}</div>
+      <div>Owned seek status: {ownedSeekResponse?.summary.status ?? "none"}</div>
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
+      {onCreateSeek && (
+        <button type="button" onClick={onCreateSeek}>
+          Browser Create Seek
+        </button>
+      )}
+      {onAcceptSeek && (
+        <button type="button" onClick={() => onAcceptSeek("seek_public_open")}>
+          Accept open seek
+        </button>
+      )}
+      {onCancelSeek && (
+        <button type="button" onClick={() => onCancelSeek("seek_public_open")}>
+          Cancel open seek
+        </button>
+      )}
+      {onRefreshOwnedSeek && (
+        <button type="button" onClick={onRefreshOwnedSeek}>
+          Refresh owned seek
+        </button>
+      )}
+      {onJoinOwnedSeek && (
+        <button type="button" onClick={onJoinOwnedSeek}>
+          Join accepted seek
+        </button>
+      )}
       {onOpenGame && (
         <button type="button" onClick={onOpenGame}>
           Watch Play
@@ -307,6 +378,30 @@ function spectatorSnapshot(gameId: string): OnlineGameSnapshotDTO {
     moveHistory: [],
     playerToMove: "w",
     turnPhase: "Movement",
+  };
+}
+
+function openSeekSummary(overrides: Partial<OpenSeekSummary> = {}): OpenSeekSummary {
+  return {
+    schemaVersion: ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
+    seekId: "seek_from_setup",
+    creatorIdentity: { kind: "session", id: "creator-session" },
+    creatorSeat: "w",
+    setup: {
+      board: { config: { nSquares: 6 }, castles: [] },
+      pieces: [],
+      sanctuaries: [],
+      timeControl: { initial: 20, increment: 20 },
+      gameRules: { vpModeEnabled: true },
+      initialPoolTypes: [SanctuaryType.WolfCovenant],
+      pieceTheme: "Castles",
+    },
+    createdAt: "2026-06-01T12:00:00.000Z",
+    updatedAt: "2026-06-01T12:00:00.000Z",
+    expiresAt: "2026-06-01T12:20:00.000Z",
+    status: "open",
+    lastEventId: "seek_evt_created",
+    ...overrides,
   };
 }
 
@@ -630,6 +725,193 @@ describe("App game setup lifecycle", () => {
       "game_watch_public",
       expect.any(Function)
     );
+  });
+
+  it("creates open lobby seeks from setup without putting creator tokens in the URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          seekId: "seek_from_setup",
+          summary: openSeekSummary(),
+          creator: { token: "creator-token" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Seek" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/seeks",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(request.body));
+    expect(body.creatorSeat).toBe("random");
+    expect(body.creatorSessionId).toEqual(expect.any(String));
+    expect(JSON.stringify(body)).not.toContain("creator-token");
+    expect(sessionStorage.getItem("castles_online_seek_creator:seek_from_setup")).toBe("creator-token");
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+    expect(screen.getByText("Initial tab: lobby")).toBeInTheDocument();
+    expect(screen.getByText("Owned seek ids: seek_from_setup")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.search).not.toContain("onlineChallenge=");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("recovers creator-owned open seek controls after a same-session reload", async () => {
+    rememberOpenSeekCreatorParams({ seekId: "seek_restore", token: "creator-token" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            role: "creator",
+            summary: openSeekSummary({ seekId: "seek_restore" }),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/online/seeks/seek_restore",
+        { headers: { authorization: "Bearer creator-token" } }
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+
+    expect(screen.getByText("Owned seek ids: seek_restore")).toBeInTheDocument();
+    expect(screen.getByText("Owned seek status: open")).toBeInTheDocument();
+  });
+
+  it("accepts open lobby seeks through the normal token-stripped game handoff", async () => {
+    const acceptedSummary = openSeekSummary({
+      status: "accepted",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      acceptedAt: "2026-06-01T12:04:00.000Z",
+      acceptedBy: { kind: "session", id: "acceptor-session" },
+      gameId: "game_seek_accepted",
+      whiteIdentity: { kind: "session", id: "creator-session" },
+      blackIdentity: { kind: "session", id: "acceptor-session" },
+      lastEventId: "seek_evt_accepted",
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          role: "acceptor",
+          summary: acceptedSummary,
+          gameInvite: {
+            gameId: "game_seek_accepted",
+            seat: "b",
+            token: "acceptor-token",
+            url: "https://castles.example/?onlineGame=game_seek_accepted&seat=b&token=acceptor-token",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Accept open seek" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/seeks/seek_public_open/accept",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    expect(sessionStorage.getItem("castles_online_join:game_seek_accepted:b")).toBe("acceptor-token");
+    expect(window.location.search).toContain("onlineGame=game_seek_accepted");
+    expect(window.location.search).toContain("seat=b");
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.search).not.toContain("onlineChallenge=");
+    expect(window.location.hash).toBe("");
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting online game");
+  });
+
+  it("lets creators refresh an accepted lobby seek and join through the token-stripped handoff", async () => {
+    const acceptedSummary = openSeekSummary({
+      status: "accepted",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      acceptedAt: "2026-06-01T12:04:00.000Z",
+      acceptedBy: { kind: "session", id: "acceptor-session" },
+      gameId: "game_creator_join",
+      whiteIdentity: { kind: "session", id: "creator-session" },
+      blackIdentity: { kind: "session", id: "acceptor-session" },
+      lastEventId: "seek_evt_accepted",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            seekId: "seek_from_setup",
+            summary: openSeekSummary(),
+            creator: { token: "creator-token" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            role: "creator",
+            summary: acceptedSummary,
+            gameInvite: {
+              gameId: "game_creator_join",
+              seat: "w",
+              token: "creator-token",
+              url: "https://castles.example/?onlineGame=game_creator_join&seat=w&token=creator-token",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Seek" }));
+    await screen.findByText("Initial tab: lobby");
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh owned seek" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/seeks/seek_from_setup",
+        { headers: { authorization: "Bearer creator-token" } }
+      );
+    });
+    expect(await screen.findByText("Owned seek status: accepted")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Join accepted seek" }));
+
+    expect(sessionStorage.getItem("castles_online_join:game_creator_join:w")).toBe("creator-token");
+    expect(window.location.search).toContain("onlineGame=game_creator_join");
+    expect(window.location.search).toContain("seat=w");
+    expect(window.location.search).not.toContain("token=");
   });
 
   it("opens archived public games as local analysis without entering spectator mode", async () => {

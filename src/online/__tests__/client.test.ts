@@ -4,9 +4,14 @@ import {
   buildSpectatorUrl,
   acceptOnlineChallenge,
   cancelOnlineChallenge,
+  acceptOpenSeek,
   copyOnlineInviteUrl,
+  cancelOpenSeek,
+  createOpenSeek,
   declineOnlineChallenge,
   fetchOnlineChallenge,
+  fetchOpenSeek,
+  fetchOpenSeekDirectory,
   fetchOnlineGameSummaries,
   fetchOnlineGameSummary,
   fetchOnlineSnapshot,
@@ -32,6 +37,10 @@ import {
   forgetOnlineChallengeParams,
   forgetOnlineJoinParams,
   forgetOnlineOpponentInviteUrl,
+  forgetOpenSeekCreatorParams,
+  listOpenSeekCreatorParams,
+  rememberOpenSeekCreatorParams,
+  resolveOpenSeekCreatorParams,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import type { OnlineConnectionStatus } from "../types";
@@ -390,6 +399,142 @@ describe("online client helpers", () => {
 
     expect(first).toBe("anon_browser_123");
     expect(second).toBe("anon_browser_123");
+  });
+
+  it("stores open seek creator tokens outside public lobby responses", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+    const auth = { seekId: "seek_123", token: "creator-token" };
+
+    rememberOpenSeekCreatorParams(auth, storageAdapter);
+    expect(resolveOpenSeekCreatorParams("seek_123", storageAdapter)).toEqual(auth);
+    expect(listOpenSeekCreatorParams(storageAdapter)).toEqual([auth]);
+
+    rememberOpenSeekCreatorParams({ seekId: "seek_456", token: "second-token" }, storageAdapter);
+    expect(listOpenSeekCreatorParams(storageAdapter)).toEqual([
+      { seekId: "seek_456", token: "second-token" },
+      auth,
+    ]);
+
+    forgetOpenSeekCreatorParams(auth, storageAdapter);
+    expect(resolveOpenSeekCreatorParams("seek_123", storageAdapter)).toBeNull();
+    expect(listOpenSeekCreatorParams(storageAdapter)).toEqual([
+      { seekId: "seek_456", token: "second-token" },
+    ]);
+  });
+
+  it("creates, fetches, cancels, lists, and accepts open seeks with validated responses", async () => {
+    const baseSummary = {
+      schemaVersion: 1,
+      seekId: "seek_123",
+      creatorIdentity: { kind: "session", id: "anon_creator" },
+      creatorSeat: "w",
+      setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+      createdAt: "2026-06-01T12:00:00.000Z",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+      expiresAt: "2026-06-01T12:10:00.000Z",
+      status: "open",
+      lastEventId: "seek_evt_created",
+    };
+    const acceptedSummary = {
+      ...baseSummary,
+      updatedAt: "2026-06-01T12:05:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-01T12:05:00.000Z",
+      acceptedBy: { kind: "session", id: "anon_acceptor" },
+      gameId: "game_from_seek",
+      whiteIdentity: baseSummary.creatorIdentity,
+      blackIdentity: { kind: "session", id: "anon_acceptor" },
+    };
+    const gameInvite = {
+      gameId: "game_from_seek",
+      seat: "b",
+      token: "acceptor-token",
+      url: "https://castles.example/?onlineGame=game_from_seek&seat=b&token=acceptor-token",
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          seekId: "seek_123",
+          summary: baseSummary,
+          creator: { token: "creator-token" },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          schemaVersion: 1,
+          seeks: [baseSummary],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "creator",
+          summary: baseSummary,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "creator",
+          summary: { ...baseSummary, status: "cancelled", updatedAt: "2026-06-01T12:04:00.000Z", cancelledAt: "2026-06-01T12:04:00.000Z", cancelledBy: baseSummary.creatorIdentity },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "acceptor",
+          summary: acceptedSummary,
+          gameInvite,
+        }),
+      });
+
+    await expect(
+      createOpenSeek(snapshot().setup, { creatorSeat: "w", creatorSessionId: "anon_creator" }, fetchImpl as any)
+    ).resolves.toMatchObject({
+      seekId: "seek_123",
+      creator: { token: "creator-token" },
+      summary: { status: "open" },
+    });
+    await expect(fetchOpenSeekDirectory({}, fetchImpl as any)).resolves.toMatchObject({
+      seeks: [{ seekId: "seek_123" }],
+    });
+    await expect(fetchOpenSeek({ seekId: "seek_123", token: "creator-token" }, fetchImpl as any)).resolves.toMatchObject({
+      role: "creator",
+      summary: { seekId: "seek_123" },
+    });
+    await expect(cancelOpenSeek({ seekId: "seek_123", token: "creator-token" }, fetchImpl as any)).resolves.toMatchObject({
+      role: "creator",
+      summary: { status: "cancelled" },
+    });
+    await expect(
+      acceptOpenSeek("seek_123", { acceptorSessionId: "anon_acceptor" }, fetchImpl as any)
+    ).resolves.toMatchObject({
+      role: "acceptor",
+      summary: { status: "accepted" },
+      gameInvite: { seat: "b", token: "acceptor-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/api/online/seeks", expect.objectContaining({ method: "POST" }));
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/seeks");
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "/api/online/seeks/seek_123", {
+      headers: { authorization: "Bearer creator-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(4, "/api/online/seeks/seek_123/cancel", {
+      method: "POST",
+      headers: { authorization: "Bearer creator-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(5, "/api/online/seeks/seek_123/accept", expect.objectContaining({ method: "POST" }));
   });
 
   it("replaces malformed anonymous session ids", () => {

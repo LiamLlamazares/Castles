@@ -62,6 +62,28 @@ describe("GameSetup", () => {
     ]);
   });
 
+  it("passes the preview setup through when creating an open lobby seek", () => {
+    const previewSanctuaries = [
+      new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
+      new Sanctuary(new Hex(1, -1, 0), SanctuaryType.WolfCovenant, "b"),
+    ];
+    vi
+      .spyOn(SanctuaryGenerator, "generateRandomSanctuaries")
+      .mockReturnValue(previewSanctuaries);
+
+    const onCreateOpenSeek = vi.fn();
+    render(<GameSetup onPlay={vi.fn()} onCreateOpenSeek={onCreateOpenSeek} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "CREATE LOBBY SEEK" }));
+
+    expect(onCreateOpenSeek).toHaveBeenCalledTimes(1);
+    expect(onCreateOpenSeek.mock.calls[0][3]).toBe(previewSanctuaries);
+    expect(onCreateOpenSeek.mock.calls[0][4]).toEqual([
+      SanctuaryType.WolfCovenant,
+      SanctuaryType.SacredSpring,
+    ]);
+  });
+
   it("exposes shared play navigation without hiding play actions", () => {
     const onBack = vi.fn();
     const onTutorial = vi.fn();

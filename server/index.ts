@@ -104,6 +104,11 @@ async function main() {
         console.error(`Invalid online challenge event store entry ${line}`, error);
       },
     });
+    await store.rebuildOpenSeekSummaries({
+      onEventError: (line, error) => {
+        console.error(`Invalid online seek event store entry ${line}`, error);
+      },
+    });
     const service = OnlineGameService.fromRecords(records, {
       credentialFactory: hashOnlineToken,
       verifyToken: verifyOnlineToken,
@@ -132,6 +137,15 @@ async function main() {
         store.resolveChallengeCredential(challengeId, token),
       acceptChallengeAndCreateGame: (input) =>
         store.acceptChallengeAndCreateGame(input),
+      appendOpenSeekCreated: (event, credentials) =>
+        store.appendOpenSeekCreated(event, credentials),
+      appendOpenSeekEvent: (event) => store.appendOpenSeekEvent(event),
+      loadOpenSeekSummaries: () => store.loadOpenSeekSummaries(),
+      listOpenSeekSummaries: (options) => store.listOpenSeekSummaries(options),
+      resolveOpenSeekCredential: (seekId, token) =>
+        store.resolveOpenSeekCredential(seekId, token),
+      acceptOpenSeekAndCreateGame: (input) =>
+        store.acceptOpenSeekAndCreateGame(input),
       applyGameAction: (input) => store.applyGameAction(input),
       adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),
       loadGameSummaries: () => store.loadSummaries(),

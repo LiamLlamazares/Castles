@@ -53,6 +53,17 @@ interface GameSetupProps {
         initialPoolTypes?: SanctuaryType[],
         pieceTheme?: PieceTheme
     ) => void;
+    onCreateOpenSeek?: (
+        board: Board,
+        pieces: Piece[],
+        timeControl?: { initial: number, increment: number },
+        sanctuaries?: Sanctuary[],
+        selectedSanctuaryTypes?: SanctuaryType[],
+        sanctuarySettings?: { unlockTurn: number, cooldown: number },
+        gameRules?: { vpModeEnabled: boolean },
+        initialPoolTypes?: SanctuaryType[],
+        pieceTheme?: PieceTheme
+    ) => void;
     onBack?: () => void;
     backLabel?: string;
     onTutorial?: () => void;
@@ -114,6 +125,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     onPlay,
     onCreateOnlineGame,
     onCreateOnlineChallenge,
+    onCreateOpenSeek,
     onBack,
     backLabel = "Back to game",
     onTutorial,
@@ -289,6 +301,20 @@ const GameSetup: React.FC<GameSetupProps> = ({
 
     const handleCreateOnlineChallenge = () => {
         onCreateOnlineChallenge?.(
+            board,
+            pieces,
+            { initial: timeInitial, increment: timeIncrement },
+            sanctuaries,
+            Array.from(selectedSanctuaries),
+            { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
+            { vpModeEnabled },
+            Array.from(selectedPoolTypes),
+            pieceTheme
+        );
+    };
+
+    const handleCreateOpenSeek = () => {
+        onCreateOpenSeek?.(
             board,
             pieces,
             { initial: timeInitial, increment: timeIncrement },
@@ -479,6 +505,26 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         }}
                     >
                         CHALLENGE A FRIEND
+                    </button>
+                )}
+                {onCreateOpenSeek && (
+                    <button
+                        onClick={handleCreateOpenSeek}
+                        style={{
+                            padding: '13px',
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            borderRadius: '8px',
+                            border: `1px solid ${Colors.Primary}`,
+                            background: '#1f7a5f',
+                            color: 'white',
+                            fontWeight: 'bold',
+                            width: '100%',
+                            marginTop: '-4px',
+                            marginBottom: '10px'
+                        }}
+                    >
+                        CREATE LOBBY SEEK
                     </button>
                 )}
                 

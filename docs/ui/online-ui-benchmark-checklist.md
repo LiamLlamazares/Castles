@@ -47,6 +47,18 @@ Public Directory v1 implementation status, 2026-06-01:
 - Review follow-ups were fixed for filtered-empty pagination reachability, shown-count copy, archive result-filter reset coverage, and mid-width toolbar overflow risk.
 - Open seeks, matchmaking, accounts, ratings, chat, and public lobby creation remain deferred.
 
+Phase 6H Open Lobby Seeks implementation status, 2026-06-01:
+
+- Lobby is now a sibling tab to Watch and Online Archive inside the online browser, matching the Lichess-style scan pattern without adding account/rating/chat concepts.
+- Open seek rows show Castles-specific terms: side preference, board radius, clock/casual, victory-points mode, and expiry.
+- Create Lobby Seek is available from Play/setup and stores the creator token in `sessionStorage`, not in the URL.
+- Public seek listing is token-free. Accepting a seek creates a normal online game and reuses the existing token-stripped join flow.
+- Creator-owned seek state shows a private refresh/cancel/join panel so the creator can see when another player has accepted and join the resulting game.
+- Focused tests cover setup creation, App token hygiene, accept handoff, creator refresh/join, row-local pending actions, client validators, server routes, and PostgreSQL store behavior.
+- Benchmark screenshots for Lichess and Chess.com lobby/play/learn references are in `artifacts/ui-audit/phase6h-benchmark`.
+- Final Playwright screenshot/layout audit covered Lobby, Watch, and Online Archive at desktop and 820 x 700 tablet sizes, plus Lobby at 430 x 932, 390 x 844, and 360 x 740 mobile sizes. No horizontal overflow or overlapping interactive controls were detected.
+- Screenshot artifacts and layout metrics are in `artifacts/ui-audit/phase6h-after`.
+
 Phase 6G implementation status, 2026-06-01:
 
 - Navigation return paths now use explicit app helpers, and game-entry flows clear stale back stacks when opening live game, loaded analysis, spectator snapshots, archive replay, editor play, or restart.
@@ -65,8 +77,8 @@ Next UI polish audit:
 - Recheck tutorial mobile compactness after adding new lessons or tutorial controls.
 - Keep the game side panel contextual to clocks, turn phase, history, save/review, online links, and analysis; do not use it as general app navigation.
 - Check long online status/error text at 360 px, 390 px, and 430 px widths whenever challenge or connection copy changes.
-- Run the next navigation pass before lobby work: fix the awkward sidebar/drawer shape, tutorial placement, return navigation, save/progress discoverability, and any go-back/navigation overlap.
-- Keep Watch/Archive dense and read-only until open-seek contracts exist; do not label public directory browsing as matchmaking.
+- Run the next navigation pass after Phase 6H: fix the awkward sidebar/drawer shape, tutorial placement, return navigation, save/progress discoverability, and any go-back/navigation overlap.
+- Keep Watch/Archive read-only and Lobby seek-based until matchmaking automation, accounts, ratings, and chat contracts exist.
 
 Reference pages checked:
 

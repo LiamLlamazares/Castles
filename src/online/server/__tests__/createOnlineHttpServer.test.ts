@@ -229,6 +229,253 @@ afterEach(async () => {
 });
 
 describe("createOnlineHttpServer", () => {
+  it("creates and lists token-free public open seeks", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.headers.get("cache-control")).toContain("no-store");
+    expect(created).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      summary: {
+        status: "open",
+        creatorSeat: "random",
+        creatorIdentity: { kind: "session", id: "session_creator" },
+      },
+      creator: {
+        token: expect.any(String),
+      },
+    });
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
+    const list = await listResponse.json();
+
+    expect(listResponse.status).toBe(200);
+    expect(JSON.stringify(list)).not.toContain(created.creator.token);
+    expect(list.seeks).toHaveLength(1);
+    expect(list.seeks[0]).toMatchObject({
+      seekId: created.seekId,
+      status: "open",
+    });
+  });
+
+  it("accepts an open seek and lets creator and acceptor join the created game", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "w",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acceptorSessionId: "session_acceptor" }),
+      }
+    );
+    const accepted = await acceptResponse.json();
+
+    expect(acceptResponse.status).toBe(200);
+    expect(accepted).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "acceptor",
+      summary: {
+        seekId: created.seekId,
+        status: "accepted",
+        acceptedBy: { kind: "session", id: "session_acceptor" },
+      },
+      gameInvite: {
+        seat: "b",
+        token: expect.any(String),
+      },
+    });
+    const gameId = accepted.gameInvite.gameId;
+
+    const creatorSeekResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}`,
+      { headers: bearer(created.creator.token) }
+    );
+    const creatorSeek = await creatorSeekResponse.json();
+
+    expect(creatorSeekResponse.status).toBe(200);
+    expect(creatorSeek).toMatchObject({
+      role: "creator",
+      summary: { status: "accepted", gameId },
+      gameInvite: {
+        gameId,
+        seat: "w",
+        token: created.creator.token,
+      },
+    });
+
+    const creatorJoin = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}`, {
+      headers: bearer(created.creator.token),
+    });
+    const acceptorJoin = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}`, {
+      headers: bearer(accepted.gameInvite.token),
+    });
+
+    expect(creatorJoin.status).toBe(200);
+    expect(acceptorJoin.status).toBe(200);
+    await expect(creatorJoin.json()).resolves.toMatchObject({ color: "w" });
+    await expect(acceptorJoin.json()).resolves.toMatchObject({ color: "b" });
+  });
+
+  it("cancels creator-owned open seeks and keeps them off the public lobby", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+
+    const cancelResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/cancel`,
+      { method: "POST", headers: bearer(created.creator.token) }
+    );
+
+    expect(cancelResponse.status).toBe(200);
+    await expect(cancelResponse.json()).resolves.toMatchObject({
+      role: "creator",
+      summary: { status: "cancelled" },
+    });
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
+    await expect(listResponse.json()).resolves.toMatchObject({ seeks: [] });
+  });
+
+  it("rejects sensitive public seek directory queries and creator self-accept", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const secretQuery = await fetch(`http://127.0.0.1:${port}/api/online/seeks?token=secret`);
+    expect(secretQuery.status).toBe(400);
+    const terminalHistoryQuery = await fetch(`http://127.0.0.1:${port}/api/online/seeks?state=all`);
+    expect(terminalHistoryQuery.status).toBe(400);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSessionId: "session_same",
+      }),
+    });
+    const created = await createResponse.json();
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acceptorSessionId: "session_same" }),
+      }
+    );
+
+    expect(acceptResponse.status).toBe(409);
+    await expect(acceptResponse.json()).resolves.toMatchObject({
+      error: { code: "game_over" },
+    });
+  });
+
+  it("keeps expired open seeks and seek invite tokens out of public lobby responses", async () => {
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "w",
+        creatorSessionId: "session_creator",
+        expiresInMs: 5 * 60 * 1000,
+      }),
+    });
+    const created = await createResponse.json();
+
+    now = Date.parse("2026-06-01T12:06:00.000Z");
+    const expiredListResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
+    await expect(expiredListResponse.json()).resolves.toMatchObject({ seeks: [] });
+
+    now = Date.parse("2026-06-01T12:00:00.000Z");
+    const activeCreateResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "w",
+        creatorSessionId: "session_creator_fresh",
+      }),
+    });
+    const active = await activeCreateResponse.json();
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${active.seekId}/accept`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acceptorSessionId: "session_acceptor" }),
+      }
+    );
+    const accepted = await acceptResponse.json();
+    expect(accepted.gameInvite.url).not.toContain("token=");
+
+    const creatorSeekResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${active.seekId}`,
+      { headers: bearer(active.creator.token) }
+    );
+    const creatorSeek = await creatorSeekResponse.json();
+    expect(creatorSeek.gameInvite.url).not.toContain("token=");
+    expect(created.summary.status).toBe("open");
+  });
+
   it("creates private challenge links with fragment tokens and bearer-only API auth", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

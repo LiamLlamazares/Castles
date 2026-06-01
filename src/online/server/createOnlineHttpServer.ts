@@ -51,6 +51,30 @@ import {
   validateOnlineGameDirectoryResponse,
 } from "../readModel";
 import {
+  ONLINE_SEEK_DIRECTORY_DEFAULT_LIMIT,
+  ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
+  ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+  OPEN_SEEK_DIRECTORY_STATES,
+  canIdentityAcceptOpenSeek,
+  canIdentityCancelOpenSeek,
+  canListOpenSeekSummary,
+  canSystemExpireOpenSeek,
+  createOpenSeekAcceptedEvent,
+  createOpenSeekCancelledEvent,
+  createOpenSeekCreatedEvent,
+  createOpenSeekExpiredEvent,
+  decodeOpenSeekDirectoryCursor,
+  encodeOpenSeekDirectoryCursor,
+  isSameOnlineIdentity as isSameOpenSeekIdentity,
+  projectOpenSeekSummaries,
+  validateOpenSeekDirectoryResponse,
+  validateOpenSeekSummary,
+  type OpenSeekDirectoryListOptions,
+  type OpenSeekDirectoryResponse,
+  type OpenSeekEvent,
+  type OpenSeekSummary,
+} from "../seeks";
+import {
   canListOnlineGameSummary,
   canSpectateOnlineGameSummary,
 } from "../accessPolicy";
@@ -71,6 +95,10 @@ import type {
   OnlineGameStoreActionResult,
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
+  OpenSeekAcceptInput,
+  OpenSeekAcceptResult,
+  OpenSeekCredentials,
+  ResolvedOpenSeekCredential,
   ResolvedOnlineChallengeCredential,
 } from "./OnlineGameStore";
 import {
@@ -135,6 +163,24 @@ export interface CreateOnlineHttpServerOptions {
   acceptChallengeAndCreateGame?: (
     input: OnlineChallengeAcceptInput
   ) => OnlineChallengeAcceptResult | Promise<OnlineChallengeAcceptResult>;
+  appendOpenSeekCreated?: (
+    event: Extract<OpenSeekEvent, { type: "seek_created" }>,
+    credentials: OpenSeekCredentials
+  ) => OpenSeekSummary | Promise<OpenSeekSummary>;
+  appendOpenSeekEvent?: (
+    event: Exclude<OpenSeekEvent, { type: "seek_created" } | { type: "seek_accepted" }>
+  ) => OpenSeekSummary | Promise<OpenSeekSummary>;
+  loadOpenSeekSummaries?: () => OpenSeekSummary[] | Promise<OpenSeekSummary[]>;
+  listOpenSeekSummaries?: (
+    options: OpenSeekDirectoryListOptions
+  ) => OpenSeekDirectoryResponse | Promise<OpenSeekDirectoryResponse>;
+  resolveOpenSeekCredential?: (
+    seekId: string,
+    token: string
+  ) => ResolvedOpenSeekCredential | null | Promise<ResolvedOpenSeekCredential | null>;
+  acceptOpenSeekAndCreateGame?: (
+    input: OpenSeekAcceptInput
+  ) => OpenSeekAcceptResult | Promise<OpenSeekAcceptResult>;
   applyGameAction?: (
     input: OnlineGameStoreActionInput
   ) => OnlineGameStoreActionResult | Promise<OnlineGameStoreActionResult>;
@@ -260,6 +306,54 @@ function parsePublicDirectoryOptions(
   };
 }
 
+function parseOpenSeekDirectoryOptions(
+  originalUrl: string
+): { ok: true; options: OpenSeekDirectoryListOptions } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Public seek query is invalid." };
+  }
+
+  for (const name of ["state", "limit", "cursor"]) {
+    if (url.searchParams.getAll(name).length > 1) {
+      return { ok: false, message: "Public seek query is invalid." };
+    }
+  }
+
+  const state = getSingleSearchParam(url.searchParams, "state") ?? "open";
+  if (!OPEN_SEEK_DIRECTORY_STATES.has(state as OpenSeekDirectoryListOptions["state"])) {
+    return { ok: false, message: "Public seek state is invalid." };
+  }
+
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? ONLINE_SEEK_DIRECTORY_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > ONLINE_SEEK_DIRECTORY_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Public seek limit is invalid." };
+  }
+
+  const cursor = getSingleSearchParam(url.searchParams, "cursor") ?? undefined;
+  if (cursor) {
+    const decoded = decodeOpenSeekDirectoryCursor(cursor);
+    if (!decoded.ok) {
+      return { ok: false, message: "Public seek cursor is invalid." };
+    }
+  }
+
+  return {
+    ok: true,
+    options: {
+      state: state as OpenSeekDirectoryListOptions["state"],
+      limit,
+      cursor,
+    },
+  };
+}
+
 function compareDirectorySummaries(left: OnlineGameSummary, right: OnlineGameSummary): number {
   if (left.updatedAt !== right.updatedAt) {
     return right.updatedAt.localeCompare(left.updatedAt);
@@ -310,6 +404,49 @@ function paginateDirectorySummaries(
   return {
     schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
     games,
+    nextCursor,
+  };
+}
+
+function compareOpenSeekSummaries(left: OpenSeekSummary, right: OpenSeekSummary): number {
+  if (left.updatedAt !== right.updatedAt) {
+    return right.updatedAt.localeCompare(left.updatedAt);
+  }
+  return left.seekId.localeCompare(right.seekId);
+}
+
+function applyOpenSeekDirectoryCursor(
+  summaries: OpenSeekSummary[],
+  cursor: string | undefined
+): OpenSeekSummary[] {
+  if (!cursor) return summaries;
+  const decoded = decodeOpenSeekDirectoryCursor(cursor);
+  if (!decoded.ok) throw new Error(decoded.error.message);
+  return summaries.filter((summary) =>
+    summary.updatedAt < decoded.value.updatedAt ||
+    (summary.updatedAt === decoded.value.updatedAt && summary.seekId > decoded.value.seekId)
+  );
+}
+
+function paginateOpenSeekSummaries(
+  summaries: OpenSeekSummary[],
+  options: OpenSeekDirectoryListOptions,
+  now: string | number | Date = Date.now()
+): OpenSeekDirectoryResponse {
+  const filtered = applyOpenSeekDirectoryCursor(
+    summaries
+      .filter((summary) => canListOpenSeekSummary(summary, now))
+      .sort(compareOpenSeekSummaries),
+    options.cursor
+  );
+  const seeks = filtered.slice(0, options.limit);
+  const nextCursor =
+    filtered.length > options.limit && seeks.length > 0
+      ? encodeOpenSeekDirectoryCursor(seeks[seeks.length - 1])
+      : undefined;
+  return {
+    schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+    seeks,
     nextCursor,
   };
 }
@@ -408,6 +545,14 @@ function defaultChallengeTokenFactory(): string {
   return randomBytes(18).toString("base64url");
 }
 
+function defaultOpenSeekIdFactory(): string {
+  return `seek_${randomBytes(9).toString("base64url")}`;
+}
+
+function defaultOpenSeekTokenFactory(): string {
+  return randomBytes(18).toString("base64url");
+}
+
 function buildChallengeUrl(
   publicBaseUrl: string,
   challengeId: string,
@@ -431,6 +576,17 @@ function buildOnlineGameInviteUrl(
   url.searchParams.set("onlineGame", gameId);
   url.searchParams.set("seat", seat);
   url.searchParams.set("token", token);
+  return url.toString();
+}
+
+function buildTokenlessOnlineGameUrl(
+  publicBaseUrl: string,
+  gameId: string,
+  seat: "w" | "b"
+): string {
+  const url = new URL(publicBaseUrl);
+  url.searchParams.set("onlineGame", gameId);
+  url.searchParams.set("seat", seat);
   return url.toString();
 }
 
@@ -459,6 +615,30 @@ function normalizeChallengeSeat(value: unknown): "w" | "b" | "random" | null {
   return value === "w" || value === "b" || value === "random" ? value : null;
 }
 
+function normalizeOpenSeekSeat(value: unknown): "w" | "b" | "random" | null {
+  if (value === undefined) return "random";
+  return value === "w" || value === "b" || value === "random" ? value : null;
+}
+
+function normalizePublicSessionIdentity(
+  value: unknown,
+  label: string
+): { ok: true; identity: { kind: "session"; id: string } } | { ok: false; error: OnlineReject } {
+  if (typeof value !== "string" || value.length === 0 || value.length > 128) {
+    return {
+      ok: false,
+      error: { code: "bad_request", message: `${label} must be a public session id.` },
+    };
+  }
+  if (stringContainsDurableSecret(value)) {
+    return {
+      ok: false,
+      error: { code: "bad_request", message: `${label} must not contain secrets.` },
+    };
+  }
+  return { ok: true, identity: { kind: "session", id: value } };
+}
+
 function normalizeChallengeVisibility(value: unknown): "private" | "unlisted" | null {
   if (value === undefined) return "unlisted";
   return value === "private" || value === "unlisted" ? value : null;
@@ -471,6 +651,11 @@ function normalizeGameVisibility(value: unknown): OnlinePlayerSettableGameVisibi
 function challengeTerminalError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return /already terminal|no longer pending|must be before expiry|expired|expiry/i.test(message);
+}
+
+function openSeekTerminalError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /already terminal|no longer open|own open seek|must be before expiry|expired|expiry/i.test(message);
 }
 
 async function checkStoreReadyWithTimeout(
@@ -509,12 +694,16 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const actionQueues = new Map<string, Promise<void>>();
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
   const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
+  const createOpenSeekLimiter = new FixedWindowRateLimiter(20, 60_000);
   const challengeActionLimiter = new FixedWindowRateLimiter(120, 10_000);
+  const openSeekActionLimiter = new FixedWindowRateLimiter(120, 10_000);
   const publicDirectoryLimiter = new FixedWindowRateLimiter(240, 10_000);
   const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
   const memoryChallengeEvents: OnlineChallengeEvent[] = [];
   const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
+  const memoryOpenSeekEvents: OpenSeekEvent[] = [];
+  const memoryOpenSeekCredentials = new Map<string, OpenSeekCredentials>();
 
   const log = (event: OnlineServerLogEvent): void => {
     try {
@@ -780,7 +969,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       gameId: summary.gameId,
       seat,
       token,
-      url: buildOnlineGameInviteUrl(options.publicBaseUrl, summary.gameId, seat, token),
+      url: buildTokenlessOnlineGameUrl(options.publicBaseUrl, summary.gameId, seat),
     };
   };
 
@@ -870,6 +1059,273 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     options.acceptChallengeAndCreateGame
       ? options.acceptChallengeAndCreateGame(input)
       : createMemoryChallengeAcceptedGame(input);
+
+  const loadOpenSeekSummaries = async (): Promise<OpenSeekSummary[]> => {
+    const summaries = options.loadOpenSeekSummaries
+      ? await options.loadOpenSeekSummaries()
+      : projectOpenSeekSummaries(memoryOpenSeekEvents);
+    return summaries.map((summary, index) => {
+      const validation = validateOpenSeekSummary(summary);
+      if (!validation.ok) {
+        throw new Error(`Invalid open seek summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+  };
+
+  const loadOpenSeekSummary = async (seekId: string): Promise<OpenSeekSummary | null> => {
+    return (await loadOpenSeekSummaries()).find((summary) => summary.seekId === seekId) ?? null;
+  };
+
+  const listPublicOpenSeekDirectory = async (
+    directoryOptions: OpenSeekDirectoryListOptions
+  ): Promise<OpenSeekDirectoryResponse> => {
+    const now = new Date(options.now?.() ?? Date.now()).toISOString();
+    if (options.listOpenSeekSummaries) {
+      const response = await options.listOpenSeekSummaries(directoryOptions);
+      const validation = validateOpenSeekDirectoryResponse(response);
+      if (!validation.ok) throw new Error(validation.error.message);
+      return {
+        ...validation.value,
+        seeks: validation.value.seeks.filter((summary) => canListOpenSeekSummary(summary, now)),
+      };
+    }
+
+    return paginateOpenSeekSummaries(await loadOpenSeekSummaries(), directoryOptions, now);
+  };
+
+  const appendOpenSeekCreated = async (
+    event: Extract<OpenSeekEvent, { type: "seek_created" }>,
+    credentials: OpenSeekCredentials
+  ): Promise<OpenSeekSummary> => {
+    if (options.appendOpenSeekCreated) {
+      return options.appendOpenSeekCreated(event, credentials);
+    }
+    const eventLength = memoryOpenSeekEvents.length;
+    const previousCredentials = memoryOpenSeekCredentials.get(event.seekId);
+    try {
+      memoryOpenSeekEvents.push(event);
+      memoryOpenSeekCredentials.set(event.seekId, credentials);
+      const summary = projectOpenSeekSummaries(memoryOpenSeekEvents).find(
+        (candidate) => candidate.seekId === event.seekId
+      );
+      if (!summary) throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
+      return summary;
+    } catch (error) {
+      memoryOpenSeekEvents.splice(eventLength);
+      if (previousCredentials) {
+        memoryOpenSeekCredentials.set(event.seekId, previousCredentials);
+      } else {
+        memoryOpenSeekCredentials.delete(event.seekId);
+      }
+      throw error;
+    }
+  };
+
+  const appendOpenSeekLifecycleEvent = async (
+    event: Exclude<OpenSeekEvent, { type: "seek_created" } | { type: "seek_accepted" }>
+  ): Promise<OpenSeekSummary> => {
+    if (options.appendOpenSeekEvent) {
+      return options.appendOpenSeekEvent(event);
+    }
+    const eventLength = memoryOpenSeekEvents.length;
+    try {
+      memoryOpenSeekEvents.push(event);
+      const summary = projectOpenSeekSummaries(memoryOpenSeekEvents).find(
+        (candidate) => candidate.seekId === event.seekId
+      );
+      if (!summary) throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
+      return summary;
+    } catch (error) {
+      memoryOpenSeekEvents.splice(eventLength);
+      throw error;
+    }
+  };
+
+  const resolveOpenSeekCredential = async (
+    seekId: string,
+    token: string
+  ): Promise<ResolvedOpenSeekCredential | null> => {
+    if (options.resolveOpenSeekCredential) {
+      return options.resolveOpenSeekCredential(seekId, token);
+    }
+    const credentials = memoryOpenSeekCredentials.get(seekId);
+    if (!credentials) return null;
+    if (!verifyOnlineToken(token, credentials.creatorCredential)) return null;
+    return {
+      seekId,
+      role: "creator",
+      identity: credentials.creatorIdentity as ResolvedOpenSeekCredential["identity"],
+    };
+  };
+
+  const expireOpenSeekIfNeeded = async (
+    summary: OpenSeekSummary,
+    expiredAt = new Date(options.now?.() ?? Date.now()).toISOString()
+  ): Promise<OpenSeekSummary> => {
+    if (!canSystemExpireOpenSeek(summary, expiredAt)) return summary;
+    try {
+      return await appendOpenSeekLifecycleEvent(
+        createOpenSeekExpiredEvent(
+          {
+            type: "seek_expired",
+            seekId: summary.seekId,
+            expiredBy: "system",
+            expiredAt,
+          },
+          { createdAt: expiredAt }
+        )
+      );
+    } catch (error) {
+      if (openSeekTerminalError(error)) {
+        const current = await loadOpenSeekSummary(summary.seekId);
+        if (current && current.status !== "open") return current;
+      }
+      throw error;
+    }
+  };
+
+  const getAuthorizedOpenSeek = async (
+    req: Request
+  ): Promise<
+    | { ok: true; token: string; credential: ResolvedOpenSeekCredential; summary: OpenSeekSummary }
+    | { ok: false; status: number; error: OnlineReject; reason: string }
+  > => {
+    const seekId = validateOnlineGameId(req.params.seekId, "seek.seekId");
+    if (!seekId.ok) {
+      return { ok: false, status: 400, error: seekId.error, reason: seekId.error.code };
+    }
+    const token = getBearerToken(req.headers.authorization);
+    if (!token) {
+      return {
+        ok: false,
+        status: 404,
+        error: { code: "not_found", message: "No open seek was found for that id and token." },
+        reason: "missing_token",
+      };
+    }
+    const credential = await resolveOpenSeekCredential(seekId.value, token);
+    if (!credential) {
+      return {
+        ok: false,
+        status: 404,
+        error: { code: "not_found", message: "No open seek was found for that id and token." },
+        reason: "bad_token",
+      };
+    }
+    const summary = await loadOpenSeekSummary(seekId.value);
+    if (!summary) {
+      return {
+        ok: false,
+        status: 404,
+        error: { code: "not_found", message: "No open seek was found for that id and token." },
+        reason: "summary_missing",
+      };
+    }
+    return { ok: true, token, credential, summary };
+  };
+
+  const seatForOpenSeekIdentity = (
+    summary: OpenSeekSummary,
+    identity: ResolvedOpenSeekCredential["identity"]
+  ): "w" | "b" | null => {
+    if (summary.status !== "accepted") return null;
+    if (summary.whiteIdentity && isSameOpenSeekIdentity(summary.whiteIdentity, identity)) return "w";
+    if (summary.blackIdentity && isSameOpenSeekIdentity(summary.blackIdentity, identity)) return "b";
+    return null;
+  };
+
+  const gameInviteForOpenSeekCreator = (
+    summary: OpenSeekSummary,
+    credential: ResolvedOpenSeekCredential,
+    token: string
+  ) => {
+    if (summary.status !== "accepted" || !summary.gameId) return undefined;
+    const seat = seatForOpenSeekIdentity(summary, credential.identity);
+    if (!seat) return undefined;
+    return {
+      gameId: summary.gameId,
+      seat,
+      token,
+      url: buildTokenlessOnlineGameUrl(options.publicBaseUrl, summary.gameId, seat),
+    };
+  };
+
+  const createMemoryOpenSeekAcceptedGame = async (
+    input: OpenSeekAcceptInput
+  ): Promise<OpenSeekAcceptResult> => {
+    const summary = await loadOpenSeekSummary(input.seekId);
+    if (!summary) throw new Error(`Open seek ${input.seekId} was not found.`);
+    if (summary.status !== "open") throw new Error(`Open seek ${input.seekId} is already terminal.`);
+    if (!canIdentityAcceptOpenSeek(summary, input.acceptedBy, input.acceptedAt)) {
+      throw new Error(`A creator cannot accept their own open seek ${input.seekId}.`);
+    }
+    if (JSON.stringify(summary.setup) !== JSON.stringify(input.gameCreatedEvent.setup)) {
+      throw new Error(`Accepted online game setup must match open seek ${input.seekId}.`);
+    }
+    const credentials = memoryOpenSeekCredentials.get(input.seekId);
+    if (!credentials) throw new Error(`Missing open seek credentials for ${input.seekId}.`);
+    const creatorSeat = isSameOpenSeekIdentity(input.whiteIdentity, summary.creatorIdentity) ? "w" : "b";
+    const acceptorSeat = creatorSeat === "w" ? "b" : "w";
+    const gameCredentials: OnlineGameCredentials =
+      creatorSeat === "w"
+        ? {
+            whiteCredential: credentials.creatorCredential,
+            blackCredential: input.acceptorCredential,
+          }
+        : {
+            whiteCredential: input.acceptorCredential,
+            blackCredential: credentials.creatorCredential,
+          };
+    const seekEvent = createOpenSeekAcceptedEvent(
+      {
+        type: "seek_accepted",
+        seekId: input.seekId,
+        acceptedBy: input.acceptedBy,
+        acceptedAt: input.acceptedAt,
+        gameId: input.gameCreatedEvent.gameId,
+        whiteIdentity: input.whiteIdentity,
+        blackIdentity: input.blackIdentity,
+      },
+      { createdAt: input.acceptedAt }
+    );
+    const eventLength = memoryOpenSeekEvents.length;
+    try {
+      memoryOpenSeekEvents.push(seekEvent);
+      const seekSummary = projectOpenSeekSummaries(memoryOpenSeekEvents).find(
+        (candidate) => candidate.seekId === input.seekId
+      );
+      if (!seekSummary) throw new Error(`Open seek summary was not refreshed for ${input.seekId}.`);
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      if (!gameSummary) throw new Error(`Online game summary was not refreshed for ${input.gameCreatedEvent.gameId}.`);
+      const gameRecord: OnlineGameRoomRecord = {
+        gameId: input.gameCreatedEvent.gameId,
+        setup: input.gameCreatedEvent.setup,
+        whiteCredential: gameCredentials.whiteCredential,
+        blackCredential: gameCredentials.blackCredential,
+        clock: input.gameCreatedEvent.clock,
+        acceptedActions: [],
+      };
+      return {
+        seekEvent,
+        seekSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord,
+        gameSeats: { creator: creatorSeat, acceptor: acceptorSeat },
+      };
+    } catch (error) {
+      memoryOpenSeekEvents.splice(eventLength);
+      throw error;
+    }
+  };
+
+  const acceptOpenSeekAndCreateGame = async (
+    input: OpenSeekAcceptInput
+  ): Promise<OpenSeekAcceptResult> =>
+    options.acceptOpenSeekAndCreateGame
+      ? options.acceptOpenSeekAndCreateGame(input)
+      : createMemoryOpenSeekAcceptedGame(input);
 
   const persistActionAccepted = async (
     gameId: string,
@@ -1115,6 +1571,304 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       throw error;
     }
   };
+
+  app.get("/api/online/seeks", async (req, res) => {
+    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many public seek requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const parsed = parseOpenSeekDirectoryOptions(req.originalUrl);
+      if (!parsed.ok) {
+        res.status(400).json({
+          error: { code: "bad_request", message: parsed.message },
+        });
+        return;
+      }
+      const directory = await listPublicOpenSeekDirectory(parsed.options);
+      res.json(directory);
+      log({ event: "online.seek.list", status: "accepted" });
+    } catch (error) {
+      log({ event: "online.seek.list", status: "failed", reason: "summary_load_failed" });
+      console.error("Failed to load open seeks", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Open seeks could not be loaded." },
+      });
+    }
+  });
+
+  app.post("/api/online/seeks", async (req, res) => {
+    if (!createOpenSeekLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many open seeks have been created from this client. Try again shortly.",
+        },
+      });
+      return;
+    }
+
+    const setup = validateOnlineGameSetup(req.body?.setup);
+    if (!setup.ok) {
+      res.status(400).json({ error: setup.error });
+      return;
+    }
+    const creatorSeat = normalizeOpenSeekSeat(req.body?.creatorSeat);
+    if (!creatorSeat) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Open seek creatorSeat must be w, b, or random." },
+      });
+      return;
+    }
+    const creatorIdentity = normalizePublicSessionIdentity(req.body?.creatorSessionId, "creatorSessionId");
+    if (!creatorIdentity.ok) {
+      res.status(400).json({ error: creatorIdentity.error });
+      return;
+    }
+    const expiry = parseChallengeExpiry(req.body?.expiresInMs);
+    if (!expiry.ok) {
+      res.status(400).json({ error: expiry.error });
+      return;
+    }
+
+    const normalizedSetup = setup.value.timeControl
+      ? setup.value
+      : { ...setup.value, timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL } };
+    let seekId = defaultOpenSeekIdFactory();
+    while (await loadOpenSeekSummary(seekId)) {
+      seekId = defaultOpenSeekIdFactory();
+    }
+    const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+    const expiresAt = new Date(Date.parse(createdAt) + expiry.value).toISOString();
+    const creatorToken = defaultOpenSeekTokenFactory();
+
+    try {
+      const event = createOpenSeekCreatedEvent(
+        {
+          type: "seek_created",
+          seekId,
+          creatorIdentity: creatorIdentity.identity,
+          creatorSeat,
+          setup: normalizedSetup,
+          expiresAt,
+        },
+        { createdAt }
+      );
+      const summary = await appendOpenSeekCreated(event, {
+        creatorCredential: hashOnlineToken(creatorToken),
+        creatorIdentity: creatorIdentity.identity,
+      });
+      res.status(201).json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        seekId,
+        summary,
+        creator: {
+          token: creatorToken,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to create open seek", error);
+      res.status(503).json({
+        error: {
+          code: "persistence_failed",
+          message: "The open seek could not be saved.",
+        },
+      });
+    }
+  });
+
+  app.get("/api/online/seeks/:seekId", async (req, res) => {
+    if (!openSeekActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many open seek requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const auth = await getAuthorizedOpenSeek(req);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const summary = await expireOpenSeekIfNeeded(auth.summary);
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: "creator",
+        summary,
+        gameInvite: gameInviteForOpenSeekCreator(summary, auth.credential, auth.token),
+      });
+    } catch (error) {
+      console.error("Failed to load open seek", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "The open seek could not be loaded." },
+      });
+    }
+  });
+
+  app.post("/api/online/seeks/:seekId/cancel", async (req, res) => {
+    if (!openSeekActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many open seek requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const auth = await getAuthorizedOpenSeek(req);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const cancelledAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const summary = await expireOpenSeekIfNeeded(auth.summary, cancelledAt);
+      if (summary.status !== "open") {
+        res.status(409).json({
+          error: { code: "game_over", message: "This open seek is no longer open." },
+        });
+        return;
+      }
+      if (!canIdentityCancelOpenSeek(summary, auth.credential.identity, cancelledAt)) {
+        res.status(409).json({
+          error: { code: "game_over", message: "This open seek is no longer open." },
+        });
+        return;
+      }
+      const cancelledSummary = await appendOpenSeekLifecycleEvent(
+        createOpenSeekCancelledEvent(
+          {
+            type: "seek_cancelled",
+            seekId: summary.seekId,
+            cancelledBy: auth.credential.identity,
+            cancelledAt,
+          },
+          { createdAt: cancelledAt }
+        )
+      );
+      res.json({ protocolVersion: ONLINE_PROTOCOL_VERSION, role: "creator", summary: cancelledSummary });
+    } catch (error) {
+      res.status(openSeekTerminalError(error) ? 409 : 503).json({
+        error: openSeekTerminalError(error)
+          ? { code: "game_over", message: "This open seek is no longer open." }
+          : { code: "persistence_failed", message: "The open seek could not be cancelled." },
+      });
+    }
+  });
+
+  app.post("/api/online/seeks/:seekId/accept", async (req, res) => {
+    if (!openSeekActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many open seek requests were sent too quickly.",
+        },
+      });
+      return;
+    }
+
+    const seekId = validateOnlineGameId(req.params.seekId, "seek.seekId");
+    if (!seekId.ok) {
+      res.status(400).json({ error: seekId.error });
+      return;
+    }
+    const acceptorIdentity = normalizePublicSessionIdentity(req.body?.acceptorSessionId, "acceptorSessionId");
+    if (!acceptorIdentity.ok) {
+      res.status(400).json({ error: acceptorIdentity.error });
+      return;
+    }
+
+    try {
+      const loadedSummary = await loadOpenSeekSummary(seekId.value);
+      if (!loadedSummary) {
+        res.status(404).json({
+          error: { code: "not_found", message: "No open seek was found for that id." },
+        });
+        return;
+      }
+      const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const summary = await expireOpenSeekIfNeeded(loadedSummary, acceptedAt);
+      if (
+        summary.status !== "open" ||
+        !canIdentityAcceptOpenSeek(summary, acceptorIdentity.identity, acceptedAt)
+      ) {
+        res.status(409).json({
+          error: { code: "game_over", message: "This open seek is no longer open." },
+        });
+        return;
+      }
+
+      const creatorSeat =
+        summary.creatorSeat === "random"
+          ? randomBytes(1)[0] % 2 === 0
+            ? "w"
+            : "b"
+          : summary.creatorSeat;
+      const whiteIdentity = creatorSeat === "w" ? summary.creatorIdentity : acceptorIdentity.identity;
+      const blackIdentity = creatorSeat === "w" ? acceptorIdentity.identity : summary.creatorIdentity;
+      let gameId = `game_${randomBytes(9).toString("base64url")}`;
+      while (service.getRoom(gameId)) {
+        gameId = `game_${randomBytes(9).toString("base64url")}`;
+      }
+      const acceptorToken = defaultOpenSeekTokenFactory();
+      const clock = createInitialClockRecord(summary.setup, gameId);
+      const gameCreatedEvent = createOnlineGameCreatedEvent(
+        {
+          type: "game_created",
+          gameId,
+          setup: summary.setup,
+          clock,
+        },
+        { createdAt: acceptedAt }
+      );
+      const result = await acceptOpenSeekAndCreateGame({
+        seekId: summary.seekId,
+        acceptedBy: acceptorIdentity.identity,
+        acceptedAt,
+        gameCreatedEvent,
+        whiteIdentity,
+        blackIdentity,
+        acceptorCredential: hashOnlineToken(acceptorToken),
+      });
+      service.replaceRoom(result.gameRecord);
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: "acceptor",
+        summary: result.seekSummary,
+        gameInvite: {
+          gameId: result.seekSummary.gameId,
+          seat: result.gameSeats.acceptor,
+          token: acceptorToken,
+          url: buildTokenlessOnlineGameUrl(
+            options.publicBaseUrl,
+            result.seekSummary.gameId!,
+            result.gameSeats.acceptor
+          ),
+        },
+      });
+    } catch (error) {
+      const terminal = openSeekTerminalError(error);
+      res.status(terminal ? 409 : 503).json({
+        error: {
+          code: terminal ? "game_over" : "persistence_failed",
+          message: terminal
+            ? "This open seek is no longer open."
+            : "The open seek could not be accepted.",
+        },
+      });
+    }
+  });
 
   app.post("/api/online/challenges", async (req, res) => {
     if (!createChallengeLimiter.take(getClientKey(req))) {

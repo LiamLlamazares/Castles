@@ -107,6 +107,7 @@
 }
 
 .online-game-row,
+.online-seek-owner-panel,
 .online-browser-empty {
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -115,7 +116,8 @@
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
 }
 
-.online-game-row {
+.online-game-row,
+.online-seek-owner-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
@@ -170,6 +172,17 @@
   color: #b9e1ff;
 }
 
+.online-game-pill.accepted {
+  background: rgba(112, 214, 161, 0.18);
+  color: #94f1be;
+}
+
+.online-game-pill.cancelled,
+.online-game-pill.expired {
+  background: rgba(255, 174, 150, 0.16);
+  color: #ffc3b0;
+}
+
 .online-game-result {
   margin-top: 8px;
   color: #f4d287;
@@ -218,7 +231,8 @@
   }
 
   .online-browser-toolbar,
-  .online-game-row {
+  .online-game-row,
+  .online-seek-owner-panel {
     grid-template-columns: 1fr;
   }
 

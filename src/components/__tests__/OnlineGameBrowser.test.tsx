@@ -6,6 +6,12 @@ import {
   type OnlineGameDirectoryResponse,
   type OnlineGameSummary,
 } from "../../online/readModel";
+import {
+  ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+  ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
+  type OpenSeekDirectoryResponse,
+  type OpenSeekSummary,
+} from "../../online/seeks";
 import { ONLINE_RULESET_VERSION } from "../../online/events";
 
 function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
@@ -41,6 +47,41 @@ function directory(
   };
 }
 
+function openSeek(overrides: Partial<OpenSeekSummary> = {}): OpenSeekSummary {
+  const seekId = overrides.seekId ?? "seek_public_open";
+  return {
+    schemaVersion: ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
+    seekId,
+    creatorIdentity: { kind: "session", id: `${seekId}_creator` },
+    creatorSeat: "random",
+    setup: {
+      board: { config: { nSquares: 7 }, castles: [] },
+      pieces: [],
+      sanctuaries: [],
+      timeControl: { initial: 20, increment: 20 },
+      gameRules: { vpModeEnabled: true },
+      initialPoolTypes: [],
+    },
+    createdAt: "2026-06-01T12:00:00.000Z",
+    updatedAt: "2026-06-01T12:00:00.000Z",
+    expiresAt: "2026-06-01T12:10:00.000Z",
+    status: "open",
+    lastEventId: `${seekId}_evt`,
+    ...overrides,
+  };
+}
+
+function seekDirectory(
+  seeks: OpenSeekSummary[],
+  nextCursor?: string
+): OpenSeekDirectoryResponse {
+  return {
+    schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+    seeks,
+    nextCursor,
+  };
+}
+
 function deferredDirectory() {
   let resolve!: (value: OnlineGameDirectoryResponse) => void;
   const promise = new Promise<OnlineGameDirectoryResponse>((innerResolve) => {
@@ -50,6 +91,164 @@ function deferredDirectory() {
 }
 
 describe("OnlineGameBrowser", () => {
+  it("loads open seeks in the Lobby tab without calling the game directory", async () => {
+    const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([openSeek()]));
+    const loadGames = vi.fn().mockResolvedValue(directory([]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={loadGames}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: /Open seek seek_public_open/i });
+
+    expect(loadOpenSeeks).toHaveBeenCalledWith({ state: "open", limit: 50 });
+    expect(loadGames).not.toHaveBeenCalled();
+    expect(row).toHaveTextContent("Side random");
+    expect(row).toHaveTextContent("Radius 7");
+    expect(row).toHaveTextContent("Timed 20+20");
+    expect(row).toHaveTextContent("Victory points");
+    expect(within(row).getByRole("button", { name: "Accept open seek seek_public_open" })).toBeInTheDocument();
+  });
+
+  it("refreshes the public open seek lobby on demand", async () => {
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([]))
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_after_refresh" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("No open seeks yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh open seeks" }));
+
+    expect(await screen.findByText("seek_after_refresh")).toBeInTheDocument();
+    expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts and cancels open seeks with row-local pending states", async () => {
+    const onAcceptSeek = vi.fn().mockResolvedValue(undefined);
+    const onCancelSeek = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({ seekId: "seek_acceptable" }),
+          openSeek({ seekId: "seek_mine" }),
+        ]))}
+        ownedSeekIds={["seek_mine"]}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={onAcceptSeek}
+        onCancelSeek={onCancelSeek}
+      />
+    );
+
+    const acceptRow = await screen.findByRole("article", { name: /seek_acceptable/i });
+    fireEvent.click(within(acceptRow).getByRole("button", { name: "Accept open seek seek_acceptable" }));
+
+    await waitFor(() => expect(onAcceptSeek).toHaveBeenCalledWith("seek_acceptable"));
+
+    const ownRow = screen.getByRole("article", { name: /seek_mine/i });
+    fireEvent.click(within(ownRow).getByRole("button", { name: "Cancel open seek seek_mine" }));
+
+    await waitFor(() => expect(onCancelSeek).toHaveBeenCalledWith("seek_mine"));
+  });
+
+  it("shows creator-owned seek status with refresh, cancel, and accepted-game join actions", async () => {
+    const onRefreshOwnedSeek = vi.fn().mockResolvedValue(undefined);
+    const onCancelSeek = vi.fn().mockResolvedValue(undefined);
+    const onJoinOwnedSeek = vi.fn();
+    const { rerender } = render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        ownedSeekIds={["seek_mine"]}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: openSeek({ seekId: "seek_mine", creatorSeat: "w" }),
+        }}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onCancelSeek={onCancelSeek}
+        onRefreshOwnedSeek={onRefreshOwnedSeek}
+        onJoinOwnedSeek={onJoinOwnedSeek}
+      />
+    );
+
+    const openPanel = await screen.findByRole("region", { name: "Your open seek" });
+
+    expect(openPanel).toHaveTextContent("seek_mine");
+    expect(openPanel).toHaveTextContent("Open");
+    fireEvent.click(within(openPanel).getByRole("button", { name: "Refresh your open seek" }));
+    await waitFor(() => expect(onRefreshOwnedSeek).toHaveBeenCalledOnce());
+    fireEvent.click(within(openPanel).getByRole("button", { name: "Cancel your open seek" }));
+    await waitFor(() => expect(onCancelSeek).toHaveBeenCalledWith("seek_mine"));
+
+    const accepted = openSeek({
+      seekId: "seek_mine",
+      creatorSeat: "w",
+      status: "accepted",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      acceptedAt: "2026-06-01T12:04:00.000Z",
+      acceptedBy: { kind: "session", id: "seek_mine_acceptor" },
+      gameId: "game_from_seek",
+      whiteIdentity: { kind: "session", id: "seek_mine_creator" },
+      blackIdentity: { kind: "session", id: "seek_mine_acceptor" },
+      lastEventId: "seek_mine_accepted",
+    });
+    rerender(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        ownedSeekIds={["seek_mine"]}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: accepted,
+          gameInvite: {
+            gameId: "game_from_seek",
+            seat: "w",
+            token: "creator-token",
+            url: "https://castles.example/?onlineGame=game_from_seek&seat=w&token=creator-token",
+          },
+        }}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onCancelSeek={onCancelSeek}
+        onRefreshOwnedSeek={onRefreshOwnedSeek}
+        onJoinOwnedSeek={onJoinOwnedSeek}
+      />
+    );
+
+    const panel = await screen.findByRole("region", { name: "Your open seek" });
+
+    expect(panel).toHaveTextContent("seek_mine");
+    expect(panel).toHaveTextContent("Accepted");
+    expect(within(panel).queryByRole("button", { name: "Cancel your open seek" })).not.toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole("button", { name: "Join accepted game" }));
+    expect(onJoinOwnedSeek).toHaveBeenCalledOnce();
+  });
+
   it("loads the public directory for the active tab state", async () => {
     const loadGames = vi.fn().mockResolvedValue(directory([]));
     render(

@@ -4,6 +4,12 @@ import type {
   OnlineChallengeEvent,
   OnlineChallengeSummary,
 } from "../challenges";
+import type {
+  OpenSeekDirectoryListOptions,
+  OpenSeekDirectoryResponse,
+  OpenSeekEvent,
+  OpenSeekSummary,
+} from "../seeks";
 import type { OnlineGameCredentials, OnlineGameEvent } from "../events";
 import type {
   OnlineGameDirectoryListOptions,
@@ -32,8 +38,11 @@ export interface OnlineGameStore {
   listGameSummaries(options: OnlineGameDirectoryListOptions): Promise<OnlineGameDirectoryResponse>;
   loadGameSummary(gameId: string): Promise<OnlineGameSummary | null>;
   loadChallengeSummaries(): Promise<OnlineChallengeSummary[]>;
+  loadOpenSeekSummaries(): Promise<OpenSeekSummary[]>;
+  listOpenSeekSummaries(options: OpenSeekDirectoryListOptions): Promise<OpenSeekDirectoryResponse>;
   rebuildSummaries(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameSummary[]>;
   rebuildChallengeSummaries(options?: OnlineGameStoreLoadOptions): Promise<OnlineChallengeSummary[]>;
+  rebuildOpenSeekSummaries(options?: OnlineGameStoreLoadOptions): Promise<OpenSeekSummary[]>;
   appendGameCreated(
     event: Extract<OnlineGameEvent, { type: "game_created" }>,
     credentials: OnlineGameCredentials
@@ -46,13 +55,24 @@ export interface OnlineGameStore {
     event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
     credentials: OnlineChallengeCredentials
   ): Promise<OnlineChallengeSummary>;
+  appendOpenSeekCreated(
+    event: Extract<OpenSeekEvent, { type: "seek_created" }>,
+    credentials: OpenSeekCredentials
+  ): Promise<OpenSeekSummary>;
   resolveChallengeCredential(
     challengeId: string,
     token: string
   ): Promise<ResolvedOnlineChallengeCredential | null>;
+  resolveOpenSeekCredential(
+    seekId: string,
+    token: string
+  ): Promise<ResolvedOpenSeekCredential | null>;
   acceptChallengeAndCreateGame(
     input: OnlineChallengeAcceptInput
   ): Promise<OnlineChallengeAcceptResult>;
+  acceptOpenSeekAndCreateGame(
+    input: OpenSeekAcceptInput
+  ): Promise<OpenSeekAcceptResult>;
   /**
    * Low-level lifecycle append for decline, cancel, and expiry only.
    * `challenge_created` must go through appendChallengeCreated so credentials
@@ -65,6 +85,9 @@ export interface OnlineGameStore {
       { type: "challenge_created" } | { type: "challenge_accepted" }
     >
   ): Promise<OnlineChallengeSummary>;
+  appendOpenSeekEvent(
+    event: Exclude<OpenSeekEvent, { type: "seek_created" } | { type: "seek_accepted" }>
+  ): Promise<OpenSeekSummary>;
   applyGameAction(input: OnlineGameStoreActionInput): Promise<OnlineGameStoreActionResult>;
   adjudicateGameTimeout(
     input: OnlineGameStoreTimeoutInput
@@ -82,9 +105,20 @@ export interface OnlineChallengeCredentials {
   challengedIdentity: OnlineIdentity;
 }
 
+export interface OpenSeekCredentials {
+  creatorCredential: string;
+  creatorIdentity: OnlineIdentity;
+}
+
 export interface ResolvedOnlineChallengeCredential {
   challengeId: string;
   role: OnlineChallengeRole;
+  identity: AuthenticatedOnlineIdentity;
+}
+
+export interface ResolvedOpenSeekCredential {
+  seekId: string;
+  role: "creator";
   identity: AuthenticatedOnlineIdentity;
 }
 
@@ -113,6 +147,28 @@ export interface OnlineChallengeAcceptResult {
   gameSeats: {
     challenger: "w" | "b";
     challenged: "w" | "b";
+  };
+}
+
+export interface OpenSeekAcceptInput {
+  seekId: string;
+  acceptedBy: OnlineIdentity;
+  acceptedAt: string;
+  gameCreatedEvent: Extract<OnlineGameEvent, { type: "game_created" }>;
+  whiteIdentity: OnlineIdentity;
+  blackIdentity: OnlineIdentity;
+  acceptorCredential: string;
+}
+
+export interface OpenSeekAcceptResult {
+  seekEvent: Extract<OpenSeekEvent, { type: "seek_accepted" }>;
+  seekSummary: OpenSeekSummary;
+  gameSummary: OnlineGameSummary;
+  gameCredentials: OnlineGameCredentials;
+  gameRecord: OnlineGameRoomRecord;
+  gameSeats: {
+    creator: "w" | "b";
+    acceptor: "w" | "b";
   };
 }
 

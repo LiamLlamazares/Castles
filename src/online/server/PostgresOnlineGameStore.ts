@@ -31,10 +31,28 @@ import {
   validateOnlineIdentity,
   validateOnlineGameSummary,
 } from "../readModel";
+import {
+  ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+  canIdentityAcceptOpenSeek,
+  createOpenSeekAcceptedEvent,
+  type OpenSeekDirectoryListOptions,
+  type OpenSeekDirectoryResponse,
+  type OpenSeekEvent,
+  type OpenSeekSummary,
+  decodeOpenSeekDirectoryCursor,
+  encodeOpenSeekDirectoryCursor,
+  projectOpenSeekSummaries,
+  validateOpenSeekEvent,
+  validateOpenSeekSummary,
+  isSameOnlineIdentity as isSameOpenSeekIdentity,
+} from "../seeks";
 import type {
   OnlineChallengeAcceptInput,
   OnlineChallengeAcceptResult,
   OnlineChallengeCredentials,
+  OpenSeekAcceptInput,
+  OpenSeekAcceptResult,
+  OpenSeekCredentials,
   AppendableOnlineGameEvent,
   OnlineGameStore,
   OnlineGameStoreActionInput,
@@ -42,6 +60,7 @@ import type {
   OnlineGameStoreLoadOptions,
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
+  ResolvedOpenSeekCredential,
   ResolvedOnlineChallengeCredential,
 } from "./OnlineGameStore";
 import { isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
@@ -66,6 +85,7 @@ export interface PostgresOnlineGameStoreOptions {
 export class PostgresOnlineGameStore implements OnlineGameStore {
   private static readonly summaryLockKey = 1_431_903_351;
   private static readonly challengeSummaryLockKey = 1_431_903_352;
+  private static readonly seekSummaryLockKey = 1_431_903_353;
   private readonly queryable: PostgresQueryable;
   private readonly transactionClientFactory?: () => Promise<PostgresTransactionClient>;
   private readonly closeConnection?: () => Promise<void>;
@@ -207,6 +227,74 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  async loadOpenSeekSummaries(): Promise<OpenSeekSummary[]> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      "SELECT payload FROM online_seek_summaries ORDER BY updated_at DESC, seek_id ASC"
+    );
+    return result.rows.map((row, index) => {
+      const validation = validateOpenSeekSummary(row.payload);
+      if (!validation.ok) {
+        throw new Error(`Invalid open seek summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+  }
+
+  async listOpenSeekSummaries(
+    options: OpenSeekDirectoryListOptions
+  ): Promise<OpenSeekDirectoryResponse> {
+    await this.ensureSchema();
+    const where: string[] = [];
+    const values: unknown[] = [];
+    if (options.state === "open") {
+      where.push("status = 'open'");
+      where.push("expires_at > now()");
+    }
+
+    if (options.cursor) {
+      const cursor = decodeOpenSeekDirectoryCursor(options.cursor);
+      if (!cursor.ok) throw new Error(cursor.error.message);
+      const updatedAtParam = values.length + 1;
+      const seekIdParam = values.length + 2;
+      values.push(cursor.value.updatedAt, cursor.value.seekId);
+      where.push(
+        `(updated_at < $${updatedAtParam}::timestamptz OR (updated_at = $${updatedAtParam}::timestamptz AND seek_id > $${seekIdParam}))`
+      );
+    }
+
+    const limitParam = values.length + 1;
+    values.push(options.limit + 1);
+    const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+    const result = await this.queryable.query(
+      `
+        SELECT payload FROM online_seek_summaries
+        ${whereClause}
+        ORDER BY updated_at DESC, seek_id ASC
+        LIMIT $${limitParam}
+      `,
+      values
+    );
+    const summaries = result.rows.map((row, index) => {
+      const validation = validateOpenSeekSummary(row.payload);
+      if (!validation.ok) {
+        throw new Error(`Invalid open seek summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+    const seeks = summaries.slice(0, options.limit);
+    const nextCursor =
+      summaries.length > options.limit && seeks.length > 0
+        ? encodeOpenSeekDirectoryCursor(seeks[seeks.length - 1])
+        : undefined;
+
+    return {
+      schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+      seeks,
+      nextCursor,
+    };
+  }
+
   async rebuildSummaries(
     options: OnlineGameStoreLoadOptions = {}
   ): Promise<OnlineGameSummary[]> {
@@ -237,6 +325,24 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         return summaries;
       },
       (queryable) => this.acquireChallengeSummaryLock(queryable)
+    );
+  }
+
+  async rebuildOpenSeekSummaries(
+    options: OnlineGameStoreLoadOptions = {}
+  ): Promise<OpenSeekSummary[]> {
+    await this.ensureSchema();
+    return this.withTransaction(
+      async (client) => {
+        const events = await this.loadOpenSeekEvents(options, client);
+        const summaries = projectOpenSeekSummaries(events);
+        await client.query("DELETE FROM online_seek_summaries");
+        for (const summary of summaries) {
+          await this.upsertOpenSeekSummary(summary, client);
+        }
+        return summaries;
+      },
+      (queryable) => this.acquireOpenSeekSummaryLock(queryable)
     );
   }
 
@@ -315,6 +421,31 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  async appendOpenSeekCreated(
+    event: Extract<OpenSeekEvent, { type: "seek_created" }>,
+    credentials: OpenSeekCredentials
+  ): Promise<OpenSeekSummary> {
+    const validated = this.validateOpenSeek(event);
+    if (validated.type !== "seek_created") {
+      throw new Error("appendOpenSeekCreated only accepts seek_created events.");
+    }
+    const normalizedCredentials = this.validateOpenSeekCredentials(
+      validated.seekId,
+      validated,
+      credentials
+    );
+    await this.ensureSchema();
+    return this.withOpenSeekTransaction(validated.seekId, async (client) => {
+      await this.insertOpenSeekEvent(validated, client);
+      await this.insertOpenSeekCredentials(validated.seekId, normalizedCredentials, client);
+      const summary = await this.refreshOpenSeekSummaryForSeek(validated.seekId, client);
+      if (!summary) {
+        throw new Error(`Open seek summary was not refreshed for ${validated.seekId}.`);
+      }
+      return summary;
+    });
+  }
+
   async resolveChallengeCredential(
     challengeId: string,
     token: string
@@ -350,6 +481,40 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         challengeId,
         role,
         identity: identity.value as ResolvedOnlineChallengeCredential["identity"],
+      };
+    }
+    return null;
+  }
+
+  async resolveOpenSeekCredential(
+    seekId: string,
+    token: string
+  ): Promise<ResolvedOpenSeekCredential | null> {
+    if (typeof seekId !== "string" || !seekId || typeof token !== "string" || !token) {
+      return null;
+    }
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        SELECT token_hash, identity
+        FROM online_seek_credentials
+        WHERE seek_id = $1
+      `,
+      [seekId]
+    );
+
+    for (const row of result.rows) {
+      const tokenHash = row.token_hash;
+      if (typeof tokenHash !== "string" || !isOnlineTokenCredentialHash(tokenHash)) {
+        throw new Error(`Invalid open seek credential hash for ${seekId}.`);
+      }
+      const identity = validateOnlineIdentity(row.identity, "open seek credential identity");
+      if (!identity.ok) throw new Error(identity.error.message);
+      if (!verifyOnlineToken(token, tokenHash)) continue;
+      return {
+        seekId,
+        role: "creator",
+        identity: identity.value as ResolvedOpenSeekCredential["identity"],
       };
     }
     return null;
@@ -476,6 +641,122 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       const summary = await this.refreshChallengeSummaryForChallenge(validated.challengeId, client);
       if (!summary) {
         throw new Error(`Online challenge summary was not refreshed for ${validated.challengeId}.`);
+      }
+      return summary;
+    });
+  }
+
+  async acceptOpenSeekAndCreateGame(
+    input: OpenSeekAcceptInput
+  ): Promise<OpenSeekAcceptResult> {
+    const gameCreatedEvent = this.validate(input.gameCreatedEvent);
+    if (gameCreatedEvent.type !== "game_created") {
+      throw new Error("acceptOpenSeekAndCreateGame requires a game_created event.");
+    }
+    if (gameCreatedEvent.createdAt !== input.acceptedAt) {
+      throw new Error("Accepted game event createdAt must equal seek acceptedAt.");
+    }
+    this.validateOpenSeekAcceptInput(input);
+
+    await this.ensureSchema();
+    return this.withOpenSeekAcceptTransaction(
+      input.seekId,
+      gameCreatedEvent.gameId,
+      async (client) => {
+        const seekEvents = await this.loadOpenSeekEventsForSeek(input.seekId, client);
+        const [summary] = projectOpenSeekSummaries(seekEvents);
+        if (!summary || summary.seekId !== input.seekId) {
+          throw new Error(`Open seek ${input.seekId} was not found.`);
+        }
+        if (summary.status !== "open") {
+          throw new Error(`Open seek ${input.seekId} is already terminal.`);
+        }
+        if (!canIdentityAcceptOpenSeek(summary, input.acceptedBy, input.acceptedAt)) {
+          throw new Error(`A creator cannot accept their own open seek ${input.seekId}.`);
+        }
+        if (!this.sameJson(summary.setup, gameCreatedEvent.setup)) {
+          throw new Error(`Accepted online game setup must match open seek ${input.seekId}.`);
+        }
+        const seekCredentials = await this.loadOpenSeekCredentialsForSeek(input.seekId, client);
+        if (!isSameOpenSeekIdentity(seekCredentials.creatorIdentity, summary.creatorIdentity)) {
+          throw new Error(`Open seek credentials for ${input.seekId} do not match creator identity.`);
+        }
+        const gameSeats = this.resolveOpenSeekAcceptedGameSeats(summary, input);
+        const gameCredentials: OnlineGameCredentials =
+          gameSeats.creator === "w"
+            ? {
+                whiteCredential: seekCredentials.creatorCredential,
+                blackCredential: input.acceptorCredential,
+              }
+            : {
+                whiteCredential: input.acceptorCredential,
+                blackCredential: seekCredentials.creatorCredential,
+              };
+        const gameRecord: OnlineGameRoomRecord = {
+          gameId: gameCreatedEvent.gameId,
+          setup: gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: gameCreatedEvent.clock,
+          acceptedActions: [],
+        };
+        const seekEvent = createOpenSeekAcceptedEvent(
+          {
+            type: "seek_accepted",
+            seekId: input.seekId,
+            acceptedBy: input.acceptedBy,
+            acceptedAt: input.acceptedAt,
+            gameId: gameCreatedEvent.gameId,
+            whiteIdentity: input.whiteIdentity,
+            blackIdentity: input.blackIdentity,
+          },
+          { createdAt: input.acceptedAt }
+        );
+
+        await this.insertEvent(gameCreatedEvent, client);
+        await this.insertCredentials(gameCreatedEvent.gameId, gameCredentials, client);
+        await this.insertOpenSeekEvent(seekEvent, client);
+        const gameSummary = await this.refreshSummaryForGame(gameCreatedEvent.gameId, client);
+        if (!gameSummary) {
+          throw new Error(`Online game summary was not refreshed for ${gameCreatedEvent.gameId}.`);
+        }
+        const seekSummary = await this.refreshOpenSeekSummaryForSeek(input.seekId, client);
+        if (!seekSummary) {
+          throw new Error(`Open seek summary was not refreshed for ${input.seekId}.`);
+        }
+
+        return {
+          seekEvent,
+          seekSummary,
+          gameSummary,
+          gameCredentials,
+          gameRecord,
+          gameSeats,
+        };
+      }
+    );
+  }
+
+  async appendOpenSeekEvent(
+    event: Exclude<OpenSeekEvent, { type: "seek_created" } | { type: "seek_accepted" }>
+  ): Promise<OpenSeekSummary> {
+    const validated = this.validateOpenSeek(event);
+    if (validated.type === "seek_created") {
+      throw new Error(
+        "seek_created must be persisted through appendOpenSeekCreated so credentials are stored atomically."
+      );
+    }
+    if (validated.type === "seek_accepted") {
+      throw new Error(
+        "seek_accepted must be persisted through acceptOpenSeekAndCreateGame so game creation and seek acceptance are atomic."
+      );
+    }
+    await this.ensureSchema();
+    return this.withOpenSeekTransaction(validated.seekId, async (client) => {
+      await this.insertOpenSeekEvent(validated, client);
+      const summary = await this.refreshOpenSeekSummaryForSeek(validated.seekId, client);
+      if (!summary) {
+        throw new Error(`Open seek summary was not refreshed for ${validated.seekId}.`);
       }
       return summary;
     });
@@ -723,6 +1004,14 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     return validation.value;
   }
 
+  private validateOpenSeek(event: OpenSeekEvent): OpenSeekEvent {
+    const validation = validateOpenSeekEvent(event);
+    if (!validation.ok) {
+      throw new Error(validation.error.message);
+    }
+    return validation.value;
+  }
+
   private async ensureSchema(): Promise<void> {
     this.schemaReady ??= this.createSchema().catch((error) => {
       this.schemaReady = undefined;
@@ -876,6 +1165,63 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         ON online_challenge_summaries (visibility, updated_at DESC)
     `);
     await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_seek_events (
+        id BIGSERIAL PRIMARY KEY,
+        event_id TEXT NOT NULL UNIQUE,
+        seek_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        payload JSONB NOT NULL,
+        inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await this.queryable.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS online_seek_events_one_create_per_seek
+        ON online_seek_events (seek_id)
+        WHERE event_type = 'seek_created'
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_seek_events_order_idx
+        ON online_seek_events (id)
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_seek_credentials (
+        seek_id TEXT NOT NULL PRIMARY KEY,
+        token_hash TEXT NOT NULL CONSTRAINT online_seek_credentials_token_hash_shape CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$'),
+        identity JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await this.queryable.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE online_seek_credentials
+          ADD CONSTRAINT online_seek_credentials_token_hash_shape
+          CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$;
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_seek_summaries (
+        seek_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL,
+        payload JSONB NOT NULL,
+        rebuilt_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_seek_summaries_status_updated_idx
+        ON online_seek_summaries (status, updated_at DESC, seek_id ASC)
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_seek_summaries_open_expiry_idx
+        ON online_seek_summaries (status, expires_at, updated_at DESC, seek_id ASC)
+    `);
+    await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_game_locks (
         game_id TEXT PRIMARY KEY
       )
@@ -883,6 +1229,11 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_challenge_locks (
         challenge_id TEXT PRIMARY KEY
+      )
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_seek_locks (
+        seek_id TEXT PRIMARY KEY
       )
     `);
   }
@@ -939,6 +1290,31 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     );
   }
 
+  private async insertOpenSeekEvent(
+    event: OpenSeekEvent,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_seek_events (
+          event_id,
+          seek_id,
+          event_type,
+          created_at,
+          payload
+        )
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        event.eventId,
+        event.seekId,
+        event.type,
+        event.createdAt,
+        event,
+      ]
+    );
+  }
+
   private async insertCredentials(
     gameId: string,
     credentials: OnlineGameCredentials,
@@ -977,6 +1353,24 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         credentials.challengedCredential,
         credentials.challengedIdentity,
       ]
+    );
+  }
+
+  private async insertOpenSeekCredentials(
+    seekId: string,
+    credentials: OpenSeekCredentials,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_seek_credentials (
+          seek_id,
+          token_hash,
+          identity
+        )
+        VALUES ($1, $2, $3)
+      `,
+      [seekId, credentials.creatorCredential, credentials.creatorIdentity]
     );
   }
 
@@ -1020,6 +1414,28 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
 
     for (let index = 0; index < result.rows.length; index++) {
       const validation = validateOnlineChallengeEvent(result.rows[index].payload);
+      if (!validation.ok) {
+        const error = new Error(validation.error.message);
+        options.onEventError?.(index + 1, error);
+        throw error;
+      }
+      events.push(validation.value);
+    }
+
+    return events;
+  }
+
+  private async loadOpenSeekEvents(
+    options: OnlineGameStoreLoadOptions = {},
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<OpenSeekEvent[]> {
+    const result = await queryable.query(
+      "SELECT payload FROM online_seek_events ORDER BY id ASC"
+    );
+    const events: OpenSeekEvent[] = [];
+
+    for (let index = 0; index < result.rows.length; index++) {
+      const validation = validateOpenSeekEvent(result.rows[index].payload);
       if (!validation.ok) {
         const error = new Error(validation.error.message);
         options.onEventError?.(index + 1, error);
@@ -1140,6 +1556,33 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     };
   }
 
+  private validateOpenSeekCredentials(
+    seekId: string,
+    event: Extract<OpenSeekEvent, { type: "seek_created" }>,
+    credentials: OpenSeekCredentials
+  ): OpenSeekCredentials {
+    if (
+      typeof credentials.creatorCredential !== "string" ||
+      !isOnlineTokenCredentialHash(credentials.creatorCredential)
+    ) {
+      throw new Error(`Invalid open seek credential hash for ${seekId}.`);
+    }
+    const creatorIdentity = validateOnlineIdentity(
+      credentials.creatorIdentity,
+      "open seek credentials.creatorIdentity"
+    );
+    if (!creatorIdentity.ok) {
+      throw new Error(creatorIdentity.error.message);
+    }
+    if (!isSameOpenSeekIdentity(creatorIdentity.value, event.creatorIdentity)) {
+      throw new Error(`Open seek credentials for ${seekId} do not match the creator identity.`);
+    }
+    return {
+      creatorCredential: credentials.creatorCredential,
+      creatorIdentity: creatorIdentity.value,
+    };
+  }
+
   private async loadChallengeCredentialsForChallenge(
     challengeId: string,
     queryable: PostgresQueryable
@@ -1187,6 +1630,33 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     return credentials as OnlineChallengeCredentials;
   }
 
+  private async loadOpenSeekCredentialsForSeek(
+    seekId: string,
+    queryable: PostgresQueryable
+  ): Promise<OpenSeekCredentials> {
+    const result = await queryable.query(
+      `
+        SELECT token_hash, identity
+        FROM online_seek_credentials
+        WHERE seek_id = $1
+      `,
+      [seekId]
+    );
+
+    const row = result.rows[0];
+    if (!row) throw new Error(`Missing open seek credentials for ${seekId}.`);
+    const tokenHash = row.token_hash;
+    if (typeof tokenHash !== "string" || !isOnlineTokenCredentialHash(tokenHash)) {
+      throw new Error(`Invalid open seek credential hash for ${seekId}.`);
+    }
+    const identity = validateOnlineIdentity(row.identity, "open seek credential identity");
+    if (!identity.ok) throw new Error(identity.error.message);
+    return {
+      creatorCredential: tokenHash,
+      creatorIdentity: identity.value,
+    };
+  }
+
   private validateAcceptInput(
     input: OnlineChallengeAcceptInput,
     gameCreatedEvent: Extract<OnlineGameEvent, { type: "game_created" }>
@@ -1210,6 +1680,24 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     }
   }
 
+  private validateOpenSeekAcceptInput(input: OpenSeekAcceptInput): void {
+    if (
+      typeof input.acceptorCredential !== "string" ||
+      !isOnlineTokenCredentialHash(input.acceptorCredential)
+    ) {
+      throw new Error(`Invalid open seek acceptor credential hash for ${input.seekId}.`);
+    }
+    const acceptedBy = validateOnlineIdentity(input.acceptedBy, "seek.acceptedBy");
+    if (!acceptedBy.ok) throw new Error(acceptedBy.error.message);
+    const whiteIdentity = validateOnlineIdentity(input.whiteIdentity, "seek.whiteIdentity");
+    if (!whiteIdentity.ok) throw new Error(whiteIdentity.error.message);
+    const blackIdentity = validateOnlineIdentity(input.blackIdentity, "seek.blackIdentity");
+    if (!blackIdentity.ok) throw new Error(blackIdentity.error.message);
+    if (isSameOpenSeekIdentity(whiteIdentity.value, blackIdentity.value)) {
+      throw new Error(`Accepted open seek ${input.seekId} must bind two distinct seats.`);
+    }
+  }
+
   private resolveAcceptedGameSeats(
     summary: OnlineChallengeSummary,
     input: OnlineChallengeAcceptInput
@@ -1228,6 +1716,26 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       throw new Error(`Accepted challenge ${summary.challengeId} must bind challenger and challenged seats.`);
     }
     return { challenger: challengerSeat, challenged: challengedSeat };
+  }
+
+  private resolveOpenSeekAcceptedGameSeats(
+    summary: OpenSeekSummary,
+    input: OpenSeekAcceptInput
+  ): { creator: "w" | "b"; acceptor: "w" | "b" } {
+    const creatorSeat = isSameOpenSeekIdentity(input.whiteIdentity, summary.creatorIdentity)
+      ? "w"
+      : isSameOpenSeekIdentity(input.blackIdentity, summary.creatorIdentity)
+        ? "b"
+        : null;
+    const acceptorSeat = isSameOpenSeekIdentity(input.whiteIdentity, input.acceptedBy)
+      ? "w"
+      : isSameOpenSeekIdentity(input.blackIdentity, input.acceptedBy)
+        ? "b"
+        : null;
+    if (!creatorSeat || !acceptorSeat || creatorSeat === acceptorSeat) {
+      throw new Error(`Accepted open seek ${summary.seekId} must bind creator and acceptor seats.`);
+    }
+    return { creator: creatorSeat, acceptor: acceptorSeat };
   }
 
   private sameJson(a: unknown, b: unknown): boolean {
@@ -1269,6 +1777,27 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       const validation = validateOnlineChallengeEvent(result.rows[index].payload);
       if (!validation.ok) {
         throw new Error(`Invalid online challenge event for ${challengeId} at row ${index + 1}: ${validation.error.message}`);
+      }
+      events.push(validation.value);
+    }
+
+    return events;
+  }
+
+  private async loadOpenSeekEventsForSeek(
+    seekId: string,
+    queryable: PostgresQueryable
+  ): Promise<OpenSeekEvent[]> {
+    const result = await queryable.query(
+      "SELECT payload FROM online_seek_events WHERE seek_id = $1 ORDER BY id ASC",
+      [seekId]
+    );
+    const events: OpenSeekEvent[] = [];
+
+    for (let index = 0; index < result.rows.length; index++) {
+      const validation = validateOpenSeekEvent(result.rows[index].payload);
+      if (!validation.ok) {
+        throw new Error(`Invalid open seek event for ${seekId} at row ${index + 1}: ${validation.error.message}`);
       }
       events.push(validation.value);
     }
@@ -1326,6 +1855,22 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       return null;
     }
     await this.upsertChallengeSummary(summary, queryable);
+    return summary;
+  }
+
+  private async refreshOpenSeekSummaryForSeek(
+    seekId: string,
+    queryable: PostgresQueryable
+  ): Promise<OpenSeekSummary | null> {
+    const summaries = projectOpenSeekSummaries(
+      await this.loadOpenSeekEventsForSeek(seekId, queryable)
+    );
+    const summary = summaries.find((candidate) => candidate.seekId === seekId);
+    if (!summary) {
+      await queryable.query("DELETE FROM online_seek_summaries WHERE seek_id = $1", [seekId]);
+      return null;
+    }
+    await this.upsertOpenSeekSummary(summary, queryable);
     return summary;
   }
 
@@ -1412,6 +1957,43 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     );
   }
 
+  private async upsertOpenSeekSummary(
+    summary: OpenSeekSummary,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    const validation = validateOpenSeekSummary(summary);
+    if (!validation.ok) {
+      throw new Error(validation.error.message);
+    }
+
+    await queryable.query(
+      `
+        INSERT INTO online_seek_summaries (
+          seek_id,
+          status,
+          expires_at,
+          updated_at,
+          payload
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (seek_id) DO UPDATE
+        SET
+          status = EXCLUDED.status,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = EXCLUDED.updated_at,
+          payload = EXCLUDED.payload,
+          rebuilt_at = now()
+      `,
+      [
+        validation.value.seekId,
+        validation.value.status,
+        validation.value.expiresAt,
+        validation.value.updatedAt,
+        validation.value,
+      ]
+    );
+  }
+
   private async withTransaction<T>(
     operation: (queryable: PostgresQueryable) => Promise<T>,
     acquireLock: (queryable: PostgresQueryable) => Promise<void> = (queryable) =>
@@ -1474,6 +2056,23 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  private async withOpenSeekTransaction<T>(
+    seekId: string,
+    operation: (queryable: PostgresQueryable) => Promise<T>
+  ): Promise<T> {
+    return this.withTransaction(operation, async (queryable) => {
+      await queryable.query(
+        "INSERT INTO online_seek_locks (seek_id) VALUES ($1) ON CONFLICT (seek_id) DO NOTHING",
+        [seekId]
+      );
+      await queryable.query(
+        "SELECT seek_id FROM online_seek_locks WHERE seek_id = $1 FOR UPDATE",
+        [seekId]
+      );
+      await this.acquireOpenSeekSummaryLock(queryable);
+    });
+  }
+
   private async withChallengeAcceptTransaction<T>(
     challengeId: string,
     gameId: string,
@@ -1501,6 +2100,33 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  private async withOpenSeekAcceptTransaction<T>(
+    seekId: string,
+    gameId: string,
+    operation: (queryable: PostgresQueryable) => Promise<T>
+  ): Promise<T> {
+    return this.withTransaction(operation, async (queryable) => {
+      await queryable.query(
+        "INSERT INTO online_seek_locks (seek_id) VALUES ($1) ON CONFLICT (seek_id) DO NOTHING",
+        [seekId]
+      );
+      await queryable.query(
+        "SELECT seek_id FROM online_seek_locks WHERE seek_id = $1 FOR UPDATE",
+        [seekId]
+      );
+      await queryable.query(
+        "INSERT INTO online_game_locks (game_id) VALUES ($1) ON CONFLICT (game_id) DO NOTHING",
+        [gameId]
+      );
+      await queryable.query(
+        "SELECT game_id FROM online_game_locks WHERE game_id = $1 FOR UPDATE",
+        [gameId]
+      );
+      await this.acquireSummaryLock(queryable);
+      await this.acquireOpenSeekSummaryLock(queryable);
+    });
+  }
+
   private async acquireSummaryLock(queryable: PostgresQueryable): Promise<void> {
     await queryable.query("SELECT pg_advisory_xact_lock($1)", [
       PostgresOnlineGameStore.summaryLockKey,
@@ -1510,6 +2136,12 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   private async acquireChallengeSummaryLock(queryable: PostgresQueryable): Promise<void> {
     await queryable.query("SELECT pg_advisory_xact_lock($1)", [
       PostgresOnlineGameStore.challengeSummaryLockKey,
+    ]);
+  }
+
+  private async acquireOpenSeekSummaryLock(queryable: PostgresQueryable): Promise<void> {
+    await queryable.query("SELECT pg_advisory_xact_lock($1)", [
+      PostgresOnlineGameStore.seekSummaryLockKey,
     ]);
   }
 }

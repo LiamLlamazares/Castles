@@ -3,18 +3,25 @@ import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import {
   buildSpectatorUrl,
   copyOnlineInviteUrl,
+  fetchOpenSeekDirectory,
   fetchOnlineGameDirectory,
   formatOnlineGameResult,
+  type FetchOpenSeekDirectoryOptions,
   type FetchOnlineGameSummariesOptions,
+  type OpenSeekResponse,
 } from "../online/client";
 import type {
   OnlineGameDirectoryResponse,
   OnlineGameSummary,
   OnlineGameSummaryParticipant,
 } from "../online/readModel";
+import type {
+  OpenSeekDirectoryResponse,
+  OpenSeekSummary,
+} from "../online/seeks";
 import "../css/OnlineGameBrowser.css";
 
-type OnlineBrowserTab = "watch" | "archive";
+type OnlineBrowserTab = "lobby" | "watch" | "archive";
 type OnlineBrowserSort = "newest" | "moves";
 type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
 type OnlineBrowserResultFilter =
@@ -29,10 +36,18 @@ type OnlineBrowserResultFilter =
 
 interface OnlineGameBrowserProps {
   loadGames?: (options?: FetchOnlineGameSummariesOptions) => Promise<OnlineGameDirectoryResponse>;
+  loadOpenSeeks?: (options?: FetchOpenSeekDirectoryOptions) => Promise<OpenSeekDirectoryResponse>;
   onBack: () => void;
   onOpenGame?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
+  onCreateSeek?: () => void;
+  onAcceptSeek?: (seekId: string) => void | Promise<void>;
+  onCancelSeek?: (seekId: string) => void | Promise<void>;
+  ownedSeekResponse?: OpenSeekResponse | null;
+  onRefreshOwnedSeek?: () => void | Promise<void>;
+  onJoinOwnedSeek?: () => void;
+  ownedSeekIds?: string[];
   onReplay: (gameId: string) => void;
   onSpectate: (gameId: string) => void;
   backLabel?: string;
@@ -93,12 +108,60 @@ function matchesResultFilter(summary: OnlineGameSummary, resultFilter: OnlineBro
   return summary.result.reason === resultFilter;
 }
 
+function seekSearchText(summary: OpenSeekSummary): string {
+  return [
+    summary.seekId,
+    summary.creatorSeat,
+    summary.status,
+    summary.setup.board.config.nSquares,
+    summary.setup.timeControl ? `${summary.setup.timeControl.initial}+${summary.setup.timeControl.increment}` : "casual",
+    summary.setup.gameRules?.vpModeEnabled ? "victory points" : "",
+  ].join(" ").toLowerCase();
+}
+
+function formatSeekClock(summary: OpenSeekSummary): string {
+  const clock = summary.setup.timeControl;
+  return clock ? `Timed ${clock.initial}+${clock.increment}` : "Casual";
+}
+
+function formatSeekExpiresAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatSeekStatus(status: OpenSeekSummary["status"]): string {
+  switch (status) {
+    case "open":
+      return "Open";
+    case "accepted":
+      return "Accepted";
+    case "cancelled":
+      return "Cancelled";
+    case "expired":
+      return "Expired";
+    default:
+      return status;
+  }
+}
+
 const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   loadGames = fetchOnlineGameDirectory,
+  loadOpenSeeks = fetchOpenSeekDirectory,
   onBack,
   onOpenGame,
   onTutorial,
   onOpenLibrary,
+  onCreateSeek,
+  onAcceptSeek,
+  onCancelSeek,
+  ownedSeekResponse,
+  onRefreshOwnedSeek,
+  onJoinOwnedSeek,
+  ownedSeekIds = [],
   onReplay,
   onSpectate,
   backLabel = "Back to game",
@@ -106,6 +169,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 }) => {
   const [tab, setTab] = React.useState<OnlineBrowserTab>(initialTab);
   const [games, setGames] = React.useState<OnlineGameSummary[]>([]);
+  const [openSeeks, setOpenSeeks] = React.useState<OpenSeekSummary[]>([]);
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<OnlineBrowserSort>("newest");
   const [timeFilter, setTimeFilter] = React.useState<OnlineBrowserTimeFilter>("all");
@@ -114,9 +178,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
   const [nextCursor, setNextCursor] = React.useState<string | undefined>();
   const [copyMessage, setCopyMessage] = React.useState("");
+  const [seekStatus, setSeekStatus] = React.useState<"loading" | "ready" | "error">("loading");
+  const [seekActionById, setSeekActionById] = React.useState<Record<string, "accept" | "cancel" | undefined>>({});
+  const [seekActionMessage, setSeekActionMessage] = React.useState("");
+  const [ownedSeekAction, setOwnedSeekAction] = React.useState<"refresh" | "join" | undefined>();
   const requestIdRef = React.useRef(0);
+  const seekRequestIdRef = React.useRef(0);
 
-  const directoryState = tab === "watch" ? "active" : "archived";
+  const directoryState = tab === "archive" ? "archived" : "active";
 
   React.useEffect(() => {
     if (tab === "watch" && resultFilter !== "all") {
@@ -162,8 +231,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [directoryState, loadGames]);
 
   const refreshGames = React.useCallback(() => {
+    if (tab === "lobby") return;
     void loadPage("replace");
-  }, [loadPage]);
+  }, [loadPage, tab]);
 
   const loadMoreGames = React.useCallback(() => {
     if (!nextCursor) return;
@@ -173,6 +243,29 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   React.useEffect(() => {
     refreshGames();
   }, [refreshGames]);
+
+  const loadOpenSeekPage = React.useCallback(async () => {
+    const requestId = seekRequestIdRef.current + 1;
+    seekRequestIdRef.current = requestId;
+    setSeekStatus("loading");
+    setSeekActionMessage("");
+    try {
+      const response = await loadOpenSeeks({ state: "open", limit: 50 });
+      if (seekRequestIdRef.current !== requestId) return;
+      setOpenSeeks(response.seeks);
+      setSeekStatus("ready");
+    } catch (error) {
+      if (seekRequestIdRef.current !== requestId) return;
+      console.error("[OnlineGameBrowser] Failed to load open seeks", error);
+      setOpenSeeks([]);
+      setSeekStatus("error");
+    }
+  }, [loadOpenSeeks]);
+
+  React.useEffect(() => {
+    if (tab !== "lobby") return;
+    void loadOpenSeekPage();
+  }, [loadOpenSeekPage, tab]);
 
   const publicGames = React.useMemo(
     () => games.filter((game) => game.visibility === "public"),
@@ -195,10 +288,65 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return filtered.sort(sort === "moves" ? compareMostMoves : compareNewest);
   }, [publicGames, query, resultFilter, sort, tab, timeFilter]);
 
+  const visibleOpenSeeks = React.useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return openSeeks
+      .filter((seek) => seek.status === "open")
+      .filter((seek) => !normalizedQuery || seekSearchText(seek).includes(normalizedQuery))
+      .sort((left, right) => {
+        if (left.updatedAt !== right.updatedAt) return right.updatedAt.localeCompare(left.updatedAt);
+        return left.seekId.localeCompare(right.seekId);
+      });
+  }, [openSeeks, query]);
+
   const emptyTitle =
     tab === "watch" ? "No public live games yet." : "No public completed games yet.";
   const hasActiveFilters =
     query.trim() !== "" || timeFilter !== "all" || (tab === "archive" && resultFilter !== "all");
+
+  const runSeekAction = async (seekId: string, action: "accept" | "cancel") => {
+    const handler = action === "accept" ? onAcceptSeek : onCancelSeek;
+    if (!handler) return;
+    setSeekActionById((current) => ({ ...current, [seekId]: action }));
+    setSeekActionMessage("");
+    try {
+      await handler(seekId);
+      setSeekActionMessage(action === "accept" ? "Opening accepted game..." : "Open seek cancelled.");
+      if (action === "cancel") {
+        setOpenSeeks((current) => current.filter((seek) => seek.seekId !== seekId));
+      }
+    } catch (error) {
+      console.error(`[OnlineGameBrowser] Failed to ${action} open seek`, error);
+      setSeekActionMessage(action === "accept" ? "Could not accept that open seek." : "Could not cancel that open seek.");
+    } finally {
+      setSeekActionById((current) => {
+        const next = { ...current };
+        delete next[seekId];
+        return next;
+      });
+    }
+  };
+
+  const runOwnedSeekRefresh = async () => {
+    if (!onRefreshOwnedSeek) return;
+    setOwnedSeekAction("refresh");
+    setSeekActionMessage("");
+    try {
+      await onRefreshOwnedSeek();
+      setSeekActionMessage("Your open seek is up to date.");
+    } catch (error) {
+      console.error("[OnlineGameBrowser] Failed to refresh owned open seek", error);
+      setSeekActionMessage("Could not refresh your open seek.");
+    } finally {
+      setOwnedSeekAction(undefined);
+    }
+  };
+
+  const runOwnedSeekJoin = () => {
+    if (!onJoinOwnedSeek) return;
+    setOwnedSeekAction("join");
+    onJoinOwnedSeek();
+  };
 
   const copySpectatorLink = async (gameId: string) => {
     try {
@@ -221,9 +369,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       <AppShellNav
         ariaLabel="Watch navigation"
         activeDestination="watch"
-        title="Watch and Online Archive"
-        kicker="Public games"
-        description="Only games deliberately published for public viewing appear here; unlisted invite games are excluded."
+        title="Online Lobby"
+        kicker="Public online"
+        description="Create or accept open seeks, watch live public games, and replay completed public games."
         backLabel={backLabel}
         onBack={onBack}
         destinations={navDestinations}
@@ -231,6 +379,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
       <section className="online-browser-toolbar" aria-label="Online browser controls">
         <div className="online-browser-tabs" aria-label="Online game lists">
+          <button
+            type="button"
+            aria-label="Open seek lobby"
+            aria-pressed={tab === "lobby"}
+            className={tab === "lobby" ? "active" : ""}
+            onClick={() => setTab("lobby")}
+          >
+            Lobby
+          </button>
           <button
             type="button"
             aria-label="Live public games"
@@ -249,6 +406,28 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             Online Archive
           </button>
         </div>
+        {tab === "lobby" ? (
+          <div className="online-browser-filter-grid">
+            <button
+              type="button"
+              className="online-browser-button neutral"
+              onClick={() => void loadOpenSeekPage()}
+              disabled={seekStatus === "loading"}
+              aria-label="Refresh open seeks"
+            >
+              {seekStatus === "loading" ? "Refreshing..." : "Refresh"}
+            </button>
+            {onCreateSeek && (
+              <button
+                type="button"
+                className="online-browser-button primary online-browser-create-seek"
+                onClick={onCreateSeek}
+              >
+                Create Open Seek
+              </button>
+            )}
+          </div>
+        ) : (
         <div className="online-browser-filter-grid">
           <label className="online-browser-select">
             <span>Sort</span>
@@ -293,28 +472,156 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </label>
           )}
         </div>
+        )}
         <label className="online-browser-search">
           <span>Search</span>
           <input
             type="search"
-            aria-label="Search public games"
+            aria-label={tab === "lobby" ? "Search open seeks" : "Search public games"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Player or game id"
+            placeholder={tab === "lobby" ? "Seek id or rules" : "Player or game id"}
           />
         </label>
       </section>
 
       <div className="online-browser-status-line" role="status" aria-live="polite">
-        {status === "loading"
-          ? "Loading public games..."
-          : status === "error"
-            ? "Could not load public games."
-            : copyMessage ||
-              `${visibleGames.length} public ${tab === "watch" ? "live" : "archived"} games shown${nextCursor ? "; more available" : ""}`}
+        {tab === "lobby"
+          ? seekStatus === "loading"
+            ? "Loading open seeks..."
+            : seekStatus === "error"
+              ? "Could not load open seeks."
+              : seekActionMessage || `${visibleOpenSeeks.length} open seeks shown`
+          : status === "loading"
+            ? "Loading public games..."
+            : status === "error"
+              ? "Could not load public games."
+              : copyMessage ||
+                `${visibleGames.length} public ${tab === "watch" ? "live" : "archived"} games shown${nextCursor ? "; more available" : ""}`}
       </div>
 
-      {status === "error" ? (
+      {tab === "lobby" ? (
+        seekStatus === "error" ? (
+          <button type="button" className="online-browser-button neutral" onClick={loadOpenSeekPage}>
+            Retry
+          </button>
+        ) : (
+          <main className="online-browser-list" aria-label="Open seek lobby">
+            {ownedSeekResponse?.summary && (
+              <section
+                className="online-seek-owner-panel"
+                aria-label="Your open seek"
+              >
+                <div className="online-game-row-main">
+                  <div className="online-game-players">
+                    <strong>Your open seek</strong>
+                    <span>{ownedSeekResponse.summary.seekId}</span>
+                  </div>
+                  <div className="online-game-meta">
+                    <span className={`online-game-pill ${ownedSeekResponse.summary.status}`}>
+                      {formatSeekStatus(ownedSeekResponse.summary.status)}
+                    </span>
+                    <span>Side {ownedSeekResponse.summary.creatorSeat}</span>
+                    <span>{formatSeekClock(ownedSeekResponse.summary)}</span>
+                    <span>Expires {formatSeekExpiresAt(ownedSeekResponse.summary.expiresAt)}</span>
+                  </div>
+                </div>
+                <div className="online-game-actions">
+                  <button
+                    type="button"
+                    className="online-browser-button neutral"
+                    onClick={() => void runOwnedSeekRefresh()}
+                    disabled={!onRefreshOwnedSeek || ownedSeekAction !== undefined}
+                    aria-label="Refresh your open seek"
+                  >
+                    {ownedSeekAction === "refresh" ? "Refreshing..." : "Refresh"}
+                  </button>
+                  {ownedSeekResponse.summary.status === "open" && (
+                    <button
+                      type="button"
+                      className="online-browser-button neutral"
+                      onClick={() => void runSeekAction(ownedSeekResponse.summary.seekId, "cancel")}
+                      disabled={!onCancelSeek || seekActionById[ownedSeekResponse.summary.seekId] !== undefined}
+                      aria-label="Cancel your open seek"
+                    >
+                      {seekActionById[ownedSeekResponse.summary.seekId] === "cancel" ? "Cancelling..." : "Cancel"}
+                    </button>
+                  )}
+                  {ownedSeekResponse.summary.status === "accepted" && ownedSeekResponse.gameInvite && (
+                    <button
+                      type="button"
+                      className="online-browser-button primary"
+                      onClick={runOwnedSeekJoin}
+                      disabled={!onJoinOwnedSeek || ownedSeekAction !== undefined}
+                      aria-label="Join accepted game"
+                    >
+                      {ownedSeekAction === "join" ? "Joining..." : "Join Game"}
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+            {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
+              <section className="online-browser-empty">
+                <h2>{query.trim() ? "No open seeks match this search." : "No open seeks yet."}</h2>
+                <p>
+                  Create a public seek from Play, or refresh when another player is ready.
+                </p>
+              </section>
+            ) : visibleOpenSeeks.map((seek) => {
+              const owned = ownedSeekIds.includes(seek.seekId);
+              const pendingAction = seekActionById[seek.seekId];
+              const sideLabel = seek.creatorSeat;
+              const radius = seek.setup.board.config.nSquares;
+              return (
+                <article
+                  key={seek.seekId}
+                  className="online-game-row online-seek-row"
+                  aria-label={`Open seek ${seek.seekId}`}
+                >
+                  <div className="online-game-row-main">
+                    <div className="online-game-players">
+                      <strong>Open seek</strong>
+                      <span>{seek.seekId}</span>
+                    </div>
+                    <div className="online-game-meta">
+                      <span className="online-game-pill active">Open</span>
+                      <span>Side {sideLabel}</span>
+                      <span>Radius {radius}</span>
+                      <span>{formatSeekClock(seek)}</span>
+                      {seek.setup.gameRules?.vpModeEnabled && <span>Victory points</span>}
+                      <span>Expires {formatSeekExpiresAt(seek.expiresAt)}</span>
+                    </div>
+                  </div>
+                  <div className="online-game-actions">
+                    {owned ? (
+                      <button
+                        type="button"
+                        className="online-browser-button neutral"
+                        onClick={() => void runSeekAction(seek.seekId, "cancel")}
+                        disabled={!onCancelSeek || pendingAction !== undefined}
+                        aria-label={`Cancel open seek ${seek.seekId}`}
+                      >
+                        {pendingAction === "cancel" ? "Cancelling..." : "Cancel"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="online-browser-button primary"
+                        onClick={() => void runSeekAction(seek.seekId, "accept")}
+                        disabled={!onAcceptSeek || pendingAction !== undefined}
+                        aria-label={`Accept open seek ${seek.seekId}`}
+                      >
+                        {pendingAction === "accept" ? "Accepting..." : "Accept"}
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </main>
+        )
+      ) : status === "error" ? (
         <button type="button" className="online-browser-button neutral" onClick={refreshGames}>
           Retry
         </button>

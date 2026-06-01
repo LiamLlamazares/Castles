@@ -14,11 +14,17 @@ import {
   createChallengeCreatedEvent,
   type OnlineChallengeEvent,
 } from "../../challenges";
+import {
+  createOpenSeekCreatedEvent,
+  createOpenSeekCancelledEvent,
+  type OpenSeekEvent,
+} from "../../seeks";
 
 class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
   eventRows: Array<{ payload: OnlineGameEvent }> = [];
   challengeEventRows: Array<{ payload: OnlineChallengeEvent }> = [];
+  seekEventRows: Array<{ payload: OpenSeekEvent }> = [];
   credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }> = [];
   challengeCredentialRows: Array<{
     challengeId: string;
@@ -26,12 +32,15 @@ class FakePostgresClient {
     tokenHash: string;
     identity: unknown;
   }> = [];
+  seekCredentialRows: Array<{ seekId: string; tokenHash: string; identity: unknown }> = [];
   summaryRows: Array<{ payload: unknown }> = [];
   challengeSummaryRows: Array<{ payload: unknown }> = [];
+  seekSummaryRows: Array<{ payload: unknown }> = [];
   failNextCreateTable = false;
   failNextSummaryInsert = false;
   failNextChallengeCredentialInsert = false;
   failNextChallengeSummaryInsert = false;
+  failNextSeekSummaryInsert = false;
   failRollback = false;
   private transactionSnapshot: {
     eventRows: Array<{ payload: OnlineGameEvent }>;
@@ -43,8 +52,11 @@ class FakePostgresClient {
       tokenHash: string;
       identity: unknown;
     }>;
+    seekEventRows: Array<{ payload: OpenSeekEvent }>;
+    seekCredentialRows: Array<{ seekId: string; tokenHash: string; identity: unknown }>;
     summaryRows: Array<{ payload: unknown }>;
     challengeSummaryRows: Array<{ payload: unknown }>;
+    seekSummaryRows: Array<{ payload: unknown }>;
   } | null = null;
 
   async query(text: string, values?: unknown[]) {
@@ -53,10 +65,13 @@ class FakePostgresClient {
       this.transactionSnapshot = {
         eventRows: this.eventRows.map((row) => ({ payload: row.payload })),
         challengeEventRows: this.challengeEventRows.map((row) => ({ payload: row.payload })),
+        seekEventRows: this.seekEventRows.map((row) => ({ payload: row.payload })),
         credentialRows: this.credentialRows.map((row) => ({ ...row })),
         challengeCredentialRows: this.challengeCredentialRows.map((row) => ({ ...row })),
+        seekCredentialRows: this.seekCredentialRows.map((row) => ({ ...row })),
         summaryRows: this.summaryRows.map((row) => ({ payload: row.payload })),
         challengeSummaryRows: this.challengeSummaryRows.map((row) => ({ payload: row.payload })),
+        seekSummaryRows: this.seekSummaryRows.map((row) => ({ payload: row.payload })),
       };
       return { rows: [] };
     }
@@ -71,10 +86,13 @@ class FakePostgresClient {
       if (this.transactionSnapshot) {
         this.eventRows = this.transactionSnapshot.eventRows.map((row) => ({ payload: row.payload }));
         this.challengeEventRows = this.transactionSnapshot.challengeEventRows.map((row) => ({ payload: row.payload }));
+        this.seekEventRows = this.transactionSnapshot.seekEventRows.map((row) => ({ payload: row.payload }));
         this.credentialRows = this.transactionSnapshot.credentialRows.map((row) => ({ ...row }));
         this.challengeCredentialRows = this.transactionSnapshot.challengeCredentialRows.map((row) => ({ ...row }));
+        this.seekCredentialRows = this.transactionSnapshot.seekCredentialRows.map((row) => ({ ...row }));
         this.summaryRows = this.transactionSnapshot.summaryRows.map((row) => ({ payload: row.payload }));
         this.challengeSummaryRows = this.transactionSnapshot.challengeSummaryRows.map((row) => ({ payload: row.payload }));
+        this.seekSummaryRows = this.transactionSnapshot.seekSummaryRows.map((row) => ({ payload: row.payload }));
         this.transactionSnapshot = null;
       }
       return { rows: [] };
@@ -103,6 +121,21 @@ class FakePostgresClient {
         throw new Error("duplicate challenge creation");
       }
       this.challengeEventRows.push({ payload: event });
+    }
+    if (/insert into online_seek_events/i.test(text) && values?.[4]) {
+      const event = values[4] as OpenSeekEvent;
+      if (this.seekEventRows.some((row) => row.payload.eventId === event.eventId)) {
+        throw new Error("duplicate seek event id");
+      }
+      if (
+        event.type === "seek_created" &&
+        this.seekEventRows.some(
+          (row) => row.payload.type === "seek_created" && row.payload.seekId === event.seekId
+        )
+      ) {
+        throw new Error("duplicate seek creation");
+      }
+      this.seekEventRows.push({ payload: event });
     }
     if (/insert into online_game_credentials/i.test(text) && values) {
       const gameId = values[0] as string;
@@ -148,6 +181,17 @@ class FakePostgresClient {
         this.challengeCredentialRows.push(credential);
       }
     }
+    if (/insert into online_seek_credentials/i.test(text) && values) {
+      const credential = {
+        seekId: values[0] as string,
+        tokenHash: values[1] as string,
+        identity: values[2],
+      };
+      if (this.seekCredentialRows.some((row) => row.seekId === credential.seekId)) {
+        throw new Error("duplicate seek credential");
+      }
+      this.seekCredentialRows.push(credential);
+    }
     if (/delete\s+from\s+online_game_summaries/i.test(text)) {
       if (/where\s+game_id/i.test(text)) {
         this.summaryRows = this.summaryRows.filter((row) => {
@@ -167,6 +211,17 @@ class FakePostgresClient {
         });
       } else {
         this.challengeSummaryRows = [];
+      }
+      return { rows: [] };
+    }
+    if (/delete\s+from\s+online_seek_summaries/i.test(text)) {
+      if (/where\s+seek_id/i.test(text)) {
+        this.seekSummaryRows = this.seekSummaryRows.filter((row) => {
+          const payload = row.payload as { seekId?: string };
+          return payload.seekId !== values?.[0];
+        });
+      } else {
+        this.seekSummaryRows = [];
       }
       return { rows: [] };
     }
@@ -193,6 +248,18 @@ class FakePostgresClient {
         return payload.challengeId !== challengeId;
       });
       this.challengeSummaryRows.push({ payload: values[5] });
+    }
+    if (/insert into online_seek_summaries/i.test(text) && values?.[4]) {
+      if (this.failNextSeekSummaryInsert) {
+        this.failNextSeekSummaryInsert = false;
+        throw new Error("seek summary insert unavailable");
+      }
+      const seekId = values[0];
+      this.seekSummaryRows = this.seekSummaryRows.filter((row) => {
+        const payload = row.payload as { seekId?: string };
+        return payload.seekId !== seekId;
+      });
+      this.seekSummaryRows.push({ payload: values[4] });
     }
     if (/select\s+payload\s+from\s+online_game_summaries/i.test(text)) {
       let rows = [...this.summaryRows];
@@ -238,6 +305,41 @@ class FakePostgresClient {
     if (/select\s+payload\s+from\s+online_challenge_summaries/i.test(text)) {
       return { rows: this.challengeSummaryRows };
     }
+    if (/select\s+payload\s+from\s+online_seek_summaries/i.test(text)) {
+      let rows = [...this.seekSummaryRows];
+      if (/where\s+status\s*=\s*'open'/i.test(text)) {
+        rows = rows.filter((row) => (row.payload as { status?: string }).status === "open");
+      }
+      if (/expires_at\s*>\s*(now\(\)|current_timestamp)/i.test(text)) {
+        rows = rows.filter((row) => {
+          const payload = row.payload as { expiresAt?: string };
+          return typeof payload.expiresAt === "string" && Date.parse(payload.expiresAt) > Date.now();
+        });
+      }
+      if (/updated_at\s*</i.test(text)) {
+        const cursorUpdatedAt = values?.[0] as string;
+        const cursorSeekId = values?.[1] as string;
+        rows = rows.filter((row) => {
+          const payload = row.payload as { updatedAt?: string; seekId?: string };
+          return (
+            typeof payload.updatedAt === "string" &&
+            typeof payload.seekId === "string" &&
+            (payload.updatedAt < cursorUpdatedAt ||
+              (payload.updatedAt === cursorUpdatedAt && payload.seekId > cursorSeekId))
+          );
+        });
+      }
+      rows.sort((a, b) => {
+        const left = a.payload as { updatedAt?: string; seekId?: string };
+        const right = b.payload as { updatedAt?: string; seekId?: string };
+        if (left.updatedAt !== right.updatedAt) {
+          return (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "");
+        }
+        return (left.seekId ?? "").localeCompare(right.seekId ?? "");
+      });
+      const limit = values?.[values.length - 1] as number | undefined;
+      return { rows: typeof limit === "number" ? rows.slice(0, limit) : rows };
+    }
     if (/select\s+payload\s+from\s+online_challenge_events\s+where\s+challenge_id/i.test(text)) {
       return {
         rows: this.challengeEventRows.filter((row) => row.payload.challengeId === values?.[0]),
@@ -245,6 +347,14 @@ class FakePostgresClient {
     }
     if (/select\s+payload\s+from\s+online_challenge_events/i.test(text)) {
       return { rows: this.challengeEventRows };
+    }
+    if (/select\s+payload\s+from\s+online_seek_events\s+where\s+seek_id/i.test(text)) {
+      return {
+        rows: this.seekEventRows.filter((row) => row.payload.seekId === values?.[0]),
+      };
+    }
+    if (/select\s+payload\s+from\s+online_seek_events/i.test(text)) {
+      return { rows: this.seekEventRows };
     }
     if (/select\s+role,\s*token_hash,\s*identity\s+from\s+online_challenge_credentials\s+where\s+challenge_id/i.test(text)) {
       return {
@@ -255,6 +365,13 @@ class FakePostgresClient {
             token_hash: row.tokenHash,
             identity: row.identity,
           })),
+      };
+    }
+    if (/select\s+token_hash,\s*identity\s+from\s+online_seek_credentials\s+where\s+seek_id/i.test(text)) {
+      return {
+        rows: this.seekCredentialRows
+          .filter((row) => row.seekId === values?.[0])
+          .map((row) => ({ token_hash: row.tokenHash, identity: row.identity })),
       };
     }
     if (/select\s+payload\s+from\s+online_game_events\s+where\s+game_id/i.test(text)) {
@@ -507,6 +624,78 @@ function createChallengeAcceptInput(
   };
 }
 
+const seekCreator = { kind: "session", id: "seek_creator" } as const;
+const seekAcceptor = { kind: "session", id: "seek_acceptor" } as const;
+
+function createOpenSeekCreated(
+  seekId = "seek_pg",
+  overrides: Partial<Extract<OpenSeekEvent, { type: "seek_created" }>> = {}
+): Extract<OpenSeekEvent, { type: "seek_created" }> {
+  const setup = createGameCreatedEvent(`game_terms_${seekId}`).setup;
+  return createOpenSeekCreatedEvent(
+    {
+      type: "seek_created",
+      seekId,
+      creatorIdentity: overrides.creatorIdentity ?? seekCreator,
+      creatorSeat: overrides.creatorSeat ?? "w",
+      setup: overrides.setup ?? setup,
+      expiresAt: overrides.expiresAt ?? "2026-06-01T12:10:00.000Z",
+    },
+    {
+      eventId: `seek-evt-${seekId}-create`,
+      createdAt: overrides.createdAt ?? "2026-06-01T12:00:00.000Z",
+    }
+  );
+}
+
+function createOpenSeekCancelled(
+  seekId = "seek_pg"
+): Extract<OpenSeekEvent, { type: "seek_cancelled" }> {
+  return createOpenSeekCancelledEvent(
+    {
+      type: "seek_cancelled",
+      seekId,
+      cancelledBy: seekCreator,
+      cancelledAt: "2026-06-01T12:04:00.000Z",
+    },
+    {
+      eventId: `seek-evt-${seekId}-cancelled`,
+      createdAt: "2026-06-01T12:04:00.000Z",
+    }
+  );
+}
+
+function createOpenSeekCredentials() {
+  return {
+    creatorCredential: hashOnlineToken("seek-creator-token"),
+    creatorIdentity: seekCreator,
+  };
+}
+
+function createOpenSeekAcceptInput(
+  seek: Extract<OpenSeekEvent, { type: "seek_created" }>,
+  overrides: { gameId?: string; acceptorCredential?: string } = {}
+) {
+  const gameId = overrides.gameId ?? `game_${seek.seekId}_accepted`;
+  const acceptedAt = "2026-06-01T12:05:00.000Z";
+  const gameCreatedEvent: Extract<OnlineGameEvent, { type: "game_created" }> = {
+    ...createGameCreatedEvent(gameId),
+    eventId: `evt-${gameId}-create`,
+    createdAt: acceptedAt,
+    gameId,
+    setup: seek.setup,
+  };
+  return {
+    seekId: seek.seekId,
+    acceptedBy: seekAcceptor,
+    acceptedAt,
+    gameCreatedEvent,
+    whiteIdentity: seek.creatorSeat === "b" ? seekAcceptor : seekCreator,
+    blackIdentity: seek.creatorSeat === "b" ? seekCreator : seekAcceptor,
+    acceptorCredential: overrides.acceptorCredential ?? hashOnlineToken("seek-acceptor-token"),
+  };
+}
+
 describe("PostgresOnlineGameStore", () => {
   it("closes its database connection when a closer is provided", async () => {
     const client = new FakePostgresClient();
@@ -530,6 +719,10 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /create table if not exists online_challenge_summaries/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_challenge_credentials/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_challenge_locks/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_seek_events/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_seek_summaries/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_seek_credentials/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_seek_locks/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create unique index if not exists/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /online_challenge_events_one_create_per_challenge/i.test(query.text))).toBe(true);
     expect(
@@ -720,6 +913,120 @@ describe("PostgresOnlineGameStore", () => {
 
     expect(client.eventRows.map((row) => row.payload.type)).toEqual(["game_created"]);
     expect(client.queries.some((query) => /^\s*begin\s*$/i.test(query.text))).toBe(false);
+  });
+
+  it("persists open seek creation with token-free events and hashed creator credentials", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const seek = createOpenSeekCreated("seek_credentials");
+    const credentials = createOpenSeekCredentials();
+
+    const summary = await store.appendOpenSeekCreated(seek, credentials);
+
+    expect(summary).toMatchObject({
+      seekId: "seek_credentials",
+      status: "open",
+      creatorIdentity: seekCreator,
+    });
+    expect(JSON.stringify(client.seekEventRows)).not.toContain("seek-creator-token");
+    expect(client.seekCredentialRows).toEqual([
+      {
+        seekId: "seek_credentials",
+        tokenHash: credentials.creatorCredential,
+        identity: seekCreator,
+      },
+    ]);
+    expect(client.seekSummaryRows).toEqual([{ payload: summary }]);
+  });
+
+  it("lists only open seek summaries with bounded pagination", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const open = createOpenSeekCreated("seek_open", { expiresAt: "2999-01-01T12:10:00.000Z" });
+    const cancelled = createOpenSeekCreated("seek_cancelled", { expiresAt: "2999-01-01T12:10:00.000Z" });
+    await store.appendOpenSeekCreated(open, createOpenSeekCredentials());
+    await store.appendOpenSeekCreated(cancelled, createOpenSeekCredentials());
+    await store.appendOpenSeekEvent(createOpenSeekCancelled("seek_cancelled"));
+
+    const directory = await store.listOpenSeekSummaries({ state: "open", limit: 10 });
+
+    expect(directory.seeks.map((summary) => summary.seekId)).toEqual(["seek_open"]);
+    expect(JSON.stringify(directory)).not.toContain("seek-creator-token");
+  });
+
+  it("filters expired open seek summaries before paginating", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const expiredFirst = createOpenSeekCreated("seek_expired_first", {
+      createdAt: "2025-01-01T12:00:00.000Z",
+      expiresAt: "2025-01-01T12:05:00.000Z",
+    });
+    const liveBehindExpired = createOpenSeekCreated("seek_live_behind_expired", {
+      createdAt: "2024-01-01T12:00:00.000Z",
+      expiresAt: "2999-01-01T12:05:00.000Z",
+    });
+    await store.appendOpenSeekCreated(expiredFirst, createOpenSeekCredentials());
+    await store.appendOpenSeekCreated(liveBehindExpired, createOpenSeekCredentials());
+
+    const directory = await store.listOpenSeekSummaries({ state: "open", limit: 1 });
+
+    expect(directory.seeks.map((summary) => summary.seekId)).toEqual(["seek_live_behind_expired"]);
+    expect(
+      client.queries.some(
+        (query) =>
+          /from\s+online_seek_summaries/i.test(query.text) &&
+          /expires_at\s*>\s*(now\(\)|current_timestamp)/i.test(query.text)
+      )
+    ).toBe(true);
+  });
+
+  it("accepts open seeks atomically into online games", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const seek = createOpenSeekCreated("seek_accept", { creatorSeat: "w" });
+    await store.appendOpenSeekCreated(seek, createOpenSeekCredentials());
+    client.queries.length = 0;
+
+    const result = await store.acceptOpenSeekAndCreateGame(createOpenSeekAcceptInput(seek));
+
+    expect(result).toMatchObject({
+      seekSummary: { seekId: "seek_accept", status: "accepted" },
+      gameSeats: { creator: "w", acceptor: "b" },
+      gameRecord: { gameId: "game_seek_accept_accepted" },
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual(["game_created"]);
+    expect(client.seekEventRows.map((row) => row.payload.type)).toEqual([
+      "seek_created",
+      "seek_accepted",
+    ]);
+    expect(client.credentialRows).toHaveLength(2);
+
+    const queryTexts = client.queries.map((query) => query.text);
+    const seekLockIndex = queryTexts.findIndex((text) => /from\s+online_seek_locks/i.test(text) && /for update/i.test(text));
+    const gameLockIndex = queryTexts.findIndex((text) => /from\s+online_game_locks/i.test(text) && /for update/i.test(text));
+    const gameInsertIndex = queryTexts.findIndex((text) => /insert into online_game_events/i.test(text));
+    const seekInsertIndex = queryTexts.findIndex((text) => /insert into online_seek_events/i.test(text));
+
+    expect(seekLockIndex).toBeGreaterThanOrEqual(0);
+    expect(gameLockIndex).toBeGreaterThan(seekLockIndex);
+    expect(gameInsertIndex).toBeGreaterThan(gameLockIndex);
+    expect(seekInsertIndex).toBeGreaterThan(gameInsertIndex);
+  });
+
+  it("rolls back accepted open seeks when seek summary refresh fails", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const seek = createOpenSeekCreated("seek_accept_rollback");
+    await store.appendOpenSeekCreated(seek, createOpenSeekCredentials());
+    client.failNextSeekSummaryInsert = true;
+
+    await expect(
+      store.acceptOpenSeekAndCreateGame(createOpenSeekAcceptInput(seek))
+    ).rejects.toThrow(/seek summary insert unavailable/);
+
+    expect(client.eventRows).toHaveLength(0);
+    expect(client.seekEventRows.map((row) => row.payload.type)).toEqual(["seek_created"]);
+    expect(client.queries.some((query) => /^\s*rollback\s*$/i.test(query.text))).toBe(true);
   });
 
   it("applies accepted actions against the locked persisted game state", async () => {

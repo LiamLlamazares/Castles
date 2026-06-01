@@ -29,9 +29,13 @@ import {
 import {
   buildSpectatorUrl,
   acceptOnlineChallenge,
+  acceptOpenSeek,
   cancelOnlineChallenge,
+  cancelOpenSeek,
   createOnlineChallenge,
+  createOpenSeek,
   declineOnlineChallenge,
+  fetchOpenSeek,
   fetchOnlineGameSummaries,
   fetchOnlineChallenge,
   createOnlineGame,
@@ -40,9 +44,12 @@ import {
   forgetOnlineChallengeParams,
   forgetOnlineJoinParams,
   forgetOnlineOpponentInviteUrl,
+  forgetOpenSeekCreatorParams,
+  listOpenSeekCreatorParams,
   rememberOnlineChallengeParams,
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
+  rememberOpenSeekCreatorParams,
   removeOnlineChallengeTokenFromUrl,
   removeOnlineTokenFromUrl,
   resolveOnlineChallengeParams,
@@ -53,6 +60,8 @@ import {
   OnlineChallengeParams,
   OnlineChallengeResponse,
   OnlineChallengeGameInvite,
+  OpenSeekCreatorParams,
+  OpenSeekResponse,
   OnlineJoinParams,
   OnlineSpectatorParams,
 } from './online/client';
@@ -71,6 +80,7 @@ import { PGNService } from './Classes/Services/PGNService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'watch';
+type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
 
 interface GameConfig {
   board?: Board;
@@ -221,6 +231,11 @@ function App() {
   const [onlineChallengeShareUrl, setOnlineChallengeShareUrl] = useState<string | null>(null);
   const [onlineChallengeStatus, setOnlineChallengeStatus] = useState<"idle" | "loading" | "acting" | "error">("idle");
   const [onlineChallengeError, setOnlineChallengeError] = useState<string | null>(null);
+  const [openSeekCreator, setOpenSeekCreator] = useState<OpenSeekCreatorParams | null>(() =>
+    listOpenSeekCreatorParams()[0] ?? null
+  );
+  const [openSeekResponse, setOpenSeekResponse] = useState<OpenSeekResponse | null>(null);
+  const [onlineBrowserInitialTab, setOnlineBrowserInitialTab] = useState<OnlineBrowserInitialTab>("watch");
   const replayRequestIdRef = useRef(0);
   const isSaveDialogOpen = saveGameDialog !== null;
 
@@ -292,6 +307,14 @@ function App() {
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
+  const clearOpenSeekState = () => {
+    if (openSeekCreator) {
+      forgetOpenSeekCreatorParams(openSeekCreator);
+    }
+    setOpenSeekCreator(null);
+    setOpenSeekResponse(null);
+  };
+
   useEffect(() => {
     if (!onlineJoin) return;
     setOnlineSpectator(null);
@@ -359,6 +382,30 @@ function App() {
     };
   }, [onlineChallenge]);
 
+  useEffect(() => {
+    if (!openSeekCreator || openSeekResponse?.summary.seekId === openSeekCreator.seekId) return;
+    let cancelled = false;
+    fetchOpenSeek(openSeekCreator)
+      .then((response) => {
+        if (cancelled) return;
+        setOpenSeekResponse(response);
+        if (response.summary.status === "cancelled" || response.summary.status === "expired") {
+          forgetOpenSeekCreatorParams(openSeekCreator);
+          setOpenSeekCreator(null);
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("Failed to restore open seek creator state", error);
+        forgetOpenSeekCreatorParams(openSeekCreator);
+        setOpenSeekCreator(null);
+        setOpenSeekResponse(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openSeekCreator, openSeekResponse?.summary.seekId]);
+
   const pushView = (nextView: ViewState) => {
     cancelPendingReplay();
     if (view === nextView) return;
@@ -392,6 +439,7 @@ function App() {
     if (onlineSnapshot) {
       forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
+    clearOpenSeekState();
     setOnlineJoin(null);
     setOnlineSpectator(null);
     setOnlineChallenge(null);
@@ -412,6 +460,7 @@ function App() {
   };
 
   const handleOpenOnlineBrowser = () => {
+    setOnlineBrowserInitialTab("watch");
     pushView('watch');
   };
 
@@ -466,6 +515,7 @@ function App() {
     if (onlineSnapshot) {
       forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
+    clearOpenSeekState();
     setOnlineJoin(null);
     setOnlineSpectator(null);
     setOnlineChallenge(null);
@@ -495,6 +545,7 @@ function App() {
       if (onlineChallenge) {
         forgetOnlineChallengeParams(onlineChallenge);
       }
+      clearOpenSeekState();
       setOnlineSpectator(null);
       setOnlineChallenge(null);
       setOnlineChallengeResponse(null);
@@ -545,6 +596,7 @@ function App() {
     if (onlineChallenge) {
       forgetOnlineChallengeParams(onlineChallenge);
     }
+    clearOpenSeekState();
     const join = {
       gameId: invite.gameId,
       seat: invite.seat,
@@ -635,6 +687,7 @@ function App() {
     try {
       cancelPendingReplay();
       clearAutosave();
+      clearOpenSeekState();
       const created = await createOnlineChallenge(
         serializeOnlineGameSetup({
           board,
@@ -676,6 +729,103 @@ function App() {
       console.error("Failed to create online challenge", error);
       alert("Could not create an online challenge. Make sure the Node server is running.");
     }
+  };
+
+  const handleCreateOpenSeek = async (
+    board: Board,
+    pieces: Piece[],
+    timeControl?: { initial: number, increment: number },
+    sanctuaries?: Sanctuary[],
+    _selectedSanctuaryTypes?: SanctuaryType[],
+    sanctuarySettings?: { unlockTurn: number, cooldown: number },
+    gameRules?: { vpModeEnabled: boolean },
+    initialPoolTypes?: SanctuaryType[],
+    pieceTheme?: PieceTheme
+  ) => {
+    try {
+      cancelPendingReplay();
+      clearAutosave();
+      clearOnlineUrl();
+      if (onlineChallenge) {
+        forgetOnlineChallengeParams(onlineChallenge);
+      }
+      if (onlineJoin) {
+        forgetOnlineJoinParams(onlineJoin);
+        forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
+      }
+      if (onlineSnapshot) {
+        forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
+      }
+      clearOpenSeekState();
+      const created = await createOpenSeek(
+        serializeOnlineGameSetup({
+          board,
+          pieces,
+          sanctuaries: sanctuaries ?? [],
+          timeControl,
+          sanctuarySettings,
+          gameRules,
+          initialPoolTypes,
+          pieceTheme,
+        }),
+        { creatorSeat: "random" }
+      );
+      const creator = {
+        seekId: created.seekId,
+        token: created.creator.token,
+      };
+      rememberOpenSeekCreatorParams(creator);
+      setOnlineJoin(null);
+      setOnlineSpectator(null);
+      setOnlineSnapshot(null);
+      setOnlineOpponentInviteUrl(null);
+      setOnlineChallenge(null);
+      setOnlineChallengeResponse(null);
+      setOnlineChallengeShareUrl(null);
+      setOpenSeekCreator(creator);
+      setOpenSeekResponse({
+        role: "creator",
+        summary: created.summary,
+      });
+      setOnlineBrowserInitialTab("lobby");
+      setViewStack(['game']);
+      setView("watch");
+    } catch (error) {
+      console.error("Failed to create open seek", error);
+      alert("Could not create an open lobby seek. Make sure the Node server is running.");
+    }
+  };
+
+  const handleAcceptOpenSeek = async (seekId: string) => {
+    cancelPendingReplay();
+    const response = await acceptOpenSeek(seekId);
+    enterOnlineGameFromInvite(response.gameInvite);
+  };
+
+  const handleCancelOpenSeek = async (seekId: string) => {
+    const storedCreator = openSeekCreator?.seekId === seekId ? openSeekCreator : null;
+    if (!storedCreator) {
+      throw new Error("No creator token is available for this open seek.");
+    }
+    const response = await cancelOpenSeek(storedCreator);
+    forgetOpenSeekCreatorParams(storedCreator);
+    setOpenSeekCreator(null);
+    setOpenSeekResponse(response);
+  };
+
+  const handleRefreshOwnedOpenSeek = async () => {
+    if (!openSeekCreator) return;
+    const response = await fetchOpenSeek(openSeekCreator);
+    setOpenSeekResponse(response);
+    if (response.summary.status === "cancelled" || response.summary.status === "expired") {
+      forgetOpenSeekCreatorParams(openSeekCreator);
+      setOpenSeekCreator(null);
+    }
+  };
+
+  const handleJoinOwnedOpenSeek = () => {
+    if (!openSeekResponse?.gameInvite) return;
+    enterOnlineGameFromInvite(openSeekResponse.gameInvite);
   };
 
   const handleAcceptOnlineChallenge = async () => {
@@ -1082,6 +1232,9 @@ function App() {
     if (onlineSnapshot) {
       forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
+    if (openSeekCreator) {
+      forgetOpenSeekCreatorParams(openSeekCreator);
+    }
     setOnlineJoin(null);
     setOnlineSpectator(null);
     setOnlineChallenge(null);
@@ -1089,7 +1242,9 @@ function App() {
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
-  }, [cancelPendingReplay, onlineChallenge, onlineJoin, onlineSnapshot]);
+    setOpenSeekCreator(null);
+    setOpenSeekResponse(null);
+  }, [cancelPendingReplay, onlineChallenge, onlineJoin, onlineSnapshot, openSeekCreator]);
 
   const handleOnlineStateBackToPlay = useCallback(() => {
     clearTransientOnlineState();
@@ -1112,6 +1267,7 @@ function App() {
   const handleOnlineStateWatch = useCallback(() => {
     clearTransientOnlineState();
     setViewStack(['setup']);
+    setOnlineBrowserInitialTab("watch");
     setView('watch');
   }, [clearTransientOnlineState]);
 
@@ -1140,6 +1296,7 @@ function App() {
     clearAutosave();
     const layout = getStartingLayout(board);
     clearOnlineUrl();
+    clearOpenSeekState();
     setOnlineJoin(null);
     setOnlineSpectator(null);
     setOnlineChallenge(null);
@@ -1170,6 +1327,7 @@ function App() {
           onPlay={handleStartGame} 
           onCreateOnlineGame={handleCreateOnlineGame}
           onCreateOnlineChallenge={handleCreateOnlineChallenge}
+          onCreateOpenSeek={handleCreateOpenSeek}
           onBack={returnToPreviousView}
           backLabel={currentBackLabel}
           onTutorial={handleTutorialClick}
@@ -1368,8 +1526,19 @@ function App() {
           onBack={returnToPreviousView}
           onOpenGame={handleOpenGame}
           backLabel={currentBackLabel}
+          initialTab={onlineBrowserInitialTab}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
+          onCreateSeek={() => {
+            setViewStack(['watch']);
+            setView('setup');
+          }}
+          onAcceptSeek={handleAcceptOpenSeek}
+          onCancelSeek={handleCancelOpenSeek}
+          ownedSeekIds={openSeekCreator ? [openSeekCreator.seekId] : []}
+          ownedSeekResponse={openSeekResponse}
+          onRefreshOwnedSeek={handleRefreshOwnedOpenSeek}
+          onJoinOwnedSeek={openSeekResponse?.gameInvite ? handleJoinOwnedOpenSeek : undefined}
           onSpectate={handleSpectateOnlineGame}
           onReplay={handleReplayOnlineGame}
         />

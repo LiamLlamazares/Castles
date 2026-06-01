@@ -14,6 +14,14 @@ import {
   type OnlineGameSummary,
 } from "./readModel";
 import {
+  validateOpenSeekDirectoryResponse,
+  validateOpenSeekSummary,
+  type OpenSeekDirectoryResponse,
+  type OpenSeekDirectoryState,
+  type OpenSeekSummary,
+  type OpenSeekSeat,
+} from "./seeks";
+import {
   OnlineConnectionStatus,
   OnlineGameResultDTO,
   OnlineGameSetupDTO,
@@ -44,6 +52,23 @@ export interface OnlineChallengeGameInvite {
   url: string;
 }
 
+export interface OpenSeekCreatorParams {
+  seekId: string;
+  token: string;
+}
+
+export interface OpenSeekResponse {
+  role: "creator";
+  summary: OpenSeekSummary;
+  gameInvite?: OnlineChallengeGameInvite;
+}
+
+export interface OpenSeekAcceptResponse {
+  role: "acceptor";
+  summary: OpenSeekSummary;
+  gameInvite: OnlineChallengeGameInvite;
+}
+
 export interface OnlineChallengeResponse {
   role: "challenger" | "challenged";
   summary: OnlineChallengeSummary;
@@ -55,6 +80,12 @@ export interface CreatedOnlineChallenge {
   summary: OnlineChallengeSummary;
   challenger: { url: string };
   challenged: { url: string };
+}
+
+export interface CreatedOpenSeek {
+  seekId: string;
+  summary: OpenSeekSummary;
+  creator: { token: string };
 }
 
 interface OnlineJoinStorage {
@@ -83,6 +114,11 @@ function challengeStorageKey(challengeId: string, role: "challenger" | "challeng
   return `castles_online_challenge:${challengeId}:${role}`;
 }
 
+function openSeekCreatorStorageKey(seekId: string): string {
+  return `castles_online_seek_creator:${seekId}`;
+}
+
+const OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY = "castles_online_seek_creator:index";
 const ANONYMOUS_SESSION_STORAGE_KEY = "castles_online_anonymous_session_id";
 
 function defaultAnonymousSessionIdFactory(): string {
@@ -191,6 +227,63 @@ export function forgetOnlineChallengeParams(
   storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
 ): void {
   storage?.removeItem(challengeStorageKey(challenge.challengeId, challenge.role));
+}
+
+export function rememberOpenSeekCreatorParams(
+  seek: OpenSeekCreatorParams,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  if (!storage) return;
+  storage.setItem(openSeekCreatorStorageKey(seek.seekId), seek.token);
+  const nextIndex = [
+    seek.seekId,
+    ...readOpenSeekCreatorIndex(storage).filter((candidate) => candidate !== seek.seekId),
+  ];
+  storage.setItem(OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY, JSON.stringify(nextIndex));
+}
+
+export function resolveOpenSeekCreatorParams(
+  seekId: string,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): OpenSeekCreatorParams | null {
+  const token = storage?.getItem(openSeekCreatorStorageKey(seekId));
+  return token ? { seekId, token } : null;
+}
+
+function readOpenSeekCreatorIndex(storage: OnlineJoinStorage | null): string[] {
+  if (!storage) return [];
+  const raw = storage.getItem(OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value): value is string => isValidAnonymousSessionId(value));
+  } catch {
+    return [];
+  }
+}
+
+export function listOpenSeekCreatorParams(
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): OpenSeekCreatorParams[] {
+  if (!storage) return [];
+  return readOpenSeekCreatorIndex(storage)
+    .map((seekId) => resolveOpenSeekCreatorParams(seekId, storage))
+    .filter((value): value is OpenSeekCreatorParams => value !== null);
+}
+
+export function forgetOpenSeekCreatorParams(
+  seek: Pick<OpenSeekCreatorParams, "seekId">,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): void {
+  if (!storage) return;
+  storage.removeItem(openSeekCreatorStorageKey(seek.seekId));
+  const nextIndex = readOpenSeekCreatorIndex(storage).filter((seekId) => seekId !== seek.seekId);
+  if (nextIndex.length > 0) {
+    storage.setItem(OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY, JSON.stringify(nextIndex));
+  } else {
+    storage.removeItem(OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY);
+  }
 }
 
 export function resolveOnlineOpponentInviteUrl(
@@ -622,6 +715,198 @@ function validateSnapshotResponse(
   const validation = validateOnlineGameSnapshot(snapshot);
   if (!validation.ok) {
     throw new Error(`${label} response was malformed: ${validation.error.message}`);
+  }
+  return validation.value;
+}
+
+function validateGameInvite(value: unknown, label: string): OnlineChallengeGameInvite {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} response was malformed: gameInvite must be an object.`);
+  }
+  const invite = value as { gameId?: unknown; seat?: unknown; token?: unknown; url?: unknown };
+  if (
+    typeof invite.gameId !== "string" ||
+    (invite.seat !== "w" && invite.seat !== "b") ||
+    typeof invite.token !== "string" ||
+    typeof invite.url !== "string"
+  ) {
+    throw new Error(`${label} response was malformed: gameInvite is invalid.`);
+  }
+  return {
+    gameId: invite.gameId,
+    seat: invite.seat,
+    token: invite.token,
+    url: invite.url,
+  };
+}
+
+function validateOpenSeekCreatorResponse(body: unknown, label: string): OpenSeekResponse {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} response was malformed: response body must be an object.`);
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(`${label} response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
+  if ((body as { role?: unknown }).role !== "creator") {
+    throw new Error(`${label} response was malformed: role is invalid.`);
+  }
+  const summary = validateOpenSeekSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`${label} response was malformed: ${summary.error.message}`);
+  }
+  const gameInvite = (body as { gameInvite?: unknown }).gameInvite;
+  return gameInvite === undefined
+    ? { role: "creator", summary: summary.value }
+    : { role: "creator", summary: summary.value, gameInvite: validateGameInvite(gameInvite, label) };
+}
+
+function validateOpenSeekAcceptResponse(body: unknown, label: string): OpenSeekAcceptResponse {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} response was malformed: response body must be an object.`);
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(`${label} response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
+  if ((body as { role?: unknown }).role !== "acceptor") {
+    throw new Error(`${label} response was malformed: role is invalid.`);
+  }
+  const summary = validateOpenSeekSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`${label} response was malformed: ${summary.error.message}`);
+  }
+  return {
+    role: "acceptor",
+    summary: summary.value,
+    gameInvite: validateGameInvite((body as { gameInvite?: unknown }).gameInvite, label),
+  };
+}
+
+export async function createOpenSeek(
+  setup: OnlineGameSetupDTO,
+  options: { creatorSeat?: OpenSeekSeat; creatorSessionId?: string; expiresInMs?: number } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<CreatedOpenSeek> {
+  const creatorSessionId = options.creatorSessionId ?? resolveOnlineAnonymousSessionId();
+  const response = await fetchImpl("/api/online/seeks", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ setup, ...options, creatorSessionId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not create open seek (${response.status})`);
+  }
+
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Open seek creation response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Open seek creation response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  const summary = validateOpenSeekSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`Open seek creation response was malformed: ${summary.error.message}`);
+  }
+  const seekId = (body as { seekId?: unknown }).seekId;
+  const creator = (body as { creator?: unknown }).creator;
+  if (
+    typeof seekId !== "string" ||
+    !creator ||
+    typeof creator !== "object" ||
+    Array.isArray(creator) ||
+    typeof (creator as { token?: unknown }).token !== "string"
+  ) {
+    throw new Error("Open seek creation response was malformed.");
+  }
+  return {
+    seekId,
+    summary: summary.value,
+    creator: { token: (creator as { token: string }).token },
+  };
+}
+
+export async function fetchOpenSeek(
+  seek: OpenSeekCreatorParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OpenSeekResponse> {
+  const response = await fetchImpl(`/api/online/seeks/${encodeURIComponent(seek.seekId)}`, {
+    headers: { authorization: `Bearer ${seek.token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch open seek (${response.status})`);
+  }
+
+  return validateOpenSeekCreatorResponse(await response.json(), "Open seek");
+}
+
+export async function cancelOpenSeek(
+  seek: OpenSeekCreatorParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OpenSeekResponse> {
+  const response = await fetchImpl(`/api/online/seeks/${encodeURIComponent(seek.seekId)}/cancel`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${seek.token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not cancel open seek (${response.status})`);
+  }
+
+  return validateOpenSeekCreatorResponse(await response.json(), "Open seek cancel");
+}
+
+export async function acceptOpenSeek(
+  seekId: string,
+  options: { acceptorSessionId?: string } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OpenSeekAcceptResponse> {
+  const acceptorSessionId = options.acceptorSessionId ?? resolveOnlineAnonymousSessionId();
+  const response = await fetchImpl(`/api/online/seeks/${encodeURIComponent(seekId)}/accept`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ acceptorSessionId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not accept open seek (${response.status})`);
+  }
+
+  return validateOpenSeekAcceptResponse(await response.json(), "Open seek accept");
+}
+
+export interface FetchOpenSeekDirectoryOptions {
+  state?: OpenSeekDirectoryState;
+  limit?: number;
+  cursor?: string;
+}
+
+function buildOpenSeekDirectoryPath(options: FetchOpenSeekDirectoryOptions = {}): string {
+  const params = new URLSearchParams();
+  if (options.state) params.set("state", options.state);
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
+  const query = params.toString();
+  return query ? `/api/online/seeks?${query}` : "/api/online/seeks";
+}
+
+export async function fetchOpenSeekDirectory(
+  options: FetchOpenSeekDirectoryOptions = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OpenSeekDirectoryResponse> {
+  const response = await fetchImpl(buildOpenSeekDirectoryPath(options));
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch open seeks (${response.status})`);
+  }
+
+  const body = await response.json();
+  const validation = validateOpenSeekDirectoryResponse(body);
+  if (!validation.ok) {
+    throw new Error(`Open seek directory response was malformed: ${validation.error.message}`);
   }
   return validation.value;
 }
