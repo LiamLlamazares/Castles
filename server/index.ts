@@ -97,6 +97,8 @@ async function main() {
       publicBaseUrl,
       service,
       onGameEvent: (event) => store.appendEvent(event),
+      applyGameAction: (input) => store.applyGameAction(input),
+      adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),
       loadGameSummaries: () => store.loadSummaries(),
       onLog: (event) => {
         console.log(formatOnlineServerLogEvent(event));

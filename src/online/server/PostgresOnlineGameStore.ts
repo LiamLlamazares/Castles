@@ -1,6 +1,8 @@
 import { Pool } from "pg";
-import type { OnlineGameRoomRecord } from "../OnlineGameRoom";
+import { OnlineGameRoom, type OnlineGameRoomRecord } from "../OnlineGameRoom";
 import {
+  createOnlineActionAcceptedEvent,
+  createOnlineTimeoutAdjudicatedEvent,
   OnlineGameEvent,
   onlineGameEventsToRecords,
   validateOnlineGameEvent,
@@ -10,7 +12,14 @@ import {
   projectOnlineGameSummaries,
   validateOnlineGameSummary,
 } from "../readModel";
-import type { OnlineGameStore, OnlineGameStoreLoadOptions } from "./OnlineGameStore";
+import type {
+  OnlineGameStore,
+  OnlineGameStoreActionInput,
+  OnlineGameStoreActionResult,
+  OnlineGameStoreLoadOptions,
+  OnlineGameStoreTimeoutInput,
+  OnlineGameStoreTimeoutResult,
+} from "./OnlineGameStore";
 
 interface PostgresQueryable {
   query(text: string, values?: unknown[]): Promise<{ rows: any[] }>;
@@ -101,6 +110,147 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  async applyGameAction(
+    input: OnlineGameStoreActionInput
+  ): Promise<OnlineGameStoreActionResult> {
+    await this.ensureSchema();
+    return this.withGameTransaction(input.gameId, async (client) => {
+      const record = await this.loadRecordForGame(input.gameId, client);
+      if (!record) {
+        return {
+          ok: false,
+          error: {
+            code: "not_found",
+            message: "No online game was found for that id.",
+          },
+        };
+      }
+
+      const room = OnlineGameRoom.create({ ...record, now: input.now });
+      const playerColor = room.authenticate(input.token);
+      if (!playerColor) {
+        return {
+          ok: false,
+          error: {
+            code: "unauthorized",
+            message: "This player token is not valid.",
+          },
+          room: room.toRecord(),
+          snapshot: room.getSnapshot(),
+        };
+      }
+
+      const timeout = room.adjudicateTimeout();
+      if (timeout) {
+        const event = createOnlineTimeoutAdjudicatedEvent({
+          type: "timeout_adjudicated",
+          gameId: input.gameId,
+          playerColor: timeout.playerColor,
+          version: timeout.version,
+          adjudicatedAt: timeout.adjudicatedAt,
+          result: timeout.result,
+          clock: timeout.clock,
+        });
+        await this.insertEvent(event, client);
+        await this.refreshSummaryForGame(input.gameId, client);
+        return {
+          ok: false,
+          error: {
+            code: "game_over",
+            message: "This game is already over on time.",
+          },
+          event,
+          room: room.toRecord(),
+          snapshot: room.getSnapshot(),
+        };
+      }
+
+      const result = room.submitAction(input.token, input.action);
+      if (!result.ok) {
+        return {
+          ok: false,
+          error: result.error,
+          room: room.toRecord(),
+          snapshot: result.snapshot,
+        };
+      }
+
+      const roomRecord = room.toRecord();
+      const acceptedAction = roomRecord.acceptedActions.at(-1);
+      if (!acceptedAction || acceptedAction.version !== result.snapshot.version) {
+        throw new Error(`Accepted online action for ${input.gameId} was not recorded.`);
+      }
+      if (result.snapshot.clock && !acceptedAction.clock) {
+        throw new Error(`Accepted online action for ${input.gameId} is missing clock.`);
+      }
+
+      const event = createOnlineActionAcceptedEvent({
+        type: "action_accepted",
+        gameId: input.gameId,
+        playerColor,
+        version: result.snapshot.version,
+        action: acceptedAction.action,
+        playedAt: acceptedAction.playedAt,
+        clock: acceptedAction.clock,
+      });
+      await this.insertEvent(event, client);
+      await this.refreshSummaryForGame(input.gameId, client);
+      return {
+        ok: true,
+        event,
+        playerColor,
+        room: roomRecord,
+        snapshot: result.snapshot,
+      };
+    });
+  }
+
+  async adjudicateGameTimeout(
+    input: OnlineGameStoreTimeoutInput
+  ): Promise<OnlineGameStoreTimeoutResult> {
+    await this.ensureSchema();
+    return this.withGameTransaction(input.gameId, async (client) => {
+      const record = await this.loadRecordForGame(input.gameId, client);
+      if (!record) {
+        return {
+          ok: false,
+          error: {
+            code: "not_found",
+            message: "No online game was found for that id.",
+          },
+        };
+      }
+
+      const room = OnlineGameRoom.create({ ...record, now: input.now });
+      const timeout = room.adjudicateTimeout();
+      if (!timeout) {
+        return {
+          ok: true,
+          room: room.toRecord(),
+          snapshot: room.getSnapshot(),
+        };
+      }
+
+      const event = createOnlineTimeoutAdjudicatedEvent({
+        type: "timeout_adjudicated",
+        gameId: input.gameId,
+        playerColor: timeout.playerColor,
+        version: timeout.version,
+        adjudicatedAt: timeout.adjudicatedAt,
+        result: timeout.result,
+        clock: timeout.clock,
+      });
+      await this.insertEvent(event, client);
+      await this.refreshSummaryForGame(input.gameId, client);
+      return {
+        ok: true,
+        event,
+        room: room.toRecord(),
+        snapshot: room.getSnapshot(),
+      };
+    });
+  }
+
   async checkReady(): Promise<boolean> {
     await this.ensureSchema();
     await this.queryable.query("SELECT 1");
@@ -173,6 +323,11 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_game_summaries_status_updated_idx
         ON online_game_summaries (status, updated_at DESC)
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_game_locks (
+        game_id TEXT PRIMARY KEY
+      )
     `);
   }
 
@@ -253,6 +408,19 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     return events;
   }
 
+  private async loadRecordForGame(
+    gameId: string,
+    queryable: PostgresQueryable
+  ): Promise<OnlineGameRoomRecord | null> {
+    const events = await this.loadEventsForGame(gameId, queryable);
+    const records = onlineGameEventsToRecords(events);
+    if (records.length === 0) return null;
+    if (records.length > 1) {
+      throw new Error(`Expected one online game record for ${gameId}, found ${records.length}.`);
+    }
+    return records[0];
+  }
+
   private async refreshSummaryForGame(
     gameId: string,
     queryable: PostgresQueryable
@@ -310,15 +478,15 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   }
 
   private async withTransaction<T>(
-    operation: (queryable: PostgresQueryable) => Promise<T>
+    operation: (queryable: PostgresQueryable) => Promise<T>,
+    acquireLock: (queryable: PostgresQueryable) => Promise<void> = (queryable) =>
+      this.acquireSummaryLock(queryable)
   ): Promise<T> {
     const client = await this.transactionClientFactory?.();
     const queryable = client ?? this.queryable;
     try {
       await queryable.query("BEGIN");
-      await queryable.query("SELECT pg_advisory_xact_lock($1)", [
-        PostgresOnlineGameStore.summaryLockKey,
-      ]);
+      await acquireLock(queryable);
       const result = await operation(queryable);
       await queryable.query("COMMIT");
       return result;
@@ -335,5 +503,28 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     } finally {
       client?.release();
     }
+  }
+
+  private async withGameTransaction<T>(
+    gameId: string,
+    operation: (queryable: PostgresQueryable) => Promise<T>
+  ): Promise<T> {
+    return this.withTransaction(operation, async (queryable) => {
+      await queryable.query(
+        "INSERT INTO online_game_locks (game_id) VALUES ($1) ON CONFLICT (game_id) DO NOTHING",
+        [gameId]
+      );
+      await queryable.query(
+        "SELECT game_id FROM online_game_locks WHERE game_id = $1 FOR UPDATE",
+        [gameId]
+      );
+      await this.acquireSummaryLock(queryable);
+    });
+  }
+
+  private async acquireSummaryLock(queryable: PostgresQueryable): Promise<void> {
+    await queryable.query("SELECT pg_advisory_xact_lock($1)", [
+      PostgresOnlineGameStore.summaryLockKey,
+    ]);
   }
 }

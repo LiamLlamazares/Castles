@@ -23,6 +23,12 @@ import {
   validateOnlineGameId,
   validateOnlineGameSetup,
 } from "../validation";
+import type {
+  OnlineGameStoreActionInput,
+  OnlineGameStoreActionResult,
+  OnlineGameStoreTimeoutInput,
+  OnlineGameStoreTimeoutResult,
+} from "./OnlineGameStore";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -43,6 +49,12 @@ export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
   service?: OnlineGameService;
   onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
+  applyGameAction?: (
+    input: OnlineGameStoreActionInput
+  ) => OnlineGameStoreActionResult | Promise<OnlineGameStoreActionResult>;
+  adjudicateGameTimeout?: (
+    input: OnlineGameStoreTimeoutInput
+  ) => OnlineGameStoreTimeoutResult | Promise<OnlineGameStoreTimeoutResult>;
   loadGameSummaries?: () => OnlineGameSummary[] | Promise<OnlineGameSummary[]>;
   onLog?: (event: OnlineServerLogEvent) => void;
   now?: () => number;
@@ -128,6 +140,32 @@ function getBearerToken(header: unknown): string | null {
 function setOnlineNoStoreHeaders(res: Response): void {
   res.setHeader("Cache-Control", "no-store");
   res.vary("Authorization");
+}
+
+function httpStatusForOnlineError(error: OnlineReject): number {
+  switch (error.code) {
+    case "bad_json":
+    case "bad_request":
+    case "unknown_message":
+      return 400;
+    case "unauthorized":
+    case "not_found":
+    case "not_joined":
+      return 404;
+    case "rate_limited":
+      return 429;
+    case "persistence_failed":
+      return 503;
+    default:
+      return 409;
+  }
+}
+
+function responseBodyWithOptionalSnapshot(
+  error: OnlineReject,
+  snapshot?: unknown
+): { error: OnlineReject; snapshot?: unknown } {
+  return snapshot ? { error, snapshot } : { error };
 }
 
 export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
@@ -222,8 +260,71 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   ):
     Promise<
       | { ok: true; timeout: AcceptedOnlineTimeoutRecord | null }
-      | { ok: false; error: OnlineReject; snapshot: ReturnType<typeof room.getSnapshot> }
+      | { ok: false; error: OnlineReject; snapshot?: ReturnType<typeof room.getSnapshot> }
     > => {
+    if (options.adjudicateGameTimeout) {
+      try {
+        const transition = await options.adjudicateGameTimeout({
+          gameId,
+          now: options.now,
+        });
+        if (!transition.ok) {
+          return {
+            ok: false,
+            error: transition.error,
+            snapshot: transition.snapshot,
+          };
+        }
+        if (transition.room) {
+          service.replaceRoom(transition.room);
+        }
+        if (!transition.event) {
+          return { ok: true, timeout: null };
+        }
+        log({
+          event: "online.timeout",
+          gameId,
+          role: "player",
+          status: "expired",
+          reason: transition.event.playerColor,
+        });
+        return {
+          ok: true,
+          timeout: {
+            playerColor: transition.event.playerColor,
+            version: transition.event.version,
+            adjudicatedAt: transition.event.adjudicatedAt,
+            result: transition.event.result,
+            clock: transition.event.clock,
+          },
+        };
+      } catch (error) {
+        log({
+          event: "online.persistence",
+          gameId,
+          role: "player",
+          status: "failed",
+          reason: "timeout_adjudicated",
+        });
+        log({
+          event: "online.timeout",
+          gameId,
+          role: "player",
+          status: "rejected",
+          reason: "persistence_failed",
+        });
+        console.error("Failed to persist online game timeout", error);
+        return {
+          ok: false,
+          error: {
+            code: "persistence_failed",
+            message: "The timeout result could not be saved.",
+          },
+          snapshot: room.getSnapshot(),
+        };
+      }
+    }
+
     const beforeTimeout = room.toRecord();
     const timeout = room.adjudicateTimeout();
     if (!timeout) {
@@ -467,19 +568,37 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           status: "rejected",
           reason: timeout.error.code,
         });
-        res.status(503).json({
-          error: timeout.error,
-          snapshot: timeout.snapshot,
-        });
+        res
+          .status(httpStatusForOnlineError(timeout.error))
+          .json(responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot));
         return;
       }
       if (timeout.timeout) {
         broadcastSnapshot(gameId.value);
       }
+      const currentRoom = service.getRoom(gameId.value) ?? room;
+
+      const color = currentRoom.authenticate(token);
+      if (!color) {
+        log({
+          event: "online.http.join",
+          gameId: gameId.value,
+          role: "player",
+          status: "rejected",
+          reason: "not_found",
+        });
+        res.status(404).json({
+          error: {
+            code: "not_found",
+            message: "No online game was found for that id and token.",
+          },
+        });
+        return;
+      }
 
       res.json({
-        color: room.authenticate(token),
-        snapshot: room.getSnapshot(),
+        color,
+        snapshot: currentRoom.getSnapshot(),
       });
       log({
         event: "online.http.join",
@@ -543,19 +662,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           status: "rejected",
           reason: timeout.error.code,
         });
-        res.status(503).json({
-          error: timeout.error,
-          snapshot: timeout.snapshot,
-        });
+        res
+          .status(httpStatusForOnlineError(timeout.error))
+          .json(responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot));
         return;
       }
       if (timeout.timeout) {
         broadcastSnapshot(gameId.value);
       }
+      const currentRoom = service.getRoom(gameId.value) ?? room;
 
       res.json({
         role: "spectator",
-        snapshot: room.getSnapshot(),
+        snapshot: currentRoom.getSnapshot(),
       });
       log({
         event: "online.http.spectate",
@@ -640,8 +759,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         if (!timeout.ok) {
           sendJson(socket, {
             type: "error",
-            error: timeout.error,
-            snapshot: timeout.snapshot,
+            ...responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot),
           });
           return;
         }
@@ -686,8 +804,24 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           });
           sendJson(socket, {
             type: "error",
-            error: timeout.error,
-            snapshot: timeout.snapshot,
+            ...responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot),
+          });
+          return;
+        }
+
+        const currentRoom = service.getRoom(message.gameId) ?? room;
+        const color = currentRoom.authenticate(message.token);
+        if (!color) {
+          log({
+            event: "online.socket.join",
+            gameId: message.gameId,
+            role: "player",
+            status: "rejected",
+            reason: "unauthorized",
+          });
+          sendSocketError(socket, {
+            code: "unauthorized",
+            message: "No online game was found for that id and token.",
           });
           return;
         }
@@ -701,8 +835,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         });
         sendJson(socket, {
           type: "joined",
-          color: room.authenticate(message.token),
-          snapshot: room.getSnapshot(),
+          color,
+          snapshot: currentRoom.getSnapshot(),
         });
         if (timeout.timeout) {
           broadcastSnapshot(message.gameId);
@@ -740,8 +874,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           });
           sendJson(socket, {
             type: "error",
-            error: timeout.error,
-            snapshot: timeout.snapshot,
+            ...responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot),
           });
           return;
         }
@@ -753,9 +886,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           role: "spectator",
           status: "accepted",
         });
+        const currentRoom = service.getRoom(message.gameId) ?? room;
         sendJson(socket, {
           type: "spectating",
-          snapshot: room.getSnapshot(),
+          snapshot: currentRoom.getSnapshot(),
         });
         if (timeout.timeout) {
           broadcastSnapshot(message.gameId);
@@ -801,6 +935,88 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             code: "not_joined",
             message: "Join an online game before sending actions.",
           });
+          return;
+        }
+
+        if (options.applyGameAction) {
+          try {
+            const transition = await options.applyGameAction({
+              gameId: currentConnection.gameId,
+              token: currentConnection.token,
+              action: message.action,
+              now: options.now,
+            });
+            if (transition.room) {
+              service.replaceRoom(transition.room);
+            }
+            if (transition.event?.type === "timeout_adjudicated") {
+              log({
+                event: "online.timeout",
+                gameId: currentConnection.gameId,
+                role: "player",
+                status: "expired",
+                reason: transition.event.playerColor,
+              });
+            }
+            if (!transition.ok) {
+              log({
+                event: "online.action",
+                gameId: currentConnection.gameId,
+                role: "player",
+                action: message.action.type,
+                status: "rejected",
+                reason: transition.error.code,
+              });
+              if (
+                transition.snapshot &&
+                transition.error.code !== "not_found" &&
+                transition.error.code !== "unauthorized"
+              ) {
+                sendJson(socket, {
+                  type: "rejected",
+                  error: transition.error,
+                  snapshot: transition.snapshot,
+                });
+              } else {
+                sendSocketError(socket, transition.error);
+              }
+              if (transition.event?.type === "timeout_adjudicated") {
+                broadcastSnapshot(currentConnection.gameId);
+              }
+              return;
+            }
+
+            log({
+              event: "online.action",
+              gameId: currentConnection.gameId,
+              role: "player",
+              action: transition.event.action.type,
+              status: "accepted",
+            });
+            broadcastSnapshot(currentConnection.gameId);
+          } catch (error) {
+            log({
+              event: "online.persistence",
+              gameId: currentConnection.gameId,
+              role: "player",
+              action: message.action.type,
+              status: "failed",
+              reason: "action_accepted",
+            });
+            log({
+              event: "online.action",
+              gameId: currentConnection.gameId,
+              role: "player",
+              action: message.action.type,
+              status: "rejected",
+              reason: "persistence_failed",
+            });
+            console.error("Failed to persist online game action", error);
+            sendSocketError(socket, {
+              code: "persistence_failed",
+              message: "The accepted action could not be saved.",
+            });
+          }
           return;
         }
 
@@ -850,13 +1066,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           });
           sendJson(socket, {
             type: "error",
-            error: timeout.error,
-            snapshot: timeout.snapshot,
+            ...responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot),
           });
           return;
         }
         if (timeout.timeout) {
-          const snapshot = room.getSnapshot();
+          const snapshot = (service.getRoom(currentConnection.gameId) ?? room).getSnapshot();
           log({
             event: "online.action",
             gameId: currentConnection.gameId,

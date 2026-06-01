@@ -121,6 +121,24 @@ function createGameCreatedEvent(
   };
 }
 
+function createClockedGameCreatedEvent(
+  gameId = "game_pg_clocked"
+): Extract<OnlineGameEvent, { type: "game_created" }> {
+  const created = createGameCreatedEvent(gameId);
+  return {
+    ...created,
+    setup: {
+      ...created.setup,
+      timeControl: { initial: 1, increment: 0 },
+    },
+    clock: {
+      remainingMs: { w: 60_000, b: 60_000 },
+      activeColor: "w",
+      runningSince: 0,
+    },
+  };
+}
+
 describe("PostgresOnlineGameStore", () => {
   it("closes its database connection when a closer is provided", async () => {
     const client = new FakePostgresClient();
@@ -212,6 +230,208 @@ describe("PostgresOnlineGameStore", () => {
       "archived",
       1,
     ]);
+  });
+
+  it("applies accepted actions against the locked persisted game state", async () => {
+    const client = new FakePostgresClient();
+    const created = createGameCreatedEvent("game_apply_action");
+    client.eventRows = [{ payload: created }];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.applyGameAction({
+      gameId: "game_apply_action",
+      token: "w-token",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 2_000,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.snapshot).toMatchObject({ gameId: "game_apply_action", version: 1 });
+    expect(result.event).toMatchObject({
+      type: "action_accepted",
+      gameId: "game_apply_action",
+      playerColor: "w",
+      version: 1,
+      playedAt: 2_000,
+      action: { type: "PASS", baseVersion: 0 },
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "action_accepted",
+    ]);
+
+    const queryTexts = client.queries.map((query) => query.text);
+    const beginIndex = queryTexts.findIndex((text) => /^\s*begin\s*$/i.test(text));
+    const lockInsertIndex = queryTexts.findIndex((text) => /insert into online_game_locks/i.test(text));
+    const rowLockIndex = queryTexts.findIndex((text) => /for update/i.test(text));
+    const summaryLockIndex = queryTexts.findIndex((text) => /pg_advisory_xact_lock/i.test(text));
+    const selectGameEventsIndex = queryTexts.findIndex((text) =>
+      /select\s+payload\s+from\s+online_game_events\s+where\s+game_id/i.test(text)
+    );
+    const eventInsertIndex = queryTexts.findIndex((text, index) =>
+      index > selectGameEventsIndex && /insert into online_game_events/i.test(text)
+    );
+    const summaryInsertIndex = queryTexts.findIndex((text) => /insert into online_game_summaries/i.test(text));
+    const commitIndex = queryTexts.findIndex((text) => /^\s*commit\s*$/i.test(text));
+
+    expect(beginIndex).toBeGreaterThanOrEqual(0);
+    expect(lockInsertIndex).toBeGreaterThan(beginIndex);
+    expect(client.queries[lockInsertIndex].values).toEqual(["game_apply_action"]);
+    expect(rowLockIndex).toBeGreaterThan(lockInsertIndex);
+    expect(client.queries[rowLockIndex].values).toEqual(["game_apply_action"]);
+    expect(summaryLockIndex).toBeGreaterThan(rowLockIndex);
+    expect(selectGameEventsIndex).toBeGreaterThan(summaryLockIndex);
+    expect(eventInsertIndex).toBeGreaterThan(selectGameEventsIndex);
+    expect(summaryInsertIndex).toBeGreaterThan(eventInsertIndex);
+    expect(commitIndex).toBeGreaterThan(summaryInsertIndex);
+  });
+
+  it("returns rejected action snapshots from the locked persisted game without appending", async () => {
+    const client = new FakePostgresClient();
+    client.eventRows = [{ payload: createGameCreatedEvent("game_apply_reject") }];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.applyGameAction({
+      gameId: "game_apply_reject",
+      token: "w-token",
+      action: { type: "PASS", baseVersion: 99 },
+      now: () => 2_000,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected stale action rejection.");
+    }
+    expect(result.error).toMatchObject({ code: "stale_action" });
+    expect(result.snapshot).toMatchObject({ gameId: "game_apply_reject", version: 0 });
+    expect(client.eventRows).toHaveLength(1);
+    expect(
+      client.queries.filter((query) => /insert into online_game_events/i.test(query.text))
+    ).toHaveLength(0);
+  });
+
+  it("rolls back accepted actions when the locked summary refresh fails", async () => {
+    const client = new FakePostgresClient();
+    client.eventRows = [{ payload: createGameCreatedEvent("game_apply_rollback") }];
+    client.failNextSummaryInsert = true;
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.applyGameAction({
+        gameId: "game_apply_rollback",
+        token: "w-token",
+        action: { type: "PASS", baseVersion: 0 },
+        now: () => 2_000,
+      })
+    ).rejects.toThrow(/summary insert unavailable/);
+
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual(["game_created"]);
+    expect(client.summaryRows).toHaveLength(0);
+    expect(client.queries.some((query) => /^\s*rollback\s*$/i.test(query.text))).toBe(true);
+  });
+
+  it("persists timeout adjudication in the locked action transaction before rejecting the action", async () => {
+    const client = new FakePostgresClient();
+    client.eventRows = [{ payload: createClockedGameCreatedEvent("game_apply_timeout") }];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.applyGameAction({
+      gameId: "game_apply_timeout",
+      token: "w-token",
+      action: { type: "PASS", baseVersion: 0 },
+      now: () => 61_000,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected timeout rejection.");
+    }
+    expect(result.error).toMatchObject({ code: "game_over" });
+    expect(result.event).toMatchObject({
+      type: "timeout_adjudicated",
+      gameId: "game_apply_timeout",
+      playerColor: "w",
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+    });
+    expect(result.snapshot).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+      clock: {
+        remainingMs: { w: 0, b: 60_000 },
+        activeColor: null,
+      },
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "timeout_adjudicated",
+    ]);
+  });
+
+  it("adjudicates timeouts against the locked persisted game state", async () => {
+    const client = new FakePostgresClient();
+    client.eventRows = [{ payload: createClockedGameCreatedEvent("game_timeout_lock") }];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.adjudicateGameTimeout({
+      gameId: "game_timeout_lock",
+      now: () => 61_000,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.event).toMatchObject({
+      type: "timeout_adjudicated",
+      gameId: "game_timeout_lock",
+      playerColor: "w",
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+    });
+    expect(result.snapshot).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "timeout_adjudicated",
+    ]);
+
+    const queryTexts = client.queries.map((query) => query.text);
+    const rowLockIndex = queryTexts.findIndex((text) => /for update/i.test(text));
+    const summaryLockIndex = queryTexts.findIndex((text) => /pg_advisory_xact_lock/i.test(text));
+    const eventInsertIndex = queryTexts.findIndex((text, index) =>
+      index > summaryLockIndex && /insert into online_game_events/i.test(text)
+    );
+    expect(rowLockIndex).toBeGreaterThanOrEqual(0);
+    expect(summaryLockIndex).toBeGreaterThan(rowLockIndex);
+    expect(eventInsertIndex).toBeGreaterThan(summaryLockIndex);
+  });
+
+  it("returns the locked persisted snapshot without appending when no timeout has occurred", async () => {
+    const client = new FakePostgresClient();
+    client.eventRows = [{ payload: createClockedGameCreatedEvent("game_timeout_none") }];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.adjudicateGameTimeout({
+      gameId: "game_timeout_none",
+      now: () => 1_000,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(result.error.message);
+    }
+    expect(result.event).toBeUndefined();
+    expect(result.snapshot).toMatchObject({
+      version: 0,
+      result: undefined,
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual(["game_created"]);
   });
 
   it("wraps appended events and summary refreshes in a locked transaction", async () => {

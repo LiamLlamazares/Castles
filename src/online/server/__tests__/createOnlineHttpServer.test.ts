@@ -5,7 +5,8 @@ import { getStartingBoard, getStartingPieces } from "../../../ConstantImports";
 import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator";
 import { SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
-import { OnlineGameEvent } from "../../events";
+import { createOnlineActionAcceptedEvent, OnlineGameEvent } from "../../events";
+import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import type { OnlineGameSummary } from "../../readModel";
@@ -1051,6 +1052,92 @@ describe("createOnlineHttpServer", () => {
     }
   });
 
+  it("uses the canonical store action result when local room state is stale", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_canonical_action",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    let applyCalls = 0;
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      applyGameAction: async (input) => {
+        applyCalls += 1;
+        expect(input).toMatchObject({
+          gameId: "game_canonical_action",
+          token: "w-token",
+          action: { type: "RESIGN", baseVersion: 1 },
+        });
+        const localRecord = service.getRoom(input.gameId)?.toRecord();
+        if (!localRecord) {
+          throw new Error("Expected local room record.");
+        }
+        const canonicalRoom = OnlineGameRoom.create(localRecord);
+        canonicalRoom.submitAction(input.token, { type: "PASS", baseVersion: 0 });
+        const actionResult = canonicalRoom.submitAction(input.token, input.action);
+        if (!actionResult.ok) {
+          throw new Error(actionResult.error.message);
+        }
+        const accepted = canonicalRoom.toRecord().acceptedActions.at(-1)!;
+        return {
+          ok: true,
+          event: createOnlineActionAcceptedEvent({
+            type: "action_accepted",
+            gameId: input.gameId,
+            playerColor: accepted.playerColor,
+            version: actionResult.snapshot.version,
+            playedAt: accepted.playedAt,
+            action: accepted.action,
+            clock: accepted.clock,
+          }),
+          playerColor: accepted.playerColor,
+          room: canonicalRoom.toRecord(),
+          snapshot: actionResult.snapshot,
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify({
+          type: "join",
+          gameId: created.gameId,
+          token: created.white.token,
+        })
+      );
+    });
+
+    try {
+      await expect(nextSocketMessage(socket, "canonical action join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      socket.send(JSON.stringify({ type: "action", action: { type: "RESIGN", baseVersion: 1 } }));
+
+      await expect(nextSocketMessage(socket, "canonical action result")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: {
+          version: 2,
+          result: { winner: "b", reason: "resignation" },
+        },
+      });
+      expect(applyCalls).toBe(1);
+      expect(service.getRoom(created.gameId)?.getSnapshot()).toMatchObject({ version: 2 });
+    } finally {
+      socket.close();
+    }
+  });
+
   it("serializes action handling so later messages wait for prior persistence", async () => {
     let releaseFirstAction!: () => void;
     let firstActionReleased = false;
@@ -1276,6 +1363,173 @@ describe("createOnlineHttpServer", () => {
       "game_created",
       "timeout_adjudicated",
     ]);
+  });
+
+  it("uses the canonical store timeout result before serving player snapshots", async () => {
+    let now = 0;
+    const service = new OnlineGameService({
+      idFactory: () => "game_canonical_timeout",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => now,
+    });
+    let timeoutCalls = 0;
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      now: () => now,
+      adjudicateGameTimeout: async (input) => {
+        timeoutCalls += 1;
+        expect(input).toMatchObject({ gameId: "game_canonical_timeout" });
+        const localRecord = service.getRoom(input.gameId)?.toRecord();
+        if (!localRecord) {
+          throw new Error("Expected local room record.");
+        }
+        const canonicalRoom = OnlineGameRoom.create({
+          ...localRecord,
+          now: () => 61_000,
+        });
+        const timeout = canonicalRoom.adjudicateTimeout();
+        if (!timeout) {
+          throw new Error("Expected canonical timeout.");
+        }
+        return {
+          ok: true,
+          event: {
+            schemaVersion: 1,
+            eventId: "evt-canonical-timeout",
+            createdAt: "2026-05-31T12:00:01.000Z",
+            rulesetVersion: "castles-beta-v1",
+            type: "timeout_adjudicated",
+            gameId: input.gameId,
+            playerColor: timeout.playerColor,
+            version: timeout.version,
+            adjudicatedAt: timeout.adjudicatedAt,
+            result: timeout.result,
+            clock: timeout.clock,
+          },
+          room: canonicalRoom.toRecord(),
+          snapshot: canonicalRoom.getSnapshot(),
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: { authorization: `Bearer ${created.white.token}` } }
+    );
+    const body = await snapshotResponse.json();
+
+    expect(snapshotResponse.status).toBe(200);
+    expect(timeoutCalls).toBe(1);
+    expect(body.snapshot).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+    });
+    expect(service.getRoom(created.gameId)?.getSnapshot()).toMatchObject({
+      version: 1,
+      result: { winner: "b", reason: "timeout" },
+    });
+  });
+
+  it("does not return a stale local snapshot when canonical timeout lookup rejects", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_canonical_timeout_missing",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      adjudicateGameTimeout: async () => ({
+        ok: false,
+        error: {
+          code: "not_found",
+          message: "Canonical game was not found.",
+        },
+      }),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: { authorization: `Bearer ${created.white.token}` } }
+    );
+    const body = await snapshotResponse.json();
+
+    expect(snapshotResponse.status).toBe(404);
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "Canonical game was not found.",
+      },
+    });
+  });
+
+  it("rejects player snapshots when the canonical room no longer authenticates the token", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_canonical_token_mismatch",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      adjudicateGameTimeout: async (input) => {
+        const localRecord = service.getRoom(input.gameId)?.toRecord();
+        if (!localRecord) {
+          throw new Error("Expected local room record.");
+        }
+        return {
+          ok: true,
+          room: {
+            ...localRecord,
+            whiteToken: "canonical-white-token",
+          },
+          snapshot: OnlineGameRoom.create({
+            ...localRecord,
+            whiteToken: "canonical-white-token",
+          }).getSnapshot(),
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: { authorization: `Bearer ${created.white.token}` } }
+    );
+    const body = await snapshotResponse.json();
+
+    expect(snapshotResponse.status).toBe(404);
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "No online game was found for that id and token.",
+      },
+    });
   });
 
   it("rolls back timeout adjudication when timeout persistence fails", async () => {
