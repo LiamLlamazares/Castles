@@ -108,6 +108,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [showQuickStart, setShowQuickStart] = React.useState(false);
   const [showTooltipHint, setShowTooltipHint] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
+  const [isNavigationMenuOpen, setNavigationMenuOpen] = React.useState(false);
   const statusTimeoutRef = React.useRef<number | null>(null);
 
   const showStatusMessage = React.useCallback((message: string) => {
@@ -440,6 +441,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onOpenLibrary={onOpenLibrary}
           onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
           onTutorial={onTutorial}
+          onOpenChange={setNavigationMenuOpen}
           isAnalysisMode={isAnalysisMode}
           onToggleShields={viewState.toggleShields}
           onToggleCastleRecruitment={viewState.toggleCastleRecruitment}
@@ -499,6 +501,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
               : undefined
           }
           onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
+          onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
+          onOpenLibrary={onOpenLibrary}
           moveHistory={moveHistory || []}
           moveTree={moveTree}
           onJumpToNode={jumpToNode}
@@ -534,7 +538,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         </div>
       )}
 
-      {statusMessage && (
+      {statusMessage && !isNavigationMenuOpen && (
         <div
           role="status"
           className="game-status-toast"
@@ -569,7 +573,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         activeAbility={activeAbility}
         onAbilitySelect={setActiveAbility}
         sanctuarySettings={sanctuarySettings}
-        showDiscoveryHint={shouldShowTooltipHint && !isTutorialMode}
+        showDiscoveryHint={shouldShowTooltipHint && !isTutorialMode && !isNavigationMenuOpen}
       />
     </div>
   );

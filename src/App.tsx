@@ -79,6 +79,7 @@ function App() {
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
   const [previousView, setPreviousView] = useState<ViewState>('game');
+  const [viewStack, setViewStack] = useState<ViewState[]>([]);
   const [gameLibraryRepository] = useState(() => new BrowserGameLibraryRepository());
   const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(() =>
     resolveOnlineJoinParams(window.location.href)
@@ -126,17 +127,46 @@ function App() {
     setOnlineSpectator(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
+    const backTarget = view === 'game' || view === 'setup' ? 'game' : view;
+    setPreviousView(backTarget);
+    setViewStack([backTarget]);
     setView('setup');
   };
 
   const handleTutorialClick = () => {
+    if (view !== 'tutorial') {
+      setViewStack(prev => [...prev, view]);
+      setPreviousView(view);
+    }
     setView('tutorial');
   };
 
   const handleOpenLibrary = () => {
-    setPreviousView(view);
+    if (view !== 'library') {
+      setViewStack(prev => [...prev, view]);
+      setPreviousView(view);
+    }
     setView('library');
   };
+
+  const returnToPreviousView = () => {
+    setViewStack(prev => {
+      if (prev.length === 0) {
+        const fallback = previousView === 'library' || previousView === 'tutorial' ? 'game' : previousView;
+        setView(fallback);
+        setPreviousView('game');
+        return [];
+      }
+
+      const next = [...prev];
+      const target = next.pop() ?? 'game';
+      setView(target);
+      setPreviousView(next[next.length - 1] ?? 'game');
+      return next;
+    });
+  };
+
+  const currentBackLabel = previousView === 'setup' ? 'Back to setup' : 'Back to game';
 
   const handleStartGame = (
     board: Board, 
@@ -416,6 +446,9 @@ function App() {
         <GameSetup 
           onPlay={handleStartGame} 
           onCreateOnlineGame={handleCreateOnlineGame}
+          onBack={returnToPreviousView}
+          onTutorial={handleTutorialClick}
+          onOpenLibrary={handleOpenLibrary}
         />
       )}
 
@@ -477,7 +510,8 @@ function App() {
       {view === 'library' && (
         <GameLibrary
           repository={gameLibraryRepository}
-          onBack={() => setView(previousView === 'library' ? 'game' : previousView)}
+          onBack={returnToPreviousView}
+          backLabel={currentBackLabel}
           onLoadGame={handleLoadSavedGame}
           onImportPGN={handleImportPGNToLibrary}
         />
@@ -495,7 +529,8 @@ function App() {
 
       {view === 'tutorial' && (
         <Tutorial
-          onBack={() => setView('game')}
+          onBack={returnToPreviousView}
+          backLabel={currentBackLabel}
         />
       )}
 

@@ -9,6 +9,7 @@ import "../css/GameLibrary.css";
 interface GameLibraryProps {
   repository: GameLibraryRepository;
   onBack: () => void;
+  backLabel?: string;
   onLoadGame: (record: SavedGameRecord) => void;
   onImportPGN: (pgn: string, name: string) => Promise<void>;
 }
@@ -16,6 +17,7 @@ interface GameLibraryProps {
 const GameLibrary: React.FC<GameLibraryProps> = ({
   repository,
   onBack,
+  backLabel = "Back to game",
   onLoadGame,
   onImportPGN,
 }) => {
@@ -126,7 +128,7 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
           </p>
         </div>
         <button className="library-button library-button-back" onClick={onBack}>
-          Back to game
+          {backLabel}
         </button>
       </header>
 

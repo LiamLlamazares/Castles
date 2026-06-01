@@ -66,18 +66,7 @@ const AbilityBar: React.FC<AbilityBarProps> = ({
   }
 
   return (
-    <div
-      className="ability-bar"
-      style={{
-        position: "absolute",
-        bottom: "20px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        display: "flex",
-        gap: "10px",
-        pointerEvents: "auto",
-      }}
-    >
+    <div className="ability-bar">
       {hasWizardAbilities && renderWizardAbilities()}
       {hasNecromancerAbilities && renderNecromancerAbilities()}
     </div>

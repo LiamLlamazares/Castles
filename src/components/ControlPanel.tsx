@@ -24,6 +24,8 @@ interface ControlPanelProps {
   onShare?: () => void;
   onCopyOpponentInvite?: () => void;
   onCopySpectator?: () => void;
+  onSaveGame?: () => void;
+  onOpenLibrary?: () => void;
   shareLabel?: string;
   shareTitle?: string;
   moveHistory: MoveRecord[];
@@ -189,6 +191,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onShare,
   onCopyOpponentInvite,
   onCopySpectator,
+  onSaveGame,
+  onOpenLibrary,
   shareLabel = "Share",
   shareTitle = "Share Game URL",
   moveHistory,
@@ -280,6 +284,16 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         <button className="control-button resign" onClick={onResign} disabled={arePlayControlsDisabled}>
           Resign
         </button>
+        {onSaveGame && (
+          <button className="control-button save" onClick={onSaveGame}>
+            Save
+          </button>
+        )}
+        {onOpenLibrary && (
+          <button className="control-button library" onClick={onOpenLibrary}>
+            Library
+          </button>
+        )}
         {onCopyOpponentInvite && (
           <button
             className="control-button share"

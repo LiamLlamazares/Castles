@@ -41,6 +41,9 @@ interface GameSetupProps {
         initialPoolTypes?: SanctuaryType[],
         pieceTheme?: PieceTheme
     ) => void;
+    onBack?: () => void;
+    onTutorial?: () => void;
+    onOpenLibrary?: () => void;
 }
 
 // Opponent options for card-based selection
@@ -93,7 +96,7 @@ const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     }
 };
 
-const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame }) => {
+const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onBack, onTutorial, onOpenLibrary }) => {
     // Game Mode State
     const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
     
@@ -266,6 +269,25 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame }) => 
             <div className="game-setup-shell">
                 {/* Sidebar Controls */}
                 <div className="setup-sidebar">
+                {(onBack || onTutorial || onOpenLibrary) && (
+                    <nav className="setup-topbar" aria-label="Setup navigation">
+                        {onBack && (
+                            <button type="button" className="setup-nav-button" onClick={onBack}>
+                                Back to game
+                            </button>
+                        )}
+                        {onTutorial && (
+                            <button type="button" className="setup-nav-button" onClick={onTutorial}>
+                                Tutorial
+                            </button>
+                        )}
+                        {onOpenLibrary && (
+                            <button type="button" className="setup-nav-button" onClick={onOpenLibrary}>
+                                Library
+                            </button>
+                        )}
+                    </nav>
+                )}
                 <h2 style={{ margin: '0 0 10px 0', fontSize: '1.5rem', textAlign: 'center', color: '#fff' }}>Game Setup</h2>
 
                 {/* Game Mode Selector */}

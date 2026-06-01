@@ -24,6 +24,7 @@ interface HamburgerMenuProps {
   onOpenLibrary?: () => void;
   onEditPosition?: () => void;
   onTutorial?: () => void;
+  onOpenChange?: (isOpen: boolean) => void;
   isAnalysisMode?: boolean;
   onToggleTerrainIcons?: () => void;
   onToggleSanctuaryIcons?: () => void;
@@ -49,6 +50,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onOpenLibrary,
   onEditPosition,
   onTutorial,
+  onOpenChange,
   isAnalysisMode = false,
   onToggleShields,
   onToggleCastleRecruitment,
@@ -66,11 +68,19 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const { toggleTheme, isDark } = useTheme();
 
+  const setMenuOpen = React.useCallback((nextOpen: boolean) => {
+    setIsOpen(nextOpen);
+    if (!nextOpen) {
+      setIsIconsMenuOpen(false);
+    }
+    onOpenChange?.(nextOpen);
+  }, [onOpenChange]);
+
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+        setMenuOpen(false);
       }
     };
 
@@ -80,13 +90,13 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, setMenuOpen]);
 
   // Close menu when Escape is pressed
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsOpen(false);
+        setMenuOpen(false);
       }
     };
 
@@ -96,11 +106,11 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isOpen]);
+  }, [isOpen, setMenuOpen]);
 
   const handleMenuItemClick = (action: () => void) => {
     action();
-    setIsOpen(false);
+    setMenuOpen(false);
   };
 
   const handleToggleClick = (action: () => void) => {
@@ -123,7 +133,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
       {/* Hamburger Icon */}
       <button
         className="hamburger-button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setMenuOpen(!isOpen)}
         aria-label="Menu"
         aria-expanded={isOpen}
       >
@@ -135,108 +145,121 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
         <div className="hamburger-menu open">
           <div className="menu-header">
             <span>Castles</span>
-            <button className="menu-close" onClick={() => setIsOpen(false)} aria-label="Close menu">×</button>
+            <button className="menu-close" onClick={() => setMenuOpen(false)} aria-label="Close menu">×</button>
           </div>
 
           <div className="menu-items">
-            <div className="menu-section-label">Play</div>
+            <section className="menu-section" aria-labelledby="menu-section-play">
+              <div id="menu-section-play" className="menu-section-label">Play</div>
 
-            {onNewGame && (
-              <button
-                className="menu-item primary"
-                onClick={() => handleMenuItemClick(onNewGame)}
-              >
-                {renderIcon("+")}
-                <span>New Game</span>
-              </button>
+              {onNewGame && (
+                <button
+                  className="menu-item primary"
+                  onClick={() => handleMenuItemClick(onNewGame)}
+                >
+                  {renderIcon("+")}
+                  <span>New Game</span>
+                </button>
+              )}
+            </section>
+
+            {(onSaveGameToLibrary || onOpenLibrary) && (
+              <section className="menu-section" aria-labelledby="menu-section-library">
+                <div id="menu-section-library" className="menu-section-label">Library</div>
+
+                {onSaveGameToLibrary && (
+                  <button
+                    className="menu-item primary"
+                    onClick={() => handleMenuItemClick(onSaveGameToLibrary)}
+                  >
+                    {renderImageIcon(scrollIcon)}
+                    <span>Save Game</span>
+                  </button>
+                )}
+
+                {onOpenLibrary && (
+                  <button
+                    className="menu-item primary"
+                    onClick={() => handleMenuItemClick(onOpenLibrary)}
+                  >
+                    {renderImageIcon(scrollsIcon)}
+                    <span>Game Library</span>
+                  </button>
+                )}
+              </section>
             )}
 
-            {onSaveGameToLibrary && (
-              <button
-                className="menu-item primary"
-                onClick={() => handleMenuItemClick(onSaveGameToLibrary)}
-              >
-                {renderImageIcon(scrollIcon)}
-                <span>Save Game</span>
-              </button>
-            )}
+            <section className="menu-section" aria-labelledby="menu-section-learn">
+              <div id="menu-section-learn" className="menu-section-label">Learn</div>
 
-            {onOpenLibrary && (
-              <button
-                className="menu-item primary"
-                onClick={() => handleMenuItemClick(onOpenLibrary)}
-              >
-                {renderImageIcon(scrollsIcon)}
-                <span>Game Library</span>
-              </button>
-            )}
+              {onTutorial && (
+                <button
+                  className="menu-item"
+                  onClick={() => handleMenuItemClick(onTutorial)}
+                >
+                  {renderIcon("?")}
+                  <span>Tutorial</span>
+                </button>
+              )}
 
-            {onTutorial && (
               <button
                 className="menu-item"
-                onClick={() => handleMenuItemClick(onTutorial)}
+                onClick={() => handleMenuItemClick(onShowRules)}
               >
-                {renderIcon("?")}
-                <span>Tutorial</span>
+                {renderIcon("i")}
+                <span>Rules</span>
               </button>
-            )}
-
-            <button
-              className="menu-item"
-              onClick={() => handleMenuItemClick(onShowRules)}
-            >
-              {renderIcon("i")}
-              <span>Rules</span>
-            </button>
+            </section>
 
             <div className="menu-divider" />
-            <div className="menu-section-label">Board</div>
+            <section className="menu-section" aria-labelledby="menu-section-board">
+              <div id="menu-section-board" className="menu-section-label">Board</div>
 
-            {/* Theme Toggle */}
-            <button
-              className="menu-item"
-              onClick={() => toggleTheme()}
-              style={{ justifyContent: 'space-between' }}
-            >
-              <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
-            </button>
+              {/* Theme Toggle */}
+              <button
+                className="menu-item"
+                onClick={() => toggleTheme()}
+                style={{ justifyContent: 'space-between' }}
+              >
+                <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+              </button>
 
-            <button
-              className="menu-item"
-              onClick={() => handleMenuItemClick(onExportPGN)}
-            >
-              {renderImageIcon(scrollIcon)}
-              <span>Export PGN</span>
-            </button>
+              <button
+                className="menu-item"
+                onClick={() => handleMenuItemClick(onExportPGN)}
+              >
+                {renderImageIcon(scrollIcon)}
+                <span>Export PGN</span>
+              </button>
 
-            <button
-              className="menu-item"
-              onClick={() => handleMenuItemClick(onImportPGN)}
-            >
-              {renderImageIcon(scrollsIcon)}
-              <span>Import PGN</span>
-            </button>
+              <button
+                className="menu-item"
+                onClick={() => handleMenuItemClick(onImportPGN)}
+              >
+                {renderImageIcon(scrollsIcon)}
+                <span>Import PGN</span>
+              </button>
 
-            <button
-              className="menu-item"
-              onClick={() => handleMenuItemClick(onFlipBoard)}
-            >
-              {renderImageIcon(rotateIcon)}
-              <span>Flip Board</span>
-            </button>
+              <button
+                className="menu-item"
+                onClick={() => handleMenuItemClick(onFlipBoard)}
+              >
+                {renderImageIcon(rotateIcon)}
+                <span>Flip Board</span>
+              </button>
 
-            {/* Icon Settings Collapsible */}
-            <button
-              className="menu-item"
-              onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
-              style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
-            >
-              <span>{renderIcon("Ic")} Icon Settings</span>
-              <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
-            </button>
+              {/* Icon Settings Collapsible */}
+              <button
+                className="menu-item"
+                onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
+                style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
+              >
+                <span>{renderIcon("Ic")} Icon Settings</span>
+                <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
+              </button>
 
-            {isIconsMenuOpen && (
-              <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              {isIconsMenuOpen && (
+                <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 {/* Show All / Hide All */}
                 {onSetAllIcons && (
                   <div style={{ display: 'flex', gap: '8px', padding: '8px 12px 8px 12px' }}>
@@ -308,10 +331,12 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   </label>
                 )}
               </div>
-            )}
+              )}
+            </section>
 
             <div className="menu-divider" />
-            <div className="menu-section-label">Tools</div>
+            <section className="menu-section" aria-labelledby="menu-section-tools">
+            <div id="menu-section-tools" className="menu-section-label">Tools</div>
 
             {onEnableAnalysis && !isAnalysisMode && (
               <button
@@ -332,12 +357,13 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 <span>Edit Position</span>
               </button>
             )}
+            </section>
           </div>
         </div>
       )}
 
       {/* Backdrop */}
-      {isOpen && <div className="menu-backdrop" onClick={() => setIsOpen(false)} />}
+      {isOpen && <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />}
     </div>
   );
 };

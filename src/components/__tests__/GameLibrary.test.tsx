@@ -29,6 +29,20 @@ describe("GameLibrary", () => {
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
   });
 
+  it("uses the provided back label", async () => {
+    render(
+      <GameLibrary
+        repository={createRepository()}
+        onBack={vi.fn()}
+        backLabel="Back to setup"
+        onLoadGame={vi.fn()}
+        onImportPGN={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByRole("button", { name: "Back to setup" })).toBeInTheDocument();
+  });
+
   it("keeps long save names inside the wrapping saved-game row", async () => {
     const longName = "Imported-game-with-a-very-long-name-that-should-wrap-without-horizontal-overflow";
     const { container } = render(

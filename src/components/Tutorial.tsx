@@ -12,13 +12,41 @@ import '../css/Board.css';
 
 interface TutorialProps {
   onBack: () => void;
+  backLabel?: string;
 }
 
-const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
+const TUTORIAL_PROGRESS_KEY = "castles_tutorial_lesson_index";
+
+function readStoredLessonIndex(lessonCount: number): number {
+  try {
+    const stored = Number(localStorage.getItem(TUTORIAL_PROGRESS_KEY));
+    if (!Number.isInteger(stored) || stored < 0 || stored >= lessonCount) {
+      return 0;
+    }
+    return stored;
+  } catch (error) {
+    console.error("Failed to load tutorial progress", error);
+    return 0;
+  }
+}
+
+function saveStoredLessonIndex(lessonIndex: number): void {
+  try {
+    localStorage.setItem(TUTORIAL_PROGRESS_KEY, String(lessonIndex));
+  } catch (error) {
+    console.error("Failed to save tutorial progress", error);
+  }
+}
+
+const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" }) => {
   const { isDark } = useTheme();
   const lessons = useMemo(() => getAllLessons(), []);
-  const [currentLessonIndex, setCurrentLessonIndex] = useState(0);
+  const [currentLessonIndex, setCurrentLessonIndex] = useState(() => readStoredLessonIndex(lessons.length));
   const lesson: TutorialLesson = lessons[currentLessonIndex];
+
+  React.useEffect(() => {
+    saveStoredLessonIndex(currentLessonIndex);
+  }, [currentLessonIndex]);
 
   const PIECE_LESSONS = [
     { id: 'm2_l2_swordsman', piece: PieceType.Swordsman, label: 'Sword' },
@@ -64,7 +92,7 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack }) => {
             onClick={onBack}
             className="tutorial-back-button"
           >
-            Back to game
+            {backLabel}
           </button>
           <span className="tutorial-progress">
             {currentLessonIndex + 1} / {lessons.length}

@@ -61,4 +61,28 @@ describe("GameSetup", () => {
       SanctuaryType.SacredSpring,
     ]);
   });
+
+  it("exposes setup navigation without hiding play actions", () => {
+    const onBack = vi.fn();
+    const onTutorial = vi.fn();
+    const onOpenLibrary = vi.fn();
+
+    render(
+      <GameSetup
+        onPlay={vi.fn()}
+        onBack={onBack}
+        onTutorial={onTutorial}
+        onOpenLibrary={onOpenLibrary}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+
+    expect(screen.getByRole("button", { name: "PLAY GAME" })).toBeInTheDocument();
+    expect(onBack).toHaveBeenCalledOnce();
+    expect(onTutorial).toHaveBeenCalledOnce();
+    expect(onOpenLibrary).toHaveBeenCalledOnce();
+  });
 });

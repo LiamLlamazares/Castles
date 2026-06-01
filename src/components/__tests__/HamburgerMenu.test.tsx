@@ -13,10 +13,11 @@ const renderMenu = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu
     onShowRules: vi.fn(),
     onNewGame: vi.fn(),
     onOpenLibrary: vi.fn(),
-    onSaveGameToLibrary: vi.fn(),
-    onTutorial: vi.fn(),
-    ...overrides,
-  };
+      onSaveGameToLibrary: vi.fn(),
+      onTutorial: vi.fn(),
+      onOpenChange: vi.fn(),
+      ...overrides,
+    };
 
   const result = render(
     <ThemeProvider>
@@ -39,6 +40,9 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "Save Game" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Game Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "New Game" }));
+    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Game Library" }));
+    expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
 
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
 
@@ -64,5 +68,36 @@ describe("HamburgerMenu", () => {
     expect(props.onToggleCoordinates).toHaveBeenCalledOnce();
     expect(coordinates.closest("button")).toBeNull();
     expect(container.querySelectorAll(".menu-toggle-item input[type='checkbox']")).toHaveLength(5);
+  });
+
+  it("reports drawer open state for shell-level overlap handling", () => {
+    const { props } = renderMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    expect(props.onOpenChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close menu" }));
+    expect(props.onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("closes with Escape and keeps icon toggles open", () => {
+    const { container, props } = renderMenu({
+      onToggleTerrainIcons: vi.fn(),
+      onToggleSanctuaryIcons: vi.fn(),
+      onToggleShields: vi.fn(),
+      onToggleCastleRecruitment: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("button", { name: /Icon Settings/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Coordinates" }));
+
+    expect(props.onToggleCoordinates).toHaveBeenCalledOnce();
+    expect(container.querySelector(".hamburger-menu")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(container.querySelector(".hamburger-menu")).not.toBeInTheDocument();
+    expect(props.onOpenChange).toHaveBeenLastCalledWith(false);
   });
 });

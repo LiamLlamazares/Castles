@@ -237,6 +237,22 @@ describe("Game ability integration", () => {
     expect(alert).not.toHaveBeenCalled();
   }, INTEGRATION_TIMEOUT_MS);
 
+  test("opening the navigation drawer suppresses the tooltip hint to prevent overlap", () => {
+    localStorage.removeItem("hasSeenTooltipHint");
+
+    render(
+      <ThemeProvider>
+        <GameBoard />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByText(/Right-click any piece or hex/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.queryByText(/Right-click any piece or hex/i)).not.toBeInTheDocument();
+  });
+
   test("online New Game requires confirmation even before the first move", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const onSetup = vi.fn();
@@ -293,6 +309,29 @@ describe("Game ability integration", () => {
     });
     expect(await screen.findByRole("status")).toHaveTextContent("PGN copied.");
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  test("opening the navigation drawer hides status toasts to prevent overlap", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <ThemeProvider>
+        <GameBoard />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export PGN" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("PGN copied.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   test("PGN export reports clipboard failures in the app", async () => {

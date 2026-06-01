@@ -37,14 +37,42 @@ describe("ControlPanel", () => {
   });
 
   it("groups the main game action buttons for accessible responsive layout", () => {
-    render(<ControlPanel {...baseProps} onShare={vi.fn()} />);
+    render(
+      <ControlPanel
+        {...baseProps}
+        onShare={vi.fn()}
+        onSaveGame={vi.fn()}
+        onOpenLibrary={vi.fn()}
+      />
+    );
 
     const controls = screen.getByRole("group", { name: "Game actions" });
 
     expect(controls).toContainElement(screen.getByRole("button", { name: "Pass" }));
     expect(controls).toContainElement(screen.getByRole("button", { name: "Resign" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "Save" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: "Library" }));
     expect(controls).toContainElement(screen.getByRole("button", { name: "Share" }));
     expect(controls).toContainElement(screen.getByRole("button", { name: "New Game" }));
+  });
+
+  it("calls visible save and library actions from the game panel", () => {
+    const onSaveGame = vi.fn();
+    const onOpenLibrary = vi.fn();
+
+    render(
+      <ControlPanel
+        {...baseProps}
+        onSaveGame={onSaveGame}
+        onOpenLibrary={onOpenLibrary}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+
+    expect(onSaveGame).toHaveBeenCalledOnce();
+    expect(onOpenLibrary).toHaveBeenCalledOnce();
   });
 
   it("renders online clocks from server state instead of starting local browser clocks", () => {
