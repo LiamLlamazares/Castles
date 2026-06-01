@@ -32,6 +32,7 @@ import {
   acceptOpenSeek,
   cancelOnlineChallenge,
   cancelOpenSeek,
+  copyOnlineInviteUrl,
   createOnlineChallenge,
   createOpenSeek,
   declineOnlineChallenge,
@@ -233,6 +234,7 @@ function App() {
   );
   const [onlineChallengeResponse, setOnlineChallengeResponse] = useState<OnlineChallengeResponse | null>(null);
   const [onlineChallengeShareUrl, setOnlineChallengeShareUrl] = useState<string | null>(null);
+  const [onlineChallengeShareMessage, setOnlineChallengeShareMessage] = useState("");
   const [onlineChallengeStatus, setOnlineChallengeStatus] = useState<"idle" | "loading" | "acting" | "error">("idle");
   const [onlineChallengeError, setOnlineChallengeError] = useState<string | null>(null);
   const [openSeekCreator, setOpenSeekCreator] = useState<OpenSeekCreatorParams | null>(() =>
@@ -318,6 +320,10 @@ function App() {
     setOpenSeekCreator(null);
     setOpenSeekResponse(null);
   };
+
+  useEffect(() => {
+    setOnlineChallengeShareMessage("");
+  }, [onlineChallengeShareUrl]);
 
   useEffect(() => {
     if (!onlineJoin) return;
@@ -899,6 +905,17 @@ function App() {
     setOpenSeekResponse(response);
   };
 
+  const handleCopyOnlineChallengeShareUrl = useCallback(async () => {
+    if (!onlineChallengeShareUrl) return;
+    try {
+      await copyOnlineInviteUrl(onlineChallengeShareUrl);
+      setOnlineChallengeShareMessage("Challenge link copied.");
+    } catch (error) {
+      console.error("Failed to copy challenge link", error);
+      setOnlineChallengeShareMessage("Could not copy the challenge link.");
+    }
+  }, [onlineChallengeShareUrl]);
+
   const handleRefreshOwnedOpenSeek = async () => {
     if (!openSeekCreator) return;
     const response = await fetchOpenSeek(openSeekCreator);
@@ -1443,15 +1460,29 @@ function App() {
                   : onlineChallengeError ?? `Status: ${onlineChallengeResponse?.summary.status ?? "pending"}`}
             </div>
             {onlineChallengeShareUrl && (
-              <label className="online-state-field">
-                Challenge link
-                <input
-                  readOnly
-                  value={onlineChallengeShareUrl}
-                  onFocus={(event) => event.currentTarget.select()}
-                  className="online-state-input"
-                />
-              </label>
+              <section className="online-state-field" aria-label="Challenge link">
+                <div className="online-state-field-heading">Challenge link</div>
+                <div className="online-state-share-row">
+                  <code className="online-state-link-preview" title={onlineChallengeShareUrl}>
+                    {onlineChallengeShareUrl}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={handleCopyOnlineChallengeShareUrl}
+                    className="online-state-button neutral online-state-copy-button"
+                  >
+                    Copy Challenge Link
+                  </button>
+                </div>
+                <div
+                  className="online-state-inline-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {onlineChallengeShareMessage}
+                </div>
+              </section>
             )}
             {onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenged" && (
               <div className="online-state-actions">

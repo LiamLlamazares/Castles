@@ -20,10 +20,15 @@ Make the post-Quick-Match UI easier to navigate by treating Online as a first-cl
 - Main UI labels leaked the backend "seek" term.
 - The spectator link copy control used the same visible verb as opening a spectator view.
 - Short-mobile page scrollports, install prompt z-index, and VP mobile layout needed regression coverage.
+- The full audit pass found the challenge creator link was a single clipped input on mobile; it now wraps in a readable preview and has an explicit copy action.
+
+## Audit Artifacts
+
+- Broad pass: `artifacts/ui-audit/phase6l-full-pass-1` and `artifacts/ui-audit/phase6l-mobile-pass-2`.
+- Challenge-link fix verification: `artifacts/ui-audit/phase6l-challenge-link-fix-2`; 430 x 932, 390 x 844, and 360 x 640 passed with no horizontal overflow, clipped controls, or interactive overlaps.
 
 ## Remaining Phase 6L Work
 
-- Run a full screenshot/layout audit across game, setup, Learn, Library, Lobby, Watch, Archive, challenge, pending online, terminal game, save modal, drawer-open, and VP states.
 - Use the screenshot results to tighten the game side panel shape and any remaining overlapping controls.
 - Improve save/autosave progress clarity beyond the existing named-save modal if the audit shows users still cannot tell what is stored locally.
 - Re-run UI/accessibility and code reviewers after each broad UI surface change.

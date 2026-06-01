@@ -132,6 +132,15 @@ describe("Tutorial mobile layout CSS", () => {
     expect(onlineCss).toMatch(/\.online-browser-page\s*\{[^}]*height:\s*100dvh;[^}]*overflow-y:\s*auto;/s);
   });
 
+  it("wraps long challenge links instead of clipping them on mobile", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(boardCss).toMatch(/\.online-state-share-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(170px,\s*auto\);/s);
+    expect(boardCss).toMatch(/\.online-state-link-preview\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s);
+    expect(boardCss).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.online-state-share-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+  });
+
   it("keeps install prompts below dialogs and victory points full-width on mobile", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");

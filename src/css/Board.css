@@ -669,6 +669,44 @@ body {
   font-weight: 800;
 }
 
+.online-state-field-heading {
+  font-weight: 800;
+}
+
+.online-state-share-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.online-state-link-preview {
+  display: block;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: #f7f1d6;
+  color: #141414;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.online-state-copy-button {
+  align-self: stretch;
+}
+
+.online-state-inline-status {
+  color: #f7f1d6;
+  font-size: 0.95rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .online-state-input {
   min-height: 42px;
   padding: 8px 10px;
@@ -677,6 +715,12 @@ body {
   background: #f7f1d6;
   color: #141414;
   font: inherit;
+}
+
+@media (max-width: 760px) {
+  .online-state-share-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .confirm-dialog-backdrop {

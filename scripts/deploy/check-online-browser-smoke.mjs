@@ -827,9 +827,11 @@ async function createChallengeFromUi(challenger) {
   await challenger.clickButton("CHALLENGE A FRIEND");
   await challenger.waitForText("Online Challenge");
   await challenger.waitForButton("Refresh Challenge");
+  await challenger.waitForButton("Copy Challenge Link");
   const challengedUrl = await waitUntil("challenge share URL", () =>
     challenger.evaluate(`
-      Array.from(document.querySelectorAll("input"))
+      document.querySelector(".online-state-link-preview")?.textContent?.trim()
+        || Array.from(document.querySelectorAll("input"))
         .map((input) => input.value || "")
         .find((value) => value.includes("onlineChallenge=") && value.includes("challengeRole=challenged") && value.includes("challengeToken="))
         || null
@@ -843,6 +845,12 @@ async function createChallengeFromUi(challenger) {
     new URLSearchParams(new URL(challengedUrl).hash.slice(1)).has("challengeToken"),
     `Challenge share URL did not include a fragment token: ${challengedUrl}`
   );
+  await challenger.clickButton("Copy Challenge Link");
+  const copiedChallengeUrl = await waitUntil("challenge URL clipboard", async () => {
+    const text = await challenger.getClipboard();
+    return text === challengedUrl ? text : null;
+  });
+  assert(copiedChallengeUrl === challengedUrl, "Copy Challenge Link did not copy the challenged URL");
   return { challengedUrl };
 }
 

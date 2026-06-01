@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import App from "../App";
 import { SanctuaryType } from "../Constants";
 import { getStartingBoard, getStartingPieces } from "../ConstantImports";
@@ -165,6 +165,7 @@ vi.mock("../components/GameSetup", () => ({
     onTutorial,
     onOpenLibrary,
     onOpenOnlineBrowser,
+    onCreateOnlineChallenge,
     onCreateOpenSeek,
   }: {
     onBack: () => void;
@@ -172,6 +173,7 @@ vi.mock("../components/GameSetup", () => ({
     onTutorial: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
+    onCreateOnlineChallenge?: (...args: unknown[]) => void;
     onCreateOpenSeek?: (...args: unknown[]) => void;
   }) => (
     <div>
@@ -188,6 +190,26 @@ vi.mock("../components/GameSetup", () => ({
       <button type="button" onClick={onOpenOnlineBrowser}>
         Setup Online
       </button>
+      {onCreateOnlineChallenge && (
+        <button
+          type="button"
+          onClick={() =>
+            onCreateOnlineChallenge(
+              { config: { nSquares: 6 }, castles: [] },
+              [],
+              { initial: 20, increment: 20 },
+              [],
+              [],
+              { unlockTurn: 0, cooldown: 10 },
+              { vpModeEnabled: true },
+              [],
+              "Castles"
+            )
+          }
+        >
+          Challenge a Friend
+        </button>
+      )}
       {onCreateOpenSeek && (
         <button
           type="button"
@@ -1680,6 +1702,62 @@ describe("App game setup lifecycle", () => {
 
     expect(await screen.findByRole("button", { name: "Refresh Challenge" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel Challenge" })).toBeInTheDocument();
+  });
+
+  it("shows a wrapped challenge link preview with a copy action", async () => {
+    const challengedUrl =
+      "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged#challengeToken=challenged-secret";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            challengeId: "challenge_123",
+            challenger: {
+              url: "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenger#challengeToken=challenger-secret",
+            },
+            challenged: {
+              url: challengedUrl,
+            },
+            summary: {
+              schemaVersion: 1,
+              challengeId: "challenge_123",
+              challengerIdentity: { kind: "session", id: "challenge_123_challenger" },
+              challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+              challengerSeat: "w",
+              visibility: "unlisted",
+              setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+              createdAt: "2026-06-01T12:00:00.000Z",
+              updatedAt: "2026-06-01T12:00:00.000Z",
+              expiresAt: "2026-06-02T12:00:00.000Z",
+              status: "pending",
+              lastEventId: "challenge_evt_created",
+            },
+          }),
+          { status: 201, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Challenge a Friend" }));
+
+    const linkRegion = await screen.findByRole("region", { name: "Challenge link" });
+    expect(linkRegion).toHaveTextContent(challengedUrl);
+    expect(within(linkRegion).getByRole("status")).toHaveTextContent("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy Challenge Link" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(challengedUrl));
+    expect(within(linkRegion).getByRole("status")).toHaveTextContent("Challenge link copied.");
   });
 
   it("uses shared navigation on challenge screens", async () => {
