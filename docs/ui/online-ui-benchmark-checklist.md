@@ -59,6 +59,17 @@ Phase 6H Open Lobby Seeks implementation status, 2026-06-01:
 - Final Playwright screenshot/layout audit covered Lobby, Watch, and Online Archive at desktop and 820 x 700 tablet sizes, plus Lobby at 430 x 932, 390 x 844, and 360 x 740 mobile sizes. No horizontal overflow or overlapping interactive controls were detected.
 - Screenshot artifacts and layout metrics are in `artifacts/ui-audit/phase6h-after`.
 
+Phase 6I UI navigation and learning sweep status, 2026-06-01:
+
+- The shared app shell no longer uses the mobile sticky header and negative-margin pattern that risked covering back/navigation controls.
+- Play/Learn/Watch/Library destinations now sit in a primary navigation group and wrap with flexible mobile columns instead of a fixed four-column layout.
+- The drawer calls the tutorial destination Learn, matching the main shell and Lichess-style learning entry expectations while staying Castles-specific.
+- Setup primary actions are grouped in stable buttons instead of scattered inline styles, so local play, private rooms, friend challenges, and lobby seeks scan as one action cluster.
+- Library rename/delete now use accessible in-app dialogs with focus trap, Escape close, focus restoration, async pending guards, and in-dialog failure messages.
+- Library action feedback is visible above the main Library layout, not hidden inside the collapsed import section.
+- Final screenshots covered desktop/mobile/short-mobile game, drawer-open, setup, tutorial, Library, Watch, and save-modal states with no interactive overlaps found.
+- Screenshot artifacts are in `artifacts/ui-audit/phase6i-after-final`.
+
 Phase 6G implementation status, 2026-06-01:
 
 - Navigation return paths now use explicit app helpers, and game-entry flows clear stale back stacks when opening live game, loaded analysis, spectator snapshots, archive replay, editor play, or restart.
@@ -77,7 +88,7 @@ Next UI polish audit:
 - Recheck tutorial mobile compactness after adding new lessons or tutorial controls.
 - Keep the game side panel contextual to clocks, turn phase, history, save/review, online links, and analysis; do not use it as general app navigation.
 - Check long online status/error text at 360 px, 390 px, and 430 px widths whenever challenge or connection copy changes.
-- Run the next navigation pass after Phase 6H: fix the awkward sidebar/drawer shape, tutorial placement, return navigation, save/progress discoverability, and any go-back/navigation overlap.
+- Re-run the full navigation pass whenever Lobby, matchmaking, accounts, ratings, chat, or moderation add new destinations or persistent banners.
 - Keep Watch/Archive read-only and Lobby seek-based until matchmaking automation, accounts, ratings, and chat contracts exist.
 
 Reference pages checked:

@@ -33,27 +33,29 @@ const AppShellNav: React.FC<AppShellNavProps> = ({
   return (
     <header className="app-shell-header">
       <nav className="app-shell-nav" aria-label={ariaLabel}>
-        {onBack && backLabel && (
-          <button type="button" className="app-shell-back-button" onClick={onBack}>
-            {backLabel}
-          </button>
-        )}
-        <div className="app-shell-destinations" aria-label="App destinations">
-          {destinations.map((destination) => {
-            const isActive = destination.id === activeDestination;
-            return (
-              <button
-                key={destination.id}
-                type="button"
-                className={`app-shell-destination ${isActive ? "active" : ""}`}
-                onClick={destination.onClick}
-                disabled={isActive || !destination.onClick}
-                aria-current={isActive ? "page" : undefined}
-              >
-                {destination.label}
-              </button>
-            );
-          })}
+        <div className="app-shell-nav-primary">
+          {onBack && backLabel && (
+            <button type="button" className="app-shell-back-button" onClick={onBack}>
+              {backLabel}
+            </button>
+          )}
+          <div className="app-shell-destinations" aria-label="App destinations">
+            {destinations.map((destination) => {
+              const isActive = destination.id === activeDestination;
+              return (
+                <button
+                  key={destination.id}
+                  type="button"
+                  className={`app-shell-destination ${isActive ? "active" : ""}`}
+                  onClick={destination.onClick}
+                  disabled={isActive || !destination.onClick}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  {destination.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </nav>
       <div className="app-shell-title-block">

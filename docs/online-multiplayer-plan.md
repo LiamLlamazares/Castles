@@ -304,7 +304,7 @@ Tests/review/deploy gates:
 
 Goal: after the open lobby foundation is stable, substantially improve the whole app UI so Play, Learn, Watch/Lobby, Library, save/progress, and in-game controls feel coherent and do not overlap.
 
-Status: planned from the 2026-06-01 user request. This phase should start after Phase 6H is committed and pushed, unless reviewers find a Phase 6H blocking issue first.
+Status: first sweep implemented locally on 2026-06-01 after Phase 6H. The shared app shell now avoids the sticky mobile header and negative-margin overlap pattern, Play/Learn/Watch/Library destinations wrap cleanly on small screens, the drawer labels Tutorial as Learn, setup actions are grouped in stable controls, Library rename/delete uses accessible in-app dialogs instead of browser prompts, Library action feedback is visible outside the collapsed import section, and screenshots found no interactive overlaps in the audited desktop/mobile/short-mobile game, drawer, setup, tutorial, Library, Watch, and save-modal states.
 
 Work:
 
@@ -359,8 +359,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Commit and push Phase 6H after the final verified diff review.
-2. Start Phase 6I: the full UI navigation and learning sweep covering the awkward sidebar, tutorial placement, return navigation, save/progress clarity, and overlap issues.
-3. After Phase 6I is stable, continue public lobby work with lobby refresh/presence, basic seek filters, then simple matchmaking automation.
+1. Commit and push Phase 6I after the final local verification pass.
+2. Continue public lobby work with lobby refresh/presence and basic seek filters.
+3. Add simple matchmaking automation only after the seek list refresh/presence flow is stable.
 4. Before adding accounts, ratings, chat, or moderation UI, run a fresh benchmark and contract review so the UI does not imply unsupported server features.
-5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, and save modal overlays.
+5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, save modal overlays, and long online status/error text.

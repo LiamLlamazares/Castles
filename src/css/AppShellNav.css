@@ -1,14 +1,21 @@
 .app-shell-header {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 18px;
+  color: inherit;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app-shell-nav {
+  min-width: 0;
+}
+
+.app-shell-nav-primary {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .app-shell-destinations {
@@ -20,7 +27,7 @@
 
 .app-shell-back-button,
 .app-shell-destination {
-  min-height: 38px;
+  min-height: 36px;
   padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -28,8 +35,8 @@
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: 0.86rem;
-  font-weight: 800;
+  font-size: 0.84rem;
+  font-weight: 750;
   line-height: 1.1;
   letter-spacing: 0;
   white-space: nowrap;
@@ -67,56 +74,62 @@
 }
 
 .app-shell-kicker {
-  text-transform: uppercase;
   color: #91d6c5;
-  letter-spacing: 0.14em;
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .app-shell-title-block h1 {
   margin: 4px 0 0;
-  font-size: clamp(1.55rem, 3vw, 2.45rem);
-  line-height: 1;
+  font-size: clamp(1.42rem, 2.2vw, 2.1rem);
+  line-height: 1.05;
   letter-spacing: 0;
 }
 
 .app-shell-title-block p {
-  margin: 8px 0 0;
+  margin: 7px 0 0;
   max-width: 760px;
   color: #d9d0b8;
+  line-height: 1.4;
 }
 
 @media (max-width: 760px) {
   .app-shell-header {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    margin: calc(-1 * var(--app-shell-mobile-padding-y, 20px)) calc(-1 * var(--app-shell-mobile-padding-x, 20px)) 16px;
-    padding: 12px var(--app-shell-mobile-padding-x, 20px) 14px;
-    background: inherit;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    gap: 8px;
+    margin-bottom: 14px;
   }
 
-  .app-shell-nav {
+  .app-shell-nav-primary {
     display: grid;
     grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .app-shell-back-button,
   .app-shell-destination {
-    min-height: 36px;
-    padding: 8px 10px;
-    font-size: 0.8rem;
+    min-height: 34px;
+    padding: 7px 9px;
+    font-size: 0.78rem;
   }
 
   .app-shell-destinations {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr));
   }
 
   .app-shell-destination {
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+
+  .app-shell-title-block h1 {
+    font-size: 1.35rem;
+  }
+
+  .app-shell-title-block p {
+    font-size: 0.9rem;
   }
 }

@@ -339,7 +339,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   onClick={() => handleMenuItemClick(onTutorial)}
                 >
                   {renderMarker()}
-                  <span>Tutorial</span>
+                  <span>Learn</span>
                 </button>
               )}
 

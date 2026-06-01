@@ -183,12 +183,12 @@ body {
   --sanctuary-phoenix: #e74c3c;
   
   /* Tutorial UI Colors */
-  --tutorial-sidebar-bg: #1a1a2e;
-  --tutorial-button-bg: #2a2a4e;
-  --tutorial-button-active: #ffd700;
-  --tutorial-text-light: #e0e0e0;
-  --tutorial-text-dark: #1a1a2e;
-  --tutorial-title-color: #ffd700;
+  --tutorial-sidebar-bg: #202524;
+  --tutorial-button-bg: #2c3332;
+  --tutorial-button-active: #70d6a1;
+  --tutorial-text-light: #f7f1d6;
+  --tutorial-text-dark: #102018;
+  --tutorial-title-color: #f7f1d6;
   
   /* Theme-aware colors (dark mode defaults) */
   --panel-bg: rgba(30, 30, 30, 0.98);
@@ -1355,7 +1355,8 @@ body {
 }
 
 .tutorial-callout.dark {
-  background-color: #2a2a4e;
+  background: rgba(112, 214, 161, 0.12);
+  border: 1px solid rgba(112, 214, 161, 0.24);
 }
 
 .tutorial-callout.light {
@@ -1364,11 +1365,11 @@ body {
 
 .tutorial-list-section h3 {
   margin: 0 0 8px;
-  color: #702cf0;
+  color: #2476a6;
 }
 
 .tutorial-list-section.dark h3 {
-  color: #ffd700;
+  color: #91d6c5;
 }
 
 .tutorial-list-section ul {
@@ -1429,6 +1430,7 @@ body {
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
   flex-shrink: 0;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .setup-preview {
@@ -1471,6 +1473,56 @@ body {
   flex-direction: column;
   gap: 16px;
   z-index: 10;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.setup-primary-actions {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.setup-action-button {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.setup-action-button.play {
+  background: #27ae60;
+}
+
+.setup-action-button.private-room {
+  background: #243f66;
+  border-color: #5aa4f0;
+}
+
+.setup-action-button.challenge {
+  background: #2b6cb0;
+  border-color: #5aa4f0;
+}
+
+.setup-action-button.lobby-seek {
+  background: #1f7a5f;
+  border-color: #70d6a1;
+}
+
+.setup-action-button:hover {
+  filter: brightness(1.08);
 }
 
 .tutorial-progress {

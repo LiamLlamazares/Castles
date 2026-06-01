@@ -42,11 +42,11 @@ const InstallAppHint: React.FC = () => {
         background: "rgba(22, 18, 14, 0.92)",
         color: "#f8ead2",
         border: "1px solid rgba(246, 211, 139, 0.4)",
-        borderRadius: "14px",
+        borderRadius: "8px",
         padding: "14px",
         boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
         maxWidth: "300px",
-        fontFamily: "Georgia, 'Times New Roman', serif",
+        fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}
     >
       <strong>Install Castles</strong>

@@ -448,85 +448,42 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     </div>
                 )}
 
-                {/* Play Button (Top for easy access, or Bottom?) - Let's keep it prominent */}
-                <button 
-                    onClick={handlePlay}
-                    style={{
-                        padding: '15px',
-                        fontSize: '1.2rem',
-                        cursor: 'pointer',
-                        borderRadius: '8px',
-                        border: 'none',
-                        background: '#27ae60',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                        width: '100%',
-                        marginBottom: '10px'
-                    }}
-                >
-                    PLAY GAME
-                </button>
-                {onCreateOnlineGame && (
+                <div className="setup-primary-actions" role="group" aria-label="Game actions">
                     <button
-                        onClick={handleCreateOnlineGame}
-                        style={{
-                            padding: '13px',
-                            fontSize: '1rem',
-                            cursor: 'pointer',
-                            borderRadius: '8px',
-                            border: `1px solid ${Colors.Primary}`,
-                            background: Colors.SelectionBackground,
-                            color: 'white',
-                            fontWeight: 'bold',
-                            width: '100%',
-                            marginTop: '-8px',
-                            marginBottom: '10px'
-                        }}
+                        type="button"
+                        onClick={handlePlay}
+                        className="setup-action-button play"
                     >
-                        CREATE PRIVATE ROOM
+                        PLAY GAME
                     </button>
-                )}
-                {onCreateOnlineChallenge && (
-                    <button
-                        onClick={handleCreateOnlineChallenge}
-                        style={{
-                            padding: '13px',
-                            fontSize: '1rem',
-                            cursor: 'pointer',
-                            borderRadius: '8px',
-                            border: `1px solid ${Colors.Primary}`,
-                            background: '#2b6cb0',
-                            color: 'white',
-                            fontWeight: 'bold',
-                            width: '100%',
-                            marginTop: '-4px',
-                            marginBottom: '10px'
-                        }}
-                    >
-                        CHALLENGE A FRIEND
-                    </button>
-                )}
-                {onCreateOpenSeek && (
-                    <button
-                        onClick={handleCreateOpenSeek}
-                        style={{
-                            padding: '13px',
-                            fontSize: '1rem',
-                            cursor: 'pointer',
-                            borderRadius: '8px',
-                            border: `1px solid ${Colors.Primary}`,
-                            background: '#1f7a5f',
-                            color: 'white',
-                            fontWeight: 'bold',
-                            width: '100%',
-                            marginTop: '-4px',
-                            marginBottom: '10px'
-                        }}
-                    >
-                        CREATE LOBBY SEEK
-                    </button>
-                )}
+                    {onCreateOnlineGame && (
+                        <button
+                            type="button"
+                            onClick={handleCreateOnlineGame}
+                            className="setup-action-button private-room"
+                        >
+                            CREATE PRIVATE ROOM
+                        </button>
+                    )}
+                    {onCreateOnlineChallenge && (
+                        <button
+                            type="button"
+                            onClick={handleCreateOnlineChallenge}
+                            className="setup-action-button challenge"
+                        >
+                            CHALLENGE A FRIEND
+                        </button>
+                    )}
+                    {onCreateOpenSeek && (
+                        <button
+                            type="button"
+                            onClick={handleCreateOpenSeek}
+                            className="setup-action-button lobby-seek"
+                        >
+                            CREATE LOBBY SEEK
+                        </button>
+                    )}
+                </div>
                 
                 {/* Board Configuration */}
                 <BoardConfig

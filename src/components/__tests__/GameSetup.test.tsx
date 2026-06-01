@@ -113,6 +113,9 @@ describe("GameSetup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
     fireEvent.click(screen.getByRole("button", { name: "Watch" }));
 
+    const actionGroup = screen.getByRole("group", { name: "Game actions" });
+    expect(actionGroup).toContainElement(screen.getByRole("button", { name: "PLAY GAME" }));
+
     expect(screen.getByRole("button", { name: "PLAY GAME" })).toBeInTheDocument();
     expect(onBack).toHaveBeenCalledOnce();
     expect(onTutorial).toHaveBeenCalledOnce();

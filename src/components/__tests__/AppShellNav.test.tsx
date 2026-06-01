@@ -25,6 +25,7 @@ describe("AppShellNav", () => {
     );
 
     const nav = screen.getByRole("navigation", { name: "Play navigation" });
+    expect(nav.querySelector(".app-shell-nav-primary")).toBeInTheDocument();
     expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
     expect(nav).toContainElement(screen.getByRole("button", { name: "Play" }));
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");

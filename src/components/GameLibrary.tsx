@@ -18,6 +18,10 @@ interface GameLibraryProps {
   onImportPGN: (pgn: string, name: string) => Promise<void>;
 }
 
+type LibraryDialogState =
+  | { type: "rename"; id: string; name: string }
+  | { type: "delete"; id: string };
+
 const GameLibrary: React.FC<GameLibraryProps> = ({
   repository,
   onBack,
@@ -31,8 +35,15 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
   const [games, setGames] = React.useState<SavedGameSummary[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string>("");
+  const [dialogError, setDialogError] = React.useState<string>("");
   const [importName, setImportName] = React.useState<string>("Imported game");
   const [importPGN, setImportPGN] = React.useState<string>("");
+  const [libraryDialog, setLibraryDialog] = React.useState<LibraryDialogState | null>(null);
+  const [isDialogSubmitting, setDialogSubmitting] = React.useState(false);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const renameInputRef = React.useRef<HTMLInputElement>(null);
+  const deleteButtonRef = React.useRef<HTMLButtonElement>(null);
+  const dialogReturnFocusRef = React.useRef<HTMLElement | null>(null);
 
   const refreshGames = React.useCallback(async () => {
     try {
@@ -63,23 +74,173 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
     if (record) onLoadGame(record);
   };
 
-  const handleRename = async () => {
-    if (!selectedId) return;
-    const selected = games.find(game => game.id === selectedId);
-    const nextName = window.prompt("Rename saved game:", selected?.name ?? "");
-    if (!nextName?.trim()) return;
-    await repository.renameGame(selectedId, nextName.trim());
-    setMessage("Saved game renamed.");
-    await refreshGames();
+  const openLibraryDialog = (dialog: LibraryDialogState) => {
+    dialogReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDialogError("");
+    setLibraryDialog(dialog);
   };
 
-  const handleDelete = async () => {
+  const closeLibraryDialog = () => {
+    setDialogError("");
+    setLibraryDialog(null);
+    window.setTimeout(() => {
+      dialogReturnFocusRef.current?.focus();
+      dialogReturnFocusRef.current = null;
+    }, 0);
+  };
+
+  const getDialogFocusables = React.useCallback(() => {
+    return Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []
+    );
+  }, []);
+
+  React.useEffect(() => {
+    if (!libraryDialog) return;
+    const timer = window.setTimeout(() => {
+      if (libraryDialog.type === "rename") {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      } else {
+        deleteButtonRef.current?.focus();
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [libraryDialog]);
+
+  React.useEffect(() => {
+    if (!libraryDialog) return;
+
+    const page = dialogRef.current?.closest(".game-library-page");
+    if (!page) return;
+
+    const backgroundChildren = Array.from(page.children).filter(
+      (child) => !child.classList.contains("library-dialog-backdrop")
+    );
+    const previousValues = backgroundChildren.map((element) => ({
+      element,
+      ariaHidden: element.getAttribute("aria-hidden"),
+      inert: element.hasAttribute("inert"),
+    }));
+    previousValues.forEach(({ element }) => {
+      element.setAttribute("aria-hidden", "true");
+      element.setAttribute("inert", "");
+    });
+
+    return () => {
+      previousValues.forEach(({ element, ariaHidden, inert }) => {
+        if (ariaHidden === null) {
+          element.removeAttribute("aria-hidden");
+        } else {
+          element.setAttribute("aria-hidden", ariaHidden);
+        }
+        if (!inert) {
+          element.removeAttribute("inert");
+        }
+      });
+    };
+  }, [libraryDialog]);
+
+  React.useEffect(() => {
+    if (!libraryDialog) return;
+
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isDialogSubmitting) {
+        event.preventDefault();
+        closeLibraryDialog();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusable = getDialogFocusables();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (!dialogRef.current?.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    return () => document.removeEventListener("keydown", handleDocumentKeyDown);
+  }, [getDialogFocusables, isDialogSubmitting, libraryDialog]);
+
+  const handleRename = () => {
     if (!selectedId) return;
-    if (!window.confirm("Delete this saved game?")) return;
-    await repository.deleteGame(selectedId);
-    setSelectedId(null);
-    setMessage("Saved game deleted.");
-    await refreshGames();
+    const selected = games.find(game => game.id === selectedId);
+    openLibraryDialog({
+      type: "rename",
+      id: selectedId,
+      name: selected?.name ?? "",
+    });
+  };
+
+  const handleDelete = () => {
+    if (!selectedId) return;
+    openLibraryDialog({ type: "delete", id: selectedId });
+  };
+
+  const handleRenameSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!libraryDialog || libraryDialog.type !== "rename" || isDialogSubmitting) return;
+    const nextName = libraryDialog.name.trim();
+    if (!nextName) {
+      setDialogError("Enter a name for this save.");
+      return;
+    }
+
+    try {
+      setDialogSubmitting(true);
+      setDialogError("");
+      await repository.renameGame(libraryDialog.id, nextName);
+      setMessage("Saved game renamed.");
+      closeLibraryDialog();
+      await refreshGames();
+    } catch (error) {
+      console.error("[GameLibrary] Failed to rename saved game", error);
+      setDialogError("Could not update this saved game.");
+    } finally {
+      setDialogSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!libraryDialog || libraryDialog.type !== "delete" || isDialogSubmitting) return;
+    try {
+      setDialogSubmitting(true);
+      setDialogError("");
+      await repository.deleteGame(libraryDialog.id);
+      setSelectedId(null);
+      setMessage("Saved game deleted.");
+      closeLibraryDialog();
+      await refreshGames();
+    } catch (error) {
+      console.error("[GameLibrary] Failed to delete saved game", error);
+      setDialogError("Could not update this saved game.");
+    } finally {
+      setDialogSubmitting(false);
+    }
   };
 
   const handleExport = async () => {
@@ -121,6 +282,7 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
   };
 
   const selected = games.find(game => game.id === selectedId);
+  const dialogGame = libraryDialog ? games.find(game => game.id === libraryDialog.id) : null;
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     ...(onTutorial ? [{ id: "learn" as const, label: "Learn", onClick: onTutorial }] : []),
@@ -130,7 +292,7 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
 
   return (
     <div className="game-library-page">
-      <AppShellNav
+        <AppShellNav
         ariaLabel="Library navigation"
         activeDestination="library"
         title="Castles Game Library"
@@ -140,6 +302,12 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
         onBack={onBack}
         destinations={navDestinations}
       />
+
+      {message && (
+        <div className="library-message" role="status" aria-live="polite">
+          {message}
+        </div>
+      )}
 
       <main className="game-library-layout">
         <section className="game-library-panel">
@@ -193,10 +361,82 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
             <button className="library-button neutral import" onClick={handleImport}>
               Import into library
             </button>
-            {message && <p className="library-message">{message}</p>}
           </div>
         </details>
       </main>
+
+      {libraryDialog && (
+        <div className="library-dialog-backdrop">
+          <div
+            className="library-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={libraryDialog.type === "rename" ? "library-rename-title" : "library-delete-title"}
+            ref={dialogRef}
+          >
+            {libraryDialog.type === "rename" ? (
+              <form className="library-dialog-form" onSubmit={handleRenameSubmit}>
+                <h2 id="library-rename-title">Rename saved game</h2>
+                <label className="library-label" htmlFor="library-rename-name">
+                  Save name
+                </label>
+                <input
+                  id="library-rename-name"
+                  className="library-input"
+                  value={libraryDialog.name}
+                  onChange={(event) => {
+                    setDialogError("");
+                    setLibraryDialog({
+                      ...libraryDialog,
+                      name: event.currentTarget.value,
+                    });
+                  }}
+                  ref={renameInputRef}
+                />
+                {dialogError && (
+                  <div className="library-dialog-error" role="alert">
+                    {dialogError}
+                  </div>
+                )}
+                <div className="library-dialog-actions">
+                  <button type="button" className="library-button neutral" onClick={closeLibraryDialog} disabled={isDialogSubmitting}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="library-button success" disabled={isDialogSubmitting}>
+                    {isDialogSubmitting ? "Saving..." : "Save name"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <h2 id="library-delete-title">Delete saved game</h2>
+                <p>
+                  Delete "{dialogGame?.name ?? "this saved game"}" from this browser's Library?
+                </p>
+                {dialogError && (
+                  <div className="library-dialog-error" role="alert">
+                    {dialogError}
+                  </div>
+                )}
+                <div className="library-dialog-actions">
+                  <button type="button" className="library-button neutral" onClick={closeLibraryDialog} disabled={isDialogSubmitting}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="library-button danger"
+                    onClick={handleConfirmDelete}
+                    ref={deleteButtonRef}
+                    disabled={isDialogSubmitting}
+                  >
+                    {isDialogSubmitting ? "Deleting..." : "Delete save"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
