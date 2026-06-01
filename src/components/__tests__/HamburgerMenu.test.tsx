@@ -69,6 +69,45 @@ describe("HamburgerMenu", () => {
     expect(screen.queryByRole("button", { name: "New Game" })).not.toBeInTheDocument();
   });
 
+  it("orders primary drawer destinations consistently before board tools", () => {
+    renderMenu({
+      onEnableAnalysis: vi.fn(),
+      onEditPosition: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    const sectionLabels = Array.from(document.querySelectorAll(".menu-section-label"))
+      .map((element) => element.textContent?.trim());
+
+    expect(sectionLabels.slice(0, 6)).toEqual([
+      "Play",
+      "Learn",
+      "Watch",
+      "Library",
+      "Board",
+      "Tools",
+    ]);
+  });
+
+  it("keeps save, learning, and secondary tools in their intended sections", () => {
+    renderMenu({
+      onEnableAnalysis: vi.fn(),
+      onEditPosition: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
+    expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Rules" }));
+    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Save Game" }));
+    expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Game Library" }));
+    expect(screen.getByRole("region", { name: "Board" })).toContainElement(screen.getByRole("button", { name: "Flip Board" }));
+    expect(screen.getByRole("region", { name: "Tools" })).toContainElement(screen.getByRole("button", { name: "Analysis Board" }));
+    expect(screen.getByText("Lessons and rules")).toBeInTheDocument();
+    expect(screen.getByText("Saved games")).toBeInTheDocument();
+  });
+
   it("uses non-text icon markers for drawer items and keeps the full menu scrollable", () => {
     const { container } = renderMenu({
       onEnableAnalysis: vi.fn(),

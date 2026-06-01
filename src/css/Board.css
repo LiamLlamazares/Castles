@@ -4,6 +4,18 @@ body {
     overflow: hidden; /* Prevent body scroll */
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .board {
     /* ViewBox handles all scaling and centering - just fill container */
     width: 100%;
@@ -720,9 +732,46 @@ body {
   color: #201812;
 }
 
+.confirm-dialog-button.primary {
+  background: #2a4a7a;
+  color: #fff;
+}
+
 .confirm-dialog-button.danger {
   background: #c0392b;
   color: #fff;
+}
+
+.save-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.save-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #f7f1d6;
+  font-weight: 800;
+}
+
+.save-dialog-field input {
+  min-height: 42px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: #f7f1d6;
+  color: #141414;
+  font: inherit;
+}
+
+.save-dialog-error {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(192, 57, 43, 0.18);
+  color: #ffd7d2;
+  font-weight: 800;
 }
 
 .player-hud {
@@ -1090,6 +1139,13 @@ body {
   text-transform: uppercase;
 }
 
+.menu-section-note {
+  margin: -2px 16px 4px;
+  color: var(--panel-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
 .menu-item:hover {
   background: var(--panel-border);
   color: var(--panel-text);
@@ -1329,6 +1385,27 @@ body {
   margin: 0;
 }
 
+.tutorial-lesson-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tutorial-lesson-progress-summary {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color: var(--panel-text);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 /* =========== SETUP, TUTORIAL, AND RESPONSIVE SHELLS =========== */
 
 .game-setup-shell {
@@ -1397,9 +1474,10 @@ body {
 }
 
 .tutorial-progress {
-  min-height: 40px;
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 0 10px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
@@ -1408,8 +1486,21 @@ body {
   font-weight: 700;
 }
 
+.tutorial-progress[data-display="screen-reader"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .tutorial-reset-button {
-  min-height: 40px;
+  min-height: 36px;
   padding: 8px 12px;
   background: transparent;
   color: var(--panel-text);
@@ -1428,7 +1519,7 @@ body {
   top: 0;
   z-index: 19;
   display: grid;
-  grid-template-columns: minmax(86px, 1fr) auto minmax(112px, 1fr) minmax(86px, 1fr);
+  grid-template-columns: 1fr;
   gap: 8px;
   align-items: center;
   padding: 10px 0;
@@ -1436,9 +1527,16 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.tutorial-control-strip {
+  display: grid;
+  grid-template-columns: minmax(76px, 1fr) minmax(112px, 1.1fr) minmax(76px, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
 .tutorial-step-button {
   flex: 1;
-  min-height: 40px;
+  min-height: 36px;
   padding: 10px;
   background: #2a4a7a;
   color: #fff;
@@ -1633,7 +1731,7 @@ body {
 
   .tutorial-container {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 58dvh) minmax(0, 42dvh);
+    grid-template-rows: minmax(0, 50dvh) minmax(0, 50dvh);
     height: 100dvh;
     overflow: hidden;
   }
@@ -1642,7 +1740,7 @@ body {
     --app-shell-mobile-padding-y: 16px;
     --app-shell-mobile-padding-x: 20px;
     padding: 16px 20px;
-    max-height: 58dvh;
+    max-height: 50dvh;
     overflow-y: auto;
   }
 
@@ -1656,17 +1754,15 @@ body {
 
   .tutorial-progress-controls {
     position: static;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 8px 0 10px;
   }
 
-  .tutorial-progress-controls .tutorial-progress,
-  .tutorial-progress-controls .tutorial-reset-button {
-    justify-content: center;
+  .tutorial-control-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .tutorial-board-stage {
-    height: 42dvh;
+    height: 50dvh;
     min-height: 0;
   }
 
@@ -1693,14 +1789,14 @@ body {
   }
 
   .tutorial-container {
-    grid-template-rows: minmax(0, 52dvh) minmax(0, 48dvh);
+    grid-template-rows: minmax(0, 46dvh) minmax(0, 54dvh);
   }
 
   .tutorial-sidebar {
     --app-shell-mobile-padding-y: 12px;
     --app-shell-mobile-padding-x: 16px;
     padding: 12px 16px;
-    max-height: 52dvh;
+    max-height: 46dvh;
     gap: 9px;
   }
 
@@ -1714,6 +1810,15 @@ body {
 
   .tutorial-title {
     font-size: 1.05rem;
+  }
+
+  .tutorial-lesson-header {
+    gap: 6px;
+  }
+
+  .tutorial-lesson-progress-summary {
+    font-size: 0.68rem;
+    padding: 4px 7px;
   }
 
   .tutorial-progress-controls {
@@ -1751,6 +1856,6 @@ body {
   }
 
   .tutorial-board-stage {
-    height: 48dvh;
+    height: 54dvh;
   }
 }

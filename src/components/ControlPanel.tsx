@@ -322,14 +322,34 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           <div className="control-section-label">Save and review</div>
           <div className="control-button-row">
             {onSaveGame && (
-              <button className="control-button save" onClick={onSaveGame}>
-                Save Game
-              </button>
+              <>
+                <button
+                  className="control-button save"
+                  onClick={onSaveGame}
+                  title="Name this game and save it to Library"
+                  aria-describedby="save-game-control-help"
+                >
+                  Save Game
+                </button>
+                <span id="save-game-control-help" className="visually-hidden">
+                  Name this game and save it to Library.
+                </span>
+              </>
             )}
             {onOpenLibrary && (
-              <button className="control-button library" onClick={onOpenLibrary}>
-                Library
-              </button>
+              <>
+                <button
+                  className="control-button library"
+                  onClick={onOpenLibrary}
+                  title="Open saved games"
+                  aria-describedby="library-control-help"
+                >
+                  Library
+                </button>
+                <span id="library-control-help" className="visually-hidden">
+                  Open saved games in Library.
+                </span>
+              </>
             )}
             {onEnableAnalysis && (
               <button

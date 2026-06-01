@@ -329,9 +329,33 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               )}
             </section>
 
+            <section className="menu-section" aria-labelledby="menu-section-learn">
+              <div id="menu-section-learn" className="menu-section-label">Learn</div>
+              <p className="menu-section-note">Lessons and rules</p>
+
+              {onTutorial && (
+                <button
+                  className="menu-item"
+                  onClick={() => handleMenuItemClick(onTutorial)}
+                >
+                  {renderMarker()}
+                  <span>Tutorial</span>
+                </button>
+              )}
+
+              <button
+                className="menu-item"
+                onClick={() => handleMenuItemClick(onShowRules)}
+              >
+                {renderMarker()}
+                <span>Rules</span>
+              </button>
+            </section>
+
             {onOpenOnlineBrowser && (
               <section className="menu-section" aria-labelledby="menu-section-watch">
                 <div id="menu-section-watch" className="menu-section-label">Watch</div>
+                <p className="menu-section-note">Live and archived games</p>
                 <button
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
@@ -345,6 +369,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             {(onSaveGameToLibrary || onOpenLibrary) && (
               <section className="menu-section" aria-labelledby="menu-section-library">
                 <div id="menu-section-library" className="menu-section-label">Library</div>
+                <p className="menu-section-note">Saved games</p>
 
                 {onSaveGameToLibrary && (
                   <button
@@ -367,28 +392,6 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 )}
               </section>
             )}
-
-            <section className="menu-section" aria-labelledby="menu-section-learn">
-              <div id="menu-section-learn" className="menu-section-label">Learn</div>
-
-              {onTutorial && (
-                <button
-                  className="menu-item"
-                  onClick={() => handleMenuItemClick(onTutorial)}
-                >
-                  {renderMarker()}
-                  <span>Tutorial</span>
-                </button>
-              )}
-
-              <button
-                className="menu-item"
-                onClick={() => handleMenuItemClick(onShowRules)}
-              >
-                {renderMarker()}
-                <span>Rules</span>
-              </button>
-            </section>
 
             <div className="menu-divider" />
             <section className="menu-section" aria-labelledby="menu-section-board">

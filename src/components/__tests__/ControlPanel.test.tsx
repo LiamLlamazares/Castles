@@ -87,6 +87,24 @@ describe("ControlPanel", () => {
     expect(onOpenLibrary).toHaveBeenCalledOnce();
   });
 
+  it("describes named saves and the Library path from the side panel", () => {
+    render(
+      <ControlPanel
+        {...baseProps}
+        onSaveGame={vi.fn()}
+        onOpenLibrary={vi.fn()}
+      />
+    );
+
+    const saveButton = screen.getByRole("button", { name: "Save Game" });
+    const libraryButton = screen.getByRole("button", { name: "Library" });
+
+    expect(saveButton).toHaveAttribute("title", "Name this game and save it to Library");
+    expect(libraryButton).toHaveAttribute("title", "Open saved games");
+    expect(saveButton).toHaveAccessibleDescription("Name this game and save it to Library.");
+    expect(libraryButton).toHaveAccessibleDescription("Open saved games in Library.");
+  });
+
   it("shows analysis in save and review controls for review-only online games", () => {
     const onEnableAnalysis = vi.fn();
 

@@ -45,6 +45,14 @@ import "../css/Board.css";
 import { GameProvider } from "../contexts/GameProvider";
 import { useGameState, useGameActions } from "../contexts/GameContext";
 
+export type SaveGameToLibraryResult =
+  | boolean
+  | void
+  | {
+      saved: boolean;
+      message?: string;
+    };
+
 interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
@@ -80,7 +88,7 @@ interface GameBoardProps {
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
-  onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<boolean | void> | boolean | void;
+  onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<SaveGameToLibraryResult> | SaveGameToLibraryResult;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
   isTutorialMode?: boolean;
@@ -644,9 +652,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
     if (!onSaveGameToLibrary) return;
     const status: SavedGameStatus = isAnalysisMode ? "analysis" : displayedWinner ? "complete" : "ongoing";
     try {
-      const didSave = await onSaveGameToLibrary(getPGN(), status);
-      if (didSave !== false) {
-        showStatusMessage("Saved to Library.");
+      const saveResult = await onSaveGameToLibrary(getPGN(), status);
+      const didSave = typeof saveResult === "object" && saveResult !== null
+        ? saveResult.saved
+        : saveResult !== false;
+      if (didSave) {
+        const message = typeof saveResult === "object" && saveResult !== null && saveResult.message
+          ? saveResult.message
+          : "Saved to Library.";
+        showStatusMessage(message);
       }
     } catch (error) {
       console.error("Failed to save game to library", error);

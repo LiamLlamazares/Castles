@@ -47,6 +47,17 @@ Public Directory v1 implementation status, 2026-06-01:
 - Review follow-ups were fixed for filtered-empty pagination reachability, shown-count copy, archive result-filter reset coverage, and mid-width toolbar overflow risk.
 - Open seeks, matchmaking, accounts, ratings, chat, and public lobby creation remain deferred.
 
+Phase 6G implementation status, 2026-06-01:
+
+- Navigation return paths now use explicit app helpers, and game-entry flows clear stale back stacks when opening live game, loaded analysis, spectator snapshots, archive replay, editor play, or restart.
+- Drawer and AppShell destinations now share the same primary order: Play, Learn, Watch, Library, with Board and Tools kept secondary in the drawer.
+- Learn/Tutorial now has a compact current-lesson header, visible lesson count, grouped lesson controls, labelled lesson-board region, visually hidden live progress status, and a board-forward mobile split for short screens.
+- Save Game now uses an in-app named-save modal instead of a browser prompt, with duplicate-save protection, Escape close, focus trap, background inerting, focus restoration, cancel handling, retryable failure state, and saved-name feedback.
+- Control-panel save and Library buttons keep short visible labels while exposing hidden helper descriptions for assistive tech.
+- Focused reviewer findings were fixed for duplicate save promises, incomplete modal behavior, destination-order drift, and duplicated tutorial progress chrome.
+- Full verification passed: `npm test`, `npm run build`, `npm run server:build`, `git diff --check`, browser online smoke, and current-code Playwright screenshot audit at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640.
+- Screenshot artifacts are in `artifacts/ui-audit/phase6g-after`.
+
 Next UI polish audit:
 
 - Keep lichess-style top destinations simple: Play, Learn, Watch, Library, and later Tools/Lobby when backed by server contracts.

@@ -304,8 +304,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
     const navDestinations: AppShellDestination[] = [
         { id: "play", label: "Play" },
         ...(onTutorial ? [{ id: "learn" as const, label: "Learn", onClick: onTutorial }] : []),
-        ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
         ...(onOpenOnlineBrowser ? [{ id: "watch" as const, label: "Watch", onClick: onOpenOnlineBrowser }] : []),
+        ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
     ];
 
     return (

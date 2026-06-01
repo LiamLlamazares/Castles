@@ -212,8 +212,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     ...(onTutorial ? [{ id: "learn" as const, label: "Learn", onClick: onTutorial }] : []),
-    ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
     { id: "watch", label: "Watch" },
+    ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
 
   return (

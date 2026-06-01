@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import GameBoard from './components/Game';
+import GameBoard, { type SaveGameToLibraryResult } from './components/Game';
 import MainMenu from './components/MainMenu';
 import GameSetup from './components/GameSetup';
 import BoardEditor from './components/BoardEditor';
@@ -98,6 +98,15 @@ interface EditorConfig {
   sanctuaries?: Sanctuary[];
 }
 
+interface SaveGameDialogState {
+  pgn: string;
+  status: SavedGameStatus;
+  name: string;
+  isSaving: boolean;
+  error: string | null;
+  resolve: (result: SaveGameToLibraryResult) => void;
+}
+
 function gameSettingsFromSetup(setup: ReturnType<typeof hydrateOnlineGameSetupDTO>) {
   return setup.sanctuarySettings
     ? {
@@ -186,9 +195,14 @@ function App() {
   const [view, setView] = useState<ViewState>('game');
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
-  const [previousView, setPreviousView] = useState<ViewState>('game');
   const [viewStack, setViewStack] = useState<ViewState[]>([]);
   const [gameLibraryRepository] = useState(() => new BrowserGameLibraryRepository());
+  const [saveGameDialog, setSaveGameDialog] = useState<SaveGameDialogState | null>(null);
+  const appRootRef = useRef<HTMLDivElement>(null);
+  const saveDialogRef = useRef<HTMLFormElement>(null);
+  const saveNameInputRef = useRef<HTMLInputElement>(null);
+  const saveDialogReturnFocusRef = useRef<HTMLElement | null>(null);
+  const activeSaveDialogRequestRef = useRef<SaveGameDialogState | null>(null);
   const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(() =>
     resolveOnlineJoinParams(window.location.href)
   );
@@ -208,6 +222,40 @@ function App() {
   const [onlineChallengeStatus, setOnlineChallengeStatus] = useState<"idle" | "loading" | "acting" | "error">("idle");
   const [onlineChallengeError, setOnlineChallengeError] = useState<string | null>(null);
   const replayRequestIdRef = useRef(0);
+  const isSaveDialogOpen = saveGameDialog !== null;
+
+  useEffect(() => {
+    const root = appRootRef.current;
+    if (!root || !isSaveDialogOpen) return;
+
+    const backgroundChildren = Array.from(root.children).filter(
+      (child) => !child.classList.contains("save-dialog-backdrop")
+    );
+
+    backgroundChildren.forEach((child) => {
+      child.setAttribute("inert", "");
+      child.setAttribute("aria-hidden", "true");
+    });
+
+    return () => {
+      backgroundChildren.forEach((child) => {
+        child.removeAttribute("inert");
+        child.removeAttribute("aria-hidden");
+      });
+    };
+  }, [isSaveDialogOpen]);
+
+  useEffect(() => {
+    if (!isSaveDialogOpen) return;
+    saveNameInputRef.current?.focus();
+  }, [isSaveDialogOpen]);
+
+  useEffect(() => {
+    return () => {
+      activeSaveDialogRequestRef.current?.resolve(false);
+      activeSaveDialogRequestRef.current = null;
+    };
+  }, []);
 
   const cancelPendingReplay = () => {
     replayRequestIdRef.current += 1;
@@ -311,6 +359,25 @@ function App() {
     };
   }, [onlineChallenge]);
 
+  const pushView = (nextView: ViewState) => {
+    cancelPendingReplay();
+    if (view === nextView) return;
+    setViewStack(prev => [...prev, view]);
+    setView(nextView);
+  };
+
+  const enterGameView = () => {
+    cancelPendingReplay();
+    setViewStack([]);
+    setView('game');
+  };
+
+  const enterSetupView = (backTarget: ViewState) => {
+    cancelPendingReplay();
+    setViewStack([backTarget]);
+    setView('setup');
+  };
+
   const handleNewGameClick = () => {
     cancelPendingReplay();
     clearAutosave();
@@ -333,71 +400,42 @@ function App() {
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
     const backTarget = view === 'game' || view === 'setup' ? 'game' : view;
-    setPreviousView(backTarget);
-    setViewStack([backTarget]);
-    setView('setup');
+    enterSetupView(backTarget);
   };
 
   const handleTutorialClick = () => {
-    cancelPendingReplay();
-    if (view !== 'tutorial') {
-      setViewStack(prev => [...prev, view]);
-      setPreviousView(view);
-    }
-    setView('tutorial');
+    pushView('tutorial');
   };
 
   const handleOpenLibrary = () => {
-    cancelPendingReplay();
-    if (view !== 'library') {
-      setViewStack(prev => [...prev, view]);
-      setPreviousView(view);
-    }
-    setView('library');
+    pushView('library');
   };
 
   const handleOpenOnlineBrowser = () => {
-    cancelPendingReplay();
-    if (view !== 'watch') {
-      setViewStack(prev => [...prev, view]);
-      setPreviousView(view);
-    }
-    setView('watch');
+    pushView('watch');
   };
 
   const handleOpenGame = () => {
-    cancelPendingReplay();
-    setViewStack([]);
-    setPreviousView('game');
-    setView('game');
+    enterGameView();
   };
 
   const returnToPreviousView = () => {
     cancelPendingReplay();
-    setViewStack(prev => {
-      if (prev.length === 0) {
-        const fallback = previousView === 'library' || previousView === 'tutorial' || previousView === 'watch' ? 'game' : previousView;
-        setView(fallback);
-        setPreviousView('game');
-        return [];
-      }
-
-      const next = [...prev];
-      const target = next.pop() ?? 'game';
-      setView(target);
-      setPreviousView(next[next.length - 1] ?? 'game');
-      return next;
-    });
+    const next = [...viewStack];
+    const target = next.pop() ?? 'game';
+    setViewStack(next);
+    setView(target);
   };
 
+  const currentBackTarget = viewStack[viewStack.length - 1] ?? 'game';
   const currentBackLabel =
-    previousView === 'setup'
+    currentBackTarget === 'setup'
       ? 'Back to setup'
-      : previousView === 'watch'
+      : currentBackTarget === 'watch'
         ? 'Back to Watch'
-        : previousView === 'tutorial'
+        : currentBackTarget === 'tutorial'
           ? 'Back to Learn'
-          : previousView === 'library'
+          : currentBackTarget === 'library'
             ? 'Back to Library'
             : 'Back to game';
 
@@ -437,7 +475,7 @@ function App() {
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
     setGameKey(prev => prev + 1);
-    setView('game');
+    enterGameView();
   };
 
   const handleCreateOnlineGame = async (
@@ -495,7 +533,7 @@ function App() {
         ...prev,
         [created.gameId]: "unlisted",
       }));
-      setView('game');
+      enterGameView();
     } catch (error) {
       console.error("Failed to create online game", error);
       alert("Could not create an online game. Make sure the Node server is running.");
@@ -530,7 +568,7 @@ function App() {
       ...prev,
       [join.gameId]: "unlisted",
     }));
-    setView('game');
+    enterGameView();
   };
 
   const handleSpectateOnlineGame = (gameId: string) => {
@@ -551,8 +589,7 @@ function App() {
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
-    setPreviousView('watch');
-    setView('game');
+    enterGameView();
   };
 
   const handleReplayOnlineGame = async (gameId: string) => {
@@ -576,8 +613,7 @@ function App() {
       const replayConfig = createReplayGameConfigFromOnlineSnapshot(snapshot);
       setGameConfig(replayConfig);
       setGameKey(prev => prev + 1);
-      setPreviousView('watch');
-      setView('game');
+      enterGameView();
     } catch (error) {
       if (replayRequestIdRef.current !== requestId) return;
       console.error("Failed to open archived online replay", error);
@@ -724,6 +760,7 @@ function App() {
   const handleRestartGame = () => {
     cancelPendingReplay();
     clearAutosave();
+    setViewStack([]);
     setGameKey(prev => prev + 1);
   };
 
@@ -800,7 +837,7 @@ function App() {
       isAnalysisMode: true,
     });
     setGameKey(prev => prev + 1); // Force remount
-    setView('game');
+    enterGameView();
   };
 
   const handleLoadSavedGame = (record: SavedGameRecord) => {
@@ -821,21 +858,114 @@ function App() {
     });
   };
 
-  const handleSaveGameToLibrary = async (pgn: string, status: SavedGameStatus): Promise<boolean> => {
+  const handleSaveGameToLibrary = (pgn: string, status: SavedGameStatus): Promise<SaveGameToLibraryResult> => {
+    if (activeSaveDialogRequestRef.current) {
+      setSaveGameDialog(current => current ? {
+        ...current,
+        error: "Finish or cancel the current save before starting another.",
+      } : current);
+      return Promise.resolve(false);
+    }
+
     const defaultName = createDefaultSavedGameName(pgn);
-    const name = prompt("Save game as:", defaultName);
-    if (!name?.trim()) return false;
+    return new Promise(resolve => {
+      saveDialogReturnFocusRef.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const request = {
+        pgn,
+        status,
+        name: defaultName,
+        isSaving: false,
+        error: null,
+        resolve,
+      };
+      activeSaveDialogRequestRef.current = request;
+      setSaveGameDialog(request);
+    });
+  };
+
+  const finishSaveDialog = (result: SaveGameToLibraryResult) => {
+    const request = activeSaveDialogRequestRef.current;
+    activeSaveDialogRequestRef.current = null;
+    request?.resolve(result);
+    setSaveGameDialog(null);
+    window.setTimeout(() => {
+      saveDialogReturnFocusRef.current?.focus();
+      saveDialogReturnFocusRef.current = null;
+    }, 0);
+  };
+
+  const handleSaveDialogNameChange = (name: string) => {
+    setSaveGameDialog(current => current ? { ...current, name, error: null } : current);
+  };
+
+  const handleCancelSaveDialog = () => {
+    if (!saveGameDialog) return;
+    finishSaveDialog(false);
+  };
+
+  const handleSubmitSaveDialog = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!saveGameDialog) return;
+
+    const name = saveGameDialog.name.trim();
+    if (!name) {
+      setSaveGameDialog(current => current ? { ...current, error: "Enter a name for this save." } : current);
+      return;
+    }
 
     try {
+      setSaveGameDialog(current => current ? { ...current, isSaving: true, error: null } : current);
       await gameLibraryRepository.saveGame(createSavedGameRecord({
-        pgn,
-        name: name.trim(),
-        status
+        pgn: saveGameDialog.pgn,
+        name,
+        status: saveGameDialog.status
       }));
-      return true;
+      finishSaveDialog({
+        saved: true,
+        message: `Saved "${name}" to Library.`,
+      });
     } catch (error) {
       console.error("Failed to save game to library", error);
-      throw error;
+      setSaveGameDialog(current => current ? {
+        ...current,
+        isSaving: false,
+        error: "Could not save game. Try again.",
+      } : current);
+    }
+  };
+
+  const handleSaveDialogKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if (!saveGameDialog) return;
+
+    if (event.key === "Escape" && !saveGameDialog.isSaving) {
+      event.preventDefault();
+      finishSaveDialog(false);
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      saveDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (!focusable.includes(active as HTMLElement)) {
+      event.preventDefault();
+      first.focus();
     }
   };
 
@@ -859,6 +989,7 @@ function App() {
     setOnlineSnapshot(snapshot);
     setGameConfig(createGameConfigFromOnlineSnapshot(snapshot, false));
     setGameKey(prev => prev + 1);
+    setViewStack([]);
     setView('game');
   }, []);
 
@@ -963,50 +1094,45 @@ function App() {
   const handleOnlineStateBackToPlay = useCallback(() => {
     clearTransientOnlineState();
     setViewStack(['game']);
-    setPreviousView('game');
     setView('setup');
   }, [clearTransientOnlineState]);
 
   const handleOnlineStateTutorial = useCallback(() => {
     clearTransientOnlineState();
     setViewStack(['setup']);
-    setPreviousView('setup');
     setView('tutorial');
   }, [clearTransientOnlineState]);
 
   const handleOnlineStateLibrary = useCallback(() => {
     clearTransientOnlineState();
     setViewStack(['setup']);
-    setPreviousView('setup');
     setView('library');
   }, [clearTransientOnlineState]);
 
   const handleOnlineStateWatch = useCallback(() => {
     clearTransientOnlineState();
     setViewStack(['setup']);
-    setPreviousView('setup');
     setView('watch');
   }, [clearTransientOnlineState]);
 
   const onlineStateDestinations = useMemo<AppShellDestination[]>(() => [
     { id: "play", label: "Play" },
     { id: "learn", label: "Learn", onClick: handleOnlineStateTutorial },
-    { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
     { id: "watch", label: "Watch", onClick: handleOnlineStateWatch },
+    { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
   ], [handleOnlineStateTutorial, handleOnlineStateLibrary, handleOnlineStateWatch]);
 
   // Editor handlers
   const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
     cancelPendingReplay();
     clearAutosave();
-    setPreviousView(view);
+    setViewStack(prev => [...prev, view]);
     setEditorConfig({ board, pieces, sanctuaries });
     setView('editor');
   };
 
   const handleEditorBack = () => {
-    cancelPendingReplay();
-    setView(previousView);
+    returnToPreviousView();
   };
 
   const handlePlayFromEditor = (board: Board, pieces: Piece[], sanctuaries: Sanctuary[]) => {
@@ -1023,12 +1149,12 @@ function App() {
     setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
     setGameKey(prev => prev + 1);
-    setView('game');
+    enterGameView();
   };
 
   return (
     <ThemeProvider>
-    <div className="App">
+    <div className="App" ref={appRootRef}>
       {isRulesPage ? (
         <RulesManualPage />
       ) : (
@@ -1247,6 +1373,58 @@ function App() {
           onSpectate={handleSpectateOnlineGame}
           onReplay={handleReplayOnlineGame}
         />
+      )}
+
+      {saveGameDialog && (
+        <div className="confirm-dialog-backdrop save-dialog-backdrop">
+          <form
+            className="confirm-dialog save-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="save-game-dialog-title"
+            aria-describedby="save-game-dialog-description"
+            onSubmit={handleSubmitSaveDialog}
+            onKeyDown={handleSaveDialogKeyDown}
+            ref={saveDialogRef}
+          >
+            <h2 id="save-game-dialog-title">Save game</h2>
+            <p id="save-game-dialog-description">
+              Name this game so you can find it later in Library.
+            </p>
+            <label className="save-dialog-field">
+              Save name
+              <input
+                value={saveGameDialog.name}
+                onChange={(event) => handleSaveDialogNameChange(event.currentTarget.value)}
+                disabled={saveGameDialog.isSaving}
+                ref={saveNameInputRef}
+                autoFocus
+              />
+            </label>
+            {saveGameDialog.error && (
+              <div className="save-dialog-error" role="alert">
+                {saveGameDialog.error}
+              </div>
+            )}
+            <div className="confirm-dialog-actions">
+              <button
+                type="button"
+                className="confirm-dialog-button neutral"
+                onClick={handleCancelSaveDialog}
+                disabled={saveGameDialog.isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="confirm-dialog-button primary"
+                disabled={saveGameDialog.isSaving}
+              >
+                {saveGameDialog.isSaving ? "Saving..." : "Save to Library"}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       <InstallAppHint />

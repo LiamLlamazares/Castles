@@ -468,6 +468,23 @@ describe("Game ability integration", () => {
     expect(onSaveGameToLibrary).toHaveBeenCalledWith(expect.stringContaining("[Event"), "ongoing");
   });
 
+  test("saving to the library can report the saved name and Library path", async () => {
+    const onSaveGameToLibrary = vi.fn().mockResolvedValue({
+      saved: true,
+      message: 'Saved "Opening study" to Library.',
+    });
+
+    render(
+      <ThemeProvider>
+        <GameBoard onSaveGameToLibrary={onSaveGameToLibrary} />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Game" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent('Saved "Opening study" to Library.');
+  });
+
   test("PGN export reports clipboard status in the app instead of using alerts", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {

@@ -31,6 +31,27 @@ describe("GameLibrary", () => {
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
   });
 
+  it("keeps primary destinations in the shared Play Learn Watch Library order", async () => {
+    render(
+      <GameLibrary
+        repository={createRepository()}
+        onBack={vi.fn()}
+        onOpenGame={vi.fn()}
+        onTutorial={vi.fn()}
+        onOpenOnlineBrowser={vi.fn()}
+        onLoadGame={vi.fn()}
+        onImportPGN={vi.fn()}
+      />
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Library navigation" });
+    const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
+      .map((element) => element.textContent?.trim());
+
+    expect(await screen.findByText(/No named saves yet/i)).toBeInTheDocument();
+    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
+  });
+
   it("uses the provided back label", async () => {
     render(
       <GameLibrary

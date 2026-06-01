@@ -25,6 +25,10 @@ describe("Tutorial", () => {
     );
 
     expect(screen.getByRole("navigation", { name: "Learn navigation" })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Learn navigation" });
+    const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
+      .map((element) => element.textContent?.trim());
+    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
     expect(screen.getByRole("button", { name: "Learn" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
     expect(screen.getByTestId("tutorial-board")).toBeInTheDocument();
@@ -60,6 +64,33 @@ describe("Tutorial", () => {
     expect(progressControls).toContainElement(screen.getByRole("status", { name: "Tutorial progress" }));
     expect(progressControls).toContainElement(screen.getByRole("button", { name: "Restart Tutorial" }));
     expect(progressControls).toContainElement(screen.getByRole("button", { name: "Next" }));
+  });
+
+  it("summarizes progress beside the lesson title and exposes a compact control strip", () => {
+    render(
+      <ThemeProvider>
+        <Tutorial onBack={vi.fn()} />
+      </ThemeProvider>
+    );
+
+    const lessonHeader = screen.getByRole("group", { name: "Current lesson" });
+    expect(lessonHeader).toContainElement(screen.getByRole("heading", { level: 2 }));
+    expect(lessonHeader).toContainElement(screen.getByText("Lesson 1 of 35"));
+
+    const controlStrip = screen.getByRole("toolbar", { name: "Lesson controls" });
+    expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Previous" }));
+    expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Restart Tutorial" }));
+    expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Next" }));
+  });
+
+  it("labels the tutorial board stage as the lesson board", () => {
+    render(
+      <ThemeProvider>
+        <Tutorial onBack={vi.fn()} />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByRole("region", { name: "Tutorial lesson board" })).toContainElement(screen.getByTestId("tutorial-board"));
   });
 
   it("persists lesson progress when the tutorial is reopened", () => {

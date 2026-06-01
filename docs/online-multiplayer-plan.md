@@ -260,6 +260,8 @@ Tests/review/deploy gates:
 
 Goal: substantially improve the app shell after the online directory foundation, using Lichess as the primary navigation-density benchmark with Castles-specific changes where the game differs.
 
+Status: implemented and locally verified on 2026-06-01. Navigation state now uses explicit view-entry helpers instead of `previousView`; game-entry paths, saved-game loads, online spectate/replay, editor play, and restart clear stale return history. The drawer and all app-shell sidebars order destinations as Play, Learn, Watch, Library before Board/Tools. Tutorial/Learn has a compact lesson header, visible lesson count, grouped controls, labelled lesson-board region, screen-reader progress status, and a more board-forward mobile split. Save Game now opens an in-app named-save modal with cancel, duplicate-save protection, focus trap, Escape close, background inerting, retryable failure, and saved-name feedback instead of a browser prompt. Screenshot artifacts are in `artifacts/ui-audit/phase6g-after`.
+
 Work:
 
 - Take fresh screenshots of Lichess navigation/game/learn/watch patterns and compare them against Castles desktop, tablet, short mobile, and drawer-open states.
@@ -312,8 +314,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Commit and push Public Directory v1.
-2. Execute Phase 6G next: sidebar/drawer, tutorial placement, return navigation, save/progress discoverability, and overlap scanning.
-3. Continue Phase 6 archive/lobby work only after the UI shell remains stable: archive detail pages if summaries are insufficient, then lobby presence, then simple matchmaking.
+1. Commit and push Phase 6G.
+2. Continue Phase 6 archive/lobby work only after the UI shell remains stable: archive detail pages if summaries are insufficient, then lobby presence, then simple matchmaking.
+3. Start lobby presence/open-seek planning only after a fresh benchmark pass and contract review.
 4. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.
 5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts and drawer-open states.

@@ -75,13 +75,20 @@ describe("OnlineGameBrowser", () => {
       <OnlineGameBrowser
         loadGames={vi.fn().mockResolvedValue(directory([]))}
         onBack={vi.fn()}
+        onOpenGame={vi.fn()}
+        onTutorial={vi.fn()}
+        onOpenLibrary={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
       />
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading public games");
-    expect(screen.getByRole("navigation", { name: "Watch navigation" })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Watch navigation" });
+    const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
+      .map((element) => element.textContent?.trim());
+    expect(nav).toBeInTheDocument();
+    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
     expect(screen.getByRole("button", { name: "Watch" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("No public live games yet.")).toBeInTheDocument();
     expect(screen.getByText(/Private and unlisted games stay off this page/i)).toBeInTheDocument();

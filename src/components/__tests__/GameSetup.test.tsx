@@ -80,7 +80,10 @@ describe("GameSetup", () => {
     );
 
     const nav = screen.getByRole("navigation", { name: "Play navigation" });
+    const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
+      .map((element) => element.textContent?.trim());
     expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
+    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
 
     fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));

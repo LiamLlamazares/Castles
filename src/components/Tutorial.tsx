@@ -101,9 +101,10 @@ const Tutorial: React.FC<TutorialProps> = ({
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     { id: "learn", label: "Learn" },
-    ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
     ...(onOpenOnlineBrowser ? [{ id: "watch" as const, label: "Watch", onClick: onOpenOnlineBrowser }] : []),
+    ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
+  const lessonProgressLabel = `Lesson ${currentLessonIndex + 1} of ${lessons.length}`;
 
   return (
     <div className="tutorial-container">
@@ -119,30 +120,36 @@ const Tutorial: React.FC<TutorialProps> = ({
           destinations={navDestinations}
         />
 
-        <h2 className="tutorial-title">{lesson.title}</h2>
+        <div className="tutorial-lesson-header" role="group" aria-label="Current lesson">
+          <h2 className="tutorial-title">{lesson.title}</h2>
+          <span className="tutorial-lesson-progress-summary">{lessonProgressLabel}</span>
+        </div>
 
         <div className="tutorial-progress-controls" role="group" aria-label="Lesson progress controls">
-          <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
-            Previous
-          </button>
           <span
             className="tutorial-progress"
+            data-display="screen-reader"
             role="status"
             aria-label="Tutorial progress"
             aria-live="polite"
           >
             {currentLessonIndex + 1} / {lessons.length}
           </span>
-          <button
-            type="button"
-            onClick={restartTutorial}
-            className="tutorial-reset-button"
-          >
-            Restart Tutorial
-          </button>
-          <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
-            Next
-          </button>
+          <div className="tutorial-control-strip" role="toolbar" aria-label="Lesson controls">
+            <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={restartTutorial}
+              className="tutorial-reset-button"
+            >
+              Restart Tutorial
+            </button>
+            <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
+              Next
+            </button>
+          </div>
         </div>
 
         {lesson.id.startsWith('m2_l') && (
@@ -203,7 +210,7 @@ const Tutorial: React.FC<TutorialProps> = ({
 
       </div>
 
-      <div className="tutorial-board-stage">
+      <section className="tutorial-board-stage" aria-label="Tutorial lesson board">
         <GameBoard
           key={lesson.id}
           initialBoard={lesson.board}
@@ -220,7 +227,7 @@ const Tutorial: React.FC<TutorialProps> = ({
           onSetup={() => {}}
           onRestart={() => {}}
         />
-      </div>
+      </section>
     </div>
   );
 };

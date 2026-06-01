@@ -7,8 +7,8 @@ describe("Tutorial mobile layout CSS", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
 
-    expect(css).toContain("grid-template-rows: minmax(0, 58dvh) minmax(0, 42dvh);");
-    expect(css).toContain("max-height: 58dvh;");
+    expect(css).toContain("grid-template-rows: minmax(0, 50dvh) minmax(0, 50dvh);");
+    expect(css).toContain("max-height: 50dvh;");
     expect(css).toContain("overflow-y: auto;");
     expect(css).not.toContain("grid-template-rows: minmax(0, 58dvh) minmax(250px, 42dvh);");
     expect(css).not.toContain("min-height: 250px;");
@@ -19,9 +19,11 @@ describe("Tutorial mobile layout CSS", () => {
     const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
 
     expect(css).toContain("@media (max-width: 760px) and (max-height: 720px)");
-    expect(css).toContain("grid-template-rows: minmax(0, 52dvh) minmax(0, 48dvh);");
-    expect(css).toContain("max-height: 52dvh;");
-    expect(css).toContain("height: 48dvh;");
+    expect(css).toContain("grid-template-rows: minmax(0, 46dvh) minmax(0, 54dvh);");
+    expect(css).toContain("max-height: 46dvh;");
+    expect(css).toContain("height: 54dvh;");
+    expect(css).toContain(".tutorial-lesson-header");
+    expect(css).toContain(".tutorial-control-strip");
     expect(css).toContain(".tutorial-quick-nav");
     expect(css).toContain(".tutorial-description");
     expect(css).toContain(".tutorial-callout");

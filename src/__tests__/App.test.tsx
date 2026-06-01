@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../App";
 import { SanctuaryType } from "../Constants";
+import { getStartingBoard, getStartingPieces } from "../ConstantImports";
+import { MoveTree } from "../Classes/Core/MoveTree";
+import * as PGNLoadService from "../Classes/Services/PGNLoadService";
 import type { OnlineGameSnapshotDTO } from "../online/types";
 
 const onlineHookMocks = vi.hoisted(() => ({
@@ -41,9 +44,11 @@ vi.mock("../components/Game", () => ({
     sanctuarySettings?: { unlockTurn: number; cooldown: number };
     initialPoolTypes?: unknown[];
     onSetup: () => void;
+    onRestart: () => void;
     onTutorial: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
+    onSaveGameToLibrary?: (pgn: string, status: "ongoing" | "complete" | "analysis") => Promise<unknown> | unknown;
     onLoadGame: (data: {
       board: unknown;
       pieces: unknown[];
@@ -69,6 +74,9 @@ vi.mock("../components/Game", () => ({
       <button type="button" onClick={props.onSetup}>
         Configure New Game
       </button>
+      <button type="button" onClick={props.onRestart}>
+        Mock Restart Game
+      </button>
       <button type="button" onClick={props.onTutorial}>
         Open Tutorial
       </button>
@@ -78,6 +86,19 @@ vi.mock("../components/Game", () => ({
       <button type="button" onClick={props.onOpenOnlineBrowser}>
         Open Watch
       </button>
+      {props.onSaveGameToLibrary && (
+        <button
+          type="button"
+          onClick={() =>
+            void props.onSaveGameToLibrary?.(
+              '[Event "Castles"]\n[White "White"]\n[Black "Black"]\n[Result "*"]\n\n1. Pass *',
+              "ongoing"
+            )
+          }
+        >
+          Mock Save Game
+        </button>
+      )}
       {props.onlineSession?.updateVisibility && (
         <button
           type="button"
@@ -196,11 +217,13 @@ vi.mock("../components/GameLibrary", () => ({
     onBack,
     onOpenGame,
     onTutorial,
+    onLoadGame,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
     onOpenGame?: () => void;
     onTutorial?: () => void;
+    onLoadGame?: (record: { pgn: string }) => void;
     backLabel?: string;
   }) => (
     <div>
@@ -216,6 +239,11 @@ vi.mock("../components/GameLibrary", () => ({
       {onTutorial && (
         <button type="button" onClick={onTutorial}>
           Library Tutorial
+        </button>
+      )}
+      {onLoadGame && (
+        <button type="button" onClick={() => onLoadGame({ pgn: "bad-pgn-for-test" })}>
+          Load Saved Test Game
         </button>
       )}
     </div>
@@ -308,6 +336,7 @@ describe("App game setup lifecycle", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/");
   });
@@ -405,7 +434,19 @@ describe("App game setup lifecycle", () => {
   });
 
   it("opens the current game from nested pages without using the back stack", () => {
+    vi.spyOn(PGNLoadService, "loadPGNText").mockReturnValue({
+      board: getStartingBoard(6),
+      pieces: getStartingPieces(6),
+      turnCounter: 3,
+      sanctuaries: [],
+      moveTree: new MoveTree(),
+      sanctuaryPool: [],
+    } as any);
     render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Library" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load Saved Test Game" }));
+    expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
     fireEvent.click(screen.getByRole("button", { name: "Watch Tutorial" }));
@@ -413,10 +454,141 @@ describe("App game setup lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Tutorial Play" }));
     expect(screen.getByText("Game Ready")).toBeInTheDocument();
+    expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Library" }));
     fireEvent.click(screen.getByRole("button", { name: "Library Play" }));
     expect(screen.getByText("Game Ready")).toBeInTheDocument();
+    expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+  });
+
+  it("clears stale return paths after loading a saved game from a nested library", async () => {
+    vi.spyOn(PGNLoadService, "loadPGNText").mockReturnValue({
+      board: getStartingBoard(6),
+      pieces: getStartingPieces(6),
+      turnCounter: 2,
+      sanctuaries: [],
+      moveTree: new MoveTree(),
+      sanctuaryPool: [],
+    } as any);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Watch Library" }));
+    expect(screen.getByText("Library Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load Saved Test Game" }));
+
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+    expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Tutorial" }));
+
+    expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Watch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Library" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
+
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+  });
+
+  it("opens an in-app save dialog instead of the browser prompt and cancels without saving", async () => {
+    const promptSpy = vi.spyOn(window, "prompt");
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Save Game" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Save game" });
+    expect(dialog).toContainElement(screen.getByLabelText("Save name"));
+    expect(promptSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Save game" })).not.toBeInTheDocument();
+    });
+    expect(window.localStorage.getItem("castles_game_library_records")).toBeNull();
+    expect(promptSpy).not.toHaveBeenCalled();
+  });
+
+  it("saves a named game from the dialog and reports the Library path", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Save Game" }));
+    const input = await screen.findByLabelText("Save name");
+    fireEvent.change(input, { target: { value: "Opening study" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save to Library" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Save game" })).not.toBeInTheDocument();
+    });
+    expect(window.localStorage.getItem("castles_game_library_records")).toContain("Opening study");
+  });
+
+  it("keeps save failures in the app dialog", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    const realSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (_key: string, _value: string) {
+      const key = _key;
+      const value = _value;
+      if (key === "castles_game_library_records") {
+        throw new Error("Storage quota exceeded");
+      }
+      return realSetItem.call(window.localStorage, key, value);
+    });
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Save Game" }));
+    fireEvent.change(await screen.findByLabelText("Save name"), { target: { value: "Blocked save" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save to Library" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save game. Try again.");
+    expect(screen.getByRole("dialog", { name: "Save game" })).toBeInTheDocument();
+
+    setItem.mockRestore();
+  });
+
+  it("settles duplicate save requests when a save dialog is already open", async () => {
+    render(<App />);
+
+    const opener = screen.getByRole("button", { name: "Mock Save Game" });
+    fireEvent.click(opener);
+    expect(await screen.findByRole("dialog", { name: "Save game" })).toBeInTheDocument();
+
+    fireEvent.click(opener);
+
+    expect(screen.getAllByRole("dialog", { name: "Save game" })).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("Finish or cancel the current save before starting another.");
+  });
+
+  it("treats the save dialog as a modal with Escape close, focus trap, and background inerting", async () => {
+    render(<App />);
+
+    const opener = screen.getByRole("button", { name: "Mock Save Game" });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const dialog = await screen.findByRole("dialog", { name: "Save game" });
+    const input = screen.getByLabelText("Save name");
+
+    expect(input).toHaveFocus();
+    expect(opener.closest("[aria-hidden='true']")).not.toBeNull();
+    expect(opener.closest("[inert]")).not.toBeNull();
+
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(screen.getByRole("button", { name: "Save to Library" })).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Save game" })).not.toBeInTheDocument();
+    });
+    expect(opener.closest("[aria-hidden='true']")).toBeNull();
+    expect(opener.closest("[inert]")).toBeNull();
+    expect(opener).toHaveFocus();
   });
 
   it("labels cross-page back buttons with the actual previous page", () => {
@@ -512,6 +684,44 @@ describe("App game setup lifecycle", () => {
       null,
       expect.any(Function)
     );
+  });
+
+  it("clears stale return paths after Watch spectate, replay, Play, and restart entries", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          snapshot: spectatorSnapshot("game_archive_public"),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    ));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Watch Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Spectate public game" }));
+
+    const spectatorCallback = onlineHookMocks.useOnlineSpectatorConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      spectatorCallback(spectatorSnapshot("game_watch_public"));
+    });
+    expect(screen.getByText("Online session: spectator")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Tutorial" }));
+    expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Watch" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+    await waitFor(() => expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Restart Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Tutorial" }));
+    expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Watch" })).not.toBeInTheDocument();
   });
 
   it("detaches an existing spectator session while an archived replay snapshot is loading", async () => {
@@ -720,7 +930,11 @@ describe("App game setup lifecycle", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("navigation", { name: "Online game navigation" })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Online game navigation" });
+    const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
+      .map((element) => element.textContent?.trim());
+    expect(nav).toBeInTheDocument();
+    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
