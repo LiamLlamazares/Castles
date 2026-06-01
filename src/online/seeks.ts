@@ -13,6 +13,8 @@ export const ONLINE_SEEK_DIRECTORY_MAX_LIMIT = 100;
 export type OpenSeekSeat = "w" | "b" | "random";
 export type OpenSeekStatus = "open" | "accepted" | "cancelled" | "expired";
 export type OpenSeekDirectoryState = "open";
+export type OpenSeekDirectoryClockFilter = "timed" | "casual";
+export type OpenSeekDirectoryVpFilter = "enabled" | "disabled";
 
 interface OpenSeekEventEnvelope {
   schemaVersion: typeof ONLINE_SEEK_EVENT_SCHEMA_VERSION;
@@ -82,6 +84,9 @@ export interface OpenSeekDirectoryListOptions {
   state: OpenSeekDirectoryState;
   limit: number;
   cursor?: string;
+  creatorSeat?: OpenSeekSeat;
+  clock?: OpenSeekDirectoryClockFilter;
+  vp?: OpenSeekDirectoryVpFilter;
 }
 
 export interface OpenSeekDirectoryResponse {
@@ -94,6 +99,14 @@ const MAX_ID_LENGTH = 128;
 const SEEK_SEATS = new Set<OpenSeekSeat>(["w", "b", "random"]);
 const SEEK_STATUSES = new Set<OpenSeekStatus>(["open", "accepted", "cancelled", "expired"]);
 export const OPEN_SEEK_DIRECTORY_STATES = new Set<OpenSeekDirectoryState>(["open"]);
+export const OPEN_SEEK_DIRECTORY_CLOCK_FILTERS = new Set<OpenSeekDirectoryClockFilter>([
+  "timed",
+  "casual",
+]);
+export const OPEN_SEEK_DIRECTORY_VP_FILTERS = new Set<OpenSeekDirectoryVpFilter>([
+  "enabled",
+  "disabled",
+]);
 let nextSeekEventSequence = 0;
 
 function bad(message: string): ValidationResult<never> {
@@ -637,6 +650,19 @@ export function canListOpenSeekSummary(
   now: string | number | Date = Date.now()
 ): boolean {
   return canActBeforeExpiry(summary, now);
+}
+
+export function openSeekMatchesDirectoryFilters(
+  summary: OpenSeekSummary,
+  options: Pick<OpenSeekDirectoryListOptions, "creatorSeat" | "clock" | "vp">
+): boolean {
+  if (options.creatorSeat && summary.creatorSeat !== options.creatorSeat) return false;
+  if (options.clock === "timed" && !summary.setup.timeControl) return false;
+  if (options.clock === "casual" && summary.setup.timeControl) return false;
+  const vpEnabled = summary.setup.gameRules?.vpModeEnabled === true;
+  if (options.vp === "enabled" && !vpEnabled) return false;
+  if (options.vp === "disabled" && vpEnabled) return false;
+  return true;
 }
 
 function encodeBase64Url(value: string): string {

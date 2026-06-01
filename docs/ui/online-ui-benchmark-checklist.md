@@ -70,6 +70,16 @@ Phase 6I UI navigation and learning sweep status, 2026-06-01:
 - Final screenshots covered desktop/mobile/short-mobile game, drawer-open, setup, tutorial, Library, Watch, and save-modal states with no interactive overlaps found.
 - Screenshot artifacts are in `artifacts/ui-audit/phase6i-after-final`.
 
+Phase 6J Lobby refresh and filters status, 2026-06-01:
+
+- Lobby now has server-backed side, clock, and scoring filters plus local seek search, with filtered-empty copy distinct from a truly empty lobby.
+- Public Lobby and creator-owned open seeks refresh every 30 seconds while visible, with in-flight serialization, 60-second rate-limit backoff, no row clearing during background refresh, and pending accept/cancel focus preservation.
+- Last-checked freshness is visible, but the changing timestamp is kept out of the polite live-region announcement loop and mirrored as non-live screen-reader text.
+- PostgreSQL and HTTP directory filters apply before cursor/limit pagination, use exact JSONB predicates, and reject secret-looking public query keys or values.
+- Reviewers cleared backend/security and UI/accessibility findings after fixes for overlapping refreshes, pending-action races, stale rate-limit copy, and freshness announcements.
+- Full Playwright screenshot/layout audit covered owner-open Lobby, public Lobby row, pending accept, all-filters-active filtered empty, Watch, Archive, and owner-accepted states at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640 with no horizontal overflow, clipped controls, or interactive overlaps.
+- Screenshot artifacts and layout metrics are in `artifacts/ui-audit/phase6j-after`.
+
 Phase 6G implementation status, 2026-06-01:
 
 - Navigation return paths now use explicit app helpers, and game-entry flows clear stale back stacks when opening live game, loaded analysis, spectator snapshots, archive replay, editor play, or restart.

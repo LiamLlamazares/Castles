@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import OnlineGameBrowser from "../OnlineGameBrowser";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
@@ -90,7 +90,20 @@ function deferredDirectory() {
   return { promise, resolve };
 }
 
+function deferredSeekDirectory() {
+  let resolve!: (value: OpenSeekDirectoryResponse) => void;
+  const promise = new Promise<OpenSeekDirectoryResponse>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("OnlineGameBrowser", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("loads open seeks in the Lobby tab without calling the game directory", async () => {
     const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([openSeek()]));
     const loadGames = vi.fn().mockResolvedValue(directory([]));
@@ -139,6 +152,326 @@ describe("OnlineGameBrowser", () => {
 
     expect(await screen.findByText("seek_after_refresh")).toBeInTheDocument();
     expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads lobby seek filters from the server and reports filtered empty states honestly", async () => {
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_initial" })]))
+      .mockResolvedValue(seekDirectory([]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    await screen.findByText("seek_initial");
+    fireEvent.change(screen.getByRole("combobox", { name: "Open seek side filter" }), {
+      target: { value: "w" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Open seek clock filter" }), {
+      target: { value: "timed" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Open seek victory points filter" }), {
+      target: { value: "enabled" },
+    });
+
+    await waitFor(() => {
+      expect(loadOpenSeeks).toHaveBeenLastCalledWith({
+        state: "open",
+        limit: 50,
+        creatorSeat: "w",
+        clock: "timed",
+        vp: "enabled",
+      });
+    });
+    expect(await screen.findByText("No open seeks match these filters.")).toBeInTheDocument();
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent(/checked/i);
+    expect(status.querySelector("[aria-hidden='true']")).toHaveTextContent(/checked/i);
+    expect(document.querySelector(".online-browser-visually-hidden[aria-live='off']")).toHaveTextContent(/last checked/i);
+    expect(status).not.toHaveTextContent(/present|waiting|ready/i);
+  });
+
+  it("auto-refreshes the active visible lobby without clearing rows on rate limits", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_initial" })]))
+      .mockRejectedValueOnce(new Error("Could not fetch open seeks (429)"))
+      .mockResolvedValue(seekDirectory([openSeek({ seekId: "seek_after_backoff" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    await screen.findByText("seek_initial");
+
+    await act(async () => {
+      vi.advanceTimersByTime(31_000);
+    });
+    await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("seek_initial")).toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent("Loading open seeks");
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      vi.advanceTimersByTime(61_000);
+    });
+    await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText("seek_after_backoff")).toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent("Auto refresh paused");
+  });
+
+  it("pauses lobby auto-refresh while hidden and checks once when visible again", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let visibilityState: DocumentVisibilityState = "hidden";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibilityState);
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_initial" })]))
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_visible_again" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    await screen.findByText("seek_initial");
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(loadOpenSeeks).toHaveBeenCalledTimes(1);
+
+    visibilityState = "visible";
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(await screen.findByText("seek_visible_again")).toBeInTheDocument();
+    expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves a pending accept row and focus while background refresh omits it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let resolveAccept!: () => void;
+    const acceptPromise = new Promise<void>((resolve) => {
+      resolveAccept = resolve;
+    });
+    const onAcceptSeek = vi.fn().mockReturnValue(acceptPromise);
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_acceptable" })]))
+      .mockResolvedValue(seekDirectory([]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={onAcceptSeek}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: /seek_acceptable/i });
+    const accept = within(row).getByRole("button", { name: "Accept open seek seek_acceptable" });
+    accept.focus();
+    fireEvent.click(accept);
+
+    await waitFor(() => expect(accept).toBeDisabled());
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+    await waitFor(() => expect(loadOpenSeeks.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(screen.getByRole("article", { name: /seek_acceptable/i })).toBeInTheDocument();
+    expect(accept).toHaveFocus();
+
+    await act(async () => {
+      resolveAccept();
+      await acceptPromise;
+    });
+    await waitFor(() => expect(accept).not.toBeDisabled());
+  });
+
+  it("preserves a pending accept row when an older background refresh resolves after the click", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const backgroundRefresh = deferredSeekDirectory();
+    let resolveAccept!: () => void;
+    const acceptPromise = new Promise<void>((resolve) => {
+      resolveAccept = resolve;
+    });
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_background_race" })]))
+      .mockReturnValueOnce(backgroundRefresh.promise);
+    const onAcceptSeek = vi.fn().mockReturnValue(acceptPromise);
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={onAcceptSeek}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: /seek_background_race/i });
+    const accept = within(row).getByRole("button", { name: "Accept open seek seek_background_race" });
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+    await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
+
+    accept.focus();
+    fireEvent.click(accept);
+    await waitFor(() => expect(accept).toBeDisabled());
+
+    await act(async () => {
+      backgroundRefresh.resolve(seekDirectory([]));
+      await backgroundRefresh.promise;
+    });
+
+    expect(screen.getByRole("article", { name: /seek_background_race/i })).toBeInTheDocument();
+    expect(accept).toHaveFocus();
+
+    await act(async () => {
+      resolveAccept();
+      await acceptPromise;
+    });
+  });
+
+  it("does not overlap a manual lobby refresh with an in-flight background refresh", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const backgroundRefresh = deferredSeekDirectory();
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_before_refresh" })]))
+      .mockReturnValueOnce(backgroundRefresh.promise)
+      .mockResolvedValue(seekDirectory([openSeek({ seekId: "seek_after_refresh" })]));
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    await screen.findByText("seek_before_refresh");
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+    await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
+
+    const refresh = screen.getByRole("button", { name: "Refresh open seeks" });
+    expect(refresh).toBeDisabled();
+    fireEvent.click(refresh);
+    expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      backgroundRefresh.resolve(seekDirectory([openSeek({ seekId: "seek_background_done" })]));
+      await backgroundRefresh.promise;
+    });
+
+    await waitFor(() => expect(refresh).not.toBeDisabled());
+    expect(screen.getByText("seek_background_done")).toBeInTheDocument();
+  });
+
+  it("does not foreground reload the lobby when a seek action becomes pending", async () => {
+    let resolveAccept!: () => void;
+    const acceptPromise = new Promise<void>((resolve) => {
+      resolveAccept = resolve;
+    });
+    const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([
+      openSeek({ seekId: "seek_pending_no_reload" }),
+    ]));
+    const onAcceptSeek = vi.fn().mockReturnValue(acceptPromise);
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={onAcceptSeek}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: /seek_pending_no_reload/i });
+    const accept = within(row).getByRole("button", { name: "Accept open seek seek_pending_no_reload" });
+
+    fireEvent.click(accept);
+
+    await waitFor(() => expect(accept).toBeDisabled());
+    expect(loadOpenSeeks).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveAccept();
+      await acceptPromise;
+    });
+  });
+
+  it("auto-refreshes creator-owned open seeks through the owner refresh path", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onRefreshOwnedSeek = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        ownedSeekIds={["seek_mine"]}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: openSeek({ seekId: "seek_mine" }),
+        }}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onRefreshOwnedSeek={onRefreshOwnedSeek}
+      />
+    );
+
+    await screen.findByRole("region", { name: "Your open seek" });
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    await waitFor(() => expect(onRefreshOwnedSeek).toHaveBeenCalledOnce());
   });
 
   it("accepts and cancels open seeks with row-local pending states", async () => {

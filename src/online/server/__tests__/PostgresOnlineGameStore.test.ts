@@ -316,9 +316,33 @@ class FakePostgresClient {
           return typeof payload.expiresAt === "string" && Date.parse(payload.expiresAt) > Date.now();
         });
       }
+      if (/payload\s*->>\s*'creatorSeat'/i.test(text)) {
+        const creatorSeat = values?.find((value) => value === "w" || value === "b" || value === "random");
+        rows = rows.filter((row) => (row.payload as { creatorSeat?: string }).creatorSeat === creatorSeat);
+      }
+      if (/payload\s*->\s*'setup'\s*\\?\s*'timeControl'/i.test(text)) {
+        rows = rows.filter((row) => {
+          const payload = row.payload as { setup?: { timeControl?: unknown } };
+          const hasTimeControl = payload.setup?.timeControl !== undefined;
+          return /not\s+\\?/i.test(text) ? !hasTimeControl : hasTimeControl;
+        });
+      }
+      if (/vpModeEnabled/i.test(text)) {
+        rows = rows.filter((row) => {
+          const payload = row.payload as { setup?: { gameRules?: { vpModeEnabled?: boolean } } };
+          const enabled = payload.setup?.gameRules?.vpModeEnabled === true;
+          return /is\s+not\s+true/i.test(text) ? !enabled : enabled;
+        });
+      }
       if (/updated_at\s*</i.test(text)) {
-        const cursorUpdatedAt = values?.[0] as string;
-        const cursorSeekId = values?.[1] as string;
+        const cursorIndex =
+          values?.findIndex(
+            (value) =>
+              typeof value === "string" &&
+              /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+          ) ?? -1;
+        const cursorUpdatedAt = values?.[cursorIndex] as string;
+        const cursorSeekId = values?.[cursorIndex + 1] as string;
         rows = rows.filter((row) => {
           const payload = row.payload as { updatedAt?: string; seekId?: string };
           return (
@@ -978,6 +1002,58 @@ describe("PostgresOnlineGameStore", () => {
           /expires_at\s*>\s*(now\(\)|current_timestamp)/i.test(query.text)
       )
     ).toBe(true);
+  });
+
+  it("applies open seek directory filters before cursor and limit", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const unmatchingNewer = createOpenSeekCreated("seek_newer_unmatched", {
+      creatorSeat: "b",
+      createdAt: "2026-06-01T12:03:00.000Z",
+      expiresAt: "2999-01-01T12:10:00.000Z",
+    });
+    const firstMatch = createOpenSeekCreated("seek_match_a", {
+      creatorSeat: "w",
+      createdAt: "2026-06-01T12:02:00.000Z",
+      expiresAt: "2999-01-01T12:10:00.000Z",
+      setup: { ...createGameCreatedEvent("game_match_a").setup, timeControl: undefined },
+    });
+    const secondMatch = createOpenSeekCreated("seek_match_b", {
+      creatorSeat: "w",
+      createdAt: "2026-06-01T12:02:00.000Z",
+      expiresAt: "2999-01-01T12:10:00.000Z",
+      setup: { ...createGameCreatedEvent("game_match_b").setup, timeControl: undefined },
+    });
+    await store.appendOpenSeekCreated(unmatchingNewer, createOpenSeekCredentials());
+    await store.appendOpenSeekCreated(firstMatch, createOpenSeekCredentials());
+    await store.appendOpenSeekCreated(secondMatch, createOpenSeekCredentials());
+    client.queries.length = 0;
+
+    const firstPage = await store.listOpenSeekSummaries({
+      state: "open",
+      limit: 1,
+      creatorSeat: "w",
+      clock: "casual",
+      vp: "disabled",
+    });
+    const secondPage = await store.listOpenSeekSummaries({
+      state: "open",
+      limit: 1,
+      creatorSeat: "w",
+      clock: "casual",
+      vp: "disabled",
+      cursor: firstPage.nextCursor,
+    });
+
+    expect(firstPage.seeks.map((summary) => summary.seekId)).toEqual(["seek_match_a"]);
+    expect(secondPage.seeks.map((summary) => summary.seekId)).toEqual(["seek_match_b"]);
+    const filteredQuery = client.queries.find(
+      (query) =>
+        /from\s+online_seek_summaries/i.test(query.text) &&
+        /payload\s*->>\s*'creatorSeat'/i.test(query.text)
+    );
+    expect(filteredQuery?.text).not.toMatch(/payload::text|like/i);
+    expect(filteredQuery?.values).toEqual(expect.arrayContaining(["w"]));
   });
 
   it("accepts open seeks atomically into online games", async () => {

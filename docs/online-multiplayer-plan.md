@@ -148,7 +148,7 @@ Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI 
 
 Goal: add discovery and post-game surfaces on top of stable contracts.
 
-Status: Phase 6H is implemented and locally verified on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by token-free `OnlineGameSummary` read models. It lists only summaries marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Phase 6E adds durable player publish/unlist controls through `visibility_changed` events and `PATCH /api/online/games/:gameId/visibility`; `private` changes remain deferred until spectator socket reauthorization exists. Phase 6F adds Public Directory v1: state-filtered public list responses, bounded limits, opaque cursors, single-summary lookup, store-level public list queries, rate-limited public directory reads, and Watch/Archive sort/time/result controls. Phase 6H adds open lobby seeks: separate durable seek events/summaries, PostgreSQL persistence, public token-free seek directory, creator-owned cancel/refresh/join flow, accept-to-game handoff, and Lobby/Watch/Online Archive tabs. Matchmaking automation, accounts, ratings, and chat remain deferred.
+Status: Phase 6H through 6J are implemented and locally verified on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by token-free `OnlineGameSummary` read models. It lists only summaries marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Phase 6E adds durable player publish/unlist controls through `visibility_changed` events and `PATCH /api/online/games/:gameId/visibility`; `private` changes remain deferred until spectator socket reauthorization exists. Phase 6F adds Public Directory v1: state-filtered public list responses, bounded limits, opaque cursors, single-summary lookup, store-level public list queries, rate-limited public directory reads, and Watch/Archive sort/time/result controls. Phase 6H adds open lobby seeks: separate durable seek events/summaries, PostgreSQL persistence, public token-free seek directory, creator-owned cancel/refresh/join flow, accept-to-game handoff, and Lobby/Watch/Online Archive tabs. Phase 6J adds server-backed seek filters, visible-tab auto-refresh, rate-limit backoff, freshness text, pending-action preservation, and mobile screenshot-verified Lobby/Watch/Archive layout. Matchmaking automation, accounts, ratings, and chat remain deferred.
 
 Work:
 
@@ -323,6 +323,28 @@ Tests/review/deploy gates:
 - Review: UI/UX/accessibility reviewer before implementation and after fixes, plus final code review for navigation-state architecture and stale-state cleanup.
 - Deploy: full automated suite, builds, browser online smoke, screenshot audit, commit, and push before moving to matchmaking or account features.
 
+## Phase 6J: Lobby Refresh and Filters
+
+Goal: make the open-seek Lobby feel live and scannable without adding accounts, ratings, chat, or automated matchmaking before their contracts exist.
+
+Status: implemented and locally verified on 2026-06-01. Public open-seek filters are now server-backed for creator side, clock type, and victory-points scoring, with local text search layered on top. Public Lobby refreshes every 30 seconds only while visible, serializes in-flight loads, backs off after rate limits, preserves current rows during background refreshes, and keeps pending accept/cancel rows focused until the action resolves. Creator-owned open seeks refresh through the existing authenticated creator fetch path. Last-checked freshness is visible without repeatedly announcing timestamp changes in the polite status region.
+
+Work:
+
+- Extend open-seek directory options and client query helpers with token-free `creatorSeat`, `clock`, and `vp` filters.
+- Apply filters before cursor/limit pagination in both the in-memory HTTP paginator and PostgreSQL store, using exact JSONB predicates and parameter binding for user-provided values.
+- Reject invalid, duplicate, and secret-looking public seek query parameters without echoing the submitted values.
+- Add Lobby filter controls for side, clock, scoring, Refresh, Create Open Seek, and search while keeping Watch/Archive controls stable.
+- Add visible-tab public and owner refresh loops with in-flight guards, 60-second rate-limit backoff, honest status copy, and non-disruptive background updates.
+- Preserve pending accept/cancel rows and focus through refresh races.
+
+Tests/review/deploy gates:
+
+- Tests: shared seek filter predicate tests, client URL tests, HTTP parser/pagination/security tests, PostgreSQL query tests, OnlineGameBrowser fake-timer/visibility/focus/backoff tests, and CSS toolbar regression tests.
+- Browser QA: Playwright screenshots and bounding-box checks at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640 for owner-open Lobby, public Lobby rows, pending accept, all-filters-active filtered empty, Watch, Archive, and owner-accepted states.
+- Review: backend/security reviewer and UI/accessibility reviewer passes before final verification, including fixes for overlapping refreshes, pending-action races, stale rate-limit copy, and live-region timestamp churn.
+- Deploy: full automated suite, client build, server build, diff check, PostgreSQL-backed browser smoke, screenshot audit, commit, and push before moving to matchmaking automation.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -359,8 +381,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Commit and push Phase 6I after the final local verification pass.
-2. Continue public lobby work with lobby refresh/presence and basic seek filters.
-3. Add simple matchmaking automation only after the seek list refresh/presence flow is stable.
+1. Commit and push Phase 6J after the final local verification pass.
+2. Start the next discovery phase with simple matchmaking automation on top of open seeks, not accounts or ratings.
+3. Define what “quick match” means for Castles: supported board sizes, clock presets, VP/castle-control defaults, color preference handling, and cancellation timeout.
 4. Before adding accounts, ratings, chat, or moderation UI, run a fresh benchmark and contract review so the UI does not imply unsupported server features.
 5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, save modal overlays, and long online status/error text.

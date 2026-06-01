@@ -22,6 +22,10 @@ import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   type OnlineGameSummary,
 } from "../../readModel";
+import {
+  ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
+  type OpenSeekSummary,
+} from "../../seeks";
 import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
 import { verifyOnlineToken } from "../onlineTokenCredentials";
 
@@ -50,6 +54,25 @@ function createClockedSetup() {
   return {
     ...createSetup(),
     timeControl: { initial: 1, increment: 0 },
+  };
+}
+
+function openSeekSummary(
+  seekId: string,
+  overrides: Partial<OpenSeekSummary> = {}
+): OpenSeekSummary {
+  return {
+    schemaVersion: ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
+    seekId,
+    creatorIdentity: { kind: "session", id: `${seekId}_creator` },
+    creatorSeat: "random",
+    setup: createClockedSetup(),
+    createdAt: "2026-06-01T12:00:00.000Z",
+    updatedAt: "2026-06-01T12:00:00.000Z",
+    expiresAt: "2999-06-01T12:10:00.000Z",
+    status: "open",
+    lastEventId: `${seekId}_evt`,
+    ...overrides,
   };
 }
 
@@ -272,6 +295,99 @@ describe("createOnlineHttpServer", () => {
       seekId: created.seekId,
       status: "open",
     });
+  });
+
+  it("filters public open seeks by side clock and victory points before pagination", async () => {
+    const summaries = [
+      openSeekSummary("seek_casual_newer", {
+        creatorSeat: "b",
+        setup: {
+          ...createSetup(),
+          timeControl: undefined,
+          gameRules: { vpModeEnabled: false },
+        },
+        updatedAt: "2026-06-01T12:03:00.000Z",
+      }),
+      openSeekSummary("seek_timed_vp_a", {
+        creatorSeat: "w",
+        setup: {
+          ...createClockedSetup(),
+          gameRules: { vpModeEnabled: true },
+        },
+        updatedAt: "2026-06-01T12:02:00.000Z",
+      }),
+      openSeekSummary("seek_timed_vp_b", {
+        creatorSeat: "w",
+        setup: {
+          ...createClockedSetup(),
+          gameRules: { vpModeEnabled: true },
+        },
+        updatedAt: "2026-06-01T12:02:00.000Z",
+      }),
+    ];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      loadOpenSeekSummaries: () => summaries,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const filteredResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks?state=open&creatorSeat=w&clock=timed&vp=enabled&limit=1`
+    );
+    const filtered = await filteredResponse.json();
+
+    expect(filteredResponse.status).toBe(200);
+    expect(filtered.seeks.map((seek: OpenSeekSummary) => seek.seekId)).toEqual(["seek_timed_vp_a"]);
+    expect(filtered.nextCursor).toEqual(expect.any(String));
+
+    const secondFilteredResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks?state=open&creatorSeat=w&clock=timed&vp=enabled&limit=1&cursor=${encodeURIComponent(filtered.nextCursor)}`
+    );
+    const secondFiltered = await secondFilteredResponse.json();
+
+    expect(secondFilteredResponse.status).toBe(200);
+    expect(secondFiltered.seeks.map((seek: OpenSeekSummary) => seek.seekId)).toEqual(["seek_timed_vp_b"]);
+    expect(secondFiltered.nextCursor).toBeUndefined();
+
+    const casualResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks?clock=casual&vp=disabled`
+    );
+    await expect(casualResponse.json()).resolves.toMatchObject({
+      seeks: [{ seekId: "seek_casual_newer" }],
+    });
+
+    const invalidClock = await fetch(`http://127.0.0.1:${port}/api/online/seeks?clock=bullet`);
+    expect(invalidClock.status).toBe(400);
+    const invalidSide = await fetch(`http://127.0.0.1:${port}/api/online/seeks?creatorSeat=white`);
+    expect(invalidSide.status).toBe(400);
+    const invalidVp = await fetch(`http://127.0.0.1:${port}/api/online/seeks?vp=yes`);
+    expect(invalidVp.status).toBe(400);
+    const duplicateFilter = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks?creatorSeat=w&creatorSeat=b`
+    );
+    expect(duplicateFilter.status).toBe(400);
+    const duplicateClock = await fetch(`http://127.0.0.1:${port}/api/online/seeks?clock=timed&clock=casual`);
+    expect(duplicateClock.status).toBe(400);
+    const duplicateVp = await fetch(`http://127.0.0.1:${port}/api/online/seeks?vp=enabled&vp=disabled`);
+    expect(duplicateVp.status).toBe(400);
+    const secretFilter = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks?creatorSeat=w&token=secret`
+    );
+    expect(secretFilter.status).toBe(400);
+    for (const [param, value] of [
+      ["creatorSeat", "Bearer abc123"],
+      ["clock", "Bearer abc123"],
+      ["vp", "Bearer abc123"],
+    ]) {
+      const secretValueFilter = await fetch(
+        `http://127.0.0.1:${port}/api/online/seeks?${param}=${encodeURIComponent(value)}`
+      );
+      const secretValueBody = await secretValueFilter.json();
+      expect(secretValueFilter.status).toBe(400);
+      expect(JSON.stringify(secretValueBody)).not.toContain("Bearer");
+      expect(JSON.stringify(secretValueBody)).not.toContain("abc123");
+    }
   });
 
   it("accepts an open seek and lets creator and acceptor join the created game", async () => {

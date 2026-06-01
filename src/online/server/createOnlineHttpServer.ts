@@ -54,7 +54,9 @@ import {
   ONLINE_SEEK_DIRECTORY_DEFAULT_LIMIT,
   ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
   ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+  OPEN_SEEK_DIRECTORY_CLOCK_FILTERS,
   OPEN_SEEK_DIRECTORY_STATES,
+  OPEN_SEEK_DIRECTORY_VP_FILTERS,
   canIdentityAcceptOpenSeek,
   canIdentityCancelOpenSeek,
   canListOpenSeekSummary,
@@ -66,13 +68,17 @@ import {
   decodeOpenSeekDirectoryCursor,
   encodeOpenSeekDirectoryCursor,
   isSameOnlineIdentity as isSameOpenSeekIdentity,
+  openSeekMatchesDirectoryFilters,
   projectOpenSeekSummaries,
   validateOpenSeekDirectoryResponse,
   validateOpenSeekSummary,
+  type OpenSeekDirectoryClockFilter,
   type OpenSeekDirectoryListOptions,
   type OpenSeekDirectoryResponse,
   type OpenSeekEvent,
+  type OpenSeekSeat,
   type OpenSeekSummary,
+  type OpenSeekDirectoryVpFilter,
 } from "../seeks";
 import {
   canListOnlineGameSummary,
@@ -314,7 +320,7 @@ function parseOpenSeekDirectoryOptions(
     return { ok: false, message: "Public seek query is invalid." };
   }
 
-  for (const name of ["state", "limit", "cursor"]) {
+  for (const name of ["state", "limit", "cursor", "creatorSeat", "clock", "vp"]) {
     if (url.searchParams.getAll(name).length > 1) {
       return { ok: false, message: "Public seek query is invalid." };
     }
@@ -344,12 +350,30 @@ function parseOpenSeekDirectoryOptions(
     }
   }
 
+  const creatorSeat = getSingleSearchParam(url.searchParams, "creatorSeat") ?? undefined;
+  if (creatorSeat && !["w", "b", "random"].includes(creatorSeat)) {
+    return { ok: false, message: "Public seek creator side is invalid." };
+  }
+
+  const clock = getSingleSearchParam(url.searchParams, "clock") ?? undefined;
+  if (clock && !OPEN_SEEK_DIRECTORY_CLOCK_FILTERS.has(clock as OpenSeekDirectoryClockFilter)) {
+    return { ok: false, message: "Public seek clock filter is invalid." };
+  }
+
+  const vp = getSingleSearchParam(url.searchParams, "vp") ?? undefined;
+  if (vp && !OPEN_SEEK_DIRECTORY_VP_FILTERS.has(vp as OpenSeekDirectoryVpFilter)) {
+    return { ok: false, message: "Public seek victory points filter is invalid." };
+  }
+
   return {
     ok: true,
     options: {
       state: state as OpenSeekDirectoryListOptions["state"],
       limit,
       cursor,
+      creatorSeat: creatorSeat as OpenSeekSeat | undefined,
+      clock: clock as OpenSeekDirectoryClockFilter | undefined,
+      vp: vp as OpenSeekDirectoryVpFilter | undefined,
     },
   };
 }
@@ -436,6 +460,7 @@ function paginateOpenSeekSummaries(
   const filtered = applyOpenSeekDirectoryCursor(
     summaries
       .filter((summary) => canListOpenSeekSummary(summary, now))
+      .filter((summary) => openSeekMatchesDirectoryFilters(summary, options))
       .sort(compareOpenSeekSummaries),
     options.cursor
   );

@@ -537,6 +537,34 @@ describe("online client helpers", () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(5, "/api/online/seeks/seek_123/accept", expect.objectContaining({ method: "POST" }));
   });
 
+  it("passes open seek directory filters as token-free query parameters", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schemaVersion: 1,
+        seeks: [],
+      }),
+    });
+
+    await expect(
+      fetchOpenSeekDirectory(
+        {
+          state: "open",
+          limit: 10,
+          cursor: "opaque-cursor",
+          creatorSeat: "w",
+          clock: "timed",
+          vp: "enabled",
+        },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({ seeks: [] });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/online/seeks?state=open&limit=10&cursor=opaque-cursor&creatorSeat=w&clock=timed&vp=enabled"
+    );
+  });
+
   it("replaces malformed anonymous session ids", () => {
     const storage = new Map<string, string>([["castles_online_anonymous_session_id", ""]]);
     const storageAdapter = {

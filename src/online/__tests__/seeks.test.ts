@@ -15,6 +15,7 @@ import {
   createOpenSeekExpiredEvent,
   decodeOpenSeekDirectoryCursor,
   encodeOpenSeekDirectoryCursor,
+  openSeekMatchesDirectoryFilters,
   projectOpenSeekSummaries,
   validateOpenSeekDirectoryResponse,
   validateOpenSeekEvent,
@@ -223,6 +224,63 @@ describe("open seek contract", () => {
     expect(canIdentityCancelOpenSeek(summary, creator, "2026-06-01T12:01:00.000Z")).toBe(true);
     expect(canSystemExpireOpenSeek(summary, "2026-06-01T12:09:59.000Z")).toBe(false);
     expect(canSystemExpireOpenSeek(summary, EXPIRES_AT)).toBe(true);
+  });
+
+  it("matches open seek directory side clock and victory point filters", () => {
+    const timedVp = pendingSummary({
+      creatorSeat: "w",
+      setup: setupFixture({
+        timeControl: { initial: 10, increment: 5 },
+        gameRules: { vpModeEnabled: true },
+      }),
+    });
+    const casualCastleControl = pendingSummary({
+      seekId: "seek_casual",
+      creatorSeat: "b",
+      setup: setupFixture({
+        timeControl: undefined,
+        gameRules: { vpModeEnabled: false },
+      }),
+    });
+    const randomSeatMissingRules = pendingSummary({
+      seekId: "seek_random",
+      creatorSeat: "random",
+      setup: setupFixture({
+        timeControl: undefined,
+        gameRules: undefined,
+      }),
+    });
+
+    expect(
+      openSeekMatchesDirectoryFilters(timedVp, {
+        creatorSeat: "w",
+        clock: "timed",
+        vp: "enabled",
+      })
+    ).toBe(true);
+    expect(
+      openSeekMatchesDirectoryFilters(timedVp, {
+        creatorSeat: "b",
+      })
+    ).toBe(false);
+    expect(
+      openSeekMatchesDirectoryFilters(casualCastleControl, {
+        clock: "casual",
+        vp: "disabled",
+      })
+    ).toBe(true);
+    expect(
+      openSeekMatchesDirectoryFilters(casualCastleControl, {
+        clock: "timed",
+      })
+    ).toBe(false);
+    expect(
+      openSeekMatchesDirectoryFilters(randomSeatMissingRules, {
+        creatorSeat: "random",
+        clock: "casual",
+        vp: "disabled",
+      })
+    ).toBe(true);
   });
 
   it("validates directory responses and opaque cursors", () => {

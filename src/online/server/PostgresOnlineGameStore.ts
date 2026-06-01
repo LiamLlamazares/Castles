@@ -252,6 +252,24 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       where.push("expires_at > now()");
     }
 
+    if (options.creatorSeat) {
+      const creatorSeatParam = values.length + 1;
+      values.push(options.creatorSeat);
+      where.push(`payload->>'creatorSeat' = $${creatorSeatParam}`);
+    }
+
+    if (options.clock === "timed") {
+      where.push(`payload->'setup' ? 'timeControl'`);
+    } else if (options.clock === "casual") {
+      where.push(`NOT (payload->'setup' ? 'timeControl')`);
+    }
+
+    if (options.vp === "enabled") {
+      where.push(`(payload->'setup'->'gameRules'->>'vpModeEnabled')::boolean IS TRUE`);
+    } else if (options.vp === "disabled") {
+      where.push(`(payload->'setup'->'gameRules'->>'vpModeEnabled')::boolean IS NOT TRUE`);
+    }
+
     if (options.cursor) {
       const cursor = decodeOpenSeekDirectoryCursor(options.cursor);
       if (!cursor.ok) throw new Error(cursor.error.message);

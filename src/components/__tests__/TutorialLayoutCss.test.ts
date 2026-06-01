@@ -110,4 +110,14 @@ describe("Tutorial mobile layout CSS", () => {
     expect(libraryCss).toContain("font-family: \"Inter\", system-ui");
     expect(onlineCss).toContain("font-family: \"Inter\", system-ui");
   });
+
+  it("lets the online lobby filter toolbar wrap without fixed-column crowding", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const onlineCss = readFileSync(resolve(testDir, "../../css/OnlineGameBrowser.css"), "utf8");
+
+    expect(onlineCss).toContain("grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));");
+    expect(onlineCss).not.toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
+    expect(onlineCss).toContain(".online-browser-visually-hidden");
+    expect(onlineCss).toContain("clip: rect(0 0 0 0) !important;");
+  });
 });

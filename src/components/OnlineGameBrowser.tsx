@@ -24,6 +24,9 @@ import "../css/OnlineGameBrowser.css";
 type OnlineBrowserTab = "lobby" | "watch" | "archive";
 type OnlineBrowserSort = "newest" | "moves";
 type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
+type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
+type OpenSeekClockFilter = "all" | "timed" | "casual";
+type OpenSeekVpFilter = "all" | "enabled" | "disabled";
 type OnlineBrowserResultFilter =
   | "all"
   | "white"
@@ -33,6 +36,10 @@ type OnlineBrowserResultFilter =
   | "castle_control"
   | "victory_points"
   | "monarch_captured";
+
+const LOBBY_AUTO_REFRESH_MS = 30_000;
+const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
+const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
 
 interface OnlineGameBrowserProps {
   loadGames?: (options?: FetchOnlineGameSummariesOptions) => Promise<OnlineGameDirectoryResponse>;
@@ -148,6 +155,23 @@ function formatSeekStatus(status: OpenSeekSummary["status"]): string {
   }
 }
 
+function compareOpenSeekNewest(left: OpenSeekSummary, right: OpenSeekSummary): number {
+  if (left.updatedAt !== right.updatedAt) return right.updatedAt.localeCompare(left.updatedAt);
+  return left.seekId.localeCompare(right.seekId);
+}
+
+function formatLastChecked(date: Date): string {
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function isRateLimitError(error: unknown): boolean {
+  return error instanceof Error && /429|rate.?limit(?:ed)?/i.test(error.message);
+}
+
 const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   loadGames = fetchOnlineGameDirectory,
   loadOpenSeeks = fetchOpenSeekDirectory,
@@ -173,6 +197,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<OnlineBrowserSort>("newest");
   const [timeFilter, setTimeFilter] = React.useState<OnlineBrowserTimeFilter>("all");
+  const [seekSideFilter, setSeekSideFilter] = React.useState<OpenSeekSideFilter>("all");
+  const [seekClockFilter, setSeekClockFilter] = React.useState<OpenSeekClockFilter>("all");
+  const [seekVpFilter, setSeekVpFilter] = React.useState<OpenSeekVpFilter>("all");
   const [resultFilter, setResultFilter] = React.useState<OnlineBrowserResultFilter>("all");
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
@@ -182,8 +209,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [seekActionById, setSeekActionById] = React.useState<Record<string, "accept" | "cancel" | undefined>>({});
   const [seekActionMessage, setSeekActionMessage] = React.useState("");
   const [ownedSeekAction, setOwnedSeekAction] = React.useState<"refresh" | "join" | undefined>();
+  const [lastSeekCheckedAt, setLastSeekCheckedAt] = React.useState("");
+  const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
+  const seekLoadInFlightRef = React.useRef(false);
+  const ownedSeekRefreshInFlightRef = React.useRef(false);
+  const seekAutoRefreshPausedUntilRef = React.useRef(0);
+  const seekActionByIdRef = React.useRef(seekActionById);
+  const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
+
+  React.useEffect(() => {
+    seekActionByIdRef.current = seekActionById;
+  }, [seekActionById]);
 
   const directoryState = tab === "archive" ? "archived" : "active";
 
@@ -244,27 +282,108 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     refreshGames();
   }, [refreshGames]);
 
-  const loadOpenSeekPage = React.useCallback(async () => {
+  const seekDirectoryOptions = React.useMemo<FetchOpenSeekDirectoryOptions>(() => ({
+    state: "open",
+    limit: 50,
+    ...(seekSideFilter !== "all" ? { creatorSeat: seekSideFilter } : {}),
+    ...(seekClockFilter !== "all" ? { clock: seekClockFilter } : {}),
+    ...(seekVpFilter !== "all" ? { vp: seekVpFilter } : {}),
+  }), [seekClockFilter, seekSideFilter, seekVpFilter]);
+  const seekDirectoryOptionsRef = React.useRef(seekDirectoryOptions);
+
+  React.useEffect(() => {
+    seekDirectoryOptionsRef.current = seekDirectoryOptions;
+  }, [seekDirectoryOptions]);
+
+  const mergePendingOpenSeeks = React.useCallback((
+    nextSeeks: OpenSeekSummary[],
+    currentSeeks: OpenSeekSummary[]
+  ): OpenSeekSummary[] => {
+    const pendingIds = new Set(
+      Object.entries(seekActionByIdRef.current)
+        .filter(([, action]) => action !== undefined)
+        .map(([seekId]) => seekId)
+    );
+    if (pendingIds.size === 0) return nextSeeks;
+    const nextIds = new Set(nextSeeks.map((seek) => seek.seekId));
+    const pendingSeeks = currentSeeks.filter(
+      (seek) => pendingIds.has(seek.seekId) && !nextIds.has(seek.seekId)
+    );
+    return [...nextSeeks, ...pendingSeeks].sort(compareOpenSeekNewest);
+  }, []);
+
+  const loadOpenSeekPage = React.useCallback(async function runOpenSeekLoad(
+    options: { background?: boolean } = {}
+  ) {
+    const background = options.background === true;
+    if (seekLoadInFlightRef.current) {
+      if (!background) {
+        queuedSeekLoadRef.current = "foreground";
+      } else if (!queuedSeekLoadRef.current) {
+        queuedSeekLoadRef.current = "background";
+      }
+      return;
+    }
+    seekLoadInFlightRef.current = true;
+    setIsSeekLoadInFlight(true);
     const requestId = seekRequestIdRef.current + 1;
     seekRequestIdRef.current = requestId;
-    setSeekStatus("loading");
-    setSeekActionMessage("");
+    if (!background) {
+      setSeekStatus("loading");
+      setSeekActionMessage("");
+    }
     try {
-      const response = await loadOpenSeeks({ state: "open", limit: 50 });
+      const response = await loadOpenSeeks(seekDirectoryOptionsRef.current);
       if (seekRequestIdRef.current !== requestId) return;
-      setOpenSeeks(response.seeks);
+      setOpenSeeks((current) => mergePendingOpenSeeks(response.seeks, current));
+      setLastSeekCheckedAt(formatLastChecked(new Date()));
       setSeekStatus("ready");
+      setSeekActionMessage((current) => current === AUTO_REFRESH_PAUSED_MESSAGE ? "" : current);
     } catch (error) {
       if (seekRequestIdRef.current !== requestId) return;
       console.error("[OnlineGameBrowser] Failed to load open seeks", error);
-      setOpenSeeks([]);
-      setSeekStatus("error");
+      if (isRateLimitError(error)) {
+        seekAutoRefreshPausedUntilRef.current = Date.now() + LOBBY_RATE_LIMIT_BACKOFF_MS;
+      }
+      if (!background) {
+        setOpenSeeks([]);
+        setSeekStatus("error");
+      } else if (isRateLimitError(error)) {
+        setSeekActionMessage(AUTO_REFRESH_PAUSED_MESSAGE);
+      }
+    } finally {
+      seekLoadInFlightRef.current = false;
+      const queuedLoad = queuedSeekLoadRef.current;
+      queuedSeekLoadRef.current = undefined;
+      if (queuedLoad) {
+        void loadOpenSeekPage({ background: queuedLoad === "background" });
+      } else {
+        setIsSeekLoadInFlight(false);
+      }
     }
-  }, [loadOpenSeeks]);
+  }, [loadOpenSeeks, mergePendingOpenSeeks]);
 
   React.useEffect(() => {
     if (tab !== "lobby") return;
-    void loadOpenSeekPage();
+    void loadOpenSeekPage({ background: false });
+  }, [loadOpenSeekPage, seekDirectoryOptions, tab]);
+
+  React.useEffect(() => {
+    if (tab !== "lobby") return;
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() < seekAutoRefreshPausedUntilRef.current) return;
+      void loadOpenSeekPage({ background: true });
+    };
+    const interval = window.setInterval(refreshIfVisible, LOBBY_AUTO_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      refreshIfVisible();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [loadOpenSeekPage, tab]);
 
   const publicGames = React.useMemo(
@@ -293,21 +412,27 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return openSeeks
       .filter((seek) => seek.status === "open")
       .filter((seek) => !normalizedQuery || seekSearchText(seek).includes(normalizedQuery))
-      .sort((left, right) => {
-        if (left.updatedAt !== right.updatedAt) return right.updatedAt.localeCompare(left.updatedAt);
-        return left.seekId.localeCompare(right.seekId);
-      });
+      .sort(compareOpenSeekNewest);
   }, [openSeeks, query]);
 
   const emptyTitle =
     tab === "watch" ? "No public live games yet." : "No public completed games yet.";
+  const hasActiveSeekFilters =
+    query.trim() !== "" ||
+    seekSideFilter !== "all" ||
+    seekClockFilter !== "all" ||
+    seekVpFilter !== "all";
   const hasActiveFilters =
     query.trim() !== "" || timeFilter !== "all" || (tab === "archive" && resultFilter !== "all");
 
   const runSeekAction = async (seekId: string, action: "accept" | "cancel") => {
     const handler = action === "accept" ? onAcceptSeek : onCancelSeek;
     if (!handler) return;
-    setSeekActionById((current) => ({ ...current, [seekId]: action }));
+    setSeekActionById((current) => {
+      const next = { ...current, [seekId]: action };
+      seekActionByIdRef.current = next;
+      return next;
+    });
     setSeekActionMessage("");
     try {
       await handler(seekId);
@@ -322,25 +447,61 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setSeekActionById((current) => {
         const next = { ...current };
         delete next[seekId];
+        seekActionByIdRef.current = next;
         return next;
       });
     }
   };
 
-  const runOwnedSeekRefresh = async () => {
+  const runOwnedSeekRefresh = React.useCallback(async (options: { background?: boolean } = {}) => {
     if (!onRefreshOwnedSeek) return;
-    setOwnedSeekAction("refresh");
-    setSeekActionMessage("");
+    const background = options.background === true;
+    if (ownedSeekRefreshInFlightRef.current) return;
+    ownedSeekRefreshInFlightRef.current = true;
+    if (!background) {
+      setOwnedSeekAction("refresh");
+      setSeekActionMessage("");
+    }
     try {
       await onRefreshOwnedSeek();
-      setSeekActionMessage("Your open seek is up to date.");
+      if (!background) {
+        setSeekActionMessage("Your open seek was refreshed.");
+      }
     } catch (error) {
       console.error("[OnlineGameBrowser] Failed to refresh owned open seek", error);
-      setSeekActionMessage("Could not refresh your open seek.");
+      if (isRateLimitError(error)) {
+        seekAutoRefreshPausedUntilRef.current = Date.now() + LOBBY_RATE_LIMIT_BACKOFF_MS;
+      }
+      if (!background) {
+        setSeekActionMessage("Could not refresh your open seek.");
+      }
     } finally {
-      setOwnedSeekAction(undefined);
+      ownedSeekRefreshInFlightRef.current = false;
+      if (!background) {
+        setOwnedSeekAction(undefined);
+      }
     }
-  };
+  }, [onRefreshOwnedSeek]);
+
+  React.useEffect(() => {
+    if (tab !== "lobby") return;
+    if (ownedSeekResponse?.summary.status !== "open") return;
+    if (!onRefreshOwnedSeek) return;
+    const refreshOwnedIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() < seekAutoRefreshPausedUntilRef.current) return;
+      void runOwnedSeekRefresh({ background: true });
+    };
+    const interval = window.setInterval(refreshOwnedIfVisible, LOBBY_AUTO_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      refreshOwnedIfVisible();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [onRefreshOwnedSeek, ownedSeekResponse?.summary.status, runOwnedSeekRefresh, tab]);
 
   const runOwnedSeekJoin = () => {
     if (!onJoinOwnedSeek) return;
@@ -408,11 +569,48 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         </div>
         {tab === "lobby" ? (
           <div className="online-browser-filter-grid">
+            <label className="online-browser-select">
+              <span>Side</span>
+              <select
+                aria-label="Open seek side filter"
+                value={seekSideFilter}
+                onChange={(event) => setSeekSideFilter(event.currentTarget.value as OpenSeekSideFilter)}
+              >
+                <option value="all">All sides</option>
+                <option value="random">Random</option>
+                <option value="w">White</option>
+                <option value="b">Black</option>
+              </select>
+            </label>
+            <label className="online-browser-select">
+              <span>Clock</span>
+              <select
+                aria-label="Open seek clock filter"
+                value={seekClockFilter}
+                onChange={(event) => setSeekClockFilter(event.currentTarget.value as OpenSeekClockFilter)}
+              >
+                <option value="all">All clocks</option>
+                <option value="timed">Timed</option>
+                <option value="casual">Casual</option>
+              </select>
+            </label>
+            <label className="online-browser-select">
+              <span>Scoring</span>
+              <select
+                aria-label="Open seek victory points filter"
+                value={seekVpFilter}
+                onChange={(event) => setSeekVpFilter(event.currentTarget.value as OpenSeekVpFilter)}
+              >
+                <option value="all">All scoring</option>
+                <option value="enabled">Victory points</option>
+                <option value="disabled">Castle control</option>
+              </select>
+            </label>
             <button
               type="button"
               className="online-browser-button neutral"
-              onClick={() => void loadOpenSeekPage()}
-              disabled={seekStatus === "loading"}
+              onClick={() => void loadOpenSeekPage({ background: false })}
+              disabled={seekStatus === "loading" || isSeekLoadInFlight}
               aria-label="Refresh open seeks"
             >
               {seekStatus === "loading" ? "Refreshing..." : "Refresh"}
@@ -491,7 +689,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             ? "Loading open seeks..."
             : seekStatus === "error"
               ? "Could not load open seeks."
-              : seekActionMessage || `${visibleOpenSeeks.length} open seeks shown`
+              : seekActionMessage || (
+                <>
+                  {visibleOpenSeeks.length} open seeks shown
+                  {lastSeekCheckedAt ? <span aria-hidden="true">; last checked {lastSeekCheckedAt}</span> : null}
+                </>
+              )
           : status === "loading"
             ? "Loading public games..."
             : status === "error"
@@ -499,10 +702,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               : copyMessage ||
                 `${visibleGames.length} public ${tab === "watch" ? "live" : "archived"} games shown${nextCursor ? "; more available" : ""}`}
       </div>
+      {tab === "lobby" && seekStatus === "ready" && lastSeekCheckedAt ? (
+        <div className="online-browser-visually-hidden" aria-live="off">
+          Last checked {lastSeekCheckedAt}
+        </div>
+      ) : null}
 
       {tab === "lobby" ? (
         seekStatus === "error" ? (
-          <button type="button" className="online-browser-button neutral" onClick={loadOpenSeekPage}>
+          <button
+            type="button"
+            className="online-browser-button neutral"
+            onClick={() => void loadOpenSeekPage()}
+          >
             Retry
           </button>
         ) : (
@@ -563,9 +775,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             )}
             {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
               <section className="online-browser-empty">
-                <h2>{query.trim() ? "No open seeks match this search." : "No open seeks yet."}</h2>
+                <h2>{hasActiveSeekFilters ? "No open seeks match these filters." : "No open seeks yet."}</h2>
                 <p>
-                  Create a public seek from Play, or refresh when another player is ready.
+                  {hasActiveSeekFilters
+                    ? "Try a different side, clock, scoring, or search setting."
+                    : "Create a public seek from Play, or check again after someone creates one."}
                 </p>
               </section>
             ) : visibleOpenSeeks.map((seek) => {

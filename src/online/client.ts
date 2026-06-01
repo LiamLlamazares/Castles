@@ -17,7 +17,9 @@ import {
   validateOpenSeekDirectoryResponse,
   validateOpenSeekSummary,
   type OpenSeekDirectoryResponse,
+  type OpenSeekDirectoryClockFilter,
   type OpenSeekDirectoryState,
+  type OpenSeekDirectoryVpFilter,
   type OpenSeekSummary,
   type OpenSeekSeat,
 } from "./seeks";
@@ -882,6 +884,9 @@ export interface FetchOpenSeekDirectoryOptions {
   state?: OpenSeekDirectoryState;
   limit?: number;
   cursor?: string;
+  creatorSeat?: OpenSeekSeat;
+  clock?: OpenSeekDirectoryClockFilter;
+  vp?: OpenSeekDirectoryVpFilter;
 }
 
 function buildOpenSeekDirectoryPath(options: FetchOpenSeekDirectoryOptions = {}): string {
@@ -889,6 +894,9 @@ function buildOpenSeekDirectoryPath(options: FetchOpenSeekDirectoryOptions = {})
   if (options.state) params.set("state", options.state);
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   if (options.cursor) params.set("cursor", options.cursor);
+  if (options.creatorSeat) params.set("creatorSeat", options.creatorSeat);
+  if (options.clock) params.set("clock", options.clock);
+  if (options.vp) params.set("vp", options.vp);
   const query = params.toString();
   return query ? `/api/online/seeks?${query}` : "/api/online/seeks";
 }
