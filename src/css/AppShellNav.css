@@ -1,0 +1,122 @@
+.app-shell-header {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.app-shell-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-shell-destinations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-shell-back-button,
+.app-shell-destination {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.app-shell-back-button {
+  background: #f4d287;
+  color: #201812;
+  flex: 0 0 auto;
+}
+
+.app-shell-destination.active,
+.app-shell-destination[aria-current="page"] {
+  background: #70d6a1;
+  border-color: #70d6a1;
+  color: #102018;
+}
+
+.app-shell-destination:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.app-shell-back-button:hover:not(:disabled),
+.app-shell-destination:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.app-shell-back-button:hover:not(:disabled) {
+  background: #f7dfa0;
+}
+
+.app-shell-title-block {
+  min-width: 0;
+}
+
+.app-shell-kicker {
+  text-transform: uppercase;
+  color: #91d6c5;
+  letter-spacing: 0.14em;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.app-shell-title-block h1 {
+  margin: 4px 0 0;
+  font-size: clamp(1.55rem, 3vw, 2.45rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.app-shell-title-block p {
+  margin: 8px 0 0;
+  max-width: 760px;
+  color: #d9d0b8;
+}
+
+@media (max-width: 760px) {
+  .app-shell-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin: -20px -20px 16px;
+    padding: 12px 20px 14px;
+    background: inherit;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .app-shell-nav {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell-back-button,
+  .app-shell-destination {
+    min-height: 36px;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+
+  .app-shell-destinations {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .app-shell-destination {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

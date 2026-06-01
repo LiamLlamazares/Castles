@@ -321,6 +321,13 @@ function App() {
     setView('watch');
   };
 
+  const handleOpenGame = () => {
+    cancelPendingReplay();
+    setViewStack([]);
+    setPreviousView('game');
+    setView('game');
+  };
+
   const returnToPreviousView = () => {
     cancelPendingReplay();
     setViewStack(prev => {
@@ -339,7 +346,16 @@ function App() {
     });
   };
 
-  const currentBackLabel = previousView === 'setup' ? 'Back to setup' : previousView === 'watch' ? 'Back to Watch' : 'Back to game';
+  const currentBackLabel =
+    previousView === 'setup'
+      ? 'Back to setup'
+      : previousView === 'watch'
+        ? 'Back to Watch'
+        : previousView === 'tutorial'
+          ? 'Back to Learn'
+          : previousView === 'library'
+            ? 'Back to Library'
+            : 'Back to game';
 
   const handleStartGame = (
     board: Board, 
@@ -739,10 +755,10 @@ function App() {
     });
   };
 
-  const handleSaveGameToLibrary = async (pgn: string, status: SavedGameStatus) => {
+  const handleSaveGameToLibrary = async (pgn: string, status: SavedGameStatus): Promise<boolean> => {
     const defaultName = createDefaultSavedGameName(pgn);
     const name = prompt("Save game as:", defaultName);
-    if (!name?.trim()) return;
+    if (!name?.trim()) return false;
 
     try {
       await gameLibraryRepository.saveGame(createSavedGameRecord({
@@ -750,10 +766,10 @@ function App() {
         name: name.trim(),
         status
       }));
-      alert("Game saved to library.");
+      return true;
     } catch (error) {
       console.error("Failed to save game to library", error);
-      alert("Could not save game to library.");
+      throw error;
     }
   };
 
@@ -887,6 +903,7 @@ function App() {
           onCreateOnlineGame={handleCreateOnlineGame}
           onCreateOnlineChallenge={handleCreateOnlineChallenge}
           onBack={returnToPreviousView}
+          backLabel={currentBackLabel}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
@@ -1133,7 +1150,10 @@ function App() {
         <GameLibrary
           repository={gameLibraryRepository}
           onBack={returnToPreviousView}
+          onOpenGame={handleOpenGame}
           backLabel={currentBackLabel}
+          onTutorial={handleTutorialClick}
+          onOpenOnlineBrowser={handleOpenOnlineBrowser}
           onLoadGame={handleLoadSavedGame}
           onImportPGN={handleImportPGNToLibrary}
         />
@@ -1152,14 +1172,20 @@ function App() {
       {view === 'tutorial' && (
         <Tutorial
           onBack={returnToPreviousView}
+          onOpenGame={handleOpenGame}
           backLabel={currentBackLabel}
+          onOpenLibrary={handleOpenLibrary}
+          onOpenOnlineBrowser={handleOpenOnlineBrowser}
         />
       )}
 
       {view === 'watch' && (
         <OnlineGameBrowser
           onBack={returnToPreviousView}
+          onOpenGame={handleOpenGame}
           backLabel={currentBackLabel}
+          onTutorial={handleTutorialClick}
+          onOpenLibrary={handleOpenLibrary}
           onSpectate={handleSpectateOnlineGame}
           onReplay={handleReplayOnlineGame}
         />

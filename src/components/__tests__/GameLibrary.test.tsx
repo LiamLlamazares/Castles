@@ -26,6 +26,8 @@ describe("GameLibrary", () => {
     expect(await screen.findByText(/No named saves yet/i)).toBeInTheDocument();
     expect(container.querySelector(".game-library-page")).toBeInTheDocument();
     expect(container.querySelector(".game-library-layout")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Library navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
   });
 
@@ -67,5 +69,19 @@ describe("GameLibrary", () => {
 
     expect(await screen.findByText(longName)).toBeInTheDocument();
     expect(container.querySelector(".saved-game-card")).toHaveClass("saved-game-card");
+  });
+
+  it("keeps PGN import behind a collapsed import section", async () => {
+    render(
+      <GameLibrary
+        repository={createRepository()}
+        onBack={vi.fn()}
+        onLoadGame={vi.fn()}
+        onImportPGN={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Import PGN")).toBeInTheDocument();
+    expect(screen.getByText("Import PGN").closest("details")).not.toHaveAttribute("open");
   });
 });

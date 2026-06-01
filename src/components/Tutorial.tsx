@@ -4,6 +4,7 @@
  */
 import React, { useState, useMemo } from 'react';
 import GameBoard from './Game';
+import AppShellNav, { AppShellDestination } from './AppShellNav';
 import { getAllLessons, TutorialLesson } from '../tutorial';
 import { getImageByPieceType } from './PieceImages';
 import { PieceType } from '../Constants';
@@ -12,7 +13,10 @@ import '../css/Board.css';
 
 interface TutorialProps {
   onBack: () => void;
+  onOpenGame?: () => void;
   backLabel?: string;
+  onOpenLibrary?: () => void;
+  onOpenOnlineBrowser?: () => void;
 }
 
 const TUTORIAL_PROGRESS_KEY = "castles_tutorial_lesson_index";
@@ -38,7 +42,13 @@ function saveStoredLessonIndex(lessonIndex: number): void {
   }
 }
 
-const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" }) => {
+const Tutorial: React.FC<TutorialProps> = ({
+  onBack,
+  onOpenGame,
+  backLabel = "Back to game",
+  onOpenLibrary,
+  onOpenOnlineBrowser,
+}) => {
   const { isDark } = useTheme();
   const lessons = useMemo(() => getAllLessons(), []);
   const [currentLessonIndex, setCurrentLessonIndex] = useState(() => readStoredLessonIndex(lessons.length));
@@ -88,15 +98,32 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" 
     if (idx !== -1) setCurrentLessonIndex(idx);
   };
 
+  const navDestinations: AppShellDestination[] = [
+    { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
+    { id: "learn", label: "Learn" },
+    ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
+    ...(onOpenOnlineBrowser ? [{ id: "watch" as const, label: "Watch", onClick: onOpenOnlineBrowser }] : []),
+  ];
+
   return (
     <div className="tutorial-container">
       <div className="tutorial-sidebar">
-        <div className="tutorial-topbar">
-          <button
-            onClick={onBack}
-            className="tutorial-back-button"
-          >
-            {backLabel}
+        <AppShellNav
+          ariaLabel="Learn navigation"
+          activeDestination="learn"
+          title="Learn"
+          kicker="Tutorial"
+          description="Resume the lesson board and keep progress visible."
+          backLabel={backLabel}
+          onBack={onBack}
+          destinations={navDestinations}
+        />
+
+        <h2 className="tutorial-title">{lesson.title}</h2>
+
+        <div className="tutorial-progress-controls" role="group" aria-label="Lesson progress controls">
+          <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
+            Previous
           </button>
           <span
             className="tutorial-progress"
@@ -113,9 +140,10 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" 
           >
             Restart Tutorial
           </button>
+          <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
+            Next
+          </button>
         </div>
-
-        <h2 className="tutorial-title" style={{ margin: 0 }}>{lesson.title}</h2>
 
         {lesson.id.startsWith('m2_l') && (
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -173,14 +201,6 @@ const Tutorial: React.FC<TutorialProps> = ({ onBack, backLabel = "Back to game" 
           </div>
         )}
 
-        <div className="tutorial-step-controls">
-          <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
-            Previous
-          </button>
-          <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
-            Next
-          </button>
-        </div>
       </div>
 
       <div className="tutorial-board-stage">

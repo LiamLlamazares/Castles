@@ -1,4 +1,5 @@
 import React from "react";
+import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import {
   GameLibraryRepository,
   SavedGameRecord,
@@ -9,7 +10,10 @@ import "../css/GameLibrary.css";
 interface GameLibraryProps {
   repository: GameLibraryRepository;
   onBack: () => void;
+  onOpenGame?: () => void;
   backLabel?: string;
+  onTutorial?: () => void;
+  onOpenOnlineBrowser?: () => void;
   onLoadGame: (record: SavedGameRecord) => void;
   onImportPGN: (pgn: string, name: string) => Promise<void>;
 }
@@ -17,7 +21,10 @@ interface GameLibraryProps {
 const GameLibrary: React.FC<GameLibraryProps> = ({
   repository,
   onBack,
+  onOpenGame,
   backLabel = "Back to game",
+  onTutorial,
+  onOpenOnlineBrowser,
   onLoadGame,
   onImportPGN,
 }) => {
@@ -114,23 +121,25 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
   };
 
   const selected = games.find(game => game.id === selectedId);
+  const navDestinations: AppShellDestination[] = [
+    { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
+    ...(onTutorial ? [{ id: "learn" as const, label: "Learn", onClick: onTutorial }] : []),
+    { id: "library", label: "Library" },
+    ...(onOpenOnlineBrowser ? [{ id: "watch" as const, label: "Watch", onClick: onOpenOnlineBrowser }] : []),
+  ];
 
   return (
     <div className="game-library-page">
-      <header className="game-library-header">
-        <div>
-          <div className="game-library-kicker">
-            Local archive
-          </div>
-          <h1>Castles Game Library</h1>
-          <p>
-            Named saves live here. Autosave remains separate, so test games do not flood the archive.
-          </p>
-        </div>
-        <button className="library-button library-button-back" onClick={onBack}>
-          {backLabel}
-        </button>
-      </header>
+      <AppShellNav
+        ariaLabel="Library navigation"
+        activeDestination="library"
+        title="Castles Game Library"
+        kicker="Local archive"
+        description="Named saves live here. Autosave remains separate, so test games do not flood the archive."
+        backLabel={backLabel}
+        onBack={onBack}
+        destinations={navDestinations}
+      />
 
       <main className="game-library-layout">
         <section className="game-library-panel">
@@ -165,26 +174,28 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
           </div>
         </section>
 
-        <section className="game-library-panel">
-          <h2>Import PGN</h2>
-          <label className="library-label">Save name</label>
-          <input
-            value={importName}
-            onChange={event => setImportName(event.target.value)}
-            className="library-input"
-          />
-          <label className="library-label">PGN text</label>
-          <textarea
-            value={importPGN}
-            onChange={event => setImportPGN(event.target.value)}
-            rows={12}
-            className="library-textarea"
-          />
-          <button className="library-button neutral import" onClick={handleImport}>
-            Import into library
-          </button>
-          {message && <p className="library-message">{message}</p>}
-        </section>
+        <details className="game-library-panel game-library-import">
+          <summary>Import PGN</summary>
+          <div className="game-library-import-body">
+            <label className="library-label">Save name</label>
+            <input
+              value={importName}
+              onChange={event => setImportName(event.target.value)}
+              className="library-input"
+            />
+            <label className="library-label">PGN text</label>
+            <textarea
+              value={importPGN}
+              onChange={event => setImportPGN(event.target.value)}
+              rows={12}
+              className="library-textarea"
+            />
+            <button className="library-button neutral import" onClick={handleImport}>
+              Import into library
+            </button>
+            {message && <p className="library-message">{message}</p>}
+          </div>
+        </details>
       </main>
     </div>
   );

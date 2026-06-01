@@ -95,11 +95,13 @@ vi.mock("../components/Game", () => ({
 vi.mock("../components/GameSetup", () => ({
   default: ({
     onBack,
+    backLabel = "Back to game",
     onTutorial,
     onOpenLibrary,
     onOpenOnlineBrowser,
   }: {
     onBack: () => void;
+    backLabel?: string;
     onTutorial: () => void;
     onOpenLibrary: () => void;
     onOpenOnlineBrowser: () => void;
@@ -107,7 +109,7 @@ vi.mock("../components/GameSetup", () => ({
     <div>
       <div>Setup Ready</div>
       <button type="button" onClick={onBack}>
-        Back to game
+        {backLabel}
       </button>
       <button type="button" onClick={onTutorial}>
         Setup Tutorial
@@ -125,11 +127,17 @@ vi.mock("../components/GameSetup", () => ({
 vi.mock("../components/OnlineGameBrowser", () => ({
   default: ({
     onBack,
+    onOpenGame,
+    onTutorial,
+    onOpenLibrary,
     onReplay,
     onSpectate,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
+    onOpenGame?: () => void;
+    onTutorial?: () => void;
+    onOpenLibrary?: () => void;
     onReplay: (gameId: string) => void;
     onSpectate: (gameId: string) => void;
     backLabel?: string;
@@ -139,6 +147,21 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
+      {onOpenGame && (
+        <button type="button" onClick={onOpenGame}>
+          Watch Play
+        </button>
+      )}
+      {onTutorial && (
+        <button type="button" onClick={onTutorial}>
+          Watch Tutorial
+        </button>
+      )}
+      {onOpenLibrary && (
+        <button type="button" onClick={onOpenLibrary}>
+          Watch Library
+        </button>
+      )}
       <button type="button" onClick={() => onSpectate("game_watch_public")}>
         Spectate public game
       </button>
@@ -150,23 +173,63 @@ vi.mock("../components/OnlineGameBrowser", () => ({
 }));
 
 vi.mock("../components/GameLibrary", () => ({
-  default: ({ onBack, backLabel = "Back to game" }: { onBack: () => void; backLabel?: string }) => (
+  default: ({
+    onBack,
+    onOpenGame,
+    onTutorial,
+    backLabel = "Back to game",
+  }: {
+    onBack: () => void;
+    onOpenGame?: () => void;
+    onTutorial?: () => void;
+    backLabel?: string;
+  }) => (
     <div>
       <div>Library Ready</div>
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
+      {onOpenGame && (
+        <button type="button" onClick={onOpenGame}>
+          Library Play
+        </button>
+      )}
+      {onTutorial && (
+        <button type="button" onClick={onTutorial}>
+          Library Tutorial
+        </button>
+      )}
     </div>
   ),
 }));
 
 vi.mock("../components/Tutorial", () => ({
-  default: ({ onBack, backLabel = "Back to game" }: { onBack: () => void; backLabel?: string }) => (
+  default: ({
+    onBack,
+    onOpenGame,
+    onOpenLibrary,
+    backLabel = "Back to game",
+  }: {
+    onBack: () => void;
+    onOpenGame?: () => void;
+    onOpenLibrary?: () => void;
+    backLabel?: string;
+  }) => (
     <div>
       <div>Tutorial Ready</div>
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
+      {onOpenGame && (
+        <button type="button" onClick={onOpenGame}>
+          Tutorial Play
+        </button>
+      )}
+      {onOpenLibrary && (
+        <button type="button" onClick={onOpenLibrary}>
+          Tutorial Library
+        </button>
+      )}
     </div>
   ),
 }));
@@ -301,6 +364,56 @@ describe("App game setup lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Back to setup" }));
     expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+  });
+
+  it("supports nested page navigation without losing the return path", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch Tutorial" }));
+    expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Watch" }));
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch Library" }));
+    expect(screen.getByText("Library Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Watch" }));
+    expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+  });
+
+  it("opens the current game from nested pages without using the back stack", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Watch Tutorial" }));
+    expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial Play" }));
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Library" }));
+    fireEvent.click(screen.getByRole("button", { name: "Library Play" }));
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+  });
+
+  it("labels cross-page back buttons with the actual previous page", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial Library" }));
+    expect(screen.getByRole("button", { name: "Back to Learn" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Learn" }));
+    expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial Play" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Library" }));
+    fireEvent.click(screen.getByRole("button", { name: "Library Tutorial" }));
+    expect(screen.getByRole("button", { name: "Back to Library" })).toBeInTheDocument();
   });
 
   it("opens public games from Watch through the token-free spectator flow", () => {

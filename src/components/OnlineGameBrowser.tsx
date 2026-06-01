@@ -1,4 +1,5 @@
 import React from "react";
+import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import {
   buildSpectatorUrl,
   copyOnlineInviteUrl,
@@ -13,6 +14,9 @@ type OnlineBrowserTab = "watch" | "archive";
 interface OnlineGameBrowserProps {
   loadGames?: () => Promise<OnlineGameSummary[]>;
   onBack: () => void;
+  onOpenGame?: () => void;
+  onTutorial?: () => void;
+  onOpenLibrary?: () => void;
   onReplay: (gameId: string) => void;
   onSpectate: (gameId: string) => void;
   backLabel?: string;
@@ -58,6 +62,9 @@ function searchText(summary: OnlineGameSummary): string {
 const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   loadGames = fetchOnlineGameSummaries,
   onBack,
+  onOpenGame,
+  onTutorial,
+  onOpenLibrary,
   onReplay,
   onSpectate,
   backLabel = "Back to game",
@@ -119,25 +126,31 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   };
 
+  const navDestinations: AppShellDestination[] = [
+    { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
+    ...(onTutorial ? [{ id: "learn" as const, label: "Learn", onClick: onTutorial }] : []),
+    ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
+    { id: "watch", label: "Watch" },
+  ];
+
   return (
     <div className="online-browser-page">
-      <header className="online-browser-header">
-        <div>
-          <div className="online-browser-kicker">Public games</div>
-          <h1>Watch and Online Archive</h1>
-          <p>
-            Only games deliberately published for public viewing appear here; unlisted invite games are excluded.
-          </p>
-        </div>
-        <button type="button" className="online-browser-button neutral" onClick={onBack}>
-          {backLabel}
-        </button>
-      </header>
+      <AppShellNav
+        ariaLabel="Watch navigation"
+        activeDestination="watch"
+        title="Watch and Online Archive"
+        kicker="Public games"
+        description="Only games deliberately published for public viewing appear here; unlisted invite games are excluded."
+        backLabel={backLabel}
+        onBack={onBack}
+        destinations={navDestinations}
+      />
 
       <section className="online-browser-toolbar" aria-label="Online browser controls">
         <div className="online-browser-tabs" aria-label="Online game lists">
           <button
             type="button"
+            aria-label="Live public games"
             aria-pressed={tab === "watch"}
             className={tab === "watch" ? "active" : ""}
             onClick={() => setTab("watch")}

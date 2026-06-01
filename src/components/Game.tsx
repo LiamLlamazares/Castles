@@ -76,7 +76,7 @@ interface GameBoardProps {
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
-  onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<void> | void;
+  onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<boolean | void> | boolean | void;
   timeControl?: { initial: number, increment: number };
   isAnalysisMode?: boolean;
   isTutorialMode?: boolean;
@@ -140,7 +140,15 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [showTooltipHint, setShowTooltipHint] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [isNavigationMenuOpen, setNavigationMenuOpen] = React.useState(false);
+  const [newGameConfirmation, setNewGameConfirmation] = React.useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const statusTimeoutRef = React.useRef<number | null>(null);
+  const shellRef = React.useRef<HTMLDivElement>(null);
+  const confirmDialogRef = React.useRef<HTMLElement>(null);
+  const keepPlayingButtonRef = React.useRef<HTMLButtonElement>(null);
+  const focusBeforeDialogRef = React.useRef<HTMLElement | null>(null);
 
   const showStatusMessage = React.useCallback((message: string) => {
     if (statusTimeoutRef.current !== null) {
@@ -160,6 +168,42 @@ const InnerGame: React.FC<GameBoardProps> = ({
       }
     };
   }, []);
+
+  React.useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    const backgroundChildren = Array.from(shell.children).filter(
+      (child) => !child.classList.contains("confirm-dialog-backdrop")
+    );
+
+    if (newGameConfirmation) {
+      backgroundChildren.forEach((child) => {
+        child.setAttribute("inert", "");
+        child.setAttribute("aria-hidden", "true");
+      });
+      return () => {
+        backgroundChildren.forEach((child) => {
+          child.removeAttribute("inert");
+          child.removeAttribute("aria-hidden");
+        });
+      };
+    }
+
+    backgroundChildren.forEach((child) => {
+      child.removeAttribute("inert");
+      child.removeAttribute("aria-hidden");
+    });
+  }, [newGameConfirmation]);
+
+  React.useEffect(() => {
+    if (!newGameConfirmation) return;
+    if (!focusBeforeDialogRef.current || !document.contains(focusBeforeDialogRef.current)) {
+      focusBeforeDialogRef.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
+    keepPlayingButtonRef.current?.focus();
+  }, [newGameConfirmation]);
 
   // Consolidated tooltip state
   const tooltip = useTooltip();
@@ -379,29 +423,81 @@ const InnerGame: React.FC<GameBoardProps> = ({
     prevTurnCounterRef.current = turnCounter;
   }, [turnCounter, castles, victoryPoints, gameRules?.vpModeEnabled]);
 
+  const closeNewGameConfirmation = React.useCallback(() => {
+    setNewGameConfirmation(null);
+    window.setTimeout(() => {
+      focusBeforeDialogRef.current?.focus();
+      focusBeforeDialogRef.current = null;
+    }, 0);
+  }, []);
+
+  const confirmNewGame = React.useCallback(() => {
+    focusBeforeDialogRef.current = null;
+    setNewGameConfirmation(null);
+    clearSave();
+    clearUrlParams();
+    onSetup();
+  }, [clearSave, clearUrlParams, onSetup]);
+
+  const handleNewGameDialogKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeNewGameConfirmation();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      confirmDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (!focusable.includes(active as HTMLElement)) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, [closeNewGameConfirmation]);
+
+  const rememberNewGameReturnFocus = () => {
+    focusBeforeDialogRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  };
+
   const handleNewGame = () => {
     if (onlineSession && !onlineSession.result) {
-      if (window.confirm("Leave this online game and start a new game?")) {
-        clearSave();
-        clearUrlParams();
-        onSetup();
-      }
+      rememberNewGameReturnFocus();
+      setNewGameConfirmation({
+        title: "Leave this online game?",
+        message: "Leave this game and configure a new one? Your current online seat or spectator view will be closed on this device.",
+      });
       return;
     }
 
     const safeToReset = !hasGameStarted || displayedWinner || isAnalysisMode;
 
     if (safeToReset) {
-      clearSave();
-      clearUrlParams();
-      onSetup();
-    } else {
-      if (window.confirm("Current game is in progress. Abandon and start a new game?")) {
-        clearSave();
-        clearUrlParams();
-        onSetup();
-      }
+      confirmNewGame();
+      return;
     }
+
+    setNewGameConfirmation({
+      title: "Leave this game?",
+      message: "Leave this game and configure a new one? Unsaved local progress will be discarded.",
+    });
+    rememberNewGameReturnFocus();
   };
 
   const handleEnterAnalysis = React.useCallback(() => {
@@ -508,8 +604,16 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const handleSaveGameToLibrary = React.useCallback(async () => {
     if (!onSaveGameToLibrary) return;
     const status: SavedGameStatus = isAnalysisMode ? "analysis" : displayedWinner ? "complete" : "ongoing";
-    await onSaveGameToLibrary(getPGN(), status);
-  }, [getPGN, isAnalysisMode, onSaveGameToLibrary, displayedWinner]);
+    try {
+      const didSave = await onSaveGameToLibrary(getPGN(), status);
+      if (didSave !== false) {
+        showStatusMessage("Saved to Library.");
+      }
+    } catch (error) {
+      console.error("Failed to save game to library", error);
+      showStatusMessage("Could not save game to library.");
+    }
+  }, [getPGN, isAnalysisMode, onSaveGameToLibrary, displayedWinner, showStatusMessage]);
 
   const dismissQuickStart = () => setShowQuickStart(false);
   const dismissTooltipHint = () => setShowTooltipHint(false);
@@ -523,7 +627,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   ].filter(Boolean).join(" ");
 
   return (
-    <div className={shellClasses}>
+    <div className={shellClasses} ref={shellRef}>
       {showNavigationMenu && (
         <HamburgerMenu
           onExportPGN={handleExportPGN}
@@ -601,8 +705,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
           onEnableAnalysis={canOpenOnlineAnalysis ? handleEnterAnalysis : undefined}
-          onOpenOnlineBrowser={onOpenOnlineBrowser}
-          onTutorial={onTutorial}
           moveHistory={moveHistory || []}
           moveTree={moveTree}
           onJumpToNode={jumpToNode}
@@ -616,6 +718,40 @@ const InnerGame: React.FC<GameBoardProps> = ({
           viewNodeId={viewNodeId}
           victoryPoints={victoryPoints}
         />
+      )}
+
+      {newGameConfirmation && (
+        <div className="confirm-dialog-backdrop">
+          <section
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-game-confirm-title"
+            aria-describedby="new-game-confirm-description"
+            ref={confirmDialogRef}
+            onKeyDown={handleNewGameDialogKeyDown}
+          >
+            <h2 id="new-game-confirm-title">{newGameConfirmation.title}</h2>
+            <p id="new-game-confirm-description">{newGameConfirmation.message}</p>
+            <div className="confirm-dialog-actions">
+              <button
+                type="button"
+                className="confirm-dialog-button neutral"
+                ref={keepPlayingButtonRef}
+                onClick={closeNewGameConfirmation}
+              >
+                Keep Playing
+              </button>
+              <button
+                type="button"
+                className="confirm-dialog-button danger"
+                onClick={confirmNewGame}
+              >
+                Leave Game
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       {onlineSession && (

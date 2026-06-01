@@ -7,10 +7,15 @@ This checklist turns the Lichess-style target into concrete Castles UI checks. L
 Phase 6A implementation status, 2026-06-01:
 
 - Current game shell follows the board-first benchmark on desktop, 390 x 844, and 360 x 640 viewports.
-- Game actions are grouped into turn controls, save/review, online links, and navigation; mobile keeps secondary navigation in the drawer to preserve board space.
-- Tutorial progress is visible, persisted, and restartable.
+- Shared Play/Learn/Library/Watch navigation is in place on setup, tutorial, Library, and Watch, with Play returning to the current game without resetting it.
+- Game actions are grouped into turn controls, save/review, online links, and Play; mobile keeps secondary navigation in the drawer to preserve board space.
+- Active games now guard New Game with an in-app confirmation, focus trap, Escape cancel, background inerting, and focus restoration to the invoking control.
+- Save Game reports in-app success/failure instead of silent browser prompts.
+- Tutorial progress is visible, persisted, restartable, and placed near the top of the Learn surface.
 - Mobile move history is available through a disclosure, and move entries are keyboard-accessible buttons.
-- Final Playwright viewport audit covered desktop/mobile game, setup, tutorial, and online game states with no clipped controls or top overlay collisions.
+- Library import is collapsed by default so saved games stay primary.
+- Final Playwright viewport audit covered desktop/mobile game, setup, tutorial, Watch, Library, drawer-open, and online smoke states with no clipped controls or top overlay collisions.
+- Screenshot artifacts for the second pass are in `artifacts/ui-audit/phase6a2-after`.
 - Full online browser smoke passed after the shell changes.
 
 Phase 6B implementation status, 2026-06-01:
@@ -85,8 +90,11 @@ For every screenshot, check:
 
 - App navigation test: menu -> tutorial -> back returns to the originating game view.
 - App navigation test: menu -> library -> back returns to the originating game view.
+- App navigation test: Play from nested setup/library/watch/learn returns to the current game without clearing it.
+- Game test: active New Game confirmation restores focus after drawer cancel and traps focus while open.
 - Tutorial test: current lesson progress is restored from localStorage.
 - Tutorial test: next/previous lesson changes persist progress.
+- Tutorial CSS test: mobile rows avoid fixed minimum heights that can clip the board on short screens.
 - Hamburger menu test: opening the drawer reports open state so game-level transient hints can be suppressed.
 - CSS/static assertion where practical: mobile drawer z-index is above hint banners and action controls.
 - Browser smoke: create/join/spectate/terminal flow still passes after shell changes.

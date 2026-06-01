@@ -1,0 +1,39 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import AppShellNav from "../AppShellNav";
+
+describe("AppShellNav", () => {
+  it("renders a stable app navigation row with a labelled back action", () => {
+    const onBack = vi.fn();
+    const onWatch = vi.fn();
+
+    render(
+      <AppShellNav
+        ariaLabel="Play navigation"
+        activeDestination="play"
+        title="Play"
+        kicker="Game setup"
+        description="Choose how this Castles game starts."
+        backLabel="Back to current game"
+        onBack={onBack}
+        destinations={[
+          { id: "play", label: "Play" },
+          { id: "learn", label: "Learn", onClick: vi.fn() },
+          { id: "library", label: "Library", onClick: vi.fn() },
+          { id: "watch", label: "Watch", onClick: onWatch },
+        ]}
+      />
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Play navigation" });
+    expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
+    expect(nav).toContainElement(screen.getByRole("button", { name: "Play" }));
+    expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));
+
+    expect(onWatch).toHaveBeenCalledOnce();
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+});

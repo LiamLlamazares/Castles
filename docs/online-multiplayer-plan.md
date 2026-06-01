@@ -28,7 +28,7 @@ Current private-link beta:
 - Read-only public spectator URLs and WebSocket spectator joins exist; spectators cannot submit actions.
 - Local PostgreSQL restart smoke tooling verifies create, join, action persistence, shutdown, restart, and reload.
 - Local PostgreSQL concurrency smoke tooling verifies per-game locking and stale-action behavior.
-- The game shell has responsive navigation, tutorial/rules/library access, save/load controls, and mobile overlap checks, but a second Lichess-benchmarked UI/navigation pass is queued after the archive replay slice.
+- The game shell has shared Play/Learn/Library/Watch navigation, contextual game controls, guarded New Game flow, save feedback, mobile tutorial bounds, drawer cleanup, and browser screenshot overlap checks.
 
 Current constraints:
 
@@ -147,7 +147,7 @@ Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI 
 
 Goal: add discovery and post-game surfaces on top of stable contracts.
 
-Status: Phase 6D is in verification on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
+Status: Phase 6D is implemented and locally verified on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
 
 Work:
 
@@ -202,7 +202,7 @@ Tests/review/deploy gates:
 
 Goal: make the app feel navigable and sturdy before broader public discovery.
 
-Status: first pass implemented for the current shell on 2026-06-01. User testing still reports that the sidebar feels awkward, tutorial placement is unnatural, returning between pages is not obvious enough, save/progress affordances need work, and some controls may overlap. Run a second Lichess-benchmarked UI pass after the current archive replay slice and before deeper lobby/matchmaking work.
+Status: second pass implemented and locally verified on 2026-06-01. The shell now uses shared Play/Learn/Library/Watch navigation on setup, tutorial, local Library, and Watch; the game side panel is contextual to live play and review actions; New Game is guarded for active games; Save Game reports in-app feedback; mobile tutorial layout keeps the board in the first viewport without fixed minimum-row clipping; drawer icon/scroll behavior is cleaned up; and stale topbar/sidebar CSS and unused ControlPanel navigation props were removed under the no-legacy-support direction.
 
 This phase is required before calling the online experience Lichess-like. The current app shell has known rough edges: the side bar can feel awkward, the tutorial entry point is not placed naturally, routes/views can be hard to return from, save/progress affordances are not prominent enough, and some controls may overlap on smaller layouts.
 
@@ -225,6 +225,10 @@ Implemented notes:
 - Mobile move history is reachable through a disclosure, and history moves are keyboard-accessible buttons.
 - Online invite/spectator controls use short visible labels while preserving full accessible names for tests and smoke automation.
 - Top online/status/hint overlays no longer collide with the hamburger/drawer; online games suppress the generic discovery hint.
+- Setup, Learn, Library, and Watch share one `AppShellNav` pattern with non-destructive Play navigation back to the current game when one exists.
+- Active local and online games use an in-app New Game confirmation dialog with focus trap, Escape handling, background inerting, and focus restoration to the invoking control or hamburger button.
+- Library import is collapsed by default so saved games stay primary; Watch and Library use denser app-shell headers.
+- Reviewer findings from the second pass were accepted and fixed: drawer-started New Game focus restoration and short-height mobile tutorial clipping.
 
 Tests/review/deploy gates:
 
@@ -269,6 +273,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish Phase 6D verification, reviewer fixes, browser smoke/manual checks, commit, and push the archive replay launch.
-2. Run the second Phase 6A UI shell/navigation pass with Lichess screenshots as a benchmark: sidebar, tutorial placement, page return paths, save/progress affordances, go-back overlap, mobile bottom controls, and similar layout defects across all pages.
-3. Continue Phase 6 archive/lobby work after the UI pass: archive search/detail pages, replay URLs if needed, public visibility controls, lobby presence, and simple matchmaking.
+1. Commit and push the completed Phase 6A second UI/navigation pass after final verification.
+2. Continue Phase 6 archive/lobby work: archive search/detail pages, replay URLs if needed, public visibility controls, lobby presence, and simple matchmaking.
+3. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.

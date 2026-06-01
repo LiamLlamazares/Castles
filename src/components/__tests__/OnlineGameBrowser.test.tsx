@@ -40,6 +40,8 @@ describe("OnlineGameBrowser", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading public games");
+    expect(screen.getByRole("navigation", { name: "Watch navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watch" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("No public live games yet.")).toBeInTheDocument();
     expect(screen.getByText(/Private and unlisted games stay off this page/i)).toBeInTheDocument();
   });

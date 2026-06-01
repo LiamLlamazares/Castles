@@ -27,8 +27,6 @@ interface ControlPanelProps {
   onSaveGame?: () => void;
   onOpenLibrary?: () => void;
   onEnableAnalysis?: () => void;
-  onOpenOnlineBrowser?: () => void;
-  onTutorial?: () => void;
   shareLabel?: string;
   shareTitle?: string;
   moveHistory: MoveRecord[];
@@ -198,8 +196,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onSaveGame,
   onOpenLibrary,
   onEnableAnalysis,
-  onOpenOnlineBrowser,
-  onTutorial,
   shareLabel = "Share",
   shareTitle = "Share Game URL",
   moveHistory,
@@ -317,7 +313,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           <div className="control-button-row">
             {onSaveGame && (
               <button className="control-button save" onClick={onSaveGame}>
-                Save
+                Save Game
               </button>
             )}
             {onOpenLibrary && (
@@ -371,19 +367,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           </section>
         )}
 
-        <section className="control-section navigation-controls" role="group" aria-label="Navigation">
-          <div className="control-section-label">Navigation</div>
+        <section className="control-section play-controls" role="group" aria-label="Play">
+          <div className="control-section-label">Play</div>
           <div className="control-button-row">
-            {onTutorial && (
-              <button className="control-button tutorial" onClick={onTutorial}>
-                Tutorial
-              </button>
-            )}
-            {onOpenOnlineBrowser && (
-              <button className="control-button library" onClick={onOpenOnlineBrowser}>
-                Watch
-              </button>
-            )}
             <button
               className="control-button new-game"
               onClick={onNewGame}

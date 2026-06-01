@@ -54,6 +54,26 @@ describe("HamburgerMenu", () => {
     expect(screen.queryByRole("button", { name: "New Game" })).not.toBeInTheDocument();
   });
 
+  it("uses non-text icon markers for drawer items and keeps the full menu scrollable", () => {
+    const { container } = renderMenu({
+      onEnableAnalysis: vi.fn(),
+      onEditPosition: vi.fn(),
+      onToggleTerrainIcons: vi.fn(),
+      onToggleSanctuaryIcons: vi.fn(),
+      onToggleShields: vi.fn(),
+      onToggleCastleRecruitment: vi.fn(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    const iconText = Array.from(container.querySelectorAll(".menu-item-icon"))
+      .map((element) => element.textContent?.trim())
+      .filter(Boolean);
+    expect(iconText).toEqual([]);
+    expect(container.querySelector(".menu-items")).toHaveClass("menu-items");
+    expect(screen.getByRole("button", { name: "Icon Settings" })).toBeInTheDocument();
+  });
+
   it("uses real checkbox controls for icon settings without nesting them in buttons", () => {
     const { container, props } = renderMenu({
       onToggleTerrainIcons: vi.fn(),

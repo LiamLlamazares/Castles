@@ -14,6 +14,7 @@ import { OpponentType, AIOpponentConfig } from '../hooks/useAIOpponent';
 import { getImageByPieceType } from './PieceImages';
 import { controlGroupStyle, labelStyle } from '../css/styles';
 import { ModeSelector, TimeControls, SanctuarySelector, BoardConfig, GameRulesSection, type GameMode } from './Setup';
+import AppShellNav, { AppShellDestination } from './AppShellNav';
 import { Palette, Colors } from '../Theme';
 import '../css/Board.css';
 
@@ -53,6 +54,7 @@ interface GameSetupProps {
         pieceTheme?: PieceTheme
     ) => void;
     onBack?: () => void;
+    backLabel?: string;
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
     onOpenOnlineBrowser?: () => void;
@@ -108,7 +110,16 @@ const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     }
 };
 
-const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onCreateOnlineChallenge, onBack, onTutorial, onOpenLibrary, onOpenOnlineBrowser }) => {
+const GameSetup: React.FC<GameSetupProps> = ({
+    onPlay,
+    onCreateOnlineGame,
+    onCreateOnlineChallenge,
+    onBack,
+    backLabel = "Back to game",
+    onTutorial,
+    onOpenLibrary,
+    onOpenOnlineBrowser
+}) => {
     // Game Mode State
     const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
     
@@ -290,36 +301,30 @@ const GameSetup: React.FC<GameSetupProps> = ({ onPlay, onCreateOnlineGame, onCre
         );
     };
 
+    const navDestinations: AppShellDestination[] = [
+        { id: "play", label: "Play" },
+        ...(onTutorial ? [{ id: "learn" as const, label: "Learn", onClick: onTutorial }] : []),
+        ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
+        ...(onOpenOnlineBrowser ? [{ id: "watch" as const, label: "Watch", onClick: onOpenOnlineBrowser }] : []),
+    ];
+
     return (
         <>
             <div className="game-setup-shell">
                 {/* Sidebar Controls */}
                 <div className="setup-sidebar">
-                {(onBack || onTutorial || onOpenLibrary || onOpenOnlineBrowser) && (
-                    <nav className="setup-topbar" aria-label="Setup navigation">
-                        {onBack && (
-                            <button type="button" className="setup-nav-button" onClick={onBack}>
-                                Back to game
-                            </button>
-                        )}
-                        {onTutorial && (
-                            <button type="button" className="setup-nav-button" onClick={onTutorial}>
-                                Tutorial
-                            </button>
-                        )}
-                        {onOpenLibrary && (
-                            <button type="button" className="setup-nav-button" onClick={onOpenLibrary}>
-                                Library
-                            </button>
-                        )}
-                        {onOpenOnlineBrowser && (
-                            <button type="button" className="setup-nav-button" onClick={onOpenOnlineBrowser}>
-                                Watch
-                            </button>
-                        )}
-                    </nav>
+                {(onBack || navDestinations.length > 1) && (
+                    <AppShellNav
+                        ariaLabel="Play navigation"
+                        activeDestination="play"
+                        title="Play"
+                        kicker="Game setup"
+                        description="Choose a local game, private room, or friend challenge."
+                        backLabel={onBack ? backLabel : undefined}
+                        onBack={onBack}
+                        destinations={navDestinations}
+                    />
                 )}
-                <h2 style={{ margin: '0 0 10px 0', fontSize: '1.5rem', textAlign: 'center', color: '#fff' }}>Game Setup</h2>
 
                 {/* Game Mode Selector */}
                 <ModeSelector selectedMode={selectedMode} onModeChange={applyMode} />

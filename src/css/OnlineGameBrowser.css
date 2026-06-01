@@ -10,33 +10,8 @@
   font-family: Georgia, "Times New Roman", serif;
 }
 
-.online-browser-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  margin-bottom: 22px;
-}
-
-.online-browser-kicker {
-  text-transform: uppercase;
-  color: #91d6c5;
-  letter-spacing: 0.16em;
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
-.online-browser-header h1 {
-  margin: 6px 0 0;
-  font-size: clamp(2rem, 4vw, 3rem);
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-.online-browser-header p {
-  margin: 10px 0 0;
-  max-width: 760px;
-  color: #d9d0b8;
+.online-browser-page .app-shell-header {
+  color: #f7f1d6;
 }
 
 .online-browser-toolbar {
@@ -219,14 +194,9 @@
     padding: 20px;
   }
 
-  .online-browser-header,
   .online-browser-toolbar,
   .online-game-row {
     grid-template-columns: 1fr;
-  }
-
-  .online-browser-header {
-    display: grid;
   }
 
   .online-game-actions {

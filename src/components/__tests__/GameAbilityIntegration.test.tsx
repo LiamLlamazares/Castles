@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import GameBoard from "../Game";
 import { MoveTree } from "../../Classes/Core/MoveTree";
 import { Hex } from "../../Classes/Entities/Hex";
@@ -285,8 +286,8 @@ describe("Game ability integration", () => {
     expect(screen.queryByText(/Right-click any piece or hex/i)).not.toBeInTheDocument();
   });
 
-  test("online New Game requires confirmation even before the first move", () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  test("online New Game requires an in-app confirmation even before the first move", () => {
+    const confirm = vi.spyOn(window, "confirm");
     const onSetup = vi.fn();
 
     render(
@@ -307,16 +308,117 @@ describe("Game ability integration", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    fireEvent.click(within(screen.getByText("Play").closest(".hamburger-menu") as HTMLElement).getByRole("button", { name: "New Game" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
 
-    expect(confirm).toHaveBeenCalledWith("Leave this online game and start a new game?");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Leave this online game?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Keep Playing" }));
     expect(onSetup).not.toHaveBeenCalled();
 
-    confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    fireEvent.click(within(screen.getByText("Play").closest(".hamburger-menu") as HTMLElement).getByRole("button", { name: "New Game" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave Game" }));
 
     expect(onSetup).toHaveBeenCalledOnce();
+  });
+
+  test("New Game confirmation traps focus and closes with Escape", async () => {
+    const user = userEvent.setup();
+    const onSetup = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_focus_trap",
+            role: "player",
+            playerColor: "w",
+            version: 0,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_focus_trap&view=spectator",
+            submitAction: vi.fn(),
+          }}
+          onSetup={onSetup}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Leave this online game?" });
+    const keepPlaying = screen.getByRole("button", { name: "Keep Playing" });
+    const leaveGame = screen.getByRole("button", { name: "Leave Game" });
+
+    expect(dialog).toHaveAccessibleDescription(
+      "Leave this game and configure a new one? Your current online seat or spectator view will be closed on this device."
+    );
+
+    await waitFor(() => expect(keepPlaying).toHaveFocus());
+
+    await user.tab();
+    expect(leaveGame).toHaveFocus();
+
+    await user.tab();
+    expect(keepPlaying).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(leaveGame).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Leave this online game?" })).not.toBeInTheDocument();
+    expect(onSetup).not.toHaveBeenCalled();
+  });
+
+  test("New Game confirmation returns focus to the menu button when cancelled from the drawer", async () => {
+    const user = userEvent.setup();
+    const onSetup = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_focus_restore",
+            role: "player",
+            playerColor: "w",
+            version: 0,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_focus_restore&view=spectator",
+            submitAction: vi.fn(),
+          }}
+          onSetup={onSetup}
+        />
+      </ThemeProvider>
+    );
+
+    const menuButton = screen.getByRole("button", { name: "Menu" });
+
+    await user.click(menuButton);
+    await user.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
+
+    const keepPlaying = screen.getByRole("button", { name: "Keep Playing" });
+    await waitFor(() => expect(keepPlaying).toHaveFocus());
+
+    await user.click(keepPlaying);
+
+    await waitFor(() => expect(menuButton).toHaveFocus());
+    expect(onSetup).not.toHaveBeenCalled();
+  });
+
+  test("saving to the library reports success in the game shell", async () => {
+    const onSaveGameToLibrary = vi.fn().mockResolvedValue(true);
+
+    render(
+      <ThemeProvider>
+        <GameBoard onSaveGameToLibrary={onSaveGameToLibrary} />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Game" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved to Library.");
+    expect(onSaveGameToLibrary).toHaveBeenCalledWith(expect.stringContaining("[Event"), "ongoing");
   });
 
   test("PGN export reports clipboard status in the app instead of using alerts", async () => {

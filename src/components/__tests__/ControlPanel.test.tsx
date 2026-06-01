@@ -36,44 +36,36 @@ describe("ControlPanel", () => {
     expect(container.querySelectorAll('[data-testid="vp-pip-b"][data-filled="true"]')).toHaveLength(1);
   });
 
-  it("groups the main game action buttons for accessible responsive layout", () => {
+  it("groups contextual game action buttons for accessible responsive layout", () => {
     render(
       <ControlPanel
         {...baseProps}
         onShare={vi.fn()}
         onSaveGame={vi.fn()}
         onOpenLibrary={vi.fn()}
-        onTutorial={vi.fn()}
       />
     );
 
     const turnControls = screen.getByRole("group", { name: "Turn controls" });
     const saveControls = screen.getByRole("group", { name: "Save and review" });
-    const navigationControls = screen.getByRole("group", { name: "Navigation" });
+    const playControls = screen.getByRole("group", { name: "Play" });
 
     expect(turnControls).toContainElement(screen.getByRole("button", { name: "Pass" }));
     expect(turnControls).toContainElement(screen.getByRole("button", { name: "Resign" }));
-    expect(saveControls).toContainElement(screen.getByRole("button", { name: "Save" }));
+    expect(saveControls).toContainElement(screen.getByRole("button", { name: "Save Game" }));
     expect(saveControls).toContainElement(screen.getByRole("button", { name: "Library" }));
     expect(saveControls).toContainElement(screen.getByRole("button", { name: "Share" }));
-    expect(navigationControls).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
-    expect(navigationControls).toContainElement(screen.getByRole("button", { name: "New Game" }));
+    expect(playControls).toContainElement(screen.getByRole("button", { name: "New Game" }));
+    expect(screen.queryByRole("button", { name: "Tutorial" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Watch" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Move history" })).toBeInTheDocument();
   });
 
-  it("opens tutorial from the game panel navigation controls", () => {
-    const onTutorial = vi.fn();
+  it("keeps tutorial and watch navigation out of the game side panel", () => {
+    render(<ControlPanel {...baseProps} />);
 
-    render(
-      <ControlPanel
-        {...baseProps}
-        onTutorial={onTutorial}
-      />
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
-
-    expect(onTutorial).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Tutorial" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Watch" })).not.toBeInTheDocument();
   });
 
   it("calls visible save and library actions from the game panel", () => {
@@ -88,7 +80,7 @@ describe("ControlPanel", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Game" }));
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
 
     expect(onSaveGame).toHaveBeenCalledOnce();

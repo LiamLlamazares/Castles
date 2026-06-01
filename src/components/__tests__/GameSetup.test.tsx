@@ -62,27 +62,36 @@ describe("GameSetup", () => {
     ]);
   });
 
-  it("exposes setup navigation without hiding play actions", () => {
+  it("exposes shared play navigation without hiding play actions", () => {
     const onBack = vi.fn();
     const onTutorial = vi.fn();
     const onOpenLibrary = vi.fn();
+    const onOpenOnlineBrowser = vi.fn();
 
     render(
       <GameSetup
         onPlay={vi.fn()}
         onBack={onBack}
+        backLabel="Back to current game"
         onTutorial={onTutorial}
         onOpenLibrary={onOpenLibrary}
+        onOpenOnlineBrowser={onOpenOnlineBrowser}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
+    const nav = screen.getByRole("navigation", { name: "Play navigation" });
+    expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
+    expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Learn" }));
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
 
     expect(screen.getByRole("button", { name: "PLAY GAME" })).toBeInTheDocument();
     expect(onBack).toHaveBeenCalledOnce();
     expect(onTutorial).toHaveBeenCalledOnce();
     expect(onOpenLibrary).toHaveBeenCalledOnce();
+    expect(onOpenOnlineBrowser).toHaveBeenCalledOnce();
   });
 });

@@ -68,6 +68,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isIconsMenuOpen, setIsIconsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const { toggleTheme, isDark } = useTheme();
 
   const setMenuOpen = React.useCallback((nextOpen: boolean) => {
@@ -111,6 +112,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   }, [isOpen, setMenuOpen]);
 
   const handleMenuItemClick = (action: () => void) => {
+    menuButtonRef.current?.focus();
     action();
     setMenuOpen(false);
   };
@@ -120,10 +122,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     // Do not close menu
   };
 
-  const renderIcon = (icon: React.ReactNode) => (
-    <span className="menu-item-icon" aria-hidden="true">
-      {icon}
-    </span>
+  const renderMarker = () => (
+    <span className="menu-item-icon menu-item-marker" aria-hidden="true" />
   );
 
   const renderImageIcon = (src: string, alt = "") => (
@@ -135,6 +135,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
       {/* Hamburger Icon */}
       <button
         className="hamburger-button"
+        ref={menuButtonRef}
         onClick={() => setMenuOpen(!isOpen)}
         aria-label="Menu"
         aria-expanded={isOpen}
@@ -159,7 +160,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item primary"
                   onClick={() => handleMenuItemClick(onNewGame)}
                 >
-                  {renderIcon("+")}
+                  {renderMarker()}
                   <span>New Game</span>
                 </button>
               )}
@@ -172,7 +173,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
                 >
-                  {renderIcon("W")}
+                  {renderMarker()}
                   <span>Watch</span>
                 </button>
               </section>
@@ -212,7 +213,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onTutorial)}
                 >
-                  {renderIcon("?")}
+                  {renderMarker()}
                   <span>Tutorial</span>
                 </button>
               )}
@@ -221,7 +222,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onShowRules)}
               >
-                {renderIcon("i")}
+                {renderMarker()}
                 <span>Rules</span>
               </button>
             </section>
@@ -269,8 +270,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
                 style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
               >
-                <span>{renderIcon("Ic")} Icon Settings</span>
-                <span style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
+                <span className="menu-item-label">{renderMarker()}<span>Icon Settings</span></span>
+                <span aria-hidden="true" style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
               </button>
 
               {isIconsMenuOpen && (
@@ -358,7 +359,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onEnableAnalysis)}
               >
-                {renderIcon("A")}
+                {renderMarker()}
                 <span>Analysis Board</span>
               </button>
             )}
@@ -368,7 +369,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onEditPosition)}
               >
-                {renderIcon("E")}
+                {renderMarker()}
                 <span>Edit Position</span>
               </button>
             )}

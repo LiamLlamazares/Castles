@@ -17,13 +17,15 @@ describe("Tutorial", () => {
     vi.mocked(GameBoard).mockClear();
   });
 
-  it("uses a tutorial-specific shell without the nested game menu", () => {
+  it("uses a learn shell without the nested game menu", () => {
     render(
       <ThemeProvider>
-        <Tutorial onBack={vi.fn()} />
+        <Tutorial onBack={vi.fn()} onOpenLibrary={vi.fn()} onOpenOnlineBrowser={vi.fn()} />
       </ThemeProvider>
     );
 
+    expect(screen.getByRole("navigation", { name: "Learn navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Learn" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
     expect(screen.getByTestId("tutorial-board")).toBeInTheDocument();
     expect(GameBoard).toHaveBeenCalled();
@@ -44,6 +46,20 @@ describe("Tutorial", () => {
     );
 
     expect(screen.getByRole("button", { name: "Back to setup" })).toBeInTheDocument();
+  });
+
+  it("keeps lesson progress and previous-next controls together near the top", () => {
+    render(
+      <ThemeProvider>
+        <Tutorial onBack={vi.fn()} />
+      </ThemeProvider>
+    );
+
+    const progressControls = screen.getByRole("group", { name: "Lesson progress controls" });
+    expect(progressControls).toContainElement(screen.getByRole("button", { name: "Previous" }));
+    expect(progressControls).toContainElement(screen.getByRole("status", { name: "Tutorial progress" }));
+    expect(progressControls).toContainElement(screen.getByRole("button", { name: "Restart Tutorial" }));
+    expect(progressControls).toContainElement(screen.getByRole("button", { name: "Next" }));
   });
 
   it("persists lesson progress when the tutorial is reopened", () => {
