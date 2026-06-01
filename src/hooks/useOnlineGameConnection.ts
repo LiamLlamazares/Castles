@@ -18,6 +18,7 @@ import { ONLINE_PROTOCOL_VERSION, validateOnlineServerMessage } from "../online/
 interface UseOnlineGameConnectionResult {
   status: OnlineConnectionStatus;
   lastError?: string;
+  isActionPending: boolean;
   submitAction: (action: OnlineActionDTO) => void;
 }
 
@@ -30,9 +31,12 @@ export function useOnlineGameConnection(
   const reconnectTimerRef = useRef<number | null>(null);
   const heartbeatTimerRef = useRef<number | null>(null);
   const latestSnapshotRef = useRef<OnlineGameSnapshotDTO | null>(null);
+  const pendingActionRef = useRef<{ clientActionId: string; baseVersion: number } | null>(null);
+  const recentlySettledActionIdsRef = useRef<Set<string>>(new Set());
   const statusRef = useRef<OnlineConnectionStatus>("idle");
   const [status, setStatus] = useState<OnlineConnectionStatus>("idle");
   const [lastError, setLastError] = useState<string | undefined>();
+  const [isActionPending, setIsActionPending] = useState(false);
 
   const setConnectionStatus = (nextStatus: OnlineConnectionStatus) => {
     statusRef.current = nextStatus;
@@ -50,6 +54,35 @@ export function useOnlineGameConnection(
     nextStatus === "protocol-error" ||
     nextStatus === "server-error" ||
     nextStatus === "terminal";
+
+  const clearPendingAction = () => {
+    pendingActionRef.current = null;
+    setIsActionPending(false);
+  };
+
+  const markPendingActionSettledBySnapshot = () => {
+    const pendingAction = pendingActionRef.current;
+    if (!pendingAction) return;
+    recentlySettledActionIdsRef.current.add(pendingAction.clientActionId);
+    if (recentlySettledActionIdsRef.current.size > 16) {
+      const [oldestActionId] = recentlySettledActionIdsRef.current;
+      recentlySettledActionIdsRef.current.delete(oldestActionId);
+    }
+    clearPendingAction();
+  };
+
+  const clearPendingActionForSnapshot = (snapshot: OnlineGameSnapshotDTO) => {
+    const pendingAction = pendingActionRef.current;
+    if (!pendingAction) return;
+    if (snapshot.result || snapshot.version > pendingAction.baseVersion) {
+      markPendingActionSettledBySnapshot();
+    }
+  };
+
+  const messageForRejectedAction = (error: OnlineReject): string =>
+    error.code === "stale_action"
+      ? "Position updated from server. Try again."
+      : error.message;
 
   useEffect(() => {
     onSnapshotRef.current = onSnapshot;
@@ -71,6 +104,8 @@ export function useOnlineGameConnection(
       clearTimers();
       socketRef.current?.close();
       socketRef.current = null;
+      clearPendingAction();
+      recentlySettledActionIdsRef.current.clear();
       setConnectionStatus("idle");
       setLastError(undefined);
       return;
@@ -79,6 +114,8 @@ export function useOnlineGameConnection(
     let cancelled = false;
     let reconnectAttempt = 0;
     latestSnapshotRef.current = null;
+    clearPendingAction();
+    recentlySettledActionIdsRef.current.clear();
     setLastError(undefined);
 
     const applySnapshot = (snapshot: OnlineGameSnapshotDTO): "applied" | "duplicate" | "ignored" => {
@@ -95,23 +132,27 @@ export function useOnlineGameConnection(
         return "duplicate";
       }
       latestSnapshotRef.current = snapshot;
+      clearPendingActionForSnapshot(snapshot);
       onSnapshotRef.current(snapshot);
       return "applied";
     };
 
-    const pullSnapshot = async () => {
+    const pullSnapshot = async (): Promise<"terminal" | "non-terminal" | "failed"> => {
       try {
         const snapshot = await fetchOnlineSnapshot(join);
         if (!cancelled) {
           const snapshotStatus = applySnapshot(snapshot);
           if (snapshotStatus !== "ignored" && snapshot.result) {
             setConnectionStatus("terminal");
+            return "terminal";
           }
         }
+        return snapshot.result ? "terminal" : "non-terminal";
       } catch (error) {
         if (!cancelled) {
           setLastError(error instanceof Error ? error.message : "Could not resync online game.");
         }
+        return "failed";
       }
     };
 
@@ -145,6 +186,7 @@ export function useOnlineGameConnection(
       };
 
       socket.onmessage = (event) => {
+        if (cancelled) return;
         let message: any;
         try {
           message = JSON.parse(event.data);
@@ -183,7 +225,16 @@ export function useOnlineGameConnection(
         }
 
         if (serverMessage.type === "rejected") {
-          setLastError(serverMessage.error.message);
+          const pendingAction = pendingActionRef.current;
+          const isRecentlySettled = recentlySettledActionIdsRef.current.delete(serverMessage.clientActionId);
+          if (pendingAction?.clientActionId === serverMessage.clientActionId) {
+            clearPendingAction();
+          } else if (!isRecentlySettled) {
+            setConnectionStatus("protocol-error");
+            setLastError("Online server rejected an action that is not pending.");
+            return;
+          }
+          setLastError(messageForRejectedAction(serverMessage.error));
           if (serverMessage.snapshot) {
             if (applySnapshot(serverMessage.snapshot) !== "ignored") {
               setConnectionStatus(statusForSnapshot(serverMessage.snapshot));
@@ -195,6 +246,7 @@ export function useOnlineGameConnection(
         }
 
         if (serverMessage.type === "error") {
+          clearPendingAction();
           setLastError(serverMessage.error.message);
           if (serverMessage.snapshot) {
             if (applySnapshot(serverMessage.snapshot) !== "ignored") {
@@ -207,6 +259,7 @@ export function useOnlineGameConnection(
       };
 
       socket.onerror = () => {
+        if (cancelled) return;
         setLastError("Online connection failed.");
       };
 
@@ -223,6 +276,10 @@ export function useOnlineGameConnection(
         if (isProtectedConnectionStatus(statusRef.current)) {
           return;
         }
+        if (pendingActionRef.current) {
+          clearPendingAction();
+          setLastError("Connection dropped before the action was confirmed. Try again after resync.");
+        }
         setConnectionStatus("disconnected");
         const delay = getReconnectDelayMs(reconnectAttempt++);
         reconnectTimerRef.current = window.setTimeout(() => {
@@ -230,7 +287,12 @@ export function useOnlineGameConnection(
             return;
           }
           setConnectionStatus("resyncing");
-          void pullSnapshot().finally(connect);
+          void pullSnapshot().then((result) => {
+            if (cancelled || result === "terminal" || isProtectedConnectionStatus(statusRef.current)) {
+              return;
+            }
+            connect();
+          });
         }, delay);
       };
     };
@@ -243,11 +305,17 @@ export function useOnlineGameConnection(
       clearTimers();
       socketRef.current?.close();
       socketRef.current = null;
+      clearPendingAction();
+      recentlySettledActionIdsRef.current.clear();
     };
   }, [join]);
 
   const submitAction = useCallback((action: OnlineActionDTO) => {
     const socket = socketRef.current;
+    if (pendingActionRef.current) {
+      setLastError("Waiting for the server to confirm the previous action.");
+      return;
+    }
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       setLastError("Online connection is not ready.");
       return;
@@ -257,15 +325,20 @@ export function useOnlineGameConnection(
       return;
     }
 
+    const clientActionId = createClientActionId();
+    pendingActionRef.current = { clientActionId, baseVersion: action.baseVersion };
+    setIsActionPending(true);
+    setLastError(undefined);
+
     socket.send(
       JSON.stringify({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "action",
-        clientActionId: createClientActionId(),
+        clientActionId,
         action,
       })
     );
   }, []);
 
-  return { status, lastError, submitAction };
+  return { status, lastError, isActionPending, submitAction };
 }

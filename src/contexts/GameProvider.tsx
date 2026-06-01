@@ -224,6 +224,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const promotePiece = useCallback((newType: PieceType) => {
     if (onlineSession) {
       if (onlineSession.result) return;
+      if (onlineSession.role === "player" && onlineSession.isActionPending) return;
+      if (onlineSession.role === "player" && onlineSession.status !== "connected") return;
       if (onlineSession.role !== "player") return;
       onlineSession.submitAction({
         type: "PROMOTE",

@@ -108,7 +108,6 @@ describe("online validation", () => {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "spectate",
         gameId: "game_test",
-        lastSeenVersion: undefined,
       },
     });
     expect(
@@ -116,14 +115,6 @@ describe("online validation", () => {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "spectate",
         gameId: "",
-      }).ok
-    ).toBe(false);
-    expect(
-      validateClientMessage({
-        protocolVersion: ONLINE_PROTOCOL_VERSION,
-        type: "spectate",
-        gameId: "g",
-        lastSeenVersion: -1,
       }).ok
     ).toBe(false);
   });
@@ -164,7 +155,6 @@ describe("online validation", () => {
         type: "join",
         gameId: "game_test",
         token: "white-token",
-        lastSeenVersion: undefined,
       },
     });
   });

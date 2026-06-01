@@ -35,13 +35,11 @@ export type OnlineClientMessage =
       type: "join";
       gameId: string;
       token: string;
-      lastSeenVersion?: number;
     }
   | {
       protocolVersion: OnlineProtocolVersion;
       type: "spectate";
       gameId: string;
-      lastSeenVersion?: number;
     }
   | {
       protocolVersion: OnlineProtocolVersion;
@@ -554,9 +552,6 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
     const gameId = validateOnlineGameId(value.gameId, "join.gameId");
     if (!gameId.ok) return gameId;
     if (!isBoundedString(value.token, MAX_TOKEN_LENGTH)) return bad("join.token is invalid.");
-    if (value.lastSeenVersion !== undefined && !isNonNegativeInteger(value.lastSeenVersion)) {
-      return bad("join.lastSeenVersion must be a non-negative integer when present.");
-    }
     return {
       ok: true,
       value: {
@@ -564,7 +559,6 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
         type: "join",
         gameId: gameId.value,
         token: value.token,
-        lastSeenVersion: value.lastSeenVersion,
       },
     };
   }
@@ -572,16 +566,12 @@ export function validateClientMessage(value: unknown): ValidationResult<OnlineCl
   if (value.type === "spectate") {
     const gameId = validateOnlineGameId(value.gameId, "spectate.gameId");
     if (!gameId.ok) return gameId;
-    if (value.lastSeenVersion !== undefined && !isNonNegativeInteger(value.lastSeenVersion)) {
-      return bad("spectate.lastSeenVersion must be a non-negative integer when present.");
-    }
     return {
       ok: true,
       value: {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "spectate",
         gameId: gameId.value,
-        lastSeenVersion: value.lastSeenVersion,
       },
     };
   }

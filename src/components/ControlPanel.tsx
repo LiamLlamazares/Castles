@@ -37,6 +37,7 @@ interface ControlPanelProps {
   onlineClock?: OnlineClockStateDTO;
   isOnline?: boolean;
   isReadOnly?: boolean;
+  isActionPending?: boolean;
   viewNodeId?: string | null;
   victoryPoints?: { w: number, b: number };
 }
@@ -204,13 +205,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onlineClock,
   isOnline = false,
   isReadOnly = false,
+  isActionPending = false,
   viewNodeId,
   victoryPoints,
 }) => {
   // Calculate phase index within current player's turn (0-4)
   const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
   const isGameOver = !!winner;
-  const arePlayControlsDisabled = isGameOver || isReadOnly;
+  const arePlayControlsDisabled = isGameOver || isReadOnly || isActionPending;
 
   return (
     <div className="game-panel">

@@ -9,8 +9,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import {
   assert,
   assertProtocolVersionedBody,
+  buildWebSocketUrl,
   createFetchWithTimeout,
+  createWebSocketWaiters,
   readJson,
+  versionedSocketMessage,
 } from "./online-smoke-lib.mjs";
 
 const require = createRequire(import.meta.url);
@@ -22,7 +25,9 @@ const expectedCommit = process.argv[3] ?? process.env.EXPECTED_COMMIT;
 const allowAnyCommit = process.env.CASTLES_ALLOW_ANY_COMMIT === "1";
 const requestTimeoutMs = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS ?? 15_000);
 const browserTimeoutMs = Number(process.env.SMOKE_BROWSER_TIMEOUT_MS ?? 20_000);
+const socketTimeoutMs = Number(process.env.SMOKE_SOCKET_TIMEOUT_MS ?? 10_000);
 const fetchWithTimeout = createFetchWithTimeout(requestTimeoutMs);
+const { waitForSocketOpen, nextSocketMessage } = createWebSocketWaiters(socketTimeoutMs);
 
 function normalizeUrl(urlText) {
   const url = new URL(urlText);
@@ -114,6 +119,82 @@ async function fetchSpectatorSnapshot(gameId, expectedVersion) {
     );
   }
   return body.snapshot;
+}
+
+async function verifyStaleActionContract(setup) {
+  const { WebSocket } = require("ws");
+  const createResponse = await fetchWithTimeout(`${baseUrl}/api/online/games`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ setup }),
+  });
+  const created = await readJson(createResponse);
+  assert(createResponse.status === 201, `Stale-action smoke create failed with ${createResponse.status}`);
+
+  const socket = new WebSocket(buildWebSocketUrl(baseUrl));
+  try {
+    const joined = nextSocketMessage(socket, "stale-action join response");
+    await waitForSocketOpen(socket);
+    socket.send(
+      JSON.stringify(
+        versionedSocketMessage({
+          type: "join",
+          gameId: created.gameId,
+          token: created.white.token,
+        })
+      )
+    );
+
+    const joinedMessage = await joined;
+    assertProtocolVersionedBody(joinedMessage, "Stale-action join response");
+    assert(joinedMessage.type === "joined", "Stale-action smoke did not join the created game");
+    assert(joinedMessage.snapshot?.version === 0, "Stale-action game did not start at version 0");
+
+    socket.send(
+      JSON.stringify(
+        versionedSocketMessage({
+          type: "action",
+          clientActionId: "browser-smoke-stale-first",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      )
+    );
+    socket.send(
+      JSON.stringify(
+        versionedSocketMessage({
+          type: "action",
+          clientActionId: "browser-smoke-stale-second",
+          action: { type: "PASS", baseVersion: 0 },
+        })
+      )
+    );
+
+    let rejected;
+    for (let index = 0; index < 4; index += 1) {
+      const message = await nextSocketMessage(socket, `stale-action response ${index + 1}`);
+      assertProtocolVersionedBody(message, `Stale-action response ${index + 1}`);
+      if (message.type === "rejected") {
+        rejected = message;
+        break;
+      }
+    }
+
+    assert(rejected, "Stale-action smoke did not receive a rejected frame");
+    assert(
+      rejected.clientActionId === "browser-smoke-stale-second",
+      `Stale-action rejection reported clientActionId ${rejected.clientActionId}`
+    );
+    assert(
+      rejected.error?.code === "stale_action",
+      `Stale-action rejection code was ${rejected.error?.code}`
+    );
+    assert(
+      rejected.snapshot?.version === 1,
+      `Stale-action rejection snapshot version was ${rejected.snapshot?.version}`
+    );
+  } finally {
+    socket.close();
+  }
 }
 
 function clipboardInitScript() {
@@ -555,7 +636,8 @@ async function runFlow(driver) {
   const spectator = await driver.newPage();
 
   const { gameId, opponentInvite, spectatorUrl } = await createOnlineGameFromUi(white);
-  await fetchSpectatorSnapshot(gameId, 0);
+  const initialSnapshot = await fetchSpectatorSnapshot(gameId, 0);
+  await verifyStaleActionContract(initialSnapshot.setup);
 
   await black.goto(opponentInvite);
   await black.waitForText("Online Black");

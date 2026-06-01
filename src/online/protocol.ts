@@ -12,6 +12,7 @@ import {
   type OnlineProtocolVersion,
   isSupportedOnlineProtocolVersion,
 } from "./protocolVersion";
+import { isValidClientActionId } from "./actionIdempotency";
 import {
   validateOnlineGameId,
   validateOnlineGameSetup,
@@ -28,7 +29,12 @@ export type OnlineServerMessage =
   | (OnlineProtocolEnvelope & { type: "joined"; color: Color; snapshot: OnlineGameSnapshotDTO })
   | (OnlineProtocolEnvelope & { type: "spectating"; snapshot: OnlineGameSnapshotDTO })
   | (OnlineProtocolEnvelope & { type: "snapshot"; snapshot: OnlineGameSnapshotDTO })
-  | (OnlineProtocolEnvelope & { type: "rejected"; error: OnlineReject; snapshot?: OnlineGameSnapshotDTO })
+  | (OnlineProtocolEnvelope & {
+      type: "rejected";
+      clientActionId: string;
+      error: OnlineReject;
+      snapshot?: OnlineGameSnapshotDTO;
+    })
   | (OnlineProtocolEnvelope & { type: "error"; error: OnlineReject; snapshot?: OnlineGameSnapshotDTO })
   | (OnlineProtocolEnvelope & { type: "pong"; clientTime?: unknown; serverTime?: number });
 
@@ -308,7 +314,11 @@ export function validateOnlineServerMessage(
     };
   }
 
-  if (value.type === "rejected" || value.type === "error") {
+  if (value.type === "rejected") {
+    const clientActionId = value.clientActionId;
+    if (!isValidClientActionId(clientActionId)) {
+      return bad("message.clientActionId is invalid.");
+    }
     const error = validateReject(value.error);
     if (!error.ok) return error;
     let snapshot: OnlineGameSnapshotDTO | undefined;
@@ -321,7 +331,28 @@ export function validateOnlineServerMessage(
       ok: true,
       value: {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        type: value.type,
+        type: "rejected",
+        clientActionId,
+        error: error.value,
+        snapshot,
+      },
+    };
+  }
+
+  if (value.type === "error") {
+    const error = validateReject(value.error);
+    if (!error.ok) return error;
+    let snapshot: OnlineGameSnapshotDTO | undefined;
+    if (value.snapshot !== undefined) {
+      const snapshotResult = validateSnapshot(value.snapshot);
+      if (!snapshotResult.ok) return snapshotResult;
+      snapshot = snapshotResult.value;
+    }
+    return {
+      ok: true,
+      value: {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
         error: error.value,
         snapshot,
       },

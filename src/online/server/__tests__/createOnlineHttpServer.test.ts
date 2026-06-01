@@ -603,6 +603,7 @@ describe("createOnlineHttpServer", () => {
       );
       await expect(nextSocketMessage(socket, "logged action rejection")).resolves.toMatchObject({
         type: "rejected",
+        clientActionId: "client-action-log-reject",
         error: { code: "stale_action" },
       });
     } finally {
@@ -1466,6 +1467,7 @@ describe("createOnlineHttpServer", () => {
       expect(whiteMessages[0]).toMatchObject({ type: "snapshot", snapshot: { version: 1 } });
       expect(whiteMessages[1]).toMatchObject({
         type: "rejected",
+        clientActionId: "client-action-serialized-2",
         error: { code: "stale_action" },
         snapshot: { version: 1 },
       });
@@ -1600,6 +1602,7 @@ describe("createOnlineHttpServer", () => {
       );
       await expect(nextSocketMessage(whiteSocket, "same-id changed action rejection")).resolves.toMatchObject({
         type: "rejected",
+        clientActionId: "client-action-conflict",
         error: { code: "duplicate_action" },
         snapshot: { version: 1 },
       });
@@ -1745,6 +1748,7 @@ describe("createOnlineHttpServer", () => {
       );
       await expect(nextSocketMessage(whiteSocket, "conflicting duplicate timeout rejection")).resolves.toMatchObject({
         type: "rejected",
+        clientActionId: "client-action-conflict-timeout",
         error: { code: "game_over" },
         snapshot: {
           version: 2,
@@ -1760,6 +1764,7 @@ describe("createOnlineHttpServer", () => {
       );
       await expect(nextSocketMessage(whiteSocket, "repeated conflict after timeout")).resolves.toMatchObject({
         type: "rejected",
+        clientActionId: "client-action-conflict-timeout",
         error: { code: "game_over" },
         snapshot: {
           version: 2,

@@ -192,4 +192,25 @@ describe("App game setup lifecycle", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Access denied: Invite link expired.");
   });
+
+  it("lets users recover from a failed pre-snapshot online connection", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_denied&seat=w&token=bad-token"
+    );
+    onlineHookMocks.useOnlineGameConnection.mockReturnValue({
+      status: "access-denied",
+      lastError: "Invite link expired.",
+      submitAction: onlineHookMocks.submitAction,
+    });
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("onlineGame=");
+    expect(window.location.search).not.toContain("token=");
+  });
 });

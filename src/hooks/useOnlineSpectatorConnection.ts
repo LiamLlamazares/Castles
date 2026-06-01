@@ -96,19 +96,22 @@ export function useOnlineSpectatorConnection(
       return "applied";
     };
 
-    const pullSnapshot = async () => {
+    const pullSnapshot = async (): Promise<"terminal" | "non-terminal" | "failed"> => {
       try {
         const snapshot = await fetchOnlineSpectatorSnapshot(gameId);
         if (!cancelled) {
           const snapshotStatus = applySnapshot(snapshot);
           if (snapshotStatus !== "ignored" && snapshot.result) {
             setConnectionStatus("terminal");
+            return "terminal";
           }
         }
+        return snapshot.result ? "terminal" : "non-terminal";
       } catch (error) {
         if (!cancelled) {
           setLastError(error instanceof Error ? error.message : "Could not resync spectator game.");
         }
+        return "failed";
       }
     };
 
@@ -179,14 +182,8 @@ export function useOnlineSpectatorConnection(
         }
 
         if (serverMessage.type === "rejected") {
-          setLastError(serverMessage.error.message);
-          if (serverMessage.snapshot) {
-            if (applySnapshot(serverMessage.snapshot) !== "ignored") {
-              setConnectionStatus(statusForSnapshot(serverMessage.snapshot));
-            }
-          } else if (isAccessDeniedError(serverMessage.error)) {
-            setConnectionStatus("access-denied");
-          }
+          setConnectionStatus("protocol-error");
+          setLastError("Online server sent an action rejection to a spectator connection.");
           return;
         }
 
@@ -226,7 +223,12 @@ export function useOnlineSpectatorConnection(
             return;
           }
           setConnectionStatus("resyncing");
-          void pullSnapshot().finally(connect);
+          void pullSnapshot().then((result) => {
+            if (cancelled || result === "terminal" || isProtectedConnectionStatus(statusRef.current)) {
+              return;
+            }
+            connect();
+          });
         }, delay);
       };
     };

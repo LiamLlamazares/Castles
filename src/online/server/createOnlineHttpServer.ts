@@ -1046,6 +1046,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
               ) {
                 sendJson(socket, {
                   type: "rejected",
+                  clientActionId: message.clientActionId,
                   error: transition.error,
                   snapshot: transition.snapshot,
                 });
@@ -1179,6 +1180,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           });
           sendJson(socket, {
             type: "rejected",
+            clientActionId: message.clientActionId,
             error: {
               code: "game_over",
               message: "This game is already over on time.",
@@ -1201,6 +1203,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           });
           sendJson(socket, {
             type: "rejected",
+            clientActionId: message.clientActionId,
             error: {
               code: "game_over",
               message: "This game is already over on time.",
@@ -1222,6 +1225,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           });
           sendJson(socket, {
             type: "rejected",
+            clientActionId: message.clientActionId,
             error: {
               code: "duplicate_action",
               message: "This client action id has already been used for a different action.",
@@ -1260,6 +1264,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           });
           sendJson(socket, {
             type: "rejected",
+            clientActionId: message.clientActionId,
             error: result.error,
             snapshot: result.snapshot,
           });

@@ -28,6 +28,49 @@ describe("online terminal action guards", () => {
     expect(submitAction).not.toHaveBeenCalled();
   });
 
+  it("does not submit new online actions while an action is pending confirmation", () => {
+    const submitAction = vi.fn();
+    const { result } = renderCustomGameLogicHook({
+      onlineSession: {
+        gameId: "game_pending",
+        role: "player",
+        playerColor: "w",
+        version: 3,
+        status: "connected",
+        isActionPending: true,
+        submitAction,
+      },
+    });
+
+    act(() => {
+      result.current.handlePass();
+      result.current.handleResign("w");
+    });
+
+    expect(submitAction).not.toHaveBeenCalled();
+  });
+
+  it("does not submit online actions while the player connection is not live", () => {
+    const submitAction = vi.fn();
+    const { result } = renderCustomGameLogicHook({
+      onlineSession: {
+        gameId: "game_resyncing",
+        role: "player",
+        playerColor: "w",
+        version: 3,
+        status: "resyncing",
+        submitAction,
+      },
+    });
+
+    act(() => {
+      result.current.handlePass();
+      result.current.handleResign("w");
+    });
+
+    expect(submitAction).not.toHaveBeenCalled();
+  });
+
   it("treats spectator sessions as read-only", () => {
     const { result } = renderCustomGameLogicHook({
       onlineSession: {

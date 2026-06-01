@@ -170,6 +170,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
   // Persistence Hooks
   const { shareGame, getGameFromUrl, loadFromLocalStorage, clearUrlParams, clearSave } = usePersistence(getPGN, loadPGN, moveTree);
   const isReadOnlyOnline = onlineSession?.role === "spectator";
+  const isOnlineActionPaused =
+    onlineSession?.role === "player" &&
+    (onlineSession.status !== "connected" || onlineSession.isActionPending === true);
   const copyOnlineLink = React.useCallback((url: string, successMessage: string) => {
     copyOnlineInviteUrl(url)
       .then(() => showStatusMessage(successMessage))
@@ -307,6 +310,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
       : "Spectating";
     const stateLabel = onlineSession.result
       ? `Complete · ${formatOnlineGameResult(onlineSession.result)}`
+      : onlineSession.role === "player" && onlineSession.isActionPending
+        ? "Waiting for server"
       : formatOnlineConnectionStatus(onlineSession.status);
     return `${roleLabel} · ${stateLabel}${onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}`;
   }, [onlineSession]);
@@ -380,7 +385,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   }, [getPGN, loadPGN, onLoadGame]);
 
   useInputHandler({
-    onPass: isReadOnlyOnline ? () => {} : handlePass,
+    onPass: isReadOnlyOnline || isOnlineActionPaused ? () => {} : handlePass,
     onFlipBoard: viewState.handleFlipBoard,
     onTakeback: handleTakeback,
     onResize: viewState.incrementResizeVersion,
@@ -491,9 +496,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
           currentPlayer={currentPlayer}
           turnPhase={turnPhase}
           turnCounter={turnCounter}
-          onPass={isReadOnlyOnline ? () => {} : handlePass}
+          onPass={isReadOnlyOnline || isOnlineActionPaused ? () => {} : handlePass}
           onResign={() => {
-              if (isReadOnlyOnline) return;
+              if (isReadOnlyOnline || isOnlineActionPaused) return;
               handleResign(currentPlayer);
               onResign();
           }}
@@ -516,13 +521,19 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onlineClock={onlineSession?.clock}
           isOnline={!!onlineSession}
           isReadOnly={isReadOnlyOnline}
+          isActionPending={isOnlineActionPaused}
           viewNodeId={viewNodeId}
           victoryPoints={victoryPoints}
         />
       )}
 
       {onlineSession && (
-        <div className="online-session-badge">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="online-session-badge"
+        >
           {onlineSessionLabel}
         </div>
       )}

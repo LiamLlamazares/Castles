@@ -189,30 +189,16 @@ describe("useOnlineSpectatorConnection", () => {
     act(() => {
       socket.onmessage?.({
         data: JSON.stringify({
-          type: "rejected",
-          protocolVersion: ONLINE_PROTOCOL_VERSION,
-          error: { code: "bad_request", message: "Spectators cannot move." },
-          snapshot: snapshot(2),
-        }),
-      });
-    });
-    await waitFor(() => expect(result.current.lastError).toBe("Spectators cannot move."));
-    expect(result.current.status).toBe("connected");
-    expect(snapshots.at(-1)).toMatchObject({ version: 2 });
-
-    act(() => {
-      socket.onmessage?.({
-        data: JSON.stringify({
           type: "error",
           protocolVersion: ONLINE_PROTOCOL_VERSION,
           error: { code: "bad_request", message: "Server problem." },
-          snapshot: snapshot(3),
+          snapshot: snapshot(2),
         }),
       });
     });
     await waitFor(() => expect(result.current.status).toBe("server-error"));
     expect(result.current.lastError).toBe("Server problem.");
-    expect(snapshots.at(-1)).toMatchObject({ version: 3 });
+    expect(snapshots.at(-1)).toMatchObject({ version: 2 });
 
     act(() => {
       socket.onmessage?.({
@@ -220,7 +206,7 @@ describe("useOnlineSpectatorConnection", () => {
           protocolVersion: ONLINE_PROTOCOL_VERSION,
           type: "joined",
           color: "w",
-          snapshot: snapshot(4),
+          snapshot: snapshot(3),
         }),
       });
     });
@@ -228,7 +214,31 @@ describe("useOnlineSpectatorConnection", () => {
       expect(result.current.status).toBe("protocol-error");
       expect(result.current.lastError).toContain("player message");
     });
-    expect(snapshots.at(-1)).toMatchObject({ version: 3 });
+    expect(snapshots.at(-1)).toMatchObject({ version: 2 });
+  });
+
+  it("treats action rejection frames as invalid for spectator connections", async () => {
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "rejected",
+          clientActionId: "client-action-spectator-reject",
+          error: { code: "stale_action", message: "Old action." },
+          snapshot: snapshot(1),
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("protocol-error");
+      expect(result.current.lastError).toContain("action rejection");
+    });
   });
 
   it("marks missing spectator games as access denied", async () => {
@@ -458,5 +468,48 @@ describe("useOnlineSpectatorConnection", () => {
 
     expect(MockWebSocket.instances.length).toBeGreaterThan(1);
     expect(result.current.status).toBe("connecting");
+  });
+
+  it("does not reconnect spectators after a terminal REST resync", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot: snapshot(0) }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            snapshot: {
+              ...snapshot(2),
+              result: { winner: "w", reason: "resignation" },
+            },
+          }),
+        })
+    );
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onclose?.();
+    });
+    expect(result.current.status).toBe("disconnected");
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.status).toBe("terminal");
+    expect(MockWebSocket.instances).toHaveLength(1);
   });
 });

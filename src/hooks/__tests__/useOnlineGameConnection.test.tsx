@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useOnlineGameConnection } from "../useOnlineGameConnection";
 import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
+import type { OnlineJoinParams } from "../../online/client";
 
 class MockWebSocket {
   static readonly OPEN = 1;
@@ -147,6 +148,68 @@ describe("useOnlineGameConnection", () => {
       clientActionId: "client-action-hook-1",
       action: { type: "PASS", baseVersion: 0 },
     });
+    expect(result.current.isActionPending).toBe(true);
+  });
+
+  it("blocks overlapping online actions until the server confirms the pending action", async () => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi
+        .fn()
+        .mockReturnValueOnce("client-action-pending-1")
+        .mockReturnValueOnce("client-action-pending-2"),
+    });
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
+    const { result } = renderHook(() => useOnlineGameConnection(join, vi.fn()));
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onopen?.();
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "joined",
+          color: "w",
+          snapshot: snapshot(0),
+        }),
+      });
+    });
+
+    act(() => {
+      result.current.submitAction({ type: "PASS", baseVersion: 0 });
+      result.current.submitAction({ type: "RESIGN", baseVersion: 0 });
+    });
+
+    expect(socket.sent.map((message) => JSON.parse(message).type).filter((type) => type === "action")).toHaveLength(1);
+    expect(JSON.parse(socket.sent.at(-1)!)).toMatchObject({
+      clientActionId: "client-action-pending-1",
+      action: { type: "PASS" },
+    });
+    expect(result.current.isActionPending).toBe(true);
+    expect(result.current.lastError).toBe("Waiting for the server to confirm the previous action.");
+
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "snapshot",
+          snapshot: snapshot(1),
+        }),
+      });
+    });
+
+    expect(result.current.isActionPending).toBe(false);
+    expect(result.current.lastError).toBeUndefined();
+
+    act(() => {
+      result.current.submitAction({ type: "RESIGN", baseVersion: 1 });
+    });
+
+    expect(socket.sent.map((message) => JSON.parse(message).type).filter((type) => type === "action")).toHaveLength(2);
+    expect(JSON.parse(socket.sent.at(-1)!)).toMatchObject({
+      clientActionId: "client-action-pending-2",
+      action: { type: "RESIGN" },
+    });
   });
 
   it("turns malformed server messages into controlled connection errors", async () => {
@@ -235,17 +298,23 @@ describe("useOnlineGameConnection", () => {
     expect(result.current.status).toBe("connected");
     expect(snapshots.at(-1)).toMatchObject({ version: 1 });
 
+    act(() => {
+      result.current.submitAction({ type: "PASS", baseVersion: 1 });
+    });
+    const pendingAction = JSON.parse(socket.sent.at(-1)!);
+
     await act(async () => {
       socket.onmessage?.({
         data: JSON.stringify({
           type: "rejected",
           protocolVersion: ONLINE_PROTOCOL_VERSION,
+          clientActionId: pendingAction.clientActionId,
           error: { code: "stale_action", message: "Old action." },
           snapshot: snapshot(2),
         }),
       });
     });
-    await waitFor(() => expect(result.current.lastError).toBe("Old action."));
+    await waitFor(() => expect(result.current.lastError).toBe("Position updated from server. Try again."));
     expect(result.current.status).toBe("connected");
     expect(snapshots.at(-1)).toMatchObject({ version: 2 });
 
@@ -471,6 +540,209 @@ describe("useOnlineGameConnection", () => {
     expect(result.current.lastError).toBe("Online connection is not ready.");
   });
 
+  it("clears pending actions when a matching stale rejection resyncs the game", async () => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "client-action-stale"),
+    });
+    const snapshots: Array<{ version: number }> = [];
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
+    const { result } = renderHook(() =>
+      useOnlineGameConnection(join, (nextSnapshot) => {
+        snapshots.push(nextSnapshot as { version: number });
+      })
+    );
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onopen?.();
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "joined",
+          color: "w",
+          snapshot: snapshot(1),
+        }),
+      });
+    });
+
+    act(() => {
+      result.current.submitAction({ type: "PASS", baseVersion: 0 });
+    });
+    expect(result.current.isActionPending).toBe(true);
+
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "rejected",
+          clientActionId: "client-action-stale",
+          error: { code: "stale_action", message: "Old action." },
+          snapshot: snapshot(2),
+        }),
+      });
+    });
+
+    expect(result.current.status).toBe("connected");
+    expect(result.current.isActionPending).toBe(false);
+    expect(result.current.lastError).toBe("Position updated from server. Try again.");
+    expect(snapshots.at(-1)).toMatchObject({ version: 2 });
+  });
+
+  it("tolerates late stale rejections for actions already settled by a newer snapshot", async () => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi
+        .fn()
+        .mockReturnValueOnce("client-action-stale-race")
+        .mockReturnValueOnce("client-action-next"),
+    });
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
+    const { result } = renderHook(() => useOnlineGameConnection(join, vi.fn()));
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onopen?.();
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "joined",
+          color: "w",
+          snapshot: snapshot(0),
+        }),
+      });
+    });
+
+    act(() => {
+      result.current.submitAction({ type: "PASS", baseVersion: 0 });
+    });
+    expect(result.current.isActionPending).toBe(true);
+
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "snapshot",
+          snapshot: snapshot(1),
+        }),
+      });
+    });
+    expect(result.current.isActionPending).toBe(false);
+
+    act(() => {
+      result.current.submitAction({ type: "RESIGN", baseVersion: 1 });
+    });
+    expect(result.current.isActionPending).toBe(true);
+
+    await act(async () => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "rejected",
+          clientActionId: "client-action-stale-race",
+          error: { code: "stale_action", message: "Old action." },
+          snapshot: snapshot(1),
+        }),
+      });
+    });
+
+    expect(result.current.status).toBe("connected");
+    expect(result.current.isActionPending).toBe(true);
+    expect(result.current.lastError).toBe("Position updated from server. Try again.");
+  });
+
+  it("clears pending actions when the socket closes before confirmation", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "client-action-lost"),
+    });
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
+    const { result } = renderHook(() => useOnlineGameConnection(join, vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const socket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.onopen?.();
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "joined",
+          color: "w",
+          snapshot: snapshot(0),
+        }),
+      });
+    });
+
+    act(() => {
+      result.current.submitAction({ type: "PASS", baseVersion: 0 });
+    });
+    expect(result.current.isActionPending).toBe(true);
+
+    act(() => {
+      socket.onclose?.();
+    });
+
+    expect(result.current.isActionPending).toBe(false);
+    expect(result.current.status).toBe("disconnected");
+    expect(result.current.lastError).toBe("Connection dropped before the action was confirmed. Try again after resync.");
+  });
+
+  it("clears pending action bookkeeping when switching directly to a different join", async () => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "client-action-before-switch"),
+    });
+    const firstJoin: OnlineJoinParams = { gameId: "game_123", seat: "w", token: "white-token" };
+    const secondJoin: OnlineJoinParams = { gameId: "game_456", seat: "b", token: "black-token" };
+    const snapshots: Array<{ version: number }> = [];
+    const { result, rerender } = renderHook(
+      ({ join }) =>
+        useOnlineGameConnection(join, (nextSnapshot) => {
+          snapshots.push(nextSnapshot as { version: number });
+        }),
+      { initialProps: { join: firstJoin } }
+    );
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const firstSocket = MockWebSocket.instances.at(-1)!;
+    await act(async () => {
+      firstSocket.onopen?.();
+      firstSocket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "joined",
+          color: "w",
+          snapshot: snapshot(0),
+        }),
+      });
+    });
+    act(() => {
+      result.current.submitAction({ type: "PASS", baseVersion: 0 });
+    });
+    expect(result.current.isActionPending).toBe(true);
+
+    rerender({ join: secondJoin });
+
+    expect(result.current.isActionPending).toBe(false);
+
+    await act(async () => {
+      firstSocket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "rejected",
+          clientActionId: "client-action-before-switch",
+          error: { code: "stale_action", message: "Old action." },
+          snapshot: snapshot(1),
+        }),
+      });
+      await Promise.resolve();
+    });
+
+    expect(result.current.status).not.toBe("protocol-error");
+    expect(snapshots.at(-1)).toMatchObject({ version: 0 });
+  });
+
   it("treats not_joined as a server state problem, not access denial", async () => {
     const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
     const { result } = renderHook(() => useOnlineGameConnection(join, vi.fn()));
@@ -543,5 +815,49 @@ describe("useOnlineGameConnection", () => {
 
     expect(MockWebSocket.instances.length).toBeGreaterThan(1);
     expect(result.current.status).toBe("connecting");
+  });
+
+  it("does not reconnect after a terminal REST resync", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot: snapshot(0) }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            snapshot: {
+              ...snapshot(2),
+              result: { winner: "b", reason: "timeout" },
+            },
+          }),
+        })
+    );
+    const join = { gameId: "game_123", seat: "w" as const, token: "white-token" };
+    const { result } = renderHook(() => useOnlineGameConnection(join, vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onclose?.();
+    });
+    expect(result.current.status).toBe("disconnected");
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.status).toBe("terminal");
+    expect(MockWebSocket.instances).toHaveLength(1);
   });
 });

@@ -224,7 +224,7 @@ describe("Game ability integration", () => {
         "https://castles.example/?onlineGame=game_share_split&seat=b&token=black-token"
       );
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("Opponent invite link copied.");
+    expect(await screen.findByText("Opponent invite link copied.")).toBeInTheDocument();
     expect(alert).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy Spectator Link" }));
@@ -233,7 +233,7 @@ describe("Game ability integration", () => {
         "https://castles.example/?onlineGame=game_share_split&view=spectator"
       );
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("Spectator link copied.");
+    expect(await screen.findByText("Spectator link copied.")).toBeInTheDocument();
     expect(alert).not.toHaveBeenCalled();
   }, INTEGRATION_TIMEOUT_MS);
 
@@ -398,6 +398,25 @@ describe("Game ability integration", () => {
       <ThemeProvider>
         <GameBoard
           onlineSession={{
+            gameId: "game_pending_label",
+            role: "player",
+            playerColor: "w",
+            version: 1,
+            status: "connected",
+            isActionPending: true,
+            spectatorUrl: "https://castles.example/?onlineGame=game_pending_label&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByText("Online White · Waiting for server")).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
             gameId: "game_access_denied_label",
             role: "spectator",
             version: 1,
@@ -412,5 +431,25 @@ describe("Game ability integration", () => {
     expect(
       screen.getByText("Spectating · Access denied · This game no longer exists.")
     ).toBeInTheDocument();
+  });
+
+  test("online session badges announce status changes", () => {
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_live_region",
+            role: "player",
+            playerColor: "w",
+            version: 1,
+            status: "resyncing",
+            spectatorUrl: "https://castles.example/?onlineGame=game_live_region&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Online White · Resyncing");
   });
 });

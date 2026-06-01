@@ -368,6 +368,7 @@ function App() {
         version: onlineSnapshot.version,
         status: onlineConnection.status,
         lastError: onlineConnection.lastError,
+        isActionPending: onlineConnection.isActionPending,
         clock: onlineSnapshot.clock,
         result: onlineSnapshot.result,
         opponentInviteUrl: onlineJoin.seat === "w" ? onlineOpponentInviteUrl ?? undefined : undefined,
@@ -403,6 +404,11 @@ function App() {
   const pendingOnlineMessage = formatOnlinePendingConnectionMessage(
     pendingOnlineConnection.status
   );
+  const canRecoverPendingOnlineConnection =
+    pendingOnlineConnection.status === "access-denied" ||
+    pendingOnlineConnection.status === "protocol-error" ||
+    pendingOnlineConnection.status === "server-error" ||
+    pendingOnlineConnection.status === "terminal";
 
   const handleEnableAnalysis = (board: Board, pieces: Piece[], turnCounter: number, sanctuaries: Sanctuary[]) => {
     const layout = getStartingLayout(board);
@@ -460,13 +466,12 @@ function App() {
 
       {view === 'game' && (onlineJoin || activeOnlineSpectator) && !onlineSnapshot && (
         <div
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
           style={{
             height: '100vh',
             width: '100vw',
             display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
             alignItems: 'center',
             justifyContent: 'center',
             background: '#151515',
@@ -474,11 +479,31 @@ function App() {
             fontSize: '1rem',
           }}
         >
-          {pendingOnlineMessage}{
-            pendingOnlineConnection.lastError
-              ? `: ${pendingOnlineConnection.lastError}`
-              : '...'
-          }
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {pendingOnlineMessage}{
+              pendingOnlineConnection.lastError
+                ? `: ${pendingOnlineConnection.lastError}`
+                : '...'
+            }
+          </div>
+          {canRecoverPendingOnlineConnection && (
+            <button
+              type="button"
+              onClick={handleNewGameClick}
+              style={{
+                minHeight: '40px',
+                padding: '10px 14px',
+                border: '1px solid rgba(255, 255, 255, 0.22)',
+                borderRadius: '6px',
+                background: '#f7f1d6',
+                color: '#141414',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              Configure New Game
+            </button>
+          )}
         </div>
       )}
 

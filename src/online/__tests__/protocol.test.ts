@@ -98,6 +98,7 @@ describe("online server protocol validation", () => {
       validateOnlineServerMessage({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "rejected",
+        clientActionId: "client-action-rejected",
         error: { code: "stale_action", message: "Old version." },
         snapshot: snapshot(),
       }).ok
@@ -141,6 +142,14 @@ describe("online server protocol validation", () => {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         type: "error",
         error: { code: "bad_request" },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "rejected",
+        error: { code: "stale_action", message: "Old version." },
+        snapshot: snapshot(),
       }).ok
     ).toBe(false);
     expect(

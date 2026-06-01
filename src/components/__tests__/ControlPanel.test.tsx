@@ -151,6 +151,20 @@ describe("ControlPanel", () => {
     expect(screen.getByRole("button", { name: "New Game" })).not.toBeDisabled();
   });
 
+  it("disables play controls while an online action is waiting for server confirmation", () => {
+    render(
+      <ControlPanel
+        {...baseProps}
+        isOnline
+        isActionPending
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Pass" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Resign" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "New Game" })).not.toBeDisabled();
+  });
+
   it("can relabel the share control for online invites", () => {
     const onShare = vi.fn();
     render(

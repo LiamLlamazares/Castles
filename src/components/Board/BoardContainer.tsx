@@ -56,7 +56,10 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
       winner,
       onlineSession
   } = gameState;
-  const isReadOnly = onlineSession?.role === "spectator";
+  const isReadOnly =
+    onlineSession?.role === "spectator" ||
+    (onlineSession?.role === "player" &&
+      (onlineSession.status !== "connected" || onlineSession.isActionPending === true));
 
   const {
       handlePieceClick,

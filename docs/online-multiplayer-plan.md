@@ -104,13 +104,13 @@ Tests/review/deploy gates:
 
 Goal: formalize the client/server online protocol and make client state resilient.
 
-Status: started. The protocol envelope now requires `protocolVersion: 1` on WebSocket client messages, WebSocket server messages, and REST snapshot responses. The browser client now distinguishes live, resyncing, access-denied, protocol-error, server-error, terminal, disconnected, and connecting states instead of flattening every problem into a generic error. Remaining Phase 4 work is explicit stale-action resync policy and fuller browser smoke coverage for reconnect/access-denied paths.
+Status: started. The protocol envelope now requires `protocolVersion: 1` on WebSocket client messages, WebSocket server messages, and REST snapshot responses. The browser client now distinguishes live, resyncing, access-denied, protocol-error, server-error, terminal, disconnected, and connecting states instead of flattening every problem into a generic error. Action-scoped `rejected` frames now carry `clientActionId`, stale-action rejections keep the client live after applying the authoritative snapshot, play controls pause while reconnecting or waiting for action confirmation, and terminal REST resyncs stop reconnect attempts. Current smoke coverage verifies the stale-action server contract; remaining Phase 4 work is dedicated browser-client stale-action UX smoke, fuller browser smoke coverage for reconnect/access-denied paths, and a documented transition diagram.
 
 Work:
 
 - Version WebSocket and REST messages with explicit error, resync, stale-version, and reconnect semantics.
 - Separate local optimistic UI from authoritative online state.
-- Define client state machines for offline, connecting, joined, resyncing, terminal, and access-denied states. Current hooks expose explicit state labels; a fuller transition diagram should be documented before public challenge/lobby launch.
+- Define client state machines for offline, connecting, joined, resyncing, terminal, and access-denied states. Current hooks expose explicit state labels and action-pending guards; a fuller transition diagram should be documented before public challenge/lobby launch.
 - Add protocol documentation close to DTO definitions.
 
 Tests/review/deploy gates:
@@ -214,6 +214,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Add explicit stale-version/resync semantics for rejected actions and reconnects, including browser smoke coverage.
+1. Expand browser smoke coverage for reconnect, access-denied recovery, and browser-client stale-action/double-submit UX behavior.
 2. Document the client state transition diagram next to the protocol contract before public challenge/lobby launch.
 3. Re-run the Phase 6A responsive shell checklist whenever new navigation surfaces are added.
