@@ -12,6 +12,10 @@ import {
   validateOnlineGameSetup,
   type ValidationResult,
 } from "./validation";
+import {
+  isOnlinePlayerSettableGameVisibility,
+  type OnlinePlayerSettableGameVisibility,
+} from "./visibility";
 
 export const ONLINE_EVENT_SCHEMA_VERSION = 2;
 export const ONLINE_RULESET_VERSION = "castles-beta-v1";
@@ -29,6 +33,11 @@ export type OnlineGameEvent =
       gameId: string;
       setup: OnlineGameSetupDTO;
       clock?: OnlineClockRecord;
+    })
+  | (OnlineGameEventEnvelope & {
+      type: "visibility_changed";
+      gameId: string;
+      visibility: OnlinePlayerSettableGameVisibility;
     })
   | (OnlineGameEventEnvelope & {
       type: "action_accepted";
@@ -130,6 +139,19 @@ export function createOnlineGameCreatedEvent(
   event: Omit<Extract<OnlineGameEvent, { type: "game_created" }>, keyof OnlineGameEventEnvelope>,
   metadata?: Partial<OnlineGameEventEnvelope>
 ): Extract<OnlineGameEvent, { type: "game_created" }> {
+  return {
+    ...event,
+    ...createEnvelope(metadata),
+  };
+}
+
+export function createOnlineGameVisibilityChangedEvent(
+  event: Omit<
+    Extract<OnlineGameEvent, { type: "visibility_changed" }>,
+    keyof OnlineGameEventEnvelope
+  >,
+  metadata?: Partial<OnlineGameEventEnvelope>
+): Extract<OnlineGameEvent, { type: "visibility_changed" }> {
   return {
     ...event,
     ...createEnvelope(metadata),
@@ -282,6 +304,21 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     };
   }
 
+  if (value.type === "visibility_changed") {
+    if (!isOnlinePlayerSettableGameVisibility(value.visibility)) {
+      return bad("event.visibility must be public or unlisted.");
+    }
+    return {
+      ok: true,
+      value: {
+        ...envelope,
+        type: "visibility_changed",
+        gameId: value.gameId,
+        visibility: value.visibility,
+      },
+    };
+  }
+
   if (value.type === "action_accepted") {
     if (!isColor(value.playerColor)) {
       return bad("event.playerColor must be w or b.");
@@ -392,6 +429,9 @@ export function onlineGameEventsToRecords(
       const room = rooms.get(event.gameId);
       if (!room) {
         throw new Error(`Online event references missing game ${event.gameId}.`);
+      }
+      if (event.type === "visibility_changed") {
+        return;
       }
       if (room.timeout) {
         throw new Error(`Online event references already-finished game ${event.gameId}.`);

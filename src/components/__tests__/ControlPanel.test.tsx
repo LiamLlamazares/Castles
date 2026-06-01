@@ -249,4 +249,40 @@ describe("ControlPanel", () => {
     expect(onCopySpectator).toHaveBeenCalledOnce();
     expect(onShare).not.toHaveBeenCalled();
   });
+
+  it("exposes a player visibility control for publishing and unlisting online games", () => {
+    const OnlineControlPanel = ControlPanel as React.ComponentType<any>;
+    const onUpdateOnlineVisibility = vi.fn();
+
+    const { rerender } = render(
+      <OnlineControlPanel
+        {...baseProps}
+        onlineVisibility="unlisted"
+        onUpdateOnlineVisibility={onUpdateOnlineVisibility}
+      />
+    );
+
+    const publishButton = screen.getByRole("button", { name: "Publish Game to Watch" });
+    expect(publishButton).toHaveTextContent("Publish");
+    expect(publishButton).toHaveAttribute("title", "List this game in Watch");
+
+    fireEvent.click(publishButton);
+
+    expect(onUpdateOnlineVisibility).toHaveBeenCalledWith("public");
+
+    rerender(
+      <OnlineControlPanel
+        {...baseProps}
+        onlineVisibility="public"
+        onUpdateOnlineVisibility={onUpdateOnlineVisibility}
+      />
+    );
+
+    const unlistButton = screen.getByRole("button", { name: "Remove Game from Watch" });
+    expect(unlistButton).toHaveTextContent("Unlist");
+
+    fireEvent.click(unlistButton);
+
+    expect(onUpdateOnlineVisibility).toHaveBeenLastCalledWith("unlisted");
+  });
 });

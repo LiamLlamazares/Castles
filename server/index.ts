@@ -112,7 +112,18 @@ async function main() {
       publicBaseUrl: config.publicBaseUrl,
       service,
       onGameCreated: (event, credentials) => store.appendGameCreated(event, credentials),
-      onGameEvent: (event) => store.appendEvent(event),
+      onGameEvent: (event) => {
+        if (event.type === "game_created") {
+          throw new Error("game_created events must be persisted through onGameCreated.");
+        }
+        if (event.type === "visibility_changed") {
+          throw new Error(
+            "visibility_changed events must be persisted through appendGameVisibilityChanged."
+          );
+        }
+        return store.appendEvent(event);
+      },
+      appendGameVisibilityChanged: (event) => store.appendGameVisibilityChanged(event),
       appendChallengeCreated: (event, credentials) =>
         store.appendChallengeCreated(event, credentials),
       appendChallengeEvent: (event) => store.appendChallengeEvent(event),

@@ -12,6 +12,11 @@ import type {
   OnlineReject,
 } from "../types";
 
+export type AppendableOnlineGameEvent = Exclude<
+  OnlineGameEvent,
+  { type: "game_created" } | { type: "visibility_changed" }
+>;
+
 export interface OnlineGameStoreLoadOptions {
   onEventError?: (line: number, error: unknown) => void;
 }
@@ -26,7 +31,10 @@ export interface OnlineGameStore {
     event: Extract<OnlineGameEvent, { type: "game_created" }>,
     credentials: OnlineGameCredentials
   ): Promise<void>;
-  appendEvent(event: OnlineGameEvent): Promise<void>;
+  appendEvent(event: AppendableOnlineGameEvent): Promise<void>;
+  appendGameVisibilityChanged(
+    event: Extract<OnlineGameEvent, { type: "visibility_changed" }>
+  ): Promise<OnlineGameSummary>;
   appendChallengeCreated(
     event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
     credentials: OnlineChallengeCredentials

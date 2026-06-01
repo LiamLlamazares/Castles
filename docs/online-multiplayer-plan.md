@@ -123,13 +123,13 @@ Tests/review/deploy gates:
 
 Goal: support intentional game creation and joining flows before public discovery.
 
-Status: access-policy foundation, the direct challenge lifecycle contract, challenge credential persistence, private challenge HTTP routes, and atomic accept into online games are in place locally. Challenge creation stores immutable setup terms and private credential hashes; accepted challenges derive game credentials from the challenge credentials so each side can retrieve only its own game link. Accept, decline, cancel, lazy expiry, access-denied, fragment-token capture, and post-accept challenger retrieval are covered by focused tests. Local and browser smoke checks cover challenge create, bearer view, accept, challenger retrieval, and immediate two-player join. A minimal browser challenge surface exists before the broader UI polish tranche. Visibility-change rules still need their own durable event contract before public lobby/archive screens can change exposure mid-game.
+Status: access-policy foundation, the direct challenge lifecycle contract, challenge credential persistence, private challenge HTTP routes, atomic accept into online games, and durable public/unlisted game visibility changes are in place locally. Challenge creation stores immutable setup terms and private credential hashes; accepted challenges derive game credentials from the challenge credentials so each side can retrieve only its own game link. Accept, decline, cancel, lazy expiry, access-denied, fragment-token capture, post-accept challenger retrieval, and player publish/unlist controls are covered by focused tests. Local and browser smoke checks cover challenge create, bearer view, accept, challenger retrieval, and immediate two-player join. A minimal browser challenge surface exists before the broader UI polish tranche.
 
 Work:
 
 - Benchmark challenge UX before implementation.
 - Keep the durable direct-challenge lifecycle event contract as the base for private challenge endpoints.
-- Add durable visibility lifecycle events before public challenges, lobby listings, or archives depend on mutable exposure.
+- Use durable visibility lifecycle events before public challenges, lobby listings, or archives depend on mutable exposure.
 - Introduce a shared access-policy module so HTTP, WebSocket, spectator, challenge, and future lobby routes enforce the same visibility and role rules.
 - Build challenge creation, accept/decline/expire, copied links, access-denied, and pending states.
 - Define private, unlisted, and public visibility semantics.
@@ -147,12 +147,12 @@ Sequencing note: after challenge/access surfaces are sketched, pull Phase 6A UI 
 
 Goal: add discovery and post-game surfaces on top of stable contracts.
 
-Status: Phase 6D is implemented and locally verified on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by existing token-free `OnlineGameSummary` read models. It lists only summaries already marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Public game creation, open seeks, matchmaking, accounts, ratings, and chat remain deferred.
+Status: Phase 6D is implemented and locally verified on 2026-06-01. The first discovery surface is a public Watch/Online Archive browser backed by token-free `OnlineGameSummary` read models. It lists only summaries marked `visibility: "public"` and does not expose private or unlisted invite games. Phase 6C adds a visible sidebar Analysis handoff for spectators and completed online games; it passes the current board state directly into local analysis and clears online URL/session state before remounting. Phase 6D separates archived-game replay launch from live spectating: completed archive rows fetch a single public snapshot, clear online URL/session state, and open local analysis directly. Phase 6E adds durable player publish/unlist controls through `visibility_changed` events and `PATCH /api/online/games/:gameId/visibility`; `private` changes remain deferred until spectator socket reauthorization exists. Open seeks, matchmaking, accounts, ratings, and chat remain deferred.
 
 Work:
 
 - Benchmark spectator, archive, lobby, matchmaking, and analysis entry points before screen design.
-- Polish spectator experience, archived-game labels, result display, move list, share/export entry points, and remaining archive-first replay launch.
+- Polish spectator experience, archived-game labels, result display, move list, share/export entry points, and public/unlisted visibility language.
 - Build archive browse/search read models before broad public lobby.
 - Add lobby presence and simple matchmaking only after archive/spectator contracts are stable.
 
@@ -273,6 +273,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Commit and push the completed Phase 6A second UI/navigation pass after final verification.
-2. Continue Phase 6 archive/lobby work: archive search/detail pages, replay URLs if needed, public visibility controls, lobby presence, and simple matchmaking.
-3. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.
+1. Finish verification, review, commit, and push the durable game visibility controls.
+2. Run a Phase 6A third UI polish pass from the latest audit: mobile drawer focus trap/background inerting, tutorial short-screen layout, sidebar/control grouping, online status/back-button overlap checks, and consistent AppShellNav use on pending challenge/online screens.
+3. Continue Phase 6 archive/lobby work: archive search/detail pages, replay URLs if needed, lobby presence, and simple matchmaking.
+4. Before implementing lobby/matchmaking screens, run a fresh Lichess/modern-board-game benchmark pass and keep public creation/open seeks separate from Watch/Archive until the backend contracts exist.

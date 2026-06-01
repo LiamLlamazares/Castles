@@ -5,6 +5,10 @@ import {
   OnlineGameEvent,
   onlineGameEventsToRecords,
 } from "./events";
+import {
+  ONLINE_GAME_VISIBILITIES,
+  type OnlineGameVisibility,
+} from "./visibility";
 import type { OnlineGameResultDTO } from "./types";
 import type { ValidationResult } from "./validation";
 import {
@@ -18,7 +22,7 @@ import { stringContainsDurableSecret } from "./secretSafety";
 
 export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 1;
 
-export type OnlineGameVisibility = "private" | "unlisted" | "public";
+export type { OnlineGameVisibility } from "./visibility";
 export type OnlineArchiveState = "active" | "archived";
 export type OnlineGameSummaryStatus = "active" | "complete";
 
@@ -91,7 +95,7 @@ interface SummaryMetadata {
 }
 
 const SUMMARY_ROLES = new Set(["white", "black"]);
-const ACCESS_VISIBILITIES = new Set<OnlineGameVisibility>(["private", "unlisted", "public"]);
+const ACCESS_VISIBILITIES = ONLINE_GAME_VISIBILITIES;
 const ARCHIVE_STATES = new Set<OnlineArchiveState>(["active", "archived"]);
 const SUMMARY_STATUSES = new Set<OnlineGameSummaryStatus>(["active", "complete"]);
 const RESULT_REASONS = new Set<OnlineGameResultDTO["reason"]>([
@@ -254,8 +258,14 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
       throw new Error(`Online summary event references missing game ${event.gameId}.`);
     }
     metadata.updatedAt = event.createdAt;
-    metadata.version = event.version;
     metadata.lastEventId = event.eventId;
+
+    if (event.type === "visibility_changed") {
+      metadata.visibility = event.visibility;
+      continue;
+    }
+
+    metadata.version = event.version;
 
     if (
       event.type === "timeout_adjudicated" ||
@@ -312,8 +322,11 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
   if (timestamp(value.createdAt) > timestamp(value.updatedAt)) {
     return bad("summary.createdAt must not be later than updatedAt.");
   }
-  if (value.endedAt !== undefined && timestamp(value.updatedAt) > timestamp(value.endedAt)) {
-    return bad("summary.updatedAt must not be later than endedAt.");
+  if (value.endedAt !== undefined && timestamp(value.createdAt) > timestamp(value.endedAt)) {
+    return bad("summary.createdAt must not be later than endedAt.");
+  }
+  if (value.endedAt !== undefined && timestamp(value.endedAt) > timestamp(value.updatedAt)) {
+    return bad("summary.endedAt must not be later than updatedAt.");
   }
   if (!isNonNegativeSafeInteger(value.version)) return bad("summary.version must be a non-negative integer.");
   if (typeof value.status !== "string" || !SUMMARY_STATUSES.has(value.status as OnlineGameSummaryStatus)) {

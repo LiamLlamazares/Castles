@@ -294,6 +294,21 @@ function createClockedGameCreatedEvent(
   };
 }
 
+function createVisibilityChangedEvent(
+  gameId = "game_pg",
+  visibility: "public" | "unlisted" = "public"
+) {
+  return {
+    schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+    eventId: `evt-${gameId}-visibility-${visibility}`,
+    createdAt: "2026-05-31T12:00:01.000Z",
+    rulesetVersion: ONLINE_RULESET_VERSION,
+    type: "visibility_changed",
+    gameId,
+    visibility,
+  } as any;
+}
+
 function createGameCredentials() {
   return {
     whiteCredential: hashOnlineToken("w-token"),
@@ -585,6 +600,64 @@ describe("PostgresOnlineGameStore", () => {
       "archived",
       1,
     ]);
+  });
+
+  it("appends visibility changes inside the game transaction and returns the refreshed summary", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createGameCreatedEvent("game_visibility_summary");
+
+    await store.appendGameCreated(created, createGameCredentials());
+    client.queries.length = 0;
+
+    const summary = await store.appendGameVisibilityChanged(
+      createVisibilityChangedEvent("game_visibility_summary", "public")
+    );
+
+    expect(summary).toMatchObject({
+      gameId: "game_visibility_summary",
+      visibility: "public",
+      version: 0,
+      lastEventId: "evt-game_visibility_summary-visibility-public",
+    });
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual([
+      "game_created",
+      "visibility_changed",
+    ]);
+    expect(client.summaryRows).toEqual([{ payload: summary }]);
+
+    const queryTexts = client.queries.map((query) => query.text);
+    const beginIndex = queryTexts.findIndex((text) => /^\s*begin\s*$/i.test(text));
+    const lockIndex = queryTexts.findIndex(
+      (text) => /from\s+online_game_locks/i.test(text) && /for update/i.test(text)
+    );
+    const summaryLockIndex = queryTexts.findIndex((text) => /pg_advisory_xact_lock/i.test(text));
+    const eventInsertIndex = queryTexts.findIndex((text) => /insert into online_game_events/i.test(text));
+    const summaryInsertIndex = queryTexts.findIndex((text) => /insert into online_game_summaries/i.test(text));
+    const commitIndex = queryTexts.findIndex((text) => /^\s*commit\s*$/i.test(text));
+
+    expect(beginIndex).toBeGreaterThanOrEqual(0);
+    expect(lockIndex).toBeGreaterThan(beginIndex);
+    expect(summaryLockIndex).toBeGreaterThan(lockIndex);
+    expect(eventInsertIndex).toBeGreaterThan(summaryLockIndex);
+    expect(summaryInsertIndex).toBeGreaterThan(eventInsertIndex);
+    expect(commitIndex).toBeGreaterThan(summaryInsertIndex);
+  });
+
+  it("requires the dedicated visibility method for visibility events", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const created = createGameCreatedEvent("game_visibility_dedicated");
+
+    await store.appendGameCreated(created, createGameCredentials());
+    client.queries.length = 0;
+
+    await expect(
+      store.appendEvent(createVisibilityChangedEvent("game_visibility_dedicated", "public"))
+    ).rejects.toThrow(/appendGameVisibilityChanged/);
+
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual(["game_created"]);
+    expect(client.queries.some((query) => /^\s*begin\s*$/i.test(query.text))).toBe(false);
   });
 
   it("applies accepted actions against the locked persisted game state", async () => {

@@ -249,6 +249,47 @@ describe("online validation", () => {
     }
   });
 
+  it("accepts public and unlisted visibility change events without gameplay versions", () => {
+    for (const visibility of ["public", "unlisted"] as const) {
+      const result = validateOnlineGameEvent({
+        schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+        eventId: `evt-visibility-${visibility}`,
+        createdAt: "2026-05-31T12:00:00.000Z",
+        rulesetVersion: "castles-beta-v1",
+        type: "visibility_changed",
+        gameId: "game_test",
+        visibility,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toMatchObject({
+          type: "visibility_changed",
+          gameId: "game_test",
+          visibility,
+        });
+        expect("version" in result.value).toBe(false);
+      }
+    }
+  });
+
+  it("keeps private visibility changes reserved until spectator reauthorization exists", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+      eventId: "evt-visibility-private",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "visibility_changed",
+      gameId: "game_test",
+      visibility: "private",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("public or unlisted");
+    }
+  });
+
   it("rejects raw player tokens in durable creation events", () => {
     const result = validateOnlineGameEvent({
       schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,

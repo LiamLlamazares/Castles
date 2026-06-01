@@ -853,6 +853,147 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("game_private_summary_http");
   });
 
+  it("lets an authenticated player publish an unlisted game without exposing bearer tokens", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_publish_http",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const appended: Array<Extract<OnlineGameEvent, { type: "visibility_changed" }>> = [];
+    const logs: unknown[] = [];
+    let summary = summaryForGame("game_publish_http", "unlisted");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      onLog: (event) => logs.push(event),
+      appendGameVisibilityChanged: (event) => {
+        appended.push(event);
+        summary = {
+          ...summary,
+          visibility: event.visibility,
+          updatedAt: event.createdAt,
+          lastEventId: event.eventId,
+        };
+        return summary;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}/visibility`,
+      {
+        method: "PATCH",
+        headers: {
+          ...bearer(created.white.token),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ visibility: "public" }),
+      }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      summary: {
+        gameId: "game_publish_http",
+        visibility: "public",
+        version: 0,
+      },
+    });
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toMatchObject({
+      type: "visibility_changed",
+      gameId: "game_publish_http",
+      visibility: "public",
+    });
+    expect(JSON.stringify(body)).not.toContain(created.white.token);
+    expect(JSON.stringify(body)).not.toContain(created.black.token);
+    expect(JSON.stringify(logs)).not.toContain(created.white.token);
+    expect(JSON.stringify(logs)).not.toContain(created.black.token);
+  });
+
+  it("rejects private visibility changes until active spectator reauthorization exists", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_private_visibility_http",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const appendGameVisibilityChanged = vi.fn();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      appendGameVisibilityChanged,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}/visibility`,
+      {
+        method: "PATCH",
+        headers: {
+          ...bearer(created.white.token),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ visibility: "private" }),
+      }
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "bad_request" },
+    });
+    expect(appendGameVisibilityChanged).not.toHaveBeenCalled();
+  });
+
+  it("requires player bearer credentials and persistence for visibility changes", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_visibility_auth_http",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+
+    const badTokenResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}/visibility`,
+      {
+        method: "PATCH",
+        headers: {
+          ...bearer("spectator-or-wrong-token"),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ visibility: "public" }),
+      }
+    );
+    const missingPersistenceResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}/visibility`,
+      {
+        method: "PATCH",
+        headers: {
+          ...bearer(created.white.token),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ visibility: "public" }),
+      }
+    );
+
+    expect(badTokenResponse.status).toBe(404);
+    expect(missingPersistenceResponse.status).toBe(503);
+  });
+
   it("allows HTTP spectator snapshots for unlisted summaries when summaries are configured", async () => {
     const service = new OnlineGameService({
       idFactory: () => "game_unlisted_spectator_http",

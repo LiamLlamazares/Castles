@@ -30,6 +30,7 @@ import type {
   OnlineChallengeAcceptInput,
   OnlineChallengeAcceptResult,
   OnlineChallengeCredentials,
+  AppendableOnlineGameEvent,
   OnlineGameStore,
   OnlineGameStoreActionInput,
   OnlineGameStoreActionResult,
@@ -179,15 +180,36 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
-  async appendEvent(event: OnlineGameEvent): Promise<void> {
+  async appendEvent(event: AppendableOnlineGameEvent): Promise<void> {
     const validated = this.validate(event);
     if (validated.type === "game_created") {
       throw new Error("Use appendGameCreated to persist game credentials atomically.");
+    }
+    if (validated.type === "visibility_changed") {
+      throw new Error("Use appendGameVisibilityChanged to persist visibility changes.");
     }
     await this.ensureSchema();
     await this.withTransaction(async (client) => {
       await this.insertEvent(validated, client);
       await this.refreshSummaryForGame(validated.gameId, client);
+    });
+  }
+
+  async appendGameVisibilityChanged(
+    event: Extract<OnlineGameEvent, { type: "visibility_changed" }>
+  ): Promise<OnlineGameSummary> {
+    const validated = this.validate(event);
+    if (validated.type !== "visibility_changed") {
+      throw new Error("appendGameVisibilityChanged only accepts visibility_changed events.");
+    }
+    await this.ensureSchema();
+    return this.withGameTransaction(validated.gameId, async (client) => {
+      await this.insertEvent(validated, client);
+      const summary = await this.refreshSummaryForGame(validated.gameId, client);
+      if (!summary) {
+        throw new Error(`Online game summary was not refreshed for ${validated.gameId}.`);
+      }
+      return summary;
     });
   }
 

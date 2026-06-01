@@ -8,6 +8,10 @@ import {
 } from "../Constants";
 import { BoardConfig } from "../Classes/Core/Board";
 import { MoveRecord } from "../Constants";
+import type {
+  OnlineGameVisibility,
+  OnlinePlayerSettableGameVisibility,
+} from "./visibility";
 
 export type OnlineRejectCode =
   | "unauthorized"
@@ -164,6 +168,7 @@ interface BaseOnlineClientSession {
   clock?: OnlineClockStateDTO;
   result?: OnlineGameResultDTO;
   spectatorUrl?: string;
+  visibility?: OnlineGameVisibility;
 }
 
 export interface OnlinePlayerClientSession extends BaseOnlineClientSession {
@@ -172,6 +177,9 @@ export interface OnlinePlayerClientSession extends BaseOnlineClientSession {
   isActionPending?: boolean;
   opponentInviteUrl?: string;
   submitAction: (action: OnlineActionDTO) => void;
+  updateVisibility?: (
+    visibility: OnlinePlayerSettableGameVisibility
+  ) => Promise<{ visibility: OnlineGameVisibility }>;
 }
 
 export interface OnlineSpectatorClientSession extends BaseOnlineClientSession {

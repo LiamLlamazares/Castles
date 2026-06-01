@@ -10,6 +10,10 @@ import { TurnPhase, Color, MoveRecord, PHASE_CYCLE_LENGTH } from "../Constants";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import { VP_VICTORY_THRESHOLD } from "../Classes/Systems/WinCondition";
 import type { OnlineClockStateDTO } from "../online/types";
+import type {
+  OnlineGameVisibility,
+  OnlinePlayerSettableGameVisibility,
+} from "../online/visibility";
 
 // SVG import
 import trophyIcon from "../Assets/Images/misc/trophy.svg";
@@ -24,6 +28,9 @@ interface ControlPanelProps {
   onShare?: () => void;
   onCopyOpponentInvite?: () => void;
   onCopySpectator?: () => void;
+  onlineVisibility?: OnlineGameVisibility;
+  onUpdateOnlineVisibility?: (visibility: OnlinePlayerSettableGameVisibility) => void;
+  isOnlineVisibilityPending?: boolean;
   onSaveGame?: () => void;
   onOpenLibrary?: () => void;
   onEnableAnalysis?: () => void;
@@ -193,6 +200,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onShare,
   onCopyOpponentInvite,
   onCopySpectator,
+  onlineVisibility,
+  onUpdateOnlineVisibility,
+  isOnlineVisibilityPending = false,
   onSaveGame,
   onOpenLibrary,
   onEnableAnalysis,
@@ -331,7 +341,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 Analysis
               </button>
             )}
-            {!onCopyOpponentInvite && !onCopySpectator && (
+            {!onCopyOpponentInvite && !onCopySpectator && !onUpdateOnlineVisibility && (
               <button className="control-button share" onClick={onShare} title={shareTitle}>
                 {shareLabel}
               </button>
@@ -339,7 +349,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           </div>
         </section>
 
-        {(onCopyOpponentInvite || onCopySpectator) && (
+        {(onCopyOpponentInvite || onCopySpectator || onUpdateOnlineVisibility) && (
           <section className="control-section online-link-controls" role="group" aria-label="Online links">
             <div className="control-section-label">Online links</div>
             <div className="control-button-row">
@@ -361,6 +371,31 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   title="Copy read-only spectator link"
                 >
                   Spectate
+                </button>
+              )}
+              {onUpdateOnlineVisibility && (
+                <button
+                  className={`control-button share visibility-${onlineVisibility === "public" ? "public" : "unlisted"}`}
+                  onClick={() =>
+                    onUpdateOnlineVisibility(onlineVisibility === "public" ? "unlisted" : "public")
+                  }
+                  aria-label={
+                    onlineVisibility === "public"
+                      ? "Remove Game from Watch"
+                      : "Publish Game to Watch"
+                  }
+                  title={
+                    onlineVisibility === "public"
+                      ? "Remove this game from Watch"
+                      : "List this game in Watch"
+                  }
+                  disabled={isOnlineVisibilityPending}
+                >
+                  {isOnlineVisibilityPending
+                    ? "Saving"
+                    : onlineVisibility === "public"
+                      ? "Unlist"
+                      : "Publish"}
                 </button>
               )}
             </div>

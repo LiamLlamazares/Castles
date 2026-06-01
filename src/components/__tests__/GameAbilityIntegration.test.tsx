@@ -270,6 +270,53 @@ describe("Game ability integration", () => {
     expect(alert).not.toHaveBeenCalled();
   }, INTEGRATION_TIMEOUT_MS);
 
+  test("online player screens publish and unlist the current game with local feedback", async () => {
+    const updateVisibility = vi
+      .fn()
+      .mockResolvedValueOnce({
+        gameId: "game_publish_ui",
+        visibility: "public",
+      })
+      .mockResolvedValueOnce({
+        gameId: "game_publish_ui",
+        visibility: "unlisted",
+      });
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          onlineSession={{
+            gameId: "game_publish_ui",
+            role: "player",
+            playerColor: "w",
+            version: 0,
+            status: "connected",
+            visibility: "unlisted",
+            spectatorUrl: "https://castles.example/?onlineGame=game_publish_ui&view=spectator",
+            submitAction: vi.fn(),
+            updateVisibility,
+          } as any}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish Game to Watch" }));
+
+    await waitFor(() => {
+      expect(updateVisibility).toHaveBeenCalledWith("public");
+    });
+    expect(await screen.findByText("Game published to Watch.")).toBeInTheDocument();
+    const unlistButton = screen.getByRole("button", { name: "Remove Game from Watch" });
+
+    fireEvent.click(unlistButton);
+
+    await waitFor(() => {
+      expect(updateVisibility).toHaveBeenCalledWith("unlisted");
+    });
+    expect(await screen.findByText("Game removed from Watch.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish Game to Watch" })).toBeInTheDocument();
+  }, INTEGRATION_TIMEOUT_MS);
+
   test("opening the navigation drawer suppresses the tooltip hint to prevent overlap", () => {
     localStorage.removeItem("hasSeenTooltipHint");
 

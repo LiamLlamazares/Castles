@@ -31,6 +31,7 @@ import {
   cancelOnlineChallenge,
   createOnlineChallenge,
   declineOnlineChallenge,
+  fetchOnlineGameSummaries,
   fetchOnlineChallenge,
   createOnlineGame,
   fetchOnlineSpectatorSnapshot,
@@ -45,6 +46,7 @@ import {
   parseOnlineSpectatorParams,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
+  updateOnlineGameVisibility,
   OnlineChallengeParams,
   OnlineChallengeResponse,
   OnlineChallengeGameInvite,
@@ -52,6 +54,7 @@ import {
   OnlineSpectatorParams,
 } from './online/client';
 import type { OnlineClientSession, OnlineGameSnapshotDTO } from './online/types';
+import type { OnlineGameVisibility, OnlinePlayerSettableGameVisibility } from './online/visibility';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
   BrowserGameLibraryRepository,
@@ -193,6 +196,7 @@ function App() {
   const [onlineOpponentInviteUrl, setOnlineOpponentInviteUrl] = useState<string | null>(() =>
     onlineJoin?.seat === "w" ? resolveOnlineOpponentInviteUrl(onlineJoin.gameId) : null
   );
+  const [onlineVisibilityByGameId, setOnlineVisibilityByGameId] = useState<Record<string, OnlineGameVisibility>>({});
   const [onlineChallenge, setOnlineChallenge] = useState<OnlineChallengeParams | null>(() =>
     resolveOnlineChallengeParams(window.location.href)
   );
@@ -243,6 +247,36 @@ function App() {
     setOnlineChallenge(null);
     rememberOnlineJoinParams(onlineJoin);
     clearOnlineTokenFromUrl();
+  }, [onlineJoin]);
+
+  useEffect(() => {
+    if (!onlineJoin) return;
+    let cancelled = false;
+    fetchOnlineGameSummaries()
+      .then((summaries) => {
+        if (cancelled) return;
+        const summary = summaries.find((candidate) => candidate.gameId === onlineJoin.gameId);
+        setOnlineVisibilityByGameId(prev => {
+          if (summary) {
+            return { ...prev, [onlineJoin.gameId]: summary.visibility };
+          }
+          if (prev[onlineJoin.gameId]) {
+            return prev;
+          }
+          return { ...prev, [onlineJoin.gameId]: "unlisted" };
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOnlineVisibilityByGameId(prev =>
+          prev[onlineJoin.gameId]
+            ? prev
+            : { ...prev, [onlineJoin.gameId]: "unlisted" }
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [onlineJoin]);
 
   useEffect(() => {
@@ -440,6 +474,10 @@ function App() {
       setOnlineSpectator(null);
       setOnlineSnapshot(null);
       setOnlineOpponentInviteUrl(created.black.url);
+      setOnlineVisibilityByGameId(prev => ({
+        ...prev,
+        [created.gameId]: "unlisted",
+      }));
       setView('game');
     } catch (error) {
       console.error("Failed to create online game", error);
@@ -471,6 +509,10 @@ function App() {
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
+    setOnlineVisibilityByGameId(prev => ({
+      ...prev,
+      [join.gameId]: "unlisted",
+    }));
     setView('game');
   };
 
@@ -802,6 +844,20 @@ function App() {
     activeOnlineSpectator?.gameId ?? null,
     handleOnlineSnapshot
   );
+  const handleUpdateOnlineVisibility = useCallback(
+    async (visibility: OnlinePlayerSettableGameVisibility) => {
+      if (!onlineJoin) {
+        throw new Error("No active online game is available.");
+      }
+      const summary = await updateOnlineGameVisibility(onlineJoin, visibility);
+      setOnlineVisibilityByGameId(prev => ({
+        ...prev,
+        [summary.gameId]: summary.visibility,
+      }));
+      return summary;
+    },
+    [onlineJoin]
+  );
   const onlineSession = useMemo<OnlineClientSession | undefined>(() => {
     if (onlineJoin && onlineSnapshot) {
       return {
@@ -814,9 +870,11 @@ function App() {
         isActionPending: onlineConnection.isActionPending,
         clock: onlineSnapshot.clock,
         result: onlineSnapshot.result,
+        visibility: onlineVisibilityByGameId[onlineJoin.gameId] ?? "unlisted",
         opponentInviteUrl: onlineJoin.seat === "w" ? onlineOpponentInviteUrl ?? undefined : undefined,
         spectatorUrl: buildSpectatorUrl(window.location.href, onlineJoin.gameId),
         submitAction: onlineConnection.submitAction,
+        updateVisibility: handleUpdateOnlineVisibility,
       };
     }
 
@@ -839,8 +897,10 @@ function App() {
     activeOnlineSpectator,
     onlineSnapshot,
     onlineOpponentInviteUrl,
+    onlineVisibilityByGameId,
     onlineConnection,
     onlineSpectatorConnection,
+    handleUpdateOnlineVisibility,
   ]);
 
   const pendingOnlineConnection = onlineJoin ? onlineConnection : onlineSpectatorConnection;

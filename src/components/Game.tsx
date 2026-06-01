@@ -27,6 +27,10 @@ import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
 import { PieceTheme } from "../Constants";
 import type { OnlineClientSession } from "../online/types";
+import type {
+  OnlineGameVisibility,
+  OnlinePlayerSettableGameVisibility,
+} from "../online/visibility";
 import {
   copyOnlineInviteUrl,
   formatOnlineConnectionStatus,
@@ -140,6 +144,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [showTooltipHint, setShowTooltipHint] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [isNavigationMenuOpen, setNavigationMenuOpen] = React.useState(false);
+  const [onlineVisibilityOverride, setOnlineVisibilityOverride] =
+    React.useState<OnlineGameVisibility | null>(null);
+  const [isOnlineVisibilityPending, setOnlineVisibilityPending] = React.useState(false);
   const [newGameConfirmation, setNewGameConfirmation] = React.useState<{
     title: string;
     message: string;
@@ -268,6 +275,38 @@ const InnerGame: React.FC<GameBoardProps> = ({
     if (!onlineSession?.spectatorUrl) return;
     copyOnlineLink(onlineSession.spectatorUrl, "Spectator link copied.");
   }, [copyOnlineLink, onlineSession]);
+  const currentOnlineVisibility =
+    onlineSession?.role === "player"
+      ? onlineVisibilityOverride ?? onlineSession.visibility ?? "unlisted"
+      : onlineSession?.visibility;
+  const handleUpdateOnlineVisibility = React.useCallback(
+    (visibility: OnlinePlayerSettableGameVisibility) => {
+      if (onlineSession?.role !== "player" || !onlineSession.updateVisibility) return;
+      setOnlineVisibilityPending(true);
+      onlineSession
+        .updateVisibility(visibility)
+        .then((summary) => {
+          setOnlineVisibilityOverride(summary.visibility);
+          showStatusMessage(
+            summary.visibility === "public"
+              ? "Game published to Watch."
+              : "Game removed from Watch."
+          );
+        })
+        .catch((error) => {
+          console.error("Failed to update online game visibility", error);
+          showStatusMessage("Could not update game visibility.");
+        })
+        .finally(() => {
+          setOnlineVisibilityPending(false);
+        });
+    },
+    [onlineSession, showStatusMessage]
+  );
+
+  React.useEffect(() => {
+    setOnlineVisibilityOverride(null);
+  }, [onlineSession?.gameId]);
 
   // Restore game logic from old Game.tsx
   React.useEffect(() => {
@@ -702,6 +741,13 @@ const InnerGame: React.FC<GameBoardProps> = ({
               : undefined
           }
           onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
+          onlineVisibility={currentOnlineVisibility}
+          onUpdateOnlineVisibility={
+            onlineSession?.role === "player" && onlineSession.updateVisibility
+              ? handleUpdateOnlineVisibility
+              : undefined
+          }
+          isOnlineVisibilityPending={isOnlineVisibilityPending}
           onSaveGame={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
           onEnableAnalysis={canOpenOnlineAnalysis ? handleEnterAnalysis : undefined}

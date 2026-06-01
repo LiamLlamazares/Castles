@@ -33,7 +33,11 @@ vi.mock("../components/Game", () => ({
     initialSanctuaries?: unknown[];
     initialVictoryPoints?: { w: number; b: number };
     isAnalysisMode?: boolean;
-    onlineSession?: { role: string };
+    onlineSession?: {
+      role: string;
+      visibility?: string;
+      updateVisibility?: (visibility: "public" | "unlisted") => Promise<unknown>;
+    };
     sanctuarySettings?: { unlockTurn: number; cooldown: number };
     initialPoolTypes?: unknown[];
     onSetup: () => void;
@@ -53,6 +57,7 @@ vi.mock("../components/Game", () => ({
     <div>
       <div>Game Ready</div>
       <div>Online session: {props.onlineSession?.role ?? "none"}</div>
+      <div>Online visibility: {props.onlineSession?.visibility ?? "none"}</div>
       <div>Analysis mode: {props.isAnalysisMode ? "yes" : "no"}</div>
       <div>
         Victory points: {props.initialVictoryPoints
@@ -73,6 +78,20 @@ vi.mock("../components/Game", () => ({
       <button type="button" onClick={props.onOpenOnlineBrowser}>
         Open Watch
       </button>
+      {props.onlineSession?.updateVisibility && (
+        <button
+          type="button"
+          onClick={() =>
+            void props.onlineSession?.updateVisibility?.(
+              props.onlineSession.visibility === "public" ? "unlisted" : "public"
+            )
+          }
+        >
+          {props.onlineSession.visibility === "public"
+            ? "Mock Unlist Current Game"
+            : "Mock Publish Current Game"}
+        </button>
+      )}
       <button
         type="button"
         onClick={() => props.onLoadGame({
@@ -679,6 +698,84 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByText("Setup Ready")).toBeInTheDocument();
     expect(window.location.search).not.toContain("onlineGame=");
     expect(window.location.search).not.toContain("token=");
+  });
+
+  it("seeds public player visibility and wires updates through the bearer-authorized client helper", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_visible_player&seat=w&token=white-token"
+    );
+    const summary = {
+      schemaVersion: 1,
+      gameId: "game_visible_player",
+      rulesetVersion: "castles-beta-v1",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      updatedAt: "2026-05-31T12:00:01.000Z",
+      version: 0,
+      status: "active",
+      visibility: "public",
+      archiveState: "active",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_visible_player_w" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_visible_player_b" } },
+      ],
+      lastEventId: "evt-visibility",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ games: [summary] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            summary: {
+              ...summary,
+              visibility: "unlisted",
+              updatedAt: "2026-05-31T12:00:02.000Z",
+              lastEventId: "evt-unlist",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const playerCallback = onlineHookMocks.useOnlineGameConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      playerCallback(spectatorSnapshot("game_visible_player"));
+    });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/online/games");
+    });
+    expect(screen.getByText("Online session: player")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Online visibility: public")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Unlist Current Game" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/online/games/game_visible_player/visibility", {
+        method: "PATCH",
+        headers: {
+          authorization: "Bearer white-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ visibility: "unlisted" }),
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Online visibility: unlisted")).toBeInTheDocument();
+    });
   });
 
   it("shows access denied for an invalid challenge link", async () => {

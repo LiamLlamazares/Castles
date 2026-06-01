@@ -28,6 +28,7 @@ import {
 import {
   createOnlineActionAcceptedEvent,
   createOnlineGameCreatedEvent,
+  createOnlineGameVisibilityChangedEvent,
   createOnlineTimeoutAdjudicatedEvent,
   OnlineGameEvent,
   type OnlineGameCredentials,
@@ -68,6 +69,10 @@ import {
   isOnlineTokenCredentialHash,
   verifyOnlineToken,
 } from "./onlineTokenCredentials";
+import {
+  isOnlinePlayerSettableGameVisibility,
+  type OnlinePlayerSettableGameVisibility,
+} from "../visibility";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -96,6 +101,9 @@ export interface CreateOnlineHttpServerOptions {
     credentials: OnlineGameCredentials
   ) => void | Promise<void>;
   onGameEvent?: (event: OnlineGameEvent) => void | Promise<void>;
+  appendGameVisibilityChanged?: (
+    event: Extract<OnlineGameEvent, { type: "visibility_changed" }>
+  ) => OnlineGameSummary | Promise<OnlineGameSummary>;
   appendChallengeCreated?: (
     event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
     credentials: OnlineChallengeCredentials
@@ -320,6 +328,10 @@ function normalizeChallengeSeat(value: unknown): "w" | "b" | "random" | null {
 function normalizeChallengeVisibility(value: unknown): "private" | "unlisted" | null {
   if (value === undefined) return "unlisted";
   return value === "private" || value === "unlisted" ? value : null;
+}
+
+function normalizeGameVisibility(value: unknown): OnlinePlayerSettableGameVisibility | null {
+  return isOnlinePlayerSettableGameVisibility(value) ? value : null;
 }
 
 function challengeTerminalError(error: unknown): boolean {
@@ -1442,6 +1454,115 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         role: "player",
         status: "accepted",
       });
+    });
+  });
+
+  app.patch("/api/online/games/:gameId/visibility", async (req, res) => {
+    const gameId = validateOnlineGameId(req.params.gameId, "visibility.gameId");
+    if (!gameId.ok) {
+      log({ event: "online.game.visibility", role: "player", status: "rejected", reason: gameId.error.code });
+      res.status(400).json({ error: gameId.error });
+      return;
+    }
+
+    const visibility = normalizeGameVisibility(req.body?.visibility);
+    if (!visibility) {
+      log({
+        event: "online.game.visibility",
+        gameId: gameId.value,
+        role: "player",
+        status: "rejected",
+        reason: "bad_request",
+      });
+      res.status(400).json({
+        error: {
+          code: "bad_request",
+          message: "Game visibility must be public or unlisted.",
+        },
+      });
+      return;
+    }
+
+    await enqueueGameAction(gameId.value, async () => {
+      const token = getBearerToken(req.headers.authorization) ?? "";
+      const room = service.getRoomForToken(gameId.value, token);
+      if (!room) {
+        log({
+          event: "online.game.visibility",
+          gameId: gameId.value,
+          role: "player",
+          status: "rejected",
+          reason: "not_found",
+        });
+        res.status(404).json({
+          error: {
+            code: "not_found",
+            message: "No online game was found for that id and token.",
+          },
+        });
+        return;
+      }
+
+      if (!options.appendGameVisibilityChanged) {
+        log({
+          event: "online.game.visibility",
+          gameId: gameId.value,
+          role: "player",
+          status: "failed",
+          reason: "persistence_unavailable",
+        });
+        res.status(503).json({
+          error: {
+            code: "persistence_failed",
+            message: "Game visibility changes require durable persistence.",
+          },
+        });
+        return;
+      }
+
+      try {
+        const summary = await options.appendGameVisibilityChanged(
+          createOnlineGameVisibilityChangedEvent(
+            {
+              type: "visibility_changed",
+              gameId: gameId.value,
+              visibility,
+            },
+            { createdAt: new Date(options.now?.() ?? Date.now()).toISOString() }
+          )
+        );
+        const validation = validateOnlineGameSummary(summary);
+        if (!validation.ok) {
+          throw new Error(validation.error.message);
+        }
+
+        log({
+          event: "online.game.visibility",
+          gameId: gameId.value,
+          role: "player",
+          status: "accepted",
+          reason: visibility,
+        });
+        res.json({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          summary: validation.value,
+        });
+      } catch (error) {
+        log({
+          event: "online.game.visibility",
+          gameId: gameId.value,
+          role: "player",
+          status: "failed",
+          reason: "persistence_failed",
+        });
+        console.error("Failed to persist online game visibility", error);
+        res.status(503).json({
+          error: {
+            code: "persistence_failed",
+            message: "The online game visibility could not be saved.",
+          },
+        });
+      }
     });
   });
 

@@ -26,6 +26,7 @@ import {
   resolveOnlineJoinParams,
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
+  updateOnlineGameVisibility,
   forgetOnlineChallengeParams,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
@@ -577,6 +578,47 @@ describe("online client helpers", () => {
 
     expect(fetchImpl).toHaveBeenCalledWith("/api/online/games");
     expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain("authorization");
+  });
+
+  it("updates game visibility with bearer authorization and validates the summary response", async () => {
+    const summary = {
+      schemaVersion: 1,
+      gameId: "game_123",
+      rulesetVersion: "castles-beta-v1",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      updatedAt: "2026-05-31T12:00:01.000Z",
+      version: 0,
+      status: "active",
+      visibility: "public",
+      archiveState: "active",
+      hasTimeControl: true,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_123_w" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_123_b" } },
+      ],
+      lastEventId: "evt-visibility",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, summary }),
+    });
+
+    await expect(
+      updateOnlineGameVisibility(
+        { gameId: "game_123", seat: "w", token: "white-token" },
+        "public",
+        fetchImpl as any
+      )
+    ).resolves.toEqual(summary);
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games/game_123/visibility", {
+      method: "PATCH",
+      headers: {
+        authorization: "Bearer white-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ visibility: "public" }),
+    });
   });
 
   it("rejects malformed game summary responses", async () => {

@@ -6,6 +6,7 @@ import { serializeOnlineGameSetup } from "../serialization";
 import {
   ONLINE_EVENT_SCHEMA_VERSION,
   ONLINE_RULESET_VERSION,
+  onlineGameEventsToRecords,
   type OnlineGameEvent,
 } from "../events";
 import {
@@ -135,6 +136,36 @@ describe("online read model", () => {
     expect(JSON.stringify(summary)).not.toContain("secret-token");
   });
 
+  it("projects visibility changes without advancing the gameplay version", () => {
+    const events = [
+      createEvent("game_visible"),
+      {
+        ...envelope(1),
+        type: "visibility_changed",
+        gameId: "game_visible",
+        visibility: "public",
+      },
+    ] as OnlineGameEvent[];
+
+    const [summary] = projectOnlineGameSummaries(events);
+
+    expect(summary).toMatchObject({
+      gameId: "game_visible",
+      updatedAt: "2026-05-31T12:00:01.000Z",
+      version: 0,
+      visibility: "public",
+      lastEventId: "evt-1",
+    });
+    expect(
+      onlineGameEventsToRecords(events, { allowMissingCredentialsForProjection: true })
+    ).toMatchObject([
+      {
+        gameId: "game_visible",
+        acceptedActions: [],
+      },
+    ]);
+  });
+
   it("marks terminal games as archived summaries", () => {
     const [summary] = projectOnlineGameSummaries([
       createEvent("game_resigned"),
@@ -161,6 +192,46 @@ describe("online read model", () => {
       version: 1,
       result: { winner: "w", reason: "resignation" },
     });
+  });
+
+  it("allows archived games to change public visibility after the result timestamp", () => {
+    const [summary] = projectOnlineGameSummaries([
+      createEvent("game_archived_visibility"),
+      {
+        ...envelope(1),
+        type: "action_accepted",
+        gameId: "game_archived_visibility",
+        playerColor: "b",
+        clientActionId: "client-action-archived-visibility",
+        version: 1,
+        playedAt: 2_000,
+        action: { type: "RESIGN", baseVersion: 0 },
+        clock: {
+          remainingMs: { w: 1_200_000, b: 1_200_000 },
+          activeColor: null,
+          runningSince: null,
+        },
+      },
+      {
+        ...envelope(2),
+        type: "visibility_changed",
+        gameId: "game_archived_visibility",
+        visibility: "public",
+      },
+    ] as OnlineGameEvent[]);
+
+    expect(summary).toMatchObject({
+      gameId: "game_archived_visibility",
+      status: "complete",
+      archiveState: "archived",
+      endedAt: "2026-05-31T12:00:01.000Z",
+      updatedAt: "2026-05-31T12:00:02.000Z",
+      version: 1,
+      visibility: "public",
+      result: { winner: "w", reason: "resignation" },
+      lastEventId: "evt-2",
+    });
+    expect(validateOnlineGameSummary(summary).ok).toBe(true);
   });
 
   it("projects idempotently from the same events", () => {
@@ -302,8 +373,21 @@ describe("online read model", () => {
         validSummary({
           status: "complete",
           archiveState: "archived",
-          updatedAt: "2026-05-31T12:00:03.000Z",
+          createdAt: "2026-05-31T12:00:03.000Z",
+          updatedAt: "2026-05-31T12:00:04.000Z",
           endedAt: "2026-05-31T12:00:02.000Z",
+          result: { winner: "w", reason: "resignation" },
+        })
+      ).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary(
+        validSummary({
+          status: "complete",
+          archiveState: "archived",
+          createdAt: "2026-05-31T12:00:00.000Z",
+          updatedAt: "2026-05-31T12:00:02.000Z",
+          endedAt: "2026-05-31T12:00:03.000Z",
           result: { winner: "w", reason: "resignation" },
         })
       ).ok

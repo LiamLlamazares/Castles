@@ -12,6 +12,7 @@ import {
   OnlineGameSetupDTO,
   OnlineGameSnapshotDTO,
 } from "./types";
+import type { OnlinePlayerSettableGameVisibility } from "./visibility";
 
 export interface OnlineJoinParams {
   gameId: string;
@@ -625,4 +626,41 @@ export async function fetchOnlineGameSummaries(
     }
     return validation.value;
   });
+}
+
+export async function updateOnlineGameVisibility(
+  join: OnlineJoinParams,
+  visibility: OnlinePlayerSettableGameVisibility,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameSummary> {
+  const response = await fetchImpl(
+    `/api/online/games/${encodeURIComponent(join.gameId)}/visibility`,
+    {
+      method: "PATCH",
+      headers: {
+        authorization: `Bearer ${join.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ visibility }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Could not update online game visibility (${response.status})`);
+  }
+
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online game visibility response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Online game visibility response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  const summary = validateOnlineGameSummary((body as { summary?: unknown }).summary);
+  if (!summary.ok) {
+    throw new Error(`Online game visibility response was malformed: ${summary.error.message}`);
+  }
+  return summary.value;
 }

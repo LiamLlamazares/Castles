@@ -22,8 +22,17 @@ Phase 6B implementation status, 2026-06-01:
 
 - Watch and Online Archive are first-class public-summary destinations, distinct from the local Library.
 - The first version lists only `visibility: "public"` summaries returned by `/api/online/games`; private and unlisted games remain off public browse surfaces.
+- Online players can deliberately publish an unlisted game to Watch and unlist it again; the control uses durable server state and does not expose bearer tokens.
 - Spectate handoff uses `?onlineGame=<id>&view=spectator` and strips player tokens, challenge parameters, PGN parameters, and URL fragments.
 - Public lobby creation, open seeks, accounts, ratings, chat, and matchmaking stay deferred until the backend contracts exist.
+
+Next UI polish audit, 2026-06-01:
+
+- Keep lichess-style top destinations simple: Play, Learn, Watch, Library, and later Tools/Lobby when backed by server contracts.
+- Add a stronger mobile drawer accessibility pass: focus trap, Escape close, focus restoration, and background inerting.
+- Make tutorial mobile more compact on short screens: reduce header/chip crowding and keep progress visible without pushing the board out of view.
+- Keep the game side panel contextual to clocks, turn phase, history, save/review, online links, and analysis; do not use it as general app navigation.
+- Check long online status/error text at 360 px, 390 px, and 430 px widths so it does not collide with back/menu controls.
 
 Reference pages checked:
 
@@ -67,9 +76,11 @@ Capture before and after screenshots at these viewport sizes:
 
 - Desktop game: 1440 x 900
 - Mobile game: 430 x 932
+- Short mobile game: 360 x 640
 - Mobile drawer open: 430 x 932
 - Desktop tutorial: 1440 x 900
 - Mobile tutorial: 430 x 932
+- Short mobile tutorial: 360 x 640
 - Library desktop/mobile after at least one long save name
 - Online player and spectator game states once a temporary local online server is running
 - Watch and Online Archive desktop/mobile with empty lists, live public games, archived public results, search/filter states, and spectator handoff
@@ -100,3 +111,4 @@ For every screenshot, check:
 - Browser smoke: create/join/spectate/terminal flow still passes after shell changes.
 - Accessibility check: move history entries are real buttons so keyboard users can jump through history in desktop and mobile history surfaces.
 - Online browser test: Watch -> Spectate enters a token-free spectator URL and clears stale player/challenge URL state.
+- Online visibility test: a player can publish an unlisted game to Watch and unlist it again without exposing bearer tokens.

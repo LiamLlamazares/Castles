@@ -16,6 +16,8 @@ Unsupported event schema versions must fail replay loudly. Silent partial replay
 
 Accepted action events include a required `clientActionId`. Clients send this id with each action message, and the server persists it on the corresponding `action_accepted` event. For a given game and player, retrying the same `clientActionId` with the same action is idempotent and must not append another action event; if the clock has expired, the retry may still trigger timeout adjudication and return the current terminal snapshot. Reusing the same id with a different action is rejected as `duplicate_action` unless server timeout adjudication has already ended the game. The PostgreSQL store enforces a unique accepted-action index over `game_id + playerColor + clientActionId`.
 
+Visibility changes are also durable `OnlineGameEvent` entries: `visibility_changed` stores `gameId` and `visibility`. Player-controlled visibility is currently limited to `public` and `unlisted`; `private` remains reserved until active spectator sockets can be reauthorized or disconnected. Visibility events do not carry or advance a gameplay version. Room replay validates that the game exists and then ignores these events, while summary projection updates `visibility`, `updatedAt`, and `lastEventId`.
+
 ## Online Protocol Envelope
 
 The current WebSocket and REST snapshot protocol is version 1. Every WebSocket client message, WebSocket server message, and REST body that contains a snapshot must include:
@@ -174,7 +176,7 @@ Visibility values:
 - `unlisted`: excluded from public lists; current private-beta spectator links are random-id links and can view these games if the id is known.
 - `public`: visible in public lists and intended for ordinary spectator access.
 
-Current created games project as `unlisted`. A future `visibility_changed` or challenge/lobby event must be added before real public lobby entries exist.
+Current created games project as `unlisted`. A player can publish or unlist a game through `PATCH /api/online/games/:gameId/visibility`, authorized by the same bearer player token used for snapshots. The route returns `protocolVersion: 1` and a token-free `OnlineGameSummary`; it fails closed if durable persistence is unavailable.
 
 Role names:
 
@@ -189,12 +191,12 @@ Summary listing and spectator authorization use `src/online/accessPolicy.ts`. Pu
 
 The `challenged` role is provisional until challenge identity binding exists. It must only be assigned after a separate challenge/session/account binding check proves the requester is the bound challenged user. It is not a permission that can be inferred from an unauthenticated HTTP or WebSocket request.
 
-Initial HTTP and WebSocket spectator joins are checked against the shared policy. Existing spectator sockets are not re-authorized on every broadcast because there are no visibility-change events yet. Before any future `visibility_changed` event can make a game private mid-game, broadcasts must either revalidate spectator sockets or disconnect sockets that no longer satisfy the policy.
+Initial HTTP and WebSocket spectator joins are checked against the shared policy. Existing spectator sockets are not re-authorized on every broadcast. Before any future visibility change can make a game private mid-game, broadcasts must either revalidate spectator sockets or disconnect sockets that no longer satisfy the policy.
 
 For this low-scale foundation slice, server spectator authorization scans `loadGameSummaries()` for the requested game id. A later `loadGameSummary(gameId)` store method can replace that scan when challenge/lobby scale requires it.
 
 ## Next Contract Changes
 
-1. Add durable visibility lifecycle events before public lobby/archive UI can change exposure mid-game.
+1. Add archive search/detail read models on top of the now-durable public/unlisted visibility boundary.
 2. Add a public account/session ownership layer before account-bound private challenges, ratings, and moderation.
-3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes.
+3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes to `private`.
