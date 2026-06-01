@@ -846,6 +846,41 @@ async function createChallengeFromUi(challenger) {
   return { challengedUrl };
 }
 
+async function verifyOnlineBrowserSurface(driver) {
+  const online = await driver.newPage();
+  await openSetupFromBase(online);
+  await online.clickButton("Online");
+  await online.waitForText("Lobby, Watch, Archive");
+  await online.waitForButton("List in Lobby");
+  await waitUntil("Online browser to default to Lobby", () =>
+    online.evaluate(
+      `window.__castlesSmokeFindButton("Lobby games")?.getAttribute("aria-pressed") === "true"`
+    )
+  );
+
+  await online.clickButton("Live public games");
+  await waitUntil("Online browser Watch tab to become active", () =>
+    online.evaluate(
+      `window.__castlesSmokeFindButton("Live public games")?.getAttribute("aria-pressed") === "true"`
+    )
+  );
+
+  await online.clickButton("Online Archive");
+  await waitUntil("Online browser Archive tab to become active", () =>
+    online.evaluate(
+      `window.__castlesSmokeFindButton("Online Archive")?.getAttribute("aria-pressed") === "true"`
+    )
+  );
+
+  await online.clickButton("Learn");
+  await online.clickButton("Online");
+  await waitUntil("Online browser to preserve Archive after Learn", () =>
+    online.evaluate(
+      `window.__castlesSmokeFindButton("Online Archive")?.getAttribute("aria-pressed") === "true"`
+    )
+  );
+}
+
 async function verifyBrowserChallengeFlow(driver) {
   const challenger = await driver.newPage();
   const challenged = await driver.newPage();
@@ -994,6 +1029,7 @@ async function verifyAccessDeniedRecovery(driver, gameId) {
 
 async function runFlow(driver) {
   await verifyHealth();
+  await verifyOnlineBrowserSurface(driver);
   const white = await driver.newPage();
   const black = await driver.newPage();
   const spectator = await driver.newPage();

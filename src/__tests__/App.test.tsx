@@ -110,7 +110,7 @@ vi.mock("../components/Game", () => ({
         Open Library
       </button>
       <button type="button" onClick={props.onOpenOnlineBrowser}>
-        Open Watch
+        Open Online
       </button>
       {props.onSaveGameToLibrary && (
         <button
@@ -186,7 +186,7 @@ vi.mock("../components/GameSetup", () => ({
         Setup Library
       </button>
       <button type="button" onClick={onOpenOnlineBrowser}>
-        Setup Watch
+        Setup Online
       </button>
       {onCreateOpenSeek && (
         <button
@@ -205,7 +205,7 @@ vi.mock("../components/GameSetup", () => ({
             )
           }
         >
-          Create Lobby Seek
+          List in Lobby
         </button>
       )}
     </div>
@@ -221,6 +221,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onReplay,
     onSpectate,
     initialTab,
+    activeTab,
+    onTabChange,
     onCreateSeek,
     onAcceptSeek,
     onCancelSeek,
@@ -239,6 +241,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onReplay: (gameId: string) => void;
     onSpectate: (gameId: string) => void;
     initialTab?: string;
+    activeTab?: "lobby" | "watch" | "archive";
+    onTabChange?: (tab: "lobby" | "watch" | "archive") => void;
     onCreateSeek?: () => void;
     onAcceptSeek?: (seekId: string) => void;
     onCancelSeek?: (seekId: string) => void;
@@ -255,6 +259,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     <div>
       <div>Online Browser Ready</div>
       <div>Initial tab: {initialTab ?? "none"}</div>
+      <div>Active tab: {activeTab ?? "none"}</div>
       <div>Owned seek ids: {ownedSeekIds.join(",") || "none"}</div>
       <div>Owned seek status: {ownedSeekResponse?.summary.status ?? "none"}</div>
       {quickMatchStatus && <div>Mock quick match status: {quickMatchStatus}</div>}
@@ -266,6 +271,16 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
+      {onTabChange && (
+        <>
+          <button type="button" onClick={() => onTabChange("lobby")}>
+            Switch to Lobby
+          </button>
+          <button type="button" onClick={() => onTabChange("archive")}>
+            Switch to Online Archive
+          </button>
+        </>
+      )}
       {onCreateSeek && (
         <button type="button" onClick={onCreateSeek}>
           Browser Create Seek
@@ -273,24 +288,24 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       )}
       {onAcceptSeek && (
         <button type="button" onClick={() => onAcceptSeek("seek_public_open")}>
-          Accept open seek
+          Accept lobby listing
         </button>
       )}
       {onCancelSeek && (
         <button type="button" onClick={() => onCancelSeek("seek_public_open")}>
-          Cancel open seek
+          Cancel lobby listing
         </button>
       )}
       {onQuickMatch && (
         <button
           type="button"
           onClick={async () => {
-            setQuickMatchStatus("Checking compatible open seeks...");
+            setQuickMatchStatus("Checking compatible lobby listings...");
             const outcome = await onQuickMatch();
             if (outcome === "matched") {
               setQuickMatchStatus("Match found. Opening game...");
             } else if (outcome === "waiting") {
-              setQuickMatchStatus("No compatible open seek found. Your open seek is listed for someone to accept.");
+              setQuickMatchStatus("No compatible lobby listing found. Your game is listed in the Lobby for someone to accept.");
             }
           }}
           disabled={
@@ -315,17 +330,17 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       )}
       {onOpenGame && (
         <button type="button" onClick={onOpenGame}>
-          Watch Play
+          Online Play
         </button>
       )}
       {onTutorial && (
         <button type="button" onClick={onTutorial}>
-          Watch Tutorial
+          Online Tutorial
         </button>
       )}
       {onOpenLibrary && (
         <button type="button" onClick={onOpenLibrary}>
-          Watch Library
+          Online Library
         </button>
       )}
       <button type="button" onClick={() => onSpectate("game_watch_public")}>
@@ -344,12 +359,14 @@ vi.mock("../components/GameLibrary", () => ({
     onBack,
     onOpenGame,
     onTutorial,
+    onOpenOnlineBrowser,
     onLoadGame,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
     onOpenGame?: () => void;
     onTutorial?: () => void;
+    onOpenOnlineBrowser?: () => void;
     onLoadGame?: (record: { pgn: string }) => void;
     backLabel?: string;
   }) => (
@@ -368,6 +385,11 @@ vi.mock("../components/GameLibrary", () => ({
           Library Tutorial
         </button>
       )}
+      {onOpenOnlineBrowser && (
+        <button type="button" onClick={onOpenOnlineBrowser}>
+          Library Online
+        </button>
+      )}
       {onLoadGame && (
         <button type="button" onClick={() => onLoadGame({ pgn: "bad-pgn-for-test" })}>
           Load Saved Test Game
@@ -382,11 +404,13 @@ vi.mock("../components/Tutorial", () => ({
     onBack,
     onOpenGame,
     onOpenLibrary,
+    onOpenOnlineBrowser,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
     onOpenGame?: () => void;
     onOpenLibrary?: () => void;
+    onOpenOnlineBrowser?: () => void;
     backLabel?: string;
   }) => (
     <div>
@@ -402,6 +426,11 @@ vi.mock("../components/Tutorial", () => ({
       {onOpenLibrary && (
         <button type="button" onClick={onOpenLibrary}>
           Tutorial Library
+        </button>
+      )}
+      {onOpenOnlineBrowser && (
+        <button type="button" onClick={onOpenOnlineBrowser}>
+          Tutorial Online
         </button>
       )}
     </div>
@@ -546,10 +575,10 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByText("Game Ready")).toBeInTheDocument();
   });
 
-  it("returns from Watch to the view that opened it", () => {
+  it("returns from Online to the view that opened it", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
@@ -558,7 +587,7 @@ describe("App game setup lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
     expect(screen.getByText("Setup Ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Setup Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Setup Online" }));
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Back to setup" }));
@@ -568,20 +597,53 @@ describe("App game setup lifecycle", () => {
   it("supports nested page navigation without losing the return path", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Watch Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online Tutorial" }));
     expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Online" }));
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Watch Library" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online Library" }));
     expect(screen.getByText("Library Ready")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Online" }));
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
+  });
+
+  it("preserves the Online tab when returning to or reopening Online from Learn and Library", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    expect(screen.getByText("Active tab: lobby")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Online Archive" }));
+    expect(screen.getByText("Active tab: archive")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Tutorial" }));
+    expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Online" }));
+    expect(screen.getByText("Active tab: archive")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Tutorial" }));
+    expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial Online" }));
+    expect(screen.getByText("Active tab: archive")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Lobby" }));
+    expect(screen.getByText("Active tab: lobby")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Library" }));
+    expect(screen.getByText("Library Ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to Online" }));
+    expect(screen.getByText("Active tab: lobby")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Library" }));
+    expect(screen.getByText("Library Ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Library Online" }));
+    expect(screen.getByText("Active tab: lobby")).toBeInTheDocument();
   });
 
   it("opens the current game from nested pages without using the back stack", () => {
@@ -599,8 +661,8 @@ describe("App game setup lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load Saved Test Game" }));
     expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
-    fireEvent.click(screen.getByRole("button", { name: "Watch Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online Tutorial" }));
     expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Tutorial Play" }));
@@ -624,8 +686,8 @@ describe("App game setup lifecycle", () => {
     } as any);
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
-    fireEvent.click(screen.getByRole("button", { name: "Watch Library" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online Library" }));
     expect(screen.getByText("Library Ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Load Saved Test Game" }));
@@ -637,7 +699,7 @@ describe("App game setup lifecycle", () => {
 
     expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back to Watch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Online" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Back to Library" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
@@ -761,7 +823,7 @@ describe("App game setup lifecycle", () => {
   it("opens public games from Watch through the token-free spectator flow", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     window.history.replaceState(
       {},
       "",
@@ -800,7 +862,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Seek" }));
+    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -825,7 +887,7 @@ describe("App game setup lifecycle", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("recovers creator-owned open seek controls after a same-session reload", async () => {
+  it("recovers creator-owned lobby listing controls after a same-session reload", async () => {
     rememberOpenSeekCreatorParams({ seekId: "seek_restore", token: "creator-token" });
     vi.stubGlobal(
       "fetch",
@@ -849,7 +911,7 @@ describe("App game setup lifecycle", () => {
         { headers: { authorization: "Bearer creator-token" } }
       );
     });
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
 
     expect(screen.getByText("Owned seek ids: seek_restore")).toBeInTheDocument();
     expect(screen.getByText("Owned seek status: open")).toBeInTheDocument();
@@ -886,8 +948,8 @@ describe("App game setup lifecycle", () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
-    fireEvent.click(screen.getByRole("button", { name: "Accept open seek" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Accept lobby listing" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -936,7 +998,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     expect(screen.getByText("Quick match summary: Radius 7; Timed 15+5; Victory points")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Quick Match" }));
 
@@ -1005,7 +1067,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Quick Match" }));
 
     await waitFor(() => {
@@ -1033,7 +1095,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
 
     expect(screen.getByText("Owned seek ids: seek_restore_pending")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Quick Match" })).toBeDisabled();
@@ -1084,7 +1146,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Seek" }));
+    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
     await screen.findByText("Initial tab: lobby");
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh owned seek" }));
@@ -1129,7 +1191,7 @@ describe("App game setup lifecycle", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     window.history.replaceState(
       {},
       "",
@@ -1159,7 +1221,7 @@ describe("App game setup lifecycle", () => {
     );
   });
 
-  it("clears stale return paths after Watch spectate, replay, Play, and restart entries", async () => {
+  it("clears stale return paths after Online spectate, replay, Play, and restart entries", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -1171,9 +1233,9 @@ describe("App game setup lifecycle", () => {
     ));
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
-    fireEvent.click(screen.getByRole("button", { name: "Watch Tutorial" }));
-    fireEvent.click(screen.getByRole("button", { name: "Back to Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Spectate public game" }));
 
     const spectatorCallback = onlineHookMocks.useOnlineSpectatorConnection.mock.calls.at(-1)?.[1];
@@ -1184,17 +1246,17 @@ describe("App game setup lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open Tutorial" }));
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back to Watch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Online" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
     await waitFor(() => expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Mock Restart Game" }));
     fireEvent.click(screen.getByRole("button", { name: "Open Tutorial" }));
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back to Watch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Online" })).not.toBeInTheDocument();
   });
 
   it("detaches an existing spectator session while an archived replay snapshot is loading", async () => {
@@ -1209,7 +1271,7 @@ describe("App game setup lifecycle", () => {
     });
     expect(screen.getByText("Online session: spectator")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -1239,7 +1301,7 @@ describe("App game setup lifecycle", () => {
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(pendingFetch.promise));
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to game" }));
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
@@ -1291,7 +1353,7 @@ describe("App game setup lifecycle", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
 
     await waitFor(() => {
@@ -1407,12 +1469,12 @@ describe("App game setup lifecycle", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
+    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online" }));
 
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
     expect(window.location.search).not.toContain("onlineGame=");
@@ -1659,9 +1721,9 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByRole("button", { name: "Back to play" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online" }));
 
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
   });

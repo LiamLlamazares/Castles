@@ -330,7 +330,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     const navDestinations: AppShellDestination[] = [
         { id: "play", label: "Play" },
         ...(onTutorial ? [{ id: "learn" as const, label: "Learn", onClick: onTutorial }] : []),
-        ...(onOpenOnlineBrowser ? [{ id: "watch" as const, label: "Watch", onClick: onOpenOnlineBrowser }] : []),
+        ...(onOpenOnlineBrowser ? [{ id: "online" as const, label: "Online", onClick: onOpenOnlineBrowser }] : []),
         ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
     ];
 
@@ -345,7 +345,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         activeDestination="play"
                         title="Play"
                         kicker="Game setup"
-                        description="Choose a local game, private room, or friend challenge."
+                        description="Choose a local game, private room, challenge, or lobby listing."
                         backLabel={onBack ? backLabel : undefined}
                         onBack={onBack}
                         destinations={navDestinations}
@@ -480,7 +480,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                             onClick={handleCreateOpenSeek}
                             className="setup-action-button lobby-seek"
                         >
-                            CREATE LOBBY SEEK
+                            LIST IN LOBBY
                         </button>
                     )}
                 </div>

@@ -101,7 +101,7 @@ const Tutorial: React.FC<TutorialProps> = ({
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     { id: "learn", label: "Learn" },
-    ...(onOpenOnlineBrowser ? [{ id: "watch" as const, label: "Watch", onClick: onOpenOnlineBrowser }] : []),
+    ...(onOpenOnlineBrowser ? [{ id: "online" as const, label: "Online", onClick: onOpenOnlineBrowser }] : []),
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
   const lessonProgressLabel = `Lesson ${currentLessonIndex + 1} of ${lessons.length}`;

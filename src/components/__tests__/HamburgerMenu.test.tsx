@@ -55,11 +55,11 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "New Game" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Game" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Game Library" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Watch" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Online Lobby" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tutorial" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "New Game" }));
-    expect(screen.getByRole("region", { name: "Watch" })).toContainElement(screen.getByRole("button", { name: "Watch" }));
+    expect(screen.getByRole("region", { name: "Online" })).toContainElement(screen.getByRole("button", { name: "Online Lobby" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Game Library" }));
     expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Learn" }));
 
@@ -84,7 +84,7 @@ describe("HamburgerMenu", () => {
     expect(sectionLabels.slice(0, 6)).toEqual([
       "Play",
       "Learn",
-      "Watch",
+      "Online",
       "Library",
       "Board",
       "Tools",

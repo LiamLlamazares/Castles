@@ -28,7 +28,7 @@ describe("Tutorial", () => {
     const nav = screen.getByRole("navigation", { name: "Learn navigation" });
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
-    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
+    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
     expect(screen.getByRole("button", { name: "Learn" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
     expect(screen.getByTestId("tutorial-board")).toBeInTheDocument();

@@ -7,20 +7,20 @@ This checklist turns the Lichess-style target into concrete Castles UI checks. L
 Phase 6A implementation status, 2026-06-01:
 
 - Current game shell follows the board-first benchmark on desktop, 390 x 844, and 360 x 640 viewports.
-- Shared Play/Learn/Library/Watch navigation is in place on setup, tutorial, Library, and Watch, with Play returning to the current game without resetting it.
+- Shared Play/Learn/Online/Library navigation is in place on setup, tutorial, Library, and the online browser, with Play returning to the current game without resetting it.
 - Game actions are grouped into turn controls, save/review, online links, and Play; mobile keeps secondary navigation in the drawer to preserve board space.
 - Active games now guard New Game with an in-app confirmation, focus trap, Escape cancel, background inerting, and focus restoration to the invoking control.
 - Save Game reports in-app success/failure instead of silent browser prompts.
 - Tutorial progress is visible, persisted, restartable, and placed near the top of the Learn surface.
 - Mobile move history is available through a disclosure, and move entries are keyboard-accessible buttons.
 - Library import is collapsed by default so saved games stay primary.
-- Final Playwright viewport audit covered desktop/mobile game, setup, tutorial, Watch, Library, drawer-open, and online smoke states with no clipped controls or top overlay collisions.
+- Final Playwright viewport audit covered desktop/mobile game, setup, tutorial, online browser, Library, drawer-open, and online smoke states with no clipped controls or top overlay collisions.
 - Screenshot artifacts for the second pass are in `artifacts/ui-audit/phase6a2-after`.
 - Full online browser smoke passed after the shell changes.
 
 Phase 6B implementation status, 2026-06-01:
 
-- Watch and Online Archive are first-class public-summary destinations, distinct from the local Library.
+- Watch and Online Archive are first-class public-summary tabs inside Online, distinct from the local Library.
 - The first version lists only `visibility: "public"` summaries returned by `/api/online/games`; private and unlisted games remain off public browse surfaces.
 - Online players can deliberately publish an unlisted game to Watch and unlist it again; the control uses durable server state and does not expose bearer tokens.
 - Spectate handoff uses `?onlineGame=<id>&view=spectator` and strips player tokens, challenge parameters, PGN parameters, and URL fragments.
@@ -28,7 +28,7 @@ Phase 6B implementation status, 2026-06-01:
 
 Phase 6A third-pass implementation status, 2026-06-01:
 
-- Challenge creation/pending/error states and failed pre-snapshot online states now use the shared Play/Learn/Watch/Library app-shell navigation.
+- Challenge creation/pending/error states and failed pre-snapshot online states now use the shared Play/Learn/Online/Library app-shell navigation.
 - Leaving failed online/challenge states clears stale online URLs, challenge parameters, invite tokens, and local autosave before opening another destination.
 - Long online status and error text uses a wrapped status block with stable responsive spacing at narrow widths.
 - The mobile drawer now behaves as a modal dialog: initial focus moves into the drawer, Tab and Shift+Tab stay inside it, Escape closes it, focus is restored, app-level background content is inert while open, and the drawer/backdrop sit above the install prompt layer.
@@ -62,7 +62,7 @@ Phase 6H Open Lobby Seeks implementation status, 2026-06-01:
 Phase 6I UI navigation and learning sweep status, 2026-06-01:
 
 - The shared app shell no longer uses the mobile sticky header and negative-margin pattern that risked covering back/navigation controls.
-- Play/Learn/Watch/Library destinations now sit in a primary navigation group and wrap with flexible mobile columns instead of a fixed four-column layout.
+- Play/Learn/Online/Library destinations now sit in a primary navigation group and wrap with flexible mobile columns instead of a fixed four-column layout.
 - The drawer calls the tutorial destination Learn, matching the main shell and Lichess-style learning entry expectations while staying Castles-specific.
 - Setup primary actions are grouped in stable buttons instead of scattered inline styles, so local play, private rooms, friend challenges, and lobby seeks scan as one action cluster.
 - Library rename/delete now use accessible in-app dialogs with focus trap, Escape close, focus restoration, async pending guards, and in-dialog failure messages.
@@ -91,7 +91,7 @@ Phase 6K Quick Match status, 2026-06-01:
 Phase 6G implementation status, 2026-06-01:
 
 - Navigation return paths now use explicit app helpers, and game-entry flows clear stale back stacks when opening live game, loaded analysis, spectator snapshots, archive replay, editor play, or restart.
-- Drawer and AppShell destinations now share the same primary order: Play, Learn, Watch, Library, with Board and Tools kept secondary in the drawer.
+- Drawer and AppShell destinations now share the same primary order: Play, Learn, Online, Library, with Board and Tools kept secondary in the drawer.
 - Learn/Tutorial now has a compact current-lesson header, visible lesson count, grouped lesson controls, labelled lesson-board region, visually hidden live progress status, and a board-forward mobile split for short screens.
 - Save Game now uses an in-app named-save modal instead of a browser prompt, with duplicate-save protection, Escape close, focus trap, background inerting, focus restoration, cancel handling, retryable failure state, and saved-name feedback.
 - Control-panel save and Library buttons keep short visible labels while exposing hidden helper descriptions for assistive tech.
@@ -101,7 +101,7 @@ Phase 6G implementation status, 2026-06-01:
 
 Next UI polish audit:
 
-- Keep lichess-style top destinations simple: Play, Learn, Watch, Library, and later Tools/Lobby when backed by server contracts.
+- Keep lichess-style top destinations simple: Play, Learn, Online, Library, and later Tools when backed by server contracts. Online owns Lobby, Watch, and Online Archive as internal tabs.
 - After Phase 6K lands, run the Phase 6L full UI pass: compare Castles against fresh Lichess play/lobby/watch/learn screenshots, then fix sidebar shape, tutorial/Learn placement, return navigation, save/progress clarity, and overlapping go-back/menu/status controls.
 - Recheck drawer modal behavior after any new menu destination or banner is added.
 - Recheck tutorial mobile compactness after adding new lessons or tutorial controls.
@@ -109,6 +109,14 @@ Next UI polish audit:
 - Check long online status/error text at 360 px, 390 px, and 430 px widths whenever challenge or connection copy changes.
 - Re-run the full navigation pass whenever Lobby, matchmaking, accounts, ratings, chat, or moderation add new destinations or persistent banners.
 - Keep Watch/Archive read-only and Lobby seek/Quick-Match based until deeper matchmaking, accounts, ratings, and chat contracts exist.
+
+Phase 6L first implementation slice, 2026-06-01:
+
+- Top-level app navigation now uses Online instead of overloading Watch; Lobby, Watch, and Online Archive remain tabs inside the Online page.
+- The selected Online tab is owned by App state, so returning from Learn or Library preserves Lobby/Watch/Archive instead of remounting to the wrong tab.
+- Player-facing Lobby copy says "lobby listing" and "List in Lobby"; backend and tests may still use the open-seek domain term where it describes the protocol.
+- The in-game spectator share control now says "Spectator Link" while Watch rows still use "Spectate" for opening a live spectator view.
+- Page-level Online, Library, and online-state screens now use their own 100dvh scrollports; save/confirm/library dialogs sit above the install prompt; VP scoring spans the full mobile panel width.
 
 Reference pages checked:
 
@@ -119,12 +127,12 @@ Reference pages checked:
 
 - Keep the live board as the primary visual surface.
 - Keep game controls and clocks close to the game, not buried in a general settings area.
-- Give top-level destinations stable names: Play, Learn, Library, Tools, and future Watch/Lobby/Archive.
+- Give top-level destinations stable names: Play, Learn, Online, Library, and later Tools when the tool surface is mature enough for primary navigation.
 - Keep Watch and Online Archive dense, task-oriented, and separate from matchmaking or account surfaces until those systems exist.
 - Make learning entry points easy to find from both the game and setup surfaces.
 - Keep share/invite/spectator actions separate, because Castles has private player links and public read-only spectator links.
 - Keep mobile navigation as a drawer, but make it suppress or move transient banners so controls do not overlap.
-- Preserve a clear return path from tutorial, library, setup, and future lobby/archive screens.
+- Preserve a clear return path from tutorial, library, setup, and online Lobby/Watch/Archive screens.
 
 ## Reject
 
@@ -138,7 +146,7 @@ Reference pages checked:
 
 - Tutorial is a first-class Learn destination, not just a secondary tool.
 - Library is a first-class local archive for now; later online archive should use a separate label.
-- Setup is the Play destination until lobby/challenges exist.
+- Setup starts the Play destination; Lobby and challenge entry points belong under Online.
 - Board editor and analysis board remain Tools.
 - Online player links, spectator links, and local share/export stay visually distinct.
 - Challenge links are distinct from immediate private-room links: a challenge has pending, accept/decline, cancel, accepted, expired, and access-denied states.
@@ -177,7 +185,7 @@ For every screenshot, check:
 
 - App navigation test: menu -> tutorial -> back returns to the originating game view.
 - App navigation test: menu -> library -> back returns to the originating game view.
-- App navigation test: Play from nested setup/library/watch/learn returns to the current game without clearing it.
+- App navigation test: Play from nested setup/library/online/learn returns to the current game without clearing it.
 - Game test: active New Game confirmation restores focus after drawer cancel and traps focus while open.
 - Tutorial test: current lesson progress is restored from localStorage.
 - Tutorial test: next/previous lesson changes persist progress.

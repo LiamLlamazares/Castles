@@ -120,4 +120,27 @@ describe("Tutorial mobile layout CSS", () => {
     expect(onlineCss).toContain(".online-browser-visually-hidden");
     expect(onlineCss).toContain("clip: rect(0 0 0 0) !important;");
   });
+
+  it("keeps app pages in their own mobile scrollports", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+    const libraryCss = readFileSync(resolve(testDir, "../../css/GameLibrary.css"), "utf8");
+    const onlineCss = readFileSync(resolve(testDir, "../../css/OnlineGameBrowser.css"), "utf8");
+
+    expect(boardCss).toMatch(/\.online-state-page\s*\{[^}]*height:\s*100dvh;[^}]*overflow-y:\s*auto;/s);
+    expect(libraryCss).toMatch(/\.game-library-page\s*\{[^}]*height:\s*100dvh;[^}]*overflow-y:\s*auto;/s);
+    expect(onlineCss).toMatch(/\.online-browser-page\s*\{[^}]*height:\s*100dvh;[^}]*overflow-y:\s*auto;/s);
+  });
+
+  it("keeps install prompts below dialogs and victory points full-width on mobile", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+    const libraryCss = readFileSync(resolve(testDir, "../../css/GameLibrary.css"), "utf8");
+    const installHintSource = readFileSync(resolve(testDir, "../InstallAppHint.tsx"), "utf8");
+
+    expect(installHintSource).toContain("zIndex: 2500");
+    expect(boardCss).toMatch(/\.confirm-dialog-backdrop\s*\{[^}]*z-index:\s*3000;/s);
+    expect(libraryCss).toMatch(/\.library-dialog-backdrop\s*\{[^}]*z-index:\s*3000;/s);
+    expect(boardCss).toMatch(/\.vp-scoreboard\s*\{[^}]*grid-column:\s*1 \/ -1;/s);
+  });
 });

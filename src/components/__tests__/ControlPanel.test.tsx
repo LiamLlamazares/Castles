@@ -256,7 +256,7 @@ describe("ControlPanel", () => {
     const opponentButton = screen.getByRole("button", { name: "Copy Opponent Invite" });
     const spectatorButton = screen.getByRole("button", { name: "Copy Spectator Link" });
     expect(opponentButton).toHaveTextContent("Invite");
-    expect(spectatorButton).toHaveTextContent("Spectate");
+    expect(spectatorButton).toHaveTextContent("Spectator Link");
     expect(opponentButton).toHaveAttribute("title", "Copy move-enabled opponent invite link");
     expect(spectatorButton).toHaveAttribute("title", "Copy read-only spectator link");
 

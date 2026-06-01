@@ -577,6 +577,7 @@ body {
 .online-state-page {
   --app-shell-mobile-padding-x: 24px;
   --app-shell-mobile-padding-y: 24px;
+  height: 100dvh;
   min-height: 100dvh;
   width: 100vw;
   display: grid;
@@ -681,7 +682,7 @@ body {
 .confirm-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 900;
+  z-index: 3000;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -1654,6 +1655,10 @@ body {
 
   .mobile-move-history,
   .game-controls {
+    grid-column: 1 / -1;
+  }
+
+  .vp-scoreboard {
     grid-column: 1 / -1;
   }
 

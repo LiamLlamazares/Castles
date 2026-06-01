@@ -106,7 +106,43 @@ describe("OnlineGameBrowser", () => {
     vi.restoreAllMocks();
   });
 
-  it("loads open seeks in the Lobby tab without calling the game directory", async () => {
+  it("reports tab changes without losing a controlled active tab", async () => {
+    const onTabChange = vi.fn();
+    const { rerender } = render(
+      <OnlineGameBrowser
+        activeTab="lobby"
+        onTabChange={onTabChange}
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Lobby games" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
+
+    expect(onTabChange).toHaveBeenCalledWith("archive");
+    expect(screen.getByRole("button", { name: "Lobby games" })).toHaveAttribute("aria-pressed", "true");
+
+    rerender(
+      <OnlineGameBrowser
+        activeTab="archive"
+        onTabChange={onTabChange}
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("loads lobby listings in the Lobby tab without calling the game directory", async () => {
     const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([openSeek()]));
     const loadGames = vi.fn().mockResolvedValue(directory([]));
     render(
@@ -121,7 +157,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    const row = await screen.findByRole("article", { name: /Open seek seek_public_open/i });
+    const row = await screen.findByRole("article", { name: /Lobby listing seek_public_open/i });
 
     expect(loadOpenSeeks).toHaveBeenCalledWith({ state: "open", limit: 50 });
     expect(loadGames).not.toHaveBeenCalled();
@@ -129,7 +165,7 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Radius 7");
     expect(row).toHaveTextContent("Timed 20+20");
     expect(row).toHaveTextContent("Victory points");
-    expect(within(row).getByRole("button", { name: "Accept open seek seek_public_open" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeInTheDocument();
   });
 
   it("runs quick match from the lobby with exact setup copy and pending controls", async () => {
@@ -167,20 +203,20 @@ describe("OnlineGameBrowser", () => {
       .toBeInTheDocument();
 
     const quickMatch = screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     });
     fireEvent.click(quickMatch);
 
     expect(onQuickMatch).toHaveBeenCalledOnce();
     expect(quickMatch).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Create Open Seek" })).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent("Checking compatible open seeks");
+    expect(screen.getByRole("button", { name: "List in Lobby" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking compatible lobby listings");
 
     await act(async () => {
       resolveQuickMatch();
       await quickMatchPromise;
     });
-    expect(await screen.findByRole("status")).toHaveTextContent(/open seek is listed/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/game is listed in the Lobby/i);
   });
 
   it("keeps conflicting lobby actions disabled after a matched quick match result", async () => {
@@ -200,16 +236,16 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("seek_public_open");
     fireEvent.click(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Match found. Opening game...");
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Create Open Seek" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Refresh open seeks" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Accept open seek seek_public_open" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "List in Lobby" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh lobby listings" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeDisabled();
   });
 
   it("starts quick match from the keyboard and moves focus to the owned seek after waiting", async () => {
@@ -243,16 +279,16 @@ describe("OnlineGameBrowser", () => {
 
     render(<Harness />);
 
-    await screen.findByText("No open seeks yet.");
+    await screen.findByText("No lobby listings yet.");
     const quickMatch = screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     });
     quickMatch.focus();
     await user.keyboard("{Enter}");
 
-    const ownerPanel = await screen.findByRole("region", { name: "Your open seek" });
+    const ownerPanel = await screen.findByRole("region", { name: "Your lobby listing" });
     expect(screen.getByRole("status")).toHaveTextContent(
-      "No compatible open seek found. Your open seek is listed for someone to accept."
+      "No compatible lobby listing found. Your game is listed in the Lobby for someone to accept."
     );
     expect(ownerPanel).toHaveFocus();
   });
@@ -287,15 +323,15 @@ describe("OnlineGameBrowser", () => {
 
     render(<Harness />);
 
-    await screen.findByText("No open seeks yet.");
+    await screen.findByText("No lobby listings yet.");
     fireEvent.click(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     }));
-    expect(await screen.findByRole("status")).toHaveTextContent("listed for someone to accept");
+    expect(await screen.findByRole("status")).toHaveTextContent(/listed in the Lobby for someone to accept/);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Cancel your open seek" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel your lobby listing" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Open seek cancelled.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Lobby listing cancelled.");
   });
 
   it("replaces waiting quick-match copy when a background refresh marks the owned seek accepted", async () => {
@@ -359,17 +395,17 @@ describe("OnlineGameBrowser", () => {
 
     render(<Harness />);
 
-    await screen.findByText("No open seeks yet.");
+    await screen.findByText("No lobby listings yet.");
     fireEvent.click(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     }));
-    expect(await screen.findByRole("status")).toHaveTextContent("listed for someone to accept");
+    expect(await screen.findByRole("status")).toHaveTextContent(/listed in the Lobby for someone to accept/);
 
     fireEvent.click(screen.getByRole("button", { name: "Mock accepted refresh" }));
 
     await waitFor(() => {
       expect(screen.getByRole("status")).toHaveTextContent(
-        "Your open seek was accepted. Join the game from your open seek panel."
+        "Your lobby listing was accepted. Join the game from your lobby panel."
       );
     });
     expect(screen.getByRole("button", { name: "Join accepted game" })).toBeInTheDocument();
@@ -391,9 +427,9 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    await screen.findByText("No open seeks yet.");
+    await screen.findByText("No lobby listings yet.");
     const quickMatch = screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     });
     quickMatch.focus();
     fireEvent.click(quickMatch);
@@ -419,9 +455,9 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    await screen.findByText("No open seeks yet.");
+    await screen.findByText("No lobby listings yet.");
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     })).toBeDisabled();
 
     rerender(
@@ -442,7 +478,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     })).toBeDisabled();
 
     rerender(
@@ -471,11 +507,11 @@ describe("OnlineGameBrowser", () => {
       />
     );
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible open seek or list yours",
+      name: "Quick Match: accept a compatible lobby listing or list yours",
     })).toBeDisabled();
   });
 
-  it("refreshes the public open seek lobby on demand", async () => {
+  it("refreshes the public lobby listing list on demand", async () => {
     const loadOpenSeeks = vi
       .fn()
       .mockResolvedValueOnce(seekDirectory([]))
@@ -492,8 +528,8 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    expect(await screen.findByText("No open seeks yet.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh open seeks" }));
+    expect(await screen.findByText("No lobby listings yet.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh lobby listings" }));
 
     expect(await screen.findByText("seek_after_refresh")).toBeInTheDocument();
     expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
@@ -517,13 +553,13 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("seek_initial");
-    fireEvent.change(screen.getByRole("combobox", { name: "Open seek side filter" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Lobby side filter" }), {
       target: { value: "w" },
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "Open seek clock filter" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Lobby clock filter" }), {
       target: { value: "timed" },
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "Open seek victory points filter" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Lobby victory points filter" }), {
       target: { value: "enabled" },
     });
 
@@ -536,7 +572,7 @@ describe("OnlineGameBrowser", () => {
         vp: "enabled",
       });
     });
-    expect(await screen.findByText("No open seeks match these filters.")).toBeInTheDocument();
+    expect(await screen.findByText("No lobby listings match these filters.")).toBeInTheDocument();
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent(/checked/i);
     expect(status.querySelector("[aria-hidden='true']")).toHaveTextContent(/checked/i);
@@ -549,7 +585,7 @@ describe("OnlineGameBrowser", () => {
     const loadOpenSeeks = vi
       .fn()
       .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_initial" })]))
-      .mockRejectedValueOnce(new Error("Could not fetch open seeks (429)"))
+      .mockRejectedValueOnce(new Error("Could not fetch lobby listings (429)"))
       .mockResolvedValue(seekDirectory([openSeek({ seekId: "seek_after_backoff" })]));
     render(
       <OnlineGameBrowser
@@ -570,7 +606,7 @@ describe("OnlineGameBrowser", () => {
     });
     await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
     expect(screen.getByText("seek_initial")).toBeInTheDocument();
-    expect(screen.getByRole("status")).not.toHaveTextContent("Loading open seeks");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Loading lobby listings");
 
     await act(async () => {
       vi.advanceTimersByTime(30_000);
@@ -644,7 +680,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const row = await screen.findByRole("article", { name: /seek_acceptable/i });
-    const accept = within(row).getByRole("button", { name: "Accept open seek seek_acceptable" });
+    const accept = within(row).getByRole("button", { name: "Accept lobby listing seek_acceptable" });
     accept.focus();
     fireEvent.click(accept);
 
@@ -689,7 +725,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const row = await screen.findByRole("article", { name: /seek_background_race/i });
-    const accept = within(row).getByRole("button", { name: "Accept open seek seek_background_race" });
+    const accept = within(row).getByRole("button", { name: "Accept lobby listing seek_background_race" });
 
     await act(async () => {
       vi.advanceTimersByTime(30_000);
@@ -741,7 +777,7 @@ describe("OnlineGameBrowser", () => {
     });
     await waitFor(() => expect(loadOpenSeeks).toHaveBeenCalledTimes(2));
 
-    const refresh = screen.getByRole("button", { name: "Refresh open seeks" });
+    const refresh = screen.getByRole("button", { name: "Refresh lobby listings" });
     expect(refresh).toBeDisabled();
     fireEvent.click(refresh);
     expect(loadOpenSeeks).toHaveBeenCalledTimes(2);
@@ -778,7 +814,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const row = await screen.findByRole("article", { name: /seek_pending_no_reload/i });
-    const accept = within(row).getByRole("button", { name: "Accept open seek seek_pending_no_reload" });
+    const accept = within(row).getByRole("button", { name: "Accept lobby listing seek_pending_no_reload" });
 
     fireEvent.click(accept);
 
@@ -791,7 +827,7 @@ describe("OnlineGameBrowser", () => {
     });
   });
 
-  it("auto-refreshes creator-owned open seeks through the owner refresh path", async () => {
+  it("auto-refreshes creator-owned lobby listings through the owner refresh path", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const onRefreshOwnedSeek = vi.fn().mockResolvedValue(undefined);
     render(
@@ -811,7 +847,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    await screen.findByRole("region", { name: "Your open seek" });
+    await screen.findByRole("region", { name: "Your lobby listing" });
     await act(async () => {
       vi.advanceTimersByTime(30_000);
     });
@@ -819,7 +855,7 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onRefreshOwnedSeek).toHaveBeenCalledOnce());
   });
 
-  it("accepts and cancels open seeks with row-local pending states", async () => {
+  it("accepts and cancels lobby listings with row-local pending states", async () => {
     const onAcceptSeek = vi.fn().mockResolvedValue(undefined);
     const onCancelSeek = vi.fn().mockResolvedValue(undefined);
     render(
@@ -839,12 +875,12 @@ describe("OnlineGameBrowser", () => {
     );
 
     const acceptRow = await screen.findByRole("article", { name: /seek_acceptable/i });
-    fireEvent.click(within(acceptRow).getByRole("button", { name: "Accept open seek seek_acceptable" }));
+    fireEvent.click(within(acceptRow).getByRole("button", { name: "Accept lobby listing seek_acceptable" }));
 
     await waitFor(() => expect(onAcceptSeek).toHaveBeenCalledWith("seek_acceptable"));
 
     const ownRow = screen.getByRole("article", { name: /seek_mine/i });
-    fireEvent.click(within(ownRow).getByRole("button", { name: "Cancel open seek seek_mine" }));
+    fireEvent.click(within(ownRow).getByRole("button", { name: "Cancel lobby listing seek_mine" }));
 
     await waitFor(() => expect(onCancelSeek).toHaveBeenCalledWith("seek_mine"));
   });
@@ -872,13 +908,13 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    const openPanel = await screen.findByRole("region", { name: "Your open seek" });
+    const openPanel = await screen.findByRole("region", { name: "Your lobby listing" });
 
     expect(openPanel).toHaveTextContent("seek_mine");
     expect(openPanel).toHaveTextContent("Open");
-    fireEvent.click(within(openPanel).getByRole("button", { name: "Refresh your open seek" }));
+    fireEvent.click(within(openPanel).getByRole("button", { name: "Refresh your lobby listing" }));
     await waitFor(() => expect(onRefreshOwnedSeek).toHaveBeenCalledOnce());
-    fireEvent.click(within(openPanel).getByRole("button", { name: "Cancel your open seek" }));
+    fireEvent.click(within(openPanel).getByRole("button", { name: "Cancel your lobby listing" }));
     await waitFor(() => expect(onCancelSeek).toHaveBeenCalledWith("seek_mine"));
 
     const accepted = openSeek({
@@ -918,11 +954,11 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    const panel = await screen.findByRole("region", { name: "Your open seek" });
+    const panel = await screen.findByRole("region", { name: "Your lobby listing" });
 
     expect(panel).toHaveTextContent("seek_mine");
     expect(panel).toHaveTextContent("Accepted");
-    expect(within(panel).queryByRole("button", { name: "Cancel your open seek" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Cancel your lobby listing" })).not.toBeInTheDocument();
     fireEvent.click(within(panel).getByRole("button", { name: "Join accepted game" }));
     expect(onJoinOwnedSeek).toHaveBeenCalledOnce();
   });
@@ -931,6 +967,7 @@ describe("OnlineGameBrowser", () => {
     const loadGames = vi.fn().mockResolvedValue(directory([]));
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={loadGames}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
@@ -950,6 +987,7 @@ describe("OnlineGameBrowser", () => {
   it("shows an honest empty Watch state while only public games are listable", async () => {
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={vi.fn().mockResolvedValue(directory([]))}
         onBack={vi.fn()}
         onOpenGame={vi.fn()}
@@ -961,12 +999,12 @@ describe("OnlineGameBrowser", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading public games");
-    const nav = screen.getByRole("navigation", { name: "Watch navigation" });
+    const nav = screen.getByRole("navigation", { name: "Online navigation" });
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
-    expect(screen.getByRole("button", { name: "Watch" })).toHaveAttribute("aria-current", "page");
+    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
+    expect(screen.getByRole("button", { name: "Online" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("No public live games yet.")).toBeInTheDocument();
     expect(screen.getByText(/Private and unlisted games stay off this page/i)).toBeInTheDocument();
   });
@@ -975,6 +1013,7 @@ describe("OnlineGameBrowser", () => {
     const onSpectate = vi.fn();
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={vi.fn().mockResolvedValue(directory([summary()]))}
         onBack={vi.fn()}
         onSpectate={onSpectate}
@@ -995,6 +1034,7 @@ describe("OnlineGameBrowser", () => {
   it("defensively hides non-public summaries even if a loader returns them", async () => {
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={vi.fn().mockResolvedValue(directory([
           summary({ gameId: "game_public_visible", visibility: "public" }),
           summary({ gameId: "game_unlisted_hidden", visibility: "unlisted" }),
@@ -1048,6 +1088,7 @@ describe("OnlineGameBrowser", () => {
   it("filters public summaries by player name and game id", async () => {
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={vi.fn().mockResolvedValue(directory([
           summary({ gameId: "game_ada_public" }),
           summary({
@@ -1076,6 +1117,7 @@ describe("OnlineGameBrowser", () => {
   it("sorts and filters live public games without exposing hidden summaries", async () => {
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={vi.fn().mockResolvedValue(directory([
           summary({
             gameId: "game_newer_few_moves",
@@ -1233,6 +1275,7 @@ describe("OnlineGameBrowser", () => {
       .mockResolvedValueOnce(directory([summary({ gameId: "game_second_page" })]));
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={loadGames}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
@@ -1263,6 +1306,7 @@ describe("OnlineGameBrowser", () => {
       ]));
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={loadGames}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
@@ -1297,6 +1341,7 @@ describe("OnlineGameBrowser", () => {
       .mockReturnValueOnce(archive.promise);
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={loadGames}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
@@ -1329,6 +1374,7 @@ describe("OnlineGameBrowser", () => {
       .mockResolvedValueOnce(directory([summary()]));
     render(
       <OnlineGameBrowser
+        initialTab="watch"
         loadGames={loadGames}
         onBack={vi.fn()}
         onSpectate={vi.fn()}

@@ -1,7 +1,7 @@
 import React from "react";
 import "../css/AppShellNav.css";
 
-export type AppDestinationId = "play" | "learn" | "library" | "watch" | "tools";
+export type AppDestinationId = "play" | "learn" | "library" | "online" | "tools";
 
 export interface AppShellDestination {
   id: AppDestinationId;

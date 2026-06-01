@@ -74,7 +74,7 @@ describe("GameSetup", () => {
     const onCreateOpenSeek = vi.fn();
     render(<GameSetup onPlay={vi.fn()} onCreateOpenSeek={onCreateOpenSeek} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "CREATE LOBBY SEEK" }));
+    fireEvent.click(screen.getByRole("button", { name: "LIST IN LOBBY" }));
 
     expect(onCreateOpenSeek).toHaveBeenCalledTimes(1);
     expect(onCreateOpenSeek.mock.calls[0][3]).toBe(previewSanctuaries);
@@ -105,13 +105,13 @@ describe("GameSetup", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
-    expect(destinations).toEqual(["Play", "Learn", "Watch", "Library"]);
+    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
 
     fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));
     fireEvent.click(screen.getByRole("button", { name: "Learn" }));
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online" }));
 
     const actionGroup = screen.getByRole("group", { name: "Game actions" });
     expect(actionGroup).toContainElement(screen.getByRole("button", { name: "PLAY GAME" }));

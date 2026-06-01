@@ -162,7 +162,7 @@ const VPScoreRow: React.FC<{ label: string; vp: number; player: Color }> = ({ la
 );
 
 const VPScoreboard: React.FC<{ victoryPoints: { w: number; b: number } }> = ({ victoryPoints }) => (
-  <div style={{
+  <div className="vp-scoreboard" style={{
     margin: "10px 0",
     padding: "12px",
     background: "linear-gradient(135deg, rgba(56, 48, 26, 0.86), rgba(25, 24, 20, 0.92))",
@@ -390,7 +390,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                   aria-label="Copy Spectator Link"
                   title="Copy read-only spectator link"
                 >
-                  Spectate
+                  Spectator Link
                 </button>
               )}
               {onUpdateOnlineVisibility && (

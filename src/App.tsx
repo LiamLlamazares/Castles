@@ -80,7 +80,7 @@ import { loadPGNText } from './Classes/Services/PGNLoadService';
 import { PGNService } from './Classes/Services/PGNService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
-type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'watch';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online';
 type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
 
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
@@ -239,7 +239,7 @@ function App() {
     listOpenSeekCreatorParams()[0] ?? null
   );
   const [openSeekResponse, setOpenSeekResponse] = useState<OpenSeekResponse | null>(null);
-  const [onlineBrowserInitialTab, setOnlineBrowserInitialTab] = useState<OnlineBrowserInitialTab>("watch");
+  const [onlineBrowserTab, setOnlineBrowserTab] = useState<OnlineBrowserInitialTab>("lobby");
   const replayRequestIdRef = useRef(0);
   const isSaveDialogOpen = saveGameDialog !== null;
 
@@ -464,8 +464,7 @@ function App() {
   };
 
   const handleOpenOnlineBrowser = () => {
-    setOnlineBrowserInitialTab("watch");
-    pushView('watch');
+    pushView('online');
   };
 
   const handleOpenGame = () => {
@@ -484,8 +483,8 @@ function App() {
   const currentBackLabel =
     currentBackTarget === 'setup'
       ? 'Back to setup'
-      : currentBackTarget === 'watch'
-        ? 'Back to Watch'
+      : currentBackTarget === 'online'
+        ? 'Back to Online'
         : currentBackTarget === 'tutorial'
           ? 'Back to Learn'
           : currentBackTarget === 'library'
@@ -825,9 +824,9 @@ function App() {
         role: "creator",
         summary: created.summary,
       });
-      setOnlineBrowserInitialTab("lobby");
+      setOnlineBrowserTab("lobby");
       setViewStack(['game']);
-      setView("watch");
+      setView("online");
     } catch (error) {
       console.error("Failed to create open seek", error);
       alert("Could not create an open lobby seek. Make sure the Node server is running.");
@@ -883,9 +882,9 @@ function App() {
       role: "creator",
       summary: response.summary,
     });
-    setOnlineBrowserInitialTab("lobby");
+    setOnlineBrowserTab("lobby");
     setViewStack(['game']);
-    setView("watch");
+    setView("online");
     return "waiting" as const;
   };
 
@@ -1351,19 +1350,19 @@ function App() {
     setView('library');
   }, [clearTransientOnlineState]);
 
-  const handleOnlineStateWatch = useCallback(() => {
+  const handleOnlineStateOnline = useCallback(() => {
     clearTransientOnlineState();
     setViewStack(['setup']);
-    setOnlineBrowserInitialTab("watch");
-    setView('watch');
+    setOnlineBrowserTab("lobby");
+    setView('online');
   }, [clearTransientOnlineState]);
 
   const onlineStateDestinations = useMemo<AppShellDestination[]>(() => [
     { id: "play", label: "Play" },
     { id: "learn", label: "Learn", onClick: handleOnlineStateTutorial },
-    { id: "watch", label: "Watch", onClick: handleOnlineStateWatch },
+    { id: "online", label: "Online", onClick: handleOnlineStateOnline },
     { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
-  ], [handleOnlineStateTutorial, handleOnlineStateLibrary, handleOnlineStateWatch]);
+  ], [handleOnlineStateTutorial, handleOnlineStateLibrary, handleOnlineStateOnline]);
 
   // Editor handlers
   const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
@@ -1608,16 +1607,18 @@ function App() {
         />
       )}
 
-      {view === 'watch' && (
+      {view === 'online' && (
         <OnlineGameBrowser
           onBack={returnToPreviousView}
           onOpenGame={handleOpenGame}
           backLabel={currentBackLabel}
-          initialTab={onlineBrowserInitialTab}
+          initialTab={onlineBrowserTab}
+          activeTab={onlineBrowserTab}
+          onTabChange={setOnlineBrowserTab}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
           onCreateSeek={() => {
-            setViewStack(['watch']);
+            setViewStack(['online']);
             setView('setup');
           }}
           onQuickMatch={quickMatchSetup ? handleQuickMatch : undefined}

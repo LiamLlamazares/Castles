@@ -353,15 +353,15 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             </section>
 
             {onOpenOnlineBrowser && (
-              <section className="menu-section" aria-labelledby="menu-section-watch">
-                <div id="menu-section-watch" className="menu-section-label">Watch</div>
-                <p className="menu-section-note">Live and archived games</p>
+              <section className="menu-section" aria-labelledby="menu-section-online">
+                <div id="menu-section-online" className="menu-section-label">Online</div>
+                <p className="menu-section-note">Lobby, live games, archive</p>
                 <button
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
                 >
                   {renderMarker()}
-                  <span>Watch</span>
+                  <span>Online Lobby</span>
                 </button>
               </section>
             )}

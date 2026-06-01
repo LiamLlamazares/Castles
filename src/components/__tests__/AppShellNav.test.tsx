@@ -4,7 +4,7 @@ import AppShellNav from "../AppShellNav";
 describe("AppShellNav", () => {
   it("renders a stable app navigation row with a labelled back action", () => {
     const onBack = vi.fn();
-    const onWatch = vi.fn();
+    const onOnline = vi.fn();
 
     render(
       <AppShellNav
@@ -19,7 +19,7 @@ describe("AppShellNav", () => {
           { id: "play", label: "Play" },
           { id: "learn", label: "Learn", onClick: vi.fn() },
           { id: "library", label: "Library", onClick: vi.fn() },
-          { id: "watch", label: "Watch", onClick: onWatch },
+          { id: "online", label: "Online", onClick: onOnline },
         ]}
       />
     );
@@ -31,10 +31,10 @@ describe("AppShellNav", () => {
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Watch" }));
+    fireEvent.click(screen.getByRole("button", { name: "Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));
 
-    expect(onWatch).toHaveBeenCalledOnce();
+    expect(onOnline).toHaveBeenCalledOnce();
     expect(onBack).toHaveBeenCalledOnce();
   });
 });
