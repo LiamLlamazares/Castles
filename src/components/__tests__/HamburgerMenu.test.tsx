@@ -140,7 +140,7 @@ describe("HamburgerMenu", () => {
     expect(onReturnFromAnalysis).toHaveBeenCalledOnce();
   });
 
-  it("uses non-text icon markers for drawer items and keeps the full menu scrollable", () => {
+  it("uses real image icons for drawer items and keeps the full menu scrollable", () => {
     const { container } = renderMenu({
       onEnableAnalysis: vi.fn(),
       onEditPosition: vi.fn(),
@@ -156,11 +156,14 @@ describe("HamburgerMenu", () => {
       .map((element) => element.textContent?.trim())
       .filter(Boolean);
     expect(iconText).toEqual([]);
+    expect(container.querySelectorAll(".menu-item-marker")).toHaveLength(0);
+    expect(container.querySelectorAll(".menu-item-icon")).toHaveLength(13);
+    expect(screen.getByRole("button", { name: "Board Display" }).querySelector(".menu-item-label .menu-item-icon")).toBeInTheDocument();
     expect(container.querySelector(".menu-items")).toHaveClass("menu-items");
-    expect(screen.getByRole("button", { name: "Icon Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Board Display" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("uses real checkbox controls for icon settings without nesting them in buttons", () => {
+  it("uses real checkbox controls for board display settings without nesting them in buttons", () => {
     const { container, props } = renderMenu({
       onToggleTerrainIcons: vi.fn(),
       onToggleSanctuaryIcons: vi.fn(),
@@ -169,9 +172,10 @@ describe("HamburgerMenu", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    fireEvent.click(screen.getByRole("button", { name: /Icon Settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Board Display/i }));
 
     const coordinates = screen.getByRole("checkbox", { name: "Coordinates" });
+    expect(screen.getByRole("checkbox", { name: "Recruitment markers" })).toBeInTheDocument();
     fireEvent.click(coordinates);
 
     expect(props.onToggleCoordinates).toHaveBeenCalledOnce();
@@ -198,7 +202,7 @@ describe("HamburgerMenu", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    fireEvent.click(screen.getByRole("button", { name: /Icon Settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Board Display/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Coordinates" }));
 
     expect(props.onToggleCoordinates).toHaveBeenCalledOnce();
@@ -224,7 +228,7 @@ describe("HamburgerMenu", () => {
     expect(menuButton).toHaveAttribute("tabindex", "-1");
 
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
-    expect(screen.getByRole("button", { name: "Icon Settings" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Board Display" })).toHaveFocus();
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(menuButton).toHaveFocus();
@@ -237,7 +241,7 @@ describe("HamburgerMenu", () => {
     renderMenu();
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    const lastControl = screen.getByRole("button", { name: "Icon Settings" });
+    const lastControl = screen.getByRole("button", { name: "Board Display" });
     lastControl.focus();
 
     fireEvent.keyDown(document, { key: "Tab" });

@@ -24,6 +24,8 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).toContain("height: 54dvh;");
     expect(css).toContain(".tutorial-lesson-header");
     expect(css).toContain(".tutorial-control-strip");
+    expect(css).toContain(".tutorial-course-main");
+    expect(css).toContain(".tutorial-objective-list");
     expect(css).toContain(".tutorial-quick-nav");
     expect(css).toContain(".tutorial-description");
     expect(css).toContain(".tutorial-callout");
@@ -32,6 +34,19 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).toMatch(/@media \(max-width: 760px\) and \(max-height: 720px\)\s*\{[\s\S]*\.tutorial-reset-full\s*\{[^}]*display:\s*none;/s);
     expect(css).toMatch(/@media \(max-width: 760px\) and \(max-height: 720px\)\s*\{[\s\S]*\.tutorial-reset-short\s*\{[^}]*display:\s*inline;/s);
     expect(css).not.toMatch(/\.tutorial-sidebar \.app-shell-title-block p\s*\{\s*display:\s*none;\s*\}/);
+  });
+
+  it("switches the Learn course overview to a single mobile scrollport", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(css).toContain(".tutorial-container-course");
+    expect(css).toMatch(/\.tutorial-container-course\s*\{[^}]*grid-template-columns:\s*360px minmax\(0,\s*1fr\);/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-container-course\s*\{[^}]*display:\s*block;[^}]*height:\s*100dvh;[^}]*overflow-y:\s*auto;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-course-main\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s);
+    expect(css).toMatch(/\.tutorial-control-strip\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-reset-full\s*\{[^}]*display:\s*none;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-reset-short\s*\{[^}]*display:\s*inline;/s);
   });
 
   it("keeps shared mobile shell spacing aligned inside online state pages", () => {
@@ -50,10 +65,12 @@ describe("Tutorial mobile layout CSS", () => {
     const openContainerRule = css.match(/\.hamburger-container\.open\s*\{[^}]+}/)?.[0] ?? "";
     const drawerRule = css.match(/\.hamburger-menu\s*\{[^}]+}/)?.[0] ?? "";
     const backdropRule = css.match(/\.menu-backdrop\s*\{[^}]+}/)?.[0] ?? "";
+    const iconRule = css.match(/\.menu-item-icon\s*\{[^}]+}/)?.[0] ?? "";
 
     expect(openContainerRule).toContain("z-index: 4000;");
     expect(drawerRule).toContain("z-index: 4002;");
     expect(backdropRule).toContain("z-index: 4001;");
+    expect(iconRule).toContain("filter: var(--icon-filter);");
   });
 
   it("keeps the desktop tooltip discovery hint away from shell controls", () => {

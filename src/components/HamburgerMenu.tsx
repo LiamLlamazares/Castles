@@ -5,12 +5,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useTheme } from "../contexts/ThemeContext";
 
-// SVG icon imports
 import scrollIcon from "../Assets/Images/misc/scroll.svg";
 import rotateIcon from "../Assets/Images/Board/rotate.svg";
 import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
-
-const menuIconStyle: React.CSSProperties = { width: '18px', height: '18px', verticalAlign: 'middle' };
+import flagIcon from "../Assets/Images/misc/flag.svg";
+import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
+import castleIcon from "../Assets/Images/misc/wcastle.svg";
+import hexTilesIcon from "../Assets/Images/misc/hex-tiles.svg";
+import shieldIcon from "../Assets/Images/Board/shield.svg";
+import starIcon from "../Assets/Images/misc/star.svg";
+import swordsIcon from "../Assets/Images/misc/swords-crossed.svg";
 
 interface HamburgerMenuProps {
   onExportPGN: () => void;
@@ -276,12 +280,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     // Do not close menu
   };
 
-  const renderMarker = () => (
-    <span className="menu-item-icon menu-item-marker" aria-hidden="true" />
-  );
-
-  const renderImageIcon = (src: string, alt = "") => (
-    <img src={src} alt={alt} style={menuIconStyle} />
+  const renderImageIcon = (src: string) => (
+    <img className="menu-item-icon" src={src} alt="" aria-hidden="true" />
   );
 
   return (
@@ -327,7 +327,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item primary"
                   onClick={() => handleMenuItemClick(onReturnFromAnalysis)}
                 >
-                  {renderMarker()}
+                  {renderImageIcon(rotateIcon)}
                   <span>{analysisReturnLabel}</span>
                 </button>
               )}
@@ -337,7 +337,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className={`menu-item ${onReturnFromAnalysis ? "" : "primary"}`}
                   onClick={() => handleMenuItemClick(onNewGame)}
                 >
-                  {renderMarker()}
+                  {renderImageIcon(flagIcon)}
                   <span>New Game</span>
                 </button>
               )}
@@ -352,7 +352,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onTutorial)}
                 >
-                  {renderMarker()}
+                  {renderImageIcon(lightbulbIcon)}
                   <span>Learn</span>
                 </button>
               )}
@@ -361,7 +361,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onShowRules)}
               >
-                {renderMarker()}
+                {renderImageIcon(scrollIcon)}
                 <span>Rules</span>
               </button>
             </section>
@@ -374,7 +374,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
                 >
-                  {renderMarker()}
+                  {renderImageIcon(castleIcon)}
                   <span>Online Lobby</span>
                 </button>
               </section>
@@ -415,8 +415,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               <button
                 className="menu-item"
                 onClick={() => toggleTheme()}
-                style={{ justifyContent: 'space-between' }}
               >
+                {renderImageIcon(starIcon)}
                 <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
               </button>
 
@@ -444,37 +444,37 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 <span>Flip Board</span>
               </button>
 
-              {/* Icon Settings Collapsible */}
               <button
                 className="menu-item"
                 onClick={() => setIsIconsMenuOpen(!isIconsMenuOpen)}
-                style={{ justifyContent: 'space-between', backgroundColor: isIconsMenuOpen ? 'rgba(255,255,255,0.05)' : 'transparent' }}
+                aria-expanded={isIconsMenuOpen}
               >
-                <span className="menu-item-label">{renderMarker()}<span>Icon Settings</span></span>
-                <span aria-hidden="true" style={{ fontSize: '0.8em', opacity: 0.7 }}>{isIconsMenuOpen ? '-' : '+'}</span>
+                <span className="menu-item-label">{renderImageIcon(hexTilesIcon)}<span>Board Display</span></span>
+                <span className="menu-item-disclosure" aria-hidden="true">{isIconsMenuOpen ? "-" : "+"}</span>
               </button>
 
               {isIconsMenuOpen && (
-                <div style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                {/* Show All / Hide All */}
+                <div className="menu-submenu">
                 {onSetAllIcons && (
-                  <div style={{ display: 'flex', gap: '8px', padding: '8px 12px 8px 12px' }}>
+                  <div className="menu-toggle-actions">
                       <button
+                        type="button"
+                        className="menu-mini-button"
                         onClick={() => onSetAllIcons(true)}
-                        style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
                       >
                         Show All
                       </button>
                       <button
+                        type="button"
+                        className="menu-mini-button"
                         onClick={() => onSetAllIcons(false)}
-                        style={{ flex: 1, padding: '6px', fontSize: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(255,255,255,0.1)', border: 'none', color: '#ddd', borderRadius: '4px' }}
                       >
                         Hide All
                       </button>
                   </div>
                 )}
 
-                <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                <label className="menu-toggle-item">
                   <input
                     type="checkbox"
                     checked={showCoordinates}
@@ -484,7 +484,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 </label>
 
                 {onToggleTerrainIcons && (
-                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                  <label className="menu-toggle-item">
                     <input
                       type="checkbox"
                       checked={showTerrainIcons}
@@ -495,7 +495,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 )}
 
                 {onToggleSanctuaryIcons && (
-                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                  <label className="menu-toggle-item">
                     <input
                       type="checkbox"
                       checked={showSanctuaryIcons}
@@ -506,7 +506,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 )}
 
                 {onToggleShields && (
-                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                  <label className="menu-toggle-item">
                     <input
                       type="checkbox"
                       checked={showShields}
@@ -517,13 +517,13 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 )}
 
                 {onToggleCastleRecruitment && (
-                  <label className="menu-toggle-item" style={{ paddingLeft: '24px', fontSize: '0.9rem' }}>
+                  <label className="menu-toggle-item">
                     <input
                       type="checkbox"
                       checked={showCastleRecruitment}
                       onChange={() => handleToggleClick(onToggleCastleRecruitment)}
                     />
-                    Castle Recruitment
+                    Recruitment markers
                   </label>
                 )}
               </div>
@@ -539,7 +539,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onEnableAnalysis)}
               >
-                {renderMarker()}
+                {renderImageIcon(swordsIcon)}
                 <span>Analysis Board</span>
               </button>
             )}
@@ -549,7 +549,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 className="menu-item"
                 onClick={() => handleMenuItemClick(onEditPosition)}
               >
-                {renderMarker()}
+                {renderImageIcon(shieldIcon)}
                 <span>Edit Position</span>
               </button>
             )}
