@@ -15,6 +15,7 @@ import type {
   OnlineGameDirectoryListOptions,
   OnlineGameDirectoryResponse,
   OnlineGameSummary,
+  OnlinePersonalGameDirectoryListOptions,
   OnlineIdentity,
 } from "../readModel";
 import type {
@@ -36,6 +37,9 @@ export interface OnlineGameStore {
   load(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameRoomRecord[]>;
   loadSummaries(): Promise<OnlineGameSummary[]>;
   listGameSummaries(options: OnlineGameDirectoryListOptions): Promise<OnlineGameDirectoryResponse>;
+  listPersonalGameSummaries(
+    options: OnlinePersonalGameDirectoryListOptions
+  ): Promise<OnlineGameDirectoryResponse>;
   loadGameSummary(gameId: string): Promise<OnlineGameSummary | null>;
   loadChallengeSummaries(): Promise<OnlineChallengeSummary[]>;
   loadOpenSeekSummaries(): Promise<OpenSeekSummary[]>;

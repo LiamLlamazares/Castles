@@ -267,6 +267,52 @@ class FakePostgresClient {
         rows = rows.filter((row) => (row.payload as { gameId?: string }).gameId === values?.[0]);
         return { rows };
       }
+      if (/payload\s*@>\s*\$1::jsonb/i.test(text)) {
+        const identityFilter = values?.[0] as
+          | { participants?: Array<{ identity?: { kind?: string; id?: string } }> }
+          | undefined;
+        const identityKind = identityFilter?.participants?.[0]?.identity?.kind;
+        const identityId = identityFilter?.participants?.[0]?.identity?.id;
+        rows = rows.filter((row) => {
+          const payload = row.payload as {
+            participants?: Array<{ identity?: { kind?: string; id?: string } }>;
+          };
+          return payload.participants?.some(
+            (participant) =>
+              participant.identity?.kind === identityKind &&
+              participant.identity?.id === identityId
+          );
+        });
+        if (/status\s*=\s*'active'/i.test(text)) {
+          rows = rows.filter((row) => (row.payload as { status?: string }).status === "active");
+        }
+        if (/archive_state\s*=\s*'archived'/i.test(text)) {
+          rows = rows.filter((row) => (row.payload as { archiveState?: string }).archiveState === "archived");
+        }
+        if (/updated_at\s*</i.test(text)) {
+          const cursorUpdatedAt = values?.[1] as string;
+          const cursorGameId = values?.[2] as string;
+          rows = rows.filter((row) => {
+            const payload = row.payload as { updatedAt?: string; gameId?: string };
+            return (
+              typeof payload.updatedAt === "string" &&
+              typeof payload.gameId === "string" &&
+              (payload.updatedAt < cursorUpdatedAt ||
+                (payload.updatedAt === cursorUpdatedAt && payload.gameId > cursorGameId))
+            );
+          });
+        }
+        rows.sort((a, b) => {
+          const left = a.payload as { updatedAt?: string; gameId?: string };
+          const right = b.payload as { updatedAt?: string; gameId?: string };
+          if (left.updatedAt !== right.updatedAt) {
+            return (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "");
+          }
+          return (left.gameId ?? "").localeCompare(right.gameId ?? "");
+        });
+        const limit = values?.[values.length - 1] as number | undefined;
+        return { rows: typeof limit === "number" ? rows.slice(0, limit) : rows };
+      }
       if (/where\s+visibility\s*=/i.test(text)) {
         const visibility = values?.[0];
         rows = rows.filter((row) => (row.payload as { visibility?: string }).visibility === visibility);
@@ -782,6 +828,7 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /create table if not exists online_seek_credentials/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_seek_locks/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create unique index if not exists/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /online_game_summaries_payload_identity_idx/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /online_challenge_events_one_create_per_challenge/i.test(query.text))).toBe(true);
     expect(
       client.queries.some(
@@ -1104,6 +1151,17 @@ describe("PostgresOnlineGameStore", () => {
       gameSeats: { creator: "w", acceptor: "b" },
       gameRecord: { gameId: "game_seek_accept_accepted" },
     });
+    expect(result.gameSummary.participants).toEqual([
+      { seat: "w", role: "white", identity: seekCreator },
+      { seat: "b", role: "black", identity: seekAcceptor },
+    ]);
+    expect(client.eventRows.map((row) => row.payload)).toEqual([
+      {
+        ...createOpenSeekAcceptInput(seek).gameCreatedEvent,
+        whiteIdentity: seekCreator,
+        blackIdentity: seekAcceptor,
+      },
+    ]);
     expect(client.eventRows.map((row) => row.payload.type)).toEqual(["game_created"]);
     expect(client.seekEventRows.map((row) => row.payload.type)).toEqual([
       "seek_created",
@@ -1121,6 +1179,24 @@ describe("PostgresOnlineGameStore", () => {
     expect(gameLockIndex).toBeGreaterThan(seekLockIndex);
     expect(gameInsertIndex).toBeGreaterThan(gameLockIndex);
     expect(seekInsertIndex).toBeGreaterThan(gameInsertIndex);
+  });
+
+  it("rebuilds accepted open-seek game summaries with durable participant identities", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const seek = createOpenSeekCreated("seek_rebuild_identity", { creatorSeat: "b" });
+    await store.appendOpenSeekCreated(seek, createOpenSeekCredentials());
+    const accepted = await store.acceptOpenSeekAndCreateGame(createOpenSeekAcceptInput(seek));
+    client.summaryRows = [];
+
+    const summaries = await store.rebuildSummaries();
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].gameId).toBe(accepted.gameSummary.gameId);
+    expect(summaries[0].participants).toEqual([
+      { seat: "w", role: "white", identity: seekAcceptor },
+      { seat: "b", role: "black", identity: seekCreator },
+    ]);
   });
 
   it("rejects accepted open seek game creation unless the game is public", async () => {
@@ -1830,6 +1906,135 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
   });
 
+  it("lists personal game summaries by participant identity across private and public visibility", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const identity = { kind: "session", id: "session_me" } as const;
+    const opponent = { kind: "session", id: "session_opponent" } as const;
+    client.summaryRows = [
+      {
+        payload: createSummary("game_public_other", {
+          visibility: "public",
+          updatedAt: "2026-05-31T12:00:04.000Z",
+        }),
+      },
+      {
+        payload: createSummary("game_private_me", {
+          visibility: "private",
+          updatedAt: "2026-05-31T12:00:03.000Z",
+          participants: [
+            { seat: "w", role: "white", identity },
+            { seat: "b", role: "black", identity: opponent },
+          ],
+        }),
+      },
+      {
+        payload: createSummary("game_unlisted_me_archived", {
+          visibility: "unlisted",
+          status: "complete",
+          archiveState: "archived",
+          endedAt: "2026-05-31T12:00:02.000Z",
+          updatedAt: "2026-05-31T12:00:02.000Z",
+          result: { winner: "b", reason: "resignation" },
+          participants: [
+            { seat: "w", role: "white", identity: opponent },
+            { seat: "b", role: "black", identity },
+          ],
+        }),
+      },
+    ];
+
+    const page = await store.listPersonalGameSummaries({
+      identity,
+      state: "all",
+      limit: 10,
+    });
+
+    expect(page.games.map((summary) => summary.gameId)).toEqual([
+      "game_private_me",
+      "game_unlisted_me_archived",
+    ]);
+    expect(page.games.map((summary) => summary.visibility)).toEqual(["private", "unlisted"]);
+    expect(page.games[0].participants[0].identity).toEqual(identity);
+    expect(
+      client.queries.some(
+        (query) =>
+          /payload\s*@>\s*\$1::jsonb/i.test(query.text) &&
+          JSON.stringify(query.values?.[0]) === JSON.stringify({
+            participants: [{ identity: { kind: identity.kind, id: identity.id } }],
+          })
+      )
+    ).toBe(true);
+  });
+
+  it("paginates personal game summaries after filtering by identity and lifecycle state", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const identity = { kind: "registered", id: "user_me", displayName: "Me" } as const;
+    const other = { kind: "registered", id: "user_other", displayName: "Other" } as const;
+    const participantSet = [
+      { seat: "w" as const, role: "white" as const, identity },
+      { seat: "b" as const, role: "black" as const, identity: other },
+    ];
+    client.summaryRows = [
+      {
+        payload: createSummary("game_newer_active_other", {
+          updatedAt: "2026-05-31T12:00:04.000Z",
+          participants: [
+            { seat: "w", role: "white", identity: other },
+            { seat: "b", role: "black", identity: { kind: "registered", id: "user_third" } },
+          ],
+        }),
+      },
+      {
+        payload: createSummary("game_newer_archived_me", {
+          status: "complete",
+          archiveState: "archived",
+          endedAt: "2026-05-31T12:00:03.000Z",
+          updatedAt: "2026-05-31T12:00:03.000Z",
+          result: { winner: "w", reason: "resignation" },
+          participants: participantSet,
+        }),
+      },
+      {
+        payload: createSummary("game_older_archived_me", {
+          status: "complete",
+          archiveState: "archived",
+          endedAt: "2026-05-31T12:00:02.000Z",
+          updatedAt: "2026-05-31T12:00:02.000Z",
+          result: { winner: "b", reason: "resignation" },
+          participants: participantSet,
+        }),
+      },
+      {
+        payload: createSummary("game_active_me", {
+          updatedAt: "2026-05-31T12:00:01.000Z",
+          participants: participantSet,
+        }),
+      },
+    ];
+
+    const firstPage = await store.listPersonalGameSummaries({
+      identity,
+      state: "archived",
+      limit: 1,
+    });
+    const secondPage = await store.listPersonalGameSummaries({
+      identity,
+      state: "archived",
+      limit: 1,
+      cursor: firstPage.nextCursor,
+    });
+
+    expect(firstPage.games.map((summary) => summary.gameId)).toEqual([
+      "game_newer_archived_me",
+    ]);
+    expect(secondPage.games.map((summary) => summary.gameId)).toEqual([
+      "game_older_archived_me",
+    ]);
+    expect(secondPage.nextCursor).toBeUndefined();
+  });
+
   it("loads a single materialized game summary without replaying events", async () => {
     const client = new FakePostgresClient();
     client.summaryRows = [
@@ -2057,10 +2262,20 @@ describe("PostgresOnlineGameStore", () => {
       gameId: input.gameCreatedEvent.gameId,
       status: "active",
     });
+    expect(result.gameSummary.participants).toEqual([
+      { seat: "w", role: "white", identity: challengeChallenger },
+      { seat: "b", role: "black", identity: challengeChallenged },
+    ]);
     expect(result.gameCredentials).toEqual(expectedGameCredentials);
     expect(result.gameRecord).toEqual(expectedGameRecord);
     expect(result.gameSeats).toEqual({ challenger: "w", challenged: "b" });
-    expect(client.eventRows.map((row) => row.payload)).toEqual([input.gameCreatedEvent]);
+    expect(client.eventRows.map((row) => row.payload)).toEqual([
+      {
+        ...input.gameCreatedEvent,
+        whiteIdentity: challengeChallenger,
+        blackIdentity: challengeChallenged,
+      },
+    ]);
     expect(client.credentialRows).toEqual([
       {
         gameId: input.gameCreatedEvent.gameId,
@@ -2106,6 +2321,31 @@ describe("PostgresOnlineGameStore", () => {
     expect(gameSummaryInsertIndex).toBeGreaterThan(acceptedEventInsertIndex);
     expect(challengeSummaryInsertIndex).toBeGreaterThan(gameSummaryInsertIndex);
     expect(commitIndex).toBeGreaterThan(challengeSummaryInsertIndex);
+  });
+
+  it("rebuilds accepted challenge game summaries with durable participant identities", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_rebuild_identity", {
+      challengerSeat: "random",
+    });
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+    const accepted = await store.acceptChallengeAndCreateGame(
+      createChallengeAcceptInput(challenge, {
+        whiteIdentity: challengeChallenged,
+        blackIdentity: challengeChallenger,
+      })
+    );
+    client.summaryRows = [];
+
+    const summaries = await store.rebuildSummaries();
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].gameId).toBe(accepted.gameSummary.gameId);
+    expect(summaries[0].participants).toEqual([
+      { seat: "w", role: "white", identity: challengeChallenged },
+      { seat: "b", role: "black", identity: challengeChallenger },
+    ]);
   });
 
   it("rejects challenge acceptance from the challenger role", async () => {

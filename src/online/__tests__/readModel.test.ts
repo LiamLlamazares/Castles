@@ -341,6 +341,38 @@ describe("online read model", () => {
     expect(JSON.stringify(summary.livePreview.boardPreview)).not.toContain("token");
   });
 
+  it("projects durable participant identities from game creation events", () => {
+    const [summary] = projectOnlineGameSummaries([
+      {
+        ...createPreviewEvent("game_identity_summary"),
+        whiteIdentity: { kind: "session", id: "session_white" },
+        blackIdentity: {
+          kind: "registered",
+          id: "user_black",
+          displayName: "Black Player",
+        },
+      },
+    ]);
+
+    expect(summary.participants).toEqual([
+      {
+        seat: "w",
+        role: "white",
+        identity: { kind: "session", id: "session_white" },
+      },
+      {
+        seat: "b",
+        role: "black",
+        identity: {
+          kind: "registered",
+          id: "user_black",
+          displayName: "Black Player",
+        },
+      },
+    ]);
+    expect(validateOnlineGameSummary(summary).ok).toBe(true);
+  });
+
   it("projects visibility changes without advancing the gameplay version", () => {
     const events = [
       createEvent("game_visible"),

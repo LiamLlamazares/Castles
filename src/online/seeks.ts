@@ -1,5 +1,4 @@
-import type { OnlineIdentity } from "./readModel";
-import { validateOnlineIdentity } from "./readModel";
+import { validateOnlineIdentity, type OnlineIdentity } from "./identity";
 import { containsDurableSecret, stringContainsDurableSecret } from "./secretSafety";
 import type { OnlineGameSetupDTO } from "./types";
 import { validateOnlineGameSetup, type ValidationResult } from "./validation";

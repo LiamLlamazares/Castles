@@ -127,9 +127,11 @@ Online summaries support three identity kinds:
 - `session`: a public, non-secret browser/session surrogate that can later back challenges without an account.
 - `registered`: a future account identity with optional display name.
 
-Current game creation still projects anonymous identities only. Session and registered identities are accepted by the summary validator so the read-model shape does not need to change when those systems arrive.
+Game creation events may now carry `whiteIdentity` and `blackIdentity`. Accepted challenges and accepted open lobby listings bind those identities into the durable `game_created` event before the game summary is projected, so a rebuild preserves the same participants. Direct-created games currently use explicit generated anonymous identities for both seats.
 
 Identity `id` values in public summaries are never authentication secrets. Do not put cookies, bearer tokens, raw private invite tokens, or server auth session ids in `OnlineIdentity.id`. Use a separate private credential table for authentication material.
+
+The PostgreSQL store has a backend-only personal-history query that can find public, unlisted, and private summaries for a server-resolved identity. There is intentionally no public HTTP endpoint for this yet. Future account/session endpoints must derive the identity from the authenticated server session, not from a request body, query parameter, or browser-supplied session id.
 
 ## Challenge Lifecycle Contract
 
@@ -216,5 +218,5 @@ Server spectator authorization now prefers `loadGameSummary(gameId)` when the co
 ## Next Contract Changes
 
 1. Add archive detail/search read models if the summary payload stops being enough for richer analysis pages.
-2. Add a public account/session ownership layer before account-bound private challenges, ratings, and moderation.
+2. Add a public account/session ownership layer before exposing account-bound personal history, account-bound private challenges, ratings, and moderation.
 3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes to `private`.

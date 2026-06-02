@@ -1097,6 +1097,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       },
       { createdAt: input.acceptedAt }
     );
+    const gameCreatedEvent = {
+      ...input.gameCreatedEvent,
+      whiteIdentity: input.whiteIdentity,
+      blackIdentity: input.blackIdentity,
+    };
     const eventLength = memoryChallengeEvents.length;
     try {
       memoryChallengeEvents.push(challengeEvent);
@@ -1104,14 +1109,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         (candidate) => candidate.challengeId === input.challengeId
       );
       if (!challengeSummary) throw new Error(`Online challenge summary was not refreshed for ${input.challengeId}.`);
-      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
-      if (!gameSummary) throw new Error(`Online game summary was not refreshed for ${input.gameCreatedEvent.gameId}.`);
+      const [gameSummary] = projectOnlineGameSummaries([gameCreatedEvent]);
+      if (!gameSummary) throw new Error(`Online game summary was not refreshed for ${gameCreatedEvent.gameId}.`);
       const gameRecord: OnlineGameRoomRecord = {
-        gameId: input.gameCreatedEvent.gameId,
-        setup: input.gameCreatedEvent.setup,
+        gameId: gameCreatedEvent.gameId,
+        setup: gameCreatedEvent.setup,
         whiteCredential: gameCredentials.whiteCredential,
         blackCredential: gameCredentials.blackCredential,
-        clock: input.gameCreatedEvent.clock,
+        clock: gameCreatedEvent.clock,
         acceptedActions: [],
       };
       return {
@@ -1419,6 +1424,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       },
       { createdAt: input.acceptedAt }
     );
+    const gameCreatedEvent = {
+      ...input.gameCreatedEvent,
+      whiteIdentity: input.whiteIdentity,
+      blackIdentity: input.blackIdentity,
+    };
     const eventLength = memoryOpenSeekEvents.length;
     try {
       memoryOpenSeekEvents.push(seekEvent);
@@ -1426,14 +1436,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         (candidate) => candidate.seekId === input.seekId
       );
       if (!seekSummary) throw new Error(`Open seek summary was not refreshed for ${input.seekId}.`);
-      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
-      if (!gameSummary) throw new Error(`Online game summary was not refreshed for ${input.gameCreatedEvent.gameId}.`);
+      const [gameSummary] = projectOnlineGameSummaries([gameCreatedEvent]);
+      if (!gameSummary) throw new Error(`Online game summary was not refreshed for ${gameCreatedEvent.gameId}.`);
       const gameRecord: OnlineGameRoomRecord = {
-        gameId: input.gameCreatedEvent.gameId,
-        setup: input.gameCreatedEvent.setup,
+        gameId: gameCreatedEvent.gameId,
+        setup: gameCreatedEvent.setup,
         whiteCredential: gameCredentials.whiteCredential,
         blackCredential: gameCredentials.blackCredential,
-        clock: input.gameCreatedEvent.clock,
+        clock: gameCreatedEvent.clock,
         acceptedActions: [],
       };
       return {
@@ -1513,6 +1523,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         setup: summary.setup,
         clock,
         initialVisibility: "public",
+        whiteIdentity,
+        blackIdentity,
       },
       { createdAt: acceptedAt }
     );
@@ -2317,6 +2329,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           setup: summary.setup,
           clock,
           initialVisibility: summary.visibility,
+          whiteIdentity,
+          blackIdentity,
         },
         { createdAt: acceptedAt }
       );
@@ -2606,6 +2620,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         gameId: record.gameId,
         setup: record.setup,
         clock: record.clock,
+        whiteIdentity: { kind: "anonymous", id: `anon_${record.gameId}_w` },
+        blackIdentity: { kind: "anonymous", id: `anon_${record.gameId}_b` },
       });
       const credentials: OnlineGameCredentials = {
         whiteCredential: record.whiteCredential,

@@ -1,6 +1,6 @@
 # Online Multiplayer Master Roadmap
 
-Last refreshed: 2026-06-01
+Last refreshed: 2026-06-02
 
 This document is the source of truth for Castles online multiplayer work. The current direction assumes no legacy compatibility burden: old online drafts, incomplete protocols, and pre-roadmap UI assumptions may be replaced instead of preserved.
 
@@ -18,6 +18,7 @@ Current private-link beta:
 - Accepted game events are persisted to PostgreSQL before authoritative snapshot broadcast.
 - Startup replay rebuilds rooms from an append-only v2 event log and fails loudly on corrupt or unsupported events.
 - Game creation events are token-free; player credentials are stored separately as token hashes keyed by game and seat.
+- Accepted challenges and accepted lobby listings bind durable white/black participant identities into the game creation event, so rebuilt summaries preserve who played which side without storing bearer secrets.
 - Accepted actions are serialized per game in the single Node process.
 - Action submissions carry required `clientActionId` values; exact retries are idempotent and conflicting id reuse is rejected.
 - Server-authoritative clocks support timeout adjudication and reconnect-safe snapshots.
@@ -556,6 +557,18 @@ Remaining work:
 - Continue to keep edited-board/private-invite flows available through the friend challenge and lobby listing paths.
 - Revisit copy if account-backed challenges add named friends or rating-aware matchmaking.
 
+## Phase 6Z: Durable Participant Identity and History Foundation
+
+Goal: prepare account-backed personal history without exposing an unsafe "tell the server who I am" endpoint.
+
+Status: implemented locally on 2026-06-02. Game creation events can now carry `whiteIdentity` and `blackIdentity`, and accepted direct challenges/open lobby listings bind those identities into the durable `game_created` event before persistence. Materialized game summaries project participants from the event stream, so summary rebuilds preserve player identities and seat assignment. Direct-created games use explicit generated anonymous identities. PostgreSQL also has a backend-only personal-history query that can list summaries for a server-resolved identity across public, unlisted, and private games.
+
+Remaining work:
+
+- Add a real account/session layer before exposing personal history over HTTP; future endpoints must derive identity server-side rather than accepting arbitrary client-provided identity fields.
+- Add signed-in archive UI only after account identity exists, then keep device-local recent replays as an anonymous fallback.
+- Ratings remain deferred until result contracts, account identity, and moderation basics are strong enough.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -563,7 +576,7 @@ Goal: add public-service trust and governance features.
 Work:
 
 - Add account-backed identity if required by ratings and moderation.
-- Add account-backed personal game history for registered players, including finished friend-link games and public games, before relying on local storage for any signed-in user's archive.
+- Expose account-backed personal game history for registered players, including finished friend-link games and public games, using the Phase 6Z backend query foundation rather than local storage.
 - Implement rating events/read models after result contracts are stable.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.
@@ -593,6 +606,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Continue Tutorial course polish with richer theory and practice, but add engine-graded progress only after objective board states are explicit and tested.
-2. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-3. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.
+1. Harden Tutorial/Rules trust next: make each objective's validation metadata explicit, add engine-graded checks only where the board state and event are tested, and keep read-only lessons completable from Next.
+2. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually thumbnails/clocks/spectator counts only from server-backed data.
+3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

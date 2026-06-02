@@ -23,6 +23,7 @@ import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   type OnlineGameDirectoryListOptions,
   type OnlineGameDirectoryResponse,
+  type OnlinePersonalGameDirectoryListOptions,
   type OnlineIdentity,
   OnlineGameSummary,
   decodeOnlineGameDirectoryCursor,
@@ -182,6 +183,78 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       const validation = validateOnlineGameSummary(row.payload);
       if (!validation.ok) {
         throw new Error(`Invalid online game summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+    const games = summaries.slice(0, options.limit);
+    const nextCursor =
+      summaries.length > options.limit && games.length > 0
+        ? encodeOnlineGameDirectoryCursor(games[games.length - 1])
+        : undefined;
+
+    return {
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games,
+      nextCursor,
+    };
+  }
+
+  async listPersonalGameSummaries(
+    options: OnlinePersonalGameDirectoryListOptions
+  ): Promise<OnlineGameDirectoryResponse> {
+    await this.ensureSchema();
+    const identity = validateOnlineIdentity(options.identity, "personal history identity");
+    if (!identity.ok) {
+      throw new Error(identity.error.message);
+    }
+
+    const identityFilter = {
+      participants: [
+        {
+          identity: {
+            kind: identity.value.kind,
+            id: identity.value.id,
+          },
+        },
+      ],
+    };
+    const where: string[] = ["payload @> $1::jsonb"];
+    const values: unknown[] = [identityFilter];
+    if (options.state === "active") {
+      where.push("status = 'active'");
+    } else if (options.state === "archived") {
+      where.push("status = 'complete'");
+      where.push("archive_state = 'archived'");
+    }
+
+    if (options.cursor) {
+      const cursor = decodeOnlineGameDirectoryCursor(options.cursor);
+      if (!cursor.ok) {
+        throw new Error(cursor.error.message);
+      }
+      const updatedAtParam = values.length + 1;
+      const gameIdParam = values.length + 2;
+      values.push(cursor.value.updatedAt, cursor.value.gameId);
+      where.push(
+        `(updated_at < $${updatedAtParam}::timestamptz OR (updated_at = $${updatedAtParam}::timestamptz AND game_id > $${gameIdParam}))`
+      );
+    }
+
+    const limitParam = values.length + 1;
+    values.push(options.limit + 1);
+    const result = await this.queryable.query(
+      `
+        SELECT payload FROM online_game_summaries
+        WHERE ${where.join(" AND ")}
+        ORDER BY updated_at DESC, game_id ASC
+        LIMIT $${limitParam}
+      `,
+      values
+    );
+    const summaries = result.rows.map((row, index) => {
+      const validation = validateOnlineGameSummary(row.payload);
+      if (!validation.ok) {
+        throw new Error(`Invalid personal online game summary ${index + 1}: ${validation.error.message}`);
       }
       return validation.value;
     });
@@ -541,14 +614,20 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   async acceptChallengeAndCreateGame(
     input: OnlineChallengeAcceptInput
   ): Promise<OnlineChallengeAcceptResult> {
-    const gameCreatedEvent = this.validate(input.gameCreatedEvent);
-    if (gameCreatedEvent.type !== "game_created") {
+    const rawGameCreatedEvent = this.validate(input.gameCreatedEvent);
+    if (rawGameCreatedEvent.type !== "game_created") {
       throw new Error("acceptChallengeAndCreateGame requires a game_created event.");
     }
-    if (gameCreatedEvent.createdAt !== input.acceptedAt) {
+    if (rawGameCreatedEvent.createdAt !== input.acceptedAt) {
       throw new Error("Accepted game event createdAt must equal challenge acceptedAt.");
     }
-    this.validateAcceptInput(input, gameCreatedEvent);
+    this.validateAcceptInput(input, rawGameCreatedEvent);
+    const gameCreatedEvent = this.bindGameCreatedIdentities(
+      rawGameCreatedEvent,
+      input.whiteIdentity,
+      input.blackIdentity,
+      `Accepted challenge ${input.challengeId}`
+    );
 
     await this.ensureSchema();
     return this.withChallengeAcceptTransaction(
@@ -670,17 +749,23 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   async acceptOpenSeekAndCreateGame(
     input: OpenSeekAcceptInput
   ): Promise<OpenSeekAcceptResult> {
-    const gameCreatedEvent = this.validate(input.gameCreatedEvent);
-    if (gameCreatedEvent.type !== "game_created") {
+    const rawGameCreatedEvent = this.validate(input.gameCreatedEvent);
+    if (rawGameCreatedEvent.type !== "game_created") {
       throw new Error("acceptOpenSeekAndCreateGame requires a game_created event.");
     }
-    if (gameCreatedEvent.createdAt !== input.acceptedAt) {
+    if (rawGameCreatedEvent.createdAt !== input.acceptedAt) {
       throw new Error("Accepted game event createdAt must equal seek acceptedAt.");
     }
-    if (gameCreatedEvent.initialVisibility !== "public") {
+    if (rawGameCreatedEvent.initialVisibility !== "public") {
       throw new Error("Accepted open seek games must be public.");
     }
     this.validateOpenSeekAcceptInput(input);
+    const gameCreatedEvent = this.bindGameCreatedIdentities(
+      rawGameCreatedEvent,
+      input.whiteIdentity,
+      input.blackIdentity,
+      `Accepted open seek ${input.seekId}`
+    );
 
     await this.ensureSchema();
     return this.withOpenSeekAcceptTransaction(
@@ -1123,6 +1208,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_game_summaries_public_directory_idx
         ON online_game_summaries (visibility, status, archive_state, updated_at DESC, game_id ASC)
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_game_summaries_payload_identity_idx
+        ON online_game_summaries USING GIN (payload jsonb_path_ops)
     `);
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_challenge_events (
@@ -1720,6 +1809,36 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     if (isSameOpenSeekIdentity(whiteIdentity.value, blackIdentity.value)) {
       throw new Error(`Accepted open seek ${input.seekId} must bind two distinct seats.`);
     }
+  }
+
+  private bindGameCreatedIdentities(
+    event: Extract<OnlineGameEvent, { type: "game_created" }>,
+    whiteIdentityInput: OnlineIdentity,
+    blackIdentityInput: OnlineIdentity,
+    label: string
+  ): Extract<OnlineGameEvent, { type: "game_created" }> {
+    const whiteIdentity = validateOnlineIdentity(whiteIdentityInput, `${label}.whiteIdentity`);
+    if (!whiteIdentity.ok) {
+      throw new Error(whiteIdentity.error.message);
+    }
+    const blackIdentity = validateOnlineIdentity(blackIdentityInput, `${label}.blackIdentity`);
+    if (!blackIdentity.ok) {
+      throw new Error(blackIdentity.error.message);
+    }
+    if (isSameOnlineIdentity(whiteIdentity.value, blackIdentity.value)) {
+      throw new Error(`${label} must bind two distinct player identities.`);
+    }
+    if (event.whiteIdentity && !isSameOnlineIdentity(event.whiteIdentity, whiteIdentity.value)) {
+      throw new Error(`${label} game event whiteIdentity does not match the accepted seat binding.`);
+    }
+    if (event.blackIdentity && !isSameOnlineIdentity(event.blackIdentity, blackIdentity.value)) {
+      throw new Error(`${label} game event blackIdentity does not match the accepted seat binding.`);
+    }
+    return {
+      ...event,
+      whiteIdentity: whiteIdentity.value,
+      blackIdentity: blackIdentity.value,
+    };
   }
 
   private resolveAcceptedGameSeats(

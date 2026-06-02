@@ -1,7 +1,7 @@
 import {
   validateOnlineIdentity,
   type OnlineIdentity,
-} from "./readModel";
+} from "./identity";
 import { containsDurableSecret } from "./secretSafety";
 import {
   validateOnlineGameSetup,

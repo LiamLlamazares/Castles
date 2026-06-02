@@ -273,6 +273,55 @@ describe("online validation", () => {
     }
   });
 
+  it("accepts participant identities on game creation events", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+      eventId: "evt-create-identities",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_identity_bound",
+      setup: createSetup(),
+      whiteIdentity: { kind: "session", id: "session_white" },
+      blackIdentity: {
+        kind: "registered",
+        id: "user_black",
+        displayName: "Black Player",
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toMatchObject({
+        type: "game_created",
+        whiteIdentity: { kind: "session", id: "session_white" },
+        blackIdentity: {
+          kind: "registered",
+          id: "user_black",
+          displayName: "Black Player",
+        },
+      });
+    }
+  });
+
+  it("rejects one-sided participant identity bindings on game creation events", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+      eventId: "evt-create-one-sided-identity",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_one_sided_identity",
+      setup: createSetup(),
+      whiteIdentity: { kind: "session", id: "session_white" },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("blackIdentity");
+    }
+  });
+
   it("rejects invalid initial visibility on game creation events", () => {
     const result = validateOnlineGameEvent({
       schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,

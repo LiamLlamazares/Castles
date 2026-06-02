@@ -18,6 +18,10 @@ import {
   type OnlineAccessRole,
 } from "./accessPolicy";
 import { stringContainsDurableSecret } from "./secretSafety";
+import {
+  validateOnlineIdentity,
+  type OnlineIdentity,
+} from "./identity";
 import { PieceType, type Color, type MoveRecord, type TurnPhase } from "../Constants";
 import type { CastleDTO, OnlineClockStateDTO, PieceDTO } from "./types";
 
@@ -39,30 +43,14 @@ export {
   type OnlineAccessRole,
 };
 
-export interface OnlineAnonymousIdentity {
-  kind: "anonymous";
-  id: string;
-}
-
-export interface OnlineSessionIdentity {
-  kind: "session";
-  /**
-   * Public, non-secret session surrogate. Never store browser cookies,
-   * bearer tokens, or auth session secrets in summary identities.
-   */
-  id: string;
-}
-
-export interface OnlineRegisteredIdentity {
-  kind: "registered";
-  id: string;
-  displayName?: string;
-}
-
-export type OnlineIdentity =
-  | OnlineAnonymousIdentity
-  | OnlineSessionIdentity
-  | OnlineRegisteredIdentity;
+export {
+  validateOnlineIdentity,
+  isSameOnlineIdentity,
+  type OnlineAnonymousIdentity,
+  type OnlineIdentity,
+  type OnlineRegisteredIdentity,
+  type OnlineSessionIdentity,
+} from "./identity";
 
 export interface OnlineGameSummaryParticipant {
   seat: Color;
@@ -138,6 +126,13 @@ export interface OnlineGameDirectoryListOptions {
   cursor?: string;
 }
 
+export interface OnlinePersonalGameDirectoryListOptions {
+  identity: OnlineIdentity;
+  state: OnlineGameDirectoryState;
+  limit: number;
+  cursor?: string;
+}
+
 export interface OnlineGameDirectoryResponse {
   schemaVersion: typeof ONLINE_GAME_DIRECTORY_SCHEMA_VERSION;
   games: OnlineGameSummary[];
@@ -153,6 +148,8 @@ interface SummaryMetadata {
   version: number;
   visibility: OnlineGameVisibility;
   hasTimeControl: boolean;
+  whiteIdentity?: OnlineIdentity;
+  blackIdentity?: OnlineIdentity;
   lastEventId: string;
 }
 
@@ -290,48 +287,6 @@ function validateResult(value: unknown): ValidationResult<OnlineGameResultDTO> {
       reason: value.reason as OnlineGameResultDTO["reason"],
     },
   };
-}
-
-export function validateOnlineIdentity(
-  value: unknown,
-  label = "identity"
-): ValidationResult<OnlineIdentity> {
-  if (!isRecord(value)) return bad(`${label} must be an object.`);
-  if (
-    value.kind !== "anonymous" &&
-    value.kind !== "session" &&
-    value.kind !== "registered"
-  ) {
-    return bad(`${label}.kind is invalid.`);
-  }
-  if (!isBoundedString(value.id)) {
-    return bad(`${label}.id is invalid.`);
-  }
-  if (stringContainsDurableSecret(value.id)) {
-    return bad(`${label}.id must be a public non-secret surrogate.`);
-  }
-  if (
-    value.kind === "registered" &&
-    value.displayName !== undefined &&
-    !isBoundedString(value.displayName, 64)
-  ) {
-    return bad(`${label}.displayName is invalid.`);
-  }
-  const identity: OnlineIdentity =
-    value.kind === "registered"
-      ? {
-          kind: "registered",
-          id: value.id,
-          displayName:
-            typeof value.displayName === "string"
-              ? value.displayName
-              : undefined,
-        }
-      : {
-          kind: value.kind,
-          id: value.id,
-        };
-  return { ok: true, value: identity };
 }
 
 function validateParticipant(value: unknown): ValidationResult<OnlineGameSummaryParticipant> {
@@ -560,6 +515,19 @@ function anonymousParticipant(gameId: string, seat: Color): OnlineGameSummaryPar
   };
 }
 
+function participantForGameSeat(
+  gameId: string,
+  seat: Color,
+  identity: OnlineIdentity | undefined
+): OnlineGameSummaryParticipant {
+  if (!identity) return anonymousParticipant(gameId, seat);
+  return {
+    seat,
+    role: roleForOnlineSeat(seat),
+    identity,
+  };
+}
+
 function summaryClockFromSnapshot(clock: OnlineClockStateDTO | undefined): OnlineGameSummaryPreviewClock | undefined {
   if (!clock) return undefined;
   return {
@@ -643,6 +611,8 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
         version: 0,
         visibility: event.initialVisibility ?? "unlisted",
         hasTimeControl: !!event.setup.timeControl,
+        whiteIdentity: event.whiteIdentity,
+        blackIdentity: event.blackIdentity,
         lastEventId: event.eventId,
       });
       continue;
@@ -693,7 +663,10 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
       visibility: metadata.visibility,
       archiveState: result ? "archived" : "active",
       hasTimeControl: metadata.hasTimeControl,
-      participants: [anonymousParticipant(record.gameId, "w"), anonymousParticipant(record.gameId, "b")],
+      participants: [
+        participantForGameSeat(record.gameId, "w", metadata.whiteIdentity),
+        participantForGameSeat(record.gameId, "b", metadata.blackIdentity),
+      ],
       livePreview: createLivePreviewFromSnapshot(snapshot),
       result,
       lastEventId: metadata.lastEventId,

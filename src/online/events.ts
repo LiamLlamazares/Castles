@@ -18,6 +18,11 @@ import {
   type OnlineGameVisibility,
   type OnlinePlayerSettableGameVisibility,
 } from "./visibility";
+import {
+  isSameOnlineIdentity,
+  validateOnlineIdentity,
+  type OnlineIdentity,
+} from "./identity";
 
 export const ONLINE_EVENT_SCHEMA_VERSION = 2;
 export const ONLINE_RULESET_VERSION = "castles-beta-v1";
@@ -36,6 +41,8 @@ export type OnlineGameEvent =
       setup: OnlineGameSetupDTO;
       clock?: OnlineClockRecord;
       initialVisibility?: OnlineGameVisibility;
+      whiteIdentity?: OnlineIdentity;
+      blackIdentity?: OnlineIdentity;
     })
   | (OnlineGameEventEnvelope & {
       type: "visibility_changed";
@@ -298,6 +305,19 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     if (value.initialVisibility !== undefined && !isOnlineGameVisibility(value.initialVisibility)) {
       return bad("event.initialVisibility must be private, unlisted, or public.");
     }
+    let whiteIdentity: OnlineIdentity | undefined;
+    let blackIdentity: OnlineIdentity | undefined;
+    if (value.whiteIdentity !== undefined || value.blackIdentity !== undefined) {
+      const white = validateOnlineIdentity(value.whiteIdentity, "event.whiteIdentity");
+      if (!white.ok) return white;
+      const black = validateOnlineIdentity(value.blackIdentity, "event.blackIdentity");
+      if (!black.ok) return black;
+      if (isSameOnlineIdentity(white.value, black.value)) {
+        return bad("event.game_created must bind two distinct player identities.");
+      }
+      whiteIdentity = white.value;
+      blackIdentity = black.value;
+    }
     return {
       ok: true,
       value: {
@@ -309,6 +329,9 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
         ...(value.initialVisibility === undefined
           ? {}
           : { initialVisibility: value.initialVisibility }),
+        ...(whiteIdentity && blackIdentity
+          ? { whiteIdentity, blackIdentity }
+          : {}),
       },
     };
   }
