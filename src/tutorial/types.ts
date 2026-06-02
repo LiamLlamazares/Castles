@@ -44,7 +44,7 @@ export interface TutorialLesson {
   layout: LayoutService;
   
   /** Learning objectives displayed in sidebar */
-  objectives?: string[];
+  objectives?: TutorialLessonObjective[];
   
   /** Hints shown to help the player */
   hints?: string[];
@@ -52,6 +52,13 @@ export interface TutorialLesson {
   /** Optional custom instructions shown at the top */
   instructions?: string | React.ReactNode;
 }
+
+export interface TutorialObjective {
+  id: string;
+  text: string;
+}
+
+export type TutorialLessonObjective = string | TutorialObjective;
 
 /**
  * Lesson category for grouping lessons in UI.

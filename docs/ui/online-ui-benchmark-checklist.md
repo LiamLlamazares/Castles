@@ -137,10 +137,17 @@ Phase 6O Online structural polish, 2026-06-02:
 - Watch now uses a top-live-game plus more-games layout, refreshes while visible, pauses while hidden, and skips background refresh if a foreground directory load is in flight.
 - The current public game row in Lobby remains a compact Watch preview, but the Lobby landmark and open-listing section now distinguish it from actual open lobby listings.
 
+Phase 6P Learn progress hardening, 2026-06-02:
+
+- Learn progress now separates resume position from completed lessons. Objective lessons are self-checked only when every normalized objective id is checked, and unchecking an objective removes that self-check.
+- Existing index-based objective checks are normalized into lesson-scoped objective ids on load; unknown lessons and invalid objective ids are dropped.
+- Course and lesson copy now says objectives/lessons are self-checked instead of "mastered" or engine-verified, so the UI stays honest until engine-graded objectives exist.
+- Long objective text wraps inside the lesson sidebar, and the existing mobile course/lesson scrollports remain protected by tests.
+
 Next product slices accepted from reviewers:
 
 - Redesign Lobby toward a quieter, more list-like page: split "Find listings" filters from "Play from current setup" actions, reduce card/shadow weight, keep actual listings/live games prominent, and decide whether lobby-created games should be public in Watch by default.
-- Redesign Learn as a course surface: separate resume position from completed lesson IDs, add checkable objectives first, and only add engine-graded objectives when the target board state is explicit and tested.
+- Continue Learn course polish with authored objective ids, richer lesson theory, and only add engine-graded objectives when the target board state is explicit and tested.
 - Improve navigation clarity: streamline setup entry points around Play Local, Invite Friend, and Find Match; add a visible return path from analysis; standardize New Game/Configure wording; and replace generic drawer markers with real icons or remove the icon column consistently.
 
 Reference pages checked:

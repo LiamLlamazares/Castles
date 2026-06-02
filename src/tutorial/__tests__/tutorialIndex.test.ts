@@ -7,6 +7,7 @@ import { Piece } from '../../Classes/Entities/Piece';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
 import { createPieceMap } from '../../utils/PieceMap';
 import { getAllLessons } from '..';
+import { getLessonObjectives } from '../objectives';
 
 const createLessonState = (lesson: ReturnType<typeof getAllLessons>[number]): GameState => ({
   pieces: lesson.pieces,
@@ -81,6 +82,16 @@ describe('tutorial lesson index', () => {
       .filter((sectionNumber): sectionNumber is string => Boolean(sectionNumber));
 
     expect(new Set(sectionNumbers).size).toBe(sectionNumbers.length);
+  });
+
+  it('gives every lesson objective a stable unique id within its lesson', () => {
+    for (const lesson of getAllLessons()) {
+      const objectiveIds = getLessonObjectives(lesson).map((objective) => objective.id);
+
+      expect(objectiveIds.every((id) => id.length > 0)).toBe(true);
+      expect(new Set(objectiveIds).size).toBe(objectiveIds.length);
+      expect(objectiveIds.every((id) => !/^\d+$/.test(id))).toBe(true);
+    }
   });
 
   it('adds standalone basic lessons for every standard recruitable piece', () => {

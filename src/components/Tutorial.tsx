@@ -6,6 +6,7 @@ import React, { useMemo, useState } from "react";
 import GameBoard from "./Game";
 import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import { getAllLessons, TutorialLesson } from "../tutorial";
+import { getLessonObjectives } from "../tutorial/objectives";
 import { getImageByPieceType } from "./PieceImages";
 import { PieceType } from "../Constants";
 import { useTheme } from "../contexts/ThemeContext";
@@ -29,8 +30,8 @@ const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
 
 interface TutorialProgressState {
   lastLessonId: string;
-  reviewedLessonIds: string[];
-  checkedObjectivesByLessonId: Record<string, number[]>;
+  completedLessonIds: string[];
+  checkedObjectiveIdsByLessonId: Record<string, string[]>;
 }
 
 interface StoredTutorialProgress {
@@ -87,8 +88,8 @@ const TUTORIAL_MODULES: TutorialModuleDescriptor[] = [
 function createDefaultTutorialProgress(lessons: TutorialLesson[]): TutorialProgressState {
   return {
     lastLessonId: lessons[0]?.id ?? "",
-    reviewedLessonIds: [],
-    checkedObjectivesByLessonId: {},
+    completedLessonIds: [],
+    checkedObjectiveIdsByLessonId: {},
   };
 }
 
@@ -108,30 +109,70 @@ function sanitizeTutorialProgress(raw: unknown, lessons: TutorialLesson[]): Tuto
   const lastLessonId = typeof record.lastLessonId === "string" && lessonIds.has(record.lastLessonId)
     ? record.lastLessonId
     : defaults.lastLessonId;
-  const reviewedLessonIds = Array.isArray(record.reviewedLessonIds)
-    ? orderLessonIds(record.reviewedLessonIds.filter((id): id is string => typeof id === "string"), lessons)
-      .filter((lessonId) => (lessons.find((candidate) => candidate.id === lessonId)?.objectives?.length ?? 0) === 0)
-    : [];
-  const checkedObjectivesByLessonId: Record<string, number[]> = {};
+  const completed = new Set<string>();
+  const rawCompletedLessonIds = Array.isArray(record.completedLessonIds)
+    ? new Set(record.completedLessonIds.filter((id): id is string => typeof id === "string" && lessonIds.has(id)))
+    : new Set<string>();
+  const legacyReviewedLessonIds = Array.isArray((record as { reviewedLessonIds?: unknown }).reviewedLessonIds)
+    ? new Set(
+        (record as { reviewedLessonIds: unknown[] }).reviewedLessonIds.filter(
+          (id): id is string => typeof id === "string" && lessonIds.has(id)
+        )
+      )
+    : new Set<string>();
+  const checkedObjectiveIdsByLessonId: Record<string, string[]> = {};
+  const rawCheckedIds = record.checkedObjectiveIdsByLessonId && typeof record.checkedObjectiveIdsByLessonId === "object"
+    ? record.checkedObjectiveIdsByLessonId
+    : {};
+  const legacyCheckedObjectives = (record as { checkedObjectivesByLessonId?: unknown }).checkedObjectivesByLessonId;
+  const rawLegacyCheckedObjectives = legacyCheckedObjectives && typeof legacyCheckedObjectives === "object"
+    ? legacyCheckedObjectives as Record<string, unknown>
+    : {};
 
-  if (record.checkedObjectivesByLessonId && typeof record.checkedObjectivesByLessonId === "object") {
-    for (const lesson of lessons) {
-      const rawObjectiveIndexes = record.checkedObjectivesByLessonId[lesson.id];
-      if (!Array.isArray(rawObjectiveIndexes)) continue;
-      const objectiveCount = lesson.objectives?.length ?? 0;
-      const cleaned = Array.from(new Set(rawObjectiveIndexes))
-        .filter((index): index is number => Number.isInteger(index) && index >= 0 && index < objectiveCount)
-        .sort((a, b) => a - b);
-      if (cleaned.length > 0) {
-        checkedObjectivesByLessonId[lesson.id] = cleaned;
+  for (const lesson of lessons) {
+    const objectives = getLessonObjectives(lesson);
+    const objectiveIdSet = new Set(objectives.map((objective) => objective.id));
+    const checked = new Set<string>();
+    const rawLessonCheckedIds = rawCheckedIds[lesson.id];
+    if (Array.isArray(rawLessonCheckedIds)) {
+      for (const objectiveId of rawLessonCheckedIds) {
+        if (typeof objectiveId === "string" && objectiveIdSet.has(objectiveId)) {
+          checked.add(objectiveId);
+        }
       }
+    }
+
+    const rawLegacyLessonChecks = rawLegacyCheckedObjectives[lesson.id];
+    if (Array.isArray(rawLegacyLessonChecks)) {
+      for (const value of rawLegacyLessonChecks) {
+        if (typeof value === "string" && objectiveIdSet.has(value)) {
+          checked.add(value);
+        } else if (Number.isInteger(value) && typeof value === "number" && value >= 0 && value < objectives.length) {
+          checked.add(objectives[value].id);
+        }
+      }
+    }
+
+    const orderedCheckedIds = objectives
+      .map((objective) => objective.id)
+      .filter((objectiveId) => checked.has(objectiveId));
+    if (orderedCheckedIds.length > 0) {
+      checkedObjectiveIdsByLessonId[lesson.id] = orderedCheckedIds;
+    }
+
+    if (objectives.length > 0) {
+      if (objectives.every((objective) => checked.has(objective.id))) {
+        completed.add(lesson.id);
+      }
+    } else if (rawCompletedLessonIds.has(lesson.id) || legacyReviewedLessonIds.has(lesson.id)) {
+      completed.add(lesson.id);
     }
   }
 
   return {
     lastLessonId,
-    reviewedLessonIds,
-    checkedObjectivesByLessonId,
+    completedLessonIds: orderLessonIds(completed, lessons),
+    checkedObjectiveIdsByLessonId,
   };
 }
 
@@ -172,16 +213,16 @@ function getLessonCardSummary(lesson: TutorialLesson): string {
   if (typeof lesson.description === "string") {
     return lesson.description;
   }
-  return lesson.objectives?.[0] ?? "Interactive lesson";
+  return getLessonObjectives(lesson)[0]?.text ?? "Interactive lesson";
 }
 
-function isLessonReviewed(lesson: TutorialLesson, progress: TutorialProgressState): boolean {
-  const objectiveCount = lesson.objectives?.length ?? 0;
-  if (objectiveCount === 0) {
-    return progress.reviewedLessonIds.includes(lesson.id);
+function isLessonComplete(lesson: TutorialLesson, progress: TutorialProgressState): boolean {
+  const objectives = getLessonObjectives(lesson);
+  if (objectives.length === 0) {
+    return progress.completedLessonIds.includes(lesson.id);
   }
-  const checkedCount = progress.checkedObjectivesByLessonId[lesson.id]?.length ?? 0;
-  return checkedCount === objectiveCount;
+  const checkedIds = new Set(progress.checkedObjectiveIdsByLessonId[lesson.id] ?? []);
+  return objectives.every((objective) => checkedIds.has(objective.id));
 }
 
 const Tutorial: React.FC<TutorialProps> = ({
@@ -197,33 +238,58 @@ const Tutorial: React.FC<TutorialProps> = ({
   const [viewMode, setViewMode] = useState<"course" | "lesson">("course");
   const [tutorialProgress, setTutorialProgress] = useState<TutorialProgressState>(initialProgress.progress);
   const [canStoreProgress, setCanStoreProgress] = useState(initialProgress.canStoreProgress);
+  const courseHeadingRef = React.useRef<HTMLHeadingElement>(null);
+  const lessonHeadingRef = React.useRef<HTMLHeadingElement>(null);
+  const focusAfterViewChangeRef = React.useRef(false);
   const currentLessonIndex = Math.max(
     0,
     lessons.findIndex((candidate) => candidate.id === tutorialProgress.lastLessonId)
   );
   const lesson: TutorialLesson = lessons[currentLessonIndex];
-  const lessonObjectives = lesson.objectives ?? [];
-  const checkedObjectiveIndexes = new Set(
-    (tutorialProgress.checkedObjectivesByLessonId[lesson.id] ?? []).filter((index) => index < lessonObjectives.length)
+  const lessonObjectives = getLessonObjectives(lesson);
+  const checkedObjectiveIds = new Set(
+    (tutorialProgress.checkedObjectiveIdsByLessonId[lesson.id] ?? []).filter((objectiveId) =>
+      lessonObjectives.some((objective) => objective.id === objectiveId)
+    )
   );
-  const reviewedLessonIds = new Set(lessons.filter((candidate) => isLessonReviewed(candidate, tutorialProgress)).map((candidate) => candidate.id));
-  const isCurrentLessonReviewed = reviewedLessonIds.has(lesson.id);
-  const reviewedLessonCount = reviewedLessonIds.size;
-  const nextUncheckedLessonIndex = Math.max(
-    0,
-    lessons.findIndex((candidate) => !reviewedLessonIds.has(candidate.id))
-  );
-  const courseActionLessonIndex = isCurrentLessonReviewed ? nextUncheckedLessonIndex : currentLessonIndex;
-  const hasStartedCourse = currentLessonIndex > 0 || reviewedLessonCount > 0;
-  const coursePrimaryActionLabel = hasStartedCourse ? "Continue course" : "Start course";
-  const courseHeroActionLabel = hasStartedCourse ? "Continue" : "Start";
+  const completedLessonIds = new Set(lessons.filter((candidate) => isLessonComplete(candidate, tutorialProgress)).map((candidate) => candidate.id));
+  const isCurrentLessonComplete = completedLessonIds.has(lesson.id);
+  const completedLessonCount = completedLessonIds.size;
+  const nextIncompleteLessonIndex = lessons.findIndex((candidate) => !completedLessonIds.has(candidate.id));
+  const allLessonsComplete = lessons.length > 0 && completedLessonCount === lessons.length;
+  const courseActionLessonIndex = allLessonsComplete
+    ? 0
+    : isCurrentLessonComplete && nextIncompleteLessonIndex >= 0
+      ? nextIncompleteLessonIndex
+      : currentLessonIndex;
+  const hasStartedCourse = currentLessonIndex > 0 || completedLessonCount > 0;
+  const coursePrimaryActionLabel = allLessonsComplete
+    ? "Review course"
+    : hasStartedCourse
+      ? "Continue course"
+      : "Start course";
+  const courseHeroActionLabel = allLessonsComplete ? "Review" : hasStartedCourse ? "Continue" : "Start";
   const courseProgressPercent = lessons.length > 0
-    ? Math.round((reviewedLessonCount / lessons.length) * 100)
+    ? Math.round((completedLessonCount / lessons.length) * 100)
     : 0;
+  const objectiveProgressLabel = lessonObjectives.length > 0
+    ? `${checkedObjectiveIds.size} / ${lessonObjectives.length} objectives self-checked`
+    : isCurrentLessonComplete
+      ? "Lesson self-checked"
+      : "Ready to self-check";
 
   React.useEffect(() => {
     setCanStoreProgress(saveStoredTutorialProgress(tutorialProgress));
   }, [tutorialProgress]);
+
+  React.useEffect(() => {
+    if (!focusAfterViewChangeRef.current) return;
+    focusAfterViewChangeRef.current = false;
+    window.requestAnimationFrame(() => {
+      const target = viewMode === "course" ? courseHeadingRef.current : lessonHeadingRef.current;
+      target?.focus();
+    });
+  }, [viewMode]);
 
   const PIECE_LESSONS = [
     { id: "m2_l2_swordsman", piece: PieceType.Swordsman, label: "Sword" },
@@ -251,11 +317,17 @@ const Tutorial: React.FC<TutorialProps> = ({
   const openLessonAtIndex = (lessonIndex: number) => {
     const nextLesson = lessons[lessonIndex];
     if (!nextLesson) return;
+    focusAfterViewChangeRef.current = true;
     updateProgress((previous) => ({
       ...previous,
       lastLessonId: nextLesson.id,
     }));
     setViewMode("lesson");
+  };
+
+  const openCourseOverview = () => {
+    focusAfterViewChangeRef.current = true;
+    setViewMode("course");
   };
 
   const goToNextLesson = () => {
@@ -272,7 +344,7 @@ const Tutorial: React.FC<TutorialProps> = ({
 
   const restartTutorial = () => {
     setTutorialProgress(createDefaultTutorialProgress(lessons));
-    setViewMode("course");
+    openCourseOverview();
   };
 
   const jumpToLesson = (lessonId: string) => {
@@ -280,45 +352,53 @@ const Tutorial: React.FC<TutorialProps> = ({
     if (idx !== -1) openLessonAtIndex(idx);
   };
 
-  const toggleObjective = (objectiveIndex: number) => {
+  const toggleObjective = (objectiveId: string) => {
     updateProgress((previous) => {
-      const checkedObjectivesByLessonId = { ...previous.checkedObjectivesByLessonId };
-      const checked = new Set(checkedObjectivesByLessonId[lesson.id] ?? []);
-      if (checked.has(objectiveIndex)) {
-        checked.delete(objectiveIndex);
+      const checkedObjectiveIdsByLessonId = { ...previous.checkedObjectiveIdsByLessonId };
+      const completedLessonIds = new Set(previous.completedLessonIds);
+      const checked = new Set(checkedObjectiveIdsByLessonId[lesson.id] ?? []);
+      if (checked.has(objectiveId)) {
+        checked.delete(objectiveId);
       } else {
-        checked.add(objectiveIndex);
+        checked.add(objectiveId);
       }
-      const nextChecked = Array.from(checked).sort((a, b) => a - b);
+      const nextChecked = lessonObjectives
+        .map((objective) => objective.id)
+        .filter((id) => checked.has(id));
       if (nextChecked.length > 0) {
-        checkedObjectivesByLessonId[lesson.id] = nextChecked;
+        checkedObjectiveIdsByLessonId[lesson.id] = nextChecked;
       } else {
-        delete checkedObjectivesByLessonId[lesson.id];
+        delete checkedObjectiveIdsByLessonId[lesson.id];
+      }
+      if (lessonObjectives.every((objective) => checked.has(objective.id))) {
+        completedLessonIds.add(lesson.id);
+      } else {
+        completedLessonIds.delete(lesson.id);
       }
 
       return {
         ...previous,
-        checkedObjectivesByLessonId,
+        completedLessonIds: orderLessonIds(completedLessonIds, lessons),
+        checkedObjectiveIdsByLessonId,
       };
     });
   };
 
-  const markLessonReviewed = () => {
+  const markLessonComplete = () => {
     updateProgress((previous) => {
-      const checkedObjectivesByLessonId = { ...previous.checkedObjectivesByLessonId };
-      const reviewed = new Set(previous.reviewedLessonIds);
+      const checkedObjectiveIdsByLessonId = { ...previous.checkedObjectiveIdsByLessonId };
+      const completedLessonIds = new Set(previous.completedLessonIds);
       if (lessonObjectives.length > 0) {
-        checkedObjectivesByLessonId[lesson.id] = lessonObjectives.map((_, index) => index);
-        reviewed.delete(lesson.id);
+        checkedObjectiveIdsByLessonId[lesson.id] = lessonObjectives.map((objective) => objective.id);
       } else {
-        delete checkedObjectivesByLessonId[lesson.id];
-        reviewed.add(lesson.id);
+        delete checkedObjectiveIdsByLessonId[lesson.id];
       }
+      completedLessonIds.add(lesson.id);
 
       return {
         ...previous,
-        checkedObjectivesByLessonId,
-        reviewedLessonIds: orderLessonIds(reviewed, lessons),
+        checkedObjectiveIdsByLessonId,
+        completedLessonIds: orderLessonIds(completedLessonIds, lessons),
       };
     });
   };
@@ -359,14 +439,14 @@ const Tutorial: React.FC<TutorialProps> = ({
 
           <div className="tutorial-course-progress-card">
             <div className="tutorial-course-progress-heading">
-              <span>Checklist progress</span>
+              <span>Course progress</span>
               <strong>{courseProgressPercent}%</strong>
             </div>
             <div className="tutorial-course-progress-track" aria-hidden="true">
               <span style={{ width: `${courseProgressPercent}%` }} />
             </div>
             <div className="tutorial-course-progress-meta" role="status" aria-label="Course progress" aria-live="polite">
-              {reviewedLessonCount} / {lessons.length} lessons checked
+              {completedLessonCount} / {lessons.length} lessons self-checked
             </div>
             <div className="tutorial-course-actions">
               <button type="button" className="tutorial-course-primary-action" onClick={() => openLessonAtIndex(courseActionLessonIndex)}>
@@ -384,7 +464,7 @@ const Tutorial: React.FC<TutorialProps> = ({
           <div className="tutorial-course-hero">
             <div>
               <p className="tutorial-course-kicker">Learn by playing</p>
-              <h2>Castles course</h2>
+              <h2 ref={courseHeadingRef} tabIndex={-1}>Castles course</h2>
             </div>
             <button type="button" className="tutorial-course-primary-action" onClick={() => openLessonAtIndex(courseActionLessonIndex)}>
               {courseHeroActionLabel}
@@ -393,7 +473,7 @@ const Tutorial: React.FC<TutorialProps> = ({
 
           <div className="tutorial-course-modules">
             {courseModules.map((module) => {
-              const moduleReviewedCount = module.lessons.filter(({ lesson: moduleLesson }) => reviewedLessonIds.has(moduleLesson.id)).length;
+              const moduleCompletedCount = module.lessons.filter(({ lesson: moduleLesson }) => completedLessonIds.has(moduleLesson.id)).length;
               return (
                 <section className="tutorial-course-module" key={module.key} aria-labelledby={`tutorial-module-${module.key}`}>
                   <div className="tutorial-course-module-heading">
@@ -402,19 +482,19 @@ const Tutorial: React.FC<TutorialProps> = ({
                       <h3 id={`tutorial-module-${module.key}`}>{module.label}</h3>
                       <p>{module.subtitle}</p>
                     </div>
-                    <span>{moduleReviewedCount} / {module.lessons.length}</span>
+                    <span>{moduleCompletedCount} / {module.lessons.length}</span>
                   </div>
                   <div className="tutorial-course-grid">
                     {module.lessons.map(({ lesson: moduleLesson, index }) => {
-                      const isReviewed = reviewedLessonIds.has(moduleLesson.id);
+                      const isComplete = completedLessonIds.has(moduleLesson.id);
                       const isCurrent = moduleLesson.id === lesson.id;
-                      const objectiveCount = moduleLesson.objectives?.length ?? 0;
-                      const cardStatusLabel = isReviewed ? "Checklist checked" : isCurrent ? "Current lesson" : "Not checked";
+                      const objectiveCount = getLessonObjectives(moduleLesson).length;
+                      const cardStatusLabel = isComplete ? "Objectives self-checked" : isCurrent ? "Current lesson" : "Not self-checked";
                       return (
                         <button
                           key={moduleLesson.id}
                           type="button"
-                          className={`tutorial-course-card ${isReviewed ? "reviewed" : ""} ${isCurrent ? "current" : ""}`}
+                          className={`tutorial-course-card ${isComplete ? "reviewed" : ""} ${isCurrent ? "current" : ""}`}
                           onClick={() => openLessonAtIndex(index)}
                           aria-label={`Open ${moduleLesson.title}. ${cardStatusLabel}${objectiveCount > 0 ? `, ${objectiveCount} objectives` : ""}`}
                           aria-current={isCurrent ? "step" : undefined}
@@ -427,8 +507,8 @@ const Tutorial: React.FC<TutorialProps> = ({
                               <span className="tutorial-course-card-meta">{objectiveCount} objectives</span>
                             )}
                           </span>
-                          <span className={`tutorial-course-card-status ${isReviewed ? "reviewed" : isCurrent ? "current" : ""}`}>
-                            {isReviewed ? "Checked" : isCurrent ? "Current" : "Open"}
+                          <span className={`tutorial-course-card-status ${isComplete ? "reviewed" : isCurrent ? "current" : ""}`}>
+                            {isComplete ? "Self-checked" : isCurrent ? "Current" : "Open"}
                           </span>
                         </button>
                       );
@@ -449,7 +529,7 @@ const Tutorial: React.FC<TutorialProps> = ({
         {shellNav}
 
         <div className="tutorial-lesson-header" role="group" aria-label="Current lesson">
-          <h2 className="tutorial-title">{lesson.title}</h2>
+          <h2 className="tutorial-title" ref={lessonHeadingRef} tabIndex={-1}>{lesson.title}</h2>
           <div className="tutorial-lesson-meta" aria-label="Lesson position">
             <span className="tutorial-module-chip">{lessonModuleLabel}</span>
             <span className="tutorial-lesson-progress-summary">{lessonProgressLabel}</span>
@@ -468,7 +548,7 @@ const Tutorial: React.FC<TutorialProps> = ({
             {currentLessonIndex + 1} / {lessons.length}
           </span>
           <div className="tutorial-control-strip" role="toolbar" aria-label="Lesson controls">
-            <button type="button" onClick={() => setViewMode("course")} className="tutorial-step-button">
+            <button type="button" onClick={openCourseOverview} className="tutorial-step-button">
               Course
             </button>
             <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
@@ -529,29 +609,30 @@ const Tutorial: React.FC<TutorialProps> = ({
 
         {lessonObjectives.length > 0 ? (
           <div className={`tutorial-list-section tutorial-objectives ${isDark ? "dark" : "light"}`} role="group" aria-label="Lesson objectives">
-            <h3>Review checklist:</h3>
+            <h3>Objectives:</h3>
+            <p className="tutorial-objective-progress">{objectiveProgressLabel}</p>
             <div className="tutorial-objective-list">
-              {lessonObjectives.map((obj, i) => (
-                <label className="tutorial-objective-item" key={i}>
+              {lessonObjectives.map((objective) => (
+                <label className="tutorial-objective-item" key={objective.id}>
                   <input
                     type="checkbox"
-                    checked={checkedObjectiveIndexes.has(i)}
-                    onChange={() => toggleObjective(i)}
+                    checked={checkedObjectiveIds.has(objective.id)}
+                    onChange={() => toggleObjective(objective.id)}
                   />
-                  <span>{obj}</span>
+                  <span>{objective.text}</span>
                 </label>
               ))}
             </div>
-            <button type="button" className="tutorial-review-button" onClick={markLessonReviewed} disabled={isCurrentLessonReviewed}>
-              {isCurrentLessonReviewed ? "Checklist checked" : "Mark checklist checked"}
+            <button type="button" className="tutorial-review-button" onClick={markLessonComplete} disabled={isCurrentLessonComplete}>
+              {isCurrentLessonComplete ? "Objectives self-checked" : "Mark objectives self-checked"}
             </button>
           </div>
         ) : (
           <div className={`tutorial-list-section tutorial-objectives ${isDark ? "dark" : "light"}`} role="group" aria-label="Lesson objectives">
-            <h3>Review checklist:</h3>
+            <h3>Objectives:</h3>
             <p className="tutorial-objective-placeholder">Read the position, inspect the board, and continue when it makes sense.</p>
-            <button type="button" className="tutorial-review-button" onClick={markLessonReviewed} disabled={isCurrentLessonReviewed}>
-              {isCurrentLessonReviewed ? "Checklist checked" : "Mark checked"}
+            <button type="button" className="tutorial-review-button" onClick={markLessonComplete} disabled={isCurrentLessonComplete}>
+              {isCurrentLessonComplete ? "Lesson self-checked" : "Mark lesson self-checked"}
             </button>
           </div>
         )}

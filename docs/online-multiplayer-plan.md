@@ -407,6 +407,18 @@ Remaining work:
 - Move Watch/Archive search and richer filters into indexed server queries once the read model carries those fields.
 - Decide whether current public-game preview belongs in Lobby long-term or should move entirely into Watch after Watch thumbnails exist.
 
+## Phase 6P: Learn Completion Progress Hardening
+
+Goal: make Learn progress closer to a Lichess-style course without claiming engine-graded mastery.
+
+Status: implemented locally on 2026-06-02. Learn now separates resume position from completed lessons, normalizes checked objectives by lesson-scoped objective ids instead of array indexes or objective wording, derives completion from objective checks, and demotes completion if a checked objective is later unchecked. Current index-based progress is normalized into the new shape on load, while unsupported legacy archaeology stays out of scope. Course copy now says lessons and objectives are self-checked rather than "mastered" or engine-verified.
+
+Remaining work:
+
+- Convert important lesson objectives from generated content-based ids to explicit authored ids as lesson text stabilizes.
+- Add engine-graded objectives only after each target board state and validation event is explicit and tested.
+- Add richer lesson theory and practice modules once the ruleset is stable enough to avoid teaching stale mechanics.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.

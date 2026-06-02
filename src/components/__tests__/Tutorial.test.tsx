@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import Tutorial from "../Tutorial";
 import GameBoard from "../Game";
 import { ThemeProvider } from "../../contexts/ThemeContext";
+import { getAllLessons } from "../../tutorial";
+import { getLessonObjectives } from "../../tutorial/objectives";
 
 vi.mock("../Game", () => ({
   default: vi.fn(() => <div data-testid="tutorial-board" />),
@@ -12,6 +14,7 @@ vi.mock("../PieceImages", () => ({
 }));
 
 const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
+const VICTORY_OBJECTIVE_ID = "m0-01-victory-conditions-objective-1";
 
 function renderTutorial(overrides: Partial<React.ComponentProps<typeof Tutorial>> = {}) {
   return render(
@@ -42,7 +45,7 @@ describe("Tutorial", () => {
     expect(screen.getByRole("button", { name: "Learn" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Learn Castles course" })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("0 / 35 lessons checked");
+    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("0 / 35 lessons self-checked");
     expect(screen.queryByTestId("tutorial-board")).not.toBeInTheDocument();
   });
 
@@ -110,7 +113,8 @@ describe("Tutorial", () => {
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_01_victory_conditions",
-        reviewedLessonIds: [],
+        completedLessonIds: [],
+        checkedObjectiveIdsByLessonId: {},
       })
     );
 
@@ -131,42 +135,117 @@ describe("Tutorial", () => {
     expect(screen.queryByTestId("tutorial-board")).not.toBeInTheDocument();
   });
 
-  it("stores objective checks and course review progress", () => {
+  it("moves focus to the new heading when switching between course and lesson", async () => {
+    renderTutorial();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 2, name: "0 Welcome" })).toHaveFocus();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Course" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 2, name: "Castles course" })).toHaveFocus();
+    });
+  });
+
+  it("stores objective checks by stable id and course completion progress", () => {
     renderTutorial();
 
     fireEvent.click(screen.getByRole("button", { name: /Open 0\.1 How to win/ }));
     fireEvent.click(screen.getByLabelText("Right-click both castles to confirm their controller."));
 
-    expect(screen.getByRole("button", { name: "Checklist checked" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Objectives self-checked" })).toBeDisabled();
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_01_victory_conditions",
-        reviewedLessonIds: [],
+        completedLessonIds: ["m0_01_victory_conditions"],
+        checkedObjectiveIdsByLessonId: {
+          m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID],
+        },
+      })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Course" }));
+    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons self-checked");
+    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Objectives self-checked/ })).toHaveTextContent("Self-checked");
+  });
+
+  it("removes lesson completion when an objective is unchecked", () => {
+    renderTutorial();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open 0\.1 How to win/ }));
+    fireEvent.click(screen.getByLabelText("Right-click both castles to confirm their controller."));
+    fireEvent.click(screen.getByLabelText("Right-click both castles to confirm their controller."));
+
+    expect(screen.getByRole("button", { name: "Mark objectives self-checked" })).toBeEnabled();
+    expect(readStoredProgress()).toEqual(
+      expect.objectContaining({
+        completedLessonIds: [],
+        checkedObjectiveIdsByLessonId: {},
+      })
+    );
+  });
+
+  it("migrates current index-based objective progress into objective ids", () => {
+    localStorage.setItem(
+      TUTORIAL_PROGRESS_KEY,
+      JSON.stringify({
+        lastLessonId: "m0_01_victory_conditions",
         checkedObjectivesByLessonId: {
           m0_01_victory_conditions: [0],
         },
       })
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Course" }));
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons checked");
-    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Checklist checked/ })).toHaveTextContent("Checked");
+    renderTutorial();
+
+    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons self-checked");
+    expect(readStoredProgress()).toEqual(
+      expect.objectContaining({
+        completedLessonIds: ["m0_01_victory_conditions"],
+        checkedObjectiveIdsByLessonId: {
+          m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID],
+        },
+      })
+    );
   });
 
-  it("derives reviewed state from checked objectives instead of trusting stale stored flags", () => {
+  it("migrates current no-objective reviewed lessons into completed lessons", () => {
+    localStorage.setItem(
+      TUTORIAL_PROGRESS_KEY,
+      JSON.stringify({
+        lastLessonId: "m0_00_welcome",
+        reviewedLessonIds: ["m0_00_welcome"],
+      })
+    );
+
+    renderTutorial();
+
+    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons self-checked");
+    expect(screen.getByRole("button", { name: /Open 0 Welcome\. Objectives self-checked/ })).toHaveTextContent("Self-checked");
+    expect(readStoredProgress()).toEqual(
+      expect.objectContaining({
+        completedLessonIds: ["m0_00_welcome"],
+        checkedObjectiveIdsByLessonId: {},
+      })
+    );
+  });
+
+  it("derives completion from checked objectives instead of trusting stale stored flags", () => {
     localStorage.setItem(
       TUTORIAL_PROGRESS_KEY,
       JSON.stringify({
         lastLessonId: "m0_01_victory_conditions",
-        reviewedLessonIds: ["m0_01_victory_conditions"],
-        checkedObjectivesByLessonId: {},
+        completedLessonIds: ["m0_01_victory_conditions"],
+        checkedObjectiveIdsByLessonId: {},
       })
     );
 
     renderTutorial();
 
     expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Current lesson/ })).toHaveTextContent("Current");
-    expect(screen.queryByRole("button", { name: /Open 0\.1 How to win\. Checklist checked/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open 0\.1 How to win\. Objectives self-checked/ })).not.toBeInTheDocument();
   });
 
   it("lets users restart persisted tutorial progress", () => {
@@ -180,11 +259,60 @@ describe("Tutorial", () => {
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_00_welcome",
-        reviewedLessonIds: [],
-        checkedObjectivesByLessonId: {},
+        completedLessonIds: [],
+        checkedObjectiveIdsByLessonId: {},
       })
     );
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("0 / 35 lessons checked");
+    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("0 / 35 lessons self-checked");
+  });
+
+  it("sanitizes unknown lesson ids and invalid objective ids", () => {
+    localStorage.setItem(
+      TUTORIAL_PROGRESS_KEY,
+      JSON.stringify({
+        lastLessonId: "not_real",
+        completedLessonIds: ["not_real", "m0_00_welcome", "m0_01_victory_conditions"],
+        checkedObjectiveIdsByLessonId: {
+          m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID, "not-real"],
+        },
+        checkedObjectivesByLessonId: {
+          m2_l12_promotion: [999, -1, 0, "not-real"],
+        },
+      })
+    );
+
+    renderTutorial();
+
+    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("3 / 35 lessons self-checked");
+    expect(readStoredProgress()).toEqual(
+      expect.objectContaining({
+        lastLessonId: "m0_00_welcome",
+        completedLessonIds: ["m0_00_welcome", "m0_01_victory_conditions", "m2_l12_promotion"],
+        checkedObjectiveIdsByLessonId: {
+          m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID],
+          m2_l12_promotion: ["m2-l12-promotion-objective-1"],
+        },
+      })
+    );
+  });
+
+  it("shows a review action once every lesson is complete", () => {
+    const completedProgress = {
+      lastLessonId: "m0_00_welcome",
+      completedLessonIds: getAllLessons().map((lesson) => lesson.id),
+      checkedObjectiveIdsByLessonId: Object.fromEntries(
+        getAllLessons()
+          .map((lesson) => [lesson.id, getLessonObjectives(lesson).map((objective) => objective.id)])
+          .filter(([, objectiveIds]) => (objectiveIds as string[]).length > 0)
+      ),
+    };
+    localStorage.setItem(TUTORIAL_PROGRESS_KEY, JSON.stringify(completedProgress));
+
+    renderTutorial();
+
+    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("35 / 35 lessons self-checked");
+    expect(screen.getByRole("button", { name: "Review course" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review" })).toBeInTheDocument();
   });
 
   it("updates persisted progress when jumping through lesson shortcuts", () => {

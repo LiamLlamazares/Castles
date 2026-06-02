@@ -195,4 +195,12 @@ describe("Tutorial mobile layout CSS", () => {
     expect(boardCss).toMatch(/\.save-status-chip\s*\{[^}]*white-space:\s*nowrap;/s);
     expect(boardCss).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.save-status-chip\s*\{[^}]*font-size:\s*0\.62rem;/s);
   });
+
+  it("keeps tutorial objectives readable when objective text is long", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(boardCss).toContain(".tutorial-objective-progress");
+    expect(boardCss).toMatch(/\.tutorial-objective-item\s*\{[^}]*grid-template-columns:\s*auto minmax\(0,\s*1fr\);[^}]*overflow-wrap:\s*anywhere;/s);
+  });
 });
