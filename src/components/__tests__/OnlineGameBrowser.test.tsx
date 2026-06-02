@@ -1665,18 +1665,20 @@ describe("OnlineGameBrowser", () => {
 
   it("shows completed recent device games in Online Archive without duplicating public rows", async () => {
     const onReplay = vi.fn();
-    render(
+    const onClearRecentOnlineGames = vi.fn();
+    const loadGames = vi.fn().mockResolvedValue(directory([
+      summary({
+        gameId: "game_public_archive",
+        status: "complete",
+        archiveState: "archived",
+        updatedAt: "2026-06-01T12:05:00.000Z",
+        result: { winner: "w", reason: "resignation" },
+      }),
+    ]));
+    const { rerender } = render(
       <OnlineGameBrowser
         initialTab="archive"
-        loadGames={vi.fn().mockResolvedValue(directory([
-          summary({
-            gameId: "game_public_archive",
-            status: "complete",
-            archiveState: "archived",
-            updatedAt: "2026-06-01T12:05:00.000Z",
-            result: { winner: "w", reason: "resignation" },
-          }),
-        ]))}
+        loadGames={loadGames}
         recentOnlineGames={[
           {
             gameId: "game_unlisted_finished",
@@ -1702,6 +1704,7 @@ describe("OnlineGameBrowser", () => {
         onBack={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={onReplay}
+        onClearRecentOnlineGames={onClearRecentOnlineGames}
       />
     );
 
@@ -1719,6 +1722,72 @@ describe("OnlineGameBrowser", () => {
       within(recent).getByRole("button", { name: "Analyze recent online replay game_unlisted_finished" })
     );
     expect(onReplay).toHaveBeenCalledWith("game_unlisted_finished");
+
+    const clearButton = within(recent).getByRole("button", {
+      name: "Clear recent online replays on this device",
+    });
+    expect(clearButton).toHaveTextContent("Clear Recent Replays");
+    fireEvent.click(clearButton);
+    expect(onClearRecentOnlineGames).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Online Archive" })).toHaveFocus();
+    expect(screen.getByText("Recent device replay list cleared.")).toBeInTheDocument();
+
+    rerender(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={loadGames}
+        recentOnlineGames={[]}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={onReplay}
+        onClearRecentOnlineGames={onClearRecentOnlineGames}
+      />
+    );
+    expect(screen.queryByRole("region", { name: "Recent online games on this device" })).not.toBeInTheDocument();
+  });
+
+  it("does not carry the recent replay clear status into Watch", async () => {
+    const { rerender } = render(
+      <OnlineGameBrowser
+        activeTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        recentOnlineGames={[
+          {
+            gameId: "game_unlisted_finished",
+            role: "player",
+            seat: "b",
+            status: "complete",
+            lastSeenAt: "2026-06-01T13:00:00.000Z",
+          },
+        ]}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onClearRecentOnlineGames={vi.fn()}
+      />
+    );
+
+    const recent = await screen.findByRole("region", { name: "Recent online games on this device" });
+    fireEvent.click(
+      within(recent).getByRole("button", {
+        name: "Clear recent online replays on this device",
+      })
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Recent device replay list cleared.");
+
+    rerender(
+      <OnlineGameBrowser
+        activeTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        recentOnlineGames={[]}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onClearRecentOnlineGames={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("status")).not.toHaveTextContent("Recent device replay list cleared.");
   });
 
   it("filters public summaries by player name and game id", async () => {

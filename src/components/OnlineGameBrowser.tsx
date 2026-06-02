@@ -72,6 +72,7 @@ interface OnlineGameBrowserProps {
   onReplay: (gameId: string) => void;
   onSpectate: (gameId: string) => void;
   recentOnlineGames?: RecentOnlineGameRecord[];
+  onClearRecentOnlineGames?: () => void;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
   activeTab?: OnlineBrowserTab;
@@ -364,6 +365,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onReplay,
   onSpectate,
   recentOnlineGames = [],
+  onClearRecentOnlineGames,
   backLabel = "Back to game",
   initialTab = "lobby",
   activeTab,
@@ -401,8 +403,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const seekActionByIdRef = React.useRef(seekActionById);
   const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
+  const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
   const closedOwnedSeekPanelRef = React.useRef<HTMLElement>(null);
+  const [recentClearMessage, setRecentClearMessage] = React.useState("");
 
   React.useEffect(() => {
     if (activeTab === undefined) {
@@ -411,11 +415,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [activeTab, initialTab]);
 
   const setBrowserTab = React.useCallback((nextTab: OnlineBrowserTab) => {
+    setRecentClearMessage("");
     if (activeTab === undefined) {
       setUncontrolledTab(nextTab);
     }
     onTabChange?.(nextTab);
   }, [activeTab, onTabChange]);
+
+  React.useEffect(() => {
+    setRecentClearMessage("");
+  }, [tab]);
 
   React.useEffect(() => {
     seekActionByIdRef.current = seekActionById;
@@ -433,6 +442,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     closedOwnedSeekResponse
       ? "Your previous lobby listing is closed and no longer public."
       : "";
+
+  const handleClearRecentOnlineGames = React.useCallback(() => {
+    setRecentClearMessage("Recent device replay list cleared.");
+    onClearRecentOnlineGames?.();
+    archiveTabButtonRef.current?.focus();
+  }, [onClearRecentOnlineGames]);
 
   React.useEffect(() => {
     if (quickMatchStatus !== "waiting") return;
@@ -484,6 +499,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
     if (!background) {
       setCopyMessage("");
+      setRecentClearMessage("");
     }
     try {
       const response = await loadGames({
@@ -1052,6 +1068,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   };
 
   const copySpectatorLink = async (gameId: string) => {
+    setRecentClearMessage("");
     try {
       await copyOnlineInviteUrl(buildSpectatorUrl(window.location.href, gameId));
       setCopyMessage("Spectator link copied.");
@@ -1106,6 +1123,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             aria-pressed={tab === "archive"}
             className={tab === "archive" ? "active" : ""}
             onClick={() => setBrowserTab("archive")}
+            ref={archiveTabButtonRef}
           >
             Archive
           </button>
@@ -1239,7 +1257,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             ? "Loading public games..."
             : status === "error"
               ? "Could not load public games."
-              : copyMessage ||
+              : copyMessage || (tab === "archive" ? recentClearMessage : "") ||
                 `${visibleGames.length} public ${tab === "watch" ? "live" : "archived"} games shown${nextCursor ? "; more available" : ""}`}
       </div>
       {tab === "lobby" && seekStatus === "ready" && lastSeekCheckedAt ? (
@@ -1610,8 +1628,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             {recentArchivedGames.length > 0 && (
               <section className="online-browser-recent-games" aria-label="Recent online games on this device">
                 <div className="online-browser-side-list-header">
-                  <span className="online-browser-section-kicker">On this device</span>
-                  <strong>Recent completed online games</strong>
+                  <div className="online-browser-side-list-heading">
+                    <span className="online-browser-section-kicker">On this device</span>
+                    <strong>Recent completed online games</strong>
+                  </div>
+                  {onClearRecentOnlineGames && (
+                    <button
+                      type="button"
+                      className="online-browser-button subtle online-browser-clear-recent"
+                      onClick={handleClearRecentOnlineGames}
+                      aria-label="Clear recent online replays on this device"
+                    >
+                      Clear Recent Replays
+                    </button>
+                  )}
                 </div>
                 <p>
                   Completed online games opened in this browser can be replayed here when they are not already in the public archive.

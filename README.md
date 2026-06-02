@@ -41,6 +41,7 @@ The canonical rules source is the in-app rules content in `src/rules/rulesConten
 *   **`docs/architecture.md`**: Current architecture and source-of-truth boundaries.
 *   **`docs/ai-agent-api.md`**: Current AI agent interface and command boundary.
 *   **`docs/online-multiplayer-plan.md`**: Future online multiplayer architecture notes.
+*   **`docs/deployment/castles-server.md`**: Fresh server reinstall and production deployment runbook for the online Node service.
 *   **`docs/game-mechanics-research.md`**: Long-form mechanics research notes.
 
 ## Notes

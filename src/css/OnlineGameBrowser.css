@@ -472,6 +472,19 @@
   text-align: right;
 }
 
+.online-browser-side-list-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.online-browser-side-list-heading strong {
+  text-align: left;
+}
+
+.online-browser-clear-recent {
+  white-space: nowrap;
+}
+
 .online-game-row-featured {
   border-color: rgba(158, 208, 194, 0.28);
   background: rgba(158, 208, 194, 0.07);
@@ -595,6 +608,11 @@
   .online-game-actions button {
     width: 100%;
   }
+
+  .online-browser-recent-games .online-browser-side-list-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 520px) {
@@ -614,5 +632,9 @@
   .online-game-board-preview,
   .online-game-row-compact .online-game-board-preview {
     width: 58px;
+  }
+
+  .online-browser-clear-recent {
+    width: 100%;
   }
 }

@@ -1,6 +1,6 @@
 # Castles Server Deployment Runbook
 
-This runbook deploys one private-beta Node process behind nginx for `https://castles.ls314.com`.
+This runbook deploys one private-beta Node process behind nginx. It is written for the current server layout, but the domain and database values are deliberately parameterized so a fresh server can be rebuilt from zero.
 
 Do not deploy from a dirty worktree, a moving branch name, or an unreviewed commit. Use an exact commit SHA.
 
@@ -16,7 +16,216 @@ database name:     castles
 database user:     castles
 ```
 
-The server must already have Node, npm, git, nginx, certbot, PostgreSQL, `psql`, and `pg_dump`.
+`deploy/systemd/castles-node.service` is committed for the current `lukasz` and `/home/lukasz/Castles` layout. If you change the linux user or repo path above, edit the service unit in the repo before copying it, or the validation step below must fail.
+
+The server must have Node, npm, git, nginx, and certbot. PostgreSQL only has to run on this server when `DATABASE_URL` points to localhost. If `DATABASE_URL` points to a managed or separate PostgreSQL host, do not install a local PostgreSQL server just for Castles; use the remote PostgreSQL URL in `/etc/castles/castles.env`. `psql` and `pg_dump` are still useful on the app server for verification and backups, but they are client tools in that setup.
+
+## 0. Fresh Server Reinstall From Zero
+
+Use this section when rebuilding a new host. It intentionally does not include real secrets; replace every placeholder before running it.
+
+1. Create or verify the deployment user and home directory:
+
+```bash
+deploy_user="lukasz"
+if ! id "$deploy_user" >/dev/null 2>&1; then
+  sudo adduser --disabled-password --gecos "" "$deploy_user"
+fi
+deploy_group="$(id -gn "$deploy_user")"
+if [ ! -d "/home/$deploy_user" ]; then
+  sudo install -d -o "$deploy_user" -g "$deploy_group" -m 750 "/home/$deploy_user"
+fi
+test "$(stat -c %U "/home/$deploy_user")" = "$deploy_user"
+sudo -u "$deploy_user" test -w "/home/$deploy_user"
+```
+
+If the same account will be used for SSH-based deploys, add its SSH key and sudo policy separately before continuing.
+
+2. Install system packages:
+
+```bash
+sudo apt update
+sudo apt install -y git nginx certbot python3-certbot-nginx curl postgresql-client
+if [ ! -x /usr/bin/node ] || [ ! -x /usr/bin/npm ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+  sudo apt install -y nodejs
+fi
+/usr/bin/node --version
+/usr/bin/npm --version
+```
+
+The systemd unit uses `/usr/bin/npm`, so Node must be installed system-wide. An `nvm`-only install can pass an interactive shell check and still fail under systemd. The current service has been verified with Node 22.
+
+3. Clone the reviewed branch and select the exact commit:
+
+```bash
+deploy_user="lukasz"
+repo="/home/${deploy_user}/Castles"
+sha="<reviewed-commit-sha>"
+sudo -u "$deploy_user" git clone https://github.com/LiamLlamazares/Castles.git "$repo"
+cd "$repo"
+sudo -u "$deploy_user" git fetch origin online-action-log
+sudo -u "$deploy_user" git checkout --detach "$sha"
+test "$(sudo -u "$deploy_user" git rev-parse HEAD)" = "$sha"
+```
+
+4. Install dependencies and build:
+
+```bash
+deploy_user="lukasz"
+repo="/home/${deploy_user}/Castles"
+cd "$repo"
+sudo -u "$deploy_user" npm ci
+sudo -u "$deploy_user" npm run build
+sudo -u "$deploy_user" npm run server:build
+```
+
+5. Create the production env file:
+
+```bash
+sudo install -d -m 700 /etc/castles
+sudo tee /etc/castles/castles.env >/dev/null <<'ENV'
+NODE_ENV=production
+PORT=3000
+PUBLIC_BASE_URL=https://<domain>
+ONLINE_STORE_BACKEND=postgres
+DATABASE_URL=postgresql://<user>:<password>@<postgres-host>:5432/<database>
+CASTLES_STATIC_DIR=/home/lukasz/Castles/build
+CASTLES_REQUIRE_STATIC_DIR=1
+BUILD_ID=<timestamp-or-release-id>
+GIT_COMMIT=<reviewed-commit-sha>
+ENV
+sudo chmod 600 /etc/castles/castles.env
+```
+
+For a cloud database, use that cloud host in `DATABASE_URL`. Do not create a local PostgreSQL database unless the URL is intentionally `localhost`. URL-encode the database username and password inside `DATABASE_URL`; for example, a literal password `p@$&;#` becomes `p%40%24%26%3B%23`. Do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL.
+
+6. Prepare and verify the database connection before starting Node.
+
+For a managed or separate PostgreSQL host, create the database and app user in that provider first, allow this app server to connect through any database firewall, then verify from the app server:
+
+```bash
+db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env)"
+psql "$db_url" -c "select 1 as castles_db_ready;"
+```
+
+For a same-server localhost PostgreSQL deployment only, install PostgreSQL and create the database/user locally before running the same `psql` check. Use the raw password in `db_password`; use the URL-encoded form only inside `DATABASE_URL`. If the raw password contains a single quote, write it twice for the SQL literal or choose a different generated password.
+
+```bash
+sudo apt install -y postgresql
+db_name="<database>"
+db_user="<user>"
+db_password="<raw-password>"
+sudo -u postgres psql <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${db_user}') THEN
+    CREATE ROLE ${db_user} LOGIN PASSWORD '${db_password}';
+  ELSE
+    ALTER ROLE ${db_user} WITH LOGIN PASSWORD '${db_password}';
+  END IF;
+END
+\$\$;
+SELECT 'CREATE DATABASE ${db_name} OWNER ${db_user}'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${db_name}')\gexec
+GRANT CONNECT ON DATABASE ${db_name} TO ${db_user};
+\c ${db_name}
+GRANT USAGE, CREATE ON SCHEMA public TO ${db_user};
+SQL
+db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env)"
+psql "$db_url" -c "select 1 as castles_db_ready;"
+```
+
+7. Install and start the Node service:
+
+```bash
+deploy_user="lukasz"
+repo="/home/${deploy_user}/Castles"
+cd "$repo"
+grep -qx "User=${deploy_user}" deploy/systemd/castles-node.service
+grep -qx "WorkingDirectory=${repo}" deploy/systemd/castles-node.service
+sudo cp deploy/systemd/castles-node.service /etc/systemd/system/castles-node.service
+sudo systemctl daemon-reload
+sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
+sudo systemctl enable castles-node.service
+sudo systemctl restart castles-node.service
+systemctl is-active castles-node.service
+curl -sS http://127.0.0.1:3000/api/health
+```
+
+8. Configure nginx to proxy HTTPS to Node. If certbot already created the site file, confirm it proxies `/`, `/api/online/`, and `/ws` to `http://127.0.0.1:3000` and that `/ws` includes the `Upgrade` and `Connection "upgrade"` headers.
+
+If starting from a server with no nginx site yet, create a temporary HTTP-only proxy first, then let certbot upgrade it to HTTPS:
+
+```bash
+domain="<domain>"
+sudo tee /etc/nginx/sites-available/castles >/dev/null <<'NGINX'
+server {
+    listen 80;
+    server_name <domain>;
+
+    client_max_body_size 512k;
+
+    location /ws {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    location /api/online/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header Cache-Control "no-store" always;
+        add_header Vary "Authorization" always;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+NGINX
+sudo sed -i "s/<domain>/${domain}/g" /etc/nginx/sites-available/castles
+sudo ln -sfn /etc/nginx/sites-available/castles /etc/nginx/sites-enabled/castles
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d "$domain"
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+9. Verify externally:
+
+```bash
+sha="<reviewed-commit-sha>"
+curl -sS https://<domain>/api/health
+node scripts/deploy/check-online-smoke.mjs https://<domain> "$sha"
+npm run online:smoke:browser -- https://<domain> "$sha"
+```
+
+If nginx returns `502 Bad Gateway`, first check whether Node is active and listening on port 3000:
+
+```bash
+systemctl status castles-node.service --no-pager
+ss -ltnp | grep ':3000'
+curl -sS http://127.0.0.1:3000/api/health
+```
 
 ## 1. Preflight
 
@@ -175,6 +384,8 @@ GIT_COMMIT=<reviewed-commit-sha>
 
 Create or update the database and app user before starting the service. Replace the password with the same value used in `DATABASE_URL`.
 
+If `DATABASE_URL` points to a managed or separate PostgreSQL host, do this database/user setup on that database host or provider, not on the app server. On the app server, only the env file and connectivity check are required. The local `sudo -u postgres psql` block below is only for deployments where PostgreSQL intentionally runs on the same server as the app.
+
 Use a URL-encoded password in `DATABASE_URL`. For example, a literal password `p@$&;#` becomes `p%40%24%26%3B%23` inside the URL. In the SQL block below, escape a single quote in the literal password by writing it twice.
 
 ```bash
@@ -230,6 +441,8 @@ sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
 ```
 
 The `load_castles_db_env` helper above is reused by the verification snippet below. Keep these PostgreSQL commands in the same shell session.
+
+For a managed or separate PostgreSQL host, the verification block is the same after `load_castles_db_env`, provided the app server has the `psql` client installed and the database firewall allows this server to connect. If the provider does not allow `psql` from the app server, `sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env` is the minimum readiness check because it connects through the same Node PostgreSQL client used by the app.
 
 Install service/proxy config:
 

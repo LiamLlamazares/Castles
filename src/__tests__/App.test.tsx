@@ -308,6 +308,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onRefreshOwnedSeek,
     onJoinOwnedSeek,
     recentOnlineGames = [],
+    onClearRecentOnlineGames,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
@@ -330,6 +331,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onRefreshOwnedSeek?: () => void;
     onJoinOwnedSeek?: () => void;
     recentOnlineGames?: { gameId: string; status: string }[];
+    onClearRecentOnlineGames?: () => void;
     backLabel?: string;
   }) => {
     const [quickMatchStatus, setQuickMatchStatus] = React.useState("");
@@ -343,6 +345,11 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       <div>
         Recent online games: {recentOnlineGames.map((game) => `${game.gameId}:${game.status}`).join(",") || "none"}
       </div>
+      {onClearRecentOnlineGames && (
+        <button type="button" onClick={onClearRecentOnlineGames}>
+          Clear recent online replays
+        </button>
+      )}
       {quickMatchStatus && <div>Mock quick match status: {quickMatchStatus}</div>}
       <div>
         Quick match summary: {quickMatchSetupSummary
@@ -1872,6 +1879,31 @@ describe("App game setup lifecycle", () => {
     const stored = localStorage.getItem("castles_recent_online_games");
     expect(stored).toContain("game_recent_complete");
     expect(stored).not.toContain("secret");
+  });
+
+  it("clears completed online games remembered on this device from Online Archive", async () => {
+    localStorage.setItem(
+      "castles_recent_online_games",
+      JSON.stringify([
+        {
+          gameId: "game_recent_complete",
+          role: "player",
+          seat: "w",
+          status: "complete",
+          lastSeenAt: "2026-06-02T12:00:00.000Z",
+        },
+      ])
+    );
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+
+    expect(screen.getByText("Recent online games: game_recent_complete:complete")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear recent online replays" }));
+
+    expect(screen.getByText("Recent online games: none")).toBeInTheDocument();
+    expect(localStorage.getItem("castles_recent_online_games")).toBeNull();
   });
 
   it("seeds public player visibility and wires updates through the bearer-authorized client helper", async () => {

@@ -73,6 +73,7 @@ import {
 } from './online/client';
 import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from './online/types';
 import {
+  clearRecentOnlineGames,
   loadRecentOnlineGames,
   rememberRecentOnlineGame,
   type RecentOnlineGameRecord,
@@ -962,6 +963,11 @@ function App() {
       alert("Could not open this replay. The game may no longer allow spectator replay.");
     }
   };
+
+  const handleClearRecentOnlineGames = useCallback(() => {
+    clearRecentOnlineGames();
+    setRecentOnlineGames([]);
+  }, []);
 
   const handleCreateOnlineChallenge = async (
     board: Board,
@@ -1992,6 +1998,7 @@ function App() {
           onSpectate={handleSpectateOnlineGame}
           onReplay={handleReplayOnlineGame}
           recentOnlineGames={recentOnlineGames}
+          onClearRecentOnlineGames={handleClearRecentOnlineGames}
         />
       )}
 
