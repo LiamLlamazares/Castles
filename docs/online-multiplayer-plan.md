@@ -509,6 +509,22 @@ Remaining work:
 - Add a visible "new version available" prompt later if silent service-worker updates ever disrupt active long games.
 - Keep deployment smoke checks pinned to the expected commit so stale clients are caught immediately after server restarts.
 
+## Phase 6W: No-Account Recent Online Replays
+
+Goal: let players find and analyze completed friend-link games from the same browser even when those games are unlisted and therefore absent from the public Online Archive.
+
+Status: implemented locally on 2026-06-02. The app now records token-free recent online game ids in localStorage when an online player or spectator snapshot is seen, updates the record to complete once the server snapshot has a result, and passes those records to Online Archive. Archive now shows a distinct `Recent completed online games` section for completed local records that are not already present in the public archive, with `Analyze Replay` using the existing spectator snapshot and replay reconstruction path. Known-private games are not newly added to this token-free replay list.
+
+Verification:
+
+- Focused tests cover recent-online-game storage validation, ordering, de-duplication, malformed data cleanup, App snapshot-to-storage wiring without token leakage, Archive rendering, duplicate suppression against public rows, and replay button handoff.
+- Client build and server build passed locally.
+
+Remaining work:
+
+- Account-backed personal game history can replace or augment this local-only list once accounts exist.
+- If private games later need replay from the same browser, add an authenticated replay endpoint or token-safe local credential design rather than using public spectator snapshots.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.

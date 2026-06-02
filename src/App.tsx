@@ -72,6 +72,11 @@ import {
   OnlineSpectatorParams,
 } from './online/client';
 import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from './online/types';
+import {
+  loadRecentOnlineGames,
+  rememberRecentOnlineGame,
+  type RecentOnlineGameRecord,
+} from './online/recentGames';
 import type { OnlineGameVisibility, OnlinePlayerSettableGameVisibility } from './online/visibility';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
@@ -306,6 +311,9 @@ function App() {
     parseOnlineSpectatorParams(window.location.href)
   );
   const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
+  const [recentOnlineGames, setRecentOnlineGames] = useState<RecentOnlineGameRecord[]>(() =>
+    loadRecentOnlineGames()
+  );
   const [onlineOpponentInviteUrl, setOnlineOpponentInviteUrl] = useState<string | null>(() =>
     onlineJoin?.seat === "w" ? resolveOnlineOpponentInviteUrl(onlineJoin.gameId) : null
   );
@@ -333,6 +341,9 @@ function App() {
   const isSaveDialogOpen = saveGameDialog !== null;
   const isFirstRunIntroVisible = isFirstRunIntroOpen && !isRulesPage;
   const isAppModalOpen = isSaveDialogOpen || isFirstRunIntroVisible;
+  const onlineSnapshotVisibility = onlineSnapshot
+    ? onlineVisibilityByGameId[onlineSnapshot.gameId]
+    : undefined;
 
   useEffect(() => {
     if (isRulesPage || onlineJoin || onlineSpectator || onlineChallenge) return;
@@ -477,6 +488,19 @@ function App() {
       cancelled = true;
     };
   }, [onlineJoin]);
+
+  useEffect(() => {
+    if (!onlineSnapshot || (!onlineJoin && !onlineSpectator)) return;
+    if (onlineSnapshotVisibility === "private") return;
+    setRecentOnlineGames(
+      rememberRecentOnlineGame({
+        gameId: onlineSnapshot.gameId,
+        status: onlineSnapshot.result ? "complete" : "active",
+        role: onlineJoin ? "player" : "spectator",
+        seat: onlineJoin?.seat,
+      })
+    );
+  }, [onlineJoin, onlineSnapshot?.gameId, onlineSnapshot?.result, onlineSnapshotVisibility, onlineSpectator]);
 
   useEffect(() => {
     if (!onlineChallenge) return;
@@ -1946,6 +1970,7 @@ function App() {
           onJoinOwnedSeek={openSeekResponse?.gameInvite ? handleJoinOwnedOpenSeek : undefined}
           onSpectate={handleSpectateOnlineGame}
           onReplay={handleReplayOnlineGame}
+          recentOnlineGames={recentOnlineGames}
         />
       )}
 

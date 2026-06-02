@@ -20,6 +20,7 @@ import type {
   OpenSeekDirectoryResponse,
   OpenSeekSummary,
 } from "../online/seeks";
+import type { RecentOnlineGameRecord } from "../online/recentGames";
 import { PieceType } from "../Constants";
 import "../css/OnlineGameBrowser.css";
 
@@ -70,6 +71,7 @@ interface OnlineGameBrowserProps {
   ownedSeekIds?: string[];
   onReplay: (gameId: string) => void;
   onSpectate: (gameId: string) => void;
+  recentOnlineGames?: RecentOnlineGameRecord[];
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
   activeTab?: OnlineBrowserTab;
@@ -97,6 +99,24 @@ function formatUpdatedAt(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatRecentOnlineGameTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recently";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatRecentOnlineGameRole(record: RecentOnlineGameRecord): string {
+  if (record.role === "spectator") return "Spectated";
+  if (record.seat === "w") return "Played White";
+  if (record.seat === "b") return "Played Black";
+  return "Played";
 }
 
 function searchText(summary: OnlineGameSummary): string {
@@ -339,6 +359,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   ownedSeekIds = [],
   onReplay,
   onSpectate,
+  recentOnlineGames = [],
   backLabel = "Back to game",
   initialTab = "lobby",
   activeTab,
@@ -682,6 +703,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return visibleGames.filter((game) => game.gameId !== watchMostActiveGame.gameId);
   }, [tab, visibleGames, watchMostActiveGame]);
 
+  const recentArchivedGames = React.useMemo(() => {
+    if (tab !== "archive") return [];
+    const publicGameIds = new Set(publicGames.map((game) => game.gameId));
+    return recentOnlineGames
+      .filter((game) => game.status === "complete")
+      .filter((game) => !publicGameIds.has(game.gameId))
+      .slice(0, 6);
+  }, [publicGames, recentOnlineGames, tab]);
+
   const visibleOpenSeeks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return openSeeks
@@ -856,6 +886,35 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               Copy Link
             </button>
           )}
+        </div>
+      </article>
+    );
+  };
+
+  const renderRecentOnlineGameRow = (record: RecentOnlineGameRecord) => {
+    return (
+      <article key={record.gameId} className="online-game-row online-recent-game-row">
+        <div className="online-game-row-main">
+          <div className="online-game-players">
+            <span className="online-game-kicker">Recent on this device</span>
+            <strong>{record.gameId}</strong>
+            <span>{formatRecentOnlineGameRole(record)}</span>
+          </div>
+          <div className="online-game-meta">
+            <span className="online-game-pill complete">Complete</span>
+            <span>Last opened {formatRecentOnlineGameTime(record.lastSeenAt)}</span>
+            <span>Unlisted friend games may only appear here on this browser.</span>
+          </div>
+        </div>
+        <div className="online-game-actions">
+          <button
+            type="button"
+            className="online-browser-button primary"
+            onClick={() => onReplay(record.gameId)}
+            aria-label={`Analyze recent online replay ${record.gameId}`}
+          >
+            Analyze Replay
+          </button>
         </div>
       </article>
     );
@@ -1544,6 +1603,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ) : (
         <main className="online-browser-list" aria-label="Public archived games">
           <>
+            {recentArchivedGames.length > 0 && (
+              <section className="online-browser-recent-games" aria-label="Recent online games on this device">
+                <div className="online-browser-side-list-header">
+                  <span className="online-browser-section-kicker">On this device</span>
+                  <strong>Recent completed online games</strong>
+                </div>
+                <p>
+                  Unlisted friend games stay out of the public archive, but completed games you opened here can still be replayed from this browser.
+                </p>
+                {recentArchivedGames.map(renderRecentOnlineGameRow)}
+              </section>
+            )}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty">
                 <h2>{hasActiveFilters && publicGames.length > 0 ? "No public games match these filters." : emptyTitle}</h2>

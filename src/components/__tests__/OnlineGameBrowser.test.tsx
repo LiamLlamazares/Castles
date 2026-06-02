@@ -1663,6 +1663,60 @@ describe("OnlineGameBrowser", () => {
     expect(within(row).queryByRole("button", { name: "Copy spectator link for game_public_archive" })).not.toBeInTheDocument();
   });
 
+  it("shows completed recent device games in Online Archive without duplicating public rows", async () => {
+    const onReplay = vi.fn();
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({
+            gameId: "game_public_archive",
+            status: "complete",
+            archiveState: "archived",
+            updatedAt: "2026-06-01T12:05:00.000Z",
+            result: { winner: "w", reason: "resignation" },
+          }),
+        ]))}
+        recentOnlineGames={[
+          {
+            gameId: "game_private_finished",
+            role: "player",
+            seat: "b",
+            status: "complete",
+            lastSeenAt: "2026-06-01T13:00:00.000Z",
+          },
+          {
+            gameId: "game_public_archive",
+            role: "player",
+            seat: "w",
+            status: "complete",
+            lastSeenAt: "2026-06-01T12:05:00.000Z",
+          },
+          {
+            gameId: "game_active_recent",
+            role: "spectator",
+            status: "active",
+            lastSeenAt: "2026-06-01T12:30:00.000Z",
+          },
+        ]}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={onReplay}
+      />
+    );
+
+    const recent = await screen.findByRole("region", { name: "Recent online games on this device" });
+    expect(recent).toHaveTextContent("game_private_finished");
+    expect(recent).toHaveTextContent("Played Black");
+    expect(recent).not.toHaveTextContent("game_active_recent");
+    expect(within(recent).queryByText("game_public_archive")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(recent).getByRole("button", { name: "Analyze recent online replay game_private_finished" })
+    );
+    expect(onReplay).toHaveBeenCalledWith("game_private_finished");
+  });
+
   it("filters public summaries by player name and game id", async () => {
     render(
       <OnlineGameBrowser

@@ -307,6 +307,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     ownedSeekResponse,
     onRefreshOwnedSeek,
     onJoinOwnedSeek,
+    recentOnlineGames = [],
     backLabel = "Back to game",
   }: {
     onBack: () => void;
@@ -328,6 +329,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     ownedSeekResponse?: { summary: { status: string } };
     onRefreshOwnedSeek?: () => void;
     onJoinOwnedSeek?: () => void;
+    recentOnlineGames?: { gameId: string; status: string }[];
     backLabel?: string;
   }) => {
     const [quickMatchStatus, setQuickMatchStatus] = React.useState("");
@@ -338,6 +340,9 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       <div>Active tab: {activeTab ?? "none"}</div>
       <div>Owned seek ids: {ownedSeekIds.join(",") || "none"}</div>
       <div>Owned seek status: {ownedSeekResponse?.summary.status ?? "none"}</div>
+      <div>
+        Recent online games: {recentOnlineGames.map((game) => `${game.gameId}:${game.status}`).join(",") || "none"}
+      </div>
       {quickMatchStatus && <div>Mock quick match status: {quickMatchStatus}</div>}
       <div>
         Quick match summary: {quickMatchSetupSummary
@@ -1829,6 +1834,28 @@ describe("App game setup lifecycle", () => {
     const ownerSummary = screen.getByText(/Initial castle owners:/);
     expect(ownerSummary).toHaveTextContent(`${capturedBlackCastle.hex.getKey()}:w`);
     expect(ownerSummary).not.toHaveTextContent(`${capturedBlackCastle.hex.getKey()}:b`);
+  });
+
+  it("remembers completed online games on this device for the Online Archive", async () => {
+    window.history.replaceState({}, "", "/?onlineGame=game_recent_complete&seat=w&token=secret");
+    render(<App />);
+
+    const playerCallback = onlineHookMocks.useOnlineGameConnection.mock.calls.at(-1)?.[1];
+    if (!playerCallback) throw new Error("Expected online snapshot callback");
+
+    act(() => {
+      playerCallback({
+        ...spectatorSnapshot("game_recent_complete"),
+        result: { winner: "b", reason: "timeout" },
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+
+    expect(screen.getByText("Recent online games: game_recent_complete:complete")).toBeInTheDocument();
+    const stored = localStorage.getItem("castles_recent_online_games");
+    expect(stored).toContain("game_recent_complete");
+    expect(stored).not.toContain("secret");
   });
 
   it("seeds public player visibility and wires updates through the bearer-authorized client helper", async () => {
