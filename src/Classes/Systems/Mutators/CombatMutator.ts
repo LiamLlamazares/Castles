@@ -33,7 +33,7 @@ export class CombatMutator {
     // Transfer castle ownership
     const newCastles = state.castles.map(c => {
         if (c.hex.equals(targetHex)) {
-            return c.with({ owner: capturer });
+            return c.with({ owner: capturer, recruitment_cooldown: 0 });
         }
         return c;
     });
@@ -59,7 +59,9 @@ export class CombatMutator {
      const capturedPiece = result.deadPiece && result.deadPiece.color !== attackerColor;
      
      const newCastles = (capturedPiece && targetCastle && targetCastle.owner !== attackerColor)
-       ? state.castles.map(c => c.hex.equals(targetHex) ? c.with({ owner: attackerColor }) : c)
+       ? state.castles.map(c => c.hex.equals(targetHex)
+         ? c.with({ owner: attackerColor, recruitment_cooldown: 0 })
+         : c)
        : state.castles;
      
      // Delegate Death Processing to DeathSystem

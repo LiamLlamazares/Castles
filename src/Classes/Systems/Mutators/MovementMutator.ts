@@ -29,7 +29,9 @@ export class MovementMutator {
     const targetCastle = state.castles.find(c => c.hex.equals(targetHex));
     const mover = TurnManager.getCurrentPlayer(state.turnCounter);
     const newCastles = targetCastle && targetCastle.owner !== mover
-      ? state.castles.map(c => c.hex.equals(targetHex) ? c.with({ owner: mover }) : c)
+      ? state.castles.map(c => c.hex.equals(targetHex)
+        ? c.with({ owner: mover, recruitment_cooldown: 0 })
+        : c)
       : state.castles;
 
     // Check for Swordsman promotion (reaching opponent's back row)

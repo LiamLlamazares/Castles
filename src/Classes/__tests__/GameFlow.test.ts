@@ -127,6 +127,24 @@ describe('Game Flow Integration Tests', () => {
       const updatedCastle = newState.castles.find(c => c.hex.equals(blackCastle.hex));
       expect(updatedCastle!.owner).toBe('w'); // Captured!
     });
+
+    it('movement capture clears the previous owner castle cooldown', () => {
+      const castles = createDefaultCastles(BOARD_SIZE);
+      const blackCastle = castles.find(c => c.color === 'b')!;
+      const coolingCastle = blackCastle.with({ recruitment_cooldown: 2 });
+      const allCastles = castles.map(c =>
+        c.hex.equals(blackCastle.hex) ? coolingCastle : c
+      );
+      const adjacentHex = blackCastle.hex.cubeRing(1).find(h => board.hexSet.has(h.getKey()))!;
+      const archer = PieceFactory.create(PieceType.Archer, adjacentHex, 'w');
+      const state = createState([archer], 0, allCastles);
+
+      const newState = MovementMutator.applyMove(state, archer, blackCastle.hex, board);
+
+      const updatedCastle = newState.castles.find(c => c.hex.equals(blackCastle.hex));
+      expect(updatedCastle!.owner).toBe('w');
+      expect(updatedCastle!.recruitment_cooldown).toBe(0);
+    });
   });
 
   // ================================================================
@@ -161,6 +179,42 @@ describe('Game Flow Integration Tests', () => {
       // Attacker should stay at original position
       const updatedAttacker = newState.pieces.find(p => p.color === 'w');
       expect(updatedAttacker!.hex.equals(attacker.hex)).toBe(true);
+    });
+
+    it('piece capture on a castle clears the previous owner castle cooldown', () => {
+      const castles = createDefaultCastles(BOARD_SIZE);
+      const blackCastle = castles.find(c => c.color === 'b')!;
+      const coolingCastle = blackCastle.with({ recruitment_cooldown: 2 });
+      const allCastles = castles.map(c =>
+        c.hex.equals(blackCastle.hex) ? coolingCastle : c
+      );
+      const attacker = PieceFactory.create(PieceType.Archer, new Hex(0, 3, -3), 'w');
+      const defender = PieceFactory.create(PieceType.Archer, blackCastle.hex, 'b');
+      const state = createState([attacker, defender], 2, allCastles);
+
+      const newState = CombatMutator.applyAttack(state, attacker, defender.hex, board);
+
+      const updatedCastle = newState.castles.find(c => c.hex.equals(blackCastle.hex));
+      expect(updatedCastle!.owner).toBe('w');
+      expect(updatedCastle!.recruitment_cooldown).toBe(0);
+    });
+
+    it('direct castle attack clears the previous owner castle cooldown', () => {
+      const castles = createDefaultCastles(BOARD_SIZE);
+      const blackCastle = castles.find(c => c.color === 'b')!;
+      const coolingCastle = blackCastle.with({ recruitment_cooldown: 2 });
+      const allCastles = castles.map(c =>
+        c.hex.equals(blackCastle.hex) ? coolingCastle : c
+      );
+      const adjacentHex = blackCastle.hex.cubeRing(1).find(h => board.hexSet.has(h.getKey()))!;
+      const attacker = PieceFactory.create(PieceType.Knight, adjacentHex, 'w');
+      const state = createState([attacker], 2, allCastles);
+
+      const newState = CombatMutator.applyCastleAttack(state, attacker, blackCastle.hex, board);
+
+      const updatedCastle = newState.castles.find(c => c.hex.equals(blackCastle.hex));
+      expect(updatedCastle!.owner).toBe('w');
+      expect(updatedCastle!.recruitment_cooldown).toBe(0);
     });
 
     it('combined arms: damage accumulates across attacks', () => {
