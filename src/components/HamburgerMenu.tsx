@@ -281,7 +281,9 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   };
 
   const renderImageIcon = (src: string) => (
-    <img className="menu-item-icon" src={src} alt="" aria-hidden="true" />
+    <span className="menu-item-icon-frame" aria-hidden="true">
+      <img className="menu-item-icon" src={src} alt="" />
+    </span>
   );
 
   return (

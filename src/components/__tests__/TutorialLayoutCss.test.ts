@@ -66,14 +66,18 @@ describe("Tutorial mobile layout CSS", () => {
     const openContainerRule = css.match(/\.hamburger-container\.open\s*\{[^}]+}/)?.[0] ?? "";
     const drawerRule = css.match(/\.hamburger-menu\s*\{[^}]+}/)?.[0] ?? "";
     const backdropRule = css.match(/\.menu-backdrop\s*\{[^}]+}/)?.[0] ?? "";
-    const iconRule = css.match(/\.menu-item-icon\s*\{[^}]+}/)?.[0] ?? "";
+    const iconFrameRule = css.match(/\.menu-item-icon-frame\s*\{[^}]+}/)?.[0] ?? "";
+    const iconRule = css.match(/\.menu-item-icon,\s*\.menu-item > img\s*\{[^}]+}/)?.[0] ?? "";
 
     expect(openContainerRule).toContain("z-index: 4000;");
     expect(drawerRule).toContain("z-index: 4002;");
     expect(backdropRule).toContain("z-index: 4001;");
-    expect(iconRule).toContain("filter: var(--icon-filter);");
+    expect(iconFrameRule).toContain("background: rgba(255, 255, 255, 0.08);");
+    expect(iconFrameRule).toContain("border: 1px solid rgba(255, 255, 255, 0.1);");
+    expect(iconRule).toContain("filter: brightness(0) saturate(100%) invert(94%)");
     expect(iconRule).toContain("opacity: 0.92;");
     expect(css).toMatch(/\.menu-item-icon,\s*\.menu-item > img\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s);
+    expect(css).toMatch(/\[data-theme="light"\] \.menu-item-icon,\s*\[data-theme="light"\] \.menu-item > img\s*\{[^}]*filter:\s*brightness\(0\) saturate\(100%\) invert\(11%\)/s);
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.menu-section-note\s*\{[^}]*display:\s*none;/s);
   });
 

@@ -140,7 +140,7 @@ describe("HamburgerMenu", () => {
     expect(onReturnFromAnalysis).toHaveBeenCalledOnce();
   });
 
-  it("uses real image icons for drawer items and keeps the full menu scrollable", () => {
+  it("uses framed asset icons for drawer items and keeps the full menu scrollable", () => {
     const { container } = renderMenu({
       onEnableAnalysis: vi.fn(),
       onEditPosition: vi.fn(),
@@ -157,13 +157,14 @@ describe("HamburgerMenu", () => {
       .filter(Boolean);
     expect(iconText).toEqual([]);
     expect(container.querySelectorAll(".menu-item-marker")).toHaveLength(0);
+    expect(container.querySelectorAll(".menu-item-icon-frame")).toHaveLength(13);
     expect(container.querySelectorAll(".menu-item-icon")).toHaveLength(13);
-    for (const icon of Array.from(container.querySelectorAll(".menu-item-icon"))) {
+    for (const icon of Array.from(container.querySelectorAll<HTMLElement>(".menu-item-icon"))) {
       expect(icon.tagName.toLowerCase()).toBe("img");
-      expect(icon).toHaveAttribute("aria-hidden", "true");
       expect(icon).toHaveAttribute("alt", "");
+      expect(icon.closest(".menu-item-icon-frame")).toHaveAttribute("aria-hidden", "true");
     }
-    expect(screen.getByRole("button", { name: "Board Display" }).querySelector(".menu-item-label .menu-item-icon")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Board Display" }).querySelector(".menu-item-label .menu-item-icon-frame")).toBeInTheDocument();
     expect(container.querySelector(".menu-items")).toHaveClass("menu-items");
     expect(screen.getByRole("button", { name: "Board Display" })).toHaveAttribute("aria-expanded", "false");
   });
