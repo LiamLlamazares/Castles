@@ -98,6 +98,29 @@ function moveRecord(notation: string, turnNumber: number): MoveRecord {
   };
 }
 
+function createTwoMoveHistoryFixture() {
+  const firstSanctuary = new Sanctuary(
+    new Hex(-2, 1, 1),
+    SanctuaryType.WolfCovenant,
+    "w",
+    "w"
+  );
+  const liveSanctuary = new Sanctuary(
+    new Hex(2, -1, -1),
+    SanctuaryType.SacredSpring,
+    "b",
+    "b"
+  );
+  const firstSnapshot = createSnapshot(1, firstSanctuary, [SanctuaryType.WolfCovenant]);
+  const liveSnapshot = createSnapshot(2, liveSanctuary, [SanctuaryType.SacredSpring]);
+  const moveTree = new MoveTree();
+  moveTree.rootNode.snapshot = createSnapshot(0, firstSanctuary, []);
+  moveTree.addMove(moveRecord("H12H11", 1), firstSnapshot);
+  moveTree.addMove(moveRecord("G13G12", 1), liveSnapshot);
+
+  return { liveSnapshot, moveTree };
+}
+
 describe("Game ability integration", () => {
   beforeEach(() => {
     originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -879,6 +902,166 @@ describe("Game ability integration", () => {
     expect(onLoadGame.mock.calls[0][0].sanctuaries[0].type).toBe(SanctuaryType.WolfCovenant);
     expect(onLoadGame.mock.calls[0][0].initialPoolTypes).toEqual([SanctuaryType.WolfCovenant]);
     expect(onLoadGame.mock.calls[0][0].victoryPoints).toEqual({ w: 3, b: 1 });
+  });
+
+  test("arrow-key replay does not pull a live playable game into history", () => {
+    const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={liveSnapshot.pieces}
+          initialMoveTree={moveTree}
+          initialTurnCounter={2}
+          initialSanctuaries={liveSnapshot.sanctuaries}
+          initialPoolTypes={liveSnapshot.sanctuaryPool}
+        />
+      </ThemeProvider>
+    );
+
+    const firstMove = screen.getByRole("button", { name: "1. H12H11" });
+    const liveMove = screen.getByRole("button", { name: "1. G13G12" });
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+
+    fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft" });
+
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+    expect(firstMove).not.toHaveAttribute("aria-current");
+  });
+
+  test("arrow-key replay does not pull a live online player game into history", () => {
+    const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={liveSnapshot.pieces}
+          initialMoveTree={moveTree}
+          initialTurnCounter={2}
+          initialSanctuaries={liveSnapshot.sanctuaries}
+          initialPoolTypes={liveSnapshot.sanctuaryPool}
+          onlineSession={{
+            gameId: "game_live_player_replay_guard",
+            role: "player",
+            playerColor: "w",
+            version: 2,
+            status: "connected",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    const firstMove = screen.getByRole("button", { name: "1. H12H11" });
+    const liveMove = screen.getByRole("button", { name: "1. G13G12" });
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+
+    fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft" });
+
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+    expect(firstMove).not.toHaveAttribute("aria-current");
+  });
+
+  test("arrow-key replay steps through move history in analysis mode", () => {
+    const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={liveSnapshot.pieces}
+          initialMoveTree={moveTree}
+          initialTurnCounter={2}
+          initialSanctuaries={liveSnapshot.sanctuaries}
+          initialPoolTypes={liveSnapshot.sanctuaryPool}
+          isAnalysisMode
+        />
+      </ThemeProvider>
+    );
+
+    const firstMove = screen.getByRole("button", { name: "1. H12H11" });
+    const liveMove = screen.getByRole("button", { name: "1. G13G12" });
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+
+    fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft" });
+
+    expect(firstMove).toHaveAttribute("aria-current", "step");
+    expect(liveMove).not.toHaveAttribute("aria-current");
+
+    fireEvent.keyDown(window, { code: "ArrowRight", key: "ArrowRight" });
+
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+    expect(firstMove).not.toHaveAttribute("aria-current");
+  });
+
+  test("arrow-key replay works for online spectators", () => {
+    const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={liveSnapshot.pieces}
+          initialMoveTree={moveTree}
+          initialTurnCounter={2}
+          initialSanctuaries={liveSnapshot.sanctuaries}
+          initialPoolTypes={liveSnapshot.sanctuaryPool}
+          onlineSession={{
+            gameId: "game_spectator_replay_keys",
+            role: "spectator",
+            version: 2,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_spectator_replay_keys&view=spectator",
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    const firstMove = screen.getByRole("button", { name: "1. H12H11" });
+    const liveMove = screen.getByRole("button", { name: "1. G13G12" });
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+
+    fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft" });
+
+    expect(firstMove).toHaveAttribute("aria-current", "step");
+    expect(liveMove).not.toHaveAttribute("aria-current");
+  });
+
+  test("arrow-key replay works after an online player game is complete", () => {
+    const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
+
+    render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={getStartingBoard(6)}
+          initialPieces={liveSnapshot.pieces}
+          initialMoveTree={moveTree}
+          initialTurnCounter={2}
+          initialSanctuaries={liveSnapshot.sanctuaries}
+          initialPoolTypes={liveSnapshot.sanctuaryPool}
+          onlineSession={{
+            gameId: "game_terminal_player_replay_keys",
+            role: "player",
+            playerColor: "w",
+            version: 2,
+            status: "terminal",
+            result: { winner: "w", reason: "resignation" },
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    const firstMove = screen.getByRole("button", { name: "1. H12H11" });
+    const liveMove = screen.getByRole("button", { name: "1. G13G12" });
+    expect(liveMove).toHaveAttribute("aria-current", "step");
+
+    fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft" });
+
+    expect(firstMove).toHaveAttribute("aria-current", "step");
+    expect(liveMove).not.toHaveAttribute("aria-current");
   });
 
   test("online sparse analysis handoff avoids broken historical navigation", () => {

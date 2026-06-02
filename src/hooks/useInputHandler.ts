@@ -6,8 +6,23 @@ interface UseInputHandlerProps {
   onTakeback: () => void;
   onResize: () => void;
   onNavigate: (direction: -1 | 1) => void;
+  isHistoryNavigationEnabled?: boolean;
   onNewGame?: () => void;
   isNewGameEnabled?: boolean;
+}
+
+function isKeyboardManagedTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target.isContentEditable ||
+    !!target.closest(
+      '[contenteditable="true"], [role="combobox"], [role="listbox"], [role="menu"], [role="radiogroup"], [role="slider"], [role="spinbutton"], [role="textbox"]'
+    )
+  );
 }
 
 export const useInputHandler = ({
@@ -16,6 +31,7 @@ export const useInputHandler = ({
   onTakeback,
   onResize,
   onNavigate,
+  isHistoryNavigationEnabled = false,
   onNewGame,
   isNewGameEnabled = false,
 }: UseInputHandlerProps) => {
@@ -24,7 +40,7 @@ export const useInputHandler = ({
   onResizeRef.current = onResize;
   
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+    if (isKeyboardManagedTarget(event.target)) {
       return;
     }
 
@@ -48,13 +64,27 @@ export const useInputHandler = ({
         }
         break;
       case "ArrowLeft":
-        onNavigate(-1);
+        if (isHistoryNavigationEnabled) {
+          event.preventDefault();
+          onNavigate(-1);
+        }
         break;
       case "ArrowRight":
-        onNavigate(1);
+        if (isHistoryNavigationEnabled) {
+          event.preventDefault();
+          onNavigate(1);
+        }
         break;
     }
-  }, [onPass, onFlipBoard, onTakeback, onNavigate, onNewGame, isNewGameEnabled]);
+  }, [
+    onPass,
+    onFlipBoard,
+    onTakeback,
+    onNavigate,
+    isHistoryNavigationEnabled,
+    onNewGame,
+    isNewGameEnabled
+  ]);
 
   // Set up keyboard and resize handlers
   // NOTE: We no longer call updateDimensions because we use viewBox-based scaling.
