@@ -2,7 +2,7 @@ import React from 'react';
 import { Hex } from '../Classes/Entities/Hex';
 import { Board } from '../Classes/Core/Board';
 import { Castle } from '../Classes/Entities/Castle';
-import { PieceType } from '../Constants';
+import { formatOwnerTurnCount, PieceType } from '../Constants';
 import { getImageByPieceType } from './PieceImages';
 
 // SVG icons for terrain types
@@ -175,7 +175,7 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
               <div style={infoRowStyle}>
                   <span>Recruitment Cooldown:</span>
                   <span style={{ color: castle.recruitment_cooldown > 0 ? '#f39c12' : '#fff', fontWeight: 'bold' }}>
-                      {castle.recruitment_cooldown > 0 ? `${castle.recruitment_cooldown} owner-turns` : 'Ready'}
+                      {castle.recruitment_cooldown > 0 ? formatOwnerTurnCount(castle.recruitment_cooldown) : 'Ready'}
                   </span>
               </div>
           </div>

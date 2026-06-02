@@ -1,4 +1,4 @@
-import { CASTLE_RECRUITMENT_COOLDOWN_TURNS, PieceType } from "../../Constants";
+import { CASTLE_RECRUITMENT_COOLDOWN_LABEL, PieceType } from "../../Constants";
 import {
   allPieceReferenceRows,
   castleRules,
@@ -67,7 +67,7 @@ describe("rules content", () => {
       "not on cooldown"
     );
     expect(recruitmentDetailRules.find((rule) => rule.title === "Recruitment cooldown")?.text).toContain(
-      `${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns`
+      CASTLE_RECRUITMENT_COOLDOWN_LABEL
     );
     expect(recruitmentDetailRules.find((rule) => rule.title === "Castle counter")?.text).toContain(
       "cooldown clears"

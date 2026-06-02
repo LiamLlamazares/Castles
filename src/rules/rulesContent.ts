@@ -1,7 +1,7 @@
 import {
   AbilityType,
   AttackType,
-  CASTLE_RECRUITMENT_COOLDOWN_TURNS,
+  CASTLE_RECRUITMENT_COOLDOWN_LABEL,
   PHOENIX_RESPAWN_TURNS,
   PieceType,
   PROMOTABLE_TYPES,
@@ -208,7 +208,7 @@ export const recruitmentDetailRules: RuleText[] = [
   },
   {
     title: "Recruitment cooldown",
-    text: `Each eligible castle can recruit once during your Castles phase. After it recruits, that castle waits ${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns before it can recruit again.`,
+    text: `Each eligible castle can recruit once during your Castles phase. After it recruits, that castle waits ${CASTLE_RECRUITMENT_COOLDOWN_LABEL} before it can recruit again.`,
   },
   {
     title: "Castle counter",

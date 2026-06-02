@@ -1,4 +1,4 @@
-import { AbilityType, CASTLE_RECRUITMENT_COOLDOWN_TURNS, PieceType } from '../../Constants';
+import { AbilityType, CASTLE_RECRUITMENT_COOLDOWN_LABEL, PieceType } from '../../Constants';
 import { GameEngine } from '../../Classes/Core/GameEngine';
 import { GameState } from '../../Classes/Core/GameState';
 import { MoveTree } from '../../Classes/Core/MoveTree';
@@ -141,14 +141,12 @@ describe('tutorial lesson index', () => {
     const lesson = getAllLessons().find((candidate) => candidate.id === 'm4_l2_recruitment');
     if (!lesson) throw new Error('Missing recruitment lesson');
 
-    const copy = [
-      lesson.description,
-      lesson.instructions,
-      ...(lesson.hints ?? []),
-    ].join(' ');
-
-    expect(copy).toContain(`${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns`);
-    expect(copy).toContain('Capturing a castle clears any current recruitment cooldown');
+    expect(lesson.description).toContain(CASTLE_RECRUITMENT_COOLDOWN_LABEL);
+    expect(lesson.description).toContain('Capturing a castle clears any current recruitment cooldown');
+    expect(lesson.instructions).toContain(`enters cooldown for ${CASTLE_RECRUITMENT_COOLDOWN_LABEL}`);
+    expect(lesson.hints).toContain(
+      `After this recruitment, the captured castle waits ${CASTLE_RECRUITMENT_COOLDOWN_LABEL} before it can recruit again.`
+    );
   });
 
   it('keeps the early victory lesson inspection-only', () => {
