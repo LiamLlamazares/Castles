@@ -26,7 +26,7 @@ describe("GameSetup", () => {
     const onPlay = vi.fn();
     const { container } = render(<GameSetup onPlay={onPlay} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "PLAY GAME" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play Local" }));
 
     expect(container.querySelector(".game-setup-shell")).toBeInTheDocument();
     expect(container.querySelector(".setup-preview")).toBeInTheDocument();
@@ -50,7 +50,7 @@ describe("GameSetup", () => {
     const onCreateOnlineGame = vi.fn();
     const { container } = render(<GameSetup onPlay={vi.fn()} onCreateOnlineGame={onCreateOnlineGame} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "CREATE PRIVATE ROOM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Private Link" }));
 
     expect(container.querySelector(".game-setup-shell")).toBeInTheDocument();
     expect(container.querySelector(".setup-preview")).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe("GameSetup", () => {
     const onCreateOpenSeek = vi.fn();
     render(<GameSetup onPlay={vi.fn()} onCreateOpenSeek={onCreateOpenSeek} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "LIST IN LOBBY" }));
+    fireEvent.click(screen.getByRole("button", { name: "Find Match" }));
 
     expect(onCreateOpenSeek).toHaveBeenCalledTimes(1);
     expect(onCreateOpenSeek.mock.calls[0][3]).toBe(previewSanctuaries);
@@ -82,6 +82,45 @@ describe("GameSetup", () => {
       SanctuaryType.WolfCovenant,
       SanctuaryType.SacredSpring,
     ]);
+  });
+
+  it("passes the preview setup through when creating an invite challenge", () => {
+    const previewSanctuaries = [
+      new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
+      new Sanctuary(new Hex(1, -1, 0), SanctuaryType.WolfCovenant, "b"),
+    ];
+    vi
+      .spyOn(SanctuaryGenerator, "generateRandomSanctuaries")
+      .mockReturnValue(previewSanctuaries);
+
+    const onCreateOnlineChallenge = vi.fn();
+    render(<GameSetup onPlay={vi.fn()} onCreateOnlineChallenge={onCreateOnlineChallenge} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Invite Friend" }));
+
+    expect(onCreateOnlineChallenge).toHaveBeenCalledTimes(1);
+    expect(onCreateOnlineChallenge.mock.calls[0][3]).toBe(previewSanctuaries);
+    expect(onCreateOnlineChallenge.mock.calls[0][4]).toEqual([
+      SanctuaryType.WolfCovenant,
+      SanctuaryType.SacredSpring,
+    ]);
+  });
+
+  it("orders setup actions around local play, invite, matchmaking, then private links", () => {
+    render(
+      <GameSetup
+        onPlay={vi.fn()}
+        onCreateOnlineChallenge={vi.fn()}
+        onCreateOpenSeek={vi.fn()}
+        onCreateOnlineGame={vi.fn()}
+      />
+    );
+
+    const actionLabels = Array.from(
+      screen.getByRole("group", { name: "Game actions" }).querySelectorAll(".setup-action-button")
+    ).map((element) => element.textContent?.trim());
+
+    expect(actionLabels).toEqual(["Play Local", "Invite Friend", "Find Match", "Private Link"]);
   });
 
   it("exposes shared play navigation without hiding play actions", () => {
@@ -114,9 +153,9 @@ describe("GameSetup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Online" }));
 
     const actionGroup = screen.getByRole("group", { name: "Game actions" });
-    expect(actionGroup).toContainElement(screen.getByRole("button", { name: "PLAY GAME" }));
+    expect(actionGroup).toContainElement(screen.getByRole("button", { name: "Play Local" }));
 
-    expect(screen.getByRole("button", { name: "PLAY GAME" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Play Local" })).toBeInTheDocument();
     expect(onBack).toHaveBeenCalledOnce();
     expect(onTutorial).toHaveBeenCalledOnce();
     expect(onOpenLibrary).toHaveBeenCalledOnce();

@@ -345,7 +345,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         activeDestination="play"
                         title="Play"
                         kicker="Game setup"
-                        description="Choose a local game, private room, challenge, or lobby listing."
+                        description="Play locally, invite a friend, or find an online match from this setup."
                         backLabel={onBack ? backLabel : undefined}
                         onBack={onBack}
                         destinations={navDestinations}
@@ -454,24 +454,15 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         onClick={handlePlay}
                         className="setup-action-button play"
                     >
-                        PLAY GAME
+                        Play Local
                     </button>
-                    {onCreateOnlineGame && (
-                        <button
-                            type="button"
-                            onClick={handleCreateOnlineGame}
-                            className="setup-action-button private-room"
-                        >
-                            CREATE PRIVATE ROOM
-                        </button>
-                    )}
                     {onCreateOnlineChallenge && (
                         <button
                             type="button"
                             onClick={handleCreateOnlineChallenge}
                             className="setup-action-button challenge"
                         >
-                            CHALLENGE A FRIEND
+                            Invite Friend
                         </button>
                     )}
                     {onCreateOpenSeek && (
@@ -480,7 +471,16 @@ const GameSetup: React.FC<GameSetupProps> = ({
                             onClick={handleCreateOpenSeek}
                             className="setup-action-button lobby-seek"
                         >
-                            LIST IN LOBBY
+                            Find Match
+                        </button>
+                    )}
+                    {onCreateOnlineGame && (
+                        <button
+                            type="button"
+                            onClick={handleCreateOnlineGame}
+                            className="setup-action-button private-room"
+                        >
+                            Private Link
                         </button>
                     )}
                 </div>

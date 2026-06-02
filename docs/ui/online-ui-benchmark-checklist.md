@@ -144,11 +144,18 @@ Phase 6P Learn progress hardening, 2026-06-02:
 - Course and lesson copy now says objectives/lessons are self-checked instead of "mastered" or engine-verified, so the UI stays honest until engine-graded objectives exist.
 - Long objective text wraps inside the lesson sidebar, and the existing mobile course/lesson scrollports remain protected by tests.
 
+Phase 6Q Navigation wording and drawer icon polish, 2026-06-02:
+
+- The drawer Play entry now says `Configure New Game`, matching the setup/victory language and separating setup from the contextual in-game `New Game` control.
+- Setup primary actions now use product-language labels: `Play Local`, `Invite Friend`, `Find Match`, and the lower-priority `Private Link`.
+- Drawer icons remain real image assets but now have stable sizing, object fitting, opacity, and mobile spacing tests so blank marker-style placeholders do not silently return.
+- Mobile drawer section notes are hidden to reduce density while keeping the same section landmarks and destination labels.
+
 Next product slices accepted from reviewers:
 
 - Redesign Lobby toward a quieter, more list-like page: split "Find listings" filters from "Play from current setup" actions, reduce card/shadow weight, keep actual listings/live games prominent, and decide whether lobby-created games should be public in Watch by default.
 - Continue Learn course polish with authored objective ids, richer lesson theory, and only add engine-graded objectives when the target board state is explicit and tested.
-- Improve navigation clarity: streamline setup entry points around Play Local, Invite Friend, and Find Match; add a visible return path from analysis; standardize New Game/Configure wording; and replace generic drawer markers with real icons or remove the icon column consistently.
+- Improve navigation clarity in later slices by reducing duplicated online entry points where possible and continuing to separate private player links from public spectator/share actions.
 
 Reference pages checked:
 

@@ -355,7 +355,7 @@ describe("Game ability integration", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "Configure New Game" }));
 
     expect(confirm).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Leave this online game?" })).toBeInTheDocument();
@@ -363,7 +363,7 @@ describe("Game ability integration", () => {
     expect(onSetup).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "Configure New Game" }));
     fireEvent.click(screen.getByRole("button", { name: "Leave Game" }));
 
     expect(onSetup).toHaveBeenCalledOnce();
@@ -391,7 +391,7 @@ describe("Game ability integration", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "Configure New Game" }));
 
     const dialog = screen.getByRole("dialog", { name: "Leave this online game?" });
     const keepPlaying = screen.getByRole("button", { name: "Keep Playing" });
@@ -442,7 +442,7 @@ describe("Game ability integration", () => {
     const menuButton = screen.getByRole("button", { name: "Menu" });
 
     await user.click(menuButton);
-    await user.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "New Game" }));
+    await user.click(within(screen.getByRole("region", { name: "Play" })).getByRole("button", { name: "Configure New Game" }));
 
     const keepPlaying = screen.getByRole("button", { name: "Keep Playing" });
     await waitFor(() => expect(keepPlaying).toHaveFocus());

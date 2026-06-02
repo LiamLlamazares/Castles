@@ -1170,6 +1170,11 @@ body {
   text-align: left;
 }
 
+.menu-item > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .menu-toggle-item {
   display: flex;
   align-items: center;
@@ -1197,16 +1202,26 @@ body {
 .menu-item-icon,
 .menu-item > img {
   width: 24px;
-  min-width: 24px;
+  flex: 0 0 24px;
   height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
+  object-fit: contain;
+  object-position: center;
 }
 
 .menu-item-icon {
   filter: var(--icon-filter);
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.menu-item.primary .menu-item-icon,
+.menu-item:hover .menu-item-icon,
+.menu-item:focus-visible .menu-item-icon {
+  opacity: 1;
 }
 
 .menu-item-label {
@@ -1954,7 +1969,7 @@ body {
   color: #fff;
   cursor: pointer;
   font: inherit;
-  font-size: 0.96rem;
+  font-size: 0.94rem;
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1.15;
@@ -1963,21 +1978,22 @@ body {
 }
 
 .setup-action-button.play {
-  background: #27ae60;
+  background: #2ca867;
 }
 
 .setup-action-button.private-room {
-  background: #243f66;
-  border-color: #5aa4f0;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
 }
 
 .setup-action-button.challenge {
-  background: #2b6cb0;
+  background: #2f6fae;
   border-color: #5aa4f0;
 }
 
 .setup-action-button.lobby-seek {
-  background: #1f7a5f;
+  background: #237c63;
   border-color: #70d6a1;
 }
 
@@ -2213,6 +2229,27 @@ body {
     width: min(320px, 88vw);
     left: min(-320px, -88vw);
     height: 100dvh;
+  }
+
+  .menu-header {
+    padding: 16px 18px;
+  }
+
+  .menu-items {
+    padding: 10px;
+    gap: 2px;
+  }
+
+  .menu-item {
+    padding: 12px 14px;
+  }
+
+  .menu-section-label {
+    padding: 8px 14px 2px;
+  }
+
+  .menu-section-note {
+    display: none;
   }
 
   .game-status-toast,

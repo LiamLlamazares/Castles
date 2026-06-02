@@ -71,6 +71,9 @@ describe("Tutorial mobile layout CSS", () => {
     expect(drawerRule).toContain("z-index: 4002;");
     expect(backdropRule).toContain("z-index: 4001;");
     expect(iconRule).toContain("filter: var(--icon-filter);");
+    expect(iconRule).toContain("opacity: 0.92;");
+    expect(css).toMatch(/\.menu-item-icon,\s*\.menu-item > img\s*\{[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.menu-section-note\s*\{[^}]*display:\s*none;/s);
   });
 
   it("keeps the desktop tooltip discovery hint away from shell controls", () => {

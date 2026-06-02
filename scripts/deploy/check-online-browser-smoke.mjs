@@ -28,6 +28,11 @@ const browserTimeoutMs = Number(process.env.SMOKE_BROWSER_TIMEOUT_MS ?? 20_000);
 const socketTimeoutMs = Number(process.env.SMOKE_SOCKET_TIMEOUT_MS ?? 10_000);
 const fetchWithTimeout = createFetchWithTimeout(requestTimeoutMs);
 const { waitForSocketOpen, nextSocketMessage } = createWebSocketWaiters(socketTimeoutMs);
+const setupLabels = {
+  configure: "Configure New Game",
+  privateLink: "Private Link",
+  inviteFriend: "Invite Friend",
+};
 
 function normalizeUrl(urlText) {
   const url = new URL(urlText);
@@ -754,7 +759,7 @@ async function createOnlineGameFromUi(white) {
   let startScreen;
   try {
     startScreen = await waitUntil("setup screen or game controls", async () => {
-      if (await white.hasButton("CREATE PRIVATE ROOM")) return "setup";
+      if (await white.hasButton(setupLabels.privateLink)) return "setup";
       if (await white.hasButton("New Game")) return "game";
       return null;
     });
@@ -769,11 +774,11 @@ async function createOnlineGameFromUi(white) {
     await white.waitForButton("New Game");
     await white.clickButton("New Game");
   }
-  await white.waitForButton("CREATE PRIVATE ROOM");
+  await white.waitForButton(setupLabels.privateLink);
   if (await white.hasButton("quick")) {
     await white.clickButton("quick");
   }
-  await white.clickButton("CREATE PRIVATE ROOM");
+  await white.clickButton(setupLabels.privateLink);
   await white.waitForButton("Copy Opponent Invite");
   await white.waitForButton("Copy Spectator Link");
   await white.clickButton("Copy Opponent Invite");
@@ -801,7 +806,7 @@ async function openSetupFromBase(page) {
   let startScreen;
   try {
     startScreen = await waitUntil("setup screen or game controls", async () => {
-      if (await page.hasButton("CREATE PRIVATE ROOM")) return "setup";
+      if (await page.hasButton(setupLabels.privateLink)) return "setup";
       if (await page.hasButton("New Game")) return "game";
       return null;
     });
@@ -815,16 +820,16 @@ async function openSetupFromBase(page) {
   if (startScreen === "game") {
     await page.clickButton("New Game");
   }
-  await page.waitForButton("CREATE PRIVATE ROOM");
+  await page.waitForButton(setupLabels.privateLink);
 }
 
 async function createChallengeFromUi(challenger) {
   await openSetupFromBase(challenger);
-  await challenger.waitForButton("CHALLENGE A FRIEND");
+  await challenger.waitForButton(setupLabels.inviteFriend);
   if (await challenger.hasButton("quick")) {
     await challenger.clickButton("quick");
   }
-  await challenger.clickButton("CHALLENGE A FRIEND");
+  await challenger.clickButton(setupLabels.inviteFriend);
   await challenger.waitForText("Online Challenge");
   await challenger.waitForButton("Refresh Challenge");
   await challenger.waitForButton("Copy Challenge Link");
@@ -1026,12 +1031,12 @@ async function verifyAccessDeniedRecovery(driver, gameId) {
     !new URL(await denied.url()).searchParams.has("token"),
     `Access-denied URL still contained a token: ${await denied.url()}`
   );
-  await denied.waitForButton("Configure New Game");
-  await denied.clickButton("Configure New Game");
+  await denied.waitForButton(setupLabels.configure);
+  await denied.clickButton(setupLabels.configure);
   await waitUntil("access-denied recovery URL to clear online params", async () =>
     !urlHasOnlineParams(await denied.url())
   );
-  await denied.waitForButton("CREATE PRIVATE ROOM");
+  await denied.waitForButton(setupLabels.privateLink);
 }
 
 async function runFlow(driver) {
@@ -1094,24 +1099,24 @@ async function runFlow(driver) {
   await black.waitForNoButton("Reset Board");
   await spectator.waitForNoButton("Reset Board");
 
-  await white.waitForButton("Configure New Game");
-  await white.clickButton("Configure New Game");
+  await white.waitForButton(setupLabels.configure);
+  await white.clickButton(setupLabels.configure);
   await waitUntil("white URL to clear online params", async () => !urlHasOnlineParams(await white.url()));
   assert(
     normalizeUrl(await white.url()) === normalizeUrl(baseUrl),
     `White Configure New Game did not return to base URL: ${await white.url()}`
   );
 
-  await black.waitForButton("Configure New Game");
-  await black.clickButton("Configure New Game");
+  await black.waitForButton(setupLabels.configure);
+  await black.clickButton(setupLabels.configure);
   await waitUntil("black URL to clear online params", async () => !urlHasOnlineParams(await black.url()));
   assert(
     normalizeUrl(await black.url()) === normalizeUrl(baseUrl),
     `Black Configure New Game did not return to base URL: ${await black.url()}`
   );
 
-  await spectator.waitForButton("Configure New Game");
-  await spectator.clickButton("Configure New Game");
+  await spectator.waitForButton(setupLabels.configure);
+  await spectator.clickButton(setupLabels.configure);
   await waitUntil("spectator URL to clear online params", async () => !urlHasOnlineParams(await spectator.url()));
   assert(
     normalizeUrl(await spectator.url()) === normalizeUrl(baseUrl),

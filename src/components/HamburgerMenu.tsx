@@ -338,7 +338,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   onClick={() => handleMenuItemClick(onNewGame)}
                 >
                   {renderImageIcon(flagIcon)}
-                  <span>New Game</span>
+                  <span>Configure New Game</span>
                 </button>
               )}
             </section>

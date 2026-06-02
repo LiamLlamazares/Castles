@@ -48,26 +48,26 @@ describe("HamburgerMenu", () => {
   it("promotes primary navigation actions and closes after a navigation action", () => {
     const { container, props } = renderMenu();
 
-    expect(screen.queryByRole("button", { name: "New Game" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configure New Game" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
 
-    expect(screen.getByRole("button", { name: "New Game" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configure New Game" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save to Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online Lobby" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tutorial" })).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "New Game" }));
+    expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "Configure New Game" }));
     expect(screen.getByRole("region", { name: "Online" })).toContainElement(screen.getByRole("button", { name: "Online Lobby" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Open Library" }));
     expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Learn" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
 
     expect(props.onNewGame).toHaveBeenCalledOnce();
     expect(container.querySelector(".hamburger-menu")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New Game" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configure New Game" })).not.toBeInTheDocument();
   });
 
   it("orders primary drawer destinations consistently before board tools", () => {
@@ -118,7 +118,7 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "Open Library" })).toHaveClass("primary");
   });
 
-  it("promotes the analysis return action above New Game when available", () => {
+  it("promotes the analysis return action above Configure New Game when available", () => {
     const onReturnFromAnalysis = vi.fn();
     renderMenu({
       onReturnFromAnalysis,
@@ -129,7 +129,7 @@ describe("HamburgerMenu", () => {
 
     const playSection = screen.getByRole("region", { name: "Play" });
     const returnButton = screen.getByRole("button", { name: "Back to Online Archive" });
-    const newGameButton = screen.getByRole("button", { name: "New Game" });
+    const newGameButton = screen.getByRole("button", { name: "Configure New Game" });
 
     expect(playSection).toContainElement(returnButton);
     expect(returnButton).toHaveClass("primary");
@@ -158,6 +158,11 @@ describe("HamburgerMenu", () => {
     expect(iconText).toEqual([]);
     expect(container.querySelectorAll(".menu-item-marker")).toHaveLength(0);
     expect(container.querySelectorAll(".menu-item-icon")).toHaveLength(13);
+    for (const icon of Array.from(container.querySelectorAll(".menu-item-icon"))) {
+      expect(icon.tagName.toLowerCase()).toBe("img");
+      expect(icon).toHaveAttribute("aria-hidden", "true");
+      expect(icon).toHaveAttribute("alt", "");
+    }
     expect(screen.getByRole("button", { name: "Board Display" }).querySelector(".menu-item-label .menu-item-icon")).toBeInTheDocument();
     expect(container.querySelector(".menu-items")).toHaveClass("menu-items");
     expect(screen.getByRole("button", { name: "Board Display" })).toHaveAttribute("aria-expanded", "false");
