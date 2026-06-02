@@ -395,6 +395,18 @@ Tests/review/deploy gates:
 - Review: UI/UX/accessibility reviewer before implementation and after fixes, plus final code review focused on navigation-state simplicity, focus order, mobile ergonomics, and stale-state cleanup.
 - Deploy: full suite, client build, server build, browser online smoke, screenshot audit, commit, and push before moving to deeper matchmaking, accounts, ratings, chat, or moderation.
 
+## Phase 6O: Online Lobby and Watch Structural Polish
+
+Goal: make Online feel more like a practical Lichess-style play surface without implying unsupported ratings, accounts, chat, or server-side discovery features.
+
+Status: implemented and locally verified on 2026-06-02. Lobby now separates "Find lobby listings" controls from "Play from current setup" actions. `List Current Setup` creates the lobby listing directly from Online, disables while pending, and is hidden together with Quick Match during analysis/replay/online/challenge states. Watch now has a top-live-game plus more-games layout, visible-tab refresh, hidden-tab pause, and an in-flight guard so background refresh cannot clobber `Load more`. Open listing side labels, search placeholders, and accessibility group names were tightened after review.
+
+Remaining work:
+
+- Add server-backed public-game thumbnails, side-to-move, last move, remaining clocks, spectator counts, and a real featured/TV selection signal before calling any game "featured".
+- Move Watch/Archive search and richer filters into indexed server queries once the read model carries those fields.
+- Decide whether current public-game preview belongs in Lobby long-term or should move entirely into Watch after Watch thumbnails exist.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.

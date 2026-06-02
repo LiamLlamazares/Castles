@@ -163,7 +163,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(loadOpenSeeks).toHaveBeenCalledWith({ state: "open", limit: 50 });
     expect(loadGames).toHaveBeenCalledWith({ state: "active", limit: 50, cursor: undefined });
-    expect(row).toHaveTextContent("Side random");
+    expect(row).toHaveTextContent("Creator side Random");
     expect(row).toHaveTextContent("Radius 7");
     expect(row).toHaveTextContent("Timed 20+20");
     expect(row).toHaveTextContent("Victory points");
@@ -269,12 +269,13 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("seek_public_open");
-    expect(screen.getByText("Uses your exact current Play setup")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Play from current setup" })).toBeInTheDocument();
+    expect(screen.getByText("Find a match with your current Play setup")).toBeInTheDocument();
     const setupSummary = screen.getByLabelText("Quick match setup summary");
     expect(within(setupSummary).getByText("Radius 7")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Timed 20+20")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Victory points")).toBeInTheDocument();
-    expect(screen.getByText(/Filters only search open listings here; Quick Match and Create Listing use your current setup/i))
+    expect(screen.getByText(/Lobby filters search existing listings\. Quick Match and List Current Setup use your current board/i))
       .toBeInTheDocument();
 
     const quickMatch = screen.getByRole("button", {
@@ -292,6 +293,42 @@ describe("OnlineGameBrowser", () => {
       await quickMatchPromise;
     });
     expect(await screen.findByRole("status")).toHaveTextContent(/game is listed in the Lobby/i);
+  });
+
+  it("lists the current setup from the lobby without allowing duplicate clicks", async () => {
+    let resolveCreate!: () => void;
+    const createPromise = new Promise<void>((resolve) => {
+      resolveCreate = resolve;
+    });
+    const onCreateSeek = vi.fn().mockReturnValue(createPromise);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onCreateSeek={onCreateSeek}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    const listButton = screen.getByRole("button", { name: "Create public lobby listing from current Play setup" });
+
+    fireEvent.click(listButton);
+    fireEvent.click(listButton);
+
+    expect(onCreateSeek).toHaveBeenCalledOnce();
+    expect(listButton).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Listing current setup in the Lobby...");
+
+    await act(async () => {
+      resolveCreate();
+      await createPromise;
+    });
+
+    expect(listButton).not.toBeDisabled();
   });
 
   it("keeps conflicting lobby actions disabled after a matched quick match result", async () => {
@@ -1090,7 +1127,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    expect(await screen.findByText("No public live games yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No public games in progress.")).toBeInTheDocument();
     expect(loadGames).toHaveBeenLastCalledWith({ state: "active", limit: 50 });
 
     fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
@@ -1120,8 +1157,99 @@ describe("OnlineGameBrowser", () => {
     expect(nav).toBeInTheDocument();
     expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
     expect(screen.getByRole("button", { name: "Online" })).toHaveAttribute("aria-current", "page");
-    expect(await screen.findByText("No public live games yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No public games in progress.")).toBeInTheDocument();
     expect(screen.getByText(/Private and unlisted games stay off this page/i)).toBeInTheDocument();
+  });
+
+  it("does not reference current-setup actions when no playable setup action is available", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+
+    expect(screen.queryByRole("region", { name: "Play from current setup" })).not.toBeInTheDocument();
+    expect(screen.getByText("Choose setup from Play, then return here to find or list a lobby game.")).toBeInTheDocument();
+  });
+
+  it("auto-refreshes the Watch tab while visible", async () => {
+    vi.useFakeTimers();
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([]))
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_watch_refresh" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("No public games in progress.")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("game_watch_refresh")).toBeInTheDocument();
+    expect(loadGames).toHaveBeenCalledTimes(2);
+  });
+
+  it("pauses Watch auto-refresh while the tab is hidden", async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = "hidden";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibilityState);
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([]))
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_visible_again" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+
+    expect(loadGames).toHaveBeenCalledTimes(1);
+
+    visibilityState = "visible";
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadGames).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("game_visible_again")).toBeInTheDocument();
   });
 
   it("renders live public games with accessible spectator handoff", async () => {
@@ -1137,6 +1265,8 @@ describe("OnlineGameBrowser", () => {
     );
 
     const row = await screen.findByRole("article", { name: /Ada vs Ben/i });
+    const featuredRegion = screen.getByRole("region", { name: "Top public live game" });
+    expect(featuredRegion).toContainElement(row);
     expect(row).toHaveTextContent("Live");
     expect(row).toHaveTextContent("3 moves");
     expect(row).toHaveTextContent("Timed");
@@ -1398,16 +1528,64 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    expect(await screen.findByText("game_first_page")).toBeInTheDocument();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("game_first_page")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
-    expect(await screen.findByText("game_second_page")).toBeInTheDocument();
+    expect(screen.getByText("game_second_page")).toBeInTheDocument();
     expect(loadGames).toHaveBeenLastCalledWith({
       state: "active",
       limit: 50,
       cursor: "cursor-next",
     });
+  });
+
+  it("does not let Watch auto-refresh clobber a pending Load more request", async () => {
+    vi.useFakeTimers();
+    const secondPage = deferredDirectory();
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_first_page" })], "cursor-next"))
+      .mockReturnValueOnce(secondPage.promise);
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("game_first_page")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+
+    expect(loadGames).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      secondPage.resolve(directory([summary({ gameId: "game_second_page" })]));
+      await secondPage.promise;
+    });
+
+    expect(screen.getByText("game_second_page")).toBeInTheDocument();
   });
 
   it("keeps pagination reachable when filters hide the loaded page", async () => {

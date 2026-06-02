@@ -70,7 +70,7 @@ import {
   OnlineJoinParams,
   OnlineSpectatorParams,
 } from './online/client';
-import type { OnlineClientSession, OnlineGameSnapshotDTO } from './online/types';
+import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from './online/types';
 import type { OnlineGameVisibility, OnlinePlayerSettableGameVisibility } from './online/visibility';
 import { ThemeProvider } from './contexts/ThemeContext';
 import {
@@ -608,15 +608,20 @@ function App() {
     gameConfig.timeControl,
   ]);
 
+  const onlineLobbySetup = useMemo(() => {
+    if (gameConfig.isAnalysisMode || onlineJoin || onlineSpectator || onlineChallenge) return null;
+    return quickMatchSetup;
+  }, [gameConfig.isAnalysisMode, onlineChallenge, onlineJoin, onlineSpectator, quickMatchSetup]);
+
   const quickMatchSetupSummary = useMemo(() => {
-    if (!quickMatchSetup) return undefined;
-    const clock = quickMatchSetup.timeControl ?? DEFAULT_QUICK_MATCH_TIME_CONTROL;
+    if (!onlineLobbySetup) return undefined;
+    const clock = onlineLobbySetup.timeControl ?? DEFAULT_QUICK_MATCH_TIME_CONTROL;
     return {
-      boardRadius: quickMatchSetup.board.config.nSquares,
+      boardRadius: onlineLobbySetup.board.config.nSquares,
       clock: `Timed ${clock.initial}+${clock.increment}`,
-      scoring: quickMatchSetup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control",
+      scoring: onlineLobbySetup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control",
     };
-  }, [quickMatchSetup]);
+  }, [onlineLobbySetup]);
 
   const handleStartGame = (
     board: Board, 
@@ -862,17 +867,7 @@ function App() {
     }
   };
 
-  const handleCreateOpenSeek = async (
-    board: Board,
-    pieces: Piece[],
-    timeControl?: { initial: number, increment: number },
-    sanctuaries?: Sanctuary[],
-    _selectedSanctuaryTypes?: SanctuaryType[],
-    sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    gameRules?: { vpModeEnabled: boolean },
-    initialPoolTypes?: SanctuaryType[],
-    pieceTheme?: PieceTheme
-  ) => {
+  const createOpenSeekFromSetup = async (setup: OnlineGameSetupDTO) => {
     try {
       cancelPendingReplay();
       clearAnalysisReturn();
@@ -887,19 +882,7 @@ function App() {
         forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
       }
       clearOpenSeekState();
-      const created = await createOpenSeek(
-        serializeOnlineGameSetup({
-          board,
-          pieces,
-          sanctuaries: sanctuaries ?? [],
-          timeControl,
-          sanctuarySettings,
-          gameRules,
-          initialPoolTypes,
-          pieceTheme,
-        }),
-        { creatorSeat: "random" }
-      );
+      const created = await createOpenSeek(setup, { creatorSeat: "random" });
       const creator = {
         seekId: created.seekId,
         token: created.creator.token,
@@ -924,6 +907,39 @@ function App() {
       console.error("Failed to create open seek", error);
       alert("Could not create an open lobby seek. Make sure the Node server is running.");
     }
+  };
+
+  const handleCreateOpenSeek = async (
+    board: Board,
+    pieces: Piece[],
+    timeControl?: { initial: number, increment: number },
+    sanctuaries?: Sanctuary[],
+    _selectedSanctuaryTypes?: SanctuaryType[],
+    sanctuarySettings?: { unlockTurn: number, cooldown: number },
+    gameRules?: { vpModeEnabled: boolean },
+    initialPoolTypes?: SanctuaryType[],
+    pieceTheme?: PieceTheme
+  ) => {
+    await createOpenSeekFromSetup(
+      serializeOnlineGameSetup({
+        board,
+        pieces,
+        sanctuaries: sanctuaries ?? [],
+        timeControl,
+        sanctuarySettings,
+        gameRules,
+        initialPoolTypes,
+        pieceTheme,
+      })
+    );
+  };
+
+  const handleListCurrentSetupInLobby = async () => {
+    if (!onlineLobbySetup) {
+      alert("Choose a Play setup before listing a lobby game.");
+      return;
+    }
+    await createOpenSeekFromSetup(onlineLobbySetup);
   };
 
   const handleAcceptOpenSeek = async (seekId: string) => {
@@ -1781,11 +1797,8 @@ function App() {
           onTabChange={setOnlineBrowserTab}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
-          onCreateSeek={() => {
-            setViewStack(['online']);
-            setView('setup');
-          }}
-          onQuickMatch={quickMatchSetup ? handleQuickMatch : undefined}
+          onCreateSeek={onlineLobbySetup ? handleListCurrentSetupInLobby : undefined}
+          onQuickMatch={onlineLobbySetup ? handleQuickMatch : undefined}
           quickMatchSetupSummary={quickMatchSetupSummary}
           onAcceptSeek={handleAcceptOpenSeek}
           onCancelSeek={handleCancelOpenSeek}

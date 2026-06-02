@@ -175,6 +175,7 @@ vi.mock("../components/Game", () => ({
 
 vi.mock("../components/GameSetup", () => ({
   default: ({
+    onPlay,
     onBack,
     backLabel = "Back to game",
     onTutorial,
@@ -183,6 +184,7 @@ vi.mock("../components/GameSetup", () => ({
     onCreateOnlineChallenge,
     onCreateOpenSeek,
   }: {
+    onPlay: (...args: unknown[]) => void;
     onBack: () => void;
     backLabel?: string;
     onTutorial: () => void;
@@ -193,6 +195,24 @@ vi.mock("../components/GameSetup", () => ({
   }) => (
     <div>
       <div>Setup Ready</div>
+      <button
+        type="button"
+        onClick={() =>
+          onPlay(
+            getStartingBoard(8),
+            getStartingPieces(8),
+            { initial: 15, increment: 5 },
+            [],
+            [],
+            { unlockTurn: 2, cooldown: 9 },
+            { vpModeEnabled: true },
+            [SanctuaryType.WolfCovenant],
+            "Castles"
+          )
+        }
+      >
+        Start Rich Local Game
+      </button>
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
@@ -477,6 +497,11 @@ vi.mock("../components/Tutorial", () => ({
 vi.mock("../components/InstallAppHint", () => ({
   default: () => null,
 }));
+
+function startRichLocalGameFromSetup() {
+  fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start Rich Local Game" }));
+}
 
 function spectatorSnapshot(gameId: string): OnlineGameSnapshotDTO {
   return {
@@ -924,6 +949,72 @@ describe("App game setup lifecycle", () => {
     expect(window.location.hash).toBe("");
   });
 
+  it("lists the current setup directly from the Online lobby", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          protocolVersion: 1,
+          seekId: "seek_current_setup",
+          summary: openSeekSummary({
+            seekId: "seek_current_setup",
+            setup: {
+              board: { config: { nSquares: 7 }, castles: [] },
+              pieces: [],
+              sanctuaries: [],
+              timeControl: { initial: 15, increment: 5 },
+              sanctuarySettings: { unlockTurn: 2, cooldown: 9 },
+              gameRules: { vpModeEnabled: true },
+              initialPoolTypes: [SanctuaryType.WolfCovenant],
+              pieceTheme: "Castles",
+            },
+          }),
+          creator: { token: "current-setup-token" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    startRichLocalGameFromSetup();
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Browser Create Seek" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/seeks",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(request.body));
+    expect(body.creatorSeat).toBe("random");
+    expect(body.setup.board.config.nSquares).toBe(7);
+    expect(body.setup.timeControl).toEqual({ initial: 15, increment: 5 });
+    expect(body.setup.sanctuarySettings).toEqual({ unlockTurn: 2, cooldown: 9 });
+    expect(body.setup.gameRules).toEqual({ vpModeEnabled: true });
+    expect(body.setup.initialPoolTypes).toEqual([SanctuaryType.WolfCovenant]);
+    expect(body.setup.pieceTheme).toBe("Castles");
+    expect(sessionStorage.getItem("castles_online_seek_creator:seek_current_setup")).toBe("current-setup-token");
+    expect(screen.getByText("Initial tab: lobby")).toBeInTheDocument();
+    expect(screen.getByText("Owned seek ids: seek_current_setup")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("token=");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("does not offer matchmaking actions from analysis-loaded positions", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
+    expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+
+    expect(screen.getByText("Quick match summary: none")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quick Match" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Browser Create Seek" })).not.toBeInTheDocument();
+  });
+
   it("recovers creator-owned lobby listing controls after a same-session reload", async () => {
     rememberOpenSeekCreatorParams({ seekId: "seek_restore", token: "creator-token" });
     vi.stubGlobal(
@@ -1034,7 +1125,7 @@ describe("App game setup lifecycle", () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
+    startRichLocalGameFromSetup();
     fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     expect(screen.getByText("Quick match summary: Radius 7; Timed 15+5; Victory points")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Quick Match" }));
@@ -1103,7 +1194,7 @@ describe("App game setup lifecycle", () => {
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
+    startRichLocalGameFromSetup();
     fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
     fireEvent.click(screen.getByRole("button", { name: "Quick Match" }));
 
@@ -1124,18 +1215,18 @@ describe("App game setup lifecycle", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("keeps quick match disabled while a creator-owned seek is restoring", async () => {
+  it("keeps matchmaking actions hidden while a creator-owned seek is restoring without a playable setup", async () => {
     rememberOpenSeekCreatorParams({ seekId: "seek_restore_pending", token: "creator-token" });
     const pendingFetch = deferredResponse();
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(pendingFetch.promise));
 
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
     fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
 
     expect(screen.getByText("Owned seek ids: seek_restore_pending")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Quick Match" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Quick Match" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Browser Create Seek" })).not.toBeInTheDocument();
   });
 
   it("lets creators refresh an accepted lobby seek and join through the token-stripped handoff", async () => {

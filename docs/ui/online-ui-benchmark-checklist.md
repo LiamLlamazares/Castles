@@ -130,6 +130,13 @@ Phase 6M lobby flow cleanup, 2026-06-01:
 - Lobby copy now distinguishes existing-list filters from current-setup actions. The browser action is "List Current Setup" because it uses the current Play setup, while filters only search visible listings.
 - Screenshot artifacts are in `artifacts/ui-audit/phase6m-safety-lobby-cleanup`; desktop, 430 x 932, 390 x 844, 360 x 640 Lobby, 360 x 640 restored challenge link, and 390 x 844 cancelled-owned-seek states passed overflow and interactive-overlap checks.
 
+Phase 6O Online structural polish, 2026-06-02:
+
+- Lobby now splits the search/filter controls from the current-setup actions. `Quick Match` and `List Current Setup` live in a separate "Play from current setup" panel, while filters are labelled as finding existing lobby listings.
+- `List Current Setup` now creates the lobby listing directly from Online instead of bouncing to Setup, disables while pending, and is hidden together with Quick Match while viewing analysis/replay/online/challenge states.
+- Watch now uses a top-live-game plus more-games layout, refreshes while visible, pauses while hidden, and skips background refresh if a foreground directory load is in flight.
+- The current public game row in Lobby remains a compact Watch preview, but the Lobby landmark and open-listing section now distinguish it from actual open lobby listings.
+
 Next product slices accepted from reviewers:
 
 - Redesign Lobby toward a quieter, more list-like page: split "Find listings" filters from "Play from current setup" actions, reduce card/shadow weight, keep actual listings/live games prominent, and decide whether lobby-created games should be public in Watch by default.

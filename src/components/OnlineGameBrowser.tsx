@@ -56,7 +56,7 @@ interface OnlineGameBrowserProps {
   onOpenGame?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
-  onCreateSeek?: () => void;
+  onCreateSeek?: () => void | Promise<void>;
   onQuickMatch?: () => QuickMatchOutcome | Promise<QuickMatchOutcome>;
   quickMatchSetupSummary?: QuickMatchSetupSummary;
   onAcceptSeek?: (seekId: string) => void | Promise<void>;
@@ -167,6 +167,19 @@ function formatSeekStatus(status: OpenSeekSummary["status"]): string {
   }
 }
 
+function formatSeekSideLabel(side: OpenSeekSummary["creatorSeat"]): string {
+  switch (side) {
+    case "w":
+      return "White";
+    case "b":
+      return "Black";
+    case "random":
+      return "Random";
+    default:
+      return side;
+  }
+}
+
 function compareOpenSeekNewest(left: OpenSeekSummary, right: OpenSeekSummary): number {
   if (left.updatedAt !== right.updatedAt) return right.updatedAt.localeCompare(left.updatedAt);
   return left.seekId.localeCompare(right.seekId);
@@ -226,11 +239,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [seekActionById, setSeekActionById] = React.useState<Record<string, "accept" | "cancel" | undefined>>({});
   const [seekActionMessage, setSeekActionMessage] = React.useState("");
   const [quickMatchStatus, setQuickMatchStatus] = React.useState<QuickMatchStatus>("idle");
+  const [createSeekPending, setCreateSeekPending] = React.useState(false);
   const [ownedSeekAction, setOwnedSeekAction] = React.useState<"refresh" | "join" | undefined>();
   const [lastSeekCheckedAt, setLastSeekCheckedAt] = React.useState("");
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
+  const gameLoadInFlightRef = React.useRef(false);
   const seekLoadInFlightRef = React.useRef(false);
   const ownedSeekRefreshInFlightRef = React.useRef(false);
   const seekAutoRefreshPausedUntilRef = React.useRef(0);
@@ -299,8 +314,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     options: { background?: boolean } = {}
   ) => {
     const background = options.background === true;
+    if (background && gameLoadInFlightRef.current) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    gameLoadInFlightRef.current = true;
     if (mode === "replace" && !background) {
       setStatus("loading");
     } else if (mode === "append") {
@@ -336,6 +353,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     } finally {
       if (requestIdRef.current === requestId) {
         setIsLoadingMore(false);
+        gameLoadInFlightRef.current = false;
       }
     }
   }, [directoryState, loadGames]);
@@ -362,6 +380,23 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const interval = window.setInterval(refreshLiveGamesIfVisible, LOBBY_AUTO_REFRESH_MS);
     const handleVisibilityChange = () => {
       refreshLiveGamesIfVisible();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadPage, tab]);
+
+  React.useEffect(() => {
+    if (tab !== "watch") return;
+    const refreshWatchIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadPage("replace", undefined, { background: true });
+    };
+    const interval = window.setInterval(refreshWatchIfVisible, LOBBY_AUTO_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      refreshWatchIfVisible();
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
@@ -512,7 +547,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [openSeeks, query]);
 
   const emptyTitle =
-    tab === "watch" ? "No public live games yet." : "No public completed games yet.";
+    tab === "watch" ? "No public games in progress." : "No public completed games yet.";
   const hasActiveSeekFilters =
     query.trim() !== "" ||
     seekSideFilter !== "all" ||
@@ -525,10 +560,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     (!ownedSeekResponse ||
       ownedSeekResponse.summary.status === "open" ||
       ownedSeekResponse.summary.status === "accepted");
+  const hasCurrentSetupActions = !!onQuickMatch || !!onCreateSeek;
   const quickMatchPending = quickMatchStatus === "pending";
   const quickMatchBlocking = quickMatchStatus === "pending" || quickMatchStatus === "matched";
   const quickMatchDisabled =
     !onQuickMatch ||
+    quickMatchBlocking ||
+    createSeekPending ||
+    hasActiveOwnedSeek ||
+    seekStatus === "loading" ||
+    isSeekLoadInFlight;
+  const createSeekDisabled =
+    !onCreateSeek ||
+    createSeekPending ||
     quickMatchBlocking ||
     hasActiveOwnedSeek ||
     seekStatus === "loading" ||
@@ -543,6 +587,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           : quickMatchStatus === "error"
             ? "Could not start quick match."
             : "";
+  const createSeekMessage = createSeekPending ? "Listing current setup in the Lobby..." : "";
 
   const renderPublicGameRow = (
     game: OnlineGameSummary,
@@ -567,11 +612,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       <article
         key={game.gameId}
         className={className}
-        aria-label={`${options.featured ? "Featured live game " : ""}${white} vs ${black} ${game.gameId}`}
+        aria-label={`${options.featured ? "Top live game " : ""}${white} vs ${black} ${game.gameId}`}
       >
         <div className="online-game-row-main">
           <div className="online-game-players">
-            {options.featured && <span className="online-game-kicker">Featured live game</span>}
+            {options.featured && <span className="online-game-kicker">Top live game</span>}
             <strong>{white} vs {black}</strong>
             <span>{game.gameId}</span>
           </div>
@@ -631,6 +676,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (shouldRestoreFocus) {
         window.setTimeout(() => quickMatchButtonRef.current?.focus(), 0);
       }
+    }
+  };
+
+  const runCreateSeek = async () => {
+    if (!onCreateSeek || createSeekDisabled) return;
+    setCreateSeekPending(true);
+    setQuickMatchStatus("idle");
+    setSeekActionMessage("");
+    try {
+      await onCreateSeek();
+    } catch (error) {
+      console.error("[OnlineGameBrowser] Failed to list current setup", error);
+      setSeekActionMessage("Could not list the current setup.");
+    } finally {
+      setCreateSeekPending(false);
     }
   };
 
@@ -749,8 +809,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         destinations={navDestinations}
       />
 
-      <section className="online-browser-toolbar" aria-label="Online browser controls">
-        <div className="online-browser-tabs" aria-label="Online game lists">
+      <section className={`online-browser-toolbar online-browser-toolbar-${tab}`} aria-label="Online browser controls">
+        <div className="online-browser-tabs" role="group" aria-label="Online game lists">
           <button
             type="button"
             aria-label="Lobby games"
@@ -780,122 +840,105 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </button>
         </div>
         {tab === "lobby" ? (
-          <div className="online-browser-filter-grid">
-            <label className="online-browser-select">
-              <span>Side</span>
-              <select
-                aria-label="Lobby side filter"
-                value={seekSideFilter}
-                onChange={(event) => setSeekSideFilter(event.currentTarget.value as OpenSeekSideFilter)}
-              >
-                <option value="all">All sides</option>
-                <option value="random">Random</option>
-                <option value="w">White</option>
-                <option value="b">Black</option>
-              </select>
-            </label>
-            <label className="online-browser-select">
-              <span>Clock</span>
-              <select
-                aria-label="Lobby clock filter"
-                value={seekClockFilter}
-                onChange={(event) => setSeekClockFilter(event.currentTarget.value as OpenSeekClockFilter)}
-              >
-                <option value="all">All clocks</option>
-                <option value="timed">Timed</option>
-                <option value="casual">Casual</option>
-              </select>
-            </label>
-            <label className="online-browser-select">
-              <span>Scoring</span>
-              <select
-                aria-label="Lobby victory points filter"
-                value={seekVpFilter}
-                onChange={(event) => setSeekVpFilter(event.currentTarget.value as OpenSeekVpFilter)}
-              >
-                <option value="all">All scoring</option>
-                <option value="enabled">Victory points</option>
-                <option value="disabled">Castle control</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              className="online-browser-button neutral"
-              onClick={() => void loadOpenSeekPage({ background: false })}
-              disabled={seekStatus === "loading" || isSeekLoadInFlight || quickMatchBlocking}
-              aria-label="Refresh lobby listings"
-            >
-              {seekStatus === "loading" ? "Refreshing..." : "Refresh listings"}
-            </button>
-            {onQuickMatch && (
+          <div className="online-browser-filter-panel" role="group" aria-label="Find lobby listings">
+            <div className="online-browser-control-title">Find lobby listings</div>
+            <div className="online-browser-filter-grid">
+              <label className="online-browser-select">
+                <span>Side</span>
+                <select
+                  aria-label="Lobby side filter"
+                  value={seekSideFilter}
+                  onChange={(event) => setSeekSideFilter(event.currentTarget.value as OpenSeekSideFilter)}
+                >
+                  <option value="all">All sides</option>
+                  <option value="random">Random</option>
+                  <option value="w">White</option>
+                  <option value="b">Black</option>
+                </select>
+              </label>
+              <label className="online-browser-select">
+                <span>Clock</span>
+                <select
+                  aria-label="Lobby clock filter"
+                  value={seekClockFilter}
+                  onChange={(event) => setSeekClockFilter(event.currentTarget.value as OpenSeekClockFilter)}
+                >
+                  <option value="all">All clocks</option>
+                  <option value="timed">Timed</option>
+                  <option value="casual">Casual</option>
+                </select>
+              </label>
+              <label className="online-browser-select">
+                <span>Scoring</span>
+                <select
+                  aria-label="Lobby victory points filter"
+                  value={seekVpFilter}
+                  onChange={(event) => setSeekVpFilter(event.currentTarget.value as OpenSeekVpFilter)}
+                >
+                  <option value="all">All scoring</option>
+                  <option value="enabled">Victory points</option>
+                  <option value="disabled">Castle control</option>
+                </select>
+              </label>
               <button
                 type="button"
-                ref={quickMatchButtonRef}
-                className="online-browser-button primary online-browser-quick-match"
-                onClick={() => void runQuickMatch()}
-                disabled={quickMatchDisabled}
-                aria-label="Quick Match: accept a compatible lobby listing or list yours"
+                className="online-browser-button neutral"
+                onClick={() => void loadOpenSeekPage({ background: false })}
+                disabled={seekStatus === "loading" || isSeekLoadInFlight || quickMatchBlocking}
+                aria-label="Refresh lobby listings"
               >
-                {quickMatchPending ? "Matching..." : quickMatchStatus === "matched" ? "Opening..." : "Quick Match"}
+                {seekStatus === "loading" ? "Refreshing..." : "Refresh listings"}
               </button>
-            )}
-            {onCreateSeek && (
-              <button
-                type="button"
-                className="online-browser-button primary online-browser-create-seek"
-                onClick={onCreateSeek}
-                disabled={quickMatchBlocking || hasActiveOwnedSeek}
-                aria-label="Create public lobby listing from current Play setup"
-              >
-                Create Listing
-              </button>
-            )}
+            </div>
           </div>
         ) : (
-        <div className="online-browser-filter-grid">
-          <label className="online-browser-select">
-            <span>Sort</span>
-            <select
-              aria-label="Sort public games"
-              value={sort}
-              onChange={(event) => setSort(event.currentTarget.value as OnlineBrowserSort)}
-            >
-              <option value="newest">Newest</option>
-              <option value="moves">Most moves</option>
-            </select>
-          </label>
-          <label className="online-browser-select">
-            <span>Clock</span>
-            <select
-              aria-label="Time control filter"
-              value={timeFilter}
-              onChange={(event) => setTimeFilter(event.currentTarget.value as OnlineBrowserTimeFilter)}
-            >
-              <option value="all">All clocks</option>
-              <option value="timed">Timed</option>
-              <option value="casual">Casual</option>
-            </select>
-          </label>
-          {tab === "archive" && (
-            <label className="online-browser-select">
-              <span>Result</span>
-              <select
-                aria-label="Result filter"
-                value={resultFilter}
-                onChange={(event) => setResultFilter(event.currentTarget.value as OnlineBrowserResultFilter)}
-              >
-                <option value="all">All results</option>
-                <option value="white">White wins</option>
-                <option value="black">Black wins</option>
-                <option value="resignation">Resignation</option>
-                <option value="timeout">Timeout</option>
-                <option value="castle_control">Castle control</option>
-                <option value="victory_points">Victory points</option>
-                <option value="monarch_captured">Monarch captured</option>
-              </select>
-            </label>
-          )}
-        </div>
+          <div className="online-browser-filter-panel" role="group" aria-label={tab === "watch" ? "Browse live public games" : "Browse archived public games"}>
+            <div className="online-browser-control-title">{tab === "watch" ? "Browse live games" : "Browse archive"}</div>
+            <div className="online-browser-filter-grid">
+              <label className="online-browser-select">
+                <span>Sort</span>
+                <select
+                  aria-label="Sort public games"
+                  value={sort}
+                  onChange={(event) => setSort(event.currentTarget.value as OnlineBrowserSort)}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="moves">Most moves</option>
+                </select>
+              </label>
+              <label className="online-browser-select">
+                <span>Clock</span>
+                <select
+                  aria-label="Time control filter"
+                  value={timeFilter}
+                  onChange={(event) => setTimeFilter(event.currentTarget.value as OnlineBrowserTimeFilter)}
+                >
+                  <option value="all">All clocks</option>
+                  <option value="timed">Timed</option>
+                  <option value="casual">Casual</option>
+                </select>
+              </label>
+              {tab === "archive" && (
+                <label className="online-browser-select">
+                  <span>Result</span>
+                  <select
+                    aria-label="Result filter"
+                    value={resultFilter}
+                    onChange={(event) => setResultFilter(event.currentTarget.value as OnlineBrowserResultFilter)}
+                  >
+                    <option value="all">All results</option>
+                    <option value="white">White wins</option>
+                    <option value="black">Black wins</option>
+                    <option value="resignation">Resignation</option>
+                    <option value="timeout">Timeout</option>
+                    <option value="castle_control">Castle control</option>
+                    <option value="victory_points">Victory points</option>
+                    <option value="monarch_captured">Monarch captured</option>
+                  </select>
+                </label>
+              )}
+            </div>
+          </div>
         )}
         <label className="online-browser-search">
           <span>Search</span>
@@ -904,7 +947,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             aria-label={tab === "lobby" ? "Search lobby listings" : "Search public games"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={tab === "lobby" ? "Listing id or rules" : "Player or game id"}
+            placeholder={tab === "lobby" ? "Listing id, side, clock, or scoring" : "Player or game id"}
           />
         </label>
       </section>
@@ -915,7 +958,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             ? "Loading lobby listings..."
             : seekStatus === "error"
               ? "Could not load lobby listings."
-              : copyMessage || seekActionMessage || quickMatchMessage || terminalOwnedSeekMessage || (
+              : copyMessage || seekActionMessage || quickMatchMessage || createSeekMessage || terminalOwnedSeekMessage || (
                 <>
                   {visibleOpenSeeks.length} lobby listings shown
                   {lastSeekCheckedAt ? <span aria-hidden="true">; last checked {lastSeekCheckedAt}</span> : null}
@@ -944,12 +987,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             Retry
           </button>
         ) : (
-          <main className="online-browser-list" aria-label="Lobby listings">
-            {onQuickMatch && (
-              <section className="online-browser-quick-match-panel" aria-label="Quick match setup">
+          <main className="online-browser-list" aria-label="Online lobby">
+            {hasCurrentSetupActions && (
+              <section className="online-browser-quick-match-panel" aria-label="Play from current setup">
                 <div className="online-browser-quick-match-copy">
-                  <strong>Uses your exact current Play setup</strong>
-                  <p>Choose board and clock on Play. Filters only search open listings here; Quick Match and Create Listing use your current setup.</p>
+                  <span className="online-browser-section-kicker">Play from current setup</span>
+                  <strong>Find a match with your current Play setup</strong>
+                  <p>Lobby filters search existing listings. Quick Match and List Current Setup use your current board, pieces, sanctuaries, pool, theme, clock, and scoring mode.</p>
                 </div>
                 {quickMatchSetupSummary && (
                   <div className="online-browser-quick-match-summary" aria-label="Quick match setup summary">
@@ -958,6 +1002,31 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <span>{quickMatchSetupSummary.scoring}</span>
                   </div>
                 )}
+                <div className="online-browser-quick-match-actions">
+                  {onQuickMatch && (
+                    <button
+                      type="button"
+                      ref={quickMatchButtonRef}
+                      className="online-browser-button primary online-browser-quick-match"
+                      onClick={() => void runQuickMatch()}
+                      disabled={quickMatchDisabled}
+                      aria-label="Quick Match: accept a compatible lobby listing or list yours"
+                    >
+                      {quickMatchPending ? "Matching..." : quickMatchStatus === "matched" ? "Opening..." : "Quick Match"}
+                    </button>
+                  )}
+                  {onCreateSeek && (
+                    <button
+                      type="button"
+                      className="online-browser-button neutral online-browser-create-seek"
+                      onClick={() => void runCreateSeek()}
+                      disabled={createSeekDisabled}
+                      aria-label="Create public lobby listing from current Play setup"
+                    >
+                      {createSeekPending ? "Listing..." : "List Current Setup"}
+                    </button>
+                  )}
+                </div>
               </section>
             )}
             {visibleOwnedSeekResponse?.summary && (
@@ -976,7 +1045,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <span className={`online-game-pill ${visibleOwnedSeekResponse.summary.status}`}>
                       {formatSeekStatus(visibleOwnedSeekResponse.summary.status)}
                     </span>
-                    <span>Side {visibleOwnedSeekResponse.summary.creatorSeat}</span>
+                    <span>Creator side {formatSeekSideLabel(visibleOwnedSeekResponse.summary.creatorSeat)}</span>
                     <span>{formatSeekClock(visibleOwnedSeekResponse.summary)}</span>
                     <span>Expires {formatSeekExpiresAt(visibleOwnedSeekResponse.summary.expiresAt)}</span>
                   </div>
@@ -1060,19 +1129,22 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </div>
               )}
             </section>
-            {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
-              <section className="online-browser-empty">
-                <h2>{hasActiveSeekFilters ? "No lobby listings match these filters." : "No lobby listings yet."}</h2>
-                <p>
-                  {hasActiveSeekFilters
-                    ? "Try a different side, clock, scoring, or search setting."
-                    : "Use Quick Match to find a compatible listing, or create a public listing from your current Play setup."}
-                </p>
-              </section>
-            ) : visibleOpenSeeks.map((seek) => {
+            <section className="online-browser-lobby-listings" aria-label="Open lobby listings">
+              {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
+                <div className="online-browser-empty">
+                  <h2>{hasActiveSeekFilters ? "No lobby listings match these filters." : "No lobby listings yet."}</h2>
+                  <p>
+                    {hasActiveSeekFilters
+                      ? "Try a different side, clock, scoring, or search setting."
+                      : hasCurrentSetupActions
+                        ? "Use Quick Match or List Current Setup above, or change setup from Play."
+                        : "Choose setup from Play, then return here to find or list a lobby game."}
+                  </p>
+                </div>
+              ) : visibleOpenSeeks.map((seek) => {
               const owned = ownedSeekIds.includes(seek.seekId);
               const pendingAction = seekActionById[seek.seekId];
-              const sideLabel = seek.creatorSeat;
+              const sideLabel = formatSeekSideLabel(seek.creatorSeat);
               const radius = seek.setup.board.config.nSquares;
               return (
                 <article
@@ -1087,7 +1159,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     </div>
                     <div className="online-game-meta">
                       <span className="online-game-pill active">Open</span>
-                      <span>Side {sideLabel}</span>
+                      <span>Creator side {sideLabel}</span>
                       <span>Board Radius {radius}</span>
                       <span>Clock {formatSeekClock(seek)}</span>
                       {seek.setup.gameRules?.vpModeEnabled && <span>Scoring Victory points</span>}
@@ -1120,14 +1192,79 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </article>
               );
             })}
+            </section>
           </main>
         )
       ) : status === "error" ? (
         <button type="button" className="online-browser-button neutral" onClick={refreshGames}>
           Retry
         </button>
+      ) : tab === "watch" ? (
+        <main className="online-browser-watch-surface" aria-label="Public live games">
+          <section className="online-browser-live-section" aria-label="Watch public games summary">
+            <div className="online-browser-section-header">
+              <div>
+                <span className="online-browser-section-kicker">Watch</span>
+                <h2>Live public games</h2>
+                <p>
+                  {status === "loading"
+                    ? "Loading public games..."
+                    : copyMessage || `${visibleGames.length} public games shown`}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="online-browser-button subtle"
+                onClick={refreshGames}
+                disabled={status === "loading"}
+                aria-label="Refresh live public games"
+              >
+                {status === "loading" ? "Refreshing..." : "Refresh live"}
+              </button>
+            </div>
+            {visibleGames.length === 0 && status === "ready" ? (
+              <section className="online-browser-empty online-browser-empty-compact">
+                <h2>{hasActiveFilters && publicGames.length > 0 ? "No public games match these filters." : emptyTitle}</h2>
+                <p>
+                  {hasActiveFilters && publicGames.length > 0
+                    ? "Try a different search or clock setting."
+                    : "Accepted public lobby games appear here automatically. Private and unlisted games stay off this page."}
+                </p>
+              </section>
+            ) : (
+              <div className="online-browser-watch-grid">
+                {visibleGames[0] && (
+                  <section className="online-browser-featured-game" aria-label="Top public live game">
+                    {renderPublicGameRow(visibleGames[0], { featured: true, context: "watch" })}
+                  </section>
+                )}
+                {visibleGames.length > 1 && (
+                  <section className="online-browser-side-list" aria-label="Other public live games">
+                    <div className="online-browser-side-list-header">
+                      <span className="online-browser-section-kicker">More games</span>
+                      <strong>{visibleGames.length - 1} more public {visibleGames.length === 2 ? "game" : "games"}</strong>
+                    </div>
+                    {visibleGames.slice(1).map((game) =>
+                      renderPublicGameRow(game, { compact: true, context: "watch" })
+                    )}
+                  </section>
+                )}
+              </div>
+            )}
+            {nextCursor && status === "ready" && (
+              <button
+                type="button"
+                className="online-browser-button neutral online-browser-load-more"
+                onClick={loadMoreGames}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? "Loading..." : "Load more"}
+              </button>
+            )}
+          </section>
+        </main>
       ) : (
-        <main className="online-browser-list" aria-label={tab === "watch" ? "Public live games" : "Public archived games"}>
+        <main className="online-browser-list" aria-label="Public archived games">
           <>
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty">

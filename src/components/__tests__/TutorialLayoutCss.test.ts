@@ -137,10 +137,21 @@ describe("Tutorial mobile layout CSS", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const onlineCss = readFileSync(resolve(testDir, "../../css/OnlineGameBrowser.css"), "utf8");
 
-    expect(onlineCss).toContain("grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));");
+    expect(onlineCss).toContain("grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr));");
+    expect(onlineCss).toContain(".online-browser-filter-panel");
+    expect(onlineCss).toContain(".online-browser-control-title");
     expect(onlineCss).not.toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
     expect(onlineCss).toContain(".online-browser-visually-hidden");
     expect(onlineCss).toContain("clip: rect(0 0 0 0) !important;");
+  });
+
+  it("gives Watch a featured live-game layout that collapses on mobile", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const onlineCss = readFileSync(resolve(testDir, "../../css/OnlineGameBrowser.css"), "utf8");
+
+    expect(onlineCss).toContain(".online-browser-watch-grid");
+    expect(onlineCss).toMatch(/\.online-browser-watch-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.15fr\)\s*minmax\(280px,\s*0\.85fr\);/s);
+    expect(onlineCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*\.online-browser-watch-grid\s*\{[^}]*grid-template-columns:\s*1fr;/s);
   });
 
   it("keeps app pages in their own mobile scrollports", () => {
