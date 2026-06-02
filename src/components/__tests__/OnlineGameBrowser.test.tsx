@@ -205,10 +205,39 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Scoring Victory points");
     expect(within(row).getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeInTheDocument();
     const currentGames = screen.getByRole("region", { name: "Current public games" });
+    const liveOverview = within(currentGames).getByRole("group", { name: "Lobby live games overview" });
+    expect(liveOverview).toHaveTextContent("1 public live game");
+    expect(liveOverview).toHaveTextContent("Most moves");
+    expect(liveOverview).toHaveTextContent("Ada vs Ben, 8 moves");
+    expect(liveOverview).toHaveTextContent("Public only");
     expect(within(currentGames).getByText("game_lobby_live")).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Spectate Ada vs Ben, game_lobby_live" })).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Open Watch tab" })).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Refresh live public games" })).toHaveTextContent("Refresh live games");
+  });
+
+  it("counts all public live games even when the Lobby preview is capped", async () => {
+    const liveGames = Array.from({ length: 6 }, (_, index) =>
+      summary({ gameId: `game_lobby_live_${index + 1}`, version: index + 1 })
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory(liveGames))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    const currentGames = await screen.findByRole("region", { name: "Current public games" });
+    const liveOverview = within(currentGames).getByRole("group", { name: "Lobby live games overview" });
+    expect(within(currentGames).getByText("6 public games in progress")).toBeInTheDocument();
+    expect(liveOverview).toHaveTextContent("6 public live games");
+    expect(liveOverview).toHaveTextContent("Ada vs Ben, 6 moves");
+    expect(within(currentGames).getByText("game_lobby_live_6")).toBeInTheDocument();
+    expect(within(currentGames).queryByText("game_lobby_live_1")).not.toBeInTheDocument();
   });
 
   it("keeps listing filters adjacent to open listings even when live games exist", async () => {
@@ -1557,6 +1586,11 @@ describe("OnlineGameBrowser", () => {
 
     const row = await screen.findByRole("article", { name: /Ada vs Ben/i });
     const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
+    const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
+    expect(liveOverview).toHaveTextContent("1 public live game");
+    expect(liveOverview).toHaveTextContent("Most moves");
+    expect(liveOverview).toHaveTextContent("Ada vs Ben, 3 moves");
+    expect(liveOverview).toHaveTextContent("Public only");
     expect(featuredRegion).toContainElement(row);
     expect(row).toHaveTextContent("Most active live game");
     expect(row).toHaveTextContent("Most moves in current list");
@@ -1604,9 +1638,53 @@ describe("OnlineGameBrowser", () => {
 
     expect(screen.getByRole("combobox", { name: "Sort public games" })).toHaveValue("newest");
     const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
+    const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
+    expect(liveOverview).toHaveTextContent("2 public live games");
+    expect(liveOverview).toHaveTextContent("Caro vs Dani, 9 moves");
     expect(featuredRegion).toHaveTextContent("game_older_many_moves");
     expect(featuredRegion).toHaveTextContent("9 moves");
     expect(screen.getByRole("region", { name: "Other public live games" })).toHaveTextContent("game_newest_few_moves");
+  });
+
+  it("keeps the Watch live count total while search filters the visible leader", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({ gameId: "game_public_visible", version: 5 }),
+          summary({
+            gameId: "game_public_hidden",
+            version: 9,
+            participants: [
+              { seat: "w", role: "white", identity: { kind: "registered", id: "caro_w", displayName: "Caro" } },
+              { seat: "b", role: "black", identity: { kind: "registered", id: "dani_b", displayName: "Dani" } },
+            ],
+          }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_public_visible");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+      target: { value: "Ada" },
+    });
+
+    const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
+    expect(liveOverview).toHaveTextContent("2 public live games");
+    expect(liveOverview).toHaveTextContent("Ada vs Ben, 5 moves");
+    expect(screen.queryByText("game_public_hidden")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+      target: { value: "no matching game" },
+    });
+
+    expect(liveOverview).toHaveTextContent("2 public live games");
+    expect(liveOverview).toHaveTextContent("No visible game");
+    expect(liveOverview).toHaveTextContent("No matching public games");
   });
 
   it("defensively hides non-public summaries even if a loader returns them", async () => {

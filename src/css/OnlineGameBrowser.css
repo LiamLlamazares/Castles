@@ -407,6 +407,37 @@
   gap: 8px;
 }
 
+.online-browser-live-overview {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(220px, 1.5fr) minmax(120px, 0.7fr);
+  gap: 8px;
+}
+
+.online-browser-live-stat {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.online-browser-live-stat span {
+  display: block;
+  color: #9ed0c2;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.online-browser-live-stat strong {
+  display: block;
+  margin-top: 4px;
+  color: #f7f1d6;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
 .online-browser-lobby-listings {
   display: grid;
   gap: 10px;
@@ -559,6 +590,7 @@
   .online-browser-closed-listing,
   .online-browser-quick-match-panel,
   .online-browser-section-header,
+  .online-browser-live-overview,
   .online-browser-watch-grid {
     grid-template-columns: 1fr;
   }

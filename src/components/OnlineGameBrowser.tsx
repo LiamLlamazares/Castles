@@ -161,6 +161,10 @@ function formatMoveCount(count: number): string {
   return `${count} ${count === 1 ? "move" : "moves"}`;
 }
 
+function formatPublicLiveCount(count: number): string {
+  return `${count} public live ${count === 1 ? "game" : "games"}`;
+}
+
 function formatClockTime(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1_000));
   const hours = Math.floor(totalSeconds / 3_600);
@@ -690,6 +694,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     [games]
   );
 
+  const publicActiveGames = React.useMemo(() => {
+    return publicGames
+      .filter((game) => game.status === "active")
+      .sort(compareMostMoves);
+  }, [publicGames]);
+
   const visibleGames = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const filtered = publicGames.filter((game) => {
@@ -707,11 +717,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [publicGames, query, resultFilter, sort, tab, timeFilter]);
 
   const lobbyLiveGames = React.useMemo(() => {
-    return publicGames
-      .filter((game) => game.status === "active")
-      .sort(compareMostMoves)
-      .slice(0, 5);
-  }, [publicGames]);
+    return publicActiveGames.slice(0, 5);
+  }, [publicActiveGames]);
 
   const watchMostActiveGame = React.useMemo(() => {
     if (tab !== "watch" || visibleGames.length === 0) return null;
@@ -937,6 +944,41 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </button>
         </div>
       </article>
+    );
+  };
+
+  const renderLiveOverview = (
+    liveGameCount: number,
+    featuredGame: OnlineGameSummary | null,
+    label: string
+  ) => {
+    const featuredWhite = featuredGame ? participantName(featuredGame.participants, "w") : "";
+    const featuredBlack = featuredGame ? participantName(featuredGame.participants, "b") : "";
+    return (
+      <div className="online-browser-live-overview" role="group" aria-label={label}>
+        <div className="online-browser-live-stat">
+          <span>Live now</span>
+          <strong>{formatPublicLiveCount(liveGameCount)}</strong>
+        </div>
+        <div className="online-browser-live-stat">
+          <span>Featured by</span>
+          <strong>{featuredGame ? "Most moves" : liveGameCount > 0 ? "No visible game" : "No featured game"}</strong>
+        </div>
+        <div className="online-browser-live-stat online-browser-live-stat-wide">
+          <span>Activity leader</span>
+          <strong>
+            {featuredGame
+              ? `${featuredWhite} vs ${featuredBlack}, ${formatMoveCount(featuredGame.livePreview.moveCount)}`
+              : liveGameCount > 0
+                ? "No matching public games"
+                : "Waiting for public games"}
+          </strong>
+        </div>
+        <div className="online-browser-live-stat">
+          <span>Visibility</span>
+          <strong>Public only</strong>
+        </div>
+      </div>
     );
   };
 
@@ -1510,7 +1552,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       ? "Loading public games..."
                       : status === "error"
                         ? "Could not load live games."
-                        : copyMessage || `${lobbyLiveGames.length} public games in progress`}
+                        : copyMessage || `${publicActiveGames.length} public games in progress`}
                   </p>
                 </div>
                 <div className="online-browser-section-actions">
@@ -1533,6 +1575,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   </button>
                 </div>
               </div>
+              {renderLiveOverview(publicActiveGames.length, lobbyLiveGames[0] ?? null, "Lobby live games overview")}
               {status === "error" ? (
                 <div className="online-browser-empty online-browser-empty-compact">
                   <h2>Live games are unavailable.</h2>
@@ -1581,6 +1624,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 {status === "loading" ? "Refreshing..." : "Refresh live games"}
               </button>
             </div>
+            {renderLiveOverview(publicActiveGames.length, watchMostActiveGame, "Watch live games overview")}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty online-browser-empty-compact">
                 <h2>{hasActiveFilters && publicGames.length > 0 ? "No public games match these filters." : emptyTitle}</h2>

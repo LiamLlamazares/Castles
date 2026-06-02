@@ -524,6 +524,23 @@ Remaining work:
 - If private games later need replay from the same browser, add an authenticated replay endpoint or token-safe local credential design rather than using public spectator snapshots.
 - Account-backed history should make this clear control affect only the anonymous/device-local fallback, not a signed-in user's durable game history.
 
+## Phase 6X: Watch and Lobby Live Overview
+
+Goal: make the current-games surfaces easier to scan without adding unsupported spectator counts, ratings, or TV-style ranking.
+
+Status: implemented locally on 2026-06-02. Lobby's Current games section and the Watch tab now show a compact live overview with the public live-game count, the fact that the featured game is selected by most moves, the current activity leader, and the public-only visibility scope. This reuses the existing public summary read model and does not infer private/unlisted games or process-local spectator presence.
+
+Verification:
+
+- Focused OnlineGameBrowser tests cover the Lobby overview, the Watch overview, and the most-active featured-game leader when the visible list is sorted by newest.
+- Regression tests cover total public-live counts when the Lobby preview is capped and when Watch filters reduce the visible game list.
+
+Remaining work:
+
+- Spectator counts still need a multi-instance-aware presence source.
+- A true TV/featured ranking still needs ratings/accounts or a durable activity signal.
+- Continue UI screenshot QA for desktop and mobile Watch/Lobby layouts before broad deployment.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -561,8 +578,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Decide the next Watch/Lobby preview step: spectator counts with durable presence, a cleaner current-games section, or deeper navigation streamlining.
-2. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
-3. Continue Tutorial course polish with richer theory and practice, but add engine-graded progress only after objective board states are explicit and tested.
-4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-5. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.
+1. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
+2. Continue Tutorial course polish with richer theory and practice, but add engine-graded progress only after objective board states are explicit and tested.
+3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.
