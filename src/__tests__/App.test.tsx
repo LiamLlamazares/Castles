@@ -7,6 +7,11 @@ import { MoveTree } from "../Classes/Core/MoveTree";
 import * as PGNLoadService from "../Classes/Services/PGNLoadService";
 import type { OnlineGameSnapshotDTO } from "../online/types";
 import {
+  createInitialStateFromSetupDTO,
+  serializeGameState,
+  serializeOnlineGameSetup,
+} from "../online/serialization";
+import {
   ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
   type OpenSeekSummary,
 } from "../online/seeks";
@@ -43,6 +48,7 @@ vi.mock("../components/Game", () => ({
   default: (props: {
     initialBoard?: unknown;
     initialPieces?: unknown[];
+    initialCastles?: unknown[];
     initialMoveTree?: unknown;
     initialTurnCounter?: number;
     initialSanctuaries?: unknown[];
@@ -80,6 +86,16 @@ vi.mock("../components/Game", () => ({
       <div>Game Ready</div>
       <div>Online session: {props.onlineSession?.role ?? "none"}</div>
       <div>Online visibility: {props.onlineSession?.visibility ?? "none"}</div>
+      <div>
+        Initial castle owners: {
+          props.initialCastles
+            ?.map((castle) => {
+              const candidate = castle as { hex?: { getKey?: () => string }; owner?: string };
+              return `${candidate.hex?.getKey?.() ?? "unknown"}:${candidate.owner ?? "unknown"}`;
+            })
+            .join(";") ?? "none"
+        }
+      </div>
       <div>Analysis mode: {props.isAnalysisMode ? "yes" : "no"}</div>
       <div>
         Victory points: {props.initialVictoryPoints
@@ -1755,6 +1771,64 @@ describe("App game setup lifecycle", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveClass("online-state-status");
     expect(status).toHaveTextContent(`Access denied: ${longError}`);
+  });
+
+  it("hydrates online player snapshots with live castle owners instead of setup owners", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_captured_castle_app&seat=w&token=white-token"
+    );
+    onlineHookMocks.useOnlineGameConnection.mockReturnValue({
+      status: "connected",
+      submitAction: onlineHookMocks.submitAction,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ schemaVersion: 1, games: [] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+    const board = getStartingBoard(6);
+    const setup = serializeOnlineGameSetup({
+      board,
+      pieces: getStartingPieces(6),
+      sanctuaries: [],
+    });
+    const { state } = createInitialStateFromSetupDTO(setup);
+    const capturedBlackCastle = state.castles.find((castle) => castle.color === "b")!;
+    const liveCastles = state.castles.map((castle) =>
+      castle.hex.equals(capturedBlackCastle.hex)
+        ? castle.with({ owner: "w" })
+        : castle
+    );
+    const snapshot: OnlineGameSnapshotDTO = {
+      gameId: "game_captured_castle_app",
+      version: 12,
+      setup,
+      state: serializeGameState({
+        ...state,
+        castles: liveCastles,
+        turnCounter: 4,
+      }),
+      moveHistory: [],
+      playerToMove: "w",
+      turnPhase: "Recruitment",
+    };
+
+    render(<App />);
+    const playerCallback = onlineHookMocks.useOnlineGameConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      playerCallback(snapshot);
+    });
+
+    expect(await screen.findByText("Online session: player")).toBeInTheDocument();
+    const ownerSummary = screen.getByText(/Initial castle owners:/);
+    expect(ownerSummary).toHaveTextContent(`${capturedBlackCastle.hex.getKey()}:w`);
+    expect(ownerSummary).not.toHaveTextContent(`${capturedBlackCastle.hex.getKey()}:b`);
   });
 
   it("seeds public player visibility and wires updates through the bearer-authorized client helper", async () => {
