@@ -434,8 +434,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
   useSoundEffects();
 
-  // Decoupled View State
-  const viewState = useGameView();
   const onlineOrientationKey = onlineSession?.role === "player"
     ? `${onlineSession.gameId}:${onlineSession.playerColor}`
     : onlineSession
@@ -443,6 +441,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
       : "local";
   const onlineOrientationTarget =
     onlineSession?.role === "player" && onlineSession.playerColor === "b";
+
+  // Decoupled View State
+  const viewState = useGameView(onlineOrientationTarget);
   const { setBoardRotated } = viewState;
 
   React.useEffect(() => {

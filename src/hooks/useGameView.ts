@@ -32,16 +32,16 @@ export interface GameViewActions {
   setAllIcons: (visible: boolean) => void;
 }
 
-export const useGameView = (): GameViewState & GameViewActions => {
-  const [state, setState] = useState<GameViewState>({
+export const useGameView = (initialBoardRotated = false): GameViewState & GameViewActions => {
+  const [state, setState] = useState<GameViewState>(() => ({
     showCoordinates: false,
-    isBoardRotated: false,
+    isBoardRotated: initialBoardRotated,
     resizeVersion: 0,
     showShields: true,
     showCastleRecruitment: true,
     showTerrainIcons: true,
     showSanctuaryIcons: true,
-  });
+  }));
 
   const toggleCoordinates = useCallback(() => {
     setState(prev => ({ ...prev, showCoordinates: !prev.showCoordinates }));
