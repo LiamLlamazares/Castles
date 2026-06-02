@@ -96,6 +96,39 @@ describe("GameLibrary", () => {
     expect(container.querySelector(".saved-game-card")).toHaveClass("saved-game-card");
   });
 
+  it("labels the primary saved-game action as analysis instead of live resume", async () => {
+    render(
+      <GameLibrary
+        repository={createRepository([
+          {
+            id: "game-complete",
+            name: "Finished friend game",
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+            moveCount: 18,
+            status: "complete",
+            players: { white: "White", black: "Black" },
+          },
+        ])}
+        onBack={vi.fn()}
+        onLoadGame={vi.fn()}
+        onImportPGN={vi.fn()}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Finished friend game/i }));
+
+    const analyzeButton = screen.getByRole("button", { name: "Analyze" });
+    expect(analyzeButton).toHaveAttribute(
+      "title",
+      "Open this save on a review board; clocks and online seats are not resumed."
+    );
+    expect(analyzeButton).toHaveAccessibleDescription(
+      "Saved games open on a review board; clocks and online seats are not resumed."
+    );
+    expect(screen.queryByRole("button", { name: "Load" })).not.toBeInTheDocument();
+  });
+
   it("keeps PGN import behind a collapsed import section", async () => {
     render(
       <GameLibrary

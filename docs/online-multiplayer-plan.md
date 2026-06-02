@@ -520,7 +520,7 @@ Verification:
 
 Remaining work:
 
-- Account-backed personal game history can replace or augment this local-only list once accounts exist.
+- Account-backed personal game history should replace or augment this local-only list once accounts exist, so registered players see their own finished games across devices while anonymous players keep the current on-this-device recent list.
 - If private games later need replay from the same browser, add an authenticated replay endpoint or token-safe local credential design rather than using public spectator snapshots.
 
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
@@ -530,6 +530,7 @@ Goal: add public-service trust and governance features.
 Work:
 
 - Add account-backed identity if required by ratings and moderation.
+- Add account-backed personal game history for registered players, including finished friend-link games and public games, before relying on local storage for any signed-in user's archive.
 - Implement rating events/read models after result contracts are stable.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.

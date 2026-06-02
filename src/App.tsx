@@ -1614,6 +1614,25 @@ function App() {
   const pendingOnlineMessage = formatOnlinePendingConnectionMessage(
     pendingOnlineConnection.status
   );
+  const onlineChallengeStatusLine = useMemo(() => {
+    if (onlineChallengeStatus === "loading") return "Loading challenge...";
+    if (onlineChallengeStatus === "acting") return "Updating challenge...";
+    if (onlineChallengeError) return onlineChallengeError;
+
+    const summaryStatus = onlineChallengeResponse?.summary.status ?? "pending";
+    if (summaryStatus === "pending" && onlineChallengeResponse?.role === "challenger") {
+      return "Status: pending; checking every second for acceptance.";
+    }
+    if (summaryStatus === "pending" && onlineChallengeResponse?.role === "challenged") {
+      return "Status: pending; waiting for your response and checking for updates.";
+    }
+    return `Status: ${summaryStatus}`;
+  }, [
+    onlineChallengeError,
+    onlineChallengeResponse?.role,
+    onlineChallengeResponse?.summary.status,
+    onlineChallengeStatus,
+  ]);
   const canRecoverPendingOnlineConnection =
     pendingOnlineConnection.status === "access-denied" ||
     pendingOnlineConnection.status === "protocol-error" ||
@@ -1759,12 +1778,13 @@ function App() {
               onBack={handleOnlineStateBackToPlay}
               destinations={onlineStateDestinations}
             />
-            <div className="online-state-status" role="status" aria-live="polite">
-              {onlineChallengeStatus === "loading"
-                ? "Loading challenge..."
-                : onlineChallengeStatus === "acting"
-                  ? "Updating challenge..."
-                  : onlineChallengeError ?? `Status: ${onlineChallengeResponse?.summary.status ?? "pending"}`}
+            <div
+              className="online-state-status"
+              role="status"
+              aria-label="Challenge status"
+              aria-live="polite"
+            >
+              {onlineChallengeStatusLine}
             </div>
             {onlineChallengeShareUrl && (
               <section className="online-state-field" aria-label="Challenge link">
@@ -1784,6 +1804,7 @@ function App() {
                 <div
                   className="online-state-inline-status"
                   role="status"
+                  aria-label="Challenge link status"
                   aria-live="polite"
                   aria-atomic="true"
                 >

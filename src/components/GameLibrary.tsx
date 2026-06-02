@@ -282,6 +282,7 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
   };
 
   const selected = games.find(game => game.id === selectedId);
+  const openAnalysisLabel = selected?.status === "complete" ? "Analyze" : "Open Analysis";
   const dialogGame = libraryDialog ? games.find(game => game.id === libraryDialog.id) : null;
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
@@ -335,7 +336,18 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
           )}
 
           <div className="library-actions">
-            <button className="library-button success" disabled={!selected} onClick={handleLoad}>Load</button>
+            <button
+              className="library-button success"
+              disabled={!selected}
+              onClick={handleLoad}
+              aria-describedby={selected ? "library-open-analysis-help" : undefined}
+              title="Open this save on a review board; clocks and online seats are not resumed."
+            >
+              {openAnalysisLabel}
+            </button>
+            <span id="library-open-analysis-help" className="visually-hidden">
+              Saved games open on a review board; clocks and online seats are not resumed.
+            </span>
             <button className="library-button neutral" disabled={!selected} onClick={handleRename}>Rename</button>
             <button className="library-button info" disabled={!selected} onClick={handleExport}>Export PGN</button>
             <button className="library-button danger" disabled={!selected} onClick={handleDelete}>Delete</button>

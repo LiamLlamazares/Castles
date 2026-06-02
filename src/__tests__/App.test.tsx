@@ -2010,6 +2010,9 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "Accept Challenge" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Challenge status" })).toHaveTextContent(
+      "waiting for your response and checking for updates"
+    );
     expect(screen.getByRole("button", { name: "Decline Challenge" })).toBeInTheDocument();
   });
 
@@ -2049,6 +2052,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     expect(await screen.findByRole("button", { name: "Refresh Challenge" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Challenge status" })).toHaveTextContent("checking every second for acceptance");
     expect(screen.getByRole("button", { name: "Cancel Challenge" })).toBeInTheDocument();
   });
 
