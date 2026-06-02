@@ -117,6 +117,10 @@ export const SanctuaryConfig: Record<SanctuaryType, {
  * During cooldown, the sanctuary cannot be pledged.
  */
 export const SANCTUARY_EVOLUTION_COOLDOWN = 10;
+export function formatCooldownTickCount(ticks: number): string {
+  return `${ticks} cooldown tick${ticks === 1 ? "" : "s"}`;
+}
+export const SANCTUARY_EVOLUTION_COOLDOWN_LABEL = formatCooldownTickCount(SANCTUARY_EVOLUTION_COOLDOWN);
 
 export type TurnPhase = "Movement" | "Attack" | "Recruitment";
 export type PieceTheme = "Chess" | "Castles";

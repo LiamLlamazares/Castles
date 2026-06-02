@@ -32,7 +32,7 @@ export class TurnMutator {
           newState = DeathSystem.processPhoenixRespawns(newState);
       }
 
-      // 1. Decrement sanctuary cooldowns at the start of EACH player's turn
+      // 1. Decrement sanctuary cooldowns at the start of their controller's turn
       if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
           const currentPhaseStartPlayer = TurnMutator.getTurnStartPlayer(newState.turnCounter);
 

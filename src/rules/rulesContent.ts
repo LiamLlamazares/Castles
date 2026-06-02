@@ -6,7 +6,7 @@ import {
   PieceType,
   PROMOTABLE_TYPES,
   SanctuaryConfig,
-  SANCTUARY_EVOLUTION_COOLDOWN,
+  SANCTUARY_EVOLUTION_COOLDOWN_LABEL,
   SanctuaryType,
 } from "../Constants";
 import { AbilityTypeConfig } from "../Classes/Config/AbilityConfig";
@@ -308,7 +308,7 @@ export const sanctuaryRules: RuleText[] = [
   },
   {
     title: "Cooldown",
-    text: "A sanctuary on cooldown cannot be pledged. Its cooldown ticks at the start of the turn for the board side the sanctuary belongs to, not necessarily the side that last pledged it.",
+    text: "A sanctuary on cooldown cannot be pledged. After a pledge, its cooldown belongs to the player who used it and ticks only at the start of that player's turn.",
   },
 ];
 
@@ -331,7 +331,7 @@ export const sanctuaryDetailRules: RuleText[] = [
   },
   {
     title: "Evolution",
-    text: `After a pledge, the sanctuary evolves to the next available higher-tier sanctuary from the pool and enters cooldown. If no higher tier remains, it keeps its current type and recharges. Default cooldown is ${SANCTUARY_EVOLUTION_COOLDOWN} ticks.`,
+    text: `After a pledge, the sanctuary evolves to the next available higher-tier sanctuary from the pool and enters cooldown. If no higher tier remains, it keeps its current type and recharges. Default cooldown is ${SANCTUARY_EVOLUTION_COOLDOWN_LABEL}.`,
   },
   {
     title: "Cooldown badge",
@@ -339,7 +339,7 @@ export const sanctuaryDetailRules: RuleText[] = [
   },
   {
     title: "Cooldown acceleration",
-    text: "When the sanctuary's board side starts a turn, cooldown drops by 1 plus that side's non-Swordsman pieces across the river. Swordsmen do not accelerate cooldown.",
+    text: "When the cooldown player's turn starts, cooldown drops by 1 plus that player's non-Swordsman pieces across the river. Swordsmen do not accelerate cooldown.",
   },
 ];
 

@@ -149,6 +149,15 @@ describe('tutorial lesson index', () => {
     );
   });
 
+  it('documents sanctuary cooldown ownership as the pledging player', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm4_l4_sanctuary_cooldowns');
+    if (!lesson) throw new Error('Missing sanctuary cooldown lesson');
+
+    expect(lesson.description).toContain('player who used it');
+    expect(lesson.description).toContain("that player's turn");
+    expect(lesson.hints?.join(' ')).toContain('Swordsmen do not accelerate sanctuary cooldown');
+  });
+
   it('keeps the early victory lesson inspection-only', () => {
     const lesson = getAllLessons().find((candidate) => candidate.id === 'm0_01_victory_conditions');
     if (!lesson) throw new Error('Missing victory lesson');

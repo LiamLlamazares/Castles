@@ -1,4 +1,8 @@
-import { CASTLE_RECRUITMENT_COOLDOWN_LABEL, PieceType } from "../../Constants";
+import {
+  CASTLE_RECRUITMENT_COOLDOWN_LABEL,
+  SANCTUARY_EVOLUTION_COOLDOWN_LABEL,
+  PieceType,
+} from "../../Constants";
 import {
   allPieceReferenceRows,
   castleRules,
@@ -73,7 +77,19 @@ describe("rules content", () => {
       "cooldown clears"
     );
     expect(sanctuaryDetailRules.find((rule) => rule.title === "Cooldown acceleration")?.text).toContain(
+      "cooldown player's turn"
+    );
+    expect(sanctuaryDetailRules.find((rule) => rule.title === "Cooldown acceleration")?.text).toContain(
       "non-Swordsman"
+    );
+    expect(sanctuaryDetailRules.find((rule) => rule.title === "Evolution")?.text).toContain(
+      SANCTUARY_EVOLUTION_COOLDOWN_LABEL
+    );
+    expect(sanctuaryRules.find((rule) => rule.title === "Cooldown")?.text).toContain(
+      "player who used it"
+    );
+    expect(sanctuaryRules.find((rule) => rule.title === "Cooldown")?.text).not.toContain(
+      "board side"
     );
     expect(sanctuaryRules.map((rule) => rule.text).join(" ")).not.toContain("invader");
   });

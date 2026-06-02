@@ -29,7 +29,7 @@ export class Sanctuary {
     public readonly type: SanctuaryType,
     /** Which player owns this sanctuary's territory ('w' for White's side, 'b' for Black's side) */
     public readonly territorySide: Color,
-    /** Player whose turn recharges this sanctuary after pledge, usually the last pledging player */
+    /** Player whose turn recharges this sanctuary after pledge */
     public readonly controller: Color | null = null,
     /** Turns remaining until sanctuary can be used again (0 = ready) */
     public readonly cooldown: number = 0,
