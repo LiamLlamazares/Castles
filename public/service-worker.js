@@ -1,5 +1,5 @@
-const CACHE_NAME = "castles-shell-v3";
-const CORE_ASSETS = ["./", "./index.html", "./manifest.json", "./favicon.ico", "./castles-icon.svg"];
+const CACHE_NAME = "castles-shell-v4";
+const CORE_ASSETS = ["./index.html", "./manifest.json", "./favicon.ico", "./castles-icon.svg"];
 
 function shouldBypassCacheForRequest(request) {
   if (request.method !== "GET") return true;
@@ -7,11 +7,27 @@ function shouldBypassCacheForRequest(request) {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return true;
 
+  if (url.pathname === "/service-worker.js") return true;
   if (url.pathname.startsWith("/api/")) return true;
   if (url.pathname === "/ws" || url.pathname.startsWith("/ws/")) return true;
-  if (url.searchParams.has("onlineGame") || url.searchParams.has("token")) return true;
+  if (url.searchParams.has("onlineGame") || url.searchParams.has("onlineChallenge")) return true;
+  for (const key of url.searchParams.keys()) {
+    if (key.toLowerCase().includes("token")) return true;
+  }
 
   return false;
+}
+
+function shouldUseNetworkFirstForRequest(request) {
+  const url = new URL(request.url);
+  return request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html";
+}
+
+function cacheSuccessfulResponse(request, response) {
+  if (!response || response.status !== 200) return response;
+  const copy = response.clone();
+  caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+  return response;
 }
 
 self.addEventListener("install", event => {
@@ -32,16 +48,20 @@ self.addEventListener("fetch", event => {
   const request = event.request;
   if (shouldBypassCacheForRequest(request)) return;
 
+  if (shouldUseNetworkFirstForRequest(request)) {
+    event.respondWith(
+      fetch(request)
+        .then(response => cacheSuccessfulResponse(request, response))
+        .catch(() => caches.match(request).then(cached => cached || caches.match("./index.html")))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then(cached => {
       if (cached) return cached;
 
-      return fetch(request).then(response => {
-        if (!response || response.status !== 200) return response;
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-        return response;
-      });
+      return fetch(request).then(response => cacheSuccessfulResponse(request, response));
     })
   );
 });

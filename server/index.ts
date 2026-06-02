@@ -207,12 +207,24 @@ async function main() {
     }
 
     if (existsSync(config.staticDir)) {
-      app.use(express.static(config.staticDir));
+      app.use(express.static(config.staticDir, {
+        setHeaders: (res, filePath) => {
+          const fileName = path.basename(filePath);
+          if (fileName === "index.html" || fileName === "service-worker.js") {
+            res.setHeader("Cache-Control", "no-store");
+            return;
+          }
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      }));
       app.use((req, res, next) => {
         if (req.method !== "GET" || req.path.startsWith("/api/")) {
           next();
           return;
         }
+        res.setHeader("Cache-Control", "no-store");
         res.sendFile(path.join(config.staticDir, "index.html"));
       });
     } else {

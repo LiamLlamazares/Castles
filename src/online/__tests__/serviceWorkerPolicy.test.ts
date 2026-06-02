@@ -22,17 +22,19 @@ function loadServiceWorkerPolicy() {
   };
   vm.runInNewContext(script, context);
   return context as typeof context & {
-    shouldBypassCacheForRequest?: (request: { method: string; url: string }) => boolean;
+    shouldBypassCacheForRequest?: (request: { method: string; url: string; mode?: string }) => boolean;
+    shouldUseNetworkFirstForRequest?: (request: { method: string; url: string; mode?: string }) => boolean;
   };
 }
 
 describe("service worker cache policy", () => {
-  it("bypasses online, API, websocket, and token-bearing same-origin GET requests", () => {
+  it("bypasses online, API, websocket, service-worker, and token-bearing same-origin GET requests", () => {
     const context = loadServiceWorkerPolicy();
 
     expect(typeof context.shouldBypassCacheForRequest).toBe("function");
     const shouldBypass = context.shouldBypassCacheForRequest!;
 
+    expect(shouldBypass({ method: "GET", url: "https://castles.example/service-worker.js" })).toBe(true);
     expect(shouldBypass({ method: "GET", url: "https://castles.example/api/health" })).toBe(true);
     expect(shouldBypass({ method: "GET", url: "https://castles.example/api/online/games/game_1" })).toBe(true);
     expect(shouldBypass({ method: "GET", url: "https://castles.example/ws" })).toBe(true);
@@ -48,9 +50,41 @@ describe("service worker cache policy", () => {
         url: "https://castles.example/?onlineGame=game_1&seat=w&token=secret",
       })
     ).toBe(true);
+    expect(
+      shouldBypass({
+        method: "GET",
+        url: "https://castles.example/?onlineChallenge=challenge_1&challengeRole=challenged",
+      })
+    ).toBe(true);
+    expect(
+      shouldBypass({
+        method: "GET",
+        url: "https://castles.example/?challengeToken=secret",
+      })
+    ).toBe(true);
     expect(shouldBypass({ method: "GET", url: "https://castles.example/manifest.json" })).toBe(
       false
     );
+  });
+
+  it("uses network-first for app shell requests so deploys replace old bundles", () => {
+    const context = loadServiceWorkerPolicy();
+
+    expect(typeof context.shouldUseNetworkFirstForRequest).toBe("function");
+    const shouldUseNetworkFirst = context.shouldUseNetworkFirstForRequest!;
+
+    expect(
+      shouldUseNetworkFirst({ method: "GET", url: "https://castles.example/", mode: "navigate" })
+    ).toBe(true);
+    expect(
+      shouldUseNetworkFirst({ method: "GET", url: "https://castles.example/index.html" })
+    ).toBe(true);
+    expect(
+      shouldUseNetworkFirst({ method: "GET", url: "https://castles.example/rules", mode: "navigate" })
+    ).toBe(true);
+    expect(
+      shouldUseNetworkFirst({ method: "GET", url: "https://castles.example/manifest.json" })
+    ).toBe(false);
   });
 
   it("deletes old cache versions during activation", async () => {
@@ -60,7 +94,7 @@ describe("service worker cache policy", () => {
     )?.[1];
     expect(typeof activateHandler).toBe("function");
 
-    context.caches.keys.mockResolvedValue(["castles-shell-v2", "castles-shell-v3"]);
+    context.caches.keys.mockResolvedValue(["castles-shell-v3", "castles-shell-v4"]);
     let activationPromise: Promise<unknown> | undefined;
     activateHandler({
       waitUntil: (promise: Promise<unknown>) => {
@@ -70,7 +104,7 @@ describe("service worker cache policy", () => {
 
     await activationPromise;
 
-    expect(context.caches.delete).toHaveBeenCalledWith("castles-shell-v2");
-    expect(context.caches.delete).not.toHaveBeenCalledWith("castles-shell-v3");
+    expect(context.caches.delete).toHaveBeenCalledWith("castles-shell-v3");
+    expect(context.caches.delete).not.toHaveBeenCalledWith("castles-shell-v4");
   });
 });

@@ -185,6 +185,13 @@ Phase 6U Public board previews and first-run onboarding, 2026-06-02:
 - Direct online game, spectator, and challenge links suppress the first-run prompt until the user returns to ordinary local play, so shared links are not interrupted.
 - Recheck first-run welcome, Lobby rows, Watch rows, and Archive rows in the next screenshot pass at desktop and mobile sizes.
 
+Phase 6V App shell deploy freshness, 2026-06-02:
+
+- The production service worker now uses network-first app-shell requests, bypasses service-worker/API/WebSocket/online/challenge/token URLs, and keeps old caches cleaned up under a new shell cache version.
+- Service-worker registration bypasses the browser HTTP cache for update checks, and the Node static server serves `index.html` and `service-worker.js` with `no-store` while keeping hashed assets immutable.
+- This was added after a live sanctuary hotfix proved that an already-installed service worker could keep an old client bundle visible after the server had moved to a new commit.
+- Verification passed focused service-worker policy tests, the full automated suite, client build, server build, and diff check.
+
 Next product slices accepted from reviewers:
 
 - Improve public board previews only after screenshot QA shows the compact thumbnail is readable on mobile.

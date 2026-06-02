@@ -493,6 +493,22 @@ Remaining work:
 - Public row clocks remain snapshot labels; ticking public clocks should wait for response-time basis and UX review.
 - Consider richer board-preview art later, but only after the current compact preview proves readable on mobile.
 
+## Phase 6V: App Shell Deploy Freshness
+
+Goal: prevent old production client bundles from surviving a deploy after the server has already moved to a newer commit.
+
+Status: implemented and locally verified on 2026-06-02. The production service worker now uses a network-first policy for app-shell navigations and `index.html`, bypasses `/service-worker.js`, API/WebSocket routes, online game links, challenge links, and token-bearing URLs, and keeps static icon/manifest assets cacheable. The browser registration now sets `updateViaCache: "none"`, while the Node static server marks `index.html` and `service-worker.js` as `no-store` and hashed assets as immutable. This keeps future online hotfixes visible after a normal reload instead of requiring users to discover cache-busted links.
+
+Verification:
+
+- Focused service-worker policy tests cover online/challenge/token bypasses, network-first app-shell requests, and old-cache cleanup.
+- Full verification passed `npm test`, `npm run build`, `npm run server:build`, and `git diff --check`.
+
+Remaining work:
+
+- Add a visible "new version available" prompt later if silent service-worker updates ever disrupt active long games.
+- Keep deployment smoke checks pinned to the expected commit so stale clients are caught immediately after server restarts.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -529,8 +545,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish Phase 6U verification, accepted reviewer cleanup, commit, and push.
-2. Decide the next Watch/Lobby preview step: spectator counts with durable presence, a cleaner current-games section, or deeper navigation streamlining.
-3. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
-4. Continue Learn course polish with authored objective ids and richer theory, but add engine-graded progress only after objective board states are explicit and tested.
-5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+1. Decide the next Watch/Lobby preview step: spectator counts with durable presence, a cleaner current-games section, or deeper navigation streamlining.
+2. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
+3. Continue Tutorial course polish with authored objective ids and richer theory, but add engine-graded progress only after objective board states are explicit and tested.
+4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+5. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.
