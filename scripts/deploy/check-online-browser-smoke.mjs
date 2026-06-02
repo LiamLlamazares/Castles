@@ -910,7 +910,14 @@ async function verifyBrowserChallengeFlow(driver) {
   await challenged.waitForText("Online Black");
   await challenged.waitForButton("Copy Spectator Link");
 
-  await challenger.clickButton("Refresh Challenge");
+  const challengerChallengeState = await waitUntil("challenger challenge accept state", async () => {
+    if (await challenger.hasButton("Join Game")) return "join";
+    if (await challenger.hasEnabledButton("Refresh Challenge")) return "refresh";
+    return null;
+  });
+  if (challengerChallengeState === "refresh") {
+    await challenger.clickButton("Refresh Challenge");
+  }
   await challenger.waitForButton("Join Game");
   await challenger.clickButton("Join Game");
   await challenger.waitForText("Online White");
