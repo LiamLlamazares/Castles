@@ -56,12 +56,12 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "Save to Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online Lobby" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Tutorial" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Learn" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "Configure New Game" }));
     expect(screen.getByRole("region", { name: "Online" })).toContainElement(screen.getByRole("button", { name: "Online Lobby" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Open Library" }));
-    expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Learn" }));
+    expect(screen.getByRole("region", { name: "Tutorial" })).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
 
@@ -83,7 +83,7 @@ describe("HamburgerMenu", () => {
 
     expect(sectionLabels.slice(0, 6)).toEqual([
       "Play",
-      "Learn",
+      "Tutorial",
       "Online",
       "Library",
       "Board",
@@ -99,8 +99,8 @@ describe("HamburgerMenu", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
 
-    expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Learn" }));
-    expect(screen.getByRole("region", { name: "Learn" })).toContainElement(screen.getByRole("button", { name: "Rules" }));
+    expect(screen.getByRole("region", { name: "Tutorial" })).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
+    expect(screen.getByRole("region", { name: "Tutorial" })).toContainElement(screen.getByRole("button", { name: "Rules" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Save to Library" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Open Library" }));
     expect(screen.getByRole("region", { name: "Board" })).toContainElement(screen.getByRole("button", { name: "Flip Board" }));

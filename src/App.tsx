@@ -607,6 +607,7 @@ function App() {
 
   const handleFirstRunIntroPlay = () => {
     markFirstRunIntroSeen();
+    enterSetupView('game');
     window.setTimeout(() => {
       appRootRef.current?.focus();
     }, 0);
@@ -656,10 +657,12 @@ function App() {
       : currentBackTarget === 'online'
         ? 'Back to Online'
         : currentBackTarget === 'tutorial'
-          ? 'Back to Learn'
+          ? 'Back to Tutorial'
           : currentBackTarget === 'library'
             ? 'Back to Library'
-            : 'Back to game';
+            : currentBackTarget === 'menu'
+              ? 'Back to menu'
+              : 'Back to game';
 
   const quickMatchSetup = useMemo(() => {
     if (!gameConfig.board || !gameConfig.pieces) return null;
@@ -1597,7 +1600,7 @@ function App() {
 
   const onlineStateDestinations = useMemo<AppShellDestination[]>(() => [
     { id: "play", label: "Play" },
-    { id: "learn", label: "Learn", onClick: handleOnlineStateTutorial },
+    { id: "learn", label: "Tutorial", onClick: handleOnlineStateTutorial },
     { id: "online", label: "Online", onClick: handleOnlineStateOnline },
     { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
   ], [handleOnlineStateTutorial, handleOnlineStateLibrary, handleOnlineStateOnline]);
@@ -1903,7 +1906,7 @@ function App() {
             <h2 id="first-run-intro-title">Welcome to Castles</h2>
             <p id="first-run-intro-description">
               Castles is a hex strategy game about controlling castles, using special units, and choosing the right phase actions.
-              The fastest way to learn the rules is the guided Learn tutorial.
+              The fastest way to learn the rules is the guided tutorial.
             </p>
             <div className="confirm-dialog-actions">
               <button
@@ -1912,14 +1915,14 @@ function App() {
                 onClick={handleFirstRunIntroTutorial}
                 ref={firstRunIntroPrimaryButtonRef}
               >
-                Start Learn
+                Start Tutorial
               </button>
               <button
                 type="button"
                 className="confirm-dialog-button neutral"
                 onClick={handleFirstRunIntroPlay}
               >
-                Play Now
+                Set Up Game
               </button>
             </div>
           </section>

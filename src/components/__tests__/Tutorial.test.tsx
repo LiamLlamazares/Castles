@@ -35,19 +35,19 @@ describe("Tutorial", () => {
     vi.mocked(GameBoard).mockClear();
   });
 
-  it("uses a learn shell and opens to a course overview", () => {
+  it("uses a tutorial shell and opens to a course overview", () => {
     renderTutorial({ onOpenLibrary: vi.fn(), onOpenOnlineBrowser: vi.fn() });
 
-    expect(screen.getByRole("navigation", { name: "Learn navigation" })).toBeInTheDocument();
-    const nav = screen.getByRole("navigation", { name: "Learn navigation" });
+    expect(screen.getByRole("navigation", { name: "Tutorial navigation" })).toBeInTheDocument();
+    const nav = screen.getByRole("navigation", { name: "Tutorial navigation" });
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
-    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
-    expect(screen.getByRole("button", { name: "Learn" })).toHaveAttribute("aria-current", "page");
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
+    expect(screen.getByRole("button", { name: "Tutorial" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
-    expect(screen.getByRole("main", { name: "Learn Castles course" })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("0 / 35 lessons completed");
-    expect(screen.getByRole("navigation", { name: "Course sections" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "Castles tutorial" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("0 / 36 lessons completed");
+    expect(screen.getByRole("navigation", { name: "Tutorial sections" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Getting started 0 of 2 lessons completed" })).toHaveAttribute("href", "#tutorial-module-m0_");
     const currentPanel = screen.getByRole("region", { name: "0 Welcome" });
     expect(within(currentPanel).getByRole("heading", { level: 3, name: "0 Welcome" })).toBeInTheDocument();
@@ -66,10 +66,10 @@ describe("Tutorial", () => {
   it("starts the current lesson from the course overview without showing the nested game menu", () => {
     renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
 
     expect(screen.getByRole("region", { name: "Tutorial lesson board" })).toContainElement(screen.getByTestId("tutorial-board"));
-    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 35");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 36");
     expect(GameBoard).toHaveBeenCalled();
     expect(vi.mocked(GameBoard).mock.calls[0][0]).toEqual(
       expect.objectContaining({
@@ -84,10 +84,10 @@ describe("Tutorial", () => {
   it("keeps lesson progress and previous-next controls together near the top", () => {
     renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
 
     const progressControls = screen.getByRole("group", { name: "Lesson progress controls" });
-    expect(progressControls).toContainElement(within(progressControls).getByRole("button", { name: "Course overview" }));
+    expect(progressControls).toContainElement(within(progressControls).getByRole("button", { name: "Tutorial overview" }));
     expect(progressControls).toContainElement(screen.getByRole("button", { name: "Previous" }));
     expect(progressControls).toContainElement(screen.getByRole("status", { name: "Tutorial progress" }));
     expect(progressControls).toContainElement(screen.getByRole("button", { name: "Restart Tutorial" }));
@@ -97,16 +97,16 @@ describe("Tutorial", () => {
   it("summarizes progress beside the lesson title and exposes a compact control strip", () => {
     renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
 
     const lessonHeader = screen.getByRole("group", { name: "Current lesson" });
     expect(lessonHeader).toContainElement(screen.getByRole("heading", { level: 2, name: "0 Welcome" }));
     expect(lessonHeader).toContainElement(screen.getByText("Getting started"));
-    expect(lessonHeader).toContainElement(screen.getByText("Lesson 1 of 35"));
+    expect(lessonHeader).toContainElement(screen.getByText("Lesson 1 of 36"));
     expect(lessonHeader).toContainElement(screen.getByText("Progress saved"));
 
     const controlStrip = screen.getByRole("toolbar", { name: "Lesson controls" });
-    expect(controlStrip).toContainElement(within(controlStrip).getByRole("button", { name: "Course overview" }));
+    expect(controlStrip).toContainElement(within(controlStrip).getByRole("button", { name: "Tutorial overview" }));
     expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Previous" }));
     expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Restart Tutorial" }));
     expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Next" }));
@@ -115,23 +115,23 @@ describe("Tutorial", () => {
   it("keeps course overview and next lesson actions reachable after lesson text", () => {
     renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
 
-    expect(screen.queryByRole("group", { name: "Lesson objectives" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Lesson goals" })).not.toBeInTheDocument();
     expect(screen.queryByText("Read the position, inspect the board, and continue when it makes sense.")).not.toBeInTheDocument();
 
     const footerNavigation = screen.getByRole("group", { name: "Lesson footer navigation" });
-    expect(footerNavigation).toContainElement(within(footerNavigation).getByRole("button", { name: "Course overview" }));
+    expect(footerNavigation).toContainElement(within(footerNavigation).getByRole("button", { name: "Tutorial overview" }));
     expect(footerNavigation).toContainElement(within(footerNavigation).getByRole("button", { name: "Next lesson" }));
   });
 
   it("persists the current lesson by stable lesson id", () => {
     const { unmount } = renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 35");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 36");
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_01_victory_conditions",
@@ -143,31 +143,31 @@ describe("Tutorial", () => {
     unmount();
     renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue course" }));
-    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 35");
+    fireEvent.click(screen.getByRole("button", { name: "Continue Tutorial" }));
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 36");
   });
 
   it("lets users return from a lesson to the course overview", () => {
     renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
-    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
 
-    expect(screen.getByRole("main", { name: "Learn Castles course" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "Castles tutorial" })).toBeInTheDocument();
     expect(screen.queryByTestId("tutorial-board")).not.toBeInTheDocument();
   });
 
   it("moves focus to the new heading when switching between course and lesson", async () => {
     renderTutorial();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
     await waitFor(() => {
       expect(screen.getByRole("heading", { level: 2, name: "0 Welcome" })).toHaveFocus();
     });
 
-    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
     await waitFor(() => {
-      expect(screen.getByRole("heading", { level: 2, name: "Castles course" })).toHaveFocus();
+      expect(screen.getByRole("heading", { level: 2, name: "Castles tutorial" })).toHaveFocus();
     });
   });
 
@@ -177,7 +177,7 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: /Open 0\.1 How to win/ }));
     fireEvent.click(screen.getByLabelText("Right-click both castles to confirm their controller."));
 
-    expect(screen.getByRole("button", { name: "Objectives complete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_01_victory_conditions",
@@ -188,9 +188,9 @@ describe("Tutorial", () => {
       })
     );
 
-    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons completed");
-    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Objectives complete, 1 \/ 1 objectives completed/ })).toHaveTextContent("Complete");
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 36 lessons completed");
+    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Goals complete, 1 \/ 1 goals completed/ })).toHaveTextContent("Complete");
     expect(screen.getByRole("link", { name: "Getting started 1 of 2 lessons completed" })).toBeInTheDocument();
   });
 
@@ -205,20 +205,20 @@ describe("Tutorial", () => {
     act(() => {
       emitTutorialEvent?.({ type: "inspect", targetKind: "castle", hexKey: "-3,3,0" });
     });
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "inspect", targetKind: "piece", hexKey: "3,-3,0" });
     });
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "inspect", targetKind: "castle", hexKey: "3,-3,0" });
     });
 
-    expect(screen.getByRole("button", { name: "Objectives complete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         completedLessonIds: ["m0_01_victory_conditions"],
@@ -227,6 +227,33 @@ describe("Tutorial", () => {
         },
       })
     );
+
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
+    fireEvent.click(screen.getByRole("button", { name: /Open 4\.4 Sanctuary cooldowns/ }));
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "inspect", targetKind: "sanctuary", hexKey: "0,0,0" });
+    });
+    expect(screen.getByText("1 / 2 goals completed")).toBeInTheDocument();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "inspect", targetKind: "piece", hexKey: "-1,-1,2" });
+    });
+    expect(screen.getByText("1 / 2 goals completed")).toBeInTheDocument();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "inspect", targetKind: "piece", hexKey: "0,-1,1" });
+    });
+    expect(screen.getByText("1 / 2 goals completed")).toBeInTheDocument();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "inspect", targetKind: "piece", hexKey: "1,-1,0" });
+    });
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
   });
 
   it("auto-completes clear capture objectives but leaves find objectives manual", () => {
@@ -237,21 +264,75 @@ describe("Tutorial", () => {
     act(() => {
       emitTutorialEvent?.({ type: "attack", notation: "J10xK11", phase: "Attack" });
     });
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "capture", notation: "J10xK11", phase: "Attack" });
     });
-    expect(screen.getByRole("button", { name: "Objectives complete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
 
-    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
     fireEvent.click(screen.getByRole("button", { name: /Open 3\.1 Strength puzzle/ }));
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "capture", notation: "J10xK11", phase: "Attack" });
     });
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+  });
+
+  it("auto-completes phase overview goals from the resulting game phase", () => {
+    renderTutorial();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open 2 Turn phases overview/ }));
+    let emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+
+    act(() => {
+      emitTutorialEvent?.({ type: "move", notation: "G12G11", phase: "Movement", resultPhase: "Movement" });
+    });
+    expect(screen.getByText("1 / 3 goals completed")).toBeInTheDocument();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "pass", notation: "Pass", phase: "Movement", resultPhase: "Attack" });
+    });
+    expect(screen.getByText("2 / 3 goals completed")).toBeInTheDocument();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "capture", notation: "A1xA3", phase: "Attack", resultPhase: "Attack" });
+    });
+    expect(screen.getByText("2 / 3 goals completed")).toBeInTheDocument();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "pass", notation: "Pass", phase: "Attack", resultPhase: "Movement" });
+    });
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
+  });
+
+  it("auto-completes attack-only objectives without requiring a capture", () => {
+    renderTutorial();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open 2\.4 Archer/ }));
+    const emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "attack", notation: "A1xA3", phase: "Attack", resultPhase: "Attack" });
+    });
+
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
+  });
+
+  it("does not complete capture-during-phase objectives merely by reaching that phase", () => {
+    renderTutorial();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open 5\.2 Wolf/ }));
+    const emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "pass", notation: "Pass", phase: "Movement", resultPhase: "Attack" });
+    });
+
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
   });
 
   it("auto-completes ability objectives only from the named ability with its expected board effect", () => {
@@ -262,33 +343,33 @@ describe("Tutorial", () => {
     act(() => {
       emitTutorialEvent?.({ type: "ability", abilityType: AbilityType.Teleport, notation: "WT:J10K11", phase: "Attack" });
     });
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "ability", abilityType: AbilityType.Fireball, notation: "WF:J10K11", phase: "Attack", pieceRemoved: false });
     });
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "ability", abilityType: AbilityType.Fireball, notation: "WF:J10K11", phase: "Attack", pieceRemoved: true });
     });
-    expect(screen.getByRole("button", { name: "Objectives complete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
 
-    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
     fireEvent.click(screen.getByRole("button", { name: /Open 5\.6 Necromancer/ }));
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "capture", notation: "J10xK11", phase: "Attack" });
     });
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "ability", abilityType: AbilityType.RaiseDead, notation: "NR:J10K11", phase: "Attack", pieceAdded: true });
     });
-    expect(screen.getByRole("button", { name: "Objectives complete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
   });
 
   it("auto-completes recruitment and promotion objectives from game events", () => {
@@ -299,15 +380,15 @@ describe("Tutorial", () => {
     act(() => {
       emitTutorialEvent?.({ type: "recruitment", notation: "K11=Swo", phase: "Recruitment" });
     });
-    expect(screen.getByRole("button", { name: "Objectives complete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
 
-    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
     fireEvent.click(screen.getByRole("button", { name: /Open 2\.12 Promotion/ }));
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "promotion", notation: "J10K11=Arc", phase: "Movement" });
     });
-    expect(screen.getByRole("button", { name: "Objectives complete" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
   });
 
   it("points the course panel to the next completion target when the stored current lesson is complete", () => {
@@ -327,7 +408,7 @@ describe("Tutorial", () => {
     const currentPanel = screen.getByRole("region", { name: "1.1 The board: Castles" });
     expect(within(currentPanel).getByText("Next to complete")).toBeInTheDocument();
     expect(within(currentPanel).getByRole("button", { name: "Open next lesson" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Objectives complete, 1 \/ 1 objectives completed/ })).toHaveTextContent("Complete");
+    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Goals complete, 1 \/ 1 goals completed/ })).toHaveTextContent("Complete");
   });
 
   it("removes lesson completion when an objective is unchecked", () => {
@@ -337,7 +418,7 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByLabelText("Right-click both castles to confirm their controller."));
     fireEvent.click(screen.getByLabelText("Right-click both castles to confirm their controller."));
 
-    expect(screen.getByRole("button", { name: "Mark objectives complete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         completedLessonIds: [],
@@ -359,7 +440,7 @@ describe("Tutorial", () => {
 
     renderTutorial();
 
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons completed");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 36 lessons completed");
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         completedLessonIds: ["m0_01_victory_conditions"],
@@ -381,7 +462,7 @@ describe("Tutorial", () => {
 
     renderTutorial();
 
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons completed");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 36 lessons completed");
     expect(screen.getByRole("button", { name: /Open 0 Welcome\. Lesson complete/ })).toHaveTextContent("Complete");
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
@@ -404,7 +485,7 @@ describe("Tutorial", () => {
     renderTutorial();
 
     expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Current lesson/ })).toHaveTextContent("Current");
-    expect(screen.queryByRole("button", { name: /Open 0\.1 How to win\. Objectives complete/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open 0\.1 How to win\. Goals complete/ })).not.toBeInTheDocument();
   });
 
   it("lets users restart persisted tutorial progress", () => {
@@ -414,7 +495,7 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByLabelText("Right-click both castles to confirm their controller."));
     fireEvent.click(screen.getByRole("button", { name: "Restart Tutorial" }));
 
-    expect(screen.getByRole("main", { name: "Learn Castles course" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "Castles tutorial" })).toBeInTheDocument();
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_00_welcome",
@@ -422,7 +503,7 @@ describe("Tutorial", () => {
         checkedObjectiveIdsByLessonId: {},
       })
     );
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("0 / 35 lessons completed");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("0 / 36 lessons completed");
   });
 
   it("sanitizes unknown lesson ids and invalid objective ids", () => {
@@ -442,7 +523,7 @@ describe("Tutorial", () => {
 
     renderTutorial();
 
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("3 / 35 lessons completed");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("3 / 36 lessons completed");
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_00_welcome",
@@ -469,8 +550,8 @@ describe("Tutorial", () => {
 
     renderTutorial();
 
-    expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("35 / 35 lessons completed");
-    expect(screen.getByRole("button", { name: "Review course" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("36 / 36 lessons completed");
+    expect(screen.getByRole("button", { name: "Review Tutorial" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review" })).toBeInTheDocument();
   });
 
@@ -518,10 +599,10 @@ describe("Tutorial", () => {
     });
 
     renderTutorial();
-    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 35");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 36");
     expect(screen.getByText("Session only")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByText("Progress saved")).not.toBeInTheDocument();

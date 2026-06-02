@@ -30,12 +30,11 @@ export function createM5L7(): TutorialLesson {
     phoenixRecords: [{ respawnTurn: 8, owner: 'w' }],
     objectives: [
       'As Black, capture the nearby Phoenix with the Giant.',
-      'Pass once if you want to see a Phoenix return immediately in this training position.',
-      'Compare the Phoenix with the Eagle: both fly, but only the Phoenix has rebirth.',
     ],
     hints: [
+      'Compare the Phoenix with the Eagle: both fly, but only the Phoenix has rebirth.',
       'In a real game, a Phoenix returns after 3 full player turns.',
-      'This training position also has one return ready, so you can see the rebirth mechanic quickly.',
+      'This training position also has one return ready, so you can see the rebirth mechanic quickly after the capture resolves.',
       'When a Phoenix returns, it uses the first friendly castle with an open castle hex or adjacent open hex. If every spawn spot is blocked, it waits and tries again later.',
     ],
   };

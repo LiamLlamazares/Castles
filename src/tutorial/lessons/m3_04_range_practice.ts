@@ -33,13 +33,13 @@ export function createM3L4(): TutorialLesson {
       'Find the enemy too close for the Archer.',
       'Find the enemy at Archer range.',
       'Find the enemy at Trebuchet range.',
-      'Move onto high ground and compare extended range.',
     ],
     hints: [
       'Archer: exactly range 2, or exactly range 3 from high ground.',
       'Trebuchet: exactly range 3, or exactly range 4 from high ground.',
       'Melee pieces attack adjacent enemies only.',
+      'High ground extends these exact ranges in later positions; this lesson starts in Attack phase, so it focuses on target distance.',
     ],
-    instructions: 'Move the ranged pieces around and click targets. The useful lesson here is what does not light up as much as what does.',
+    instructions: 'Click the ranged pieces and compare which targets light up. The useful lesson here is what does not light up as much as what does.',
   };
 }

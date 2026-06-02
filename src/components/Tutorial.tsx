@@ -250,13 +250,28 @@ function getLessonCardSummary(lesson: TutorialLesson): string {
 
 function getRequiredInspectionKeys(lesson: TutorialLesson, objectiveText: string): string[] {
   const lower = objectiveText.toLowerCase();
+  if (lower.includes("non-swordsman") && lower.includes("across the river")) {
+    return lesson.pieces
+      .filter((piece) =>
+        piece.type !== PieceType.Swordsman &&
+        ((piece.color === "w" && piece.hex.r < 0) || (piece.color === "b" && piece.hex.r > 0))
+      )
+      .map((piece) => piece.hex.getKey());
+  }
   if (lower.includes("both castles") || lower.includes("each castle") || lower.includes("every castle")) {
     return lesson.board.castles.map((castle) => castle.hex.getKey());
+  }
+  if (lower.includes("sanctuary")) {
+    return (lesson.sanctuaries ?? []).map((sanctuary) => sanctuary.hex.getKey());
   }
   if (lower.includes("each special unit") || lower.includes("each unit") || lower.includes("every unit")) {
     return lesson.pieces.map((piece) => piece.hex.getKey());
   }
   return [];
+}
+
+function eventReachedPhase(event: TutorialGameEvent, targetPhase: "Attack" | "Recruitment"): boolean {
+  return event.resultPhase === targetPhase || event.phase === targetPhase;
 }
 
 function objectiveMatchesTutorialEvent(
@@ -271,9 +286,25 @@ function objectiveMatchesTutorialEvent(
     return false;
   }
 
+  if (lower.includes("reach the attack phase") || lower.includes("reach attack phase")) {
+    return eventReachedPhase(event, "Attack");
+  }
+
+  if (
+    lower.includes("reach the castles phase") ||
+    lower.includes("reach castles phase")
+  ) {
+    return eventReachedPhase(event, "Recruitment");
+  }
+
+  if (lower.includes("pass after attack") || lower.includes("pass during attack")) {
+    return event.type === "pass" && event.phase === "Attack";
+  }
+
   if (lower.includes("right-click") || lower.includes("right click") || lower.includes("inspect")) {
     if (event.type !== "inspect") return false;
     if (lower.includes("castle") && event.targetKind !== "castle") return false;
+    if (lower.includes("sanctuary") && event.targetKind !== "sanctuary") return false;
     if ((lower.includes("unit") || lower.includes("piece")) && event.targetKind !== "piece") return false;
     const requiredKeys = getRequiredInspectionKeys(lesson, objectiveText);
     return requiredKeys.length === 0 || requiredKeys.every((key) => inspectedKeys.has(key));
@@ -294,8 +325,11 @@ function objectiveMatchesTutorialEvent(
   if (lower.includes("ability")) {
     return event.type === "ability" && event.abilityType !== undefined;
   }
-  if (lower.includes("capture") || lower.includes("attack") || lower.includes("overpower") || lower.includes("defeat") || lower.includes("kill")) {
+  if (lower.includes("capture") || lower.includes("overpower") || lower.includes("defeat") || lower.includes("kill")) {
     return event.type === "capture";
+  }
+  if (lower.includes("attack")) {
+    return event.type === "attack" || event.type === "capture";
   }
   if (lower.includes("move") || lower.includes("slide") || lower.includes("fly") || lower.includes("jump")) {
     return event.type === "move";
@@ -414,16 +448,16 @@ const Tutorial: React.FC<TutorialProps> = ({
       : currentLessonIndex;
   const hasStartedCourse = currentLessonIndex > 0 || completedLessonCount > 0;
   const coursePrimaryActionLabel = allLessonsComplete
-    ? "Review course"
+    ? "Review Tutorial"
     : hasStartedCourse
-      ? "Continue course"
-      : "Start course";
+      ? "Continue Tutorial"
+      : "Start Tutorial";
   const courseHeroActionLabel = allLessonsComplete ? "Review" : hasStartedCourse ? "Continue" : "Start";
   const courseProgressPercent = lessons.length > 0
     ? Math.round((completedLessonCount / lessons.length) * 100)
     : 0;
   const objectiveProgressLabel = lessonObjectives.length > 0
-    ? `${checkedObjectiveIds.size} / ${lessonObjectives.length} objectives completed`
+    ? `${checkedObjectiveIds.size} / ${lessonObjectives.length} goals completed`
     : isCurrentLessonComplete
       ? "Completed"
       : "Ready to continue";
@@ -438,7 +472,7 @@ const Tutorial: React.FC<TutorialProps> = ({
     if (targetObjectives.length === 0) {
       return completedLessonIds.has(targetLesson.id) ? "Completed" : "Ready to continue";
     }
-    return `${getCheckedObjectiveCount(targetLesson)} / ${targetObjectives.length} objectives completed`;
+    return `${getCheckedObjectiveCount(targetLesson)} / ${targetObjectives.length} goals completed`;
   };
 
   const renderLessonVisual = (targetLesson: TutorialLesson, moduleIcon: string, className = "tutorial-course-card-visual") => {
@@ -595,7 +629,7 @@ const Tutorial: React.FC<TutorialProps> = ({
 
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
-    { id: "learn", label: "Learn" },
+    { id: "learn", label: "Tutorial" },
     ...(onOpenOnlineBrowser ? [{ id: "online" as const, label: "Online", onClick: onOpenOnlineBrowser }] : []),
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
@@ -627,10 +661,10 @@ const Tutorial: React.FC<TutorialProps> = ({
         : "Next to complete";
   const shellNav = (
     <AppShellNav
-      ariaLabel="Learn navigation"
+      ariaLabel="Tutorial navigation"
       activeDestination="learn"
-      title="Learn"
-      kicker={viewMode === "course" ? "Course" : "Tutorial"}
+      title="Tutorial"
+      kicker={viewMode === "course" ? "Overview" : "Lesson"}
       description={viewMode === "course" ? "Castle basics, terrain, pieces, combat, and advanced units." : "Interactive lesson board."}
       backLabel={backLabel}
       onBack={onBack}
@@ -646,13 +680,13 @@ const Tutorial: React.FC<TutorialProps> = ({
 
           <div className="tutorial-course-progress-card">
             <div className="tutorial-course-progress-heading">
-              <span>Course progress</span>
+              <span>Tutorial progress</span>
               <strong>{courseProgressPercent}%</strong>
             </div>
             <div className="tutorial-course-progress-track" aria-hidden="true">
               <span style={{ width: `${courseProgressPercent}%` }} />
             </div>
-            <div className="tutorial-course-progress-meta" role="status" aria-label="Course progress" aria-live="polite">
+            <div className="tutorial-course-progress-meta" role="status" aria-label="Tutorial progress" aria-live="polite">
               {completedLessonCount} / {lessons.length} lessons completed
             </div>
             <div className="tutorial-course-actions">
@@ -666,8 +700,8 @@ const Tutorial: React.FC<TutorialProps> = ({
             <span className="tutorial-progress-saved-chip">{progressStorageLabel}</span>
           </div>
 
-          <nav className="tutorial-course-section-map" aria-label="Course sections">
-            <h2>Course sections</h2>
+          <nav className="tutorial-course-section-map" aria-label="Tutorial sections">
+            <h2>Tutorial sections</h2>
             {courseModules.map((module) => {
               const moduleCompletedCount = module.lessons.filter(({ lesson: moduleLesson }) => completedLessonIds.has(moduleLesson.id)).length;
               const moduleProgressPercent = Math.round((moduleCompletedCount / module.lessons.length) * 100);
@@ -689,11 +723,11 @@ const Tutorial: React.FC<TutorialProps> = ({
           </nav>
         </aside>
 
-        <main className="tutorial-course-main" aria-label="Learn Castles course">
+        <main className="tutorial-course-main" aria-label="Castles tutorial">
           <div className="tutorial-course-hero">
             <div>
-              <p className="tutorial-course-kicker">Learn by playing</p>
-              <h2 ref={courseHeadingRef} tabIndex={-1}>Castles course</h2>
+              <p className="tutorial-course-kicker">Guided tutorial</p>
+              <h2 ref={courseHeadingRef} tabIndex={-1}>Castles tutorial</h2>
             </div>
             <button type="button" className="tutorial-course-primary-action" onClick={() => openLessonAtIndex(courseActionLessonIndex)}>
               {courseHeroActionLabel}
@@ -738,7 +772,7 @@ const Tutorial: React.FC<TutorialProps> = ({
                       const isComplete = completedLessonIds.has(moduleLesson.id);
                       const isCurrent = moduleLesson.id === lesson.id;
                       const objectiveCount = getLessonObjectives(moduleLesson).length;
-                      const completedStatusLabel = objectiveCount > 0 ? "Objectives complete" : "Lesson complete";
+                      const completedStatusLabel = objectiveCount > 0 ? "Goals complete" : "Lesson complete";
                       const cardStatusLabel = isComplete ? completedStatusLabel : isCurrent ? "Current lesson" : "Not complete";
                       return (
                         <button
@@ -797,7 +831,7 @@ const Tutorial: React.FC<TutorialProps> = ({
           </span>
           <div className="tutorial-control-strip" role="toolbar" aria-label="Lesson controls">
             <button type="button" onClick={openCourseOverview} className="tutorial-step-button">
-              Course overview
+              Tutorial overview
             </button>
             <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
               Previous
@@ -856,8 +890,8 @@ const Tutorial: React.FC<TutorialProps> = ({
         )}
 
         {lessonObjectives.length > 0 && (
-          <div className={`tutorial-list-section tutorial-objectives ${isDark ? "dark" : "light"}`} role="group" aria-label="Lesson objectives">
-            <h3>Objectives:</h3>
+          <div className={`tutorial-list-section tutorial-objectives ${isDark ? "dark" : "light"}`} role="group" aria-label="Lesson goals">
+            <h3>Lesson goals</h3>
             <p className="tutorial-objective-progress">{objectiveProgressLabel}</p>
             <div className="tutorial-objective-list">
               {lessonObjectives.map((objective) => (
@@ -872,7 +906,7 @@ const Tutorial: React.FC<TutorialProps> = ({
               ))}
             </div>
             <button type="button" className="tutorial-review-button" onClick={markLessonComplete} disabled={isCurrentLessonComplete}>
-              {isCurrentLessonComplete ? "Objectives complete" : "Mark objectives complete"}
+              {isCurrentLessonComplete ? "Goals complete" : "Complete manually"}
             </button>
           </div>
         )}
@@ -888,7 +922,7 @@ const Tutorial: React.FC<TutorialProps> = ({
 
         <div className="tutorial-lesson-footer-actions" role="group" aria-label="Lesson footer navigation">
           <button type="button" onClick={openCourseOverview} className="tutorial-step-button">
-            Course overview
+            Tutorial overview
           </button>
           <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
             Next lesson

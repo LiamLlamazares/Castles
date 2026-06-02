@@ -44,11 +44,10 @@ export function createM2L0(): TutorialLesson {
     layout,
     objectives: [
       'Move one or two white Swordsmen toward the black Swordsmen.',
-      'Reach the Attack phase and capture an opponent piece if one is available.',
-      'Reach the Castles phase and notice that this preview does not ask you to recruit yet.',
+      'Reach the Attack phase by moving or passing.',
+      'Pass during Attack to continue through the phase.',
     ],
     hints: [
-      'The turn panel tells you whether you are in Movement, Attack, or Castles.',
       'If the game waits in the Attack phase, it may be because a capture is available.',
       'You can press Pass to move through phases when you do not want to use the remaining action.',
       'Later lessons teach attacks, recruitment, and pledging in detail.',

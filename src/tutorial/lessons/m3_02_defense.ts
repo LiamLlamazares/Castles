@@ -12,7 +12,7 @@ export function createM3L2(): TutorialLesson {
   const board = new Board(boardConfig, castles);
   const pieces = [
     PieceFactory.create(PieceType.Archer, new Hex(-2, 0, 2), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(0, -2, 2), 'b'),
+    PieceFactory.create(PieceType.Archer, new Hex(0, -2, 2), 'b'),
     PieceFactory.create(PieceType.Swordsman, new Hex(1, -2, 1), 'b'),
     PieceFactory.create(PieceType.Swordsman, new Hex(-2, -2, 4), 'b'),
   ];
@@ -21,18 +21,19 @@ export function createM3L2(): TutorialLesson {
   return {
     id: 'm3_l2_defense',
     title: '3.2 Defense system',
-    description: 'Adjacent friendly pieces defend each other. Ranged pieces cannot attack a defended target, but undefended targets remain available.',
+    description: 'A friendly melee piece defends any adjacent friendly piece, including an Archer. The Archer can be protected by that melee defender, but the Archer itself does not protect adjacent allies. Ranged pieces cannot attack a melee-protected target, but undefended targets remain available.',
     board,
     pieces,
     layout,
     initialTurnCounter: 2,
     objectives: [
-      'Compare the shield marker on the defended enemy with the undefended enemy.',
+      'Compare the shield marker on the defended Archer with the undefended enemy.',
       'Try the Archer against both targets.',
     ],
     hints: [
-      'The two adjacent black Swordsmen defend each other.',
+      'The protected piece can be an Archer; only the adjacent melee piece is providing the defense.',
       'The separated black Swordsman is undefended.',
+      'Archers and other ranged pieces do not create defense for adjacent allies.',
       'Melee pieces can still attack defended enemies; ranged pieces cannot.',
     ],
     instructions: 'Click the Archer and notice that one enemy is protected while the separated enemy is a legal ranged target.',

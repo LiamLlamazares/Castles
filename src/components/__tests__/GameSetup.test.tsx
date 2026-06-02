@@ -144,11 +144,11 @@ describe("GameSetup", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
-    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
 
     fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Learn" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
     fireEvent.click(screen.getByRole("button", { name: "Online" }));
 

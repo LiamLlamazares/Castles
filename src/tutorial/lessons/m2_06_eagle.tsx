@@ -32,7 +32,6 @@ export function createM2L6(): TutorialLesson {
       'Flying ignores blockers on the route.',
       'The landing hex still must be empty and legal.',
       'After moving the Eagle, use your remaining movement action or press Pass before the Attack phase begins.',
-      'The turn panel names the current phase while you play.',
     ],
   };
 }

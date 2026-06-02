@@ -19,7 +19,7 @@ export function createM4L2(): TutorialLesson {
   return {
     id: 'm4_l2_recruitment',
     title: '4.2 Recruitment cycle',
-    description: 'Recruitment happens only from enemy castles you have captured. Your own starting castles do not produce recruits, even if you lose and retake them later.',
+    description: 'Recruitment happens only from enemy castles you have captured. Your own starting castles do not produce recruits, even if you lose and retake them later. The castle cycle is Swordsman -> Archer -> Knight -> Eagle -> Giant -> Trebuchet -> Assassin -> Dragon -> Monarch, then repeats.',
     board,
     pieces,
     layout,
@@ -31,9 +31,9 @@ export function createM4L2(): TutorialLesson {
       'You are already in the Castles phase from the captured black-side castle.',
       'River hexes are not legal recruitment targets.',
       'The captured castle stays under White control even if the Swordsman leaves.',
-      'The next recruitment piece comes from the castle cycle shown in its tooltip.',
+      'The cycle is Swordsman -> Archer -> Knight -> Eagle -> Giant -> Trebuchet -> Assassin -> Dragon -> Monarch, then repeats.',
       'Only empty, non-river adjacent hexes are valid recruitment squares.',
     ],
-    instructions: 'You are already in the Castles phase. Recruit from the captured enemy castle on the black side.',
+    instructions: 'You are already in the Castles phase. Recruit from the captured enemy castle on the black side and check the piece-symbol -> piece-symbol cycle in the tooltip.',
   };
 }

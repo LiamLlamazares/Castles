@@ -76,6 +76,7 @@ export interface TutorialGameEvent {
   type: TutorialGameEventType;
   notation?: string;
   phase?: TurnPhase;
+  resultPhase?: TurnPhase;
   hexKey?: string;
   targetKind?: 'hex' | 'castle' | 'sanctuary' | 'piece';
   pieceType?: PieceType;

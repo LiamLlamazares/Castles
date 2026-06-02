@@ -29,6 +29,8 @@ import {
   PieceType,
   DEFENDED_PIECE_IS_PROTECTED_RANGED,
 } from "../../Constants";
+import { AbilitySystem } from "./AbilitySystem";
+import { getPieceConfig } from "../Config/PieceTypeConfig";
 import { getNeighborPieces } from "../../utils/PieceMap";
 import { CombatSystem } from "./CombatSystem";
 
@@ -176,6 +178,25 @@ export class RuleEngine {
     for (const piece of potentialAttackers) {
       if (RuleEngine.getLegalAttacksForPlayer(piece, gameState, board, currentPlayer, false).length > 0) {
         return true;
+      }
+    }
+
+    return false;
+  }
+
+  private static hasAnyFutureAbilityActions(gameState: GameState, board: Board): boolean {
+    const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
+    const potentialUsers = gameState.pieces.filter(
+      (piece) => piece.color === currentPlayer && piece.canAttack
+    );
+
+    for (const piece of potentialUsers) {
+      const abilities = getPieceConfig(piece.type).abilities ?? [];
+      for (const ability of abilities) {
+        const targets = AbilitySystem.getValidTargets(piece, ability, gameState, { ignorePhase: true });
+        if (targets.some((targetHex) => board.hexSet.has(targetHex.getKey()))) {
+          return true;
+        }
       }
     }
 
@@ -383,7 +404,9 @@ export class RuleEngine {
    */
   public static getTurnCounterIncrement(gameState: GameState, board: Board, isPassing: boolean = false): number {
     // Optimization Phase 3: Use early-exit checks instead of full list generation
-    const hasFutureAttacks = RuleEngine.hasAnyFutureLegalAttacks(gameState, board);
+    const hasFutureAttacks =
+        RuleEngine.hasAnyFutureLegalAttacks(gameState, board) ||
+        RuleEngine.hasAnyFutureAbilityActions(gameState, board);
     const hasFutureControlledCastles = RuleEngine.hasAnyFutureControlledCastles(gameState, board);
     
     // Check legal moves (for skipping Movement phase)
@@ -431,7 +454,10 @@ export class RuleEngine {
     }
 
     if (phase === "Attack") {
-      return RuleEngine.hasAnyFutureLegalAttacks(gameState, board);
+      return (
+        RuleEngine.hasAnyFutureLegalAttacks(gameState, board) ||
+        RuleEngine.hasAnyFutureAbilityActions(gameState, board)
+      );
     }
 
     return (

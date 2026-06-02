@@ -884,9 +884,9 @@ async function verifyOnlineBrowserSurface(driver) {
     )
   );
 
-  await online.clickButton("Learn");
+  await online.clickButton("Tutorial");
   await online.clickButton("Online");
-  await waitUntil("Online browser to preserve Archive after Learn", () =>
+  await waitUntil("Online browser to preserve Archive after Tutorial", () =>
     online.evaluate(
       `window.__castlesSmokeFindButton("Online Archive")?.getAttribute("aria-pressed") === "true"`
     )

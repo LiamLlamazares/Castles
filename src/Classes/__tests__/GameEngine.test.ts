@@ -4,7 +4,7 @@ import { Board } from '../Core/Board';
 import { Piece } from '../Entities/Piece';
 import { Hex } from '../Entities/Hex';
 import { Castle } from '../Entities/Castle';
-import { PieceType, Color } from '../../Constants';
+import { AbilityType, PieceType, Color } from '../../Constants';
 import { createPieceMap } from '../../utils/PieceMap';
 import { MoveTree } from '../Core/MoveTree';
 
@@ -353,6 +353,20 @@ describe('GameEngine', () => {
       const increment = gameEngine.getTurnCounterIncrement(state);
 
       expect(increment).toBe(3);
+    });
+
+    it('keeps Attack available when a piece has an ability but no normal attack', () => {
+      const necromancer = new Piece(new Hex(0, 0, 0), 'w', PieceType.Necromancer, true, true, 0, false, 1);
+      const deadSwordsman = new Piece(new Hex(1, -1, 0), 'w', PieceType.Swordsman);
+      const state = {
+        ...createMockState([necromancer], [], 2),
+        graveyard: [deadSwordsman],
+      };
+
+      expect(gameEngine.hasAnyFutureLegalAttacks(state)).toBe(false);
+      expect(gameEngine.getAbilityTargets(state, necromancer, AbilityType.RaiseDead).length).toBeGreaterThan(0);
+      expect(gameEngine.getTurnCounterIncrement(state)).toBe(1);
+      expect(gameEngine.normalizeForcedTurns(state).turnCounter).toBe(2);
     });
   });
 

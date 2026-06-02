@@ -17,7 +17,7 @@ describe("AppShellNav", () => {
         onBack={onBack}
         destinations={[
           { id: "play", label: "Play" },
-          { id: "learn", label: "Learn", onClick: vi.fn() },
+          { id: "learn", label: "Tutorial", onClick: vi.fn() },
           { id: "library", label: "Library", onClick: vi.fn() },
           { id: "online", label: "Online", onClick: onOnline },
         ]}

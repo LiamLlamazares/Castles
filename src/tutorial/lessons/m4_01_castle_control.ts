@@ -22,6 +22,6 @@ export function createM4L1(): TutorialLesson {
     layout,
     objectives: ['Capture the black-side castle with the Knight.'],
     hints: ['Opponent-controlled castles block ordinary movement until captured.', 'Right-click the castle after capture to confirm the controller changed.'],
-    instructions: 'Use this as the bridge between combat and recruitment: first you must take an enemy castle, then later you can recruit from it.',
+    instructions: 'First take an enemy castle; later you can recruit from it.',
   };
 }

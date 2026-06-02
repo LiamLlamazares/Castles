@@ -39,6 +39,6 @@ export function createM3L1(): TutorialLesson {
       'Enemies heal if the phase ends without capture.',
       'Right-click pieces to compare strength.',
     ],
-    instructions: 'Use this like a puzzle board: click your pieces and compare which enemy targets are actually legal.',
+    instructions: 'Click your pieces and compare which enemy targets are actually legal.',
   };
 }

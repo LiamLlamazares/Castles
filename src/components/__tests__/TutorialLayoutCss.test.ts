@@ -36,7 +36,7 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).not.toMatch(/\.tutorial-sidebar \.app-shell-title-block p\s*\{\s*display:\s*none;\s*\}/);
   });
 
-  it("switches the Learn course overview to a single mobile scrollport", () => {
+  it("switches the Tutorial overview to a single mobile scrollport", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
 

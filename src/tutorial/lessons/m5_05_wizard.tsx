@@ -30,13 +30,13 @@ export function createM5L5(): TutorialLesson {
     pieces,
     layout,
     initialTurnCounter: 2,
-    objectives: ['Select the Wizard, use Fireball on the clustered Swordsman, and notice it can kill multiple weak pieces while only damaging the Giant.'],
+    objectives: ['Select the Wizard and use Fireball on the clustered Swordsman and Archers.'],
     hints: [
       'Wizard abilities are used during the Attack phase and consume that Wizard\'s attack for the turn.',
       'The Wizard normally attacks exactly 2 hexes away.',
       'Fireball targets within range 2 and deals 1 damage to the target and adjacent pieces.',
       'Teleport is also an Attack-phase ability. It moves the Wizard to an empty hex within range 3 instead of making a capture.',
-      'Fireball can remove several weak pieces at once, while a Giant usually survives with damage.',
+      'Fireball can remove clustered weak pieces at once, while a Giant usually survives with damage.',
       'Teleport is for repositioning rather than direct damage.',
     ],
   };

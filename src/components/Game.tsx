@@ -23,6 +23,7 @@ import { Piece } from "../Classes/Entities/Piece";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
+import { NotationService } from "../Classes/Systems/NotationService";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
 import { AbilityType, PieceTheme } from "../Constants";
@@ -40,6 +41,7 @@ import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import { createPieceMap } from "../utils/PieceMap";
 import PromotionModal from "./PromotionModal";
 import type { TutorialGameEvent } from "../tutorial/types";
+import TurnBanner from "./Turn_banner";
 import "../css/Board.css";
 
 // Context
@@ -177,6 +179,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const tutorialSnapshotRef = React.useRef<{
     pieceCount: number;
     graveyardLength: number;
+    piecesByHex: Record<string, string>;
     castleOwnersByHex: Record<string, string>;
   } | null>(null);
 
@@ -773,6 +776,9 @@ const InnerGame: React.FC<GameBoardProps> = ({
     const currentSnapshot = {
       pieceCount: pieces.length,
       graveyardLength: graveyard.length,
+      piecesByHex: Object.fromEntries(
+        pieces.map((piece) => [piece.hex.getKey(), `${piece.color}:${piece.type}`])
+      ),
       castleOwnersByHex: Object.fromEntries(
         castles.map((castle) => [castle.hex.getKey(), castle.owner])
       ),
@@ -803,9 +809,24 @@ const InnerGame: React.FC<GameBoardProps> = ({
       : false;
 
     const notation = latestMove.notation;
+    const capturedTargetKey = (() => {
+      const targetMatch = notation.match(/x([A-Z]\d+)/);
+      if (!targetMatch) return null;
+      try {
+        return NotationService.fromCoordinate(targetMatch[1]).getKey();
+      } catch {
+        return null;
+      }
+    })();
+    const capturedTargetChanged = !!(
+      previousSnapshot &&
+      capturedTargetKey &&
+      previousSnapshot.piecesByHex[capturedTargetKey] &&
+      previousSnapshot.piecesByHex[capturedTargetKey] !== currentSnapshot.piecesByHex[capturedTargetKey]
+    );
     let type: TutorialGameEvent["type"] = "move";
     let abilityType: AbilityType | undefined;
-    if (notation === "Pass") {
+    if (notation.toLowerCase() === "pass") {
       type = "pass";
     } else if (notation.startsWith("P:")) {
       type = "pledge";
@@ -824,7 +845,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     } else if (latestMove.phase === "Movement" && notation.includes("=")) {
       type = "promotion";
     } else if (notation.includes("x")) {
-      type = pieceRemoved || castleControlChanged ? "capture" : "attack";
+      type = pieceRemoved || capturedTargetChanged || castleControlChanged ? "capture" : "attack";
     } else if (latestMove.phase === "Movement") {
       type = "move";
     }
@@ -833,13 +854,14 @@ const InnerGame: React.FC<GameBoardProps> = ({
       type,
       notation,
       phase: latestMove.phase,
+      resultPhase: turnPhase,
       abilityType,
       pieceRemoved,
       pieceAdded,
       castleControlChanged,
     });
     tutorialSnapshotRef.current = currentSnapshot;
-  }, [castles, graveyard.length, isTutorialMode, moveHistory, onTutorialEvent, pieces.length]);
+  }, [castles, graveyard.length, isTutorialMode, moveHistory, onTutorialEvent, pieces.length, turnPhase]);
 
   const [activeAbility, setActiveAbility] = React.useState<import('../Constants').AbilityType | null>(null);
   const shellClasses = [
@@ -1008,6 +1030,18 @@ const InnerGame: React.FC<GameBoardProps> = ({
           aria-live="polite"
         >
           {statusMessage}
+        </div>
+      )}
+
+      {isTutorialMode && (
+        <div
+          role="status"
+          aria-label="Current tutorial turn"
+          className={`tutorial-turn-indicator ${currentPlayer}`}
+        >
+          <span className="tutorial-turn-player">{currentPlayer === "w" ? "White" : "Black"}</span>
+          <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={turnCounter % 5} />
+          <span className="tutorial-turn-phase">{turnPhase === "Recruitment" ? "Castles" : turnPhase}</span>
         </div>
       )}
 

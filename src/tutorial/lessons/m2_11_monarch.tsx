@@ -26,7 +26,7 @@ export function createM2L11(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Protect your Monarch and threaten the enemy Monarch.'],
+    objectives: ['Capture the enemy Monarch.'],
     hints: ['Capturing the enemy Monarch is one of the default win conditions.', 'Assassins are especially dangerous to Monarchs.'],
   };
 }

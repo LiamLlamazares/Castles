@@ -592,32 +592,32 @@ describe("App game setup lifecycle", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("shows first-time players a Learn recommendation", async () => {
+  it("shows first-time players a Tutorial recommendation", async () => {
     localStorage.removeItem("castles_first_run_intro_seen");
     render(<App />);
 
     const dialog = await screen.findByRole("dialog", { name: "Welcome to Castles" });
 
-    expect(dialog).toHaveTextContent("guided Learn tutorial");
-    expect(screen.getByRole("button", { name: "Start Learn" })).toHaveFocus();
+    expect(dialog).toHaveTextContent("guided tutorial");
+    expect(screen.getByRole("button", { name: "Start Tutorial" })).toHaveFocus();
     expect(screen.getByText("Game Ready").closest("[inert]")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Start Learn" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
 
     expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
     expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
     expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
   });
 
-  it("dismisses the first-run introduction after the player chooses to play", async () => {
+  it("opens setup after the player chooses to set up a game", async () => {
     localStorage.removeItem("castles_first_run_intro_seen");
     const { unmount } = render(<App />);
 
     expect(await screen.findByRole("dialog", { name: "Welcome to Castles" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Play Now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Set Up Game" }));
 
     expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
-    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
     expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
     expect(localStorage.getItem("hasSeenQuickStart")).toBe("true");
     await waitFor(() => {
@@ -638,10 +638,10 @@ describe("App game setup lifecycle", () => {
     const dialog = await screen.findByRole("dialog", { name: "Welcome to Castles" });
 
     fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
-    expect(screen.getByRole("button", { name: "Play Now" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Set Up Game" })).toHaveFocus();
 
     fireEvent.keyDown(dialog, { key: "Tab" });
-    expect(screen.getByRole("button", { name: "Start Learn" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Start Tutorial" })).toHaveFocus();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
 
@@ -766,7 +766,7 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
   });
 
-  it("preserves the Online tab when returning to or reopening Online from Learn and Library", () => {
+  it("preserves the Online tab when returning to or reopening Online from Tutorial and Library", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
@@ -962,9 +962,9 @@ describe("App game setup lifecycle", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open Tutorial" }));
     fireEvent.click(screen.getByRole("button", { name: "Tutorial Library" }));
-    expect(screen.getByRole("button", { name: "Back to Learn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to Tutorial" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to Learn" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Tutorial" }));
     expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Tutorial Play" }));
@@ -1722,9 +1722,9 @@ describe("App game setup lifecycle", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Online" }));
@@ -2098,7 +2098,7 @@ describe("App game setup lifecycle", () => {
     expect(await screen.findByRole("navigation", { name: "Challenge navigation" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back to play" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Learn" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Online" }));

@@ -75,7 +75,7 @@ export function createM5L8(): TutorialLesson {
     title: '5.8 All units reference',
     description: (
       <div>
-        <p style={{ marginTop: 0 }}>A compact rule card for every current unit. Use this as a lookup after the interactive lessons.</p>
+        <p style={{ marginTop: 0 }}>A compact rule card for every current unit, for checking after the interactive lessons.</p>
         <UnitList title="Standard pieces" pieces={standardPieces} />
         <UnitList title="Sanctuary pieces" pieces={specialPieces} />
       </div>
@@ -83,6 +83,6 @@ export function createM5L8(): TutorialLesson {
     board,
     pieces,
     layout,
-    instructions: 'Right-click the standard row and the sanctuary-piece row on the board, then compare them with the reference text.',
+    instructions: 'Right-click the pieces, then compare them with the reference text.',
   };
 }

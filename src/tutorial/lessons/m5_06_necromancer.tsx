@@ -14,9 +14,8 @@ export function createM5L6(): TutorialLesson {
   const board = new Board(boardConfig, castles);
   const pieces = [
     PieceFactory.create(PieceType.Necromancer, new Hex(-2, 1, 1), 'w'),
-    PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w'),
-    PieceFactory.create(PieceType.Giant, new Hex(0, 0, 0), 'b'),
   ];
+  const graveyard = [PieceFactory.create(PieceType.Swordsman, new Hex(-1, 1, 0), 'w')];
   const layout = getStartingLayout(board);
 
   return {
@@ -25,11 +24,11 @@ export function createM5L6(): TutorialLesson {
     description: <PieceRules type={PieceType.Necromancer} intro="The Necromancer starts with 1 soul, gains another soul when it captures, and can spend 1 soul to raise any one dead friendly piece." />,
     board,
     pieces,
+    graveyard,
     layout,
-    initialTurnCounter: 7,
+    initialTurnCounter: 2,
     objectives: [
-      'As Black, capture the White Swordsman with the Giant.',
-      'Pass back to White, then select the Necromancer and use Raise Dead on an adjacent empty hex.',
+      'Select the Necromancer and use Raise Dead on an adjacent empty hex.',
     ],
     hints: [
       'Raise Dead is an Attack-phase ability. It is not a capture, but it spends the Necromancer\'s attack action.',

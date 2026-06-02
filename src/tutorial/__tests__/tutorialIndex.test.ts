@@ -64,6 +64,7 @@ describe('tutorial lesson index', () => {
       'm4_l1_castle_control',
       'm4_l2_recruitment',
       'm4_l3_pledging',
+      'm4_l4_sanctuary_cooldowns',
       'm5_l1_special_units',
       'm5_l2_wolf',
       'm5_l3_healer',
@@ -206,7 +207,7 @@ describe('tutorial lesson index', () => {
     expect(promotedState.promotionPending?.hex.equals(promotionHex)).toBe(true);
   });
 
-  it('gives attack-phase lessons at least one legal attack for the side to move', () => {
+  it('gives attack-phase lessons at least one legal attack or ability for the side to move', () => {
     const lessons = getAllLessons().filter(
       (lesson) => lesson.initialTurnCounter === 2 && lesson.id !== 'm3_l3_defense_followup'
     );
@@ -214,11 +215,19 @@ describe('tutorial lesson index', () => {
     for (const lesson of lessons) {
       const engine = new GameEngine(lesson.board);
       const state = createLessonState(lesson);
-      const legalAttackCount = lesson.pieces
+      const legalActionCount = lesson.pieces
         .filter((piece) => piece.color === 'w')
-        .reduce((count, piece) => count + engine.getLegalAttacks(state, piece).length, 0);
+        .reduce((count, piece) => {
+          const abilityTargets =
+            piece.type === PieceType.Wizard
+              ? engine.getAbilityTargets(state, piece, AbilityType.Fireball).length + engine.getAbilityTargets(state, piece, AbilityType.Teleport).length
+              : piece.type === PieceType.Necromancer
+                ? engine.getAbilityTargets(state, piece, AbilityType.RaiseDead).length
+                : 0;
+          return count + engine.getLegalAttacks(state, piece).length + abilityTargets;
+        }, 0);
 
-      if (legalAttackCount === 0) {
+      if (legalActionCount === 0) {
         const attackMap = lesson.pieces
           .filter((piece) => piece.color === 'w')
           .map((piece) => `${piece.type}@${piece.hex.getKey()} -> ${engine.getLegalAttacks(state, piece).map((hex) => hex.getKey()).join(',') || 'none'}`)
@@ -330,17 +339,17 @@ describe('tutorial lesson index', () => {
 
     const engine = new GameEngine(lesson.board);
     const state = createLessonState(lesson);
-    const blackGiant = findPiece(state.pieces, PieceType.Giant, new Hex(0, 0, 0));
-    const victimHex = new Hex(-1, 1, 0);
+    const whiteNecromancer = findPiece(state.pieces, PieceType.Necromancer, new Hex(-2, 1, 1));
+    const reviveHex = new Hex(-1, 0, 1);
 
-    expect(lesson.initialTurnCounter).toBe(7);
-    expect(engine.getLegalAttacks(state, blackGiant).some((hex) => hex.equals(victimHex))).toBe(true);
-
-    const afterCapture = engine.applyAttack(state, blackGiant, victimHex);
-    expect(afterCapture.graveyard.some((piece) => piece.color === 'w' && piece.type === PieceType.Swordsman)).toBe(true);
-
-    const whiteNecromancer = findPiece(afterCapture.pieces, PieceType.Necromancer, new Hex(-2, 1, 1));
+    expect(lesson.initialTurnCounter).toBe(2);
+    expect(state.graveyard.some((piece) => piece.color === 'w' && piece.type === PieceType.Swordsman)).toBe(true);
     expect(whiteNecromancer.souls).toBe(1);
+    expect(engine.getAbilityTargets(state, whiteNecromancer, AbilityType.RaiseDead).some((hex) => hex.equals(reviveHex))).toBe(true);
+
+    const afterRaiseDead = engine.activateAbility(state, whiteNecromancer.hex, reviveHex, AbilityType.RaiseDead);
+    expect(afterRaiseDead.pieces.some((piece) => piece.type === PieceType.Swordsman && piece.hex.equals(reviveHex))).toBe(true);
+    expect(afterRaiseDead.graveyard).toEqual([]);
   });
 
   it('sets up the Phoenix lesson with an Eagle comparison and a pending rebirth demonstration', () => {
@@ -349,6 +358,42 @@ describe('tutorial lesson index', () => {
 
     expect(lesson.pieces.some((piece) => piece.type === PieceType.Eagle)).toBe(true);
     expect(lesson.phoenixRecords?.some((record) => record.owner === 'w')).toBe(true);
+    expect(lesson.objectives).toEqual(['As Black, capture the nearby Phoenix with the Giant.']);
+    expect(lesson.hints?.some((hint) => hint.includes('Compare the Phoenix with the Eagle'))).toBe(true);
+
+    const engine = new GameEngine(lesson.board);
+    const state = createLessonState(lesson);
+    const blackGiant = findPiece(state.pieces, PieceType.Giant, new Hex(0, 0, 0));
+    const phoenixHex = new Hex(-1, 1, 0);
+    expect(engine.getLegalAttacks(state, blackGiant).some((hex) => hex.equals(phoenixHex))).toBe(true);
+
+    const afterCapture = engine.applyAttack(state, blackGiant, phoenixHex);
+    expect(afterCapture.pieces.some((piece) => piece.type === PieceType.Phoenix && piece.hex.equals(phoenixHex))).toBe(false);
+    expect(afterCapture.pieces.some((piece) => piece.type === PieceType.Phoenix)).toBe(true);
+  });
+
+  it('teaches that melee pieces defend adjacent Archers but Archers do not defend allies', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm3_l2_defense');
+    if (!lesson) throw new Error('Missing defense lesson');
+
+    expect(lesson.description).toContain('melee piece defends any adjacent friendly piece');
+
+    const board = lesson.board;
+    const engine = new GameEngine(board);
+    const state = createLessonState(lesson);
+    const whiteArcher = findPiece(state.pieces, PieceType.Archer, new Hex(-2, 0, 2));
+    const defendedBlackArcher = findPiece(state.pieces, PieceType.Archer, new Hex(0, -2, 2));
+
+    expect(engine.isHexDefended(defendedBlackArcher.hex, 'w', state)).toBe(true);
+    expect(engine.getLegalAttacks(state, whiteArcher).some((hex) => hex.equals(defendedBlackArcher.hex))).toBe(false);
+
+    const archerOnlyDefendedTarget = PieceFactory.create(PieceType.Swordsman, new Hex(-2, -2, 4), 'b');
+    const blackArcher = PieceFactory.create(PieceType.Archer, new Hex(-1, -2, 3), 'b');
+    const archerOnlyState = createLessonState({
+      ...lesson,
+      pieces: [whiteArcher, archerOnlyDefendedTarget, blackArcher],
+    });
+    expect(engine.isHexDefended(archerOnlyDefendedTarget.hex, 'w', archerOnlyState)).toBe(false);
   });
 
   it('lets the defense follow-up lesson break defense then fire with the Archer', () => {
@@ -373,7 +418,8 @@ describe('tutorial lesson index', () => {
     const lessons = new Map(getAllLessons().map((lesson) => [lesson.id, lesson]));
     const recruitmentLesson = lessons.get('m4_l2_recruitment');
     const pledgeLesson = lessons.get('m4_l3_pledging');
-    if (!recruitmentLesson || !pledgeLesson) throw new Error('Missing castle-phase lessons');
+    const cooldownLesson = lessons.get('m4_l4_sanctuary_cooldowns');
+    if (!recruitmentLesson || !pledgeLesson || !cooldownLesson) throw new Error('Missing castle-phase lessons');
 
     const recruitmentEngine = new GameEngine(recruitmentLesson.board);
     const recruitmentState = createLessonState(recruitmentLesson);
@@ -384,6 +430,11 @@ describe('tutorial lesson index', () => {
     const pledgeEngine = new GameEngine(pledgeLesson.board);
     const pledgeState = createLessonState(pledgeLesson);
     expect(pledgeEngine.canPledge(pledgeState, pledgeLesson.sanctuaries![0].hex)).toBe(true);
+
+    const cooldownEngine = new GameEngine(cooldownLesson.board);
+    const cooldownState = createLessonState({ ...cooldownLesson, initialTurnCounter: 9 });
+    const afterCooldownTick = cooldownEngine.passTurn(cooldownState);
+    expect(afterCooldownTick.sanctuaries[0].cooldown).toBe(3);
   });
 
   it('shows every standard and sanctuary unit on the all-units reference board', () => {

@@ -31,6 +31,7 @@ import { createM3L4 } from './lessons/m3_04_range_practice';
 import { createM4L1 } from './lessons/m4_01_castle_control';
 import { createM4L2 } from './lessons/m4_02_recruitment';
 import { createM4L3 } from './lessons/m4_03_pledging';
+import { createM4L4 } from './lessons/m4_04_sanctuary_cooldowns';
 import { createM5L1 } from './lessons/m5_01_special_units';
 import { createM5L2 } from './lessons/m5_02_wolf';
 import { createM5L3 } from './lessons/m5_03_healer';
@@ -71,6 +72,7 @@ export function getAllLessons(): TutorialLesson[] {
     createM4L1(),
     createM4L2(),
     createM4L3(),
+    createM4L4(),
     createM5L1(),
     createM5L2(),
     createM5L3(),

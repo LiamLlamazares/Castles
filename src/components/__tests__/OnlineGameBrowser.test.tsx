@@ -1430,7 +1430,7 @@ describe("OnlineGameBrowser", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
     expect(screen.getByRole("button", { name: "Online" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("No public games in progress.")).toBeInTheDocument();
     expect(screen.getByText(/Private and unlisted games stay off this page/i)).toBeInTheDocument();

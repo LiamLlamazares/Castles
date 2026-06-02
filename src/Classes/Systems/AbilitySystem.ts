@@ -48,6 +48,10 @@ export interface AbilityInfo {
   reason?: string;
 }
 
+interface AbilityUseOptions {
+  ignorePhase?: boolean;
+}
+
 /**
  * Centralized ability system for validation and targeting.
  * Execution is delegated to StateMutator.activateAbility().
@@ -65,9 +69,10 @@ export class AbilitySystem {
   public static canUseAbility(
     piece: Piece,
     ability: AbilityType,
-    gameState: GameState
+    gameState: GameState,
+    options: AbilityUseOptions = {}
   ): AbilityValidationResult {
-    if (TurnManager.getTurnPhase(gameState.turnCounter) !== "Attack") {
+    if (!options.ignorePhase && TurnManager.getTurnPhase(gameState.turnCounter) !== "Attack") {
       return {
         valid: false,
         error: `${ability} can only be used during the Attack phase`,
@@ -187,10 +192,11 @@ export class AbilitySystem {
     source: Piece,
     targetHex: Hex,
     ability: AbilityType,
-    gameState: GameState
+    gameState: GameState,
+    options: AbilityUseOptions = {}
   ): AbilityValidationResult {
     // Check if piece can use the ability at all
-    const canUse = this.canUseAbility(source, ability, gameState);
+    const canUse = this.canUseAbility(source, ability, gameState, options);
     if (!canUse.valid) return canUse;
 
     // Check if target is valid
@@ -209,8 +215,12 @@ export class AbilitySystem {
   public static getValidTargets(
     source: Piece,
     ability: AbilityType,
-    gameState: GameState
+    gameState: GameState,
+    options: AbilityUseOptions = {}
   ): Hex[] {
+    const canUse = this.canUseAbility(source, ability, gameState, options);
+    if (!canUse.valid) return [];
+
     const config = getAbilityConfig(ability);
     const validTargets: Hex[] = [];
 

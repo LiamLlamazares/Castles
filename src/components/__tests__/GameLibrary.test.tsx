@@ -35,7 +35,7 @@ describe("GameLibrary", () => {
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
   });
 
-  it("keeps primary destinations in the shared Play Learn Online Library order", async () => {
+  it("keeps primary destinations in the shared Play Tutorial Online Library order", async () => {
     render(
       <GameLibrary
         repository={createRepository()}
@@ -53,7 +53,7 @@ describe("GameLibrary", () => {
       .map((element) => element.textContent?.trim());
 
     expect(await screen.findByText(/No named saves yet/i)).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Learn", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
   });
 
   it("uses the provided back label", async () => {

@@ -346,7 +346,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
             </section>
 
             <section className="menu-section" aria-labelledby="menu-section-learn">
-              <div id="menu-section-learn" className="menu-section-label">Learn</div>
+              <div id="menu-section-learn" className="menu-section-label">Tutorial</div>
               <p className="menu-section-note">Lessons and rules</p>
 
               {onTutorial && (
@@ -355,7 +355,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                   onClick={() => handleMenuItemClick(onTutorial)}
                 >
                   {renderImageIcon(lightbulbIcon)}
-                  <span>Learn</span>
+                  <span>Tutorial</span>
                 </button>
               )}
 
