@@ -1,7 +1,7 @@
 import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import App from "../App";
-import { SanctuaryType } from "../Constants";
+import { PieceType, SanctuaryType } from "../Constants";
 import { getStartingBoard, getStartingPieces } from "../ConstantImports";
 import { MoveTree } from "../Classes/Core/MoveTree";
 import * as PGNLoadService from "../Classes/Services/PGNLoadService";
@@ -571,6 +571,7 @@ function deferredResponse() {
 describe("App game setup lifecycle", () => {
   beforeEach(() => {
     localStorage.clear();
+    localStorage.setItem("castles_first_run_intro_seen", "true");
     sessionStorage.clear();
     onlineHookMocks.submitAction.mockReset();
     onlineHookMocks.useOnlineGameConnection.mockReset();
@@ -589,6 +590,88 @@ describe("App game setup lifecycle", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/");
+  });
+
+  it("shows first-time players a Learn recommendation", async () => {
+    localStorage.removeItem("castles_first_run_intro_seen");
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Welcome to Castles" });
+
+    expect(dialog).toHaveTextContent("guided Learn tutorial");
+    expect(screen.getByRole("button", { name: "Start Learn" })).toHaveFocus();
+    expect(screen.getByText("Game Ready").closest("[inert]")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start Learn" }));
+
+    expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+    expect(screen.getByText("Tutorial Ready")).toBeInTheDocument();
+    expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
+  });
+
+  it("dismisses the first-run introduction after the player chooses to play", async () => {
+    localStorage.removeItem("castles_first_run_intro_seen");
+    const { unmount } = render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: "Welcome to Castles" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Play Now" }));
+
+    expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+    expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
+    expect(localStorage.getItem("hasSeenQuickStart")).toBe("true");
+    await waitFor(() => {
+      expect(document.activeElement).toHaveClass("App");
+    });
+
+    unmount();
+    render(<App />);
+
+    expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+    expect(screen.getByText("Game Ready")).toBeInTheDocument();
+  });
+
+  it("supports keyboard dismissal and focus wrapping in the first-run introduction", async () => {
+    localStorage.removeItem("castles_first_run_intro_seen");
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Welcome to Castles" });
+
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(screen.getByRole("button", { name: "Play Now" })).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(screen.getByRole("button", { name: "Start Learn" })).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+    });
+    expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
+    expect(localStorage.getItem("hasSeenQuickStart")).toBe("true");
+  });
+
+  it("does not interrupt direct online or challenge links with the first-run introduction", () => {
+    localStorage.removeItem("castles_first_run_intro_seen");
+    window.history.replaceState({}, "", "/?onlineGame=game_direct&seat=w&token=player-token");
+
+    const { unmount } = render(<App />);
+
+    expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting online game");
+
+    unmount();
+    localStorage.removeItem("castles_first_run_intro_seen");
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_direct&challengeRole=challenged#challengeToken=challenge-token"
+    );
+    render(<App />);
+
+    expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+    expect(screen.getByText("Online Challenge")).toBeInTheDocument();
   });
 
   it("clears stale shared-game URL parameters when configuring a new game", () => {
@@ -1699,6 +1782,17 @@ describe("App game setup lifecycle", () => {
         sideToMove: "w",
         turnPhase: "Movement",
         moveCount: 0,
+        boardPreview: {
+          radius: 6,
+          pieces: [
+            { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+            { q: 0, r: -6, s: 6, color: "b", type: PieceType.Monarch },
+          ],
+          castles: [
+            { q: 0, r: 6, s: -6, owner: "w" },
+            { q: 0, r: -6, s: 6, owner: "b" },
+          ],
+        },
       },
       lastEventId: "evt-visibility",
     };

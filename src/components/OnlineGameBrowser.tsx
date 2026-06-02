@@ -12,6 +12,7 @@ import {
 } from "../online/client";
 import type {
   OnlineGameDirectoryResponse,
+  OnlineGameSummaryBoardPreviewHex,
   OnlineGameSummary,
   OnlineGameSummaryParticipant,
 } from "../online/readModel";
@@ -19,6 +20,7 @@ import type {
   OpenSeekDirectoryResponse,
   OpenSeekSummary,
 } from "../online/seeks";
+import { PieceType } from "../Constants";
 import "../css/OnlineGameBrowser.css";
 
 type OnlineBrowserTab = "lobby" | "watch" | "archive";
@@ -149,6 +151,67 @@ function formatClockSnapshot(summary: OnlineGameSummary): string {
   const clock = summary.livePreview.clock;
   if (!clock) return "Casual";
   return `Clock snapshot W ${formatClockTime(clock.remainingMs.w)} B ${formatClockTime(clock.remainingMs.b)}`;
+}
+
+const PIECE_PREVIEW_LABELS: Record<PieceType, string> = {
+  [PieceType.Swordsman]: "S",
+  [PieceType.Archer]: "A",
+  [PieceType.Knight]: "N",
+  [PieceType.Trebuchet]: "T",
+  [PieceType.Eagle]: "E",
+  [PieceType.Giant]: "G",
+  [PieceType.Assassin]: "X",
+  [PieceType.Dragon]: "D",
+  [PieceType.Monarch]: "M",
+  [PieceType.Wolf]: "W",
+  [PieceType.Healer]: "H",
+  [PieceType.Ranger]: "R",
+  [PieceType.Wizard]: "Z",
+  [PieceType.Necromancer]: "C",
+  [PieceType.Phoenix]: "P",
+};
+const BOARD_PREVIEW_CELL_CACHE = new Map<number, OnlineGameSummaryBoardPreviewHex[]>();
+
+function boardPreviewPoint(
+  hex: OnlineGameSummaryBoardPreviewHex,
+  radius: number
+): { x: number; y: number } {
+  const scale = 42 / Math.max(1, radius);
+  return {
+    x: 50 + (hex.q + hex.r / 2) * scale,
+    y: 50 + hex.r * scale * 0.86,
+  };
+}
+
+function boardPreviewCells(radius: number): OnlineGameSummaryBoardPreviewHex[] {
+  const cached = BOARD_PREVIEW_CELL_CACHE.get(radius);
+  if (cached) return cached;
+
+  const cells: OnlineGameSummaryBoardPreviewHex[] = [];
+  for (let q = -radius; q <= radius; q += 1) {
+    const rMin = Math.max(-radius, -q - radius);
+    const rMax = Math.min(radius, -q + radius);
+    for (let r = rMin; r <= rMax; r += 1) {
+      cells.push({ q, r, s: -q - r });
+    }
+  }
+  BOARD_PREVIEW_CELL_CACHE.set(radius, cells);
+  return cells;
+}
+
+function boardPreviewImageLabel(game: OnlineGameSummary): string {
+  const preview = game.livePreview.boardPreview;
+  const whitePieces = preview.pieces.filter((piece) => piece.color === "w").length;
+  const blackPieces = preview.pieces.length - whitePieces;
+  const whiteCastles = preview.castles.filter((castle) => castle.owner === "w").length;
+  const blackCastles = preview.castles.length - whiteCastles;
+  return [
+    "Board preview:",
+    `${whitePieces} White pieces`,
+    `${blackPieces} Black pieces`,
+    `${whiteCastles} White-controlled castles`,
+    `${blackCastles} Black-controlled castles`,
+  ].join(" ");
 }
 
 function matchesResultFilter(summary: OnlineGameSummary, resultFilter: OnlineBrowserResultFilter): boolean {
@@ -687,9 +750,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const featuredKicker = isArchivedGame ? "Featured replay" : "Most active live game";
     const className = [
       "online-game-row",
+      "online-public-game-row",
       options.compact ? "online-game-row-compact" : "",
       options.featured ? "online-game-row-featured" : "",
     ].filter(Boolean).join(" ");
+    const boardPreview = game.livePreview.boardPreview;
+    const previewCells = boardPreviewCells(boardPreview.radius);
+    const boardPreviewLabel = boardPreviewImageLabel(game);
 
     return (
       <article
@@ -697,6 +764,50 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         className={className}
         aria-label={`${options.featured ? `${featuredKicker} ` : ""}${white} vs ${black} ${game.gameId}`}
       >
+        <div className="online-game-board-preview">
+          <svg viewBox="0 0 100 100" role="img" aria-label={boardPreviewLabel} focusable="false">
+            <g className="online-game-board-preview-cells">
+              {previewCells.map((hex) => {
+                const point = boardPreviewPoint(hex, boardPreview.radius);
+                return <circle key={`${hex.q},${hex.r},${hex.s}`} cx={point.x} cy={point.y} r="1.15" />;
+              })}
+            </g>
+            <g className="online-game-board-preview-castles">
+              {boardPreview.castles.map((castle) => {
+                const point = boardPreviewPoint(castle, boardPreview.radius);
+                return (
+                  <rect
+                    key={`${castle.q},${castle.r},${castle.s}`}
+                    className={`owner-${castle.owner}`}
+                    x={point.x - 2.2}
+                    y={point.y - 2.2}
+                    width="4.4"
+                    height="4.4"
+                    rx="0.8"
+                  />
+                );
+              })}
+            </g>
+            <g className="online-game-board-preview-pieces">
+              {boardPreview.pieces.map((piece) => {
+                const point = boardPreviewPoint(piece, boardPreview.radius);
+                return (
+                  <g
+                    key={`${piece.q},${piece.r},${piece.s},${piece.color},${piece.type}`}
+                    className={`piece-${piece.color}`}
+                  >
+                    <circle cx={point.x} cy={point.y} r={piece.type === PieceType.Monarch ? 3.5 : 2.8} />
+                    {piece.type === PieceType.Monarch && (
+                      <text x={point.x} y={point.y + 1.35} textAnchor="middle">
+                        {PIECE_PREVIEW_LABELS[piece.type]}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+        </div>
         <div className="online-game-row-main">
           <div className="online-game-players">
             {options.featured && <span className="online-game-kicker">{featuredKicker}</span>}

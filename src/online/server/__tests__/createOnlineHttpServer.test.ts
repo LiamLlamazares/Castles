@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { getStartingBoard, getStartingPieces } from "../../../ConstantImports";
 import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator";
-import { SanctuaryType } from "../../../Constants";
+import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import {
   createOnlineActionAcceptedEvent,
@@ -214,6 +214,17 @@ function summaryForGame(
       sideToMove: "w",
       turnPhase: "Movement",
       moveCount: 0,
+      boardPreview: {
+        radius: 6,
+        pieces: [
+          { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+          { q: 0, r: -6, s: 6, color: "b", type: PieceType.Monarch },
+        ],
+        castles: [
+          { q: 0, r: 6, s: -6, owner: "w" },
+          { q: 0, r: -6, s: 6, owner: "b" },
+        ],
+      },
       clock: {
         timeControl: { initialMs: 60_000, incrementMs: 0 },
         remainingMs: { w: 60_000, b: 60_000 },

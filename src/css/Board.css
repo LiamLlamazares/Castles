@@ -803,6 +803,19 @@ body {
   line-height: 1.45;
 }
 
+.first-run-intro-dialog {
+  width: min(460px, 100%);
+}
+
+.first-run-intro-kicker {
+  margin-bottom: 8px;
+  color: #7fd1b0;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .confirm-dialog-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

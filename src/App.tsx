@@ -89,6 +89,8 @@ type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
 
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
+const FIRST_RUN_INTRO_STORAGE_KEY = "castles_first_run_intro_seen";
+const QUICK_START_STORAGE_KEY = "hasSeenQuickStart";
 
 interface GameConfig {
   board?: Board;
@@ -272,17 +274,21 @@ function createReplayGameConfigFromOnlineSnapshot(snapshot: OnlineGameSnapshotDT
 }
 
 function App() {
+  const isRulesPage = window.location.pathname === '/rules';
   const [view, setView] = useState<ViewState>('game');
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
   const [viewStack, setViewStack] = useState<ViewState[]>([]);
   const [gameLibraryRepository] = useState(() => new BrowserGameLibraryRepository());
   const [saveGameDialog, setSaveGameDialog] = useState<SaveGameDialogState | null>(null);
+  const [isFirstRunIntroOpen, setIsFirstRunIntroOpen] = useState(false);
   const appRootRef = useRef<HTMLDivElement>(null);
   const saveDialogRef = useRef<HTMLFormElement>(null);
   const saveNameInputRef = useRef<HTMLInputElement>(null);
   const saveDialogReturnFocusRef = useRef<HTMLElement | null>(null);
   const activeSaveDialogRequestRef = useRef<SaveGameDialogState | null>(null);
+  const firstRunIntroDialogRef = useRef<HTMLElement>(null);
+  const firstRunIntroPrimaryButtonRef = useRef<HTMLButtonElement>(null);
   const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(() =>
     resolveOnlineJoinParams(window.location.href)
   );
@@ -314,13 +320,25 @@ function App() {
   const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
   const replayRequestIdRef = useRef(0);
   const isSaveDialogOpen = saveGameDialog !== null;
+  const isFirstRunIntroVisible = isFirstRunIntroOpen && !isRulesPage;
+  const isAppModalOpen = isSaveDialogOpen || isFirstRunIntroVisible;
+
+  useEffect(() => {
+    if (isRulesPage || onlineJoin || onlineSpectator || onlineChallenge) return;
+    try {
+      if (localStorage.getItem(FIRST_RUN_INTRO_STORAGE_KEY) === "true") return;
+    } catch {
+      // If storage is unavailable, still show the one-session introduction.
+    }
+    setIsFirstRunIntroOpen(true);
+  }, [isRulesPage, onlineJoin, onlineSpectator, onlineChallenge]);
 
   useEffect(() => {
     const root = appRootRef.current;
-    if (!root || !isSaveDialogOpen) return;
+    if (!root || !isAppModalOpen) return;
 
     const backgroundChildren = Array.from(root.children).filter(
-      (child) => !child.classList.contains("save-dialog-backdrop")
+      (child) => !child.classList.contains("app-modal-backdrop")
     );
 
     backgroundChildren.forEach((child) => {
@@ -334,12 +352,17 @@ function App() {
         child.removeAttribute("aria-hidden");
       });
     };
-  }, [isSaveDialogOpen]);
+  }, [isAppModalOpen]);
 
   useEffect(() => {
     if (!isSaveDialogOpen) return;
     saveNameInputRef.current?.focus();
   }, [isSaveDialogOpen]);
+
+  useEffect(() => {
+    if (!isFirstRunIntroVisible) return;
+    firstRunIntroPrimaryButtonRef.current?.focus();
+  }, [isFirstRunIntroVisible]);
 
   useEffect(() => {
     return () => {
@@ -570,6 +593,60 @@ function App() {
     const target = next.pop() ?? 'game';
     setViewStack(next);
     setView(target);
+  };
+
+  const markFirstRunIntroSeen = () => {
+    try {
+      localStorage.setItem(FIRST_RUN_INTRO_STORAGE_KEY, "true");
+      localStorage.setItem(QUICK_START_STORAGE_KEY, "true");
+    } catch {
+      // Storage failures should not trap the player behind onboarding.
+    }
+    setIsFirstRunIntroOpen(false);
+  };
+
+  const handleFirstRunIntroPlay = () => {
+    markFirstRunIntroSeen();
+    window.setTimeout(() => {
+      appRootRef.current?.focus();
+    }, 0);
+  };
+
+  const handleFirstRunIntroTutorial = () => {
+    markFirstRunIntroSeen();
+    pushView('tutorial');
+  };
+
+  const handleFirstRunIntroKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      handleFirstRunIntroPlay();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      firstRunIntroDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    } else if (!focusable.includes(active as HTMLElement)) {
+      event.preventDefault();
+      first.focus();
+    }
   };
 
   const currentBackTarget = viewStack[viewStack.length - 1] ?? 'game';
@@ -1375,7 +1452,6 @@ function App() {
   };
   
   const [gameKey, setGameKey] = useState(0);
-  const isRulesPage = window.location.pathname === '/rules';
 
   const handleOnlineSnapshot = useCallback((snapshot: OnlineGameSnapshotDTO) => {
     setOnlineSnapshot(snapshot);
@@ -1561,7 +1637,7 @@ function App() {
 
   return (
     <ThemeProvider>
-    <div className="App" ref={appRootRef}>
+    <div className="App" ref={appRootRef} tabIndex={-1}>
       {isRulesPage ? (
         <RulesManualPage />
       ) : (
@@ -1812,8 +1888,46 @@ function App() {
         />
       )}
 
+      {isFirstRunIntroVisible && (
+        <div className="confirm-dialog-backdrop app-modal-backdrop first-run-intro-backdrop">
+          <section
+            className="confirm-dialog first-run-intro-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="first-run-intro-title"
+            aria-describedby="first-run-intro-description"
+            onKeyDown={handleFirstRunIntroKeyDown}
+            ref={firstRunIntroDialogRef}
+          >
+            <div className="first-run-intro-kicker">New to Castles?</div>
+            <h2 id="first-run-intro-title">Welcome to Castles</h2>
+            <p id="first-run-intro-description">
+              Castles is a hex strategy game about controlling castles, using special units, and choosing the right phase actions.
+              The fastest way to learn the rules is the guided Learn tutorial.
+            </p>
+            <div className="confirm-dialog-actions">
+              <button
+                type="button"
+                className="confirm-dialog-button primary"
+                onClick={handleFirstRunIntroTutorial}
+                ref={firstRunIntroPrimaryButtonRef}
+              >
+                Start Learn
+              </button>
+              <button
+                type="button"
+                className="confirm-dialog-button neutral"
+                onClick={handleFirstRunIntroPlay}
+              >
+                Play Now
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {saveGameDialog && (
-        <div className="confirm-dialog-backdrop save-dialog-backdrop">
+        <div className="confirm-dialog-backdrop app-modal-backdrop save-dialog-backdrop">
           <form
             className="confirm-dialog save-dialog"
             role="dialog"

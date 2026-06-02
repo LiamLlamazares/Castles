@@ -464,14 +464,34 @@ Status: implemented and locally verified on 2026-06-02. `OnlineGameSummary` is n
 
 Deferred:
 
-- Board thumbnails need a separate token-free board-preview read model before any row renders a miniature board.
+- Board thumbnails are handled in Phase 6U with a separate token-free board-preview read model.
 - Spectator counts need a multi-instance-aware presence source; the current process-local socket map is not durable enough.
 - Ratings, accounts, TV-style ranking, opening trees, and public archive search remain later phases.
 - Live row clocks are snapshot labels only. Ticking public clocks should wait for a response-time basis and a UX review so rows do not imply more precision than the summary contract provides.
 
 Commit status:
 
-- Ready to commit and push after final diff review.
+- Superseded by Phase 6U board-preview verification before commit/push.
+
+## Phase 6U: Public Board Preview and First-Run Onboarding
+
+Goal: make Watch and Lobby rows more scannable with token-free miniature board previews, and give first-time players a clear path into Learn before they are dropped into the board.
+
+Status: implemented locally on 2026-06-02. `OnlineGameSummary` is now schema version 3 and includes `livePreview.boardPreview` with bounded board radius, piece coordinates/types, and castle owners. Lobby/Watch/Archive public rows render compact SVG board previews with accessible labels that expose White/Black piece and castle-owner counts without tokens or private snapshots. First-time local visitors see a one-time welcome dialog that recommends `Start Learn`, traps focus, supports Escape dismissal, and stores the dismissal in localStorage. Direct online/challenge/spectator links suppress the prompt until the user returns to normal local play.
+
+Verification plan:
+
+- Focused tests: read-model validation/projection, OnlineGameBrowser row rendering/accessibility, and App first-run modal/navigation tests.
+- Wider tests: client/server summary fixtures, full automated suite, client build, server build, diff check.
+- Browser QA: local Playwright smoke for first-run Learn handoff plus Online Lobby/Watch rows at desktop and mobile widths.
+- Review: backend/read-model reviewer for schema, token hygiene, and startup rebuild assumptions; UI/accessibility reviewer for modal focus and preview labels.
+
+Remaining work:
+
+- Spectator counts need a multi-instance-aware presence source.
+- A true TV/featured ranking still needs ratings/accounts or a durable activity signal.
+- Public row clocks remain snapshot labels; ticking public clocks should wait for response-time basis and UX review.
+- Consider richer board-preview art later, but only after the current compact preview proves readable on mobile.
 
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
@@ -509,8 +529,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Finish Phase 6T verification, accepted reviewer cleanup, commit, and push.
-2. Decide the next Watch/Lobby preview step: token-free board thumbnails, a cleaner current-games section, or deeper navigation streamlining.
+1. Finish Phase 6U verification, accepted reviewer cleanup, commit, and push.
+2. Decide the next Watch/Lobby preview step: spectator counts with durable presence, a cleaner current-games section, or deeper navigation streamlining.
 3. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
 4. Continue Learn course polish with authored objective ids and richer theory, but add engine-graded progress only after objective board states are explicit and tested.
-5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, save modal overlays, and long online status/error text.
+5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.

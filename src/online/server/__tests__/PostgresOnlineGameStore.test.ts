@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getStartingBoard, getStartingPieces } from "../../../ConstantImports";
 import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator";
-import { SanctuaryType } from "../../../Constants";
+import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
@@ -512,6 +512,17 @@ function createSummary(
       sideToMove: "w",
       turnPhase: "Movement",
       moveCount: 0,
+      boardPreview: {
+        radius: 6,
+        pieces: [
+          { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+          { q: 0, r: -6, s: 6, color: "b", type: PieceType.Monarch },
+        ],
+        castles: [
+          { q: 0, r: 6, s: -6, owner: "w" },
+          { q: 0, r: -6, s: 6, owner: "b" },
+        ],
+      },
       ...(hasTimeControl
         ? {
             clock: {

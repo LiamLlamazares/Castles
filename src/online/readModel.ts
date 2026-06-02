@@ -18,10 +18,10 @@ import {
   type OnlineAccessRole,
 } from "./accessPolicy";
 import { stringContainsDurableSecret } from "./secretSafety";
-import type { Color, MoveRecord, TurnPhase } from "../Constants";
-import type { OnlineClockStateDTO } from "./types";
+import { PieceType, type Color, type MoveRecord, type TurnPhase } from "../Constants";
+import type { CastleDTO, OnlineClockStateDTO, PieceDTO } from "./types";
 
-export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 2;
+export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 3;
 export const ONLINE_GAME_DIRECTORY_SCHEMA_VERSION = 1;
 export const ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT = 25;
 export const ONLINE_GAME_DIRECTORY_MAX_LIMIT = 100;
@@ -78,12 +78,34 @@ export interface OnlineGameSummaryPreviewClock {
   flag?: { color: Color; at: number };
 }
 
+export interface OnlineGameSummaryBoardPreviewHex {
+  q: number;
+  r: number;
+  s: number;
+}
+
+export interface OnlineGameSummaryBoardPreviewPiece extends OnlineGameSummaryBoardPreviewHex {
+  color: Color;
+  type: PieceType;
+}
+
+export interface OnlineGameSummaryBoardPreviewCastle extends OnlineGameSummaryBoardPreviewHex {
+  owner: Color;
+}
+
+export interface OnlineGameSummaryBoardPreview {
+  radius: number;
+  pieces: OnlineGameSummaryBoardPreviewPiece[];
+  castles: OnlineGameSummaryBoardPreviewCastle[];
+}
+
 export interface OnlineGameSummaryLivePreview {
   sideToMove: Color;
   turnPhase: TurnPhase;
   moveCount: number;
   lastMove?: MoveRecord;
   clock?: OnlineGameSummaryPreviewClock;
+  boardPreview: OnlineGameSummaryBoardPreview;
 }
 
 export interface OnlineGameSummary {
@@ -139,6 +161,10 @@ const ACCESS_VISIBILITIES = ONLINE_GAME_VISIBILITIES;
 const ARCHIVE_STATES = new Set<OnlineArchiveState>(["active", "archived"]);
 const SUMMARY_STATUSES = new Set<OnlineGameSummaryStatus>(["active", "complete"]);
 const TURN_PHASES = new Set<TurnPhase>(["Movement", "Attack", "Recruitment"]);
+const PIECE_TYPES = new Set<PieceType>(Object.values(PieceType));
+const BOARD_PREVIEW_MAX_RADIUS = 12;
+const BOARD_PREVIEW_MAX_PIECES = 300;
+const BOARD_PREVIEW_MAX_CASTLES = 40;
 export const ONLINE_GAME_DIRECTORY_STATES = new Set<OnlineGameDirectoryState>([
   "active",
   "archived",
@@ -180,6 +206,10 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
 
 function isPositiveSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
+function isBoardPreviewCoordinate(value: unknown): value is number {
+  return Number.isInteger(value) && Math.abs(value as number) <= BOARD_PREVIEW_MAX_RADIUS;
 }
 
 function isIsoDateString(value: unknown): value is string {
@@ -401,6 +431,124 @@ function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummar
   };
 }
 
+function validateBoardPreviewHex(
+  value: unknown,
+  radius: number,
+  label: string
+): ValidationResult<OnlineGameSummaryBoardPreviewHex> {
+  if (!isRecord(value)) return bad(`${label} must be an object.`);
+  if (
+    !isBoardPreviewCoordinate(value.q) ||
+    !isBoardPreviewCoordinate(value.r) ||
+    !isBoardPreviewCoordinate(value.s)
+  ) {
+    return bad(`${label} coordinates are invalid.`);
+  }
+  if (value.q + value.r + value.s !== 0) {
+    return bad(`${label} coordinates must sum to zero.`);
+  }
+  if (Math.max(Math.abs(value.q), Math.abs(value.r), Math.abs(value.s)) > radius) {
+    return bad(`${label} must be inside the preview radius.`);
+  }
+  return {
+    ok: true,
+    value: { q: value.q, r: value.r, s: value.s },
+  };
+}
+
+function validateBoardPreviewPiece(
+  value: unknown,
+  radius: number
+): ValidationResult<OnlineGameSummaryBoardPreviewPiece> {
+  const hex = validateBoardPreviewHex(value, radius, "summary.livePreview.boardPreview.pieces[]");
+  if (!hex.ok) return hex;
+  if (!isRecord(value)) return bad("summary.livePreview.boardPreview.pieces[] must be an object.");
+  if (!isColor(value.color)) return bad("summary.livePreview.boardPreview.pieces[].color must be w or b.");
+  if (typeof value.type !== "string" || !PIECE_TYPES.has(value.type as PieceType)) {
+    return bad("summary.livePreview.boardPreview.pieces[].type is invalid.");
+  }
+  return {
+    ok: true,
+    value: {
+      ...hex.value,
+      color: value.color,
+      type: value.type as PieceType,
+    },
+  };
+}
+
+function validateBoardPreviewCastle(
+  value: unknown,
+  radius: number
+): ValidationResult<OnlineGameSummaryBoardPreviewCastle> {
+  const hex = validateBoardPreviewHex(value, radius, "summary.livePreview.boardPreview.castles[]");
+  if (!hex.ok) return hex;
+  if (!isRecord(value)) return bad("summary.livePreview.boardPreview.castles[] must be an object.");
+  if (!isColor(value.owner)) return bad("summary.livePreview.boardPreview.castles[].owner must be w or b.");
+  return {
+    ok: true,
+    value: {
+      ...hex.value,
+      owner: value.owner,
+    },
+  };
+}
+
+function validateBoardPreview(value: unknown): ValidationResult<OnlineGameSummaryBoardPreview> {
+  if (!isRecord(value)) return bad("summary.livePreview.boardPreview must be an object.");
+  if (!isPositiveSafeInteger(value.radius) || value.radius > BOARD_PREVIEW_MAX_RADIUS) {
+    return bad("summary.livePreview.boardPreview.radius is invalid.");
+  }
+  if (!Array.isArray(value.pieces) || value.pieces.length > BOARD_PREVIEW_MAX_PIECES) {
+    return bad("summary.livePreview.boardPreview.pieces is invalid.");
+  }
+  if (!Array.isArray(value.castles) || value.castles.length > BOARD_PREVIEW_MAX_CASTLES) {
+    return bad("summary.livePreview.boardPreview.castles is invalid.");
+  }
+
+  const pieces = value.pieces.map((piece) => validateBoardPreviewPiece(piece, value.radius as number));
+  const invalidPiece = pieces.find((piece) => !piece.ok);
+  if (invalidPiece && !invalidPiece.ok) return invalidPiece;
+  const castles = value.castles.map((castle) => validateBoardPreviewCastle(castle, value.radius as number));
+  const invalidCastle = castles.find((castle) => !castle.ok);
+  if (invalidCastle && !invalidCastle.ok) return invalidCastle;
+
+  const pieceHexes = new Set<string>();
+  for (const piece of pieces) {
+    if (!piece.ok) throw new Error("unreachable invalid board preview piece.");
+    const key = `${piece.value.q},${piece.value.r},${piece.value.s}`;
+    if (pieceHexes.has(key)) {
+      return bad("summary.livePreview.boardPreview.pieces must not contain duplicate coordinates.");
+    }
+    pieceHexes.add(key);
+  }
+
+  const castleHexes = new Set<string>();
+  for (const castle of castles) {
+    if (!castle.ok) throw new Error("unreachable invalid board preview castle.");
+    const key = `${castle.value.q},${castle.value.r},${castle.value.s}`;
+    if (castleHexes.has(key)) {
+      return bad("summary.livePreview.boardPreview.castles must not contain duplicate coordinates.");
+    }
+    castleHexes.add(key);
+  }
+
+  return {
+    ok: true,
+    value: {
+      radius: value.radius as number,
+      pieces: pieces.map((piece) => {
+        if (!piece.ok) throw new Error("unreachable invalid board preview piece.");
+        return piece.value;
+      }),
+      castles: castles.map((castle) => {
+        if (!castle.ok) throw new Error("unreachable invalid board preview castle.");
+        return castle.value;
+      }),
+    },
+  };
+}
+
 function anonymousParticipant(gameId: string, seat: Color): OnlineGameSummaryParticipant {
   return {
     seat,
@@ -423,6 +571,48 @@ function summaryClockFromSnapshot(clock: OnlineClockStateDTO | undefined): Onlin
   };
 }
 
+function comparePreviewHexes(
+  left: OnlineGameSummaryBoardPreviewHex,
+  right: OnlineGameSummaryBoardPreviewHex
+): number {
+  if (left.q !== right.q) return left.q - right.q;
+  if (left.r !== right.r) return left.r - right.r;
+  return left.s - right.s;
+}
+
+function previewHexFromDto(value: PieceDTO["hex"]): OnlineGameSummaryBoardPreviewHex {
+  return { q: value.q, r: value.r, s: value.s };
+}
+
+function previewPieceFromDto(piece: PieceDTO): OnlineGameSummaryBoardPreviewPiece {
+  return {
+    ...previewHexFromDto(piece.hex),
+    color: piece.color,
+    type: piece.type,
+  };
+}
+
+function previewCastleFromDto(castle: CastleDTO): OnlineGameSummaryBoardPreviewCastle {
+  return {
+    ...previewHexFromDto(castle.hex),
+    owner: castle.owner,
+  };
+}
+
+function createBoardPreviewFromSnapshot(
+  snapshot: ReturnType<OnlineGameRoom["getSnapshot"]>
+): OnlineGameSummaryBoardPreview {
+  return {
+    radius: snapshot.setup.board.config.nSquares,
+    pieces: snapshot.state.pieces
+      .map(previewPieceFromDto)
+      .sort((left, right) => comparePreviewHexes(left, right) || left.color.localeCompare(right.color) || left.type.localeCompare(right.type)),
+    castles: snapshot.state.castles
+      .map(previewCastleFromDto)
+      .sort((left, right) => comparePreviewHexes(left, right) || left.owner.localeCompare(right.owner)),
+  };
+}
+
 function createLivePreviewFromSnapshot(
   snapshot: ReturnType<OnlineGameRoom["getSnapshot"]>
 ): OnlineGameSummaryLivePreview {
@@ -433,6 +623,7 @@ function createLivePreviewFromSnapshot(
     moveCount: snapshot.moveHistory.length,
     lastMove,
     clock: summaryClockFromSnapshot(snapshot.clock),
+    boardPreview: createBoardPreviewFromSnapshot(snapshot),
   };
 }
 
@@ -602,6 +793,8 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
   if (!value.hasTimeControl && clock) {
     return bad("summary.livePreview.clock is not allowed for casual games.");
   }
+  const boardPreview = validateBoardPreview(value.livePreview.boardPreview);
+  if (!boardPreview.ok) return boardPreview;
 
   let result: OnlineGameResultDTO | undefined;
   if (value.result !== undefined) {
@@ -650,6 +843,7 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
         moveCount: value.livePreview.moveCount,
         lastMove,
         clock,
+        boardPreview: boardPreview.value,
       },
       result,
       lastEventId: value.lastEventId,

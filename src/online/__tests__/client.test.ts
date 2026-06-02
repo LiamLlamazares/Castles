@@ -48,6 +48,7 @@ import {
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
+import { PieceType } from "../../Constants";
 import type { OnlineConnectionStatus } from "../types";
 
 function snapshot(version = 0) {
@@ -91,6 +92,17 @@ function publicSummary(overrides: Record<string, unknown> = {}) {
       sideToMove: "w",
       turnPhase: "Movement",
       moveCount: 0,
+      boardPreview: {
+        radius: 6,
+        pieces: [
+          { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+          { q: 0, r: -6, s: 6, color: "b", type: PieceType.Monarch },
+        ],
+        castles: [
+          { q: 0, r: 6, s: -6, owner: "w" },
+          { q: 0, r: -6, s: 6, owner: "b" },
+        ],
+      },
       clock: {
         timeControl: { initialMs: 60_000, incrementMs: 0 },
         remainingMs: { w: 60_000, b: 60_000 },

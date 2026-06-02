@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
+import { Board } from "../../Classes/Core/Board";
+import { Castle } from "../../Classes/Entities/Castle";
+import { Hex } from "../../Classes/Entities/Hex";
+import { Piece } from "../../Classes/Entities/Piece";
 import { SanctuaryGenerator } from "../../Classes/Systems/SanctuaryGenerator";
-import { SanctuaryType } from "../../Constants";
+import { PieceType, SanctuaryType } from "../../Constants";
 import { serializeOnlineGameSetup } from "../serialization";
 import {
   ONLINE_EVENT_SCHEMA_VERSION,
@@ -68,6 +72,40 @@ function createEvent(
   };
 }
 
+function createPreviewSetup() {
+  const board = new Board(
+    { nSquares: 3, riverCrossingLength: 100, hasHighGround: false },
+    [
+      new Castle(new Hex(0, 3, -3), "w", 0, false, "w"),
+      new Castle(new Hex(0, -3, 3), "b", 2, false, "w"),
+    ]
+  );
+  const pieces = [
+    new Piece(new Hex(0, 0, 0), "w", PieceType.Swordsman),
+    new Piece(new Hex(1, -1, 0), "b", PieceType.Monarch),
+  ];
+
+  return serializeOnlineGameSetup({
+    board,
+    pieces,
+    sanctuaries: [],
+    gameRules: { vpModeEnabled: false },
+    initialPoolTypes: [],
+    pieceTheme: "Castles",
+  });
+}
+
+function createPreviewEvent(
+  gameId = "game_preview"
+): Extract<OnlineGameEvent, { type: "game_created" }> {
+  return {
+    ...envelope(0),
+    type: "game_created",
+    gameId,
+    setup: createPreviewSetup(),
+  };
+}
+
 function validSummary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
   const hasTimeControl = overrides.hasTimeControl ?? true;
   return {
@@ -94,6 +132,17 @@ function validSummary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSum
         turnNumber: 1,
         color: "w",
         phase: "Movement",
+      },
+      boardPreview: {
+        radius: 6,
+        pieces: [
+          { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+          { q: 0, r: -6, s: 6, color: "b", type: PieceType.Monarch },
+        ],
+        castles: [
+          { q: 0, r: 6, s: -6, owner: "w" },
+          { q: 0, r: -6, s: 6, owner: "b" },
+        ],
       },
       ...(hasTimeControl
         ? {
@@ -223,6 +272,17 @@ describe("online read model", () => {
           activeColor: "b",
           runningSince: 2_000,
         },
+        boardPreview: {
+          radius: expect.any(Number),
+          pieces: expect.arrayContaining([
+            expect.objectContaining({ color: "w", type: PieceType.Monarch }),
+            expect.objectContaining({ color: "b", type: PieceType.Monarch }),
+          ]),
+          castles: expect.arrayContaining([
+            expect.objectContaining({ owner: "w" }),
+            expect.objectContaining({ owner: "b" }),
+          ]),
+        },
       },
       lastEventId: "evt-1",
     });
@@ -262,6 +322,23 @@ describe("online read model", () => {
       unlisted: "unlisted",
       public: "public",
     });
+  });
+
+  it("projects a token-free board preview from current public game state", () => {
+    const [summary] = projectOnlineGameSummaries([createPreviewEvent()]);
+
+    expect(summary.livePreview.boardPreview).toEqual({
+      radius: 3,
+      pieces: [
+        { q: 0, r: 0, s: 0, color: "w", type: PieceType.Swordsman },
+        { q: 1, r: -1, s: 0, color: "b", type: PieceType.Monarch },
+      ],
+      castles: [
+        { q: 0, r: -3, s: 3, owner: "w" },
+        { q: 0, r: 3, s: -3, owner: "w" },
+      ],
+    });
+    expect(JSON.stringify(summary.livePreview.boardPreview)).not.toContain("token");
   });
 
   it("projects visibility changes without advancing the gameplay version", () => {
@@ -495,6 +572,7 @@ describe("online read model", () => {
             sideToMove: "w",
             turnPhase: "Movement",
             moveCount: 0,
+            boardPreview: validSummary().livePreview.boardPreview,
             clock: {
               timeControl: { initialMs: 60_000, incrementMs: 0 },
               remainingMs: { w: 60_000, b: 60_000 },
@@ -513,6 +591,97 @@ describe("online read model", () => {
           clock: {
             ...validSummary().livePreview.clock!,
             serverNow: Date.now(),
+          },
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          boardPreview: undefined,
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          boardPreview: {
+            ...validSummary().livePreview.boardPreview,
+            radius: 13,
+          },
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          boardPreview: {
+            ...validSummary().livePreview.boardPreview,
+            pieces: [
+              {
+                q: 7,
+                r: 0,
+                s: -7,
+                color: "w",
+                type: PieceType.Monarch,
+              },
+            ],
+          },
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          boardPreview: {
+            ...validSummary().livePreview.boardPreview,
+            pieces: [
+              {
+                q: 0,
+                r: 6,
+                s: -6,
+                color: "w",
+                type: "token=secret",
+              },
+            ],
+          },
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          boardPreview: {
+            ...validSummary().livePreview.boardPreview,
+            pieces: [
+              { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+              { q: 0, r: 6, s: -6, color: "b", type: PieceType.Archer },
+            ],
+          },
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          boardPreview: {
+            ...validSummary().livePreview.boardPreview,
+            castles: [
+              { q: 0, r: 6, s: -6, owner: "w" },
+              { q: 0, r: 6, s: -6, owner: "b" },
+            ],
           },
         },
       }).ok

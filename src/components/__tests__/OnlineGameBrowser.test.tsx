@@ -14,6 +14,7 @@ import {
   type OpenSeekDirectoryResponse,
   type OpenSeekSummary,
 } from "../../online/seeks";
+import { PieceType } from "../../Constants";
 import { ONLINE_RULESET_VERSION } from "../../online/events";
 
 function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
@@ -43,6 +44,19 @@ function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary 
         turnNumber: 1,
         color: "w",
         phase: "Movement",
+      },
+      boardPreview: {
+        radius: 6,
+        pieces: [
+          { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+          { q: 0, r: -6, s: 6, color: "b", type: PieceType.Monarch },
+          { q: -1, r: 5, s: -4, color: "w", type: PieceType.Swordsman },
+          { q: 1, r: -5, s: 4, color: "b", type: PieceType.Archer },
+        ],
+        castles: [
+          { q: 0, r: 6, s: -6, owner: "w" },
+          { q: 0, r: -6, s: 6, owner: "b" },
+        ],
       },
       ...(hasTimeControl
         ? {
@@ -1551,6 +1565,9 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Black to move, Attack");
     expect(row).toHaveTextContent("Last G13G12");
     expect(row).toHaveTextContent("Clock snapshot W 19:58 B 20:00");
+    expect(within(row).getByRole("img", {
+      name: "Board preview: 2 White pieces 2 Black pieces 1 White-controlled castles 1 Black-controlled castles",
+    })).toBeInTheDocument();
 
     fireEvent.click(within(row).getByRole("button", { name: "Spectate Ada vs Ben, game_public_active" }));
 

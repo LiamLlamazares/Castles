@@ -177,9 +177,17 @@ Phase 6T Public live-preview read model, 2026-06-02:
 - Startup rebuilds destructively replace stale materialized game-summary rows from the event log before serving the production app; this is intentional under the no-legacy-data direction.
 - Final verification passed focused Phase 6T tests, the full automated suite, client build, server build, diff check, local PostgreSQL restart smoke, browser online smoke, and desktop/mobile Lobby/Watch/Archive screenshot audit. Screenshot artifacts are in `artifacts/ui-audit/phase6t-live-preview`.
 
+Phase 6U Public board previews and first-run onboarding, 2026-06-02:
+
+- Public summaries now carry a token-free board-preview contract, and Watch/Lobby/Archive rows render compact board thumbnails with accessible White/Black piece and castle-control counts.
+- Board-preview validation is bounded to the current online setup limits so public rows cannot carry oversized board payloads.
+- First-time local visitors see a short welcome dialog with a direct `Start Learn` recommendation and a `Play Now` dismissal. The modal uses the shared dialog focus trap and stores dismissal in localStorage.
+- Direct online game, spectator, and challenge links suppress the first-run prompt until the user returns to ordinary local play, so shared links are not interrupted.
+- Recheck first-run welcome, Lobby rows, Watch rows, and Archive rows in the next screenshot pass at desktop and mobile sizes.
+
 Next product slices accepted from reviewers:
 
-- Add token-free board thumbnails only after a small public board-preview contract exists.
+- Improve public board previews only after screenshot QA shows the compact thumbnail is readable on mobile.
 - Add spectator counts only after presence works across server instances.
 - Continue Learn course polish with authored objective ids, richer lesson theory, and only add engine-graded objectives when the target board state is explicit and tested.
 - Improve navigation clarity in later slices by reducing duplicated online entry points where possible and continuing to separate private player links from public spectator/share actions.
