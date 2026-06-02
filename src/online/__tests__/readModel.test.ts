@@ -69,6 +69,7 @@ function createEvent(
 }
 
 function validSummary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
+  const hasTimeControl = overrides.hasTimeControl ?? true;
   return {
     schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
     gameId: "game_valid_summary",
@@ -84,6 +85,27 @@ function validSummary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSum
       { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_valid_summary_w" } },
       { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_valid_summary_b" } },
     ],
+    livePreview: {
+      sideToMove: "b",
+      turnPhase: "Attack",
+      moveCount: 1,
+      lastMove: {
+        notation: "G13G12",
+        turnNumber: 1,
+        color: "w",
+        phase: "Movement",
+      },
+      ...(hasTimeControl
+        ? {
+            clock: {
+              timeControl: { initialMs: 1_200_000, incrementMs: 20_000 },
+              remainingMs: { w: 1_190_000, b: 1_200_000 },
+              activeColor: "b" as const,
+              runningSince: 2_000,
+            },
+          }
+        : {}),
+    },
     lastEventId: "evt-valid",
     ...overrides,
   };
@@ -185,6 +207,23 @@ describe("online read model", () => {
       visibility: "unlisted",
       archiveState: "active",
       hasTimeControl: true,
+      livePreview: {
+        sideToMove: expect.stringMatching(/^[wb]$/),
+        turnPhase: expect.stringMatching(/^(Movement|Attack|Recruitment)$/),
+        moveCount: 1,
+        lastMove: expect.objectContaining({
+          notation: "Pass",
+          turnNumber: 1,
+          color: "w",
+          phase: "Movement",
+        }),
+        clock: {
+          timeControl: { initialMs: 1_200_000, incrementMs: 20_000 },
+          remainingMs: { w: 1_200_000, b: 1_200_000 },
+          activeColor: "b",
+          runningSince: 2_000,
+        },
+      },
       lastEventId: "evt-1",
     });
     expect(summary.participants).toEqual([
@@ -200,6 +239,7 @@ describe("online read model", () => {
       },
     ]);
     expect(JSON.stringify(summary)).not.toContain("secret-token");
+    expect(JSON.stringify(summary)).not.toContain("serverNow");
   });
 
   it("projects explicit initial visibility while keeping old creation events unlisted", () => {
@@ -416,6 +456,67 @@ describe("online read model", () => {
     if (!result.ok) {
       expect(result.error.message).toContain("role");
     }
+  });
+
+  it("validates live preview move and clock invariants", () => {
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          moveCount: 0,
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          moveCount: 1,
+          lastMove: undefined,
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          clock: undefined,
+        },
+      }).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary(
+        validSummary({
+          hasTimeControl: false,
+          livePreview: {
+            sideToMove: "w",
+            turnPhase: "Movement",
+            moveCount: 0,
+            clock: {
+              timeControl: { initialMs: 60_000, incrementMs: 0 },
+              remainingMs: { w: 60_000, b: 60_000 },
+              activeColor: "w",
+              runningSince: 0,
+            },
+          },
+        })
+      ).ok
+    ).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...validSummary(),
+        livePreview: {
+          ...validSummary().livePreview,
+          clock: {
+            ...validSummary().livePreview.clock!,
+            serverNow: Date.now(),
+          },
+        },
+      }).ok
+    ).toBe(false);
   });
 
   it("rejects contradictory summary lifecycle states", () => {

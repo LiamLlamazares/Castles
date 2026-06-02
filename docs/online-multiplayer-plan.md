@@ -456,6 +456,23 @@ Remaining work:
 - Add server-backed live-game preview fields before introducing board thumbnails, side-to-move, last move, clocks, spectator counts, ratings, or a true TV-style featured game.
 - Decide later whether the compact Watch preview belongs in Lobby once Watch has richer scan controls.
 
+## Phase 6T: Public Live Preview Read Model
+
+Goal: make Watch and Lobby rows show trustworthy live-game metadata from the public read model instead of guessing from UI state or private snapshots.
+
+Status: implemented and locally verified on 2026-06-02. `OnlineGameSummary` is now schema version 2 and groups token-free preview data under `livePreview`: side to move, turn phase, move-history count, last move, and persisted clock basis. Watch/Lobby rows now render move count from move history instead of the room version, show the active side and phase only for live games, show last move notation when available, and show a non-ticking `Clock snapshot` label for timed games. The summary validator rejects timed public summaries without clock basis, casual summaries with clock data, impossible last-move combinations, and clock objects that contain response-specific `serverNow` values. Production startup already calls the destructive summary rebuild path before listening, and regression coverage now verifies stale materialized v1 summary rows are deleted and replaced from the event log. Verification passed focused Phase 6T tests, the full automated suite, client build, server build, diff check, local PostgreSQL restart smoke, browser online smoke, and Lobby/Watch/Archive screenshot audit at 1440 x 900 and 390 x 844. Screenshot artifacts are in `artifacts/ui-audit/phase6t-live-preview`.
+
+Deferred:
+
+- Board thumbnails need a separate token-free board-preview read model before any row renders a miniature board.
+- Spectator counts need a multi-instance-aware presence source; the current process-local socket map is not durable enough.
+- Ratings, accounts, TV-style ranking, opening trees, and public archive search remain later phases.
+- Live row clocks are snapshot labels only. Ticking public clocks should wait for a response-time basis and a UX review so rows do not imply more precision than the summary contract provides.
+
+Commit status:
+
+- Ready to commit and push after final diff review.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -492,8 +509,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Commit and push Phase 6S after the final diff check.
-2. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
-3. Plan the next backend-backed public read-model slice for live preview fields before adding thumbnails, clocks, spectator counts, ratings, or TV-style ranking.
+1. Finish Phase 6T verification, accepted reviewer cleanup, commit, and push.
+2. Decide the next Watch/Lobby preview step: token-free board thumbnails, a cleaner current-games section, or deeper navigation streamlining.
+3. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
 4. Continue Learn course polish with authored objective ids and richer theory, but add engine-graded progress only after objective board states are explicit and tested.
 5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, save modal overlays, and long online status/error text.

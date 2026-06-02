@@ -10,6 +10,7 @@ import {
   ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
   type OpenSeekSummary,
 } from "../online/seeks";
+import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../online/readModel";
 import {
   rememberOnlineChallengeParams,
   rememberOnlineChallengeShareUrl,
@@ -1680,7 +1681,7 @@ describe("App game setup lifecycle", () => {
       "/?onlineGame=game_visible_player&seat=w&token=white-token"
     );
     const summary = {
-      schemaVersion: 1,
+      schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
       gameId: "game_visible_player",
       rulesetVersion: "castles-beta-v1",
       createdAt: "2026-05-31T12:00:00.000Z",
@@ -1694,6 +1695,11 @@ describe("App game setup lifecycle", () => {
         { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_visible_player_w" } },
         { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_visible_player_b" } },
       ],
+      livePreview: {
+        sideToMove: "w",
+        turnPhase: "Movement",
+        moveCount: 0,
+      },
       lastEventId: "evt-visibility",
     };
     const fetchMock = vi

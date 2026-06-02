@@ -492,6 +492,7 @@ function createSummary(
   gameId: string,
   overrides: Partial<OnlineGameSummary> = {}
 ): OnlineGameSummary {
+  const hasTimeControl = overrides.hasTimeControl ?? true;
   return {
     schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
     gameId,
@@ -507,6 +508,21 @@ function createSummary(
       { seat: "w", role: "white", identity: { kind: "anonymous", id: `anon_${gameId}_w` } },
       { seat: "b", role: "black", identity: { kind: "anonymous", id: `anon_${gameId}_b` } },
     ],
+    livePreview: {
+      sideToMove: "w",
+      turnPhase: "Movement",
+      moveCount: 0,
+      ...(hasTimeControl
+        ? {
+            clock: {
+              timeControl: { initialMs: 60_000, incrementMs: 0 },
+              remainingMs: { w: 60_000, b: 60_000 },
+              activeColor: "w" as const,
+              runningSince: 0,
+            },
+          }
+        : {}),
+    },
     lastEventId: `evt-${gameId}`,
     ...overrides,
   };
@@ -1688,28 +1704,41 @@ describe("PostgresOnlineGameStore", () => {
     expect(commitIndex).toBeGreaterThan(insertIndex);
   });
 
+  it("destructively replaces stale materialized game summaries during rebuilds", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(client, createGameCreatedEvent("game_rebuilt_schema_v2"));
+    client.summaryRows = [
+      {
+        payload: {
+          schemaVersion: 1,
+          gameId: "stale_schema_v1_summary",
+          updatedAt: "2026-05-30T12:00:00.000Z",
+        },
+      },
+    ];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const summaries = await store.rebuildSummaries();
+
+    expect(summaries).toHaveLength(1);
+    expect(client.summaryRows).toHaveLength(1);
+    expect(client.summaryRows[0].payload).toMatchObject({
+      schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+      gameId: "game_rebuilt_schema_v2",
+    });
+    expect(JSON.stringify(client.summaryRows)).not.toContain("stale_schema_v1_summary");
+  });
+
   it("rolls back summary rebuilds when an upsert fails", async () => {
     const client = new FakePostgresClient();
     seedCreatedGame(client, createGameCreatedEvent("game_rebuild_rollback"));
     client.summaryRows = [
       {
-        payload: {
-          schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
-          gameId: "game_existing_summary",
-          rulesetVersion: ONLINE_RULESET_VERSION,
-          createdAt: "2026-05-31T12:00:00.000Z",
-          updatedAt: "2026-05-31T12:00:00.000Z",
-          version: 0,
-          status: "active",
-          visibility: "unlisted",
-          archiveState: "active",
+        payload: createSummary("game_existing_summary", {
           hasTimeControl: false,
-          participants: [
-            { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_existing_w" } },
-            { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_existing_b" } },
-          ],
+          visibility: "unlisted",
           lastEventId: "evt-existing",
-        },
+        }),
       },
     ];
     client.failNextSummaryInsert = true;
@@ -1726,23 +1755,11 @@ describe("PostgresOnlineGameStore", () => {
     const client = new FakePostgresClient();
     client.summaryRows = [
       {
-        payload: {
-          schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
-          gameId: "game_summary_loaded",
-          rulesetVersion: ONLINE_RULESET_VERSION,
-          createdAt: "2026-05-31T12:00:00.000Z",
-          updatedAt: "2026-05-31T12:00:00.000Z",
-          version: 0,
-          status: "active",
-          visibility: "unlisted",
-          archiveState: "active",
+        payload: createSummary("game_summary_loaded", {
           hasTimeControl: false,
-          participants: [
-            { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_summary_loaded_w" } },
-            { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_summary_loaded_b" } },
-          ],
+          visibility: "unlisted",
           lastEventId: "evt-create",
-        },
+        }),
       },
     ];
     const store = new PostgresOnlineGameStore({ queryable: client });

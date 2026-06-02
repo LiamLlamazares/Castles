@@ -210,6 +210,17 @@ function summaryForGame(
       { seat: "w", role: "white", identity: { kind: "anonymous", id: `anon_${gameId}_w` } },
       { seat: "b", role: "black", identity: { kind: "anonymous", id: `anon_${gameId}_b` } },
     ],
+    livePreview: {
+      sideToMove: "w",
+      turnPhase: "Movement",
+      moveCount: 0,
+      clock: {
+        timeControl: { initialMs: 60_000, incrementMs: 0 },
+        remainingMs: { w: 60_000, b: 60_000 },
+        activeColor: "w",
+        runningSince: 0,
+      },
+    },
     lastEventId: `evt-${gameId}`,
   };
 }
@@ -2038,58 +2049,17 @@ describe("createOnlineHttpServer", () => {
   it("lists only public token-free online game summaries through the directory contract", async () => {
     const summaries: OnlineGameSummary[] = [
       {
-        schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
-        gameId: "game_public_summary_http",
-        rulesetVersion: "castles-beta-v1",
-        createdAt: "2026-05-31T12:00:00.000Z",
+        ...summaryForGame("game_public_summary_http", "public"),
         updatedAt: "2026-05-31T12:00:01.000Z",
         endedAt: "2026-05-31T12:00:01.000Z",
         version: 1,
         status: "complete",
-        visibility: "public",
         archiveState: "archived",
-        hasTimeControl: true,
-        participants: [
-          { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_public_summary_http_w" } },
-          { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_public_summary_http_b" } },
-        ],
         result: { winner: "w", reason: "resignation" },
         lastEventId: "evt-summary",
       },
-      {
-        schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
-        gameId: "game_unlisted_summary_http",
-        rulesetVersion: "castles-beta-v1",
-        createdAt: "2026-05-31T12:00:00.000Z",
-        updatedAt: "2026-05-31T12:00:00.000Z",
-        version: 0,
-        status: "active",
-        visibility: "unlisted",
-        archiveState: "active",
-        hasTimeControl: true,
-        participants: [
-          { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_unlisted_summary_http_w" } },
-          { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_unlisted_summary_http_b" } },
-        ],
-        lastEventId: "evt-unlisted",
-      },
-      {
-        schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
-        gameId: "game_private_summary_http",
-        rulesetVersion: "castles-beta-v1",
-        createdAt: "2026-05-31T12:00:00.000Z",
-        updatedAt: "2026-05-31T12:00:00.000Z",
-        version: 0,
-        status: "active",
-        visibility: "private",
-        archiveState: "active",
-        hasTimeControl: true,
-        participants: [
-          { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_private_summary_http_w" } },
-          { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_private_summary_http_b" } },
-        ],
-        lastEventId: "evt-private",
-      },
+      { ...summaryForGame("game_unlisted_summary_http", "unlisted"), lastEventId: "evt-unlisted" },
+      { ...summaryForGame("game_private_summary_http", "private"), lastEventId: "evt-private" },
     ];
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",

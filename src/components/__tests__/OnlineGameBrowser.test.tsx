@@ -18,6 +18,7 @@ import { ONLINE_RULESET_VERSION } from "../../online/events";
 
 function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
   const gameId = overrides.gameId ?? "game_public_active";
+  const hasTimeControl = overrides.hasTimeControl ?? true;
   return {
     schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
     gameId,
@@ -33,6 +34,27 @@ function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary 
       { seat: "w", role: "white", identity: { kind: "registered", id: `${gameId}_w`, displayName: "Ada" } },
       { seat: "b", role: "black", identity: { kind: "registered", id: `${gameId}_b`, displayName: "Ben" } },
     ],
+    livePreview: {
+      sideToMove: "b",
+      turnPhase: "Attack",
+      moveCount: overrides.version ?? 3,
+      lastMove: {
+        notation: "G13G12",
+        turnNumber: 1,
+        color: "w",
+        phase: "Movement",
+      },
+      ...(hasTimeControl
+        ? {
+            clock: {
+              timeControl: { initialMs: 1_200_000, incrementMs: 20_000 },
+              remainingMs: { w: 1_198_000, b: 1_200_000 },
+              activeColor: "b" as const,
+              runningSince: 2_000,
+            },
+          }
+        : {}),
+    },
     lastEventId: `${gameId}_evt`,
     ...overrides,
   };
@@ -1526,7 +1548,9 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Most moves in current list");
     expect(row).toHaveTextContent("Live");
     expect(row).toHaveTextContent("3 moves");
-    expect(row).toHaveTextContent("Timed");
+    expect(row).toHaveTextContent("Black to move, Attack");
+    expect(row).toHaveTextContent("Last G13G12");
+    expect(row).toHaveTextContent("Clock snapshot W 19:58 B 20:00");
 
     fireEvent.click(within(row).getByRole("button", { name: "Spectate Ada vs Ben, game_public_active" }));
 

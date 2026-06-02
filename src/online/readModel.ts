@@ -1,4 +1,3 @@
-import { Color } from "../Constants";
 import { OnlineGameRoom } from "./OnlineGameRoom";
 import {
   ONLINE_RULESET_VERSION,
@@ -19,8 +18,10 @@ import {
   type OnlineAccessRole,
 } from "./accessPolicy";
 import { stringContainsDurableSecret } from "./secretSafety";
+import type { Color, MoveRecord, TurnPhase } from "../Constants";
+import type { OnlineClockStateDTO } from "./types";
 
-export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 1;
+export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 2;
 export const ONLINE_GAME_DIRECTORY_SCHEMA_VERSION = 1;
 export const ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT = 25;
 export const ONLINE_GAME_DIRECTORY_MAX_LIMIT = 100;
@@ -69,6 +70,22 @@ export interface OnlineGameSummaryParticipant {
   identity: OnlineIdentity;
 }
 
+export interface OnlineGameSummaryPreviewClock {
+  timeControl: { initialMs: number; incrementMs: number };
+  remainingMs: { w: number; b: number };
+  activeColor: Color | null;
+  runningSince: number | null;
+  flag?: { color: Color; at: number };
+}
+
+export interface OnlineGameSummaryLivePreview {
+  sideToMove: Color;
+  turnPhase: TurnPhase;
+  moveCount: number;
+  lastMove?: MoveRecord;
+  clock?: OnlineGameSummaryPreviewClock;
+}
+
 export interface OnlineGameSummary {
   schemaVersion: typeof ONLINE_GAME_SUMMARY_SCHEMA_VERSION;
   gameId: string;
@@ -82,6 +99,7 @@ export interface OnlineGameSummary {
   archiveState: OnlineArchiveState;
   hasTimeControl: boolean;
   participants: OnlineGameSummaryParticipant[];
+  livePreview: OnlineGameSummaryLivePreview;
   result?: OnlineGameResultDTO;
   lastEventId: string;
 }
@@ -120,6 +138,7 @@ const SUMMARY_ROLES = new Set(["white", "black"]);
 const ACCESS_VISIBILITIES = ONLINE_GAME_VISIBILITIES;
 const ARCHIVE_STATES = new Set<OnlineArchiveState>(["active", "archived"]);
 const SUMMARY_STATUSES = new Set<OnlineGameSummaryStatus>(["active", "complete"]);
+const TURN_PHASES = new Set<TurnPhase>(["Movement", "Attack", "Recruitment"]);
 export const ONLINE_GAME_DIRECTORY_STATES = new Set<OnlineGameDirectoryState>([
   "active",
   "archived",
@@ -157,6 +176,10 @@ function isColor(value: unknown): value is Color {
 
 function isNonNegativeSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
 }
 
 function isIsoDateString(value: unknown): value is string {
@@ -302,6 +325,82 @@ function validateParticipant(value: unknown): ValidationResult<OnlineGameSummary
   };
 }
 
+function validateSummaryMoveRecord(
+  value: unknown,
+  label = "summary.lastMove"
+): ValidationResult<MoveRecord> {
+  if (!isRecord(value)) return bad(`${label} must be an object.`);
+  if (!isBoundedString(value.notation, 128)) return bad(`${label}.notation is invalid.`);
+  if (!isPositiveSafeInteger(value.turnNumber)) {
+    return bad(`${label}.turnNumber must be a positive integer.`);
+  }
+  if (!isColor(value.color)) return bad(`${label}.color must be w or b.`);
+  if (typeof value.phase !== "string" || !TURN_PHASES.has(value.phase as TurnPhase)) {
+    return bad(`${label}.phase is invalid.`);
+  }
+  return {
+    ok: true,
+    value: {
+      notation: value.notation,
+      turnNumber: value.turnNumber,
+      color: value.color,
+      phase: value.phase as TurnPhase,
+    },
+  };
+}
+
+function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummaryPreviewClock> {
+  if (!isRecord(value)) return bad("summary.clock must be an object.");
+  if ("serverNow" in value) return bad("summary.clock.serverNow is not allowed.");
+  if (!isRecord(value.timeControl)) return bad("summary.clock.timeControl must be an object.");
+  if (!isNonNegativeSafeInteger(value.timeControl.initialMs)) {
+    return bad("summary.clock.timeControl.initialMs must be a non-negative integer.");
+  }
+  if (!isNonNegativeSafeInteger(value.timeControl.incrementMs)) {
+    return bad("summary.clock.timeControl.incrementMs must be a non-negative integer.");
+  }
+  if (!isRecord(value.remainingMs)) return bad("summary.clock.remainingMs must be an object.");
+  if (
+    !isNonNegativeSafeInteger(value.remainingMs.w) ||
+    !isNonNegativeSafeInteger(value.remainingMs.b)
+  ) {
+    return bad("summary.clock.remainingMs must contain non-negative w and b values.");
+  }
+  if (value.activeColor !== null && !isColor(value.activeColor)) {
+    return bad("summary.clock.activeColor must be w, b, or null.");
+  }
+  if (value.runningSince !== null && !isNonNegativeSafeInteger(value.runningSince)) {
+    return bad("summary.clock.runningSince must be a non-negative integer or null.");
+  }
+  if ((value.activeColor === null) !== (value.runningSince === null)) {
+    return bad("summary.clock.activeColor and runningSince must both be set or both be null.");
+  }
+
+  let flag: OnlineGameSummaryPreviewClock["flag"];
+  if (value.flag !== undefined) {
+    if (!isRecord(value.flag)) return bad("summary.clock.flag must be an object when present.");
+    if (!isColor(value.flag.color)) return bad("summary.clock.flag.color must be w or b.");
+    if (!isNonNegativeSafeInteger(value.flag.at)) {
+      return bad("summary.clock.flag.at must be a non-negative integer.");
+    }
+    flag = { color: value.flag.color, at: value.flag.at };
+  }
+
+  return {
+    ok: true,
+    value: {
+      timeControl: {
+        initialMs: value.timeControl.initialMs,
+        incrementMs: value.timeControl.incrementMs,
+      },
+      remainingMs: { w: value.remainingMs.w, b: value.remainingMs.b },
+      activeColor: value.activeColor,
+      runningSince: value.runningSince,
+      flag,
+    },
+  };
+}
+
 function anonymousParticipant(gameId: string, seat: Color): OnlineGameSummaryParticipant {
   return {
     seat,
@@ -310,6 +409,30 @@ function anonymousParticipant(gameId: string, seat: Color): OnlineGameSummaryPar
       kind: "anonymous",
       id: `anon_${gameId}_${seat}`,
     },
+  };
+}
+
+function summaryClockFromSnapshot(clock: OnlineClockStateDTO | undefined): OnlineGameSummaryPreviewClock | undefined {
+  if (!clock) return undefined;
+  return {
+    timeControl: { ...clock.timeControl },
+    remainingMs: { ...clock.remainingMs },
+    activeColor: clock.activeColor,
+    runningSince: clock.runningSince,
+    flag: clock.flag ? { ...clock.flag } : undefined,
+  };
+}
+
+function createLivePreviewFromSnapshot(
+  snapshot: ReturnType<OnlineGameRoom["getSnapshot"]>
+): OnlineGameSummaryLivePreview {
+  const lastMove = snapshot.moveHistory.at(-1);
+  return {
+    sideToMove: snapshot.playerToMove,
+    turnPhase: snapshot.turnPhase,
+    moveCount: snapshot.moveHistory.length,
+    lastMove,
+    clock: summaryClockFromSnapshot(snapshot.clock),
   };
 }
 
@@ -380,6 +503,7 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
       archiveState: result ? "archived" : "active",
       hasTimeControl: metadata.hasTimeControl,
       participants: [anonymousParticipant(record.gameId, "w"), anonymousParticipant(record.gameId, "b")],
+      livePreview: createLivePreviewFromSnapshot(snapshot),
       result,
       lastEventId: metadata.lastEventId,
     };
@@ -436,6 +560,48 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
   if (!seats.has("w") || !seats.has("b")) {
     return bad("summary.participants must contain white and black seats.");
   }
+  if (!isRecord(value.livePreview)) return bad("summary.livePreview must be an object.");
+  if (!isColor(value.livePreview.sideToMove)) {
+    return bad("summary.livePreview.sideToMove must be w or b.");
+  }
+  if (
+    typeof value.livePreview.turnPhase !== "string" ||
+    !TURN_PHASES.has(value.livePreview.turnPhase as TurnPhase)
+  ) {
+    return bad("summary.livePreview.turnPhase is invalid.");
+  }
+  if (!isNonNegativeSafeInteger(value.livePreview.moveCount)) {
+    return bad("summary.livePreview.moveCount must be a non-negative integer.");
+  }
+
+  let lastMove: MoveRecord | undefined;
+  if (value.livePreview.lastMove !== undefined) {
+    const lastMoveValidation = validateSummaryMoveRecord(
+      value.livePreview.lastMove,
+      "summary.livePreview.lastMove"
+    );
+    if (!lastMoveValidation.ok) return lastMoveValidation;
+    lastMove = lastMoveValidation.value;
+  }
+  if (value.livePreview.moveCount === 0 && lastMove) {
+    return bad("summary.livePreview.lastMove is not allowed when moveCount is zero.");
+  }
+  if (value.livePreview.moveCount > 0 && !lastMove) {
+    return bad("summary.livePreview.lastMove is required when moveCount is positive.");
+  }
+
+  let clock: OnlineGameSummaryPreviewClock | undefined;
+  if (value.livePreview.clock !== undefined) {
+    const clockValidation = validateSummaryClock(value.livePreview.clock);
+    if (!clockValidation.ok) return clockValidation;
+    clock = clockValidation.value;
+  }
+  if (value.hasTimeControl && !clock) {
+    return bad("summary.livePreview.clock is required for timed games.");
+  }
+  if (!value.hasTimeControl && clock) {
+    return bad("summary.livePreview.clock is not allowed for casual games.");
+  }
 
   let result: OnlineGameResultDTO | undefined;
   if (value.result !== undefined) {
@@ -478,6 +644,13 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
       archiveState: value.archiveState as OnlineArchiveState,
       hasTimeControl: value.hasTimeControl,
       participants: normalizedParticipants,
+      livePreview: {
+        sideToMove: value.livePreview.sideToMove,
+        turnPhase: value.livePreview.turnPhase as TurnPhase,
+        moveCount: value.livePreview.moveCount,
+        lastMove,
+        clock,
+      },
       result,
       lastEventId: value.lastEventId,
     },

@@ -47,6 +47,7 @@ import {
   resolveOpenSeekCreatorParams,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
+import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
 import type { OnlineConnectionStatus } from "../types";
 
 function snapshot(version = 0) {
@@ -67,6 +68,38 @@ function snapshot(version = 0) {
     moveHistory: [],
     playerToMove: "w",
     turnPhase: "Movement",
+  };
+}
+
+function publicSummary(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+    gameId: "game_123",
+    rulesetVersion: "castles-beta-v1",
+    createdAt: "2026-05-31T12:00:00.000Z",
+    updatedAt: "2026-05-31T12:00:00.000Z",
+    version: 0,
+    status: "active",
+    visibility: "public",
+    archiveState: "active",
+    hasTimeControl: true,
+    participants: [
+      { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_123_w" } },
+      { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_123_b" } },
+    ],
+    livePreview: {
+      sideToMove: "w",
+      turnPhase: "Movement",
+      moveCount: 0,
+      clock: {
+        timeControl: { initialMs: 60_000, incrementMs: 0 },
+        remainingMs: { w: 60_000, b: 60_000 },
+        activeColor: "w",
+        runningSince: 0,
+      },
+    },
+    lastEventId: "evt-create",
+    ...overrides,
   };
 }
 
@@ -924,23 +957,7 @@ describe("online client helpers", () => {
   });
 
   it("fetches validated game directory summaries without player authorization", async () => {
-    const summary = {
-      schemaVersion: 1,
-      gameId: "game_123",
-      rulesetVersion: "castles-beta-v1",
-      createdAt: "2026-05-31T12:00:00.000Z",
-      updatedAt: "2026-05-31T12:00:00.000Z",
-      version: 0,
-      status: "active",
-      visibility: "public",
-      archiveState: "active",
-      hasTimeControl: true,
-      participants: [
-        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_123_w" } },
-        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_123_b" } },
-      ],
-      lastEventId: "evt-create",
-    };
+    const summary = publicSummary();
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ schemaVersion: 1, games: [summary], nextCursor: "WyIyMDI2LTA1LTMxVDEyOjAwOjAwLjAwMFoiLCJnYW1lXzEyMyJd" }),
@@ -958,23 +975,7 @@ describe("online client helpers", () => {
   });
 
   it("fetches a single public game summary by id", async () => {
-    const summary = {
-      schemaVersion: 1,
-      gameId: "game_123",
-      rulesetVersion: "castles-beta-v1",
-      createdAt: "2026-05-31T12:00:00.000Z",
-      updatedAt: "2026-05-31T12:00:00.000Z",
-      version: 0,
-      status: "active",
-      visibility: "public",
-      archiveState: "active",
-      hasTimeControl: true,
-      participants: [
-        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_123_w" } },
-        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_123_b" } },
-      ],
-      lastEventId: "evt-create",
-    };
+    const summary = publicSummary();
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ schemaVersion: 1, summary }),
@@ -986,23 +987,10 @@ describe("online client helpers", () => {
   });
 
   it("updates game visibility with bearer authorization and validates the summary response", async () => {
-    const summary = {
-      schemaVersion: 1,
-      gameId: "game_123",
-      rulesetVersion: "castles-beta-v1",
-      createdAt: "2026-05-31T12:00:00.000Z",
+    const summary = publicSummary({
       updatedAt: "2026-05-31T12:00:01.000Z",
-      version: 0,
-      status: "active",
-      visibility: "public",
-      archiveState: "active",
-      hasTimeControl: true,
-      participants: [
-        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_game_123_w" } },
-        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_game_123_b" } },
-      ],
       lastEventId: "evt-visibility",
-    };
+    });
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, summary }),

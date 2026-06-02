@@ -100,6 +100,7 @@ function formatUpdatedAt(value: string): string {
 function searchText(summary: OnlineGameSummary): string {
   const white = participantName(summary.participants, "w");
   const black = participantName(summary.participants, "b");
+  const sideToMove = formatSideToMove(summary.livePreview.sideToMove);
   return [
     summary.gameId,
     white,
@@ -107,6 +108,9 @@ function searchText(summary: OnlineGameSummary): string {
     summary.status,
     summary.archiveState,
     summary.result ? formatOnlineGameResult(summary.result) : "",
+    sideToMove,
+    summary.livePreview.turnPhase,
+    summary.livePreview.lastMove?.notation ?? "",
   ].join(" ").toLowerCase();
 }
 
@@ -116,8 +120,35 @@ function compareNewest(left: OnlineGameSummary, right: OnlineGameSummary): numbe
 }
 
 function compareMostMoves(left: OnlineGameSummary, right: OnlineGameSummary): number {
-  if (left.version !== right.version) return right.version - left.version;
+  if (left.livePreview.moveCount !== right.livePreview.moveCount) {
+    return right.livePreview.moveCount - left.livePreview.moveCount;
+  }
   return compareNewest(left, right);
+}
+
+function formatSideToMove(color: "w" | "b"): string {
+  return color === "w" ? "White" : "Black";
+}
+
+function formatMoveCount(count: number): string {
+  return `${count} ${count === 1 ? "move" : "moves"}`;
+}
+
+function formatClockTime(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatClockSnapshot(summary: OnlineGameSummary): string {
+  const clock = summary.livePreview.clock;
+  if (!clock) return "Casual";
+  return `Clock snapshot W ${formatClockTime(clock.remainingMs.w)} B ${formatClockTime(clock.remainingMs.b)}`;
 }
 
 function matchesResultFilter(summary: OnlineGameSummary, resultFilter: OnlineBrowserResultFilter): boolean {
@@ -676,9 +707,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <span className={`online-game-pill ${game.status}`}>
               {game.status === "active" ? "Live" : "Complete"}
             </span>
-            <span>{game.version} {game.version === 1 ? "move" : "moves"}</span>
+            <span>{formatMoveCount(game.livePreview.moveCount)}</span>
             {options.featured && !isArchivedGame && <span>Most moves in current list</span>}
-            <span>{game.hasTimeControl ? "Timed" : "Casual"}</span>
+            {!isArchivedGame && (
+              <span>
+                {formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}
+              </span>
+            )}
+            {game.livePreview.lastMove && <span>Last {game.livePreview.lastMove.notation}</span>}
+            <span>{!isArchivedGame && game.hasTimeControl ? formatClockSnapshot(game) : game.hasTimeControl ? "Timed" : "Casual"}</span>
             <span>Updated {formatUpdatedAt(game.updatedAt)}</span>
           </div>
           {resultLabel && <div className="online-game-result">{resultLabel}</div>}
@@ -1007,7 +1044,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             aria-label={tab === "lobby" ? "Search lobby listings" : "Search public games"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={tab === "lobby" ? "Listing id, creator side, clock, or scoring" : "Player or game id"}
+            placeholder={tab === "lobby" ? "Listing id, creator side, clock, or scoring" : "Player, game id, or move"}
           />
         </label>
       </section>

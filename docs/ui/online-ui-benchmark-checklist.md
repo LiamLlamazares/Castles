@@ -167,9 +167,20 @@ Phase 6S Online lobby visual clarity, 2026-06-02:
 - Reviewer cleanup added visible focus styling for closed owner panels, corrected accepted random-side owner copy, aligned search tokens with visible row metadata, and made scoring filter accessibility labels generic.
 - Final verification passed the full automated suite, client build, server build, diff check, browser online smoke, and Playwright screenshot/layout audit at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640. Screenshot artifacts are in `artifacts/ui-audit/phase6s-online-lobby`.
 
+Phase 6T Public live-preview read model, 2026-06-02:
+
+- Public game summaries now expose a schema-versioned `livePreview` object with side to move, turn phase, move count, last move, and persisted clock basis.
+- Lobby and Watch rows may show `White to move`, `Black to move`, turn phase, last move notation, move count, and a `Clock snapshot` when the public summary provides it.
+- Completed Online Archive rows must avoid active-game language such as "to move"; they can still show move count, result, last move, and whether the game was timed.
+- Row clocks are summary snapshots, not ticking live clocks. Do not animate them until the contract carries enough response-time basis to make that honest.
+- Continue excluding board thumbnails, spectator counts, ratings, account names, and TV-style ranking until separate backend read models exist.
+- Startup rebuilds destructively replace stale materialized game-summary rows from the event log before serving the production app; this is intentional under the no-legacy-data direction.
+- Final verification passed focused Phase 6T tests, the full automated suite, client build, server build, diff check, local PostgreSQL restart smoke, browser online smoke, and desktop/mobile Lobby/Watch/Archive screenshot audit. Screenshot artifacts are in `artifacts/ui-audit/phase6t-live-preview`.
+
 Next product slices accepted from reviewers:
 
-- Add server-backed live-game preview fields before showing board thumbnails, side-to-move, last move, clocks, spectator counts, ratings, or a true TV-style featured game.
+- Add token-free board thumbnails only after a small public board-preview contract exists.
+- Add spectator counts only after presence works across server instances.
 - Continue Learn course polish with authored objective ids, richer lesson theory, and only add engine-graded objectives when the target board state is explicit and tested.
 - Improve navigation clarity in later slices by reducing duplicated online entry points where possible and continuing to separate private player links from public spectator/share actions.
 
