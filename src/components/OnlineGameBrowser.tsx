@@ -295,16 +295,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const loadPage = React.useCallback(async (
     mode: "replace" | "append",
-    cursor?: string
+    cursor?: string,
+    options: { background?: boolean } = {}
   ) => {
+    const background = options.background === true;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    if (mode === "replace") {
+    if (mode === "replace" && !background) {
       setStatus("loading");
-    } else {
+    } else if (mode === "append") {
       setIsLoadingMore(true);
     }
-    setCopyMessage("");
+    if (!background) {
+      setCopyMessage("");
+    }
     try {
       const response = await loadGames({
         state: directoryState,
@@ -312,17 +316,23 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         cursor,
       });
       if (requestIdRef.current !== requestId) return;
-      setGames((current) => mode === "append" ? [...current, ...response.games] : response.games);
+      if (!response || !Array.isArray(response.games)) {
+        throw new Error("Public game directory response was malformed.");
+      }
+      const loadedGames = response.games;
+      setGames((current) => mode === "append" ? [...current, ...loadedGames] : loadedGames);
       setNextCursor(response.nextCursor);
       setStatus("ready");
     } catch (error) {
       if (requestIdRef.current !== requestId) return;
       console.error("[OnlineGameBrowser] Failed to load public games", error);
-      if (mode === "replace") {
+      if (mode === "replace" && !background) {
         setGames([]);
         setNextCursor(undefined);
       }
-      setStatus("error");
+      if (!background) {
+        setStatus("error");
+      }
     } finally {
       if (requestIdRef.current === requestId) {
         setIsLoadingMore(false);
@@ -331,9 +341,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [directoryState, loadGames]);
 
   const refreshGames = React.useCallback(() => {
-    if (tab === "lobby") return;
     void loadPage("replace");
-  }, [loadPage, tab]);
+  }, [loadPage]);
 
   const loadMoreGames = React.useCallback(() => {
     if (!nextCursor) return;
@@ -343,6 +352,23 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   React.useEffect(() => {
     refreshGames();
   }, [refreshGames]);
+
+  React.useEffect(() => {
+    if (tab !== "lobby") return;
+    const refreshLiveGamesIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadPage("replace", undefined, { background: true });
+    };
+    const interval = window.setInterval(refreshLiveGamesIfVisible, LOBBY_AUTO_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      refreshLiveGamesIfVisible();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadPage, tab]);
 
   const seekDirectoryOptions = React.useMemo<FetchOpenSeekDirectoryOptions>(() => ({
     state: "open",
@@ -470,6 +496,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return filtered.sort(sort === "moves" ? compareMostMoves : compareNewest);
   }, [publicGames, query, resultFilter, sort, tab, timeFilter]);
 
+  const lobbyLiveGames = React.useMemo(() => {
+    return publicGames
+      .filter((game) => game.status === "active")
+      .sort(compareMostMoves)
+      .slice(0, 5);
+  }, [publicGames]);
+
   const visibleOpenSeeks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return openSeeks
@@ -510,6 +543,77 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           : quickMatchStatus === "error"
             ? "Could not start quick match."
             : "";
+
+  const renderPublicGameRow = (
+    game: OnlineGameSummary,
+    options: { compact?: boolean; featured?: boolean; context?: "watch" | "archive" } = {}
+  ) => {
+    const white = participantName(game.participants, "w");
+    const black = participantName(game.participants, "b");
+    const resultLabel = game.result ? formatOnlineGameResult(game.result) : null;
+    const context = options.context ?? tab;
+    const isArchivedGame = context === "archive" && game.status === "complete" && game.archiveState === "archived";
+    const primaryActionLabel = isArchivedGame ? "Analyze Replay" : "Spectate";
+    const primaryActionAriaLabel = isArchivedGame
+      ? `Analyze replay ${white} vs ${black}, ${game.gameId}`
+      : `Spectate ${white} vs ${black}, ${game.gameId}`;
+    const className = [
+      "online-game-row",
+      options.compact ? "online-game-row-compact" : "",
+      options.featured ? "online-game-row-featured" : "",
+    ].filter(Boolean).join(" ");
+
+    return (
+      <article
+        key={game.gameId}
+        className={className}
+        aria-label={`${options.featured ? "Featured live game " : ""}${white} vs ${black} ${game.gameId}`}
+      >
+        <div className="online-game-row-main">
+          <div className="online-game-players">
+            {options.featured && <span className="online-game-kicker">Featured live game</span>}
+            <strong>{white} vs {black}</strong>
+            <span>{game.gameId}</span>
+          </div>
+          <div className="online-game-meta">
+            <span className={`online-game-pill ${game.status}`}>
+              {game.status === "active" ? "Live" : "Complete"}
+            </span>
+            <span>{game.version} {game.version === 1 ? "move" : "moves"}</span>
+            <span>{game.hasTimeControl ? "Timed" : "Casual"}</span>
+            <span>Updated {formatUpdatedAt(game.updatedAt)}</span>
+          </div>
+          {resultLabel && <div className="online-game-result">{resultLabel}</div>}
+        </div>
+        <div className="online-game-actions">
+          <button
+            type="button"
+            className="online-browser-button primary"
+            onClick={() => {
+              if (isArchivedGame) {
+                onReplay(game.gameId);
+              } else {
+                onSpectate(game.gameId);
+              }
+            }}
+            aria-label={primaryActionAriaLabel}
+          >
+            {primaryActionLabel}
+          </button>
+          {!isArchivedGame && (
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => copySpectatorLink(game.gameId)}
+              aria-label={`Copy spectator link for ${game.gameId}`}
+            >
+              Copy Link
+            </button>
+          )}
+        </div>
+      </article>
+    );
+  };
 
   const runQuickMatch = async () => {
     if (!onQuickMatch || quickMatchDisabled) return;
@@ -667,11 +771,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </button>
           <button
             type="button"
+            aria-label="Online Archive"
             aria-pressed={tab === "archive"}
             className={tab === "archive" ? "active" : ""}
             onClick={() => setBrowserTab("archive")}
           >
-            Online Archive
+            Archive
           </button>
         </div>
         {tab === "lobby" ? (
@@ -720,7 +825,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               disabled={seekStatus === "loading" || isSeekLoadInFlight || quickMatchBlocking}
               aria-label="Refresh lobby listings"
             >
-              {seekStatus === "loading" ? "Refreshing..." : "Refresh"}
+              {seekStatus === "loading" ? "Refreshing..." : "Refresh listings"}
             </button>
             {onQuickMatch && (
               <button
@@ -740,9 +845,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 className="online-browser-button primary online-browser-create-seek"
                 onClick={onCreateSeek}
                 disabled={quickMatchBlocking || hasActiveOwnedSeek}
-                aria-label="List current Play setup in Lobby"
+                aria-label="Create public lobby listing from current Play setup"
               >
-                List Current Setup
+                Create Listing
               </button>
             )}
           </div>
@@ -810,7 +915,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             ? "Loading lobby listings..."
             : seekStatus === "error"
               ? "Could not load lobby listings."
-              : seekActionMessage || quickMatchMessage || terminalOwnedSeekMessage || (
+              : copyMessage || seekActionMessage || quickMatchMessage || terminalOwnedSeekMessage || (
                 <>
                   {visibleOpenSeeks.length} lobby listings shown
                   {lastSeekCheckedAt ? <span aria-hidden="true">; last checked {lastSeekCheckedAt}</span> : null}
@@ -844,7 +949,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               <section className="online-browser-quick-match-panel" aria-label="Quick match setup">
                 <div className="online-browser-quick-match-copy">
                   <strong>Uses your exact current Play setup</strong>
-                  <p>Filters search existing listings. Quick Match and List Current Setup use your current board, pieces, sanctuaries, pool, theme, clock, and scoring mode.</p>
+                  <p>Choose board and clock on Play. Filters only search open listings here; Quick Match and Create Listing use your current setup.</p>
                 </div>
                 {quickMatchSetupSummary && (
                   <div className="online-browser-quick-match-summary" aria-label="Quick match setup summary">
@@ -913,13 +1018,55 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </div>
               </section>
             )}
+            <section className="online-browser-live-section" aria-label="Current public games">
+              <div className="online-browser-section-header">
+                <div>
+                  <span className="online-browser-section-kicker">Watch</span>
+                  <h2>Current games</h2>
+                  <p>
+                    {status === "loading"
+                      ? "Loading public games..."
+                      : status === "error"
+                        ? "Could not load live games."
+                        : copyMessage || `${lobbyLiveGames.length} public games in progress`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="online-browser-button subtle"
+                  onClick={refreshGames}
+                  disabled={status === "loading"}
+                  aria-label="Refresh live public games"
+                >
+                  {status === "loading" ? "Refreshing..." : "Refresh live"}
+                </button>
+              </div>
+              {status === "error" ? (
+                <div className="online-browser-empty online-browser-empty-compact">
+                  <h2>Live games are unavailable.</h2>
+                  <p>Refresh live games to try again.</p>
+                </div>
+              ) : lobbyLiveGames.length === 0 && status === "ready" ? (
+                <div className="online-browser-empty online-browser-empty-compact">
+                  <h2>No public games in progress.</h2>
+                  <p>Accepted lobby games appear here automatically.</p>
+                </div>
+              ) : (
+                <div className="online-browser-live-list">
+                  {lobbyLiveGames[0] && renderPublicGameRow(lobbyLiveGames[0], { featured: true, context: "watch" })}
+                  {lobbyLiveGames.slice(1).map((game) =>
+                    renderPublicGameRow(game, { compact: true, context: "watch" })
+                  )}
+                </div>
+              )}
+            </section>
             {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
               <section className="online-browser-empty">
                 <h2>{hasActiveSeekFilters ? "No lobby listings match these filters." : "No lobby listings yet."}</h2>
                 <p>
                   {hasActiveSeekFilters
                     ? "Try a different side, clock, scoring, or search setting."
-                    : "Use Quick Match to match or list automatically, or List Current Setup to create a lobby listing."}
+                    : "Use Quick Match to find a compatible listing, or create a public listing from your current Play setup."}
                 </p>
               </section>
             ) : visibleOpenSeeks.map((seek) => {
@@ -991,65 +1138,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     : "Private and unlisted games stay off this page. Shared spectator links still work for people who already have them."}
                 </p>
               </section>
-            ) : visibleGames.map((game) => {
-              const white = participantName(game.participants, "w");
-              const black = participantName(game.participants, "b");
-              const resultLabel = game.result ? formatOnlineGameResult(game.result) : null;
-              const isArchivedGame = tab === "archive" && game.status === "complete" && game.archiveState === "archived";
-              const primaryActionLabel = isArchivedGame ? "Analyze Replay" : "Spectate";
-              const primaryActionAriaLabel = isArchivedGame
-                ? `Analyze replay ${white} vs ${black}, ${game.gameId}`
-                : `Spectate ${white} vs ${black}, ${game.gameId}`;
-              return (
-                <article
-                  key={game.gameId}
-                  className="online-game-row"
-                  aria-label={`${white} vs ${black} ${game.gameId}`}
-                >
-                  <div className="online-game-row-main">
-                    <div className="online-game-players">
-                      <strong>{white} vs {black}</strong>
-                      <span>{game.gameId}</span>
-                    </div>
-                    <div className="online-game-meta">
-                      <span className={`online-game-pill ${game.status}`}>
-                        {game.status === "active" ? "Live" : "Complete"}
-                      </span>
-                      <span>{game.version} {game.version === 1 ? "move" : "moves"}</span>
-                      <span>{game.hasTimeControl ? "Timed" : "Casual"}</span>
-                      <span>Updated {formatUpdatedAt(game.updatedAt)}</span>
-                    </div>
-                    {resultLabel && <div className="online-game-result">{resultLabel}</div>}
-                  </div>
-                  <div className="online-game-actions">
-                    <button
-                      type="button"
-                      className="online-browser-button primary"
-                      onClick={() => {
-                        if (isArchivedGame) {
-                          onReplay(game.gameId);
-                        } else {
-                          onSpectate(game.gameId);
-                        }
-                      }}
-                      aria-label={primaryActionAriaLabel}
-                    >
-                      {primaryActionLabel}
-                    </button>
-                    {!isArchivedGame && (
-                      <button
-                        type="button"
-                        className="online-browser-button neutral"
-                        onClick={() => copySpectatorLink(game.gameId)}
-                        aria-label={`Copy spectator link for ${game.gameId}`}
-                      >
-                        Copy Link
-                      </button>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
+            ) : visibleGames.map((game) => renderPublicGameRow(game, { context: tab === "archive" ? "archive" : "watch" }))}
             {nextCursor && status === "ready" && (
               <button
                 type="button"

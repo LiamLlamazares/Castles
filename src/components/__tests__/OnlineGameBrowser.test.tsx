@@ -142,9 +142,11 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("loads lobby listings in the Lobby tab without calling the game directory", async () => {
+  it("loads lobby listings and public live games in the Lobby tab", async () => {
     const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([openSeek()]));
-    const loadGames = vi.fn().mockResolvedValue(directory([]));
+    const loadGames = vi.fn().mockResolvedValue(directory([
+      summary({ gameId: "game_lobby_live", version: 8 }),
+    ]));
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -160,12 +162,85 @@ describe("OnlineGameBrowser", () => {
     const row = await screen.findByRole("article", { name: /Lobby listing seek_public_open/i });
 
     expect(loadOpenSeeks).toHaveBeenCalledWith({ state: "open", limit: 50 });
-    expect(loadGames).not.toHaveBeenCalled();
+    expect(loadGames).toHaveBeenCalledWith({ state: "active", limit: 50, cursor: undefined });
     expect(row).toHaveTextContent("Side random");
     expect(row).toHaveTextContent("Radius 7");
     expect(row).toHaveTextContent("Timed 20+20");
     expect(row).toHaveTextContent("Victory points");
     expect(within(row).getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeInTheDocument();
+    const currentGames = screen.getByRole("region", { name: "Current public games" });
+    expect(within(currentGames).getByText("game_lobby_live")).toBeInTheDocument();
+    expect(within(currentGames).getByRole("button", { name: "Spectate Ada vs Ben, game_lobby_live" })).toBeInTheDocument();
+  });
+
+  it("auto-refreshes current public games while the Lobby tab is visible", async () => {
+    vi.useFakeTimers();
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([]))
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_auto_live" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={loadGames}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("No public games in progress.")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("game_auto_live")).toBeInTheDocument();
+    expect(loadGames).toHaveBeenCalledTimes(2);
+  });
+
+  it("announces copied spectator links from Lobby current games", async () => {
+    const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      render(
+        <OnlineGameBrowser
+          initialTab="lobby"
+          loadGames={vi.fn().mockResolvedValue(directory([
+            summary({ gameId: "game_copy_live" }),
+          ]))}
+          loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+          onBack={vi.fn()}
+          onSpectate={vi.fn()}
+          onReplay={vi.fn()}
+        />
+      );
+
+      const currentGames = await screen.findByRole("region", { name: "Current public games" });
+      fireEvent.click(within(currentGames).getByRole("button", { name: "Copy spectator link for game_copy_live" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("status")).toHaveTextContent("Spectator link copied.");
+      });
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("onlineGame=game_copy_live"));
+    } finally {
+      if (originalClipboardDescriptor) {
+        Object.defineProperty(navigator, "clipboard", originalClipboardDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+    }
   });
 
   it("runs quick match from the lobby with exact setup copy and pending controls", async () => {
@@ -177,7 +252,7 @@ describe("OnlineGameBrowser", () => {
     render(
       <OnlineGameBrowser
         initialTab="lobby"
-        loadGames={vi.fn()}
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
         loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([openSeek()]))}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
@@ -199,7 +274,7 @@ describe("OnlineGameBrowser", () => {
     expect(within(setupSummary).getByText("Radius 7")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Timed 20+20")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Victory points")).toBeInTheDocument();
-    expect(screen.getByText(/Filters search existing listings\. Quick Match and List Current Setup use your current board/i))
+    expect(screen.getByText(/Filters only search open listings here; Quick Match and Create Listing use your current setup/i))
       .toBeInTheDocument();
 
     const quickMatch = screen.getByRole("button", {
@@ -209,7 +284,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(onQuickMatch).toHaveBeenCalledOnce();
     expect(quickMatch).toBeDisabled();
-    expect(screen.getByRole("button", { name: "List current Play setup in Lobby" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create public lobby listing from current Play setup" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("Checking compatible lobby listings");
 
     await act(async () => {
@@ -223,7 +298,7 @@ describe("OnlineGameBrowser", () => {
     render(
       <OnlineGameBrowser
         initialTab="lobby"
-        loadGames={vi.fn()}
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
         loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([openSeek()]))}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
@@ -243,7 +318,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("button", {
       name: "Quick Match: accept a compatible lobby listing or list yours",
     })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "List current Play setup in Lobby" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create public lobby listing from current Play setup" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Refresh lobby listings" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeDisabled();
   });

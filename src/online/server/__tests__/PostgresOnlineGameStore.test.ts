@@ -559,7 +559,7 @@ function createChallengeCreated(
       challengerIdentity: challengeChallenger,
       challengedIdentity: challengeChallenged,
       challengerSeat: overrides.challengerSeat ?? "w",
-      visibility: "unlisted",
+      visibility: overrides.visibility ?? "unlisted",
       setup: overrides.setup ?? setup,
       expiresAt: overrides.expiresAt ?? "2026-06-01T12:10:00.000Z",
     },
@@ -616,6 +616,7 @@ function createChallengeAcceptInput(
     whiteIdentity?: typeof challengeChallenger | typeof challengeChallenged;
     blackIdentity?: typeof challengeChallenger | typeof challengeChallenged;
     setup?: Extract<OnlineGameEvent, { type: "game_created" }>["setup"];
+    initialVisibility?: Extract<OnlineGameEvent, { type: "game_created" }>["initialVisibility"];
   } = {}
 ) {
   const gameId = overrides.gameId ?? `game_${challenge.challengeId}_accepted`;
@@ -633,6 +634,7 @@ function createChallengeAcceptInput(
     createdAt: acceptedAt,
     gameId,
     setup: overrides.setup ?? challenge.setup,
+    initialVisibility: overrides.initialVisibility ?? challenge.visibility,
   };
   return {
     challengeId: challenge.challengeId,
@@ -698,7 +700,11 @@ function createOpenSeekCredentials() {
 
 function createOpenSeekAcceptInput(
   seek: Extract<OpenSeekEvent, { type: "seek_created" }>,
-  overrides: { gameId?: string; acceptorCredential?: string } = {}
+  overrides: {
+    gameId?: string;
+    acceptorCredential?: string;
+    initialVisibility?: Extract<OnlineGameEvent, { type: "game_created" }>["initialVisibility"];
+  } = {}
 ) {
   const gameId = overrides.gameId ?? `game_${seek.seekId}_accepted`;
   const acceptedAt = "2026-06-01T12:05:00.000Z";
@@ -708,6 +714,7 @@ function createOpenSeekAcceptInput(
     createdAt: acceptedAt,
     gameId,
     setup: seek.setup,
+    initialVisibility: overrides.initialVisibility ?? "public",
   };
   return {
     seekId: seek.seekId,
@@ -1087,6 +1094,24 @@ describe("PostgresOnlineGameStore", () => {
     expect(gameLockIndex).toBeGreaterThan(seekLockIndex);
     expect(gameInsertIndex).toBeGreaterThan(gameLockIndex);
     expect(seekInsertIndex).toBeGreaterThan(gameInsertIndex);
+  });
+
+  it("rejects accepted open seek game creation unless the game is public", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const seek = createOpenSeekCreated("seek_accept_hidden", { creatorSeat: "w" });
+    await store.appendOpenSeekCreated(seek, createOpenSeekCredentials());
+    client.queries.length = 0;
+
+    await expect(
+      store.acceptOpenSeekAndCreateGame(
+        createOpenSeekAcceptInput(seek, { initialVisibility: "unlisted" })
+      )
+    ).rejects.toThrow(/public/);
+
+    expect(client.eventRows).toHaveLength(0);
+    expect(client.credentialRows).toHaveLength(0);
+    expect(client.seekEventRows.map((row) => row.payload.type)).toEqual(["seek_created"]);
   });
 
   it("rolls back accepted open seeks when seek summary refresh fails", async () => {
@@ -2087,6 +2112,25 @@ describe("PostgresOnlineGameStore", () => {
         })
       )
     ).rejects.toThrow(/setup/);
+
+    expect(client.eventRows).toHaveLength(0);
+    expect(client.credentialRows).toHaveLength(0);
+    expect(client.challengeEventRows.map((row) => row.payload.type)).toEqual(["challenge_created"]);
+  });
+
+  it("rejects accepted challenge games whose initial visibility differs from the challenge", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const challenge = createChallengeCreated("challenge_visibility_mismatch", {
+      visibility: "private",
+    });
+    await store.appendChallengeCreated(challenge, createChallengeCredentials());
+
+    await expect(
+      store.acceptChallengeAndCreateGame(
+        createChallengeAcceptInput(challenge, { initialVisibility: "public" })
+      )
+    ).rejects.toThrow(/visibility/);
 
     expect(client.eventRows).toHaveLength(0);
     expect(client.credentialRows).toHaveLength(0);

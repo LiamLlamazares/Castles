@@ -249,6 +249,48 @@ describe("online validation", () => {
     }
   });
 
+  it("accepts explicit initial visibility on game creation events", () => {
+    for (const initialVisibility of ["private", "unlisted", "public"] as const) {
+      const result = validateOnlineGameEvent({
+        schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+        eventId: `evt-create-${initialVisibility}`,
+        createdAt: "2026-05-31T12:00:00.000Z",
+        rulesetVersion: "castles-beta-v1",
+        type: "game_created",
+        gameId: `game_${initialVisibility}`,
+        setup: createSetup(),
+        initialVisibility,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toMatchObject({
+          type: "game_created",
+          gameId: `game_${initialVisibility}`,
+          initialVisibility,
+        });
+      }
+    }
+  });
+
+  it("rejects invalid initial visibility on game creation events", () => {
+    const result = validateOnlineGameEvent({
+      schemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+      eventId: "evt-create-invalid-visibility",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      rulesetVersion: "castles-beta-v1",
+      type: "game_created",
+      gameId: "game_invalid_visibility",
+      setup: createSetup(),
+      initialVisibility: "friends-only",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("initialVisibility");
+    }
+  });
+
   it("accepts public and unlisted visibility change events without gameplay versions", () => {
     for (const visibility of ["public", "unlisted"] as const) {
       const result = validateOnlineGameEvent({

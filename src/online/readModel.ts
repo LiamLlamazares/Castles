@@ -327,7 +327,7 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
         version: 0,
-        visibility: "unlisted",
+        visibility: event.initialVisibility ?? "unlisted",
         hasTimeControl: !!event.setup.timeControl,
         lastEventId: event.eventId,
       });

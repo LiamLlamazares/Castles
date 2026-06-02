@@ -1512,6 +1512,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         gameId,
         setup: summary.setup,
         clock,
+        initialVisibility: "public",
       },
       { createdAt: acceptedAt }
     );
@@ -2315,6 +2316,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           gameId,
           setup: summary.setup,
           clock,
+          initialVisibility: summary.visibility,
         },
         { createdAt: acceptedAt }
       );

@@ -202,6 +202,28 @@ describe("online read model", () => {
     expect(JSON.stringify(summary)).not.toContain("secret-token");
   });
 
+  it("projects explicit initial visibility while keeping old creation events unlisted", () => {
+    const [legacySummary] = projectOnlineGameSummaries([createEvent("game_legacy_visibility")]);
+    const explicitSummaries = Object.fromEntries(
+      (["private", "unlisted", "public"] as const).map((initialVisibility) => {
+        const [summary] = projectOnlineGameSummaries([
+          {
+            ...createEvent(`game_initial_${initialVisibility}`),
+            initialVisibility,
+          },
+        ]);
+        return [initialVisibility, summary.visibility];
+      })
+    );
+
+    expect(legacySummary.visibility).toBe("unlisted");
+    expect(explicitSummaries).toEqual({
+      private: "private",
+      unlisted: "unlisted",
+      public: "public",
+    });
+  });
+
   it("projects visibility changes without advancing the gameplay version", () => {
     const events = [
       createEvent("game_visible"),

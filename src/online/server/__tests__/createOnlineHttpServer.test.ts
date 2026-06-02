@@ -15,8 +15,10 @@ import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import {
+  createChallengeAcceptedEvent,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
   type AuthenticatedOnlineIdentity,
+  type OnlineChallengeVisibility,
   type OnlineChallengeSummary,
 } from "../../challenges";
 import {
@@ -476,6 +478,107 @@ describe("createOnlineHttpServer", () => {
     expect(acceptorJoin.status).toBe(200);
     await expect(creatorJoin.json()).resolves.toMatchObject({ color: "w" });
     await expect(acceptorJoin.json()).resolves.toMatchObject({ color: "b" });
+
+  });
+
+  it("lists directly accepted open-seek games as public live games", async () => {
+    const gameSummaries: OnlineGameSummary[] = [];
+    let createdSeekSummary: OpenSeekSummary | null = null;
+    const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      if (!createdSeekSummary) {
+        throw new Error("open seek summary was not captured");
+      }
+      const seekEvent = createOpenSeekAcceptedEvent(
+        {
+          type: "seek_accepted",
+          seekId: input.seekId,
+          acceptedBy: input.acceptedBy,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: `${input.seekId}_accepted`, createdAt: input.acceptedAt }
+      );
+      const accepted: OpenSeekSummary = {
+        ...createdSeekSummary,
+        status: "accepted",
+        updatedAt: seekEvent.createdAt,
+        acceptedAt: seekEvent.acceptedAt,
+        acceptedBy: seekEvent.acceptedBy,
+        gameId: seekEvent.gameId,
+        whiteIdentity: seekEvent.whiteIdentity,
+        blackIdentity: seekEvent.blackIdentity,
+        lastEventId: seekEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      if (!gameSummary) {
+        throw new Error("Accepted open seek game summary was not projected.");
+      }
+      gameSummaries.push(gameSummary);
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "creator-credential",
+        blackCredential: input.acceptorCredential,
+      };
+      return {
+        seekEvent,
+        seekSummary: accepted,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { creator: "w" as const, acceptor: "b" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      acceptOpenSeekAndCreateGame,
+      loadGameSummaries: async () => gameSummaries,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "w",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+    createdSeekSummary = created.summary;
+
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acceptorSessionId: "session_acceptor" }),
+      }
+    );
+    const accepted = await acceptResponse.json();
+    const gameId = accepted.gameInvite.gameId;
+    const directoryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games?state=active`
+    );
+    const directory = await directoryResponse.json();
+
+    expect(acceptResponse.status).toBe(200);
+    expect(acceptOpenSeekAndCreateGame.mock.calls[0][0].gameCreatedEvent).toMatchObject({
+      type: "game_created",
+      initialVisibility: "public",
+    });
+    expect(directoryResponse.status).toBe(200);
+    expect(directory.games.map((game: OnlineGameSummary) => game.gameId)).toContain(gameId);
   });
 
   it("quick matches by accepting a compatible open seek with a tokenless game URL", async () => {
@@ -997,6 +1100,10 @@ describe("createOnlineHttpServer", () => {
       limit: ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
     });
     expect(acceptOpenSeekAndCreateGame).toHaveBeenCalledOnce();
+    expect(acceptOpenSeekAndCreateGame.mock.calls[0][0].gameCreatedEvent).toMatchObject({
+      type: "game_created",
+      initialVisibility: "public",
+    });
   });
 
   it("quick match scans later open-seek pages before creating a fallback", async () => {
@@ -1351,6 +1458,7 @@ describe("createOnlineHttpServer", () => {
       body: JSON.stringify({
         setup,
         challengerSeat: "w",
+        visibility: "private",
       }),
     });
     const created = await createResponse.json();
@@ -1411,6 +1519,109 @@ describe("createOnlineHttpServer", () => {
     expect(whiteJoin.color).toBe("w");
     expect(blackJoin.color).toBe("b");
   });
+
+  it.each(["private", "unlisted"] as const)(
+    "keeps accepted %s challenge games out of the public game directory",
+    async (visibility: OnlineChallengeVisibility) => {
+      const gameSummaries: OnlineGameSummary[] = [];
+      let pendingChallenge: OnlineChallengeSummary | null = null;
+      const acceptChallengeAndCreateGame = vi.fn(async (input: any) => {
+        if (!pendingChallenge) {
+          throw new Error("challenge summary was not captured");
+        }
+        const challengeEvent = createChallengeAcceptedEvent(
+          {
+            type: "challenge_accepted",
+            challengeId: input.challengeId,
+            acceptedBy: input.acceptedBy.identity,
+            acceptedAt: input.acceptedAt,
+            gameId: input.gameCreatedEvent.gameId,
+            whiteIdentity: input.whiteIdentity,
+            blackIdentity: input.blackIdentity,
+          },
+          { eventId: `${input.challengeId}_accepted`, createdAt: input.acceptedAt }
+        );
+        const challengeSummary: OnlineChallengeSummary = {
+          ...pendingChallenge,
+          status: "accepted",
+          updatedAt: challengeEvent.createdAt,
+          acceptedAt: challengeEvent.acceptedAt,
+          acceptedBy: challengeEvent.acceptedBy,
+          gameId: challengeEvent.gameId,
+          whiteIdentity: challengeEvent.whiteIdentity,
+          blackIdentity: challengeEvent.blackIdentity,
+          lastEventId: challengeEvent.eventId,
+        };
+        const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+        if (!gameSummary) {
+          throw new Error("Accepted challenge game summary was not projected.");
+        }
+        gameSummaries.push(gameSummary);
+        const gameCredentials: OnlineGameCredentials = {
+          whiteCredential: "challenger-credential",
+          blackCredential: "challenged-credential",
+        };
+        return {
+          challengeEvent,
+          challengeSummary,
+          gameSummary,
+          gameCredentials,
+          gameRecord: {
+            gameId: input.gameCreatedEvent.gameId,
+            setup: input.gameCreatedEvent.setup,
+            whiteCredential: gameCredentials.whiteCredential,
+            blackCredential: gameCredentials.blackCredential,
+            clock: input.gameCreatedEvent.clock,
+            acceptedActions: [],
+          },
+          gameSeats: { challenger: "w" as const, challenged: "b" as const },
+        };
+      });
+      const { server } = createOnlineHttpServer({
+        publicBaseUrl: "https://castles.example/play",
+        now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+        acceptChallengeAndCreateGame,
+        loadGameSummaries: async () => gameSummaries,
+      });
+      servers.push(server);
+      const port = await listen(server);
+      const setup = createSetup();
+
+      const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility,
+        }),
+      });
+      const created = await createResponse.json();
+      pendingChallenge = created.summary;
+      const challengedToken = fragmentChallengeToken(created.challenged.url);
+
+      const acceptResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}/accept`,
+        { method: "POST", headers: bearer(challengedToken) }
+      );
+      const accepted = await acceptResponse.json();
+      const directoryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games?state=active`
+      );
+      const directory = await directoryResponse.json();
+
+      expect(acceptResponse.status).toBe(200);
+      expect(acceptChallengeAndCreateGame.mock.calls[0][0].gameCreatedEvent).toMatchObject({
+        type: "game_created",
+        initialVisibility: visibility,
+      });
+      expect(accepted.gameInvite.gameId).toBeTruthy();
+      expect(directoryResponse.status).toBe(200);
+      expect(directory.games.map((game: OnlineGameSummary) => game.gameId)).not.toContain(
+        accepted.gameInvite.gameId
+      );
+    }
+  );
 
   it.each(["decline", "cancel"] as const)(
     "rate limits challenge %s actions before auth",

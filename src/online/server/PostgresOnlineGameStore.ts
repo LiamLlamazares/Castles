@@ -569,6 +569,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         if (!this.sameJson(summary.setup, gameCreatedEvent.setup)) {
           throw new Error(`Accepted online game setup must match challenge ${input.challengeId}.`);
         }
+        if (gameCreatedEvent.initialVisibility !== summary.visibility) {
+          throw new Error(`Accepted online game visibility must match challenge ${input.challengeId}.`);
+        }
         const challengeCredentials = await this.loadChallengeCredentialsForChallenge(
           input.challengeId,
           client
@@ -673,6 +676,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     }
     if (gameCreatedEvent.createdAt !== input.acceptedAt) {
       throw new Error("Accepted game event createdAt must equal seek acceptedAt.");
+    }
+    if (gameCreatedEvent.initialVisibility !== "public") {
+      throw new Error("Accepted open seek games must be public.");
     }
     this.validateOpenSeekAcceptInput(input);
 

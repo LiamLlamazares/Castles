@@ -13,7 +13,9 @@ import {
   type ValidationResult,
 } from "./validation";
 import {
+  isOnlineGameVisibility,
   isOnlinePlayerSettableGameVisibility,
+  type OnlineGameVisibility,
   type OnlinePlayerSettableGameVisibility,
 } from "./visibility";
 
@@ -33,6 +35,7 @@ export type OnlineGameEvent =
       gameId: string;
       setup: OnlineGameSetupDTO;
       clock?: OnlineClockRecord;
+      initialVisibility?: OnlineGameVisibility;
     })
   | (OnlineGameEventEnvelope & {
       type: "visibility_changed";
@@ -292,6 +295,9 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
     } else if (setup.value.timeControl) {
       return bad("event.clock is required for time-controlled games.");
     }
+    if (value.initialVisibility !== undefined && !isOnlineGameVisibility(value.initialVisibility)) {
+      return bad("event.initialVisibility must be private, unlisted, or public.");
+    }
     return {
       ok: true,
       value: {
@@ -300,6 +306,9 @@ export function validateOnlineGameEvent(value: unknown): ValidationResult<Online
         gameId: value.gameId,
         setup: setup.value,
         clock,
+        ...(value.initialVisibility === undefined
+          ? {}
+          : { initialVisibility: value.initialVisibility }),
       },
     };
   }

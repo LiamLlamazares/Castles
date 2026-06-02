@@ -5,7 +5,7 @@
   box-sizing: border-box;
   padding: clamp(20px, 4vw, 40px);
   background:
-    linear-gradient(135deg, rgba(29, 35, 34, 0.97), rgba(25, 31, 35, 0.98)),
+    linear-gradient(135deg, rgba(27, 30, 28, 0.98), rgba(18, 20, 21, 0.99)),
     var(--backgroundColor);
   color: #f7f1d6;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -29,10 +29,10 @@
 
 .online-browser-toolbar {
   display: grid;
-  grid-template-columns: minmax(240px, 0.8fr) minmax(280px, 1.1fr) minmax(220px, 320px);
-  gap: 16px;
+  grid-template-columns: minmax(220px, 0.55fr) minmax(360px, 1.25fr) minmax(220px, 0.6fr);
+  gap: 12px;
   align-items: end;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .online-browser-tabs {
@@ -44,7 +44,7 @@
 .online-browser-tabs button,
 .online-browser-button {
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 10px 14px;
   min-height: 40px;
   cursor: pointer;
@@ -61,14 +61,14 @@
 }
 
 .online-browser-tabs button {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f7f1d6;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.055);
+  color: #d8d3bf;
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .online-browser-tabs button.active {
-  background: #f4d287;
-  color: #201812;
+  background: #b8a46d;
+  color: #161511;
 }
 
 .online-browser-tabs span {
@@ -86,7 +86,7 @@
 .online-browser-filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -101,7 +101,7 @@
 .online-browser-search input,
 .online-browser-select select {
   min-height: 42px;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 9px 12px;
   font: inherit;
@@ -110,7 +110,7 @@
 
 .online-browser-status-line {
   min-height: 24px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   color: #d9d0b8;
 }
 
@@ -122,11 +122,11 @@
 .online-game-row,
 .online-seek-owner-panel,
 .online-browser-empty {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 6px;
   padding: 16px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  box-shadow: none;
 }
 
 .online-game-row,
@@ -176,8 +176,8 @@
 }
 
 .online-game-pill.active {
-  background: rgba(112, 214, 161, 0.18);
-  color: #94f1be;
+  background: rgba(123, 178, 151, 0.2);
+  color: #b8d9c7;
 }
 
 .online-game-pill.complete {
@@ -186,8 +186,8 @@
 }
 
 .online-game-pill.accepted {
-  background: rgba(112, 214, 161, 0.18);
-  color: #94f1be;
+  background: rgba(123, 178, 151, 0.2);
+  color: #b8d9c7;
 }
 
 .online-game-pill.cancelled,
@@ -210,13 +210,19 @@
 }
 
 .online-browser-button.primary {
-  background: #70d6a1;
-  color: #102018;
+  background: #7bb297;
+  color: #101815;
 }
 
 .online-browser-button.neutral {
-  background: #f4d287;
-  color: #201812;
+  background: #b8a46d;
+  color: #161511;
+}
+
+.online-browser-button.subtle {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f1d6;
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .online-browser-quick-match-panel {
@@ -224,9 +230,9 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
-  background: rgba(244, 210, 135, 0.1);
-  border: 1px solid rgba(244, 210, 135, 0.24);
-  border-radius: 8px;
+  background: rgba(184, 164, 109, 0.1);
+  border: 1px solid rgba(184, 164, 109, 0.22);
+  border-radius: 6px;
   padding: 14px 16px;
 }
 
@@ -262,6 +268,64 @@
   white-space: nowrap;
 }
 
+.online-browser-live-section {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0 8px;
+}
+
+.online-browser-section-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 4px 0 10px;
+}
+
+.online-browser-section-kicker,
+.online-game-kicker {
+  display: block;
+  color: #9ed0c2;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.online-browser-section-header h2 {
+  margin: 2px 0 0;
+  font-size: clamp(1.25rem, 2vw, 1.6rem);
+}
+
+.online-browser-section-header p {
+  margin: 3px 0 0;
+  color: #d9d0b8;
+  line-height: 1.35;
+}
+
+.online-browser-live-list {
+  display: grid;
+  gap: 8px;
+}
+
+.online-game-row-featured {
+  border-color: rgba(158, 208, 194, 0.28);
+  background: rgba(158, 208, 194, 0.07);
+}
+
+.online-game-row-compact {
+  padding: 12px 14px;
+}
+
+.online-game-row-compact .online-game-players strong {
+  font-size: 1rem;
+}
+
+.online-browser-empty-compact {
+  padding: 12px 14px;
+}
+
 .online-browser-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -289,7 +353,8 @@
   .online-browser-toolbar,
   .online-game-row,
   .online-seek-owner-panel,
-  .online-browser-quick-match-panel {
+  .online-browser-quick-match-panel,
+  .online-browser-section-header {
     grid-template-columns: 1fr;
   }
 
