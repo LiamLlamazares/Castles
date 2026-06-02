@@ -49,12 +49,13 @@ export class TurnMutator {
 
               const updatedSanctuaries = newState.sanctuaries.map(s => {
                   if (skipCooldownTickHexKeys.has(s.hex.getKey())) return s;
-                  if (s.territorySide !== currentPhaseStartPlayer) return s;
                   if (s.cooldown <= 0) return s;
+                  const cooldownSide = s.controller ?? s.territorySide;
+                  if (cooldownSide !== currentPhaseStartPlayer) return s;
                   
                   let reduction = 1;
-                  if (s.territorySide === 'w') reduction += whiteInvaders;
-                  else if (s.territorySide === 'b') reduction += blackInvaders;
+                  if (cooldownSide === 'w') reduction += whiteInvaders;
+                  else if (cooldownSide === 'b') reduction += blackInvaders;
                   
                   const newCooldown = Math.max(0, s.cooldown - reduction);
                   return s.with({ cooldown: newCooldown });

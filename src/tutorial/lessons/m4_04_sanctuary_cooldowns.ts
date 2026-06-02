@@ -27,7 +27,7 @@ export function createM4L4(): TutorialLesson {
   return {
     id: 'm4_l4_sanctuary_cooldowns',
     title: '4.4 Sanctuary cooldowns',
-    description: 'After a sanctuary is pledged, it goes on cooldown. At the start of that sanctuary side\'s turn, cooldown drops by 1 plus 1 for each non-Swordsman that side has across the river.',
+    description: 'After a sanctuary is pledged, it goes on cooldown for the player who used it. At the start of that player\'s turn, cooldown drops by 1 plus 1 for each non-Swordsman that player has across the river.',
     board,
     pieces,
     sanctuaries,
@@ -37,9 +37,9 @@ export function createM4L4(): TutorialLesson {
       'Right-click the non-Swordsman pieces across the river.',
     ],
     hints: [
-      'Archers, Knights, Eagles, Giants, Trebuchets, Assassins, Dragons, Monarchs, and sanctuary pieces all accelerate cooldown if they are across the river for their side.',
+      'Archers, Knights, Eagles, Giants, Trebuchets, Assassins, Dragons, Monarchs, and sanctuary pieces all accelerate cooldown if they are across the river for the player who pledged the sanctuary.',
       'Swordsmen do not accelerate sanctuary cooldown.',
-      'The bonus is checked at the start of the sanctuary side\'s turn, not immediately when a piece crosses the river.',
+      'The bonus is checked at the start of that player\'s turn, not immediately when a piece crosses the river.',
     ],
     instructions: 'Right-click the sanctuary and inspect why the non-Swordsmen across the river reduce cooldown later while the Swordsman does not.',
   };

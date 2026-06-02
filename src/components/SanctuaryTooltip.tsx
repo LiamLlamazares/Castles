@@ -141,7 +141,7 @@ export const SanctuaryTooltip: React.FC<SanctuaryTooltipProps> = ({
       {sanctuary.cooldown > 0 && (
         <>
           <div style={infoRowStyle}>
-            <span>Cooldown side:</span>
+            <span>Cooldown for:</span>
             <span style={valueStyle}>{cooldownSide === 'w' ? 'White' : 'Black'}</span>
           </div>
           <div style={infoRowStyle}>

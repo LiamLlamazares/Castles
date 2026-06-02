@@ -186,12 +186,13 @@ export class SanctuaryService {
           // Evolve to higher tier with cooldown
           return s.with({ 
             type: evolvedType, 
+            controller: occupant.color,
             cooldown: cooldownTurns, 
             hasPledgedThisGame: false // Reset so it can be pledged again after cooldown
           });
         } else {
           // No evolution available - keep the same type and recharge normally
-          return s.with({ hasPledgedThisGame: false, cooldown: cooldownTurns });
+          return s.with({ controller: occupant.color, hasPledgedThisGame: false, cooldown: cooldownTurns });
         }
       }
       return s;

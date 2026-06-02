@@ -101,8 +101,24 @@ describe('Pledge Mechanics', () => {
     // With empty pool, sanctuary keeps its type and recharges normally
     const newSanctuary = newState.sanctuaries.find(s => s.hex.equals(sanctuary.hex));
     expect(newSanctuary?.type).toBe(SanctuaryType.WolfCovenant);
+    expect(newSanctuary?.controller).toBe('w');
     expect(newSanctuary?.hasPledgedThisGame).toBe(false);
     expect(newSanctuary?.cooldown).toBe(5);
+  });
+
+  test('Pledge cooldown belongs to the player who used the sanctuary', () => {
+    const sanctuary = sanctuaries[0].with({ territorySide: 'w' });
+    const spawnHex = new Hex(1, -5, 4);
+
+    placePiece(sanctuary.hex, PieceType.Swordsman, 'b');
+    const state = createGameState(pieces, [sanctuary], 19);
+
+    const newState = gameEngine.pledge(state, sanctuary.hex, spawnHex);
+
+    const rechargingSanctuary = newState.sanctuaries.find(s => s.hex.equals(sanctuary.hex));
+    expect(rechargingSanctuary?.territorySide).toBe('w');
+    expect(rechargingSanctuary?.controller).toBe('b');
+    expect(rechargingSanctuary?.cooldown).toBe(5);
   });
 
   test('Pledge evolves sanctuary to higher tier when pool has types', () => {

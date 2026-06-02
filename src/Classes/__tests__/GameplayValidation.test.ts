@@ -117,4 +117,34 @@ describe('Gameplay Adjustments Validation', () => {
         expect(newSanc.cooldown).toBe(2);
     });
 
+    test('Pledged sanctuary cooldown follows the pledging player, not territory side', () => {
+        const contestedSanctuary = new Sanctuary(
+            new Hex(0, 5, -5),
+            SanctuaryType.WolfCovenant,
+            'w',
+            'b',
+            5,
+            true
+        );
+
+        const blackInvader = new Piece(new Hex(0, 1, -1), 'b', PieceType.Archer);
+        const whiteInvader = new Piece(new Hex(0, -1, 1), 'w', PieceType.Archer);
+
+        const whiteTurnStart = gameEngine.passTurn(createGameState(
+            [blackInvader, whiteInvader],
+            [contestedSanctuary],
+            9
+        ));
+
+        expect(whiteTurnStart.sanctuaries[0].cooldown).toBe(5);
+
+        const blackTurnStart = gameEngine.passTurn(createGameState(
+            [blackInvader, whiteInvader],
+            [contestedSanctuary],
+            14
+        ));
+
+        expect(blackTurnStart.sanctuaries[0].cooldown).toBe(3);
+    });
+
 });
