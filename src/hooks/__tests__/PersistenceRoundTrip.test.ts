@@ -67,6 +67,9 @@ describe("PGN persistence round-trip", () => {
       sanctuaries: expect.any(Array),
       moveTree: expect.any(MoveTree),
       turnCounter: expect.any(Number),
+      graveyard: expect.any(Array),
+      phoenixRecords: expect.any(Array),
+      promotionPending: null,
       sanctuaryPool: expect.any(Array),
       diagnostics: [],
     });

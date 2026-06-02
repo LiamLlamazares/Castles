@@ -76,6 +76,7 @@ interface GameBoardProps {
   onLoadGame?: (data: {
     board: Board,
     pieces: Piece[],
+    castles?: Castle[],
     turnCounter: number,
     sanctuaries: Sanctuary[],
     moveTree?: import('../Classes/Core/MoveTree').MoveTree,
@@ -373,11 +374,16 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onLoadGame({
             board: result.board,
             pieces: result.pieces,
+            castles: result.castles,
             turnCounter: result.turnCounter,
             sanctuaries: result.sanctuaries,
             moveTree: result.moveTree,
             sanctuarySettings: result.sanctuarySettings,
-            initialPoolTypes: result.sanctuaryPool
+            initialPoolTypes: result.sanctuaryPool,
+            graveyard: result.graveyard,
+            phoenixRecords: result.phoenixRecords,
+            promotionPending: result.promotionPending,
+            victoryPoints: result.victoryPoints,
           });
           return;
         }
@@ -401,11 +407,16 @@ const InnerGame: React.FC<GameBoardProps> = ({
             onLoadGame({
               board: result.board,
               pieces: result.pieces,
+              castles: result.castles,
               turnCounter: result.turnCounter,
               sanctuaries: result.sanctuaries,
               moveTree: result.moveTree,
               sanctuarySettings: result.sanctuarySettings,
-              initialPoolTypes: result.sanctuaryPool
+              initialPoolTypes: result.sanctuaryPool,
+              graveyard: result.graveyard,
+              phoenixRecords: result.phoenixRecords,
+              promotionPending: result.promotionPending,
+              victoryPoints: result.victoryPoints,
             });
           } else {
             clearSave();
@@ -732,11 +743,16 @@ const InnerGame: React.FC<GameBoardProps> = ({
             onLoadGame({
               board: result.board,
               pieces: result.pieces,
+              castles: result.castles,
               turnCounter: result.turnCounter,
               sanctuaries: result.sanctuaries,
               moveTree: result.moveTree,
               sanctuarySettings: result.sanctuarySettings,
-              initialPoolTypes: result.sanctuaryPool
+              initialPoolTypes: result.sanctuaryPool,
+              graveyard: result.graveyard,
+              phoenixRecords: result.phoenixRecords,
+              promotionPending: result.promotionPending,
+              victoryPoints: result.victoryPoints,
             });
         } else {
             alert("Failed to load PGN. Check console for details.");
@@ -951,6 +967,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         onOpenTutorial={onTutorial ? openQuickStartTutorial : undefined}
         showTooltipHint={showTooltipHint}
         onDismissTooltipHint={dismissTooltipHint}
+        isAnalysisMode={isAnalysisMode}
       />
 
       {/* Game Panel (Right Side) - Hidden in tutorial mode */}

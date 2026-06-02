@@ -23,7 +23,8 @@ export class SanctuaryGenerator {
    */
   public static generateRandomSanctuaries(
     board: Board,
-    types: SanctuaryType[] = [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring]
+    types: SanctuaryType[] = [SanctuaryType.WolfCovenant, SanctuaryType.SacredSpring],
+    random: () => number = Math.random
   ): Sanctuary[] {
     const sanctuaries: Sanctuary[] = [];
     // Initialize usedKeys with Castles AND their neighbors (Exclusion Zone)
@@ -67,7 +68,7 @@ export class SanctuaryGenerator {
       }
 
             // Pick a random hex from valid OPTIONS
-      const randomIndex = Math.floor(Math.random() * symmetricCandidates.length);
+      const randomIndex = Math.floor(random() * symmetricCandidates.length);
       const hex = symmetricCandidates[randomIndex];
       const mirroredHex = new Hex(-hex.q, -hex.r, -hex.s);
 

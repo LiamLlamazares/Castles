@@ -2,7 +2,7 @@ import { GameState } from "../../Core/GameState";
 import { Board } from "../../Core/Board";
 import { NotationService } from "../NotationService";
 import { DeathSystem } from "../DeathSystem";
-import { PieceType, PHASE_CYCLE_LENGTH, PLAYER_CYCLE_LENGTH } from "../../../Constants";
+import { Color, PieceType, PHASE_CYCLE_LENGTH, PLAYER_CYCLE_LENGTH } from "../../../Constants";
 import { createPieceMap } from "../../../utils/PieceMap";
 import { ActionOrchestrator } from "./ActionOrchestrator";
 import { RuleEngine } from "../RuleEngine";
@@ -34,7 +34,7 @@ export class TurnMutator {
 
       // 1. Decrement sanctuary cooldowns at the start of EACH player's turn
       if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
-          const currentPhaseStartPlayer = (newState.turnCounter % 10) < 5 ? 'w' : 'b';
+          const currentPhaseStartPlayer = TurnMutator.getTurnStartPlayer(newState.turnCounter);
 
           if (newState.sanctuaries && newState.sanctuaries.length > 0) {
               
@@ -64,7 +64,13 @@ export class TurnMutator {
           }
       }
 
-      // 2. Global Reset at the start of EACH player's turn (Reset piece/castle action flags)
+      // 2. Castle recruitment cooldowns tick once at the start of that castle owner's turn.
+      if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
+          const currentPhaseStartPlayer = TurnMutator.getTurnStartPlayer(newState.turnCounter);
+          newState = TurnMutator.tickCastleCooldowns(newState, currentPhaseStartPlayer);
+      }
+
+      // 3. Global Reset at the start of EACH player's turn (Reset piece/castle action flags)
       if (newState.turnCounter % PHASE_CYCLE_LENGTH === 0) {
           newState = TurnMutator.resetTurnFlags(newState);
       }
@@ -120,6 +126,24 @@ export class TurnMutator {
           ...state,
           pieces: newPieces,
           pieceMap: newPieceMap,
+          castles: newCastles
+      };
+  }
+
+  private static getTurnStartPlayer(turnCounter: number): Color {
+      return turnCounter % PLAYER_CYCLE_LENGTH < PHASE_CYCLE_LENGTH ? 'w' : 'b';
+  }
+
+  private static tickCastleCooldowns(state: GameState, owner: Color): GameState {
+      const newCastles = state.castles.map(castle => {
+          if (castle.owner !== owner || castle.recruitment_cooldown <= 0) return castle;
+          return castle.with({
+              recruitment_cooldown: Math.max(0, castle.recruitment_cooldown - 1)
+          });
+      });
+
+      return {
+          ...state,
           castles: newCastles
       };
   }

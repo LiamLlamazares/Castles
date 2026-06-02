@@ -19,7 +19,7 @@ import { RecruitmentMutator } from '../Systems/Mutators/RecruitmentMutator';
 import { TurnMutator } from '../Systems/Mutators/TurnMutator';
 import { WinCondition } from '../Systems/WinCondition';
 import { CombatSystem } from '../Systems/CombatSystem';
-import { PieceType, Color, TurnPhase, GameResult } from '../../Constants';
+import { CASTLE_RECRUITMENT_COOLDOWN_TURNS, PieceType, Color, TurnPhase, GameResult } from '../../Constants';
 import { createPieceMap } from '../../utils/PieceMap';
 import { MoveTree } from '../Core/MoveTree';
 
@@ -258,11 +258,35 @@ describe('Game Flow Integration Tests', () => {
         board.hexSet.has(h.getKey())
       )!;
 
-      const state = createState([], 4, allCastles);
+      const blackPiece = PieceFactory.create(PieceType.Monarch, new Hex(0, -2, 2), 'b');
+      const state = createState([blackPiece], 4, allCastles);
       const newState = RecruitmentMutator.recruitPiece(state, captured, spawnHex, board);
 
       const updatedCastle = newState.castles.find(c => c.hex.equals(captured.hex));
       expect(updatedCastle!.turns_controlled).toBe(6);
+      expect(updatedCastle!.recruitment_cooldown).toBe(CASTLE_RECRUITMENT_COOLDOWN_TURNS);
+    });
+
+    it('blocks recruitment while a castle is cooling down', () => {
+      const castles = createDefaultCastles(BOARD_SIZE);
+      const blackCastle = castles.find(c => c.color === 'b')!;
+      const captured = blackCastle.with({
+        owner: 'w',
+        recruitment_cooldown: 2,
+      });
+      const allCastles = castles.map(c =>
+        c.hex.equals(blackCastle.hex) ? captured : c
+      );
+
+      const spawnHex = captured.hex.cubeRing(1).find(h =>
+        board.hexSet.has(h.getKey())
+      )!;
+
+      const state = createState([], 4, allCastles);
+
+      expect(RuleEngine.getRecruitmentHexes(state, board)).toHaveLength(0);
+      expect(() => RecruitmentMutator.recruitPiece(state, captured, spawnHex, board))
+        .toThrow("Castle is cooling down");
     });
   });
 
@@ -300,6 +324,28 @@ describe('Game Flow Integration Tests', () => {
       reset.castles.forEach(c => {
         expect(c.used_this_turn).toBe(false);
       });
+    });
+
+    it('ticks castle recruitment cooldown only at the owner turn start', () => {
+      const castles = createDefaultCastles(BOARD_SIZE);
+      const blackCastle = castles.find(c => c.color === 'b')!;
+      const captured = blackCastle.with({
+        owner: 'w',
+        recruitment_cooldown: CASTLE_RECRUITMENT_COOLDOWN_TURNS,
+      });
+      const allCastles = castles.map(c =>
+        c.hex.equals(captured.hex) ? captured : c
+      );
+
+      const blackTurnStart = TurnMutator.checkTurnTransitions(createState([], 5, allCastles));
+      expect(
+        blackTurnStart.castles.find(c => c.hex.equals(captured.hex))!.recruitment_cooldown
+      ).toBe(CASTLE_RECRUITMENT_COOLDOWN_TURNS);
+
+      const whiteTurnStart = TurnMutator.checkTurnTransitions(createState([], 10, allCastles));
+      expect(
+        whiteTurnStart.castles.find(c => c.hex.equals(captured.hex))!.recruitment_cooldown
+      ).toBe(CASTLE_RECRUITMENT_COOLDOWN_TURNS - 1);
     });
   });
 

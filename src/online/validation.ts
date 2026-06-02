@@ -171,6 +171,9 @@ function validateCastle(value: unknown, path: string): ValidationResult<CastleDT
     return bad(`${path}.turnsControlled must be a non-negative integer.`);
   }
   if (!isBoolean(value.usedThisTurn)) return bad(`${path}.usedThisTurn must be a boolean.`);
+  if (!isNonNegativeInteger(value.recruitmentCooldown)) {
+    return bad(`${path}.recruitmentCooldown must be a non-negative integer.`);
+  }
 
   return {
     ok: true,
@@ -180,6 +183,7 @@ function validateCastle(value: unknown, path: string): ValidationResult<CastleDT
       owner: value.owner,
       turnsControlled: value.turnsControlled,
       usedThisTurn: value.usedThisTurn,
+      recruitmentCooldown: value.recruitmentCooldown,
     },
   };
 }

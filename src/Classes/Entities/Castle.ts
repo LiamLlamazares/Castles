@@ -10,6 +10,7 @@ import { Color } from "../../Constants";
  * 
  * The piece summoned depends on `turns_controlled`: cycles through
  * Swordsman → Archer → Knight → Eagle → Giant → Trebuchet → Assassin → Dragon → Monarch
+ * A recruited castle then waits `recruitment_cooldown` owner-turns before recruiting again.
  * 
  * OWNERSHIP:
  * - `color` = original side of the board (never changes)
@@ -29,7 +30,9 @@ export class Castle {
     /** Whether this castle has been used for recruitment this turn */
     public readonly used_this_turn: boolean = false,
     /** Current owner of this castle (can change when captured) */
-    public readonly owner: Color = color
+    public readonly owner: Color = color,
+    /** Owner-turns remaining before this castle can recruit again */
+    public readonly recruitment_cooldown: number = 0
   ) {}
 
   /** Returns all hexes adjacent to this castle (valid recruitment positions) */
@@ -51,7 +54,8 @@ export class Castle {
       updates.color !== undefined ? updates.color : this.color,
       updates.turns_controlled !== undefined ? updates.turns_controlled : this.turns_controlled,
       updates.used_this_turn !== undefined ? updates.used_this_turn : this.used_this_turn,
-      updates.owner !== undefined ? updates.owner : this.owner
+      updates.owner !== undefined ? updates.owner : this.owner,
+      updates.recruitment_cooldown !== undefined ? updates.recruitment_cooldown : this.recruitment_cooldown
     );
   }
 

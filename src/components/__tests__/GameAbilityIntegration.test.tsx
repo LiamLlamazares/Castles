@@ -388,6 +388,29 @@ describe("Game ability integration", () => {
     expect(onSetup).toHaveBeenCalledOnce();
   });
 
+  test("analysis mode suppresses the terminal victory overlay", () => {
+    render(
+      <ThemeProvider>
+        <GameBoard
+          isAnalysisMode
+          onlineSession={{
+            gameId: "game_terminal_analysis",
+            role: "player",
+            playerColor: "w",
+            version: 8,
+            status: "terminal",
+            spectatorUrl: "https://castles.example/?onlineGame=game_terminal_analysis&view=spectator",
+            result: { winner: "w", reason: "resignation" },
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(screen.queryByRole("button", { name: "Analyze Game" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configure New Game" })).not.toBeInTheDocument();
+  });
+
   test("New Game confirmation traps focus and closes with Escape", async () => {
     const user = userEvent.setup();
     const onSetup = vi.fn();

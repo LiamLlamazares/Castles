@@ -318,14 +318,20 @@ export class RuleEngine {
     );
   }
 
+  public static castleCanRecruitForActivePlayer(castle: Castle, currentPlayer: Color): boolean {
+    return (
+      RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer) &&
+      !castle.used_this_turn &&
+      castle.recruitment_cooldown <= 0
+    );
+  }
+
   public static getControlledCastlesActivePlayer(gameState: GameState): Castle[] {
     const currentPlayer = TurnManager.getCurrentPlayer(gameState.turnCounter);
     const phase = TurnManager.getTurnPhase(gameState.turnCounter);
     return gameState.castles.filter((castle) => {
       if (phase !== "Recruitment") return false;
-      return (
-        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer)
-      );
+      return RuleEngine.castleCanRecruitForActivePlayer(castle, currentPlayer);
     });
   }
 
@@ -337,8 +343,7 @@ export class RuleEngine {
     const occupiedSet = new Set(RuleEngine.getOccupiedHexes(gameState).map(h => h.getKey()));
     // Use some() for early exit
     return gameState.castles.some((castle) => 
-        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer) &&
-        !castle.used_this_turn &&
+        RuleEngine.castleCanRecruitForActivePlayer(castle, currentPlayer) &&
         castle.hex.cubeRing(1).some(hex => RuleEngine.isValidRecruitmentHex(hex, board, occupiedSet))
     );
   }
@@ -348,7 +353,7 @@ export class RuleEngine {
     return gameState.castles.filter((castle) => {
 
       return (
-        RuleEngine.castleGrantsRecruitmentToActivePlayer(castle, currentPlayer)
+        RuleEngine.castleCanRecruitForActivePlayer(castle, currentPlayer)
       );
     });
   }
@@ -365,8 +370,6 @@ export class RuleEngine {
      const processedHexKeys = new Set<string>();
 
      for (const castle of controlledCastles) {
-        if (castle.used_this_turn) continue;
-
         const adjacentHexes = castle.hex.cubeRing(1);
         for (const hex of adjacentHexes) {
            const key = hex.getKey();

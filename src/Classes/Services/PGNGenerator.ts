@@ -41,6 +41,7 @@ export class PGNGenerator {
       turns_controlled: c.turns_controlled,
       used_this_turn: c.used_this_turn,
       owner: c.owner as 'w' | 'b',
+      recruitment_cooldown: c.recruitment_cooldown,
     }));
 
     const setup: GameSetup = {
@@ -189,7 +190,8 @@ export class PGNGenerator {
               c.color === 'w' ? 0 : 1,
               c.turns_controlled ?? 0,
               c.used_this_turn ? 1 : 0,
-              (c.owner ?? c.color) === 'w' ? 0 : 1
+              (c.owner ?? c.color) === 'w' ? 0 : 1,
+              c.recruitment_cooldown ?? 0
           ]),
           p: setup.pieces.map((p: PieceSetup) => [p.type, p.q, p.r, p.s, p.color === 'w' ? 0 : 1])
       };

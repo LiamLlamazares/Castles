@@ -167,6 +167,7 @@ export function makeSmokeSetup() {
     turnsControlled: 0,
     usedThisTurn: false,
     owner: "w",
+    recruitmentCooldown: 0,
   };
   const blackCastle = {
     hex: { q: 0, r: -3, s: 3, colorIndex: 0 },
@@ -174,6 +175,7 @@ export function makeSmokeSetup() {
     turnsControlled: 0,
     usedThisTurn: false,
     owner: "b",
+    recruitmentCooldown: 0,
   };
   const piece = (color, q, r, s) => ({
     hex: { q, r, s, colorIndex: 0 },

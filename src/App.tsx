@@ -261,12 +261,17 @@ function createReplayGameConfigFromOnlineSnapshot(snapshot: OnlineGameSnapshotDT
           ...hydratedConfig,
           board: replay.board,
           pieces: replay.pieces,
+          castles: replay.castles,
           layout: getStartingLayout(replay.board),
           moveTree: replay.moveTree,
           turnCounter: replay.turnCounter,
           sanctuaries: replay.sanctuaries,
           sanctuarySettings: replay.sanctuarySettings ?? setup.sanctuarySettings,
           initialPoolTypes: replay.sanctuaryPool ?? hydratedConfig.initialPoolTypes,
+          graveyard: replay.graveyard,
+          phoenixRecords: replay.phoenixRecords,
+          promotionPending: replay.promotionPending,
+          victoryPoints: replay.victoryPoints,
           isAnalysisMode: true,
         };
       }
@@ -324,6 +329,7 @@ function App() {
   const [onlineBrowserTab, setOnlineBrowserTab] = useState<OnlineBrowserInitialTab>("lobby");
   const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
   const replayRequestIdRef = useRef(0);
+  const onlineChallengePollInFlightRef = useRef(false);
   const isSaveDialogOpen = saveGameDialog !== null;
   const isFirstRunIntroVisible = isFirstRunIntroOpen && !isRulesPage;
   const isAppModalOpen = isSaveDialogOpen || isFirstRunIntroVisible;
@@ -505,6 +511,47 @@ function App() {
       cancelled = true;
     };
   }, [onlineChallenge]);
+
+  useEffect(() => {
+    if (
+      !onlineChallenge ||
+      onlineChallengeResponse?.summary.status !== "pending" ||
+      onlineChallengeStatus === "loading" ||
+      onlineChallengeStatus === "acting"
+    ) {
+      onlineChallengePollInFlightRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    const intervalId = window.setInterval(() => {
+      if (onlineChallengePollInFlightRef.current) return;
+      onlineChallengePollInFlightRef.current = true;
+      fetchOnlineChallenge(onlineChallenge)
+        .then((response) => {
+          if (cancelled) return;
+          setOnlineChallengeResponse(response);
+          setOnlineChallengeError(null);
+          setOnlineChallengeStatus((status) => (status === "error" ? "idle" : status));
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.warn("Failed to auto-refresh online challenge", error);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            onlineChallengePollInFlightRef.current = false;
+          }
+        });
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      onlineChallengePollInFlightRef.current = false;
+      window.clearInterval(intervalId);
+    };
+  }, [onlineChallenge, onlineChallengeResponse?.summary.status, onlineChallengeStatus]);
 
   useEffect(() => {
     if (!openSeekCreator || openSeekResponse?.summary.seekId === openSeekCreator.seekId) return;
@@ -1327,11 +1374,16 @@ function App() {
     handleLoadGame({
       board: result.board,
       pieces: result.pieces,
+      castles: result.castles,
       turnCounter: result.turnCounter,
       sanctuaries: result.sanctuaries,
       moveTree: result.moveTree,
       sanctuarySettings: result.sanctuarySettings,
-      initialPoolTypes: result.sanctuaryPool
+      initialPoolTypes: result.sanctuaryPool,
+      graveyard: result.graveyard,
+      phoenixRecords: result.phoenixRecords,
+      promotionPending: result.promotionPending,
+      victoryPoints: result.victoryPoints,
     });
   };
 

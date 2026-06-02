@@ -58,6 +58,7 @@ describe("online serialization", () => {
         turnsControlled: castle.turns_controlled,
         usedThisTurn: castle.used_this_turn,
         owner: castle.owner,
+        recruitmentCooldown: castle.recruitment_cooldown,
       })),
     });
 

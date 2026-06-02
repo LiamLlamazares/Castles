@@ -92,6 +92,7 @@ export function serializeCastle(castle: Castle): CastleDTO {
     turnsControlled: castle.turns_controlled,
     usedThisTurn: castle.used_this_turn,
     owner: castle.owner,
+    recruitmentCooldown: castle.recruitment_cooldown,
   };
 }
 
@@ -101,7 +102,8 @@ export function hydrateCastleDTO(dto: CastleDTO): Castle {
     dto.color,
     dto.turnsControlled,
     dto.usedThisTurn,
-    dto.owner
+    dto.owner,
+    dto.recruitmentCooldown
   );
 }
 
@@ -290,4 +292,3 @@ export function createMoveTreeFromHistory(
 
   return tree;
 }
-

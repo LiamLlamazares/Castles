@@ -121,6 +121,14 @@ const MODE_PRESETS: Record<GameMode, ModeConfig> = {
     }
 };
 
+function createSeededRandom(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+        state = (state * 1664525 + 1013904223) >>> 0;
+        return state / 0x100000000;
+    };
+}
+
 const GameSetup: React.FC<GameSetupProps> = ({
     onPlay,
     onCreateOnlineGame,
@@ -137,7 +145,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     
     // Setup State - defaults match 'standard' mode preset
     const [boardRadius, setBoardRadius] = useState<number>(MODE_PRESETS.standard.boardRadius); // 7
-    const [useRandomCastles, setUseRandomCastles] = useState<boolean>(true);
+    const [useRandomCastles, setUseRandomCastles] = useState<boolean>(false);
     const [timeInitial, setTimeInitial] = useState<number>(MODE_PRESETS.standard.timeInitial); // 20
     const [timeIncrement, setTimeIncrement] = useState<number>(MODE_PRESETS.standard.timeIncrement); // 20
     
@@ -223,11 +231,17 @@ const GameSetup: React.FC<GameSetupProps> = ({
     const previewState = useMemo(() => {
         // 1. Create Base Board
         let b = getStartingBoard(boardRadius);
+        const sanctuarySignature = Array.from(selectedSanctuaries).sort().join("|");
+        const random = createSeededRandom(
+            boardRadius * 1009 +
+            rerollKey * 9176 +
+            sanctuarySignature.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0)
+        );
         
         // 2. Apply Random Castles if enabled
         if (useRandomCastles) {
             // Generate random castles using named constant
-            const randomCastles = CastleGenerator.generateRandomCastles(b, DEFAULT_CASTLES_PER_SIDE);
+            const randomCastles = CastleGenerator.generateRandomCastles(b, DEFAULT_CASTLES_PER_SIDE, random);
             b = new Board({ nSquares: boardRadius - 1 }, randomCastles);
         }
 
@@ -235,7 +249,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
         const p = getStartingPieces(boardRadius);
         
         // 3. Generate sanctuaries for preview
-        const s = SanctuaryGenerator.generateRandomSanctuaries(b, Array.from(selectedSanctuaries));
+        const s = SanctuaryGenerator.generateRandomSanctuaries(b, Array.from(selectedSanctuaries), random);
 
         // Calculate viewBox using LayoutService method
         const vb = l.calculateViewBox();

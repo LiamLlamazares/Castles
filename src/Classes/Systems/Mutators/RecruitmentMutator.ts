@@ -10,7 +10,7 @@ import { Board } from "../../Core/Board";
 import { NotationService } from "../NotationService";
 import { RuleEngine } from "../RuleEngine";
 import { TurnManager } from "../../Core/TurnManager";
-import { PieceType } from "../../../Constants";
+import { CASTLE_RECRUITMENT_COOLDOWN_TURNS, PieceType } from "../../../Constants";
 import { ActionOrchestrator } from "./ActionOrchestrator";
 
 export class RecruitmentMutator {
@@ -33,6 +33,9 @@ export class RecruitmentMutator {
       }
       if (liveCastle.used_this_turn) {
           throw new Error("Castle has already recruited this turn");
+      }
+      if (liveCastle.recruitment_cooldown > 0) {
+          throw new Error("Castle is cooling down");
       }
       if (!liveCastle.isAdjacent(hex)) {
           throw new Error("Recruitment hex is not adjacent to castle");
@@ -64,7 +67,8 @@ export class RecruitmentMutator {
           if (c.hex.equals(liveCastle.hex)) {
               return c.with({ 
                   turns_controlled: c.turns_controlled + 1,
-                  used_this_turn: true
+                  used_this_turn: true,
+                  recruitment_cooldown: CASTLE_RECRUITMENT_COOLDOWN_TURNS
               });
           }
           return c;

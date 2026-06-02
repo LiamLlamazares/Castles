@@ -172,6 +172,12 @@ export const TerrainTooltip: React.FC<TerrainTooltipProps> = ({ hex, board, cast
                       </span>
                   </div>
               </div>
+              <div style={infoRowStyle}>
+                  <span>Recruitment Cooldown:</span>
+                  <span style={{ color: castle.recruitment_cooldown > 0 ? '#f39c12' : '#fff', fontWeight: 'bold' }}>
+                      {castle.recruitment_cooldown > 0 ? `${castle.recruitment_cooldown} owner-turns` : 'Ready'}
+                  </span>
+              </div>
           </div>
       )}
     </div>

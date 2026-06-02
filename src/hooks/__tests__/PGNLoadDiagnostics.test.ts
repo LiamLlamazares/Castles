@@ -74,7 +74,7 @@ describe("loadPGN replay diagnostics", () => {
 
   it("preserves setup castle state when hard replay failure falls back to start position", () => {
     const { result } = renderGameLogicHook();
-    const castle = new Castle(new Hex(-3, 3, 0), "b", 4, true, "w");
+    const castle = new Castle(new Hex(-3, 3, 0), "b", 4, true, "w", 2);
     const board = new Board({ nSquares: 3 }, [castle]);
     const moveTree = new MoveTree();
     const pgn = PGNService.generatePGN(board, [], [], [], {}, moveTree);
@@ -93,6 +93,7 @@ describe("loadPGN replay diagnostics", () => {
     expect(loaded?.castles[0].owner).toBe("w");
     expect(loaded?.castles[0].turns_controlled).toBe(4);
     expect(loaded?.castles[0].used_this_turn).toBe(true);
+    expect(loaded?.castles[0].recruitment_cooldown).toBe(2);
     expect(loaded?.diagnostics).toEqual([
       expect.objectContaining({
         notation: "<replay>",

@@ -58,6 +58,7 @@ export interface CastleDTO {
   turnsControlled: number;
   usedThisTurn: boolean;
   owner: Color;
+  recruitmentCooldown: number;
 }
 
 export interface SanctuaryDTO {

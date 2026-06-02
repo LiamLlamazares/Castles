@@ -57,6 +57,20 @@ describe("RecruitCommand", () => {
     expect(result.error).toBe("Castle has already recruited this turn");
   });
 
+  it("rejects a stale castle object when the live castle is cooling down", () => {
+    const staleCastle = new Castle(new Hex(0, 3, -3), "b", 0, false, "w");
+    const coolingCastle = new Castle(new Hex(0, 3, -3), "b", 0, false, "w", 2);
+    const spawnHex = new Hex(0, 2, -2);
+    const state = createState([], [coolingCastle]);
+    const command = new RecruitCommand(staleCastle, spawnHex, context);
+
+    const result = command.execute(state);
+
+    expect(result.success).toBe(false);
+    expect(result.newState).toBe(state);
+    expect(result.error).toBe("Castle is cooling down");
+  });
+
   it("rejects recruitment outside the Recruitment phase", () => {
     const castle = new Castle(new Hex(0, 3, -3), "w", 0, false, "w");
     const spawnHex = new Hex(0, 2, -2);

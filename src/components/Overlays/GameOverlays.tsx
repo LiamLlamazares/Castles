@@ -22,6 +22,7 @@ interface GameOverlaysProps {
   onOpenTutorial?: () => void;
   showTooltipHint: boolean;
   onDismissTooltipHint: () => void;
+  isAnalysisMode?: boolean;
 }
 
 export const GameOverlays: React.FC<GameOverlaysProps> = ({
@@ -37,7 +38,8 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
   canRestart = true,
   showQuickStart,
   onCloseQuickStart,
-  onOpenTutorial
+  onOpenTutorial,
+  isAnalysisMode = false
 }) => {
   const gameState = useGameState();
   const { promotePiece } = useGameActions();
@@ -49,7 +51,7 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
         onClose={onCloseRules}
       />
 
-      {!isOverlayDismissed && (
+      {!isAnalysisMode && !isOverlayDismissed && (
           <VictoryOverlay
             victoryMessage={victoryMessage}
             winner={winner}

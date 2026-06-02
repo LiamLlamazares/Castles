@@ -251,11 +251,13 @@ describe("PGN export/import idempotence", () => {
     const { state } = loadCurrentPgn(pgn);
     const replayedPiece = state.pieces.find((piece) => piece.hex.equals(spawnHex));
     const replayedCastle = state.castles.find((candidate) => candidate.hex.equals(castle.hex));
+    const recruitedCastle = recruited.castles.find((candidate) => candidate.hex.equals(castle.hex));
 
     expect(recruited.moveTree.getHistoryLine()[0].notation).toBe("H11=Arc");
     expect(replayedPiece?.type).toBe(PieceType.Archer);
     expect(replayedCastle?.turns_controlled).toBe(2);
     expect(replayedCastle?.used_this_turn).toBe(false);
+    expect(replayedCastle?.recruitment_cooldown).toBe(recruitedCastle?.recruitment_cooldown);
     expect(canonicalState(state)).toEqual(canonicalState(recruited));
   });
 

@@ -4,6 +4,7 @@ import { Piece } from "../Entities/Piece";
 import { Sanctuary } from "../Entities/Sanctuary";
 import { Castle } from "../Entities/Castle";
 import { SanctuaryType } from "../../Constants";
+import { PhoenixRecord } from "../Core/GameState";
 import { PGNService, ReplayDiagnostic } from "./PGNService";
 
 export interface PGNLoadResult {
@@ -13,6 +14,10 @@ export interface PGNLoadResult {
   turnCounter: number;
   sanctuaries: Sanctuary[];
   castles: Castle[];
+  graveyard: Piece[];
+  phoenixRecords: PhoenixRecord[];
+  promotionPending: Piece | null;
+  victoryPoints?: { w: number; b: number };
   sanctuarySettings?: { unlockTurn: number; cooldown: number };
   sanctuaryPool?: SanctuaryType[];
   diagnostics?: ReplayDiagnostic[];
@@ -57,6 +62,10 @@ export function loadPGNText(pgn: string): PGNLoadResult | null {
       board,
       pieces: finalState.pieces,
       castles: finalState.castles,
+      graveyard: finalState.graveyard,
+      phoenixRecords: finalState.phoenixRecords,
+      promotionPending: finalState.promotionPending ?? null,
+      victoryPoints: finalState.victoryPoints,
       sanctuaries: finalState.sanctuaries,
       moveTree: finalState.moveTree!,
       turnCounter: finalState.turnCounter,
@@ -70,6 +79,9 @@ export function loadPGNText(pgn: string): PGNLoadResult | null {
       board,
       pieces: startPieces,
       castles: board.castles,
+      graveyard: [],
+      phoenixRecords: [],
+      promotionPending: null,
       sanctuaries: startSanctuaries,
       moveTree: new MoveTree(),
       turnCounter: setup.turnCounter ?? 0,

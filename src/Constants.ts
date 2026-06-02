@@ -155,6 +155,7 @@ export const ATTACK_PHASE_END = 4;      // Indices 2-3 are Attack (index 4 is Re
 
 // Castle generation default
 export const DEFAULT_CASTLES_PER_SIDE = 3;
+export const CASTLE_RECRUITMENT_COOLDOWN_TURNS = 3;
 export enum GameResult {
   WhiteWins = "1-0",
   BlackWins = "0-1",

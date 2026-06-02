@@ -19,8 +19,8 @@ const boardConfig: BoardConfig = {
 };
 
 const castles = [
-  new Castle(new Hex(-5, 5, 0), "w", 2, true, "w"),
-  new Castle(new Hex(5, -5, 0), "b", 1, false, "b"),
+  new Castle(new Hex(-5, 5, 0), "w", 2, true, "w", 1),
+  new Castle(new Hex(5, -5, 0), "b", 1, false, "b", 3),
 ];
 
 const pieces = [
@@ -49,6 +49,7 @@ const setup: GameSetup = {
     turns_controlled: castle.turns_controlled,
     used_this_turn: castle.used_this_turn,
     owner: castle.owner,
+    recruitment_cooldown: castle.recruitment_cooldown,
   })),
   pieces: pieces.map((piece) => ({
     type: piece.type,
@@ -122,6 +123,7 @@ describe("PGN setup round-trip", () => {
       turns_controlled: c.turns_controlled,
       used_this_turn: c.used_this_turn,
       owner: c.owner,
+      recruitment_cooldown: c.recruitment_cooldown,
     }))).toEqual(setup.castles);
     expect(reconstructed.pieces.map(p => ({ type: p.type, q: p.hex.q, r: p.hex.r, s: p.hex.s, color: p.color }))).toEqual(setup.pieces);
     expect(reconstructed.sanctuaries.map(s => ({

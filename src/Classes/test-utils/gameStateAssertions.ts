@@ -34,6 +34,7 @@ const castleKey = (castle: Castle): string =>
     castle.hex.getKey(),
     `turns=${castle.turns_controlled}`,
     `used=${castle.used_this_turn}`,
+    `recruitmentCooldown=${castle.recruitment_cooldown}`,
   ].join(":");
 
 const sanctuaryKey = (sanctuary: Sanctuary): string =>

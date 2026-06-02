@@ -2025,6 +2025,80 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByRole("button", { name: "Cancel Challenge" })).toBeInTheDocument();
   });
 
+  it("auto-refreshes pending challenger challenges until the game is ready", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_auto&challengeRole=challenger#challengeToken=secret"
+    );
+    const pendingResponse = {
+      protocolVersion: 1,
+      role: "challenger",
+      summary: {
+        schemaVersion: 1,
+        challengeId: "challenge_auto",
+        challengerIdentity: { kind: "session", id: "challenge_auto_challenger" },
+        challengedIdentity: { kind: "session", id: "challenge_auto_challenged" },
+        challengerSeat: "w",
+        visibility: "unlisted",
+        setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+        createdAt: "2026-06-01T12:00:00.000Z",
+        updatedAt: "2026-06-01T12:00:00.000Z",
+        expiresAt: "2026-06-02T12:00:00.000Z",
+        status: "pending",
+        lastEventId: "challenge_evt_created",
+      },
+    };
+    const acceptedResponse = {
+      protocolVersion: 1,
+      role: "challenger",
+      summary: {
+        ...pendingResponse.summary,
+        status: "accepted",
+        gameId: "game_from_challenge_auto",
+        updatedAt: "2026-06-01T12:01:00.000Z",
+        acceptedAt: "2026-06-01T12:01:00.000Z",
+        acceptedBy: { kind: "session", id: "challenge_auto_challenged" },
+        whiteIdentity: { kind: "session", id: "challenge_auto_challenger" },
+        blackIdentity: { kind: "session", id: "challenge_auto_challenged" },
+        lastEventId: "challenge_evt_accepted",
+      },
+      gameInvite: {
+        gameId: "game_from_challenge_auto",
+        seat: "w",
+        token: "join-token",
+        url: "https://castles.example/?onlineGame=game_from_challenge_auto&seat=w&token=join-token",
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(pendingResponse), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(acceptedResponse), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Refresh Challenge" });
+
+    await waitFor(
+      () => {
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole("button", { name: "Join Game" })).toBeInTheDocument();
+      },
+      { timeout: 2500 }
+    );
+  });
+
   it("restores the challenger share link after a tokenless challenge reload", async () => {
     const challenge = {
       challengeId: "challenge_restore",

@@ -10,7 +10,7 @@ export class CastleGenerator {
    * @param count Number of castles per player
    * @returns Array of Castle objects
    */
-  public static generateRandomCastles(board: Board, count: number): Castle[] {
+  public static generateRandomCastles(board: Board, count: number, random: () => number = Math.random): Castle[] {
     // Exclude hexes at distance <=1 from edge (back two rows)
     // Edge hexes have |q|, |r|, or |s| === NSquares
     // Distance 1 from edge means |coord| >= NSquares - 1
@@ -34,7 +34,7 @@ export class CastleGenerator {
     for (let i = 0; i < count; i++) {
         if (validHexes.length === 0) break;
         
-        const randomIndex = Math.floor(Math.random() * validHexes.length);
+        const randomIndex = Math.floor(random() * validHexes.length);
         const hex = validHexes[randomIndex];
         
         selectedHexes.push(hex);

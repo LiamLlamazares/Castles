@@ -145,7 +145,8 @@ export class PGNImporter {
               color: c[3] === 0 ? 'w' : 'b',
               turns_controlled: c[4] ?? 0,
               used_this_turn: c[5] === 1,
-              owner: c[6] === undefined ? (c[3] === 0 ? 'w' : 'b') : (c[6] === 0 ? 'w' : 'b')
+              owner: c[6] === undefined ? (c[3] === 0 ? 'w' : 'b') : (c[6] === 0 ? 'w' : 'b'),
+              recruitment_cooldown: c[7] ?? 0
           })),
           pieces: compact.p.map(p => ({
               type: p[0],
@@ -192,7 +193,8 @@ export class PGNImporter {
             c.color,
             c.turns_controlled ?? 0,
             c.used_this_turn ?? false,
-            c.owner ?? c.color
+            c.owner ?? c.color,
+            c.recruitment_cooldown ?? 0
         ));
         
         const board = new Board(setup.boardConfig, castles);

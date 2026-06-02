@@ -168,8 +168,7 @@ export class AIContextBuilder {
     // Get controlled castles that can recruit (owned, not used this turn)
     const controlledCastles = gameState.castles.filter(
       (c) =>
-        c.owner === myColor &&
-        !c.used_this_turn
+        RuleEngine.castleCanRecruitForActivePlayer(c, myColor)
     );
 
     const occupiedSet = new Set(gameState.pieces.map((p) => p.hex.getKey()));
