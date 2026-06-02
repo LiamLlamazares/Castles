@@ -157,9 +157,19 @@ Phase 6R Lobby setup prompt polish, 2026-06-02:
 - Lobby empty copy now points back to that setup panel and no longer references hidden matchmaking controls when no Play setup exists.
 - `Create Lobby Listing` keeps the same direct current-setup listing behavior, but the visible label is clearer than `List Current Setup`.
 
+Phase 6S Online lobby visual clarity, 2026-06-02:
+
+- Open lobby listings now sit directly below the setup/owned-listing panels, so the lobby filters visibly apply to the next list rather than to the Watch preview.
+- Closed owned listings are status-only panels. The page keeps one create/list path in the current-setup panel and no longer shows a duplicate terminal `Create New Listing` action.
+- Lobby side copy now says `Creator side`, and fixed-side listings explain the acceptor's side. Castle-control listings are rendered and searchable instead of only showing Victory-points scoring.
+- Quick Match copy now describes the actual open-listing flow instead of implying account/rating-style matchmaking.
+- The lobby surface uses quieter panel styling while keeping Watch and Online Archive separate from unsupported ratings, thumbnails, accounts, chat, and spectator-count features.
+- Reviewer cleanup added visible focus styling for closed owner panels, corrected accepted random-side owner copy, aligned search tokens with visible row metadata, and made scoring filter accessibility labels generic.
+- Final verification passed the full automated suite, client build, server build, diff check, browser online smoke, and Playwright screenshot/layout audit at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640. Screenshot artifacts are in `artifacts/ui-audit/phase6s-online-lobby`.
+
 Next product slices accepted from reviewers:
 
-- Redesign Lobby toward a quieter, more list-like page: split "Find listings" filters from "Play from current setup" actions, reduce card/shadow weight, keep actual listings/live games prominent, and decide whether lobby-created games should be public in Watch by default.
+- Add server-backed live-game preview fields before showing board thumbnails, side-to-move, last move, clocks, spectator counts, ratings, or a true TV-style featured game.
 - Continue Learn course polish with authored objective ids, richer lesson theory, and only add engine-graded objectives when the target board state is explicit and tested.
 - Improve navigation clarity in later slices by reducing duplicated online entry points where possible and continuing to separate private player links from public spectator/share actions.
 

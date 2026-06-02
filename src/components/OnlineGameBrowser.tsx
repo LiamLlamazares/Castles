@@ -129,19 +129,30 @@ function matchesResultFilter(summary: OnlineGameSummary, resultFilter: OnlineBro
 }
 
 function seekSearchText(summary: OpenSeekSummary): string {
+  const sideLabel = formatSeekSideLabel(summary.creatorSeat);
+  const sideDetail = formatSeekSideDetail(summary, false);
+  const clock = formatSeekClock(summary);
+  const scoring = formatSeekScoringLabel(summary);
   return [
     summary.seekId,
     summary.creatorSeat,
+    sideLabel,
+    sideDetail,
     summary.status,
     summary.setup.board.config.nSquares,
+    clock,
     summary.setup.timeControl ? `${summary.setup.timeControl.initial}+${summary.setup.timeControl.increment}` : "casual",
-    summary.setup.gameRules?.vpModeEnabled ? "victory points" : "",
+    scoring,
   ].join(" ").toLowerCase();
 }
 
 function formatSeekClock(summary: OpenSeekSummary): string {
   const clock = summary.setup.timeControl;
   return clock ? `Timed ${clock.initial}+${clock.increment}` : "Casual";
+}
+
+function formatSeekScoringLabel(summary: OpenSeekSummary): string {
+  return summary.setup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control";
 }
 
 function formatSeekExpiresAt(value: string): string {
@@ -179,6 +190,23 @@ function formatSeekSideLabel(side: OpenSeekSummary["creatorSeat"]): string {
     default:
       return side;
   }
+}
+
+function formatSeekSideDetail(summary: OpenSeekSummary, owned: boolean): string {
+  if (summary.creatorSeat === "random") return "Creator side Random";
+  const creatorSide = formatSeekSideLabel(summary.creatorSeat);
+  if (owned) return `You play ${creatorSide}`;
+  return summary.creatorSeat === "w"
+    ? "Creator plays White; you play Black"
+    : "Creator plays Black; you play White";
+}
+
+function formatOwnedSeekSideDetail(response: OpenSeekResponse): string {
+  if (response.summary.creatorSeat !== "random") {
+    return formatSeekSideDetail(response.summary, true);
+  }
+  if (!response.gameInvite) return "Creator side Random";
+  return `You play ${formatSeekSideLabel(response.gameInvite.seat)}`;
 }
 
 function compareOpenSeekNewest(left: OpenSeekSummary, right: OpenSeekSummary): number {
@@ -255,6 +283,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
+  const closedOwnedSeekPanelRef = React.useRef<HTMLElement>(null);
 
   React.useEffect(() => {
     if (activeTab === undefined) {
@@ -291,6 +320,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (!visibleOwnedSeekResponse?.summary) return;
     ownedSeekPanelRef.current?.focus();
   }, [visibleOwnedSeekResponse?.summary, quickMatchStatus]);
+
+  React.useEffect(() => {
+    if (!closedOwnedSeekResponse?.summary) return;
+    closedOwnedSeekPanelRef.current?.focus();
+  }, [closedOwnedSeekResponse?.summary]);
 
   React.useEffect(() => {
     const status = ownedSeekResponse?.summary.status;
@@ -596,15 +630,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     isSeekLoadInFlight;
   const quickMatchMessage =
     quickMatchStatus === "pending"
-      ? "Checking compatible lobby listings..."
+      ? "Checking open lobby listings..."
       : quickMatchStatus === "matched"
         ? "Match found. Opening game..."
         : quickMatchStatus === "waiting"
-          ? "No compatible lobby listing found. Your game is listed in the Lobby for someone to accept."
+          ? "No open listing for this setup found. Your setup is listed in the Lobby for someone to accept."
           : quickMatchStatus === "error"
             ? "Could not start quick match."
             : "";
-  const createSeekMessage = createSeekPending ? "Listing current setup in the Lobby..." : "";
+  const createSeekMessage = createSeekPending ? "Creating lobby listing from current setup..." : "";
 
   const renderPublicGameRow = (
     game: OnlineGameSummary,
@@ -870,13 +904,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <div className="online-browser-control-title">Find lobby listings</div>
             <div className="online-browser-filter-grid">
               <label className="online-browser-select">
-                <span>Side</span>
+                <span>Creator side</span>
                 <select
-                  aria-label="Lobby side filter"
+                  aria-label="Lobby creator side filter"
                   value={seekSideFilter}
                   onChange={(event) => setSeekSideFilter(event.currentTarget.value as OpenSeekSideFilter)}
                 >
-                  <option value="all">All sides</option>
+                  <option value="all">All creator sides</option>
                   <option value="random">Random</option>
                   <option value="w">White</option>
                   <option value="b">Black</option>
@@ -897,7 +931,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               <label className="online-browser-select">
                 <span>Scoring</span>
                 <select
-                  aria-label="Lobby victory points filter"
+                  aria-label="Lobby scoring filter"
                   value={seekVpFilter}
                   onChange={(event) => setSeekVpFilter(event.currentTarget.value as OpenSeekVpFilter)}
                 >
@@ -973,7 +1007,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             aria-label={tab === "lobby" ? "Search lobby listings" : "Search public games"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={tab === "lobby" ? "Listing id, side, clock, or scoring" : "Player or game id"}
+            placeholder={tab === "lobby" ? "Listing id, creator side, clock, or scoring" : "Player or game id"}
           />
         </label>
       </section>
@@ -1016,7 +1050,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <main className="online-browser-list" aria-label="Online lobby">
             <section
               className={`online-browser-quick-match-panel ${hasCurrentSetupActions ? "" : "setup-needed"}`}
-              aria-label={hasCurrentSetupActions ? "Play from current setup" : "Set up matchmaking"}
+              aria-label={hasCurrentSetupActions ? "Play from current setup" : "Set up lobby play"}
             >
               <div className="online-browser-quick-match-copy">
                 <span className="online-browser-section-kicker">
@@ -1024,12 +1058,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </span>
                 <strong>
                   {hasCurrentSetupActions
-                    ? "Find a match with your current Play setup"
-                    : "Choose a Play setup before matchmaking"}
+                    ? "Try open listings with your current Play setup"
+                    : "Choose a Play setup before lobby play"}
                 </strong>
                 <p>
                   {hasCurrentSetupActions
-                    ? "Lobby filters search existing listings. Quick Match and Create Lobby Listing use your current board, pieces, sanctuaries, pool, theme, clock, and scoring mode."
+                    ? "Quick Match tries open listings for this setup, then lists yours if none are available. Filters only change the listings below."
                     : "Quick Match and lobby listings use the board, pieces, clock, and scoring from Play."}
                 </p>
               </div>
@@ -1050,7 +1084,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         className="online-browser-button primary online-browser-quick-match"
                         onClick={() => void runQuickMatch()}
                         disabled={quickMatchDisabled}
-                        aria-label="Quick Match: accept a compatible lobby listing or list yours"
+                        aria-label="Quick Match: try open lobby listings or list yours"
                       >
                         {quickMatchPending ? "Matching..." : quickMatchStatus === "matched" ? "Opening..." : "Quick Match"}
                       </button>
@@ -1072,7 +1106,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     type="button"
                     className="online-browser-button primary online-browser-setup-action"
                     onClick={setupPromptAction}
-                    aria-label="Configure a Play setup for matchmaking"
+                    aria-label="Configure a Play setup for online lobby"
                   >
                     Configure Setup
                   </button>
@@ -1095,8 +1129,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <span className={`online-game-pill ${visibleOwnedSeekResponse.summary.status}`}>
                       {formatSeekStatus(visibleOwnedSeekResponse.summary.status)}
                     </span>
-                    <span>Creator side {formatSeekSideLabel(visibleOwnedSeekResponse.summary.creatorSeat)}</span>
+                    <span>{formatOwnedSeekSideDetail(visibleOwnedSeekResponse)}</span>
                     <span>{formatSeekClock(visibleOwnedSeekResponse.summary)}</span>
+                    <span>{formatSeekScoringLabel(visibleOwnedSeekResponse.summary)}</span>
                     <span>Expires {formatSeekExpiresAt(visibleOwnedSeekResponse.summary.expiresAt)}</span>
                   </div>
                 </div>
@@ -1141,6 +1176,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               <section
                 className="online-browser-closed-listing"
                 aria-label="Closed lobby listing"
+                ref={closedOwnedSeekPanelRef}
+                tabIndex={-1}
               >
                 <div className="online-browser-quick-match-copy">
                   <span className="online-browser-section-kicker">Lobby listing closed</span>
@@ -1156,30 +1193,84 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <span>{closedOwnedSeekResponse.summary.seekId}</span>
                   </div>
                 </div>
-                <div className="online-game-actions">
-                  {hasCurrentSetupActions && onCreateSeek ? (
-                    <button
-                      type="button"
-                      className="online-browser-button primary"
-                      onClick={() => void runCreateSeek()}
-                      disabled={createSeekDisabled}
-                      aria-label="Create a new lobby listing from current Play setup"
-                    >
-                      {createSeekPending ? "Listing..." : "Create New Listing"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="online-browser-button primary"
-                      onClick={setupPromptAction}
-                      aria-label="Configure a Play setup for a new lobby listing"
-                    >
-                      Configure Setup
-                    </button>
-                  )}
-                </div>
               </section>
             )}
+            <section className="online-browser-lobby-listings" aria-label="Open lobby listings">
+              <div className="online-browser-section-header online-browser-section-header-compact">
+                <div>
+                  <span className="online-browser-section-kicker">Lobby</span>
+                  <h2>Open listings</h2>
+                  <p>
+                    {seekStatus === "loading"
+                      ? "Loading lobby listings..."
+                      : `${visibleOpenSeeks.length} open ${visibleOpenSeeks.length === 1 ? "listing" : "listings"}`}
+                  </p>
+                </div>
+              </div>
+              {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
+                <div className="online-browser-empty">
+                  <h2>{hasActiveSeekFilters ? "No lobby listings match these filters." : "No lobby listings yet."}</h2>
+                  <p>
+                    {hasActiveSeekFilters
+                      ? "Try a different creator side, clock, scoring, or search setting."
+                      : hasCurrentSetupActions
+                        ? "Use Quick Match or Create Lobby Listing above, or change setup from Play."
+                        : "Configure setup, then return here to find or create a lobby listing."}
+                  </p>
+                </div>
+              ) : (
+                visibleOpenSeeks.map((seek) => {
+                  const owned = ownedSeekIds.includes(seek.seekId);
+                  const pendingAction = seekActionById[seek.seekId];
+                  const radius = seek.setup.board.config.nSquares;
+                  return (
+                    <article
+                      key={seek.seekId}
+                      className="online-game-row online-seek-row"
+                      aria-label={`Lobby listing ${seek.seekId}`}
+                    >
+                      <div className="online-game-row-main">
+                        <div className="online-game-players">
+                          <strong>Lobby listing</strong>
+                          <span>{seek.seekId}</span>
+                        </div>
+                        <div className="online-game-meta">
+                          <span className="online-game-pill active">Open</span>
+                          <span>{formatSeekSideDetail(seek, owned)}</span>
+                          <span>Board Radius {radius}</span>
+                          <span>Clock {formatSeekClock(seek)}</span>
+                          <span>Scoring {formatSeekScoringLabel(seek)}</span>
+                          <span>Expires {formatSeekExpiresAt(seek.expiresAt)}</span>
+                        </div>
+                      </div>
+                      <div className="online-game-actions">
+                        {owned ? (
+                          <button
+                            type="button"
+                            className="online-browser-button neutral"
+                            onClick={() => void runSeekAction(seek.seekId, "cancel")}
+                            disabled={!onCancelSeek || pendingAction !== undefined || quickMatchBlocking}
+                            aria-label={`Cancel lobby listing ${seek.seekId}`}
+                          >
+                            {pendingAction === "cancel" ? "Cancelling..." : "Cancel"}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="online-browser-button primary"
+                            onClick={() => void runSeekAction(seek.seekId, "accept")}
+                            disabled={!onAcceptSeek || pendingAction !== undefined || quickMatchBlocking}
+                            aria-label={`Accept lobby listing ${seek.seekId}`}
+                          >
+                            {pendingAction === "accept" ? "Accepting..." : "Accept"}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </section>
             <section className="online-browser-live-section" aria-label="Current public games">
               <div className="online-browser-section-header">
                 <div>
@@ -1231,70 +1322,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   )}
                 </div>
               )}
-            </section>
-            <section className="online-browser-lobby-listings" aria-label="Open lobby listings">
-              {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
-                <div className="online-browser-empty">
-                  <h2>{hasActiveSeekFilters ? "No lobby listings match these filters." : "No lobby listings yet."}</h2>
-                  <p>
-                    {hasActiveSeekFilters
-                      ? "Try a different side, clock, scoring, or search setting."
-                      : hasCurrentSetupActions
-                        ? "Use Quick Match or Create Lobby Listing above, or change setup from Play."
-                        : "Configure setup above, then return here to find or list a lobby game."}
-                  </p>
-                </div>
-              ) : visibleOpenSeeks.map((seek) => {
-              const owned = ownedSeekIds.includes(seek.seekId);
-              const pendingAction = seekActionById[seek.seekId];
-              const sideLabel = formatSeekSideLabel(seek.creatorSeat);
-              const radius = seek.setup.board.config.nSquares;
-              return (
-                <article
-                  key={seek.seekId}
-                  className="online-game-row online-seek-row"
-                  aria-label={`Lobby listing ${seek.seekId}`}
-                >
-                  <div className="online-game-row-main">
-                    <div className="online-game-players">
-                      <strong>Lobby listing</strong>
-                      <span>{seek.seekId}</span>
-                    </div>
-                    <div className="online-game-meta">
-                      <span className="online-game-pill active">Open</span>
-                      <span>Creator side {sideLabel}</span>
-                      <span>Board Radius {radius}</span>
-                      <span>Clock {formatSeekClock(seek)}</span>
-                      {seek.setup.gameRules?.vpModeEnabled && <span>Scoring Victory points</span>}
-                      <span>Expires {formatSeekExpiresAt(seek.expiresAt)}</span>
-                    </div>
-                  </div>
-                  <div className="online-game-actions">
-                    {owned ? (
-                      <button
-                        type="button"
-                        className="online-browser-button neutral"
-                        onClick={() => void runSeekAction(seek.seekId, "cancel")}
-                        disabled={!onCancelSeek || pendingAction !== undefined || quickMatchBlocking}
-                        aria-label={`Cancel lobby listing ${seek.seekId}`}
-                      >
-                        {pendingAction === "cancel" ? "Cancelling..." : "Cancel"}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="online-browser-button primary"
-                        onClick={() => void runSeekAction(seek.seekId, "accept")}
-                        disabled={!onAcceptSeek || pendingAction !== undefined || quickMatchBlocking}
-                        aria-label={`Accept lobby listing ${seek.seekId}`}
-                      >
-                        {pendingAction === "accept" ? "Accepting..." : "Accept"}
-                      </button>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
             </section>
           </main>
         )

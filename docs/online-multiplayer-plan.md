@@ -445,6 +445,17 @@ Remaining work:
 - Keep cancelled and expired lobby listings out of public rows and avoid showing dead owner refresh controls.
 - Re-audit Watch and Lobby at desktop/mobile sizes after each new public summary field is added.
 
+## Phase 6S: Online Lobby Visual Clarity
+
+Goal: make Lobby feel quieter and more list-first while preserving the current open-seek backend contract.
+
+Status: implemented and locally verified on 2026-06-02. Open listings now sit before the secondary Watch/current-games preview, so Lobby filters visibly apply to the next list. Closed owned listings are status-only and no longer duplicate the current-setup create action. Creator-side wording is explicit, fixed-side listings explain the acceptor's side, and Castle-control listings are rendered and searchable. Quick Match copy describes the actual "try open listings, otherwise list this setup" behavior without implying ratings, accounts, or a richer matchmaking queue. Reviewer cleanup added visible terminal-panel focus, corrected accepted random-side owner copy, aligned search tokens with visible row metadata, and made scoring filter accessibility labels generic. Full verification passed `npm test`, `npm run build`, `npm run server:build`, `git diff --check`, browser online smoke, and Playwright screenshot/layout audit at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640. Screenshot artifacts are in `artifacts/ui-audit/phase6s-online-lobby`.
+
+Remaining work:
+
+- Add server-backed live-game preview fields before introducing board thumbnails, side-to-move, last move, clocks, spectator counts, ratings, or a true TV-style featured game.
+- Decide later whether the compact Watch preview belongs in Lobby once Watch has richer scan controls.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -481,8 +492,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Commit and push the verified Phase 6K changeset if it is not already on the remote.
-2. Start Phase 6L UI polish after Phase 6K lands, using Lichess as a benchmark with Castles-specific improvements.
-3. Re-audit sidebar shape, tutorial/Learn placement, return navigation, save/progress clarity, and all overlap-prone controls across desktop and mobile.
-4. Before adding accounts, ratings, chat, or moderation UI, run a fresh benchmark and contract review so the UI does not imply unsupported server features.
+1. Commit and push Phase 6S after the final diff check.
+2. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
+3. Plan the next backend-backed public read-model slice for live preview fields before adding thumbnails, clocks, spectator counts, ratings, or TV-style ranking.
+4. Continue Learn course polish with authored objective ids and richer theory, but add engine-graded progress only after objective board states are explicit and tested.
 5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, save modal overlays, and long online status/error text.

@@ -166,13 +166,119 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Creator side Random");
     expect(row).toHaveTextContent("Radius 7");
     expect(row).toHaveTextContent("Timed 20+20");
-    expect(row).toHaveTextContent("Victory points");
+    expect(row).toHaveTextContent("Scoring Victory points");
     expect(within(row).getByRole("button", { name: "Accept lobby listing seek_public_open" })).toBeInTheDocument();
     const currentGames = screen.getByRole("region", { name: "Current public games" });
     expect(within(currentGames).getByText("game_lobby_live")).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Spectate Ada vs Ben, game_lobby_live" })).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Open Watch tab" })).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Refresh live public games" })).toHaveTextContent("Refresh live games");
+  });
+
+  it("keeps listing filters adjacent to open listings even when live games exist", async () => {
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_before_filter" })]))
+      .mockResolvedValue(seekDirectory([]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({ gameId: "game_live_below_listings", version: 10 }),
+        ]))}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    await screen.findByText("seek_before_filter");
+    fireEvent.change(screen.getByRole("combobox", { name: "Lobby creator side filter" }), {
+      target: { value: "w" },
+    });
+
+    expect(await screen.findByText("No lobby listings match these filters.")).toBeInTheDocument();
+    expect(screen.getByText("game_live_below_listings")).toBeInTheDocument();
+    const listings = screen.getByRole("region", { name: "Open lobby listings" });
+    const currentGames = screen.getByRole("region", { name: "Current public games" });
+    expect(Boolean(listings.compareDocumentPosition(currentGames) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
+  it("renders and searches Castle-control listings explicitly", async () => {
+    const castleControlSeek = openSeek({ seekId: "seek_castle_control" });
+    castleControlSeek.setup.gameRules = { vpModeEnabled: false };
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([castleControlSeek]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: /Lobby listing seek_castle_control/i });
+    expect(row).toHaveTextContent("Scoring Castle control");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search lobby listings" }), {
+      target: { value: "castle control" },
+    });
+
+    expect(screen.getByRole("article", { name: /Lobby listing seek_castle_control/i })).toBeInTheDocument();
+  });
+
+  it("explains fixed creator-side listings from the acceptor's point of view", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({ seekId: "seek_creator_white", creatorSeat: "w" }),
+          openSeek({ seekId: "seek_creator_black", creatorSeat: "b" }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("seek_creator_white")).toBeInTheDocument();
+    expect(screen.getByText("Creator plays White; you play Black")).toBeInTheDocument();
+    expect(screen.getByText("Creator plays Black; you play White")).toBeInTheDocument();
+  });
+
+  it("searches lobby listings by visible creator side and clock labels", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({ seekId: "seek_creator_white_timed", creatorSeat: "w" }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("seek_creator_white_timed")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search lobby listings" }), {
+      target: { value: "creator plays white" },
+    });
+
+    expect(screen.getByRole("article", { name: /Lobby listing seek_creator_white_timed/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search lobby listings" }), {
+      target: { value: "timed" },
+    });
+
+    expect(screen.getByRole("article", { name: /Lobby listing seek_creator_white_timed/i })).toBeInTheDocument();
   });
 
   it("opens the Watch tab from the Lobby current-games section", async () => {
@@ -297,16 +403,16 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("seek_public_open");
     expect(screen.getByRole("region", { name: "Play from current setup" })).toBeInTheDocument();
-    expect(screen.getByText("Find a match with your current Play setup")).toBeInTheDocument();
+    expect(screen.getByText("Try open listings with your current Play setup")).toBeInTheDocument();
     const setupSummary = screen.getByLabelText("Quick match setup summary");
     expect(within(setupSummary).getByText("Radius 7")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Timed 20+20")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Victory points")).toBeInTheDocument();
-    expect(screen.getByText(/Lobby filters search existing listings\. Quick Match and Create Lobby Listing use your current board/i))
+    expect(screen.getByText(/Quick Match tries open listings for this setup, then lists yours/i))
       .toBeInTheDocument();
 
     const quickMatch = screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     });
     fireEvent.click(quickMatch);
 
@@ -315,13 +421,13 @@ describe("OnlineGameBrowser", () => {
     const createListing = screen.getByRole("button", { name: "Create public lobby listing from current Play setup" });
     expect(createListing).toHaveTextContent("Create Lobby Listing");
     expect(createListing).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent("Checking compatible lobby listings");
+    expect(screen.getByRole("status")).toHaveTextContent("Checking open lobby listings");
 
     await act(async () => {
       resolveQuickMatch();
       await quickMatchPromise;
     });
-    expect(await screen.findByRole("status")).toHaveTextContent(/game is listed in the Lobby/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/setup is listed in the Lobby/i);
   });
 
   it("lists the current setup from the lobby without allowing duplicate clicks", async () => {
@@ -351,7 +457,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(onCreateSeek).toHaveBeenCalledOnce();
     expect(listButton).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent("Listing current setup in the Lobby...");
+    expect(screen.getByRole("status")).toHaveTextContent("Creating lobby listing from current setup...");
 
     await act(async () => {
       resolveCreate();
@@ -378,12 +484,12 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("seek_public_open");
     fireEvent.click(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("Match found. Opening game...");
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Create public lobby listing from current Play setup" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Refresh lobby listings" })).toBeDisabled();
@@ -423,14 +529,14 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     const quickMatch = screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     });
     quickMatch.focus();
     await user.keyboard("{Enter}");
 
     const ownerPanel = await screen.findByRole("region", { name: "Your lobby listing" });
     expect(screen.getByRole("status")).toHaveTextContent(
-      "No compatible lobby listing found. Your game is listed in the Lobby for someone to accept."
+      "No open listing for this setup found. Your setup is listed in the Lobby for someone to accept."
     );
     expect(ownerPanel).toHaveFocus();
   });
@@ -467,7 +573,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     fireEvent.click(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     }));
     expect(await screen.findByRole("status")).toHaveTextContent(/listed in the Lobby for someone to accept/);
 
@@ -539,7 +645,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     fireEvent.click(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     }));
     expect(await screen.findByRole("status")).toHaveTextContent(/listed in the Lobby for someone to accept/);
 
@@ -571,7 +677,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     const quickMatch = screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     });
     quickMatch.focus();
     fireEvent.click(quickMatch);
@@ -599,7 +705,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     })).toBeDisabled();
 
     rerender(
@@ -620,7 +726,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     })).toBeDisabled();
 
     rerender(
@@ -649,7 +755,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
     expect(screen.getByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     })).toBeDisabled();
   });
 
@@ -695,13 +801,13 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("seek_initial");
-    fireEvent.change(screen.getByRole("combobox", { name: "Lobby side filter" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Lobby creator side filter" }), {
       target: { value: "w" },
     });
     fireEvent.change(screen.getByRole("combobox", { name: "Lobby clock filter" }), {
       target: { value: "timed" },
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "Lobby victory points filter" }), {
+    fireEvent.change(screen.getByRole("combobox", { name: "Lobby scoring filter" }), {
       target: { value: "enabled" },
     });
 
@@ -1105,6 +1211,48 @@ describe("OnlineGameBrowser", () => {
     expect(onJoinOwnedSeek).toHaveBeenCalledOnce();
   });
 
+  it("shows the concrete owned side after a random-side listing is accepted", async () => {
+    const acceptedRandom = openSeek({
+      seekId: "seek_random_accepted_side",
+      creatorSeat: "random",
+      status: "accepted",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      acceptedAt: "2026-06-01T12:04:00.000Z",
+      acceptedBy: { kind: "session", id: "seek_random_acceptor" },
+      gameId: "game_random_accepted_side",
+      whiteIdentity: { kind: "session", id: "seek_random_creator" },
+      blackIdentity: { kind: "session", id: "seek_random_acceptor" },
+      lastEventId: "seek_random_accepted_side_evt",
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        ownedSeekIds={["seek_random_accepted_side"]}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: acceptedRandom,
+          gameInvite: {
+            gameId: "game_random_accepted_side",
+            seat: "b",
+            token: "creator-token",
+            url: "https://castles.example/?onlineGame=game_random_accepted_side&seat=b&token=creator-token",
+          },
+        }}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onJoinOwnedSeek={vi.fn()}
+      />
+    );
+
+    const panel = await screen.findByRole("region", { name: "Your lobby listing" });
+    expect(panel).toHaveTextContent("You play Black");
+    expect(panel).not.toHaveTextContent("Creator side Random");
+  });
+
   it.each(["cancelled", "expired"] as const)(
     "does not render dead owner controls for %s lobby listings",
     async (status) => {
@@ -1135,6 +1283,8 @@ describe("OnlineGameBrowser", () => {
           onAcceptSeek={vi.fn()}
           onCancelSeek={vi.fn()}
           onRefreshOwnedSeek={vi.fn()}
+          onCreateSeek={vi.fn()}
+          onQuickMatch={vi.fn()}
         />
       );
 
@@ -1145,9 +1295,64 @@ describe("OnlineGameBrowser", () => {
       expect(closedPanel).toHaveTextContent(`seek_${status}`);
       expect(screen.queryByRole("region", { name: "Your lobby listing" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Refresh your lobby listing" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel your lobby listing" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Create a new lobby listing from current Play setup" })).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Create public lobby listing from current Play setup" })).toHaveLength(1);
       expect(screen.getByRole("status")).toHaveTextContent("Your previous lobby listing is closed and no longer public.");
     }
   );
+
+  it("moves focus to the closed listing panel when owner controls disappear", async () => {
+    const openOwnedSeek = openSeek({ seekId: "seek_focus_terminal" });
+    const closedOwnedSeek = openSeek({
+      seekId: "seek_focus_terminal",
+      status: "cancelled",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      cancelledAt: "2026-06-01T12:04:00.000Z",
+      cancelledBy: { kind: "session", id: "seek_focus_terminal_creator" },
+    });
+    const props = {
+      initialTab: "lobby" as const,
+      loadOpenSeeks: vi.fn().mockResolvedValue(seekDirectory([])),
+      ownedSeekIds: ["seek_focus_terminal"],
+      onBack: vi.fn(),
+      onSpectate: vi.fn(),
+      onReplay: vi.fn(),
+      onAcceptSeek: vi.fn(),
+      onCancelSeek: vi.fn(),
+      onRefreshOwnedSeek: vi.fn().mockResolvedValue(undefined),
+      onCreateSeek: vi.fn(),
+      onQuickMatch: vi.fn(),
+    };
+    const { rerender } = render(
+      <OnlineGameBrowser
+        {...props}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: openOwnedSeek,
+        }}
+      />
+    );
+
+    const openPanel = await screen.findByRole("region", { name: "Your lobby listing" });
+    const refresh = within(openPanel).getByRole("button", { name: "Refresh your lobby listing" });
+    refresh.focus();
+    expect(refresh).toHaveFocus();
+
+    rerender(
+      <OnlineGameBrowser
+        {...props}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: closedOwnedSeek,
+        }}
+      />
+    );
+
+    const closedPanel = await screen.findByRole("region", { name: "Closed lobby listing" });
+    await waitFor(() => expect(closedPanel).toHaveFocus());
+    expect(screen.queryByRole("button", { name: "Refresh your lobby listing" })).not.toBeInTheDocument();
+  });
 
   it("loads the public directory for the active tab state", async () => {
     const loadGames = vi.fn().mockResolvedValue(directory([]));
@@ -1213,17 +1418,17 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
 
-    expect(screen.getByRole("region", { name: "Set up matchmaking" })).toBeInTheDocument();
-    expect(screen.getByText("Choose a Play setup before matchmaking")).toBeInTheDocument();
-    expect(screen.getByText("Configure setup above, then return here to find or list a lobby game.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Set up lobby play" })).toBeInTheDocument();
+    expect(screen.getByText("Choose a Play setup before lobby play")).toBeInTheDocument();
+    expect(screen.getByText("Configure setup, then return here to find or create a lobby listing.")).toBeInTheDocument();
     expect(screen.queryByRole("button", {
-      name: "Quick Match: accept a compatible lobby listing or list yours",
+      name: "Quick Match: try open lobby listings or list yours",
     })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", {
       name: "Create public lobby listing from current Play setup",
     })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Configure a Play setup for matchmaking" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure a Play setup for online lobby" }));
 
     expect(onConfigureSetup).toHaveBeenCalledOnce();
     expect(onOpenGame).not.toHaveBeenCalled();

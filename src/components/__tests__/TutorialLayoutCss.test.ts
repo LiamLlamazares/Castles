@@ -151,6 +151,10 @@ describe("Tutorial mobile layout CSS", () => {
     expect(onlineCss).not.toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
     expect(onlineCss).toContain(".online-browser-visually-hidden");
     expect(onlineCss).toContain("clip: rect(0 0 0 0) !important;");
+    expect(onlineCss).toContain(".online-browser-section-header-compact");
+    expect(onlineCss).toContain(".online-browser-lobby-listings + .online-browser-live-section");
+    expect(onlineCss).toMatch(/\.online-browser-quick-match-panel\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.035\);/s);
+    expect(onlineCss).toMatch(/\.online-browser-select select:focus-visible,\s*\.online-seek-owner-panel:focus-visible,\s*\.online-browser-closed-listing:focus-visible\s*\{[^}]*outline:\s*3px solid #91d6c5;/s);
   });
 
   it("gives Watch a featured live-game layout that collapses on mobile", () => {
