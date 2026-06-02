@@ -2,7 +2,7 @@ import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { CASTLE_RECRUITMENT_COOLDOWN_TURNS, PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { TutorialLesson } from '../types';
 
@@ -15,11 +15,12 @@ export function createM4L2(): TutorialLesson {
   const board = new Board(boardConfig, castles);
   const pieces = [PieceFactory.create(PieceType.Swordsman, new Hex(3, -3, 0), 'w')];
   const layout = getStartingLayout(board);
+  const cycleText = 'Swordsman -> Archer -> Knight -> Eagle -> Giant -> Trebuchet -> Assassin -> Dragon -> Monarch';
 
   return {
     id: 'm4_l2_recruitment',
     title: '4.2 Recruitment cycle',
-    description: 'Recruitment happens only from enemy castles you have captured. Your own starting castles do not produce recruits, even if you lose and retake them later. The castle cycle is Swordsman -> Archer -> Knight -> Eagle -> Giant -> Trebuchet -> Assassin -> Dragon -> Monarch, then repeats.',
+    description: `Recruitment happens only from enemy castles you have captured. Your own starting castles do not produce recruits, even if you lose and retake them later. After recruiting, that castle waits ${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns before it can recruit again. Capturing a castle clears any current recruitment cooldown for the new controller. The castle cycle is ${cycleText}, then repeats.`,
     board,
     pieces,
     layout,
@@ -31,9 +32,10 @@ export function createM4L2(): TutorialLesson {
       'You are already in the Castles phase from the captured black-side castle.',
       'River hexes are not legal recruitment targets.',
       'The captured castle stays under White control even if the Swordsman leaves.',
-      'The cycle is Swordsman -> Archer -> Knight -> Eagle -> Giant -> Trebuchet -> Assassin -> Dragon -> Monarch, then repeats.',
+      `After this recruitment, the captured castle waits ${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns before it can recruit again.`,
+      `The cycle is ${cycleText}, then repeats.`,
       'Only empty, non-river adjacent hexes are valid recruitment squares.',
     ],
-    instructions: 'You are already in the Castles phase. Recruit from the captured enemy castle on the black side and check the piece-symbol -> piece-symbol cycle in the tooltip.',
+    instructions: `You are already in the Castles phase. Recruit from the captured enemy castle on the black side and check the piece-symbol -> piece-symbol cycle in the tooltip. The castle then enters a ${CASTLE_RECRUITMENT_COOLDOWN_TURNS}-owner-turn cooldown.`,
   };
 }

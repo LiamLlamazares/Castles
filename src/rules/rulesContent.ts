@@ -1,6 +1,7 @@
 import {
   AbilityType,
   AttackType,
+  CASTLE_RECRUITMENT_COOLDOWN_TURNS,
   PHOENIX_RESPAWN_TURNS,
   PieceType,
   PROMOTABLE_TYPES,
@@ -92,7 +93,7 @@ export const phaseRules: RuleText[] = [
   },
   {
     title: "Turn reset",
-    text: "At the start of each player turn, all pieces regain move and attack availability, temporary damage is cleared from all pieces, and all castles become available again.",
+    text: "At the start of each player turn, all pieces regain move and attack availability and temporary damage is cleared from all pieces. Castle recruitment cooldowns drop only at the start of that castle controller's turn.",
   },
 ];
 
@@ -172,11 +173,11 @@ export const castleRules: RuleText[] = [
   },
   {
     title: "Capturing an empty castle",
-    text: "An enemy-controlled empty castle can be attacked during the Attack phase. The attacker moves onto the castle and control changes to the attacker's side.",
+    text: "An enemy-controlled empty castle can be attacked during the Attack phase. The attacker moves onto the castle, control changes to the attacker's side, and any recruitment cooldown is cleared for the new controller.",
   },
   {
     title: "Capturing a piece on a castle",
-    text: "If you capture an enemy piece standing on a castle, control of that castle changes to your side.",
+    text: "If you capture an enemy piece standing on a castle, control of that castle changes to your side and any recruitment cooldown is cleared for you.",
   },
   {
     title: "Recruitment source",
@@ -203,15 +204,15 @@ export const recruitmentCycle: PieceType[] = [
 export const recruitmentDetailRules: RuleText[] = [
   {
     title: "Eligibility",
-    text: "A castle can recruit during your Castles phase only if it is an enemy starting castle, you currently control it, it has not recruited this phase, and it has a valid adjacent spawn hex.",
+    text: "A castle can recruit during your Castles phase only if it is an enemy starting castle, you currently control it, it has not recruited this phase, it is not on cooldown, and it has a valid adjacent spawn hex.",
   },
   {
-    title: "One use",
-    text: "Each eligible castle can recruit once during your Castles phase.",
+    title: "Recruitment cooldown",
+    text: `Each eligible castle can recruit once during your Castles phase. After it recruits, that castle waits ${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns before it can recruit again.`,
   },
   {
     title: "Castle counter",
-    text: "Each castle has its own recruitment counter. The counter advances only when that castle recruits and does not reset when ownership changes.",
+    text: "Each castle has its own recruitment counter. The counter advances only when that castle recruits and does not reset when ownership changes; only the temporary cooldown clears when the castle is captured by a new controller.",
   },
   {
     title: "Cycle",
@@ -401,7 +402,7 @@ export const commonBlockerRules: RuleText[] = [
   },
   {
     title: "Cannot recruit",
-    text: "The castle may be your own starting castle, not controlled by you, already used this phase, or lacking an adjacent empty non-river, non-castle spawn hex.",
+    text: "The castle may be your own starting castle, not controlled by you, already used this phase, on cooldown, or lacking an adjacent empty non-river, non-castle spawn hex.",
   },
   {
     title: "Cannot promote",

@@ -1,10 +1,12 @@
-import { PieceType } from "../../Constants";
+import { CASTLE_RECRUITMENT_COOLDOWN_TURNS, PieceType } from "../../Constants";
 import {
   allPieceReferenceRows,
   castleRules,
   commonBlockerRules,
   optionalModeRules,
+  phaseRules,
   rangeDetailRules,
+  recruitmentDetailRules,
   sanctuaryDetailRules,
   recruitmentCycle,
   sanctuaryRules,
@@ -38,6 +40,9 @@ describe("rules content", () => {
       "Cannot promote",
       "Cannot pledge",
     ]);
+    expect(commonBlockerRules.find((rule) => rule.title === "Cannot recruit")?.text).toContain(
+      "on cooldown"
+    );
     expect(optionalModeRules[0].text).toContain("4 castles");
     expect(optionalModeRules[0].text).toContain("First to 10 VP");
   });
@@ -48,6 +53,24 @@ describe("rules content", () => {
     );
     expect(castleRules.find((rule) => rule.title === "Recruitment source")?.text).toContain(
       "enemy starting castles"
+    );
+    expect(castleRules.find((rule) => rule.title === "Capturing an empty castle")?.text).toContain(
+      "recruitment cooldown is cleared"
+    );
+    expect(castleRules.find((rule) => rule.title === "Capturing a piece on a castle")?.text).toContain(
+      "recruitment cooldown is cleared"
+    );
+    expect(phaseRules.find((rule) => rule.title === "Turn reset")?.text).toContain(
+      "that castle controller's turn"
+    );
+    expect(recruitmentDetailRules.find((rule) => rule.title === "Eligibility")?.text).toContain(
+      "not on cooldown"
+    );
+    expect(recruitmentDetailRules.find((rule) => rule.title === "Recruitment cooldown")?.text).toContain(
+      `${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns`
+    );
+    expect(recruitmentDetailRules.find((rule) => rule.title === "Castle counter")?.text).toContain(
+      "cooldown clears"
     );
     expect(sanctuaryDetailRules.find((rule) => rule.title === "Cooldown acceleration")?.text).toContain(
       "non-Swordsman"

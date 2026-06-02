@@ -1,4 +1,4 @@
-import { AbilityType, PieceType } from '../../Constants';
+import { AbilityType, CASTLE_RECRUITMENT_COOLDOWN_TURNS, PieceType } from '../../Constants';
 import { GameEngine } from '../../Classes/Core/GameEngine';
 import { GameState } from '../../Classes/Core/GameState';
 import { MoveTree } from '../../Classes/Core/MoveTree';
@@ -135,6 +135,20 @@ describe('tutorial lesson index', () => {
     expect(lessons.get('m4_l3_pledging')?.initialTurnCounter).toBe(4);
     expect(lessons.get('m5_l2_wolf')?.initialTurnCounter).toBe(0);
     expect(lessons.get('m5_l3_healer')?.initialTurnCounter).toBe(0);
+  });
+
+  it('documents castle recruitment cooldown with the shared value', () => {
+    const lesson = getAllLessons().find((candidate) => candidate.id === 'm4_l2_recruitment');
+    if (!lesson) throw new Error('Missing recruitment lesson');
+
+    const copy = [
+      lesson.description,
+      lesson.instructions,
+      ...(lesson.hints ?? []),
+    ].join(' ');
+
+    expect(copy).toContain(`${CASTLE_RECRUITMENT_COOLDOWN_TURNS} owner-turns`);
+    expect(copy).toContain('Capturing a castle clears any current recruitment cooldown');
   });
 
   it('keeps the early victory lesson inspection-only', () => {
