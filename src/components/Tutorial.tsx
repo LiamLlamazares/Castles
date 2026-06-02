@@ -46,6 +46,18 @@ interface TutorialModuleDescriptor {
   icon: string;
 }
 
+interface PieceLessonShortcut {
+  id: string;
+  piece: PieceType;
+  label: string;
+}
+
+interface TerrainLessonShortcut {
+  id: string;
+  label: string;
+  hexClass: string;
+}
+
 const TUTORIAL_MODULES: TutorialModuleDescriptor[] = [
   {
     key: "m0_",
@@ -83,6 +95,25 @@ const TUTORIAL_MODULES: TutorialModuleDescriptor[] = [
     subtitle: "Special units, abilities, and a practice position.",
     icon: dragonIcon,
   },
+];
+
+const PIECE_LESSONS: PieceLessonShortcut[] = [
+  { id: "m2_l2_swordsman", piece: PieceType.Swordsman, label: "Sword" },
+  { id: "m2_l4_archer", piece: PieceType.Archer, label: "Archer" },
+  { id: "m2_l5_knight", piece: PieceType.Knight, label: "Knight" },
+  { id: "m2_l6_eagle", piece: PieceType.Eagle, label: "Eagle" },
+  { id: "m2_l7_giant", piece: PieceType.Giant, label: "Giant" },
+  { id: "m2_l8_trebuchet", piece: PieceType.Trebuchet, label: "Treb." },
+  { id: "m2_l9_assassin", piece: PieceType.Assassin, label: "Assassin" },
+  { id: "m2_l10_dragon", piece: PieceType.Dragon, label: "Dragon" },
+  { id: "m2_l11_monarch", piece: PieceType.Monarch, label: "Monarch" },
+];
+
+const TERRAIN_LESSONS: TerrainLessonShortcut[] = [
+  { id: "m1_l1_introduction", label: "Castles", hexClass: "hexagon-white-castle" },
+  { id: "m1_l2_terrain_rivers", label: "Rivers", hexClass: "hexagon-river" },
+  { id: "m1_l3_terrain_highground", label: "High Ground", hexClass: "hexagon-light hexagon-high-ground" },
+  { id: "m1_l4_terrain_sanctuaries", label: "Sanctuaries", hexClass: "hexagon-sanctuary hexagon-sanctuary-phoenix" },
 ];
 
 function createDefaultTutorialProgress(lessons: TutorialLesson[]): TutorialProgressState {
@@ -277,6 +308,48 @@ const Tutorial: React.FC<TutorialProps> = ({
     : isCurrentLessonComplete
       ? "Lesson self-checked"
       : "Ready to self-check";
+  const getCheckedObjectiveCount = (targetLesson: TutorialLesson) => {
+    const targetObjectives = getLessonObjectives(targetLesson);
+    const targetCheckedIds = new Set(tutorialProgress.checkedObjectiveIdsByLessonId[targetLesson.id] ?? []);
+    return targetObjectives.filter((objective) => targetCheckedIds.has(objective.id)).length;
+  };
+
+  const getLessonObjectiveProgressLabel = (targetLesson: TutorialLesson) => {
+    const targetObjectives = getLessonObjectives(targetLesson);
+    if (targetObjectives.length === 0) {
+      return completedLessonIds.has(targetLesson.id) ? "Lesson self-checked" : "Ready to self-check";
+    }
+    return `${getCheckedObjectiveCount(targetLesson)} / ${targetObjectives.length} objectives self-checked`;
+  };
+
+  const renderLessonVisual = (targetLesson: TutorialLesson, moduleIcon: string, className = "tutorial-course-card-visual") => {
+    const pieceLesson = PIECE_LESSONS.find((candidate) => candidate.id === targetLesson.id);
+    const terrainLesson = TERRAIN_LESSONS.find((candidate) => candidate.id === targetLesson.id);
+
+    if (pieceLesson) {
+      return (
+        <span className={className} aria-hidden="true">
+          <img src={getImageByPieceType(pieceLesson.piece, "w")} alt="" />
+        </span>
+      );
+    }
+
+    if (terrainLesson) {
+      return (
+        <span className={className} aria-hidden="true">
+          <svg viewBox="0 0 110 110" focusable="false">
+            <polygon points="55 5, 98 27.5, 98 72.5, 55 95, 12 72.5, 12 27.5" className={terrainLesson.hexClass} style={{ strokeWidth: 3 }} />
+          </svg>
+        </span>
+      );
+    }
+
+    return (
+      <span className={className} aria-hidden="true">
+        <img src={moduleIcon} alt="" />
+      </span>
+    );
+  };
 
   React.useEffect(() => {
     setCanStoreProgress(saveStoredTutorialProgress(tutorialProgress));
@@ -290,25 +363,6 @@ const Tutorial: React.FC<TutorialProps> = ({
       target?.focus();
     });
   }, [viewMode]);
-
-  const PIECE_LESSONS = [
-    { id: "m2_l2_swordsman", piece: PieceType.Swordsman, label: "Sword" },
-    { id: "m2_l4_archer", piece: PieceType.Archer, label: "Archer" },
-    { id: "m2_l5_knight", piece: PieceType.Knight, label: "Knight" },
-    { id: "m2_l6_eagle", piece: PieceType.Eagle, label: "Eagle" },
-    { id: "m2_l7_giant", piece: PieceType.Giant, label: "Giant" },
-    { id: "m2_l8_trebuchet", piece: PieceType.Trebuchet, label: "Treb." },
-    { id: "m2_l9_assassin", piece: PieceType.Assassin, label: "Assassin" },
-    { id: "m2_l10_dragon", piece: PieceType.Dragon, label: "Dragon" },
-    { id: "m2_l11_monarch", piece: PieceType.Monarch, label: "Monarch" },
-  ];
-
-  const TERRAIN_LESSONS = [
-    { id: "m1_l1_introduction", label: "Castles", hexClass: "hexagon-white-castle" },
-    { id: "m1_l2_terrain_rivers", label: "Rivers", hexClass: "hexagon-river" },
-    { id: "m1_l3_terrain_highground", label: "High Ground", hexClass: "hexagon-light hexagon-high-ground" },
-    { id: "m1_l4_terrain_sanctuaries", label: "Sanctuaries", hexClass: "hexagon-sanctuary hexagon-sanctuary-phoenix" },
-  ];
 
   const updateProgress = (updater: (progress: TutorialProgressState) => TutorialProgressState) => {
     setTutorialProgress((previous) => sanitizeTutorialProgress(updater(previous), lessons));
@@ -418,6 +472,23 @@ const Tutorial: React.FC<TutorialProps> = ({
       .map((moduleLesson, index) => ({ lesson: moduleLesson, index }))
       .filter(({ lesson: moduleLesson }) => moduleLesson.id.startsWith(module.key)),
   })).filter((module) => module.lessons.length > 0);
+  const courseActionLesson = lessons[courseActionLessonIndex] ?? lesson;
+  const courseActionModule = courseModules.find((module) => courseActionLesson.id.startsWith(module.key)) ?? courseModules[0];
+  const courseActionIsCurrentLesson = courseActionLesson.id === lesson.id;
+  const courseActionLabel = allLessonsComplete
+    ? "Review this lesson"
+    : !hasStartedCourse
+      ? "Start this lesson"
+      : courseActionIsCurrentLesson
+      ? "Continue this lesson"
+      : "Open next lesson";
+  const courseActionStatusLabel = allLessonsComplete
+    ? "Review"
+    : !hasStartedCourse
+      ? "First lesson"
+      : courseActionIsCurrentLesson
+        ? "Current lesson"
+        : "Next to self-check";
   const shellNav = (
     <AppShellNav
       ariaLabel="Learn navigation"
@@ -458,6 +529,28 @@ const Tutorial: React.FC<TutorialProps> = ({
             </div>
             <span className="tutorial-progress-saved-chip">{progressStorageLabel}</span>
           </div>
+
+          <nav className="tutorial-course-section-map" aria-label="Course sections">
+            <h2>Course sections</h2>
+            {courseModules.map((module) => {
+              const moduleCompletedCount = module.lessons.filter(({ lesson: moduleLesson }) => completedLessonIds.has(moduleLesson.id)).length;
+              const moduleProgressPercent = Math.round((moduleCompletedCount / module.lessons.length) * 100);
+              return (
+                <a
+                  className="tutorial-course-section-link"
+                  href={`#tutorial-module-${module.key}`}
+                  key={module.key}
+                  aria-label={`${module.label} ${moduleCompletedCount} of ${module.lessons.length} lessons self-checked`}
+                >
+                  <span className="tutorial-course-section-label">{module.label}</span>
+                  <span className="tutorial-course-section-count">{moduleCompletedCount} / {module.lessons.length}</span>
+                  <span className="tutorial-course-section-track" aria-hidden="true">
+                    <span style={{ width: `${moduleProgressPercent}%` }} />
+                  </span>
+                </a>
+              );
+            })}
+          </nav>
         </aside>
 
         <main className="tutorial-course-main" aria-label="Learn Castles course">
@@ -471,9 +564,26 @@ const Tutorial: React.FC<TutorialProps> = ({
             </button>
           </div>
 
+          <section className="tutorial-course-current-panel" aria-labelledby="tutorial-course-current-heading">
+            {renderLessonVisual(courseActionLesson, courseActionModule?.icon ?? scrollIcon, "tutorial-course-current-visual")}
+            <div className="tutorial-course-current-copy">
+              <div className="tutorial-course-current-meta">
+                <span>{courseActionStatusLabel}</span>
+                <span>{getLessonModuleLabel(courseActionLesson.id)}</span>
+              </div>
+              <h3 id="tutorial-course-current-heading">{courseActionLesson.title}</h3>
+              <p>{getLessonCardSummary(courseActionLesson)}</p>
+              <span className="tutorial-course-current-progress">{getLessonObjectiveProgressLabel(courseActionLesson)}</span>
+            </div>
+            <button type="button" className="tutorial-course-primary-action" onClick={() => openLessonAtIndex(courseActionLessonIndex)}>
+              {courseActionLabel}
+            </button>
+          </section>
+
           <div className="tutorial-course-modules">
             {courseModules.map((module) => {
               const moduleCompletedCount = module.lessons.filter(({ lesson: moduleLesson }) => completedLessonIds.has(moduleLesson.id)).length;
+              const moduleProgressPercent = Math.round((moduleCompletedCount / module.lessons.length) * 100);
               return (
                 <section className="tutorial-course-module" key={module.key} aria-labelledby={`tutorial-module-${module.key}`}>
                   <div className="tutorial-course-module-heading">
@@ -481,6 +591,9 @@ const Tutorial: React.FC<TutorialProps> = ({
                     <div>
                       <h3 id={`tutorial-module-${module.key}`}>{module.label}</h3>
                       <p>{module.subtitle}</p>
+                      <div className="tutorial-course-module-progress" aria-hidden="true">
+                        <span style={{ width: `${moduleProgressPercent}%` }} />
+                      </div>
                     </div>
                     <span>{moduleCompletedCount} / {module.lessons.length}</span>
                   </div>
@@ -489,23 +602,22 @@ const Tutorial: React.FC<TutorialProps> = ({
                       const isComplete = completedLessonIds.has(moduleLesson.id);
                       const isCurrent = moduleLesson.id === lesson.id;
                       const objectiveCount = getLessonObjectives(moduleLesson).length;
-                      const cardStatusLabel = isComplete ? "Objectives self-checked" : isCurrent ? "Current lesson" : "Not self-checked";
+                      const completedStatusLabel = objectiveCount > 0 ? "Objectives self-checked" : "Lesson self-checked";
+                      const cardStatusLabel = isComplete ? completedStatusLabel : isCurrent ? "Current lesson" : "Not self-checked";
                       return (
                         <button
                           key={moduleLesson.id}
                           type="button"
                           className={`tutorial-course-card ${isComplete ? "reviewed" : ""} ${isCurrent ? "current" : ""}`}
                           onClick={() => openLessonAtIndex(index)}
-                          aria-label={`Open ${moduleLesson.title}. ${cardStatusLabel}${objectiveCount > 0 ? `, ${objectiveCount} objectives` : ""}`}
+                          aria-label={`Open ${moduleLesson.title}. ${cardStatusLabel}${objectiveCount > 0 ? `, ${getLessonObjectiveProgressLabel(moduleLesson)}` : ""}`}
                           aria-current={isCurrent ? "step" : undefined}
                         >
-                          <img src={module.icon} alt="" aria-hidden="true" />
+                          {renderLessonVisual(moduleLesson, module.icon)}
                           <span className="tutorial-course-card-content">
                             <span className="tutorial-course-card-title">{moduleLesson.title}</span>
                             <span className="tutorial-course-card-summary">{getLessonCardSummary(moduleLesson)}</span>
-                            {objectiveCount > 0 && (
-                              <span className="tutorial-course-card-meta">{objectiveCount} objectives</span>
-                            )}
+                            <span className="tutorial-course-card-meta">{getLessonObjectiveProgressLabel(moduleLesson)}</span>
                           </span>
                           <span className={`tutorial-course-card-status ${isComplete ? "reviewed" : isCurrent ? "current" : ""}`}>
                             {isComplete ? "Self-checked" : isCurrent ? "Current" : "Open"}
@@ -549,7 +661,7 @@ const Tutorial: React.FC<TutorialProps> = ({
           </span>
           <div className="tutorial-control-strip" role="toolbar" aria-label="Lesson controls">
             <button type="button" onClick={openCourseOverview} className="tutorial-step-button">
-              Course
+              Course overview
             </button>
             <button onClick={goToPrevLesson} disabled={currentLessonIndex === 0} className="tutorial-step-button">
               Previous
@@ -645,6 +757,15 @@ const Tutorial: React.FC<TutorialProps> = ({
             </ul>
           </div>
         )}
+
+        <div className="tutorial-lesson-footer-actions" role="group" aria-label="Lesson footer navigation">
+          <button type="button" onClick={openCourseOverview} className="tutorial-step-button">
+            Course overview
+          </button>
+          <button onClick={goToNextLesson} disabled={currentLessonIndex === lessons.length - 1} className="tutorial-step-button">
+            Next lesson
+          </button>
+        </div>
       </div>
 
       <section className="tutorial-board-stage" aria-label="Tutorial lesson board">

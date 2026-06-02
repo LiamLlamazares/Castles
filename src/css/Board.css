@@ -1631,7 +1631,7 @@ body {
   display: none;
 }
 
-.tutorial-container-course {
+.tutorial-container.tutorial-container-course {
   grid-template-columns: 360px minmax(0, 1fr);
   background: var(--tutorial-course-bg);
   color: var(--panel-text);
@@ -1648,6 +1648,69 @@ body {
   border: 1px solid var(--tutorial-course-border);
   border-radius: 8px;
   background: var(--tutorial-course-surface);
+}
+
+.tutorial-course-section-map {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--tutorial-course-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.tutorial-course-section-map h2 {
+  margin: 0 0 2px;
+  color: var(--tutorial-course-text);
+  font-size: 0.86rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.tutorial-course-section-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--tutorial-course-text);
+  text-decoration: none;
+}
+
+.tutorial-course-section-link:hover,
+.tutorial-course-section-link:focus-visible {
+  border-color: rgba(112, 214, 161, 0.42);
+  background: var(--tutorial-course-surface);
+}
+
+.tutorial-course-section-label {
+  overflow: hidden;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-course-section-count {
+  color: var(--tutorial-course-muted);
+  font-weight: 800;
+}
+
+.tutorial-course-section-track {
+  grid-column: 1 / -1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--tutorial-course-border);
+}
+
+.tutorial-course-section-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #70d6a1;
 }
 
 .tutorial-course-progress-heading {
@@ -1742,6 +1805,85 @@ body {
   letter-spacing: 0;
 }
 
+.tutorial-course-current-panel {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 28px;
+  padding: 18px;
+  border: 1px solid rgba(112, 214, 161, 0.38);
+  border-radius: 8px;
+  background: rgba(112, 214, 161, 0.1);
+}
+
+.tutorial-course-current-visual,
+.tutorial-course-card-visual {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tutorial-course-current-visual {
+  width: 72px;
+  height: 72px;
+}
+
+.tutorial-course-current-visual img,
+.tutorial-course-current-visual svg {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: var(--icon-filter);
+}
+
+.tutorial-course-current-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tutorial-course-current-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tutorial-course-current-meta span,
+.tutorial-course-current-progress {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--tutorial-course-muted);
+  font-size: 0.76rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.tutorial-course-current-meta span:first-child {
+  color: #102018;
+  background: #70d6a1;
+}
+
+.tutorial-course-current-panel h3 {
+  margin: 0;
+  color: var(--tutorial-course-text);
+  font-size: 1.42rem;
+  line-height: 1.1;
+}
+
+.tutorial-course-current-panel p {
+  margin: 0;
+  color: var(--tutorial-course-muted);
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
 .tutorial-course-modules {
   display: grid;
   gap: 28px;
@@ -1778,6 +1920,22 @@ body {
   margin: 4px 0 0;
   color: var(--tutorial-course-muted);
   line-height: 1.35;
+}
+
+.tutorial-course-module-progress {
+  width: min(320px, 100%);
+  height: 6px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--tutorial-course-border);
+}
+
+.tutorial-course-module-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #70d6a1;
 }
 
 .tutorial-course-module-heading > span {
@@ -1826,7 +1984,13 @@ body {
   background: rgba(112, 214, 161, 0.12);
 }
 
-.tutorial-course-card > img {
+.tutorial-course-card-visual {
+  width: 42px;
+  height: 42px;
+}
+
+.tutorial-course-card-visual img,
+.tutorial-course-card-visual svg {
   width: 42px;
   height: 42px;
   object-fit: contain;
@@ -1859,6 +2023,7 @@ body {
   color: #91d6c5;
   font-size: 0.78rem;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .tutorial-course-card-status {
@@ -2060,6 +2225,13 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   align-items: center;
+}
+
+.tutorial-lesson-footer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 4px;
 }
 
 .tutorial-step-button {
@@ -2354,6 +2526,10 @@ body {
     max-height: none;
   }
 
+  .tutorial-course-section-map {
+    display: none;
+  }
+
   .tutorial-course-main {
     height: auto;
     overflow: visible;
@@ -2364,6 +2540,33 @@ body {
     align-items: stretch;
     flex-direction: column;
     margin-bottom: 20px;
+  }
+
+  .tutorial-course-current-panel {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    margin-bottom: 20px;
+    padding: 14px;
+  }
+
+  .tutorial-course-current-visual {
+    width: 48px;
+    height: 48px;
+  }
+
+  .tutorial-course-current-visual img,
+  .tutorial-course-current-visual svg {
+    width: 34px;
+    height: 34px;
+  }
+
+  .tutorial-course-current-panel .tutorial-course-primary-action {
+    grid-column: 1 / -1;
+  }
+
+  .tutorial-course-current-panel h3 {
+    font-size: 1.14rem;
   }
 
   .tutorial-course-module-heading {
@@ -2383,6 +2586,10 @@ body {
   .tutorial-course-card-status {
     grid-column: 1 / -1;
     justify-self: start;
+  }
+
+  .tutorial-lesson-footer-actions {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2486,6 +2693,11 @@ body {
 
   .tutorial-objective-item {
     padding: 7px;
+  }
+
+  .tutorial-lesson-footer-actions {
+    gap: 6px;
+    padding-top: 0;
   }
 
   .tutorial-board-stage {

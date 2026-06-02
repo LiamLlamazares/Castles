@@ -419,6 +419,19 @@ Remaining work:
 - Add engine-graded objectives only after each target board state and validation event is explicit and tested.
 - Add richer lesson theory and practice modules once the ruleset is stable enough to avoid teaching stale mechanics.
 
+## Phase 6Q: Learn Course Presentation Polish
+
+Goal: make the Learn overview feel more like a compact Lichess-style learning path while keeping Castles-specific self-check progress honest.
+
+Status: implemented and locally verified on 2026-06-02. The Learn overview now has a current/next lesson panel, desktop course section map, per-module progress bars, per-lesson objective progress, piece/terrain-specific lesson visuals, clearer `Course overview` return controls, and bottom lesson navigation for users who scroll through lesson text. Mobile hides the section map so the first screen reaches the course title and current lesson panel sooner. A reviewer pass fixed the next-incomplete lesson label and no-objective completed-card aria wording. Screenshot artifacts are in `artifacts/ui-audit/phase6q-learn-after`.
+
+Remaining work:
+
+- Add authored lesson objective ids as lesson text stabilizes.
+- Add real engine-graded lesson success only after each objective has an explicit validation event.
+- Expand theory/practice lesson content after the ruleset is stable enough to avoid teaching stale mechanics.
+- Recheck Learn at tablet boundary widths when the next broad UI sweep starts.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Tutorial from "../Tutorial";
 import GameBoard from "../Game";
 import { ThemeProvider } from "../../contexts/ThemeContext";
@@ -46,6 +46,13 @@ describe("Tutorial", () => {
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Learn Castles course" })).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("0 / 35 lessons self-checked");
+    expect(screen.getByRole("navigation", { name: "Course sections" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Getting started 0 of 2 lessons self-checked" })).toHaveAttribute("href", "#tutorial-module-m0_");
+    const currentPanel = screen.getByRole("region", { name: "0 Welcome" });
+    expect(within(currentPanel).getByRole("heading", { level: 3, name: "0 Welcome" })).toBeInTheDocument();
+    expect(within(currentPanel).getByText("First lesson")).toBeInTheDocument();
+    expect(within(currentPanel).getByText("Ready to self-check")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start this lesson" })).toBeInTheDocument();
     expect(screen.queryByTestId("tutorial-board")).not.toBeInTheDocument();
   });
 
@@ -78,7 +85,7 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start course" }));
 
     const progressControls = screen.getByRole("group", { name: "Lesson progress controls" });
-    expect(progressControls).toContainElement(screen.getByRole("button", { name: "Course" }));
+    expect(progressControls).toContainElement(within(progressControls).getByRole("button", { name: "Course overview" }));
     expect(progressControls).toContainElement(screen.getByRole("button", { name: "Previous" }));
     expect(progressControls).toContainElement(screen.getByRole("status", { name: "Tutorial progress" }));
     expect(progressControls).toContainElement(screen.getByRole("button", { name: "Restart Tutorial" }));
@@ -97,10 +104,20 @@ describe("Tutorial", () => {
     expect(lessonHeader).toContainElement(screen.getByText("Progress saved"));
 
     const controlStrip = screen.getByRole("toolbar", { name: "Lesson controls" });
-    expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Course" }));
+    expect(controlStrip).toContainElement(within(controlStrip).getByRole("button", { name: "Course overview" }));
     expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Previous" }));
     expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Restart Tutorial" }));
     expect(controlStrip).toContainElement(screen.getByRole("button", { name: "Next" }));
+  });
+
+  it("keeps course overview and next lesson actions reachable after lesson text", () => {
+    renderTutorial();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start course" }));
+
+    const footerNavigation = screen.getByRole("group", { name: "Lesson footer navigation" });
+    expect(footerNavigation).toContainElement(within(footerNavigation).getByRole("button", { name: "Course overview" }));
+    expect(footerNavigation).toContainElement(within(footerNavigation).getByRole("button", { name: "Next lesson" }));
   });
 
   it("persists the current lesson by stable lesson id", () => {
@@ -129,7 +146,7 @@ describe("Tutorial", () => {
     renderTutorial();
 
     fireEvent.click(screen.getByRole("button", { name: "Start course" }));
-    fireEvent.click(screen.getByRole("button", { name: "Course" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
 
     expect(screen.getByRole("main", { name: "Learn Castles course" })).toBeInTheDocument();
     expect(screen.queryByTestId("tutorial-board")).not.toBeInTheDocument();
@@ -143,7 +160,7 @@ describe("Tutorial", () => {
       expect(screen.getByRole("heading", { level: 2, name: "0 Welcome" })).toHaveFocus();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Course" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
     await waitFor(() => {
       expect(screen.getByRole("heading", { level: 2, name: "Castles course" })).toHaveFocus();
     });
@@ -166,9 +183,30 @@ describe("Tutorial", () => {
       })
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Course" }));
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Course overview" }));
     expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons self-checked");
-    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Objectives self-checked/ })).toHaveTextContent("Self-checked");
+    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Objectives self-checked, 1 \/ 1 objectives self-checked/ })).toHaveTextContent("Self-checked");
+    expect(screen.getByRole("link", { name: "Getting started 1 of 2 lessons self-checked" })).toBeInTheDocument();
+  });
+
+  it("points the course panel to the next self-check target when the stored current lesson is complete", () => {
+    localStorage.setItem(
+      TUTORIAL_PROGRESS_KEY,
+      JSON.stringify({
+        lastLessonId: "m0_01_victory_conditions",
+        completedLessonIds: ["m0_00_welcome", "m0_01_victory_conditions"],
+        checkedObjectiveIdsByLessonId: {
+          m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID],
+        },
+      })
+    );
+
+    renderTutorial();
+
+    const currentPanel = screen.getByRole("region", { name: "1.1 The board: Castles" });
+    expect(within(currentPanel).getByText("Next to self-check")).toBeInTheDocument();
+    expect(within(currentPanel).getByRole("button", { name: "Open next lesson" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open 0\.1 How to win\. Objectives self-checked, 1 \/ 1 objectives self-checked/ })).toHaveTextContent("Self-checked");
   });
 
   it("removes lesson completion when an objective is unchecked", () => {
@@ -223,7 +261,7 @@ describe("Tutorial", () => {
     renderTutorial();
 
     expect(screen.getByRole("status", { name: "Course progress" })).toHaveTextContent("1 / 35 lessons self-checked");
-    expect(screen.getByRole("button", { name: /Open 0 Welcome\. Objectives self-checked/ })).toHaveTextContent("Self-checked");
+    expect(screen.getByRole("button", { name: /Open 0 Welcome\. Lesson self-checked/ })).toHaveTextContent("Self-checked");
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         completedLessonIds: ["m0_00_welcome"],
