@@ -277,9 +277,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const status = ownedSeekResponse?.summary.status;
     return status === "open" || status === "accepted" ? ownedSeekResponse : null;
   }, [ownedSeekResponse]);
+  const closedOwnedSeekResponse = React.useMemo(() => {
+    const status = ownedSeekResponse?.summary.status;
+    return status === "cancelled" || status === "expired" ? ownedSeekResponse : null;
+  }, [ownedSeekResponse]);
   const terminalOwnedSeekMessage =
-    ownedSeekResponse?.summary.status === "cancelled" || ownedSeekResponse?.summary.status === "expired"
-      ? "Your lobby listing is no longer open."
+    closedOwnedSeekResponse
+      ? "Your previous lobby listing is closed and no longer public."
       : "";
 
   React.useEffect(() => {
@@ -298,7 +302,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       current ||
       (status === "accepted"
         ? "Your lobby listing was accepted. Join the game from your lobby panel."
-        : "Your lobby listing is no longer open.")
+        : "Your previous lobby listing is closed and no longer public.")
     );
   }, [ownedSeekResponse?.summary.status, quickMatchStatus]);
 
@@ -540,6 +544,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .slice(0, 5);
   }, [publicGames]);
 
+  const watchMostActiveGame = React.useMemo(() => {
+    if (tab !== "watch" || visibleGames.length === 0) return null;
+    return [...visibleGames].sort(compareMostMoves)[0] ?? null;
+  }, [tab, visibleGames]);
+
+  const watchSecondaryGames = React.useMemo(() => {
+    if (tab !== "watch" || !watchMostActiveGame) return [];
+    return visibleGames.filter((game) => game.gameId !== watchMostActiveGame.gameId);
+  }, [tab, visibleGames, watchMostActiveGame]);
+
   const visibleOpenSeeks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return openSeeks
@@ -605,6 +619,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const primaryActionAriaLabel = isArchivedGame
       ? `Analyze replay ${white} vs ${black}, ${game.gameId}`
       : `Spectate ${white} vs ${black}, ${game.gameId}`;
+    const featuredKicker = isArchivedGame ? "Featured replay" : "Most active live game";
     const className = [
       "online-game-row",
       options.compact ? "online-game-row-compact" : "",
@@ -615,11 +630,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       <article
         key={game.gameId}
         className={className}
-        aria-label={`${options.featured ? "Top live game " : ""}${white} vs ${black} ${game.gameId}`}
+        aria-label={`${options.featured ? `${featuredKicker} ` : ""}${white} vs ${black} ${game.gameId}`}
       >
         <div className="online-game-row-main">
           <div className="online-game-players">
-            {options.featured && <span className="online-game-kicker">Top live game</span>}
+            {options.featured && <span className="online-game-kicker">{featuredKicker}</span>}
             <strong>{white} vs {black}</strong>
             <span>{game.gameId}</span>
           </div>
@@ -628,6 +643,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               {game.status === "active" ? "Live" : "Complete"}
             </span>
             <span>{game.version} {game.version === 1 ? "move" : "moves"}</span>
+            {options.featured && !isArchivedGame && <span>Most moves in current list</span>}
             <span>{game.hasTimeControl ? "Timed" : "Casual"}</span>
             <span>Updated {formatUpdatedAt(game.updatedAt)}</span>
           </div>
@@ -781,6 +797,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (!onJoinOwnedSeek) return;
     setOwnedSeekAction("join");
     onJoinOwnedSeek();
+  };
+
+  const openWatchFromLobby = () => {
+    setQuery("");
+    setTimeFilter("all");
+    setSort("moves");
+    setBrowserTab("watch");
   };
 
   const copySpectatorLink = async (gameId: string) => {
@@ -1114,6 +1137,49 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </div>
               </section>
             )}
+            {closedOwnedSeekResponse?.summary && (
+              <section
+                className="online-browser-closed-listing"
+                aria-label="Closed lobby listing"
+              >
+                <div className="online-browser-quick-match-copy">
+                  <span className="online-browser-section-kicker">Lobby listing closed</span>
+                  <strong>This listing is no longer public</strong>
+                  <p>
+                    Cancelled and expired listings are removed from the Lobby. Create a new listing from your
+                    current Play setup when you want another opponent.
+                  </p>
+                  <div className="online-game-meta">
+                    <span className={`online-game-pill ${closedOwnedSeekResponse.summary.status}`}>
+                      {formatSeekStatus(closedOwnedSeekResponse.summary.status)}
+                    </span>
+                    <span>{closedOwnedSeekResponse.summary.seekId}</span>
+                  </div>
+                </div>
+                <div className="online-game-actions">
+                  {hasCurrentSetupActions && onCreateSeek ? (
+                    <button
+                      type="button"
+                      className="online-browser-button primary"
+                      onClick={() => void runCreateSeek()}
+                      disabled={createSeekDisabled}
+                      aria-label="Create a new lobby listing from current Play setup"
+                    >
+                      {createSeekPending ? "Listing..." : "Create New Listing"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="online-browser-button primary"
+                      onClick={setupPromptAction}
+                      aria-label="Configure a Play setup for a new lobby listing"
+                    >
+                      Configure Setup
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
             <section className="online-browser-live-section" aria-label="Current public games">
               <div className="online-browser-section-header">
                 <div>
@@ -1127,15 +1193,25 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         : copyMessage || `${lobbyLiveGames.length} public games in progress`}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="online-browser-button subtle"
-                  onClick={refreshGames}
-                  disabled={status === "loading"}
-                  aria-label="Refresh live public games"
-                >
-                  {status === "loading" ? "Refreshing..." : "Refresh live"}
-                </button>
+                <div className="online-browser-section-actions">
+                  <button
+                    type="button"
+                    className="online-browser-button subtle"
+                    onClick={openWatchFromLobby}
+                    aria-label="Open Watch tab"
+                  >
+                    Open Watch
+                  </button>
+                  <button
+                    type="button"
+                    className="online-browser-button subtle"
+                    onClick={refreshGames}
+                    disabled={status === "loading"}
+                    aria-label="Refresh live public games"
+                  >
+                    {status === "loading" ? "Refreshing..." : "Refresh live games"}
+                  </button>
+                </div>
               </div>
               {status === "error" ? (
                 <div className="online-browser-empty online-browser-empty-compact">
@@ -1246,7 +1322,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 disabled={status === "loading"}
                 aria-label="Refresh live public games"
               >
-                {status === "loading" ? "Refreshing..." : "Refresh live"}
+                {status === "loading" ? "Refreshing..." : "Refresh live games"}
               </button>
             </div>
             {visibleGames.length === 0 && status === "ready" ? (
@@ -1260,18 +1336,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               </section>
             ) : (
               <div className="online-browser-watch-grid">
-                {visibleGames[0] && (
-                  <section className="online-browser-featured-game" aria-label="Top public live game">
-                    {renderPublicGameRow(visibleGames[0], { featured: true, context: "watch" })}
+                {watchMostActiveGame && (
+                  <section className="online-browser-featured-game" aria-label="Most active public live game">
+                    {renderPublicGameRow(watchMostActiveGame, { featured: true, context: "watch" })}
                   </section>
                 )}
-                {visibleGames.length > 1 && (
+                {watchSecondaryGames.length > 0 && (
                   <section className="online-browser-side-list" aria-label="Other public live games">
                     <div className="online-browser-side-list-header">
                       <span className="online-browser-section-kicker">More games</span>
-                      <strong>{visibleGames.length - 1} more public {visibleGames.length === 2 ? "game" : "games"}</strong>
+                      <strong>{watchSecondaryGames.length} more public {watchSecondaryGames.length === 1 ? "game" : "games"}</strong>
                     </div>
-                    {visibleGames.slice(1).map((game) =>
+                    {watchSecondaryGames.map((game) =>
                       renderPublicGameRow(game, { compact: true, context: "watch" })
                     )}
                   </section>

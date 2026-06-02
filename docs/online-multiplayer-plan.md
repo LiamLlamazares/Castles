@@ -432,6 +432,19 @@ Remaining work:
 - Expand theory/practice lesson content after the ruleset is stable enough to avoid teaching stale mechanics.
 - Recheck Learn at tablet boundary widths when the next broad UI sweep starts.
 
+## Phase 6R: Online Lobby and Watch Clarity
+
+Goal: make the current Online surface easier to understand without implying unsupported ratings, accounts, board thumbnails, or a real featured-game ranking.
+
+Status: implemented and locally verified on 2026-06-02. The slice keeps the existing public summary data model, renames "Top live game" to "Most active live game", selects that featured card by move count rather than the active sort dropdown, adds a direct `Open Watch` handoff from the Lobby current-games section, makes live refresh labels explicit, and replaces terminal owned-listing dead ends with a clear closed-listing notice and next action.
+
+Remaining work:
+
+- Add server-backed public-game thumbnails, side-to-move, last move, remaining clocks, spectator counts, and a real featured/TV selection signal before showing richer game previews.
+- Decide whether the current public-game preview belongs in Lobby long-term or should move entirely into Watch after Watch has thumbnails and stronger scan controls.
+- Keep cancelled and expired lobby listings out of public rows and avoid showing dead owner refresh controls.
+- Re-audit Watch and Lobby at desktop/mobile sizes after each new public summary field is added.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.

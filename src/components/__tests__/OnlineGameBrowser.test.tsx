@@ -171,6 +171,33 @@ describe("OnlineGameBrowser", () => {
     const currentGames = screen.getByRole("region", { name: "Current public games" });
     expect(within(currentGames).getByText("game_lobby_live")).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Spectate Ada vs Ben, game_lobby_live" })).toBeInTheDocument();
+    expect(within(currentGames).getByRole("button", { name: "Open Watch tab" })).toBeInTheDocument();
+    expect(within(currentGames).getByRole("button", { name: "Refresh live public games" })).toHaveTextContent("Refresh live games");
+  });
+
+  it("opens the Watch tab from the Lobby current-games section", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({ gameId: "game_lobby_watch_handoff", version: 8 }),
+        ]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    const currentGames = await screen.findByRole("region", { name: "Current public games" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search lobby listings" }), {
+      target: { value: "not-this-live-game" },
+    });
+    fireEvent.click(within(currentGames).getByRole("button", { name: "Open Watch tab" }));
+
+    expect(screen.getByRole("button", { name: "Live public games" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("searchbox", { name: "Search public games" })).toHaveValue("");
+    expect(screen.getByRole("region", { name: "Most active public live game" })).toHaveTextContent("game_lobby_watch_handoff");
   });
 
   it("auto-refreshes current public games while the Lobby tab is visible", async () => {
@@ -1112,9 +1139,13 @@ describe("OnlineGameBrowser", () => {
       );
 
       await screen.findByText("No lobby listings yet.");
+      const closedPanel = screen.getByRole("region", { name: "Closed lobby listing" });
+      expect(closedPanel).toHaveTextContent("This listing is no longer public");
+      expect(closedPanel).toHaveTextContent(status === "cancelled" ? "Cancelled" : "Expired");
+      expect(closedPanel).toHaveTextContent(`seek_${status}`);
       expect(screen.queryByRole("region", { name: "Your lobby listing" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Refresh your lobby listing" })).not.toBeInTheDocument();
-      expect(screen.getByRole("status")).toHaveTextContent("Your lobby listing is no longer open.");
+      expect(screen.getByRole("status")).toHaveTextContent("Your previous lobby listing is closed and no longer public.");
     }
   );
 
@@ -1284,8 +1315,10 @@ describe("OnlineGameBrowser", () => {
     );
 
     const row = await screen.findByRole("article", { name: /Ada vs Ben/i });
-    const featuredRegion = screen.getByRole("region", { name: "Top public live game" });
+    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
     expect(featuredRegion).toContainElement(row);
+    expect(row).toHaveTextContent("Most active live game");
+    expect(row).toHaveTextContent("Most moves in current list");
     expect(row).toHaveTextContent("Live");
     expect(row).toHaveTextContent("3 moves");
     expect(row).toHaveTextContent("Timed");
@@ -1293,6 +1326,41 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Spectate Ada vs Ben, game_public_active" }));
 
     expect(onSpectate).toHaveBeenCalledWith("game_public_active");
+  });
+
+  it("features the most active live game even when the Watch list is sorted newest", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({
+            gameId: "game_newest_few_moves",
+            updatedAt: "2026-06-01T12:05:00.000Z",
+            version: 2,
+          }),
+          summary({
+            gameId: "game_older_many_moves",
+            updatedAt: "2026-06-01T12:01:00.000Z",
+            version: 9,
+            participants: [
+              { seat: "w", role: "white", identity: { kind: "registered", id: "caro_w", displayName: "Caro" } },
+              { seat: "b", role: "black", identity: { kind: "registered", id: "dani_b", displayName: "Dani" } },
+            ],
+          }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_newest_few_moves");
+
+    expect(screen.getByRole("combobox", { name: "Sort public games" })).toHaveValue("newest");
+    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
+    expect(featuredRegion).toHaveTextContent("game_older_many_moves");
+    expect(featuredRegion).toHaveTextContent("9 moves");
+    expect(screen.getByRole("region", { name: "Other public live games" })).toHaveTextContent("game_newest_few_moves");
   });
 
   it("defensively hides non-public summaries even if a loader returns them", async () => {
@@ -1395,6 +1463,12 @@ describe("OnlineGameBrowser", () => {
             version: 9,
             hasTimeControl: false,
           }),
+          summary({
+            gameId: "game_middle_moves",
+            updatedAt: "2026-06-01T12:03:00.000Z",
+            version: 5,
+            hasTimeControl: false,
+          }),
           summary({ gameId: "game_hidden_unlisted", visibility: "unlisted", version: 99 }),
         ]))}
         onBack={vi.fn()}
@@ -1406,15 +1480,17 @@ describe("OnlineGameBrowser", () => {
     await screen.findByText("game_newer_few_moves");
     expect(screen.queryByText("game_hidden_unlisted")).not.toBeInTheDocument();
 
-    let rows = screen.getAllByRole("article");
-    expect(rows[0]).toHaveTextContent("game_newer_few_moves");
-    expect(rows[1]).toHaveTextContent("game_older_many_moves");
+    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
+    expect(featuredRegion).toHaveTextContent("game_older_many_moves");
+    let sideRows = within(screen.getByRole("region", { name: "Other public live games" })).getAllByRole("article");
+    expect(sideRows[0]).toHaveTextContent("game_newer_few_moves");
+    expect(sideRows[1]).toHaveTextContent("game_middle_moves");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
       target: { value: "moves" },
     });
-    rows = screen.getAllByRole("article");
-    expect(rows[0]).toHaveTextContent("game_older_many_moves");
+    sideRows = within(screen.getByRole("region", { name: "Other public live games" })).getAllByRole("article");
+    expect(sideRows[0]).toHaveTextContent("game_middle_moves");
 
     fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
       target: { value: "timed" },
@@ -1422,6 +1498,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(screen.getByText("game_newer_few_moves")).toBeInTheDocument();
     expect(screen.queryByText("game_older_many_moves")).not.toBeInTheDocument();
+    expect(screen.queryByText("game_middle_moves")).not.toBeInTheDocument();
   });
 
   it("filters archived games by result and reports filtered no-results honestly", async () => {

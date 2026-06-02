@@ -132,6 +132,7 @@
 
 .online-game-row,
 .online-seek-owner-panel,
+.online-browser-closed-listing,
 .online-browser-empty {
   background: rgba(255, 255, 255, 0.047);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -141,7 +142,8 @@
 }
 
 .online-game-row,
-.online-seek-owner-panel {
+.online-seek-owner-panel,
+.online-browser-closed-listing {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
@@ -292,6 +294,11 @@
   min-width: 180px;
 }
 
+.online-browser-closed-listing {
+  background: rgba(255, 174, 150, 0.08);
+  border-color: rgba(255, 174, 150, 0.18);
+}
+
 .online-browser-live-section {
   display: grid;
   gap: 10px;
@@ -326,6 +333,13 @@
   margin: 3px 0 0;
   color: #d9d0b8;
   line-height: 1.35;
+}
+
+.online-browser-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .online-browser-live-list {
@@ -430,6 +444,7 @@
   .online-browser-toolbar,
   .online-game-row,
   .online-seek-owner-panel,
+  .online-browser-closed-listing,
   .online-browser-quick-match-panel,
   .online-browser-section-header,
   .online-browser-watch-grid {
@@ -455,6 +470,11 @@
     min-width: 0;
   }
 
+  .online-browser-section-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .online-browser-featured-game .online-game-row {
     min-height: auto;
   }
@@ -468,6 +488,7 @@
 @media (max-width: 520px) {
   .online-browser-tabs,
   .online-browser-quick-match-actions,
+  .online-browser-section-actions,
   .online-game-actions {
     display: grid;
     grid-template-columns: 1fr;
