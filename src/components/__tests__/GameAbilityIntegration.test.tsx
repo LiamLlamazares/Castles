@@ -6,6 +6,7 @@ import { Hex } from "../../Classes/Entities/Hex";
 import { PieceFactory } from "../../Classes/Entities/PieceFactory";
 import { Sanctuary } from "../../Classes/Entities/Sanctuary";
 import { PGNService } from "../../Classes/Services/PGNService";
+import * as PGNLoadService from "../../Classes/Services/PGNLoadService";
 import { PieceType, SanctuaryType, type MoveRecord } from "../../Constants";
 import { getStartingBoard, getStartingLayout, getStartingPieces } from "../../ConstantImports";
 import { createPieceMap } from "../../utils/PieceMap";
@@ -119,6 +120,22 @@ function createTwoMoveHistoryFixture() {
   moveTree.addMove(moveRecord("G13G12", 1), liveSnapshot);
 
   return { liveSnapshot, moveTree };
+}
+
+function diagnosticPGNLoadResult() {
+  const board = getStartingBoard(6);
+  return {
+    board,
+    pieces: getStartingPieces(6),
+    castles: board.castles,
+    sanctuaries: [],
+    moveTree: new MoveTree(),
+    turnCounter: 0,
+    graveyard: [],
+    phoenixRecords: [],
+    promotionPending: null,
+    diagnostics: [{ notation: "Z99Z98", message: "Mover not found at Z99" }],
+  };
 }
 
 describe("Game ability integration", () => {
@@ -266,6 +283,59 @@ describe("Game ability integration", () => {
     );
 
     expect(onLoadGame).not.toHaveBeenCalled();
+  });
+
+  test("autosave restore rejects PGNs with replay diagnostics", async () => {
+    const onLoadGame = vi.fn();
+    vi.spyOn(PGNLoadService, "loadPGNText").mockReturnValue(diagnosticPGNLoadResult());
+    localStorage.setItem("castles_autosave", "diagnostic-pgn");
+
+    render(
+      <ThemeProvider>
+        <GameBoard onLoadGame={onLoadGame} />
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(localStorage.getItem("castles_autosave")).toBeNull();
+    });
+    expect(onLoadGame).not.toHaveBeenCalled();
+  });
+
+  test("shared URL restore rejects PGNs with replay diagnostics and clears the URL", async () => {
+    const onLoadGame = vi.fn();
+    vi.spyOn(PGNLoadService, "loadPGNText").mockReturnValue(diagnosticPGNLoadResult());
+    window.history.replaceState({}, "", "/?pgn=diagnostic-pgn");
+
+    render(
+      <ThemeProvider>
+        <GameBoard onLoadGame={onLoadGame} />
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(window.location.search).not.toContain("pgn=");
+    });
+    expect(onLoadGame).not.toHaveBeenCalled();
+  });
+
+  test("manual PGN import rejects replay diagnostics", () => {
+    const onLoadGame = vi.fn();
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    vi.spyOn(window, "prompt").mockReturnValue("diagnostic-pgn");
+    vi.spyOn(PGNLoadService, "loadPGNText").mockReturnValue(diagnosticPGNLoadResult());
+
+    render(
+      <ThemeProvider>
+        <GameBoard onLoadGame={onLoadGame} />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import PGN" }));
+
+    expect(onLoadGame).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith("Failed to load PGN. Check console for details.");
   });
 
   test("online player screens expose separate opponent invite and spectator copy actions", async () => {

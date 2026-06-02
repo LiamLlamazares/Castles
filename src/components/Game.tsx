@@ -38,6 +38,7 @@ import {
   formatOnlineConnectionStatus,
   formatOnlineGameResult,
 } from "../online/client";
+import type { PGNLoadResult } from "../Classes/Services/PGNLoadService";
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import { createPieceMap } from "../utils/PieceMap";
 import PromotionModal from "./PromotionModal";
@@ -123,6 +124,10 @@ function createCurrentPositionAnalysisTree(snapshot: PositionSnapshot): MoveTree
   const tree = new MoveTree();
   tree.rootNode.snapshot = snapshot;
   return tree;
+}
+
+function isUsablePGNLoadResult(result: PGNLoadResult | null): result is PGNLoadResult {
+  return !!result && (!result.diagnostics || result.diagnostics.length === 0);
 }
 
 /**
@@ -369,7 +374,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
       try {
         const result = loadPGN(urlPgn);
-        if (result && onLoadGame) {
+        if (isUsablePGNLoadResult(result) && onLoadGame) {
           clearUrlParams();
           onLoadGame({
             board: result.board,
@@ -403,7 +408,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
       if (savedPgn && savedPgn !== currentPgn) {
         try {
           const result = loadPGN(savedPgn);
-          if (result && onLoadGame) {
+          if (isUsablePGNLoadResult(result) && onLoadGame) {
             onLoadGame({
               board: result.board,
               pieces: result.pieces,
@@ -740,7 +745,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     const pgn = prompt("Paste PGN here:");
     if (pgn) {
         const result = loadPGN(pgn);
-        if (result && onLoadGame) {
+        if (isUsablePGNLoadResult(result) && onLoadGame) {
             onLoadGame({
               board: result.board,
               pieces: result.pieces,
