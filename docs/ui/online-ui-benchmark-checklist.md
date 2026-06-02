@@ -127,13 +127,13 @@ Phase 6M lobby flow cleanup, 2026-06-01:
 
 - Challenger challenge share links now survive same-tab tokenless reloads, but challenge share-link storage is cleared with the challenge token on every challenge exit and online/local handoff path.
 - Cancelled and expired owned lobby listings no longer render a stale "Your lobby listing" owner panel or dead Refresh action; App clears them during restore/refresh and the Online browser hides them defensively.
-- Lobby copy now distinguishes existing-list filters from current-setup actions. The browser action is "List Current Setup" because it uses the current Play setup, while filters only search visible listings.
+- Lobby copy now distinguishes existing-list filters from current-setup actions. The browser listing action uses the current Play setup, while filters only search visible listings.
 - Screenshot artifacts are in `artifacts/ui-audit/phase6m-safety-lobby-cleanup`; desktop, 430 x 932, 390 x 844, 360 x 640 Lobby, 360 x 640 restored challenge link, and 390 x 844 cancelled-owned-seek states passed overflow and interactive-overlap checks.
 
 Phase 6O Online structural polish, 2026-06-02:
 
-- Lobby now splits the search/filter controls from the current-setup actions. `Quick Match` and `List Current Setup` live in a separate "Play from current setup" panel, while filters are labelled as finding existing lobby listings.
-- `List Current Setup` now creates the lobby listing directly from Online instead of bouncing to Setup, disables while pending, and is hidden together with Quick Match while viewing analysis/replay/online/challenge states.
+- Lobby now splits the search/filter controls from the current-setup actions. `Quick Match` and the current-setup lobby-listing action live in a separate "Play from current setup" panel, while filters are labelled as finding existing lobby listings.
+- The current-setup lobby-listing action creates the lobby listing directly from Online instead of bouncing to Setup, disables while pending, and is hidden together with Quick Match while viewing analysis/replay/online/challenge states.
 - Watch now uses a top-live-game plus more-games layout, refreshes while visible, pauses while hidden, and skips background refresh if a foreground directory load is in flight.
 - The current public game row in Lobby remains a compact Watch preview, but the Lobby landmark and open-listing section now distinguish it from actual open lobby listings.
 
@@ -147,9 +147,15 @@ Phase 6P Learn progress hardening, 2026-06-02:
 Phase 6Q Navigation wording and drawer icon polish, 2026-06-02:
 
 - The drawer Play entry now says `Configure New Game`, matching the setup/victory language and separating setup from the contextual in-game `New Game` control.
-- Setup primary actions now use product-language labels: `Play Local`, `Invite Friend`, `Find Match`, and the lower-priority `Private Link`.
+- Setup primary actions now use product-language labels: `Play Local`, `Invite Friend`, `Create Lobby Listing`, and the lower-priority `Private Link`.
 - Drawer icons remain real image assets but now have stable sizing, object fitting, opacity, and mobile spacing tests so blank marker-style placeholders do not silently return.
 - Mobile drawer section notes are hidden to reduce density while keeping the same section landmarks and destination labels.
+
+Phase 6R Lobby setup prompt polish, 2026-06-02:
+
+- The Lobby now always shows a next-step panel: current setup users get `Quick Match` and `Create Lobby Listing`, while first-time users get a `Configure Setup` action instead of only an empty list.
+- Lobby empty copy now points back to that setup panel and no longer references hidden matchmaking controls when no Play setup exists.
+- `Create Lobby Listing` keeps the same direct current-setup listing behavior, but the visible label is clearer than `List Current Setup`.
 
 Next product slices accepted from reviewers:
 

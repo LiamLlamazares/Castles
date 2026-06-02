@@ -262,7 +262,7 @@ vi.mock("../components/GameSetup", () => ({
             )
           }
         >
-          List in Lobby
+          Create Lobby Listing
         </button>
       )}
     </div>
@@ -273,6 +273,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
   default: ({
     onBack,
     onOpenGame,
+    onConfigureSetup,
     onTutorial,
     onOpenLibrary,
     onReplay,
@@ -293,6 +294,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
   }: {
     onBack: () => void;
     onOpenGame?: () => void;
+    onConfigureSetup?: () => void;
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
     onReplay: (gameId: string) => void;
@@ -388,6 +390,11 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       {onOpenGame && (
         <button type="button" onClick={onOpenGame}>
           Online Play
+        </button>
+      )}
+      {onConfigureSetup && (
+        <button type="button" onClick={onConfigureSetup}>
+          Online Configure Setup
         </button>
       )}
       {onTutorial && (
@@ -924,7 +931,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Listing" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1013,6 +1020,11 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByText("Quick match summary: none")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quick Match" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Browser Create Seek" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Configure Setup" }));
+
+    expect(screen.getByText("Setup Ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to Online" })).toBeInTheDocument();
   });
 
   it("recovers creator-owned lobby listing controls after a same-session reload", async () => {
@@ -1274,7 +1286,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Listing" }));
     await screen.findByText("Initial tab: lobby");
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh owned seek" }));

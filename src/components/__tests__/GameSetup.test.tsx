@@ -74,7 +74,7 @@ describe("GameSetup", () => {
     const onCreateOpenSeek = vi.fn();
     render(<GameSetup onPlay={vi.fn()} onCreateOpenSeek={onCreateOpenSeek} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Find Match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Listing" }));
 
     expect(onCreateOpenSeek).toHaveBeenCalledTimes(1);
     expect(onCreateOpenSeek.mock.calls[0][3]).toBe(previewSanctuaries);
@@ -120,7 +120,7 @@ describe("GameSetup", () => {
       screen.getByRole("group", { name: "Game actions" }).querySelectorAll(".setup-action-button")
     ).map((element) => element.textContent?.trim());
 
-    expect(actionLabels).toEqual(["Play Local", "Invite Friend", "Find Match", "Private Link"]);
+    expect(actionLabels).toEqual(["Play Local", "Invite Friend", "Create Lobby Listing", "Private Link"]);
   });
 
   it("exposes shared play navigation without hiding play actions", () => {

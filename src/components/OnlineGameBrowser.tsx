@@ -54,6 +54,7 @@ interface OnlineGameBrowserProps {
   loadOpenSeeks?: (options?: FetchOpenSeekDirectoryOptions) => Promise<OpenSeekDirectoryResponse>;
   onBack: () => void;
   onOpenGame?: () => void;
+  onConfigureSetup?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
   onCreateSeek?: () => void | Promise<void>;
@@ -202,6 +203,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   loadOpenSeeks = fetchOpenSeekDirectory,
   onBack,
   onOpenGame,
+  onConfigureSetup,
   onTutorial,
   onOpenLibrary,
   onCreateSeek,
@@ -561,6 +563,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ownedSeekResponse.summary.status === "open" ||
       ownedSeekResponse.summary.status === "accepted");
   const hasCurrentSetupActions = !!onQuickMatch || !!onCreateSeek;
+  const setupPromptAction = onConfigureSetup ?? onOpenGame ?? onBack;
   const quickMatchPending = quickMatchStatus === "pending";
   const quickMatchBlocking = quickMatchStatus === "pending" || quickMatchStatus === "matched";
   const quickMatchDisabled =
@@ -988,47 +991,71 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </button>
         ) : (
           <main className="online-browser-list" aria-label="Online lobby">
-            {hasCurrentSetupActions && (
-              <section className="online-browser-quick-match-panel" aria-label="Play from current setup">
-                <div className="online-browser-quick-match-copy">
-                  <span className="online-browser-section-kicker">Play from current setup</span>
-                  <strong>Find a match with your current Play setup</strong>
-                  <p>Lobby filters search existing listings. Quick Match and List Current Setup use your current board, pieces, sanctuaries, pool, theme, clock, and scoring mode.</p>
+            <section
+              className={`online-browser-quick-match-panel ${hasCurrentSetupActions ? "" : "setup-needed"}`}
+              aria-label={hasCurrentSetupActions ? "Play from current setup" : "Set up matchmaking"}
+            >
+              <div className="online-browser-quick-match-copy">
+                <span className="online-browser-section-kicker">
+                  {hasCurrentSetupActions ? "Play from current setup" : "Setup needed"}
+                </span>
+                <strong>
+                  {hasCurrentSetupActions
+                    ? "Find a match with your current Play setup"
+                    : "Choose a Play setup before matchmaking"}
+                </strong>
+                <p>
+                  {hasCurrentSetupActions
+                    ? "Lobby filters search existing listings. Quick Match and Create Lobby Listing use your current board, pieces, sanctuaries, pool, theme, clock, and scoring mode."
+                    : "Quick Match and lobby listings use the board, pieces, clock, and scoring from Play."}
+                </p>
+              </div>
+              {quickMatchSetupSummary && (
+                <div className="online-browser-quick-match-summary" aria-label="Quick match setup summary">
+                  <span>Radius {quickMatchSetupSummary.boardRadius}</span>
+                  <span>{quickMatchSetupSummary.clock}</span>
+                  <span>{quickMatchSetupSummary.scoring}</span>
                 </div>
-                {quickMatchSetupSummary && (
-                  <div className="online-browser-quick-match-summary" aria-label="Quick match setup summary">
-                    <span>Radius {quickMatchSetupSummary.boardRadius}</span>
-                    <span>{quickMatchSetupSummary.clock}</span>
-                    <span>{quickMatchSetupSummary.scoring}</span>
-                  </div>
+              )}
+              <div className="online-browser-quick-match-actions">
+                {hasCurrentSetupActions ? (
+                  <>
+                    {onQuickMatch && (
+                      <button
+                        type="button"
+                        ref={quickMatchButtonRef}
+                        className="online-browser-button primary online-browser-quick-match"
+                        onClick={() => void runQuickMatch()}
+                        disabled={quickMatchDisabled}
+                        aria-label="Quick Match: accept a compatible lobby listing or list yours"
+                      >
+                        {quickMatchPending ? "Matching..." : quickMatchStatus === "matched" ? "Opening..." : "Quick Match"}
+                      </button>
+                    )}
+                    {onCreateSeek && (
+                      <button
+                        type="button"
+                        className="online-browser-button neutral online-browser-create-seek"
+                        onClick={() => void runCreateSeek()}
+                        disabled={createSeekDisabled}
+                        aria-label="Create public lobby listing from current Play setup"
+                      >
+                        {createSeekPending ? "Listing..." : "Create Lobby Listing"}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="online-browser-button primary online-browser-setup-action"
+                    onClick={setupPromptAction}
+                    aria-label="Configure a Play setup for matchmaking"
+                  >
+                    Configure Setup
+                  </button>
                 )}
-                <div className="online-browser-quick-match-actions">
-                  {onQuickMatch && (
-                    <button
-                      type="button"
-                      ref={quickMatchButtonRef}
-                      className="online-browser-button primary online-browser-quick-match"
-                      onClick={() => void runQuickMatch()}
-                      disabled={quickMatchDisabled}
-                      aria-label="Quick Match: accept a compatible lobby listing or list yours"
-                    >
-                      {quickMatchPending ? "Matching..." : quickMatchStatus === "matched" ? "Opening..." : "Quick Match"}
-                    </button>
-                  )}
-                  {onCreateSeek && (
-                    <button
-                      type="button"
-                      className="online-browser-button neutral online-browser-create-seek"
-                      onClick={() => void runCreateSeek()}
-                      disabled={createSeekDisabled}
-                      aria-label="Create public lobby listing from current Play setup"
-                    >
-                      {createSeekPending ? "Listing..." : "List Current Setup"}
-                    </button>
-                  )}
-                </div>
-              </section>
-            )}
+              </div>
+            </section>
             {visibleOwnedSeekResponse?.summary && (
               <section
                 className="online-seek-owner-panel"
@@ -1137,8 +1164,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     {hasActiveSeekFilters
                       ? "Try a different side, clock, scoring, or search setting."
                       : hasCurrentSetupActions
-                        ? "Use Quick Match or List Current Setup above, or change setup from Play."
-                        : "Choose setup from Play, then return here to find or list a lobby game."}
+                        ? "Use Quick Match or Create Lobby Listing above, or change setup from Play."
+                        : "Configure setup above, then return here to find or list a lobby game."}
                   </p>
                 </div>
               ) : visibleOpenSeeks.map((seek) => {

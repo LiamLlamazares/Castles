@@ -467,11 +467,11 @@ const GameSetup: React.FC<GameSetupProps> = ({
                     )}
                     {onCreateOpenSeek && (
                         <button
-                            type="button"
-                            onClick={handleCreateOpenSeek}
-                            className="setup-action-button lobby-seek"
-                        >
-                            Find Match
+                        type="button"
+                        onClick={handleCreateOpenSeek}
+                        className="setup-action-button lobby-seek"
+                    >
+                            Create Lobby Listing
                         </button>
                     )}
                     {onCreateOnlineGame && (

@@ -275,7 +275,7 @@ describe("OnlineGameBrowser", () => {
     expect(within(setupSummary).getByText("Radius 7")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Timed 20+20")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Victory points")).toBeInTheDocument();
-    expect(screen.getByText(/Lobby filters search existing listings\. Quick Match and List Current Setup use your current board/i))
+    expect(screen.getByText(/Lobby filters search existing listings\. Quick Match and Create Lobby Listing use your current board/i))
       .toBeInTheDocument();
 
     const quickMatch = screen.getByRole("button", {
@@ -285,7 +285,9 @@ describe("OnlineGameBrowser", () => {
 
     expect(onQuickMatch).toHaveBeenCalledOnce();
     expect(quickMatch).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Create public lobby listing from current Play setup" })).toBeDisabled();
+    const createListing = screen.getByRole("button", { name: "Create public lobby listing from current Play setup" });
+    expect(createListing).toHaveTextContent("Create Lobby Listing");
+    expect(createListing).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("Checking compatible lobby listings");
 
     await act(async () => {
@@ -315,6 +317,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     const listButton = screen.getByRole("button", { name: "Create public lobby listing from current Play setup" });
+    expect(listButton).toHaveTextContent("Create Lobby Listing");
 
     fireEvent.click(listButton);
     fireEvent.click(listButton);
@@ -1161,13 +1164,17 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByText(/Private and unlisted games stay off this page/i)).toBeInTheDocument();
   });
 
-  it("does not reference current-setup actions when no playable setup action is available", async () => {
+  it("shows a setup prompt when no playable setup action is available", async () => {
+    const onOpenGame = vi.fn();
+    const onConfigureSetup = vi.fn();
     render(
       <OnlineGameBrowser
         initialTab="lobby"
         loadGames={vi.fn().mockResolvedValue(directory([]))}
         loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
         onBack={vi.fn()}
+        onOpenGame={onOpenGame}
+        onConfigureSetup={onConfigureSetup}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
       />
@@ -1175,8 +1182,20 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
 
-    expect(screen.queryByRole("region", { name: "Play from current setup" })).not.toBeInTheDocument();
-    expect(screen.getByText("Choose setup from Play, then return here to find or list a lobby game.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Set up matchmaking" })).toBeInTheDocument();
+    expect(screen.getByText("Choose a Play setup before matchmaking")).toBeInTheDocument();
+    expect(screen.getByText("Configure setup above, then return here to find or list a lobby game.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", {
+      name: "Quick Match: accept a compatible lobby listing or list yours",
+    })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {
+      name: "Create public lobby listing from current Play setup",
+    })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure a Play setup for matchmaking" }));
+
+    expect(onConfigureSetup).toHaveBeenCalledOnce();
+    expect(onOpenGame).not.toHaveBeenCalled();
   });
 
   it("auto-refreshes the Watch tab while visible", async () => {

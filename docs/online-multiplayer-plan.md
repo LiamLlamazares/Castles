@@ -399,7 +399,7 @@ Tests/review/deploy gates:
 
 Goal: make Online feel more like a practical Lichess-style play surface without implying unsupported ratings, accounts, chat, or server-side discovery features.
 
-Status: implemented and locally verified on 2026-06-02. Lobby now separates "Find lobby listings" controls from "Play from current setup" actions. `List Current Setup` creates the lobby listing directly from Online, disables while pending, and is hidden together with Quick Match during analysis/replay/online/challenge states. Watch now has a top-live-game plus more-games layout, visible-tab refresh, hidden-tab pause, and an in-flight guard so background refresh cannot clobber `Load more`. Open listing side labels, search placeholders, and accessibility group names were tightened after review.
+Status: implemented and locally verified on 2026-06-02. Lobby now separates "Find lobby listings" controls from "Play from current setup" actions. `Create Lobby Listing` creates the listing directly from Online using the current Play setup, disables while pending, and is hidden together with Quick Match during analysis/replay/online/challenge states. If no current Play setup exists, Lobby shows a `Configure Setup` prompt instead of referencing unavailable matchmaking actions. Watch now has a top-live-game plus more-games layout, visible-tab refresh, hidden-tab pause, and an in-flight guard so background refresh cannot clobber `Load more`. Open listing side labels, search placeholders, and accessibility group names were tightened after review.
 
 Remaining work:
 

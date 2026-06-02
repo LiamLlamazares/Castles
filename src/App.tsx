@@ -1791,6 +1791,7 @@ function App() {
         <OnlineGameBrowser
           onBack={returnToPreviousView}
           onOpenGame={handleOpenGame}
+          onConfigureSetup={handleNewGameClick}
           backLabel={currentBackLabel}
           initialTab={onlineBrowserTab}
           activeTab={onlineBrowserTab}
