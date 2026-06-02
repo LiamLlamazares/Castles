@@ -130,6 +130,8 @@ npm run build
 npm run server:build
 ```
 
+Do not skip the runtime environment block below when doing a condensed hotfix deploy. Health checks and browser smoke are pinned to `GIT_COMMIT`; if `/etc/castles/castles.env` still points at an older SHA, the service can run new files while `/api/health` correctly reports that the deployed commit contract has not been updated.
+
 Set up the runtime environment:
 
 ```bash
