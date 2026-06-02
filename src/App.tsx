@@ -15,6 +15,7 @@ import { LayoutService } from './Classes/Systems/LayoutService';
 import { MoveTree } from './Classes/Core/MoveTree';
 import { SanctuaryType, PieceTheme } from './Constants';
 import { Sanctuary } from './Classes/Entities/Sanctuary';
+import { Castle } from './Classes/Entities/Castle';
 import { getStartingLayout } from './ConstantImports';
 import { AIOpponentConfig } from './hooks/useAIOpponent';
 import { useOnlineGameConnection } from './hooks/useOnlineGameConnection';
@@ -95,6 +96,7 @@ const QUICK_START_STORAGE_KEY = "hasSeenQuickStart";
 interface GameConfig {
   board?: Board;
   pieces?: Piece[];
+  castles?: Castle[];
   layout?: LayoutService;
   moveTree?: MoveTree;
   turnCounter?: number;
@@ -115,6 +117,7 @@ interface GameConfig {
 interface LoadGameData {
   board: Board;
   pieces: Piece[];
+  castles?: Castle[];
   turnCounter: number;
   sanctuaries: Sanctuary[];
   moveTree?: MoveTree;
@@ -189,6 +192,7 @@ function createGameConfigFromOnlineSnapshot(
   return {
     board: setup.board,
     pieces: state.pieces,
+    castles: state.castles,
     layout,
     moveTree: state.moveTree,
     turnCounter: state.turnCounter,
@@ -210,6 +214,7 @@ function createGameConfigFromLoadData(data: LoadGameData, isAnalysisMode: boolea
   return {
     board: data.board,
     pieces: data.pieces,
+    castles: data.castles,
     layout: getStartingLayout(data.board),
     moveTree: data.moveTree,
     turnCounter: data.turnCounter,
@@ -1802,6 +1807,7 @@ function App() {
               key={gameKey}
               initialBoard={gameConfig.board}
               initialPieces={gameConfig.pieces}
+              initialCastles={gameConfig.castles}
               initialLayout={gameConfig.layout}
               initialMoveTree={gameConfig.moveTree}
               initialTurnCounter={gameConfig.turnCounter}

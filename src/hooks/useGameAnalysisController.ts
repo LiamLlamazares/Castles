@@ -14,7 +14,7 @@ interface UseGameAnalysisControllerProps {
   state: GameBoardState;
   setState: React.Dispatch<React.SetStateAction<GameBoardState>>;
   initialPieces: Piece[];
-  initialBoard: import("../Classes/Core/Board").Board;
+  initialCastles: Castle[];
   startingSanctuaries: Sanctuary[];
   initialTurnCounter: number;
   isViewingHistory: boolean;
@@ -25,7 +25,7 @@ export const useGameAnalysisController = ({
   state,
   setState,
   initialPieces,
-  initialBoard,
+  initialCastles,
   startingSanctuaries,
   initialTurnCounter,
   isViewingHistory,
@@ -59,7 +59,7 @@ export const useGameAnalysisController = ({
       return {
         pieces: initialPieces.map(p => p.clone()),
         pieceMap: createPieceMap(initialPieces.map(p => p.clone())),
-        castles: initialBoard.castles.map(c => c.clone()) as Castle[],
+        castles: initialCastles.map(c => c.clone()),
         sanctuaries: startingSanctuaries.map(s => s.clone()),
         sanctuaryPool: state.sanctuaryPool,
         turnCounter: initialTurnCounter,
@@ -72,7 +72,7 @@ export const useGameAnalysisController = ({
       } as unknown as GameState;
     }
     return state as unknown as GameState;
-  }, [isViewingHistory, analysisState, state, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
+  }, [isViewingHistory, analysisState, state, initialPieces, initialCastles, startingSanctuaries, initialTurnCounter]);
 
   // Constructed View State (GameState compatible)
   const viewState = useMemo<GameState>(() => {
@@ -97,7 +97,7 @@ export const useGameAnalysisController = ({
           return {
               pieces: initialPieces,
               pieceMap: createPieceMap(initialPieces),
-              castles: initialBoard.castles as Castle[],
+              castles: initialCastles,
               sanctuaries: startingSanctuaries,
               sanctuaryPool: state.sanctuaryPool,
               turnCounter: initialTurnCounter,
@@ -110,7 +110,7 @@ export const useGameAnalysisController = ({
           };
       }
       return state as unknown as GameState;
-  }, [state, isViewingHistory, analysisState, initialPieces, initialBoard, startingSanctuaries, initialTurnCounter]);
+  }, [state, isViewingHistory, analysisState, initialPieces, initialCastles, startingSanctuaries, initialTurnCounter]);
 
   /**
    * Jumps to a specific node in the move tree, potentially switching variations.

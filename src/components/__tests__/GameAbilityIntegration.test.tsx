@@ -7,7 +7,7 @@ import { PieceFactory } from "../../Classes/Entities/PieceFactory";
 import { Sanctuary } from "../../Classes/Entities/Sanctuary";
 import { PGNService } from "../../Classes/Services/PGNService";
 import { PieceType, SanctuaryType, type MoveRecord } from "../../Constants";
-import { getStartingBoard, getStartingPieces } from "../../ConstantImports";
+import { getStartingBoard, getStartingLayout, getStartingPieces } from "../../ConstantImports";
 import { createPieceMap } from "../../utils/PieceMap";
 import { createM5L2 } from "../../tutorial/lessons/m5_02_wolf";
 import { createM5L5 } from "../../tutorial/lessons/m5_05_wizard";
@@ -40,6 +40,24 @@ const getHexPolygon = (
   hex: Hex
 ): SVGPolygonElement => {
   const expectedPoints = lesson.layout.hexCornerString[hex.reflect().getKey(true)];
+  const polygon = Array.from(container.querySelectorAll("polygon")).find(
+    (element) => element.getAttribute("points") === expectedPoints
+  );
+
+  if (!polygon) {
+    throw new Error(`Could not find polygon for ${hex.getKey()}`);
+  }
+
+  return polygon as SVGPolygonElement;
+};
+
+const getBoardHexPolygon = (
+  container: HTMLElement,
+  layout: ReturnType<typeof getStartingLayout>,
+  hex: Hex,
+  isBoardRotated = false
+): SVGPolygonElement => {
+  const expectedPoints = layout.hexCornerString[hex.reflect().getKey(!isBoardRotated)];
   const polygon = Array.from(container.querySelectorAll("polygon")).find(
     (element) => element.getAttribute("points") === expectedPoints
   );
@@ -639,6 +657,86 @@ describe("Game ability integration", () => {
     );
 
     expect(screen.getByText("Online White · Complete · White wins by resignation")).toBeInTheDocument();
+  });
+
+  test("online reloads render server-authoritative captured castle ownership", async () => {
+    const board = getStartingBoard(6);
+    const layout = getStartingLayout(board);
+    const capturedBlackCastle = board.castles.find((castle) => castle.color === "b")!;
+    const liveCastles = board.castles.map((castle) =>
+      castle.hex.equals(capturedBlackCastle.hex)
+        ? castle.with({ owner: "w" })
+        : castle
+    );
+
+    const { container } = render(
+      <ThemeProvider>
+        <GameBoard
+          initialBoard={board}
+          initialPieces={getStartingPieces(6)}
+          initialCastles={liveCastles}
+          initialLayout={layout}
+          initialTurnCounter={4}
+          onlineSession={{
+            gameId: "game_captured_castle_reload",
+            role: "player",
+            playerColor: "w",
+            version: 10,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_captured_castle_reload&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    fireEvent.contextMenu(getBoardHexPolygon(container, layout, capturedBlackCastle.hex));
+
+    expect(await screen.findByText(/White controls this castle/)).toBeInTheDocument();
+    expect(screen.getByText("Online White · Your turn · Castles")).toBeInTheDocument();
+  });
+
+  test("online board orientation follows the player seat, not the current turn", () => {
+    const { container, rerender } = render(
+      <ThemeProvider>
+        <GameBoard
+          key="black-orientation-white-turn"
+          onlineSession={{
+            gameId: "game_black_orientation",
+            role: "player",
+            playerColor: "b",
+            version: 1,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_black_orientation&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(container.querySelector(".game-board-stage")).toHaveAttribute("data-board-orientation", "rotated");
+    expect(screen.getByText("Online Black · Waiting for White · Movement")).toBeInTheDocument();
+
+    rerender(
+      <ThemeProvider>
+        <GameBoard
+          key="black-orientation-black-turn"
+          initialTurnCounter={5}
+          onlineSession={{
+            gameId: "game_black_orientation",
+            role: "player",
+            playerColor: "b",
+            version: 2,
+            status: "connected",
+            spectatorUrl: "https://castles.example/?onlineGame=game_black_orientation&view=spectator",
+            submitAction: vi.fn(),
+          }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(container.querySelector(".game-board-stage")).toHaveAttribute("data-board-orientation", "rotated");
+    expect(screen.getByText("Online Black · Your turn · Movement")).toBeInTheDocument();
   });
 
   test("active online players do not get a drawer analysis escape hatch", () => {

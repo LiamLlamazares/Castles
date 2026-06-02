@@ -59,6 +59,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
   const initialBoard = config?.board ?? startingBoard;
   const initialPieces = config?.pieces ?? allPieces;
   const initialTurnCounter = config?.turnCounter ?? 0;
+  const initialCastles = config?.castles ?? initialBoard.castles;
   const initialSanctuaries = config?.sanctuaries;
   const initialMoveTree = config?.moveTree;
   const initialPoolTypes = config?.poolTypes;
@@ -83,6 +84,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     initialBoard, 
     initialPieces, 
     initialTurnCounter,
+    initialCastles,
     initialSanctuaries,
     initialMoveTree,
     sanctuarySettings,
@@ -107,7 +109,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     state,
     setState,
     initialPieces,
-    initialBoard,
+    initialCastles,
     startingSanctuaries,
     initialTurnCounter,
     isViewingHistory,

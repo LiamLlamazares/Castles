@@ -30,6 +30,7 @@ import type { OnlineClientSession } from "../online/types";
 export interface GameConfig {
   board?: Board;
   pieces?: Piece[];
+  castles?: Castle[];
   sanctuaries?: Sanctuary[];
   turnCounter?: number;
   moveTree?: MoveTree;

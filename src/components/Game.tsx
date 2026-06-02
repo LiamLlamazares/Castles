@@ -20,6 +20,7 @@ import { Board } from "../Classes/Core/Board";
 import { MoveNode, MoveTree } from "../Classes/Core/MoveTree";
 import type { PositionSnapshot } from "../Classes/Core/GameState";
 import { Piece } from "../Classes/Entities/Piece";
+import { Castle } from "../Classes/Entities/Castle";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
@@ -59,6 +60,7 @@ export type SaveGameToLibraryResult =
 interface GameBoardProps {
   initialBoard?: Board;
   initialPieces?: Piece[];
+  initialCastles?: Castle[];
   initialLayout?: LayoutService;
   initialMoveTree?: import('../Classes/Core/MoveTree').MoveTree;
   initialTurnCounter?: number;
@@ -434,6 +436,18 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
   // Decoupled View State
   const viewState = useGameView();
+  const onlineOrientationKey = onlineSession?.role === "player"
+    ? `${onlineSession.gameId}:${onlineSession.playerColor}`
+    : onlineSession
+      ? `${onlineSession.gameId}:spectator`
+      : "local";
+  const onlineOrientationTarget =
+    onlineSession?.role === "player" && onlineSession.playerColor === "b";
+  const { setBoardRotated } = viewState;
+
+  React.useEffect(() => {
+    setBoardRotated(onlineOrientationTarget);
+  }, [onlineOrientationKey, onlineOrientationTarget, setBoardRotated]);
 
   // AI Integration
   const aiIntegrationSafe = aiIntegration ? {
@@ -465,13 +479,21 @@ const InnerGame: React.FC<GameBoardProps> = ({
     const roleLabel = onlineSession.role === "player"
       ? `Online ${onlineSession.playerColor === "w" ? "White" : "Black"}`
       : "Spectating";
+    const activePlayerLabel = currentPlayer === "w" ? "White" : "Black";
+    const displayPhase = turnPhase === "Recruitment" ? "Castles" : turnPhase;
     const stateLabel = onlineSession.result
       ? `Complete · ${formatOnlineGameResult(onlineSession.result)}`
       : onlineSession.role === "player" && onlineSession.isActionPending
         ? "Waiting for server"
+      : onlineSession.status === "connected" && onlineSession.role === "player"
+        ? onlineSession.playerColor === currentPlayer
+          ? `Your turn · ${displayPhase}`
+          : `Waiting for ${activePlayerLabel} · ${displayPhase}`
+      : onlineSession.status === "connected" && onlineSession.role === "spectator"
+        ? `${activePlayerLabel} to move · ${displayPhase}`
       : formatOnlineConnectionStatus(onlineSession.status);
     return `${roleLabel} · ${stateLabel}${onlineSession.lastError ? ` · ${onlineSession.lastError}` : ""}`;
-  }, [onlineSession]);
+  }, [currentPlayer, onlineSession, turnPhase]);
   const canOpenAnalysisBoard =
     !isAnalysisMode &&
     (!onlineSession || onlineSession.role === "spectator" || !!onlineSession.result);
@@ -1046,7 +1068,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
       )}
 
       {/* Board Container */}
-      <div className="game-board-stage">
+      <div
+        className="game-board-stage"
+        data-board-orientation={viewState.isBoardRotated ? "rotated" : "default"}
+      >
         <BoardContainer
           layout={initialLayout}
           pieceTheme={pieceTheme || "Castles"}
@@ -1083,6 +1108,7 @@ const GameBoard: React.FC<GameBoardProps> = (props) => {
       config={{
         board: props.initialBoard,
         pieces: props.initialPieces,
+        castles: props.initialCastles,
         turnCounter: props.initialTurnCounter,
         sanctuaries: props.initialSanctuaries,
         graveyard: props.initialGraveyard,

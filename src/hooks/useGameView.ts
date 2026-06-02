@@ -23,6 +23,7 @@ export interface GameViewState {
 export interface GameViewActions {
   toggleCoordinates: () => void;
   handleFlipBoard: () => void;
+  setBoardRotated: (isRotated: boolean) => void;
   incrementResizeVersion: () => void;
   toggleShields: () => void;
   toggleCastleRecruitment: () => void;
@@ -48,6 +49,14 @@ export const useGameView = (): GameViewState & GameViewActions => {
 
   const handleFlipBoard = useCallback(() => {
     setState(prev => ({ ...prev, isBoardRotated: !prev.isBoardRotated }));
+  }, []);
+
+  const setBoardRotated = useCallback((isRotated: boolean) => {
+    setState(prev => (
+      prev.isBoardRotated === isRotated
+        ? prev
+        : { ...prev, isBoardRotated: isRotated }
+    ));
   }, []);
 
   const incrementResizeVersion = useCallback(() => {
@@ -90,6 +99,7 @@ export const useGameView = (): GameViewState & GameViewActions => {
     showSanctuaryIcons: state.showSanctuaryIcons,
     toggleCoordinates,
     handleFlipBoard,
+    setBoardRotated,
     incrementResizeVersion,
     toggleShields,
     toggleCastleRecruitment,

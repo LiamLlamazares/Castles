@@ -31,6 +31,7 @@ export const useCoreGame = (
   initialBoard: import("../Classes/Core/Board").Board = startingBoard,
   initialPieces: Piece[] = allPieces,
   initialTurnCounter: number = 0,
+  initialCastles?: Castle[],
   initialSanctuaries?: Sanctuary[],
   initialMoveTree?: MoveTree,
   sanctuarySettings?: { unlockTurn: number, cooldown: number },
@@ -53,6 +54,11 @@ export const useCoreGame = (
       return SanctuaryGenerator.generateDefaultSanctuaries(initialBoard);
   }, [initialBoard, initialSanctuaries]);
 
+  const startingCastles = useMemo(
+    () => (initialCastles ?? initialBoard.castles).map(c => c.clone()),
+    [initialBoard, initialCastles]
+  );
+
   // Use passed MoveTree if available (e.g., from PGN import with snapshots)
   // Otherwise build a new tree from initialMoveHistory
   const startingMoveTree = useMemo(() => {
@@ -73,7 +79,7 @@ export const useCoreGame = (
     tree.rootNode.snapshot = {
       pieces: initialPieces.map(p => p.clone()),
       pieceMap: createPieceMap(initialPieces),
-      castles: initialBoard.castles.map(c => c.clone()),
+      castles: startingCastles.map(c => c.clone()),
       sanctuaries: startingSanctuaries.map(s => s.clone()),
       turnCounter: 0,
       sanctuaryPool: initialPool,
@@ -83,7 +89,7 @@ export const useCoreGame = (
     };
     
     return tree;
-  }, [initialMoveTree, initialPieces, initialBoard, startingSanctuaries, initialGraveyard, initialPhoenixRecords, initialVictoryPoints]);
+  }, [initialMoveTree, initialPieces, initialPoolTypes, startingCastles, startingSanctuaries, initialGraveyard, initialPhoenixRecords, initialVictoryPoints]);
 
   // =========== STATE ===========
   const [state, setState] = useState<GameBoardState>(() => {
@@ -93,7 +99,7 @@ export const useCoreGame = (
       movingPiece: null,
       promotionPending: initialPromotionPending,
       turnCounter: initialTurnCounter,
-      castles: initialBoard.castles as Castle[], 
+      castles: startingCastles.map(c => c.clone()),
       sanctuaries: startingSanctuaries,
       // Initialize sanctuary pool
       sanctuaryPool: (initialPoolTypes || Object.values(SanctuaryType)).filter((t): t is SanctuaryType => {
