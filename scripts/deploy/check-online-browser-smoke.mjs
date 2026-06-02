@@ -962,7 +962,7 @@ async function verifyBrowserStaleActionUi(page, gameId) {
       const text = await page.bodyText();
       return (
         text.includes("Online White") &&
-        text.includes("Live") &&
+        (text.includes("Your turn") || text.includes("Waiting for")) &&
         text.includes("Position updated from server. Try again.") &&
         !text.includes("Waiting for server")
       );
@@ -1014,7 +1014,11 @@ async function verifyBrowserReconnect(page) {
     await waitUntil("browser websocket reconnect", async () => {
       const afterCount = await page.evaluate("window.__castlesSmokeSocketCount()");
       const text = await page.bodyText();
-      return afterCount > beforeCount && text.includes("Online White") && text.includes("Live");
+      return (
+        afterCount > beforeCount &&
+        text.includes("Online White") &&
+        (text.includes("Your turn") || text.includes("Waiting for"))
+      );
     });
   } finally {
     if (!released) {
