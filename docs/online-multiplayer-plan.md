@@ -511,17 +511,18 @@ Remaining work:
 
 Goal: let players find and analyze completed friend-link games from the same browser even when those games are unlisted and therefore absent from the public Online Archive.
 
-Status: implemented locally on 2026-06-02. The app now records token-free recent online game ids in localStorage when an online player or spectator snapshot is seen, updates the record to complete once the server snapshot has a result, and passes those records to Online Archive. Archive now shows a distinct `Recent completed online games` section for completed local records that are not already present in the public archive, with `Analyze Replay` using the existing spectator snapshot and replay reconstruction path. Known-private games are not newly added to this token-free replay list.
+Status: implemented locally on 2026-06-02. The app now records token-free recent online game ids in localStorage when an online player or spectator snapshot is seen, updates the record to complete once the server snapshot has a result, and passes those records to Online Archive. Archive now shows a distinct `Recent completed online games` section for completed local records that are not already present in the public archive, with `Analyze Replay` using the existing spectator snapshot and replay reconstruction path. The visible copy describes these as device-only replays rather than account history or public archive rows. Unlisted game ids in this list are local replay locators, not bearer tokens or harmless public-history entries. Known-private games are not newly added to this token-free replay list.
 
 Verification:
 
-- Focused tests cover recent-online-game storage validation, ordering, de-duplication, malformed data cleanup, App snapshot-to-storage wiring without token leakage, Archive rendering, duplicate suppression against public rows, and replay button handoff.
+- Focused tests cover recent-online-game storage validation, ordering, de-duplication, malformed data cleanup, extra token/URL field normalization, App snapshot-to-storage wiring without token leakage, Archive rendering, duplicate suppression against public rows, and replay button handoff.
 - Client build and server build passed locally.
 
 Remaining work:
 
 - Account-backed personal game history should replace or augment this local-only list once accounts exist, so registered players see their own finished games across devices while anonymous players keep the current on-this-device recent list.
 - If private games later need replay from the same browser, add an authenticated replay endpoint or token-safe local credential design rather than using public spectator snapshots.
+- Add a user-facing clear-control for this local recent replay list before broader public/account-backed history, because unlisted game ids can locate replays under the current spectator policy.
 
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 

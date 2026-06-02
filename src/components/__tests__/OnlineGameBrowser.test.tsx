@@ -1679,7 +1679,7 @@ describe("OnlineGameBrowser", () => {
         ]))}
         recentOnlineGames={[
           {
-            gameId: "game_private_finished",
+            gameId: "game_unlisted_finished",
             role: "player",
             seat: "b",
             status: "complete",
@@ -1706,15 +1706,19 @@ describe("OnlineGameBrowser", () => {
     );
 
     const recent = await screen.findByRole("region", { name: "Recent online games on this device" });
-    expect(recent).toHaveTextContent("game_private_finished");
+    expect(recent).toHaveTextContent("game_unlisted_finished");
     expect(recent).toHaveTextContent("Played Black");
+    expect(recent).toHaveTextContent("Device-only replay");
+    expect(recent).toHaveTextContent(
+      "Completed online games opened in this browser can be replayed here when they are not already in the public archive."
+    );
     expect(recent).not.toHaveTextContent("game_active_recent");
     expect(within(recent).queryByText("game_public_archive")).not.toBeInTheDocument();
 
     fireEvent.click(
-      within(recent).getByRole("button", { name: "Analyze recent online replay game_private_finished" })
+      within(recent).getByRole("button", { name: "Analyze recent online replay game_unlisted_finished" })
     );
-    expect(onReplay).toHaveBeenCalledWith("game_private_finished");
+    expect(onReplay).toHaveBeenCalledWith("game_unlisted_finished");
   });
 
   it("filters public summaries by player name and game id", async () => {

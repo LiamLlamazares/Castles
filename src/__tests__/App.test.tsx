@@ -1588,6 +1588,22 @@ describe("App game setup lifecycle", () => {
     expect(screen.queryByRole("button", { name: "Back to Online Archive" })).not.toBeInTheDocument();
   });
 
+  it("uses replay failure copy that applies to public archive and device-only replays", async () => {
+    const alertMock = vi.fn();
+    vi.stubGlobal("alert", alertMock);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("not found")));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+
+    await waitFor(() => {
+      expect(alertMock).toHaveBeenCalledWith(
+        "Could not open this replay. The game may no longer allow spectator replay."
+      );
+    });
+  });
+
   it("uses replay setup metadata for archived games with move history", async () => {
     const archiveSnapshot = spectatorSnapshot("game_archive_public");
     const fetchMock = vi.fn().mockResolvedValue(

@@ -119,6 +119,10 @@ function formatRecentOnlineGameRole(record: RecentOnlineGameRecord): string {
   return "Played";
 }
 
+function formatRecentOnlineGameScope(): string {
+  return "Device-only replay";
+}
+
 function searchText(summary: OnlineGameSummary): string {
   const white = participantName(summary.participants, "w");
   const black = participantName(summary.participants, "b");
@@ -903,7 +907,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <div className="online-game-meta">
             <span className="online-game-pill complete">Complete</span>
             <span>Last opened {formatRecentOnlineGameTime(record.lastSeenAt)}</span>
-            <span>Unlisted friend games may only appear here on this browser.</span>
+            <span>{formatRecentOnlineGameScope()}</span>
           </div>
         </div>
         <div className="online-game-actions">
@@ -1610,7 +1614,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   <strong>Recent completed online games</strong>
                 </div>
                 <p>
-                  Unlisted friend games stay out of the public archive, but completed games you opened here can still be replayed from this browser.
+                  Completed online games opened in this browser can be replayed here when they are not already in the public archive.
                 </p>
                 {recentArchivedGames.map(renderRecentOnlineGameRow)}
               </section>

@@ -111,6 +111,14 @@ Public directory list responses wrap summaries in schema v1:
 
 Directory ordering is by recent public activity: `updatedAt DESC`, then `gameId ASC`. Cursors are opaque keyset cursors over that ordering; clients must not parse them or treat them as durable identifiers. Cursor payloads reject malformed or secret-looking game ids.
 
+### Local Recent Replay Boundary
+
+No-account recent online replays are a browser convenience, not durable account history and not an authorization mechanism. The local record stores only a game id, last-seen timestamp, player/spectator role, optional player seat, and active/complete status. For unlisted games, that game id is still a local replay locator because the current spectator policy allows anyone who knows the random id to view the game. It is not a bearer token, but it should not be treated as harmless public-history data. Local recent records must not store bearer tokens, challenge tokens, raw invite URLs, cookies, session ids, or spectator URLs.
+
+Opening a recent replay must still go through the server's spectator snapshot policy. Public and unlisted games can be replayed only if that token-free spectator path is allowed; private games need a future authenticated replay endpoint or a token-safe credential design.
+
+Once registered accounts exist, signed-in player history should be server-backed and attached to the account identity. Local recent replays may remain as an anonymous/offline fallback, but they must not be the source of truth for a signed-in user's archive.
+
 ## Identity Primitive
 
 Online summaries support three identity kinds:

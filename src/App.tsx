@@ -959,7 +959,7 @@ function App() {
     } catch (error) {
       if (replayRequestIdRef.current !== requestId) return;
       console.error("Failed to open archived online replay", error);
-      alert("Could not open this archived replay. Refresh public games and try again.");
+      alert("Could not open this replay. The game may no longer allow spectator replay.");
     }
   };
 

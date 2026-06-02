@@ -94,4 +94,50 @@ describe("recent online games storage", () => {
     clearRecentOnlineGames(storage);
     expect(loadRecentOnlineGames(storage)).toEqual([]);
   });
+
+  it("normalizes stored records without preserving token or URL-looking fields", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      "castles_recent_online_games",
+      JSON.stringify([
+        {
+          gameId: "game_token_noise",
+          role: "player",
+          seat: "w",
+          status: "complete",
+          lastSeenAt: "2026-06-01T12:00:00.000Z",
+          token: "secret-token",
+          spectatorUrl: "https://castles.example/?onlineGame=game_token_noise&token=secret-token",
+          invite: "#challengeToken=secret-token",
+        },
+      ])
+    );
+
+    expect(loadRecentOnlineGames(storage)).toEqual([
+      {
+        gameId: "game_token_noise",
+        role: "player",
+        seat: "w",
+        status: "complete",
+        lastSeenAt: "2026-06-01T12:00:00.000Z",
+      },
+    ]);
+
+    rememberRecentOnlineGame(
+      {
+        gameId: "game_token_noise",
+        role: "player",
+        seat: "w",
+        status: "complete",
+        lastSeenAt: "2026-06-01T12:05:00.000Z",
+      },
+      storage
+    );
+
+    const stored = storage.getItem("castles_recent_online_games");
+    expect(stored).toContain("game_token_noise");
+    expect(stored).not.toContain("secret-token");
+    expect(stored).not.toContain("spectatorUrl");
+    expect(stored).not.toContain("challengeToken");
+  });
 });
