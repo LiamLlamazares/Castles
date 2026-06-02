@@ -38,31 +38,7 @@ describe("GameSetup", () => {
     ]);
   });
 
-  it("passes the preview setup through when creating a private online room", () => {
-    const previewSanctuaries = [
-      new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
-      new Sanctuary(new Hex(1, -1, 0), SanctuaryType.WolfCovenant, "b"),
-    ];
-    vi
-      .spyOn(SanctuaryGenerator, "generateRandomSanctuaries")
-      .mockReturnValue(previewSanctuaries);
-
-    const onCreateOnlineGame = vi.fn();
-    const { container } = render(<GameSetup onPlay={vi.fn()} onCreateOnlineGame={onCreateOnlineGame} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Private Link" }));
-
-    expect(container.querySelector(".game-setup-shell")).toBeInTheDocument();
-    expect(container.querySelector(".setup-preview")).toBeInTheDocument();
-    expect(onCreateOnlineGame).toHaveBeenCalledTimes(1);
-    expect(onCreateOnlineGame.mock.calls[0][3]).toBe(previewSanctuaries);
-    expect(onCreateOnlineGame.mock.calls[0][4]).toEqual([
-      SanctuaryType.WolfCovenant,
-      SanctuaryType.SacredSpring,
-    ]);
-  });
-
-  it("passes the preview setup through when creating an open lobby seek", () => {
+  it("passes the preview setup through when listing in the public lobby", () => {
     const previewSanctuaries = [
       new Sanctuary(new Hex(-1, 1, 0), SanctuaryType.WolfCovenant, "w"),
       new Sanctuary(new Hex(1, -1, 0), SanctuaryType.WolfCovenant, "b"),
@@ -74,7 +50,7 @@ describe("GameSetup", () => {
     const onCreateOpenSeek = vi.fn();
     render(<GameSetup onPlay={vi.fn()} onCreateOpenSeek={onCreateOpenSeek} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Listing" }));
+    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
 
     expect(onCreateOpenSeek).toHaveBeenCalledTimes(1);
     expect(onCreateOpenSeek.mock.calls[0][3]).toBe(previewSanctuaries);
@@ -106,13 +82,12 @@ describe("GameSetup", () => {
     ]);
   });
 
-  it("orders setup actions around local play, invite, matchmaking, then private links", () => {
+  it("orders setup actions around local play, friend invite, then public lobby listing", () => {
     render(
       <GameSetup
         onPlay={vi.fn()}
         onCreateOnlineChallenge={vi.fn()}
         onCreateOpenSeek={vi.fn()}
-        onCreateOnlineGame={vi.fn()}
       />
     );
 
@@ -120,7 +95,16 @@ describe("GameSetup", () => {
       screen.getByRole("group", { name: "Game actions" }).querySelectorAll(".setup-action-button")
     ).map((element) => element.textContent?.trim());
 
-    expect(actionLabels).toEqual(["Play Local", "Invite Friend", "Create Lobby Listing", "Private Link"]);
+    expect(actionLabels).toEqual(["Play Local", "Invite Friend", "List in Lobby"]);
+    expect(screen.queryByRole("button", { name: "Private Link" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Invite Friend" })).toHaveAttribute(
+      "title",
+      "Create a private friend challenge from this setup"
+    );
+    expect(screen.getByRole("button", { name: "List in Lobby" })).toHaveAttribute(
+      "title",
+      "List this setup in the public lobby"
+    );
   });
 
   it("exposes shared play navigation without hiding play actions", () => {

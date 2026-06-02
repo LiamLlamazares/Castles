@@ -541,6 +541,21 @@ Remaining work:
 - A true TV/featured ranking still needs ratings/accounts or a durable activity signal.
 - Continue UI screenshot QA for desktop and mobile Watch/Lobby layouts before broad deployment.
 
+## Phase 6Y: Setup Entry Point Streamlining
+
+Goal: make the Play setup screen present one clear path for each game-start intent.
+
+Status: implemented locally on 2026-06-02. The setup screen now keeps three primary actions: `Play Local`, `Invite Friend`, and `List in Lobby`. The older direct `Private Link` action was removed from setup because `Invite Friend` covers private invitations with a clearer accept/join lifecycle, while `List in Lobby` covers public matchmaking from the current setup. This avoids presenting two competing private-online flows.
+
+Verification:
+
+- Focused GameSetup tests cover the new action order and absence of the old `Private Link` button. App tests cover the `Invite Friend` and `List in Lobby` handoffs.
+
+Remaining work:
+
+- Continue to keep edited-board/private-invite flows available through the friend challenge and lobby listing paths.
+- Revisit copy if account-backed challenges add named friends or rating-aware matchmaking.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -578,7 +593,6 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
-2. Continue Tutorial course polish with richer theory and practice, but add engine-graded progress only after objective board states are explicit and tested.
-3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.
+1. Continue Tutorial course polish with richer theory and practice, but add engine-graded progress only after objective board states are explicit and tested.
+2. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+3. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

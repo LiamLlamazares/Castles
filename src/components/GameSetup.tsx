@@ -31,17 +31,6 @@ interface GameSetupProps {
         pieceTheme?: PieceTheme,
         opponentConfig?: AIOpponentConfig
     ) => void;
-    onCreateOnlineGame?: (
-        board: Board,
-        pieces: Piece[],
-        timeControl?: { initial: number, increment: number },
-        sanctuaries?: Sanctuary[],
-        selectedSanctuaryTypes?: SanctuaryType[],
-        sanctuarySettings?: { unlockTurn: number, cooldown: number },
-        gameRules?: { vpModeEnabled: boolean },
-        initialPoolTypes?: SanctuaryType[],
-        pieceTheme?: PieceTheme
-    ) => void;
     onCreateOnlineChallenge?: (
         board: Board,
         pieces: Piece[],
@@ -131,7 +120,6 @@ function createSeededRandom(seed: number): () => number {
 
 const GameSetup: React.FC<GameSetupProps> = ({
     onPlay,
-    onCreateOnlineGame,
     onCreateOnlineChallenge,
     onCreateOpenSeek,
     onBack,
@@ -299,20 +287,6 @@ const GameSetup: React.FC<GameSetupProps> = ({
         );
     };
 
-    const handleCreateOnlineGame = () => {
-        onCreateOnlineGame?.(
-            board,
-            pieces,
-            { initial: timeInitial, increment: timeIncrement },
-            sanctuaries,
-            Array.from(selectedSanctuaries),
-            { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
-            { vpModeEnabled },
-            Array.from(selectedPoolTypes),
-            pieceTheme
-        );
-    };
-
     const handleCreateOnlineChallenge = () => {
         onCreateOnlineChallenge?.(
             board,
@@ -467,6 +441,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         type="button"
                         onClick={handlePlay}
                         className="setup-action-button play"
+                        title="Play this setup locally"
                     >
                         Play Local
                     </button>
@@ -475,6 +450,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
                             type="button"
                             onClick={handleCreateOnlineChallenge}
                             className="setup-action-button challenge"
+                            title="Create a private friend challenge from this setup"
                         >
                             Invite Friend
                         </button>
@@ -484,17 +460,9 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         type="button"
                         onClick={handleCreateOpenSeek}
                         className="setup-action-button lobby-seek"
+                        title="List this setup in the public lobby"
                     >
-                            Create Lobby Listing
-                        </button>
-                    )}
-                    {onCreateOnlineGame && (
-                        <button
-                            type="button"
-                            onClick={handleCreateOnlineGame}
-                            className="setup-action-button private-room"
-                        >
-                            Private Link
+                            List in Lobby
                         </button>
                     )}
                 </div>

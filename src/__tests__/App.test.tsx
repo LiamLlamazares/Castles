@@ -259,7 +259,7 @@ vi.mock("../components/GameSetup", () => ({
             )
           }
         >
-          Challenge a Friend
+          Invite Friend
         </button>
       )}
       {onCreateOpenSeek && (
@@ -279,7 +279,7 @@ vi.mock("../components/GameSetup", () => ({
             )
           }
         >
-          Create Lobby Listing
+          List in Lobby
         </button>
       )}
     </div>
@@ -1043,7 +1043,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Listing" }));
+    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1398,7 +1398,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Lobby Listing" }));
+    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
     await screen.findByText("Initial tab: lobby");
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh owned seek" }));
@@ -2271,7 +2271,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: "Challenge a Friend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Invite Friend" }));
 
     const linkRegion = await screen.findByRole("region", { name: "Challenge link" });
     expect(linkRegion).toHaveTextContent(challengedUrl);

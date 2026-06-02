@@ -40,7 +40,6 @@ import {
   fetchOpenSeek,
   fetchOnlineGameSummaries,
   fetchOnlineChallenge,
-  createOnlineGame,
   fetchOnlineSpectatorSnapshot,
   formatOnlinePendingConnectionMessage,
   forgetOnlineChallengeParams,
@@ -817,68 +816,6 @@ function App() {
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
     setGameKey(prev => prev + 1);
     enterGameView();
-  };
-
-  const handleCreateOnlineGame = async (
-    board: Board,
-    pieces: Piece[],
-    timeControl?: { initial: number, increment: number },
-    sanctuaries?: Sanctuary[],
-    _selectedSanctuaryTypes?: SanctuaryType[],
-    sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    gameRules?: { vpModeEnabled: boolean },
-    initialPoolTypes?: SanctuaryType[],
-    pieceTheme?: PieceTheme
-  ) => {
-    try {
-      cancelPendingReplay();
-      clearAnalysisReturn();
-      clearAutosave();
-      forgetOnlineChallengeStorage(onlineChallenge);
-      clearOpenSeekState();
-      setOnlineSpectator(null);
-      setOnlineChallenge(null);
-      setOnlineChallengeResponse(null);
-      setOnlineChallengeShareUrl(null);
-      const created = await createOnlineGame(
-        serializeOnlineGameSetup({
-          board,
-          pieces,
-          sanctuaries: sanctuaries ?? [],
-          timeControl,
-          sanctuarySettings,
-          gameRules,
-          initialPoolTypes,
-          pieceTheme,
-        })
-      );
-
-      const whiteJoin = {
-        gameId: created.gameId,
-        seat: "w" as const,
-        token: created.white.token,
-      };
-      rememberOnlineJoinParams(whiteJoin);
-      rememberOnlineOpponentInviteUrl(created.gameId, created.black.url);
-      const whiteUrl = new URL(removeOnlineTokenFromUrl(created.white.url));
-      window.history.pushState(
-        {},
-        "",
-        `${window.location.pathname}?${whiteUrl.searchParams.toString()}`
-      );
-      setOnlineJoin(whiteJoin);
-      setOnlineSpectator(null);
-      setOnlineSnapshot(null);
-      setOnlineOpponentInviteUrl(created.black.url);
-      setOnlineVisibilityByGameId(prev => ({
-        ...prev,
-        [created.gameId]: "unlisted",
-      }));
-      enterGameView();
-    } catch (error) {
-      console.error("Failed to create online game", error);
-      alert("Could not create an online game. Make sure the Node server is running.");
-    }
   };
 
   const enterOnlineGameFromInvite = (invite: OnlineChallengeGameInvite) => {
@@ -1760,7 +1697,6 @@ function App() {
       {view === 'setup' && (
         <GameSetup 
           onPlay={handleStartGame} 
-          onCreateOnlineGame={handleCreateOnlineGame}
           onCreateOnlineChallenge={handleCreateOnlineChallenge}
           onCreateOpenSeek={handleCreateOpenSeek}
           onBack={returnToPreviousView}
