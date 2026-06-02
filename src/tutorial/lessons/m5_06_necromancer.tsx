@@ -28,7 +28,7 @@ export function createM5L6(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      'Select the Necromancer and use Raise Dead on an adjacent empty hex.',
+      { id: 'raise-dead-adjacent-hex', text: 'Select the Necromancer and use Raise Dead on an adjacent empty hex.' },
     ],
     hints: [
       'Raise Dead is an Attack-phase ability. It is not a capture, but it spends the Necromancer\'s attack action.',

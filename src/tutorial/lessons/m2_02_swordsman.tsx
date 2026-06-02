@@ -25,7 +25,9 @@ export function createM2L2(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Move into position, then capture the enemy Swordsman.'],
+    objectives: [
+      { id: 'move-and-capture-swordsman', text: 'Move into position, then capture the enemy Swordsman.' },
+    ],
     hints: ['Swordsmen move forward and attack forward diagonally.', 'If you cannot attack yet, pass through movement until the attack phase.'],
   };
 }

@@ -27,7 +27,9 @@ export function createM5L3(): TutorialLesson {
     pieces,
     layout,
     initialTurnCounter: 0,
-    objectives: ['Move the Swordsman and Healer so both stand beside the Giant, then use the strengthened Swordsman to capture it.'],
+    objectives: [
+      { id: 'use-healer-aura-to-capture', text: 'Move the Swordsman and Healer so both stand beside the Giant, then use the strengthened Swordsman to capture it.' },
+    ],
     hints: [
       'You do not activate the Healer. The strength bonus is passive.',
       'The Swordsman begins on White\'s side of the river, so its strength 2 comes from the Healer aura, not the river bonus.',

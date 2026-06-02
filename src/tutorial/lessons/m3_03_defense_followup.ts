@@ -27,8 +27,8 @@ export function createM3L3(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      'Use the Swordsman to capture one adjacent defender.',
-      'Then use the Archer against the enemy that is no longer defended.',
+      { id: 'capture-adjacent-defender', text: 'Use the Swordsman to capture one adjacent defender.' },
+      { id: 'archer-attacks-undefended-enemy', text: 'Then use the Archer against the enemy that is no longer defended.' },
     ],
     hints: [
       'Do not start with the Archer if the target is still defended.',

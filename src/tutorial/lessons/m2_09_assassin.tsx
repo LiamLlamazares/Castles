@@ -26,7 +26,9 @@ export function createM2L9(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Move the Assassin toward the Monarch instead of wasting it on the Giant.'],
+    objectives: [
+      { id: 'threaten-monarch', text: 'Move the Assassin toward the Monarch instead of wasting it on the Giant.' },
+    ],
     hints: ['Assassins instantly kill Monarchs.', 'Against non-Monarchs, they still use normal strength rules.'],
   };
 }

@@ -25,7 +25,9 @@ export function createM2L7(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Slide the Giant along a straight lane and overpower the enemy.'],
+    objectives: [
+      { id: 'slide-and-overpower', text: 'Slide the Giant along a straight lane and overpower the enemy.' },
+    ],
     hints: ['The Giant cannot slide through occupied hexes.', 'Strength 2 means a lone strength-1 piece usually cannot capture it.'],
   };
 }

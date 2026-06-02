@@ -27,7 +27,9 @@ export function createM4L3(): TutorialLesson {
     sanctuaries,
     layout,
     initialTurnCounter: 4,
-    objectives: ['Pledge the Swordsman standing on the Wolf Covenant.'],
+    objectives: [
+      { id: 'pledge-wolf-covenant', text: 'Pledge the Swordsman standing on the Wolf Covenant.' },
+    ],
     hints: [
       'Pledging is separate from castle recruitment.',
       'Cooldown drops at the start of that side\'s turn, plus 1 for each non-Swordsman that side has across the river.',

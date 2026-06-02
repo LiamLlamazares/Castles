@@ -27,8 +27,8 @@ export function createM3L2(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      'Compare the shield marker on the defended Archer with the undefended enemy.',
-      'Try the Archer against both targets.',
+      { id: 'compare-defended-archer', text: 'Compare the shield marker on the defended Archer with the undefended enemy.' },
+      { id: 'try-archer-targets', text: 'Try the Archer against both targets.' },
     ],
     hints: [
       'The protected piece can be an Archer; only the adjacent melee piece is providing the defense.',

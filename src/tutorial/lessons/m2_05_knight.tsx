@@ -25,7 +25,9 @@ export function createM2L5(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Slide the Knight along a diagonal lane, then capture the target.'],
+    objectives: [
+      { id: 'slide-and-capture', text: 'Slide the Knight along a diagonal lane, then capture the target.' },
+    ],
     hints: ['The Knight does not jump over blockers.', 'Use right-click to inspect its actual legal moves if the diagonal geometry feels odd at first.'],
   };
 }

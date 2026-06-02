@@ -27,7 +27,9 @@ export function createM2L12(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Move the Swordsman onto the back edge and choose a promotion.'],
+    objectives: [
+      { id: 'promote-swordsman', text: 'Move the Swordsman onto the back edge and choose a promotion.' },
+    ],
     hints: ['River hexes cannot be promotion squares.'],
   };
 }

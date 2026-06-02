@@ -411,11 +411,10 @@ Remaining work:
 
 Goal: make Learn progress closer to a Lichess-style course without claiming engine-graded mastery.
 
-Status: implemented locally on 2026-06-02. Learn now separates resume position from completed lessons, normalizes checked objectives by lesson-scoped objective ids instead of array indexes or objective wording, derives completion from objective checks, and demotes completion if a checked objective is later unchecked. Current index-based progress is normalized into the new shape on load, while unsupported legacy archaeology stays out of scope. Course copy now says lessons and objectives are completed rather than "mastered"; read-only lessons complete from Next, and clear action objectives can auto-complete from movement, capture, recruitment, promotion, pledge, ability, and inspection events.
+Status: implemented locally on 2026-06-02. Learn now separates resume position from completed lessons, stores checked objectives by authored lesson-scoped objective ids instead of array indexes or objective wording, derives completion from objective checks, and demotes completion if a checked objective is later unchecked. Unsupported legacy progress archaeology stays out of scope. Course copy now says lessons and objectives are completed rather than "mastered"; read-only lessons complete from Next, and clear action objectives can auto-complete from movement, capture, recruitment, promotion, pledge, ability, and inspection events.
 
 Remaining work:
 
-- Convert important lesson objectives from generated content-based ids to explicit authored ids as lesson text stabilizes.
 - Add engine-graded objectives only after each target board state and validation event is explicit and tested.
 - Add richer lesson theory and practice modules once the ruleset is stable enough to avoid teaching stale mechanics.
 
@@ -427,7 +426,6 @@ Status: implemented and locally verified on 2026-06-02. The Learn overview now h
 
 Remaining work:
 
-- Add authored lesson objective ids as lesson text stabilizes.
 - Add real engine-graded lesson success only after each objective has an explicit validation event.
 - Expand theory/practice lesson content after the ruleset is stable enough to avoid teaching stale mechanics.
 - Recheck Learn at tablet boundary widths when the next broad UI sweep starts.
@@ -563,6 +561,6 @@ Tests/review/deploy gates:
 
 1. Decide the next Watch/Lobby preview step: spectator counts with durable presence, a cleaner current-games section, or deeper navigation streamlining.
 2. Continue navigation clarity by reducing duplicated online game-creation entry points only where doing so does not remove useful edited-board or private-invite flows.
-3. Continue Tutorial course polish with authored objective ids and richer theory, but add engine-graded progress only after objective board states are explicit and tested.
+3. Continue Tutorial course polish with richer theory and practice, but add engine-graded progress only after objective board states are explicit and tested.
 4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 5. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

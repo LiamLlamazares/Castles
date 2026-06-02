@@ -15,7 +15,7 @@ vi.mock("../PieceImages", () => ({
 }));
 
 const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
-const VICTORY_OBJECTIVE_ID = "m0-01-victory-conditions-objective-1";
+const VICTORY_OBJECTIVE_ID = "inspect-castle-controllers";
 
 function renderTutorial(overrides: Partial<React.ComponentProps<typeof Tutorial>> = {}) {
   return render(
@@ -427,36 +427,12 @@ describe("Tutorial", () => {
     );
   });
 
-  it("migrates current index-based objective progress into objective ids", () => {
-    localStorage.setItem(
-      TUTORIAL_PROGRESS_KEY,
-      JSON.stringify({
-        lastLessonId: "m0_01_victory_conditions",
-        checkedObjectivesByLessonId: {
-          m0_01_victory_conditions: [0],
-        },
-      })
-    );
-
-    renderTutorial();
-
-    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("1 / 36 lessons completed");
-    expect(readStoredProgress()).toEqual(
-      expect.objectContaining({
-        completedLessonIds: ["m0_01_victory_conditions"],
-        checkedObjectiveIdsByLessonId: {
-          m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID],
-        },
-      })
-    );
-  });
-
-  it("migrates current no-objective reviewed lessons into completed lessons", () => {
+  it("preserves current no-objective completed lessons", () => {
     localStorage.setItem(
       TUTORIAL_PROGRESS_KEY,
       JSON.stringify({
         lastLessonId: "m0_00_welcome",
-        reviewedLessonIds: ["m0_00_welcome"],
+        completedLessonIds: ["m0_00_welcome"],
       })
     );
 
@@ -515,22 +491,18 @@ describe("Tutorial", () => {
         checkedObjectiveIdsByLessonId: {
           m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID, "not-real"],
         },
-        checkedObjectivesByLessonId: {
-          m2_l12_promotion: [999, -1, 0, "not-real"],
-        },
       })
     );
 
     renderTutorial();
 
-    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("3 / 36 lessons completed");
+    expect(screen.getByRole("status", { name: "Tutorial progress" })).toHaveTextContent("2 / 36 lessons completed");
     expect(readStoredProgress()).toEqual(
       expect.objectContaining({
         lastLessonId: "m0_00_welcome",
-        completedLessonIds: ["m0_00_welcome", "m0_01_victory_conditions", "m2_l12_promotion"],
+        completedLessonIds: ["m0_00_welcome", "m0_01_victory_conditions"],
         checkedObjectiveIdsByLessonId: {
           m0_01_victory_conditions: [VICTORY_OBJECTIVE_ID],
-          m2_l12_promotion: ["m2-l12-promotion-objective-1"],
         },
       })
     );

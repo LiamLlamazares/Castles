@@ -26,7 +26,9 @@ export function createM2L4(): TutorialLesson {
     pieces,
     layout,
     initialTurnCounter: 2,
-    objectives: ['Use the Archer to attack the enemy at range 2.'],
+    objectives: [
+      { id: 'attack-at-range-two', text: 'Use the Archer to attack the enemy at range 2.' },
+    ],
     hints: ['Archers cannot attack adjacent enemies.', 'Defended enemies can block ranged attacks; the defense lessons cover that soon.'],
   };
 }

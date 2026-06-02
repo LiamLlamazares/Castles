@@ -45,7 +45,7 @@ export interface TutorialLesson {
   layout: LayoutService;
   
   /** Learning objectives displayed in sidebar */
-  objectives?: TutorialLessonObjective[];
+  objectives?: TutorialObjective[];
   
   /** Hints shown to help the player */
   hints?: string[];
@@ -58,8 +58,6 @@ export interface TutorialObjective {
   id: string;
   text: string;
 }
-
-export type TutorialLessonObjective = string | TutorialObjective;
 
 export type TutorialGameEventType =
   | 'move'

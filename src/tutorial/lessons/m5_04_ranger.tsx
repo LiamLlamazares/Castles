@@ -28,7 +28,9 @@ export function createM5L4(): TutorialLesson {
     pieces,
     layout,
     initialTurnCounter: 2,
-    objectives: ['Attack the enemy exactly 3 hexes away with the Ranger.'],
+    objectives: [
+      { id: 'ranger-exact-range-three', text: 'Attack the enemy exactly 3 hexes away with the Ranger.' },
+    ],
     hints: [
       'The Ranger cannot attack adjacent or range-2 enemies.',
       'Without high ground, the Ranger attacks exactly 3 hexes away.',

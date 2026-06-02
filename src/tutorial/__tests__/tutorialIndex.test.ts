@@ -95,6 +95,15 @@ describe('tutorial lesson index', () => {
     }
   });
 
+  it('uses authored objective ids instead of generated ids for current lesson objectives', () => {
+    for (const lesson of getAllLessons()) {
+      for (const objective of lesson.objectives ?? []) {
+        expect(objective.id).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+        expect(objective.text.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('adds standalone basic lessons for every standard recruitable piece', () => {
     const lessons = getAllLessons();
     const basicPieceIds = new Set(
@@ -379,7 +388,9 @@ describe('tutorial lesson index', () => {
 
     expect(lesson.pieces.some((piece) => piece.type === PieceType.Eagle)).toBe(true);
     expect(lesson.phoenixRecords?.some((record) => record.owner === 'w')).toBe(true);
-    expect(lesson.objectives).toEqual(['As Black, capture the nearby Phoenix with the Giant.']);
+    expect(lesson.objectives).toEqual([
+      { id: 'capture-phoenix-with-giant', text: 'As Black, capture the nearby Phoenix with the Giant.' },
+    ]);
     expect(lesson.hints?.some((hint) => hint.includes('Compare the Phoenix with the Eagle'))).toBe(true);
 
     const engine = new GameEngine(lesson.board);

@@ -23,7 +23,9 @@ export function createM2L3(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Move the Swordsman one hex up from the centre, then capture the Giant.'],
+    objectives: [
+      { id: 'cross-river-and-capture-giant', text: 'Move the Swordsman one hex up from the centre, then capture the Giant.' },
+    ],
     hints: ['White Swordsmen become stronger on the black side of the board.'],
   };
 }

@@ -145,20 +145,9 @@ function sanitizeTutorialProgress(raw: unknown, lessons: TutorialLesson[]): Tuto
   const rawCompletedLessonIds = Array.isArray(record.completedLessonIds)
     ? new Set(record.completedLessonIds.filter((id): id is string => typeof id === "string" && lessonIds.has(id)))
     : new Set<string>();
-  const legacyReviewedLessonIds = Array.isArray((record as { reviewedLessonIds?: unknown }).reviewedLessonIds)
-    ? new Set(
-        (record as { reviewedLessonIds: unknown[] }).reviewedLessonIds.filter(
-          (id): id is string => typeof id === "string" && lessonIds.has(id)
-        )
-      )
-    : new Set<string>();
   const checkedObjectiveIdsByLessonId: Record<string, string[]> = {};
   const rawCheckedIds = record.checkedObjectiveIdsByLessonId && typeof record.checkedObjectiveIdsByLessonId === "object"
     ? record.checkedObjectiveIdsByLessonId
-    : {};
-  const legacyCheckedObjectives = (record as { checkedObjectivesByLessonId?: unknown }).checkedObjectivesByLessonId;
-  const rawLegacyCheckedObjectives = legacyCheckedObjectives && typeof legacyCheckedObjectives === "object"
-    ? legacyCheckedObjectives as Record<string, unknown>
     : {};
 
   for (const lesson of lessons) {
@@ -174,17 +163,6 @@ function sanitizeTutorialProgress(raw: unknown, lessons: TutorialLesson[]): Tuto
       }
     }
 
-    const rawLegacyLessonChecks = rawLegacyCheckedObjectives[lesson.id];
-    if (Array.isArray(rawLegacyLessonChecks)) {
-      for (const value of rawLegacyLessonChecks) {
-        if (typeof value === "string" && objectiveIdSet.has(value)) {
-          checked.add(value);
-        } else if (Number.isInteger(value) && typeof value === "number" && value >= 0 && value < objectives.length) {
-          checked.add(objectives[value].id);
-        }
-      }
-    }
-
     const orderedCheckedIds = objectives
       .map((objective) => objective.id)
       .filter((objectiveId) => checked.has(objectiveId));
@@ -196,7 +174,7 @@ function sanitizeTutorialProgress(raw: unknown, lessons: TutorialLesson[]): Tuto
       if (objectives.every((objective) => checked.has(objective.id))) {
         completed.add(lesson.id);
       }
-    } else if (rawCompletedLessonIds.has(lesson.id) || legacyReviewedLessonIds.has(lesson.id)) {
+    } else if (rawCompletedLessonIds.has(lesson.id)) {
       completed.add(lesson.id);
     }
   }

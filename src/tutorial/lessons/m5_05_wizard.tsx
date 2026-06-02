@@ -30,7 +30,9 @@ export function createM5L5(): TutorialLesson {
     pieces,
     layout,
     initialTurnCounter: 2,
-    objectives: ['Select the Wizard and use Fireball on the clustered Swordsman and Archers.'],
+    objectives: [
+      { id: 'fireball-clustered-units', text: 'Select the Wizard and use Fireball on the clustered Swordsman and Archers.' },
+    ],
     hints: [
       'Wizard abilities are used during the Attack phase and consume that Wizard\'s attack for the turn.',
       'The Wizard normally attacks exactly 2 hexes away.',

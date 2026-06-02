@@ -29,7 +29,7 @@ export function createM5L7(): TutorialLesson {
     initialTurnCounter: 7,
     phoenixRecords: [{ respawnTurn: 8, owner: 'w' }],
     objectives: [
-      'As Black, capture the nearby Phoenix with the Giant.',
+      { id: 'capture-phoenix-with-giant', text: 'As Black, capture the nearby Phoenix with the Giant.' },
     ],
     hints: [
       'Compare the Phoenix with the Eagle: both fly, but only the Phoenix has rebirth.',

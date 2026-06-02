@@ -26,7 +26,7 @@ export function createM4L2(): TutorialLesson {
     layout,
     initialTurnCounter: 4,
     objectives: [
-      'Recruit beside the captured black-side castle, not the white-side castle.',
+      { id: 'recruit-from-captured-castle', text: 'Recruit beside the captured black-side castle, not the white-side castle.' },
     ],
     hints: [
       'You are already in the Castles phase from the captured black-side castle.',

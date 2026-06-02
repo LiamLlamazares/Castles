@@ -37,9 +37,9 @@ export function createM5L9(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      'Play a few turns from both sides.',
-      'Try to capture an enemy castle and then recruit from it.',
-      'Keep both Monarch safety and castle control in mind.',
+      { id: 'play-both-sides', text: 'Play a few turns from both sides.' },
+      { id: 'capture-and-recruit', text: 'Try to capture an enemy castle and then recruit from it.' },
+      { id: 'protect-monarchs-and-castles', text: 'Keep both Monarch safety and castle control in mind.' },
     ],
     hints: [
       'You now know enough to use the normal game screen.',

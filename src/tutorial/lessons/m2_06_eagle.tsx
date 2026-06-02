@@ -27,7 +27,9 @@ export function createM2L6(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Fly past the friendly blockers and threaten the enemy Swordsman.'],
+    objectives: [
+      { id: 'fly-past-blockers', text: 'Fly past the friendly blockers and threaten the enemy Swordsman.' },
+    ],
     hints: [
       'Flying ignores blockers on the route.',
       'The landing hex still must be empty and legal.',

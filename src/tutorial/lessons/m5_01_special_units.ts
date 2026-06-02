@@ -27,7 +27,9 @@ export function createM5L1(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Inspect each special unit.'],
+    objectives: [
+      { id: 'inspect-special-units', text: 'Inspect each special unit.' },
+    ],
     instructions: 'Right-click any unit to compare its rules before the individual lessons.',
   };
 }

@@ -26,7 +26,9 @@ export function createM2L10(): TutorialLesson {
     board,
     pieces,
     layout,
-    objectives: ['Use the Dragon jump to get next to the Giant, then capture it.'],
+    objectives: [
+      { id: 'jump-and-capture-giant', text: 'Use the Dragon jump to get next to the Giant, then capture it.' },
+    ],
     hints: ['The Dragon flies over blockers but cannot land on an occupied hex.', 'Strength 3 makes it dangerous even to Giants and Monarchs.'],
   };
 }
