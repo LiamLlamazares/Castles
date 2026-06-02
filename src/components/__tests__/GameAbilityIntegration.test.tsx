@@ -84,6 +84,7 @@ describe("Game ability integration", () => {
   beforeEach(() => {
     originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     localStorage.clear();
+    localStorage.setItem("hasSeenQuickStart", "true");
     localStorage.setItem("hasSeenTooltipHint", "true");
     vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
     vi.spyOn(console, "log").mockImplementation(() => {});

@@ -17,10 +17,21 @@ import { useTheme } from "../contexts/ThemeContext";
 
 interface QuickStartModalProps {
   onClose: () => void;
+  onOpenTutorial?: () => void;
 }
 
-const QuickStartModal: React.FC<QuickStartModalProps> = ({ onClose }) => {
+const QuickStartModal: React.FC<QuickStartModalProps> = ({ onClose, onOpenTutorial }) => {
   const { isDark } = useTheme();
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
   
   const iconStyle: React.CSSProperties = { 
     width: '24px', 
@@ -39,11 +50,15 @@ const QuickStartModal: React.FC<QuickStartModalProps> = ({ onClose }) => {
     <div className="quickstart-backdrop" onClick={onClose}>
       <div className="quickstart-modal" onClick={(e) => e.stopPropagation()}>
         <div className="quickstart-header">
-          <h1><img src={castleIcon} alt="" style={iconStyle} /> Castles in 60 Seconds</h1>
+          <h1><img src={castleIcon} alt="" style={iconStyle} /> Welcome to Castles</h1>
           <button className="quickstart-close" onClick={onClose}>×</button>
         </div>
 
         <div className="quickstart-content">
+          <p className="quickstart-intro">
+            Castles has different rules from chess. The fastest way to learn is the guided tutorial, then you can come back and play a full game.
+          </p>
+
           {/* Goal Section */}
           <div className="quickstart-goal">
             <span className="goal-icon"><img src={flagIcon} alt="" style={iconStyle} /></span>
@@ -101,8 +116,13 @@ const QuickStartModal: React.FC<QuickStartModalProps> = ({ onClose }) => {
         </div>
 
         <div className="quickstart-footer">
+          {onOpenTutorial && (
+            <button className="quickstart-learn-btn" onClick={onOpenTutorial}>
+              <img src={lightbulbIcon} alt="" style={smallIconStyle} /> Start Tutorial
+            </button>
+          )}
           <button className="quickstart-play-btn" onClick={onClose}>
-            <img src={swordsIcon} alt="" style={smallIconStyle} /> Let's Play!
+            <img src={swordsIcon} alt="" style={smallIconStyle} /> Play Anyway
           </button>
           <span className="quickstart-hint">Press ESC or click outside to close</span>
         </div>

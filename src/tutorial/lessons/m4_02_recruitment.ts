@@ -25,11 +25,11 @@ export function createM4L2(): TutorialLesson {
     layout,
     initialTurnCounter: 4,
     objectives: [
-      'Use the Castles phase from the already-captured black-side castle.',
       'Recruit beside the captured black-side castle, not the white-side castle.',
-      'Notice river hexes are not legal recruitment targets.',
     ],
     hints: [
+      'You are already in the Castles phase from the captured black-side castle.',
+      'River hexes are not legal recruitment targets.',
       'The captured castle stays under White control even if the Swordsman leaves.',
       'The next recruitment piece comes from the castle cycle shown in its tooltip.',
       'Only empty, non-river adjacent hexes are valid recruitment squares.',

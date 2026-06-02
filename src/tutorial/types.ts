@@ -8,6 +8,7 @@ import { Piece } from '../Classes/Entities/Piece';
 import { Sanctuary } from '../Classes/Entities/Sanctuary';
 import { LayoutService } from '../Classes/Systems/LayoutService';
 import { PhoenixRecord } from '../Classes/Core/GameState';
+import { AbilityType, PieceType, TurnPhase } from '../Constants';
 
 /**
  * Represents a single tutorial lesson with board setup and instructional content.
@@ -59,6 +60,30 @@ export interface TutorialObjective {
 }
 
 export type TutorialLessonObjective = string | TutorialObjective;
+
+export type TutorialGameEventType =
+  | 'move'
+  | 'attack'
+  | 'capture'
+  | 'recruitment'
+  | 'promotion'
+  | 'pledge'
+  | 'ability'
+  | 'pass'
+  | 'inspect';
+
+export interface TutorialGameEvent {
+  type: TutorialGameEventType;
+  notation?: string;
+  phase?: TurnPhase;
+  hexKey?: string;
+  targetKind?: 'hex' | 'castle' | 'sanctuary' | 'piece';
+  pieceType?: PieceType;
+  abilityType?: AbilityType;
+  pieceRemoved?: boolean;
+  pieceAdded?: boolean;
+  castleControlChanged?: boolean;
+}
 
 /**
  * Lesson category for grouping lessons in UI.

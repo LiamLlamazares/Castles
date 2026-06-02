@@ -13,6 +13,7 @@ import { useClickHandler } from "../../hooks/useClickHandler";
 import { useTooltip } from "../../hooks/useTooltip";
 import { useGameView } from "../../hooks/useGameView";
 import { AbilitySystem } from "../../Classes/Systems/AbilitySystem";
+import type { TutorialGameEvent } from "../../tutorial/types";
 
 interface BoardContainerProps {
   layout: LayoutService;
@@ -27,6 +28,7 @@ interface BoardContainerProps {
   onAbilitySelect?: (ability: AbilityType | null) => void;
   onActiveAbilityChange?: (ability: import("../../Constants").AbilityType | null) => void;
   containerStyle?: React.CSSProperties;
+  onTutorialEvent?: (event: TutorialGameEvent) => void;
 }
 
 export const BoardContainer: React.FC<BoardContainerProps> = ({
@@ -38,7 +40,8 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
   activeAbility: controlledActiveAbility,
   onAbilitySelect,
   onActiveAbilityChange,
-  containerStyle
+  containerStyle,
+  onTutorialEvent
 }) => {
   const gameState = useGameState();
   const {
@@ -235,7 +238,13 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
           onHexClick={handleBoardClick}
           onHexRightClick={(hex) => {
             tooltip.clearPiece();
+            const castle = castles.find(c => c.hex.equals(hex));
             const sanctuary = sanctuaries.find(s => s.hex.equals(hex));
+            onTutorialEvent?.({
+              type: "inspect",
+              targetKind: castle ? "castle" : sanctuary ? "sanctuary" : "hex",
+              hexKey: hex.getKey(),
+            });
             if (sanctuary) {
               const pieceType = SanctuaryConfig[sanctuary.type].pieceType;
               const dummyPiece = PieceFactory.create(pieceType, hex, currentPlayer);
@@ -259,7 +268,15 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
           isBoardRotated={viewState.isBoardRotated}
           onPieceClick={handlePieceClickWrapper}
           onPieceRightClick={(piece) => {
-            if (piece) tooltip.togglePieceTooltip(piece);
+            if (piece) {
+              onTutorialEvent?.({
+                type: "inspect",
+                targetKind: "piece",
+                hexKey: piece.hex.getKey(),
+                pieceType: piece.type,
+              });
+              tooltip.togglePieceTooltip(piece);
+            }
           }}
           resizeVersion={viewState.resizeVersion}
           layout={layout}

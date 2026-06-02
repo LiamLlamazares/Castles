@@ -19,6 +19,7 @@ interface GameOverlaysProps {
   canRestart?: boolean;
   showQuickStart: boolean;
   onCloseQuickStart: () => void;
+  onOpenTutorial?: () => void;
   showTooltipHint: boolean;
   onDismissTooltipHint: () => void;
 }
@@ -35,7 +36,8 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
   onEnableAnalysis,
   canRestart = true,
   showQuickStart,
-  onCloseQuickStart
+  onCloseQuickStart,
+  onOpenTutorial
 }) => {
   const gameState = useGameState();
   const { promotePiece } = useGameActions();
@@ -60,7 +62,7 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
       )}
 
       {showQuickStart && (
-        <QuickStartModal onClose={onCloseQuickStart} />
+        <QuickStartModal onClose={onCloseQuickStart} onOpenTutorial={onOpenTutorial} />
       )}
 
       {gameState.promotionPending && (

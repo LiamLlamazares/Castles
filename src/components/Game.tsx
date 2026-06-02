@@ -25,7 +25,7 @@ import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
-import { PieceTheme } from "../Constants";
+import { AbilityType, PieceTheme } from "../Constants";
 import type { OnlineClientSession } from "../online/types";
 import type {
   OnlineGameVisibility,
@@ -39,6 +39,7 @@ import {
 import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import { createPieceMap } from "../utils/PieceMap";
 import PromotionModal from "./PromotionModal";
+import type { TutorialGameEvent } from "../tutorial/types";
 import "../css/Board.css";
 
 // Context
@@ -101,6 +102,7 @@ interface GameBoardProps {
   initialVictoryPoints?: { w: number; b: number };
   showNavigationMenu?: boolean;
   showTooltipHint?: boolean;
+  onTutorialEvent?: (event: TutorialGameEvent) => void;
 }
 
 function moveTreeHasCompleteSnapshots(tree: MoveTree): boolean {
@@ -147,7 +149,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   opponentConfig,
   onlineSession,
   showNavigationMenu = true,
-  showTooltipHint: shouldShowTooltipHint = true
+  showTooltipHint: shouldShowTooltipHint = true,
+  onTutorialEvent
 }) => {
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [showRulesModal, setShowRulesModal] = React.useState(false);
@@ -170,6 +173,12 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const keepPlayingButtonRef = React.useRef<HTMLButtonElement>(null);
   const focusBeforeDialogRef = React.useRef<HTMLElement | null>(null);
   const lastOnlineGameIdRef = React.useRef<string | null | undefined>(undefined);
+  const lastTutorialMoveSignatureRef = React.useRef("");
+  const tutorialSnapshotRef = React.useRef<{
+    pieceCount: number;
+    graveyardLength: number;
+    castleOwnersByHex: Record<string, string>;
+  } | null>(null);
 
   const showStatusMessage = React.useCallback((message: string) => {
     if (statusTimeoutRef.current !== null) {
@@ -270,6 +279,22 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const isOnlineActionPaused =
     onlineSession?.role === "player" &&
     (onlineSession.status !== "connected" || onlineSession.isActionPending === true);
+
+  React.useEffect(() => {
+    if (isTutorialMode || onlineSession || isAnalysisMode) {
+      return;
+    }
+
+    try {
+      if (!localStorage.getItem("hasSeenQuickStart")) {
+        setShowQuickStart(true);
+      }
+    } catch (error) {
+      console.error("Failed to read quick-start preference", error);
+      setShowQuickStart(true);
+    }
+  }, [isAnalysisMode, isTutorialMode, onlineSession]);
+
   const copyOnlineLink = React.useCallback((url: string, successMessage: string) => {
     copyOnlineInviteUrl(url)
       .then(() => showStatusMessage(successMessage))
@@ -725,8 +750,96 @@ const InnerGame: React.FC<GameBoardProps> = ({
     }
   }, [getPGN, isAnalysisMode, onSaveGameToLibrary, displayedWinner, showStatusMessage]);
 
-  const dismissQuickStart = () => setShowQuickStart(false);
+  const dismissQuickStart = React.useCallback(() => {
+    try {
+      localStorage.setItem("hasSeenQuickStart", "true");
+    } catch (error) {
+      console.error("Failed to save quick-start preference", error);
+    }
+    setShowQuickStart(false);
+  }, []);
+  const openQuickStartTutorial = React.useCallback(() => {
+    dismissQuickStart();
+    onTutorial?.();
+  }, [dismissQuickStart, onTutorial]);
   const dismissTooltipHint = () => setShowTooltipHint(false);
+
+  React.useEffect(() => {
+    if (!isTutorialMode || !onTutorialEvent) {
+      tutorialSnapshotRef.current = null;
+      return;
+    }
+
+    const currentSnapshot = {
+      pieceCount: pieces.length,
+      graveyardLength: graveyard.length,
+      castleOwnersByHex: Object.fromEntries(
+        castles.map((castle) => [castle.hex.getKey(), castle.owner])
+      ),
+    };
+    const previousSnapshot = tutorialSnapshotRef.current;
+    const latestMove = moveHistory.at(-1);
+    const signature = latestMove
+      ? `${moveHistory.length}:${latestMove.notation}:${latestMove.phase}:${latestMove.turnNumber}`
+      : "";
+    if (!latestMove || signature === lastTutorialMoveSignatureRef.current) {
+      tutorialSnapshotRef.current = currentSnapshot;
+      return;
+    }
+    lastTutorialMoveSignatureRef.current = signature;
+
+    const pieceRemoved = previousSnapshot
+      ? pieces.length < previousSnapshot.pieceCount ||
+        graveyard.length > previousSnapshot.graveyardLength
+      : false;
+    const pieceAdded = previousSnapshot
+      ? pieces.length > previousSnapshot.pieceCount
+      : false;
+    const castleControlChanged = previousSnapshot
+      ? castles.some((castle) =>
+          previousSnapshot.castleOwnersByHex[castle.hex.getKey()] !== undefined &&
+          previousSnapshot.castleOwnersByHex[castle.hex.getKey()] !== castle.owner
+        )
+      : false;
+
+    const notation = latestMove.notation;
+    let type: TutorialGameEvent["type"] = "move";
+    let abilityType: AbilityType | undefined;
+    if (notation === "Pass") {
+      type = "pass";
+    } else if (notation.startsWith("P:")) {
+      type = "pledge";
+    } else if (/^[A-Z][TFR]:/.test(notation)) {
+      type = "ability";
+      const abilityCode = notation.charAt(1);
+      abilityType = abilityCode === "F"
+        ? AbilityType.Fireball
+        : abilityCode === "T"
+          ? AbilityType.Teleport
+          : abilityCode === "R"
+            ? AbilityType.RaiseDead
+            : undefined;
+    } else if (latestMove.phase === "Recruitment" && notation.includes("=")) {
+      type = "recruitment";
+    } else if (latestMove.phase === "Movement" && notation.includes("=")) {
+      type = "promotion";
+    } else if (notation.includes("x")) {
+      type = pieceRemoved || castleControlChanged ? "capture" : "attack";
+    } else if (latestMove.phase === "Movement") {
+      type = "move";
+    }
+
+    onTutorialEvent({
+      type,
+      notation,
+      phase: latestMove.phase,
+      abilityType,
+      pieceRemoved,
+      pieceAdded,
+      castleControlChanged,
+    });
+    tutorialSnapshotRef.current = currentSnapshot;
+  }, [castles, graveyard.length, isTutorialMode, moveHistory, onTutorialEvent, pieces.length]);
 
   const [activeAbility, setActiveAbility] = React.useState<import('../Constants').AbilityType | null>(null);
   const shellClasses = [
@@ -790,6 +903,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         canRestart={!onlineSession}
         showQuickStart={showQuickStart}
         onCloseQuickStart={dismissQuickStart}
+        onOpenTutorial={onTutorial ? openQuickStartTutorial : undefined}
         showTooltipHint={showTooltipHint}
         onDismissTooltipHint={dismissTooltipHint}
       />
@@ -908,6 +1022,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           activeAbility={activeAbility}
           onAbilitySelect={setActiveAbility}
           onActiveAbilityChange={setActiveAbility}
+          onTutorialEvent={onTutorialEvent}
           containerStyle={{
             position: 'absolute',
             inset: 0,

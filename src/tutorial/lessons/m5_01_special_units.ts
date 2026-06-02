@@ -28,6 +28,6 @@ export function createM5L1(): TutorialLesson {
     pieces,
     layout,
     objectives: ['Inspect each special unit.'],
-    instructions: 'Use this as a lineup.',
+    instructions: 'Right-click any unit to compare its rules before the individual lessons.',
   };
 }

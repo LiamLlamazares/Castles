@@ -411,7 +411,7 @@ Remaining work:
 
 Goal: make Learn progress closer to a Lichess-style course without claiming engine-graded mastery.
 
-Status: implemented locally on 2026-06-02. Learn now separates resume position from completed lessons, normalizes checked objectives by lesson-scoped objective ids instead of array indexes or objective wording, derives completion from objective checks, and demotes completion if a checked objective is later unchecked. Current index-based progress is normalized into the new shape on load, while unsupported legacy archaeology stays out of scope. Course copy now says lessons and objectives are self-checked rather than "mastered" or engine-verified.
+Status: implemented locally on 2026-06-02. Learn now separates resume position from completed lessons, normalizes checked objectives by lesson-scoped objective ids instead of array indexes or objective wording, derives completion from objective checks, and demotes completion if a checked objective is later unchecked. Current index-based progress is normalized into the new shape on load, while unsupported legacy archaeology stays out of scope. Course copy now says lessons and objectives are completed rather than "mastered"; read-only lessons complete from Next, and clear action objectives can auto-complete from movement, capture, recruitment, promotion, pledge, ability, and inspection events.
 
 Remaining work:
 
@@ -421,7 +421,7 @@ Remaining work:
 
 ## Phase 6Q: Learn Course Presentation Polish
 
-Goal: make the Learn overview feel more like a compact Lichess-style learning path while keeping Castles-specific self-check progress honest.
+Goal: make the Learn overview feel more like a compact Lichess-style learning path while keeping Castles-specific completion progress honest.
 
 Status: implemented and locally verified on 2026-06-02. The Learn overview now has a current/next lesson panel, desktop course section map, per-module progress bars, per-lesson objective progress, piece/terrain-specific lesson visuals, clearer `Course overview` return controls, and bottom lesson navigation for users who scroll through lesson text. Mobile hides the section map so the first screen reaches the course title and current lesson panel sooner. A reviewer pass fixed the next-incomplete lesson label and no-objective completed-card aria wording. Screenshot artifacts are in `artifacts/ui-audit/phase6q-learn-after`.
 

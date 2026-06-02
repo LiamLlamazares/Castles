@@ -33,6 +33,5 @@ export function createM2L1(): TutorialLesson {
     board,
     pieces,
     layout,
-    instructions: 'Use this as a lineup.',
   };
 }

@@ -7,8 +7,9 @@ import GameBoard from "./Game";
 import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import { getAllLessons, TutorialLesson } from "../tutorial";
 import { getLessonObjectives } from "../tutorial/objectives";
+import type { TutorialGameEvent } from "../tutorial/types";
 import { getImageByPieceType } from "./PieceImages";
-import { PieceType } from "../Constants";
+import { AbilityType, PieceType } from "../Constants";
 import { useTheme } from "../contexts/ThemeContext";
 import castleIcon from "../Assets/Images/misc/wcastle.svg";
 import dragonIcon from "../Assets/Images/misc/dragon2.svg";
@@ -247,6 +248,62 @@ function getLessonCardSummary(lesson: TutorialLesson): string {
   return getLessonObjectives(lesson)[0]?.text ?? "Interactive lesson";
 }
 
+function getRequiredInspectionKeys(lesson: TutorialLesson, objectiveText: string): string[] {
+  const lower = objectiveText.toLowerCase();
+  if (lower.includes("both castles") || lower.includes("each castle") || lower.includes("every castle")) {
+    return lesson.board.castles.map((castle) => castle.hex.getKey());
+  }
+  if (lower.includes("each special unit") || lower.includes("each unit") || lower.includes("every unit")) {
+    return lesson.pieces.map((piece) => piece.hex.getKey());
+  }
+  return [];
+}
+
+function objectiveMatchesTutorialEvent(
+  lesson: TutorialLesson,
+  objectiveText: string,
+  event: TutorialGameEvent,
+  inspectedKeys: Set<string>
+): boolean {
+  const lower = objectiveText.toLowerCase();
+
+  if (/\bfind\b/.test(lower)) {
+    return false;
+  }
+
+  if (lower.includes("right-click") || lower.includes("right click") || lower.includes("inspect")) {
+    if (event.type !== "inspect") return false;
+    if (lower.includes("castle") && event.targetKind !== "castle") return false;
+    if ((lower.includes("unit") || lower.includes("piece")) && event.targetKind !== "piece") return false;
+    const requiredKeys = getRequiredInspectionKeys(lesson, objectiveText);
+    return requiredKeys.length === 0 || requiredKeys.every((key) => inspectedKeys.has(key));
+  }
+
+  if (lower.includes("recruit")) return event.type === "recruitment";
+  if (lower.includes("promot")) return event.type === "promotion";
+  if (lower.includes("pledge")) return event.type === "pledge";
+  if (lower.includes("fireball")) {
+    return event.type === "ability" && event.abilityType === AbilityType.Fireball && event.pieceRemoved === true;
+  }
+  if (lower.includes("raise dead")) {
+    return event.type === "ability" && event.abilityType === AbilityType.RaiseDead && event.pieceAdded === true;
+  }
+  if (lower.includes("teleport")) {
+    return event.type === "ability" && event.abilityType === AbilityType.Teleport;
+  }
+  if (lower.includes("ability")) {
+    return event.type === "ability" && event.abilityType !== undefined;
+  }
+  if (lower.includes("capture") || lower.includes("attack") || lower.includes("overpower") || lower.includes("defeat") || lower.includes("kill")) {
+    return event.type === "capture";
+  }
+  if (lower.includes("move") || lower.includes("slide") || lower.includes("fly") || lower.includes("jump")) {
+    return event.type === "move";
+  }
+
+  return false;
+}
+
 function isLessonComplete(lesson: TutorialLesson, progress: TutorialProgressState): boolean {
   const objectives = getLessonObjectives(lesson);
   if (objectives.length === 0) {
@@ -254,6 +311,67 @@ function isLessonComplete(lesson: TutorialLesson, progress: TutorialProgressStat
   }
   const checkedIds = new Set(progress.checkedObjectiveIdsByLessonId[lesson.id] ?? []);
   return objectives.every((objective) => checkedIds.has(objective.id));
+}
+
+function completeLessonInProgress(
+  progress: TutorialProgressState,
+  targetLesson: TutorialLesson,
+  lessons: TutorialLesson[]
+): TutorialProgressState {
+  const checkedObjectiveIdsByLessonId = { ...progress.checkedObjectiveIdsByLessonId };
+  const completedLessonIds = new Set(progress.completedLessonIds);
+  const objectives = getLessonObjectives(targetLesson);
+  if (objectives.length > 0) {
+    checkedObjectiveIdsByLessonId[targetLesson.id] = objectives.map((objective) => objective.id);
+  } else {
+    delete checkedObjectiveIdsByLessonId[targetLesson.id];
+  }
+  completedLessonIds.add(targetLesson.id);
+
+  return {
+    ...progress,
+    checkedObjectiveIdsByLessonId,
+    completedLessonIds: orderLessonIds(completedLessonIds, lessons),
+  };
+}
+
+function completeObjectiveIdsInProgress(
+  progress: TutorialProgressState,
+  targetLesson: TutorialLesson,
+  objectiveIds: string[],
+  lessons: TutorialLesson[]
+): TutorialProgressState {
+  const objectives = getLessonObjectives(targetLesson);
+  if (objectives.length === 0 || objectiveIds.length === 0) {
+    return progress;
+  }
+
+  const objectiveIdSet = new Set(objectives.map((objective) => objective.id));
+  const checked = new Set(
+    (progress.checkedObjectiveIdsByLessonId[targetLesson.id] ?? []).filter((objectiveId) =>
+      objectiveIdSet.has(objectiveId)
+    )
+  );
+  for (const objectiveId of objectiveIds) {
+    if (objectiveIdSet.has(objectiveId)) {
+      checked.add(objectiveId);
+    }
+  }
+
+  const checkedObjectiveIdsByLessonId = { ...progress.checkedObjectiveIdsByLessonId };
+  const orderedCheckedIds = objectives.map((objective) => objective.id).filter((objectiveId) => checked.has(objectiveId));
+  checkedObjectiveIdsByLessonId[targetLesson.id] = orderedCheckedIds;
+
+  const completedLessonIds = new Set(progress.completedLessonIds);
+  if (objectives.every((objective) => checked.has(objective.id))) {
+    completedLessonIds.add(targetLesson.id);
+  }
+
+  return {
+    ...progress,
+    checkedObjectiveIdsByLessonId,
+    completedLessonIds: orderLessonIds(completedLessonIds, lessons),
+  };
 }
 
 const Tutorial: React.FC<TutorialProps> = ({
@@ -268,6 +386,7 @@ const Tutorial: React.FC<TutorialProps> = ({
   const initialProgress = useMemo(() => readStoredTutorialProgress(lessons), [lessons]);
   const [viewMode, setViewMode] = useState<"course" | "lesson">("course");
   const [tutorialProgress, setTutorialProgress] = useState<TutorialProgressState>(initialProgress.progress);
+  const [inspectedKeysByLessonId, setInspectedKeysByLessonId] = useState<Record<string, string[]>>({});
   const [canStoreProgress, setCanStoreProgress] = useState(initialProgress.canStoreProgress);
   const courseHeadingRef = React.useRef<HTMLHeadingElement>(null);
   const lessonHeadingRef = React.useRef<HTMLHeadingElement>(null);
@@ -304,10 +423,10 @@ const Tutorial: React.FC<TutorialProps> = ({
     ? Math.round((completedLessonCount / lessons.length) * 100)
     : 0;
   const objectiveProgressLabel = lessonObjectives.length > 0
-    ? `${checkedObjectiveIds.size} / ${lessonObjectives.length} objectives self-checked`
+    ? `${checkedObjectiveIds.size} / ${lessonObjectives.length} objectives completed`
     : isCurrentLessonComplete
-      ? "Lesson self-checked"
-      : "Ready to self-check";
+      ? "Completed"
+      : "Ready to continue";
   const getCheckedObjectiveCount = (targetLesson: TutorialLesson) => {
     const targetObjectives = getLessonObjectives(targetLesson);
     const targetCheckedIds = new Set(tutorialProgress.checkedObjectiveIdsByLessonId[targetLesson.id] ?? []);
@@ -317,9 +436,9 @@ const Tutorial: React.FC<TutorialProps> = ({
   const getLessonObjectiveProgressLabel = (targetLesson: TutorialLesson) => {
     const targetObjectives = getLessonObjectives(targetLesson);
     if (targetObjectives.length === 0) {
-      return completedLessonIds.has(targetLesson.id) ? "Lesson self-checked" : "Ready to self-check";
+      return completedLessonIds.has(targetLesson.id) ? "Completed" : "Ready to continue";
     }
-    return `${getCheckedObjectiveCount(targetLesson)} / ${targetObjectives.length} objectives self-checked`;
+    return `${getCheckedObjectiveCount(targetLesson)} / ${targetObjectives.length} objectives completed`;
   };
 
   const renderLessonVisual = (targetLesson: TutorialLesson, moduleIcon: string, className = "tutorial-course-card-visual") => {
@@ -385,9 +504,19 @@ const Tutorial: React.FC<TutorialProps> = ({
   };
 
   const goToNextLesson = () => {
-    if (currentLessonIndex < lessons.length - 1) {
-      openLessonAtIndex(currentLessonIndex + 1);
-    }
+    const nextLesson = lessons[currentLessonIndex + 1];
+    if (!nextLesson) return;
+    focusAfterViewChangeRef.current = true;
+    updateProgress((previous) => {
+      const withCurrentComplete = lessonObjectives.length === 0
+        ? completeLessonInProgress(previous, lesson, lessons)
+        : previous;
+      return {
+        ...withCurrentComplete,
+        lastLessonId: nextLesson.id,
+      };
+    });
+    setViewMode("lesson");
   };
 
   const goToPrevLesson = () => {
@@ -439,23 +568,30 @@ const Tutorial: React.FC<TutorialProps> = ({
   };
 
   const markLessonComplete = () => {
-    updateProgress((previous) => {
-      const checkedObjectiveIdsByLessonId = { ...previous.checkedObjectiveIdsByLessonId };
-      const completedLessonIds = new Set(previous.completedLessonIds);
-      if (lessonObjectives.length > 0) {
-        checkedObjectiveIdsByLessonId[lesson.id] = lessonObjectives.map((objective) => objective.id);
-      } else {
-        delete checkedObjectiveIdsByLessonId[lesson.id];
-      }
-      completedLessonIds.add(lesson.id);
-
-      return {
-        ...previous,
-        checkedObjectiveIdsByLessonId,
-        completedLessonIds: orderLessonIds(completedLessonIds, lessons),
-      };
-    });
+    updateProgress((previous) => completeLessonInProgress(previous, lesson, lessons));
   };
+
+  const handleTutorialEvent = React.useCallback((event: TutorialGameEvent) => {
+    const nextInspectedKeys = new Set(inspectedKeysByLessonId[lesson.id] ?? []);
+    if (event.type === "inspect" && event.hexKey) {
+      nextInspectedKeys.add(event.hexKey);
+      setInspectedKeysByLessonId((previous) => ({
+        ...previous,
+        [lesson.id]: Array.from(nextInspectedKeys),
+      }));
+    }
+
+    const matchingObjectiveIds = lessonObjectives
+      .filter((objective) => objectiveMatchesTutorialEvent(lesson, objective.text, event, nextInspectedKeys))
+      .map((objective) => objective.id)
+      .filter((objectiveId) => !checkedObjectiveIds.has(objectiveId));
+
+    if (matchingObjectiveIds.length > 0) {
+      updateProgress((previous) =>
+        completeObjectiveIdsInProgress(previous, lesson, matchingObjectiveIds, lessons)
+      );
+    }
+  }, [checkedObjectiveIds, inspectedKeysByLessonId, lesson, lessonObjectives, lessons]);
 
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
@@ -487,8 +623,8 @@ const Tutorial: React.FC<TutorialProps> = ({
     : !hasStartedCourse
       ? "First lesson"
       : courseActionIsCurrentLesson
-        ? "Current lesson"
-        : "Next to self-check";
+      ? "Current lesson"
+        : "Next to complete";
   const shellNav = (
     <AppShellNav
       ariaLabel="Learn navigation"
@@ -517,7 +653,7 @@ const Tutorial: React.FC<TutorialProps> = ({
               <span style={{ width: `${courseProgressPercent}%` }} />
             </div>
             <div className="tutorial-course-progress-meta" role="status" aria-label="Course progress" aria-live="polite">
-              {completedLessonCount} / {lessons.length} lessons self-checked
+              {completedLessonCount} / {lessons.length} lessons completed
             </div>
             <div className="tutorial-course-actions">
               <button type="button" className="tutorial-course-primary-action" onClick={() => openLessonAtIndex(courseActionLessonIndex)}>
@@ -540,7 +676,7 @@ const Tutorial: React.FC<TutorialProps> = ({
                   className="tutorial-course-section-link"
                   href={`#tutorial-module-${module.key}`}
                   key={module.key}
-                  aria-label={`${module.label} ${moduleCompletedCount} of ${module.lessons.length} lessons self-checked`}
+                  aria-label={`${module.label} ${moduleCompletedCount} of ${module.lessons.length} lessons completed`}
                 >
                   <span className="tutorial-course-section-label">{module.label}</span>
                   <span className="tutorial-course-section-count">{moduleCompletedCount} / {module.lessons.length}</span>
@@ -602,8 +738,8 @@ const Tutorial: React.FC<TutorialProps> = ({
                       const isComplete = completedLessonIds.has(moduleLesson.id);
                       const isCurrent = moduleLesson.id === lesson.id;
                       const objectiveCount = getLessonObjectives(moduleLesson).length;
-                      const completedStatusLabel = objectiveCount > 0 ? "Objectives self-checked" : "Lesson self-checked";
-                      const cardStatusLabel = isComplete ? completedStatusLabel : isCurrent ? "Current lesson" : "Not self-checked";
+                      const completedStatusLabel = objectiveCount > 0 ? "Objectives complete" : "Lesson complete";
+                      const cardStatusLabel = isComplete ? completedStatusLabel : isCurrent ? "Current lesson" : "Not complete";
                       return (
                         <button
                           key={moduleLesson.id}
@@ -620,7 +756,7 @@ const Tutorial: React.FC<TutorialProps> = ({
                             <span className="tutorial-course-card-meta">{getLessonObjectiveProgressLabel(moduleLesson)}</span>
                           </span>
                           <span className={`tutorial-course-card-status ${isComplete ? "reviewed" : isCurrent ? "current" : ""}`}>
-                            {isComplete ? "Self-checked" : isCurrent ? "Current" : "Open"}
+                            {isComplete ? "Complete" : isCurrent ? "Current" : "Open"}
                           </span>
                         </button>
                       );
@@ -719,7 +855,7 @@ const Tutorial: React.FC<TutorialProps> = ({
           </div>
         )}
 
-        {lessonObjectives.length > 0 ? (
+        {lessonObjectives.length > 0 && (
           <div className={`tutorial-list-section tutorial-objectives ${isDark ? "dark" : "light"}`} role="group" aria-label="Lesson objectives">
             <h3>Objectives:</h3>
             <p className="tutorial-objective-progress">{objectiveProgressLabel}</p>
@@ -736,15 +872,7 @@ const Tutorial: React.FC<TutorialProps> = ({
               ))}
             </div>
             <button type="button" className="tutorial-review-button" onClick={markLessonComplete} disabled={isCurrentLessonComplete}>
-              {isCurrentLessonComplete ? "Objectives self-checked" : "Mark objectives self-checked"}
-            </button>
-          </div>
-        ) : (
-          <div className={`tutorial-list-section tutorial-objectives ${isDark ? "dark" : "light"}`} role="group" aria-label="Lesson objectives">
-            <h3>Objectives:</h3>
-            <p className="tutorial-objective-placeholder">Read the position, inspect the board, and continue when it makes sense.</p>
-            <button type="button" className="tutorial-review-button" onClick={markLessonComplete} disabled={isCurrentLessonComplete}>
-              {isCurrentLessonComplete ? "Lesson self-checked" : "Mark lesson self-checked"}
+              {isCurrentLessonComplete ? "Objectives complete" : "Mark objectives complete"}
             </button>
           </div>
         )}
@@ -784,6 +912,7 @@ const Tutorial: React.FC<TutorialProps> = ({
           showTooltipHint={false}
           onSetup={() => {}}
           onRestart={() => {}}
+          onTutorialEvent={handleTutorialEvent}
         />
       </section>
     </div>

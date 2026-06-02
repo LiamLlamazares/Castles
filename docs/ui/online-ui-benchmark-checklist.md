@@ -139,9 +139,9 @@ Phase 6O Online structural polish, 2026-06-02:
 
 Phase 6P Learn progress hardening, 2026-06-02:
 
-- Learn progress now separates resume position from completed lessons. Objective lessons are self-checked only when every normalized objective id is checked, and unchecking an objective removes that self-check.
+- Learn progress now separates resume position from completed lessons. Objective lessons complete only when every normalized objective id is checked or an explicit tutorial event completes the objective, and unchecking an objective removes completion.
 - Existing index-based objective checks are normalized into lesson-scoped objective ids on load; unknown lessons and invalid objective ids are dropped.
-- Course and lesson copy now says objectives/lessons are self-checked instead of "mastered" or engine-verified, so the UI stays honest until engine-graded objectives exist.
+- Course and lesson copy now says objectives/lessons are completed instead of "mastered"; read-only lessons complete from Next, while clear action objectives can auto-complete from movement, capture, recruitment, promotion, pledge, ability, and inspection events.
 - Long objective text wraps inside the lesson sidebar, and the existing mobile course/lesson scrollports remain protected by tests.
 
 Phase 6Q Navigation wording and drawer icon polish, 2026-06-02:
