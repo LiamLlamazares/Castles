@@ -598,6 +598,18 @@ Remaining work:
 - Add richer animated piece movement and/or a last-action toast later if the static board highlight is not enough during fast play.
 - Keep active-player analysis handoff blocked until a future server-confirmed takeback/analysis model exists.
 
+## Phase 6AC: Watch Current-Audience Scan Mode
+
+Goal: let Watch use the live spectator-count metadata without implying ratings, global popularity, or durable archive history.
+
+Status: implemented locally on 2026-06-03. The Watch tab now has a `Most watched in current list` sort option that ranks only the loaded public live-game page by current response-decorated spectator count, falling back to move count and recency. The featured Watch card and live overview use the watcher-ranked label only when the selected game has a positive current watcher count; otherwise they keep the existing most-moves activity model. Online Archive intentionally does not expose this sort because spectator counts are active-game-only and are not persisted into completed summaries.
+
+Remaining work:
+
+- Replace process-local watcher counts with a shared presence source before using this signal across multiple Node instances.
+- Add a stronger TV/featured-game model only after accounts, ratings, or another durable activity signal exists.
+- Keep browser screenshot QA on Watch rows because board previews, clock snapshots, watcher labels, and row actions are dense on mobile.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -635,7 +647,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually richer thumbnails/clocks from server-backed data. Live spectator counts are now response-decorated from current WebSocket state rather than persisted summary rows.
+1. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually richer thumbnails/clocks from server-backed data. Live spectator counts are now response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

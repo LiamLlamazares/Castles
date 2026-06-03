@@ -241,6 +241,197 @@ describe("OnlineGameBrowser", () => {
     expect(watch).toHaveTextContent("3 watching");
   });
 
+  it("can scan Watch by current spectator count without claiming a global ranking", async () => {
+    const manyMoves = summary({
+      gameId: "game_many_moves_fewer_watchers",
+      version: 14,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "mara_w", displayName: "Mara" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "noor_b", displayName: "Noor" } },
+      ],
+    });
+    manyMoves.livePreview = {
+      ...manyMoves.livePreview,
+      spectatorCount: 1,
+    };
+    const mostWatched = summary({
+      gameId: "game_most_watched_now",
+      version: 4,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "iris_w", displayName: "Iris" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "jules_b", displayName: "Jules" } },
+      ],
+    });
+    mostWatched.livePreview = {
+      ...mostWatched.livePreview,
+      spectatorCount: 6,
+    };
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([manyMoves, mostWatched]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_many_moves_fewer_watchers");
+
+    expect(screen.getByRole("region", { name: "Most active public live game" })).toHaveTextContent(
+      "game_many_moves_fewer_watchers"
+    );
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
+      target: { value: "watchers" },
+    });
+
+    const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
+    const featuredRegion = screen.getByRole("region", {
+      name: "Most watched public live game in current list",
+    });
+    expect(liveOverview).toHaveTextContent("Most watched in current list");
+    expect(liveOverview).toHaveTextContent("Iris vs Jules, 6 watching, 4 moves");
+    expect(featuredRegion).toHaveTextContent("Most watched in current list");
+    expect(featuredRegion).toHaveTextContent("Current-list watcher leader");
+    expect(featuredRegion).toHaveTextContent("game_most_watched_now");
+    expect(featuredRegion).toHaveTextContent("6 watching");
+  });
+
+  it("falls back to the most-moves Watch model when watcher counts are missing", async () => {
+    const manyMoves = summary({
+      gameId: "game_many_moves_no_watchers",
+      version: 14,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "mara_w", displayName: "Mara" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "noor_b", displayName: "Noor" } },
+      ],
+    });
+    const fewerMoves = summary({
+      gameId: "game_fewer_moves_zero_watchers",
+      version: 4,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "iris_w", displayName: "Iris" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "jules_b", displayName: "Jules" } },
+      ],
+    });
+    fewerMoves.livePreview = {
+      ...fewerMoves.livePreview,
+      spectatorCount: 0,
+    };
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([fewerMoves, manyMoves]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_many_moves_no_watchers");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
+      target: { value: "watchers" },
+    });
+
+    const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
+    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
+    expect(liveOverview).toHaveTextContent("Most moves");
+    expect(liveOverview).toHaveTextContent("Mara vs Noor, 14 moves");
+    expect(featuredRegion).toHaveTextContent("Most active live game");
+    expect(featuredRegion).toHaveTextContent("Most moves in current list");
+    expect(featuredRegion).toHaveTextContent("game_many_moves_no_watchers");
+    expect(featuredRegion).not.toHaveTextContent("watching");
+  });
+
+  it("orders Watch rows by watcher count before move-count fallback", async () => {
+    const mostWatched = summary({
+      gameId: "game_six_watchers",
+      version: 4,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "iris_w", displayName: "Iris" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "jules_b", displayName: "Jules" } },
+      ],
+    });
+    mostWatched.livePreview = {
+      ...mostWatched.livePreview,
+      spectatorCount: 6,
+    };
+    const fewerMovesMoreWatchers = summary({
+      gameId: "game_three_watchers_two_moves",
+      version: 2,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "kara_w", displayName: "Kara" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "luz_b", displayName: "Luz" } },
+      ],
+    });
+    fewerMovesMoreWatchers.livePreview = {
+      ...fewerMovesMoreWatchers.livePreview,
+      spectatorCount: 3,
+    };
+    const tiedWatchersMoreMoves = summary({
+      gameId: "game_two_watchers_twenty_moves",
+      version: 20,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "mara_w", displayName: "Mara" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "noor_b", displayName: "Noor" } },
+      ],
+    });
+    tiedWatchersMoreMoves.livePreview = {
+      ...tiedWatchersMoreMoves.livePreview,
+      spectatorCount: 2,
+    };
+    const tiedWatchersFewerMoves = summary({
+      gameId: "game_two_watchers_nine_moves",
+      version: 9,
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "opal_w", displayName: "Opal" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "paz_b", displayName: "Paz" } },
+      ],
+    });
+    tiedWatchersFewerMoves.livePreview = {
+      ...tiedWatchersFewerMoves.livePreview,
+      spectatorCount: 2,
+    };
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          tiedWatchersFewerMoves,
+          tiedWatchersMoreMoves,
+          fewerMovesMoreWatchers,
+          mostWatched,
+        ]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_six_watchers");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort public games" }), {
+      target: { value: "watchers" },
+    });
+
+    const spectateLabels = screen
+      .getAllByRole("button", { name: /^Spectate / })
+      .map((button) => button.getAttribute("aria-label"));
+    expect(spectateLabels).toEqual([
+      "Spectate Iris vs Jules, game_six_watchers",
+      "Spectate Kara vs Luz, game_three_watchers_two_moves",
+      "Spectate Mara vs Noor, game_two_watchers_twenty_moves",
+      "Spectate Opal vs Paz, game_two_watchers_nine_moves",
+    ]);
+  });
+
   it("counts all public live games even when the Lobby preview is capped", async () => {
     const liveGames = Array.from({ length: 6 }, (_, index) =>
       summary({ gameId: `game_lobby_live_${index + 1}`, version: index + 1 })
@@ -1764,6 +1955,44 @@ describe("OnlineGameBrowser", () => {
     expect(onReplay).toHaveBeenCalledWith("game_public_archive");
     expect(onSpectate).not.toHaveBeenCalled();
     expect(within(row).queryByRole("button", { name: "Copy spectator link for game_public_archive" })).not.toBeInTheDocument();
+  });
+
+  it("keeps current spectator sorting out of Online Archive", async () => {
+    const active = summary({ gameId: "game_live_with_watchers", version: 6 });
+    active.livePreview = {
+      ...active.livePreview,
+      spectatorCount: 5,
+    };
+    const archived = summary({
+      gameId: "game_public_archive_no_watchers",
+      status: "complete",
+      archiveState: "archived",
+      endedAt: "2026-06-01T12:05:00.000Z",
+      updatedAt: "2026-06-01T12:05:00.000Z",
+      result: { winner: "b", reason: "timeout" },
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([active, archived]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("game_live_with_watchers");
+    const watchSort = screen.getByRole("combobox", { name: "Sort public games" });
+    fireEvent.change(watchSort, { target: { value: "watchers" } });
+    expect(watchSort).toHaveValue("watchers");
+
+    fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
+
+    await screen.findByText("game_public_archive_no_watchers");
+    const archiveSort = screen.getByRole("combobox", { name: "Sort public games" });
+    expect(archiveSort).toHaveValue("newest");
+    expect(screen.queryByRole("option", { name: "Most watched in current list" })).not.toBeInTheDocument();
   });
 
   it("shows completed recent device games in Online Archive without duplicating public rows", async () => {

@@ -25,7 +25,7 @@ import { PieceType } from "../Constants";
 import "../css/OnlineGameBrowser.css";
 
 type OnlineBrowserTab = "lobby" | "watch" | "archive";
-type OnlineBrowserSort = "newest" | "moves";
+type OnlineBrowserSort = "newest" | "moves" | "watchers";
 type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
 type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
 type OpenSeekClockFilter = "all" | "timed" | "casual";
@@ -146,11 +146,23 @@ function compareNewest(left: OnlineGameSummary, right: OnlineGameSummary): numbe
   return left.gameId.localeCompare(right.gameId);
 }
 
+function spectatorCountValue(summary: OnlineGameSummary): number {
+  const count = summary.livePreview.spectatorCount;
+  return Number.isSafeInteger(count) && (count ?? 0) > 0 ? count ?? 0 : 0;
+}
+
 function compareMostMoves(left: OnlineGameSummary, right: OnlineGameSummary): number {
   if (left.livePreview.moveCount !== right.livePreview.moveCount) {
     return right.livePreview.moveCount - left.livePreview.moveCount;
   }
   return compareNewest(left, right);
+}
+
+function compareMostWatchedNow(left: OnlineGameSummary, right: OnlineGameSummary): number {
+  const leftWatchers = spectatorCountValue(left);
+  const rightWatchers = spectatorCountValue(right);
+  if (leftWatchers !== rightWatchers) return rightWatchers - leftWatchers;
+  return compareMostMoves(left, right);
 }
 
 function formatSideToMove(color: "w" | "b"): string {
@@ -491,6 +503,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [resultFilter, tab]);
 
+  React.useEffect(() => {
+    if (tab === "archive" && sort === "watchers") {
+      setSort("newest");
+    }
+  }, [sort, tab]);
+
   const loadPage = React.useCallback(async (
     mode: "replace" | "append",
     cursor?: string,
@@ -718,22 +736,33 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (tab === "archive" && !matchesResultFilter(game, resultFilter)) return false;
       return !normalizedQuery || searchText(game).includes(normalizedQuery);
     });
-    return filtered.sort(sort === "moves" ? compareMostMoves : compareNewest);
+    return filtered.sort(
+      sort === "watchers" && tab === "watch"
+        ? compareMostWatchedNow
+        : sort === "moves"
+          ? compareMostMoves
+          : compareNewest
+    );
   }, [publicGames, query, resultFilter, sort, tab, timeFilter]);
 
   const lobbyLiveGames = React.useMemo(() => {
     return publicActiveGames.slice(0, 5);
   }, [publicActiveGames]);
 
-  const watchMostActiveGame = React.useMemo(() => {
+  const watchFeaturedGame = React.useMemo(() => {
     if (tab !== "watch" || visibleGames.length === 0) return null;
-    return [...visibleGames].sort(compareMostMoves)[0] ?? null;
-  }, [tab, visibleGames]);
+    return [...visibleGames].sort(sort === "watchers" ? compareMostWatchedNow : compareMostMoves)[0] ?? null;
+  }, [sort, tab, visibleGames]);
 
   const watchSecondaryGames = React.useMemo(() => {
-    if (tab !== "watch" || !watchMostActiveGame) return [];
-    return visibleGames.filter((game) => game.gameId !== watchMostActiveGame.gameId);
-  }, [tab, visibleGames, watchMostActiveGame]);
+    if (tab !== "watch" || !watchFeaturedGame) return [];
+    return visibleGames.filter((game) => game.gameId !== watchFeaturedGame.gameId);
+  }, [tab, visibleGames, watchFeaturedGame]);
+
+  const watchFeaturedReason =
+    sort === "watchers" && watchFeaturedGame && spectatorCountValue(watchFeaturedGame) > 0
+      ? "watchers"
+      : "moves";
 
   const recentArchivedGames = React.useMemo(() => {
     if (tab !== "archive") return [];
@@ -798,7 +827,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const renderPublicGameRow = (
     game: OnlineGameSummary,
-    options: { compact?: boolean; featured?: boolean; context?: "watch" | "archive" } = {}
+    options: {
+      compact?: boolean;
+      featured?: boolean;
+      context?: "watch" | "archive";
+      featuredReason?: "moves" | "watchers";
+    } = {}
   ) => {
     const white = participantName(game.participants, "w");
     const black = participantName(game.participants, "b");
@@ -809,7 +843,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const primaryActionAriaLabel = isArchivedGame
       ? `Analyze replay ${white} vs ${black}, ${game.gameId}`
       : `Spectate ${white} vs ${black}, ${game.gameId}`;
-    const featuredKicker = isArchivedGame ? "Featured replay" : "Most active live game";
+    const featuredKicker = isArchivedGame
+      ? "Featured replay"
+      : options.featuredReason === "watchers"
+        ? "Most watched in current list"
+        : "Most active live game";
     const spectatorCountLabel = isArchivedGame
       ? null
       : formatSpectatorCount(game.livePreview.spectatorCount);
@@ -884,7 +922,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               {game.status === "active" ? "Live" : "Complete"}
             </span>
             <span>{formatMoveCount(game.livePreview.moveCount)}</span>
-            {options.featured && !isArchivedGame && <span>Most moves in current list</span>}
+            {options.featured && !isArchivedGame && (
+              <span>
+                {options.featuredReason === "watchers"
+                  ? "Current-list watcher leader"
+                  : "Most moves in current list"}
+              </span>
+            )}
             {!isArchivedGame && (
               <span>
                 {formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}
@@ -959,10 +1003,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const renderLiveOverview = (
     liveGameCount: number,
     featuredGame: OnlineGameSummary | null,
-    label: string
+    label: string,
+    featuredReason: "moves" | "watchers" = "moves"
   ) => {
     const featuredWhite = featuredGame ? participantName(featuredGame.participants, "w") : "";
     const featuredBlack = featuredGame ? participantName(featuredGame.participants, "b") : "";
+    const leaderLabel =
+      featuredGame && featuredReason === "watchers"
+        ? `${featuredWhite} vs ${featuredBlack}, ${formatSpectatorCount(featuredGame.livePreview.spectatorCount) ?? "watching now"}, ${formatMoveCount(featuredGame.livePreview.moveCount)}`
+        : featuredGame
+          ? `${featuredWhite} vs ${featuredBlack}, ${formatMoveCount(featuredGame.livePreview.moveCount)}`
+          : "";
     return (
       <div className="online-browser-live-overview" role="group" aria-label={label}>
         <div className="online-browser-live-stat">
@@ -971,13 +1022,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         </div>
         <div className="online-browser-live-stat">
           <span>Featured by</span>
-          <strong>{featuredGame ? "Most moves" : liveGameCount > 0 ? "No visible game" : "No featured game"}</strong>
+          <strong>
+            {featuredGame
+              ? featuredReason === "watchers"
+                ? "Most watched in current list"
+                : "Most moves"
+              : liveGameCount > 0
+                ? "No visible game"
+                : "No featured game"}
+          </strong>
         </div>
         <div className="online-browser-live-stat online-browser-live-stat-wide">
           <span>Activity leader</span>
           <strong>
             {featuredGame
-              ? `${featuredWhite} vs ${featuredBlack}, ${formatMoveCount(featuredGame.livePreview.moveCount)}`
+              ? leaderLabel
               : liveGameCount > 0
                 ? "No matching public games"
                 : "Waiting for public games"}
@@ -1239,11 +1298,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 <span>Sort</span>
                 <select
                   aria-label="Sort public games"
-                  value={sort}
+                  value={tab === "archive" && sort === "watchers" ? "newest" : sort}
                   onChange={(event) => setSort(event.currentTarget.value as OnlineBrowserSort)}
                 >
                   <option value="newest">Newest</option>
                   <option value="moves">Most moves</option>
+                  {tab === "watch" && <option value="watchers">Most watched in current list</option>}
                 </select>
               </label>
               <label className="online-browser-select">
@@ -1633,7 +1693,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 {status === "loading" ? "Refreshing..." : "Refresh live games"}
               </button>
             </div>
-            {renderLiveOverview(publicActiveGames.length, watchMostActiveGame, "Watch live games overview")}
+            {renderLiveOverview(publicActiveGames.length, watchFeaturedGame, "Watch live games overview", watchFeaturedReason)}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty online-browser-empty-compact">
                 <h2>{hasActiveFilters && publicGames.length > 0 ? "No public games match these filters." : emptyTitle}</h2>
@@ -1645,9 +1705,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               </section>
             ) : (
               <div className="online-browser-watch-grid">
-                {watchMostActiveGame && (
-                  <section className="online-browser-featured-game" aria-label="Most active public live game">
-                    {renderPublicGameRow(watchMostActiveGame, { featured: true, context: "watch" })}
+                {watchFeaturedGame && (
+                  <section
+                    className="online-browser-featured-game"
+                    aria-label={
+                      watchFeaturedReason === "watchers"
+                        ? "Most watched public live game in current list"
+                        : "Most active public live game"
+                    }
+                  >
+                    {renderPublicGameRow(watchFeaturedGame, {
+                      featured: true,
+                      context: "watch",
+                      featuredReason: watchFeaturedReason,
+                    })}
                   </section>
                 )}
                 {watchSecondaryGames.length > 0 && (
