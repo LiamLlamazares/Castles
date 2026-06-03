@@ -110,7 +110,7 @@ Public directory list responses wrap summaries in schema v1:
 - `games: OnlineGameSummary[]`
 - optional `nextCursor`
 
-`GET /api/online/games` accepts `state=active|archived|all`, `limit=1..100`, and an opaque `cursor`. It returns only public summaries. Token/auth/credential/api-key-looking query parameters or values are rejected instead of ignored, and public directory reads are lightly rate limited. `GET /api/online/games/:gameId/summary` returns one public summary or the same not-found shape for missing, private, or unlisted games.
+`GET /api/online/games` accepts `state=active|archived|all`, `limit=1..100`, an opaque `cursor`, `clock=timed|casual`, and `result=white|black|resignation|timeout|castle_control|victory_points|monarch_captured`. It returns only public summaries. State, clock, and result filters are applied before cursor/limit pagination, so a filtered archive page does not depend on which unfiltered page was loaded first. Result filters match completed summaries only; active games without a result do not match a result filter. Text search in the current browser UI is still local to the loaded page and is not a directory query parameter yet. Token/auth/credential/api-key-looking query parameters or values are rejected instead of ignored, and public directory reads are lightly rate limited. `GET /api/online/games/:gameId/summary` returns one public summary or the same not-found shape for missing, private, or unlisted games.
 
 Directory ordering is by recent public activity: `updatedAt DESC`, then `gameId ASC`. Cursors are opaque keyset cursors over that ordering; clients must not parse them or treat them as durable identifiers. Cursor payloads reject malformed or secret-looking game ids.
 

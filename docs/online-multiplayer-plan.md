@@ -602,13 +602,25 @@ Remaining work:
 
 Goal: let Watch use the live spectator-count metadata without implying ratings, global popularity, or durable archive history.
 
-Status: implemented locally on 2026-06-03. The Watch tab now has a `Most watched in current list` sort option that ranks only the loaded public live-game page by current response-decorated spectator count, falling back to move count and recency. The featured Watch card and live overview use the watcher-ranked label only when the selected game has a positive current watcher count; otherwise they keep the existing most-moves activity model. Online Archive intentionally does not expose this sort because spectator counts are active-game-only and are not persisted into completed summaries.
+Status: implemented on 2026-06-03. The Watch tab now has a `Most watched in current list` sort option that ranks only the loaded public live-game page by current response-decorated spectator count, falling back to move count and recency. The featured Watch card and live overview use the watcher-ranked label only when the selected game has a positive current watcher count; otherwise they keep the existing most-moves activity model. Online Archive intentionally does not expose this sort because spectator counts are active-game-only and are not persisted into completed summaries.
 
 Remaining work:
 
 - Replace process-local watcher counts with a shared presence source before using this signal across multiple Node instances.
 - Add a stronger TV/featured-game model only after accounts, ratings, or another durable activity signal exists.
 - Keep browser screenshot QA on Watch rows because board previews, clock snapshots, watcher labels, and row actions are dense on mobile.
+
+## Phase 6AD: Server-Backed Public Directory Filters
+
+Goal: make Watch/Archive clock and Archive result filters apply before pagination, so archive scanning does not depend on whichever page happened to be loaded first.
+
+Status: implemented locally on 2026-06-03. `GET /api/online/games` now accepts token-free `clock=timed|casual` and `result=white|black|resignation|timeout|castle_control|victory_points|monarch_captured` filters. The HTTP parser rejects invalid or duplicate values, the in-memory and PostgreSQL public directory paths apply these filters before cursor/limit pagination, and the Online browser sends Clock and Result controls through the shared client query helper. Text search remains local to the loaded page until a bounded server-side search/index strategy exists.
+
+Remaining work:
+
+- Move text/player/game-id search server-side once there is a safe bounded query and index plan.
+- Keep Watch `Most watched in current list` scoped to the loaded page until spectator presence is shared across Node instances.
+- Continue Archive/replay row polish after the server can return the right filtered page.
 
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
@@ -647,7 +659,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually richer thumbnails/clocks from server-backed data. Live spectator counts are now response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+1. Improve public directory scanability after the summary model grows: clock/result filters are now server-backed, while text search, player/game-id lookup, clearer replay metadata, and richer thumbnails/clocks still need bounded server-backed designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

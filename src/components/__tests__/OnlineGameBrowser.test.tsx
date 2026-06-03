@@ -1656,6 +1656,60 @@ describe("OnlineGameBrowser", () => {
     expect(loadGames).toHaveBeenLastCalledWith({ state: "archived", limit: 50 });
   });
 
+  it("requests public game clock and archive result filters from the server", async () => {
+    const loadGames = vi.fn().mockResolvedValue(directory([]));
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("No public completed games yet.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
+      target: { value: "casual" },
+    });
+
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "archived",
+        limit: 50,
+        clock: "casual",
+        cursor: undefined,
+      });
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
+      target: { value: "timeout" },
+    });
+
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "archived",
+        limit: 50,
+        clock: "casual",
+        result: "timeout",
+        cursor: undefined,
+      });
+    });
+    expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Live public games" }));
+
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "active",
+        limit: 50,
+        clock: "casual",
+        cursor: undefined,
+      });
+    });
+  });
+
   it("shows an honest empty Watch state while only public games are listable", async () => {
     render(
       <OnlineGameBrowser
@@ -2238,14 +2292,18 @@ describe("OnlineGameBrowser", () => {
       target: { value: "black" },
     });
 
-    expect(screen.getByText("game_black_archive")).toBeInTheDocument();
-    expect(screen.queryByText("game_white_archive")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("game_black_archive")).toBeInTheDocument();
+      expect(screen.queryByText("game_white_archive")).not.toBeInTheDocument();
+    });
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
       target: { value: "no-such-game" },
     });
 
-    expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
+    });
   });
 
   it("hides archive-only result filters on Watch and resets them when returning to live games", async () => {
@@ -2393,10 +2451,10 @@ describe("OnlineGameBrowser", () => {
     const loadGames = vi
       .fn()
       .mockResolvedValueOnce(directory([
-        summary({ gameId: "game_casual_first_page", hasTimeControl: false }),
+        summary({ gameId: "game_first_page_no_match" }),
       ], "cursor-filtered"))
       .mockResolvedValueOnce(directory([
-        summary({ gameId: "game_timed_second_page", hasTimeControl: true }),
+        summary({ gameId: "game_second_page_match" }),
       ]));
     render(
       <OnlineGameBrowser
@@ -2408,17 +2466,17 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    expect(await screen.findByText("game_casual_first_page")).toBeInTheDocument();
+    expect(await screen.findByText("game_first_page_no_match")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
-      target: { value: "timed" },
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+      target: { value: "second_page_match" },
     });
 
     expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Load more" }));
 
-    expect(await screen.findByText("game_timed_second_page")).toBeInTheDocument();
+    expect(await screen.findByText("game_second_page_match")).toBeInTheDocument();
     expect(loadGames).toHaveBeenLastCalledWith({
       state: "active",
       limit: 50,

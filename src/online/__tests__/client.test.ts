@@ -977,12 +977,20 @@ describe("online client helpers", () => {
 
     await expect(
       fetchOnlineGameSummaries(
-        { state: "active", limit: 25, cursor: "cursor_abc" },
+        {
+          state: "active",
+          limit: 25,
+          cursor: "cursor_abc",
+          clock: "timed",
+          result: "timeout",
+        },
         fetchImpl as any
       )
     ).resolves.toEqual([summary]);
 
-    expect(fetchImpl).toHaveBeenCalledWith("/api/online/games?state=active&limit=25&cursor=cursor_abc");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/online/games?state=active&limit=25&cursor=cursor_abc&clock=timed&result=timeout"
+    );
     expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain("authorization");
   });
 

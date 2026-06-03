@@ -236,6 +236,14 @@ function summaryForGame(
   };
 }
 
+function withoutPreviewClock(
+  livePreview: OnlineGameSummary["livePreview"]
+): OnlineGameSummary["livePreview"] {
+  const nextLivePreview = { ...livePreview };
+  delete nextLivePreview.clock;
+  return nextLivePreview;
+}
+
 function waitForSocketOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
 
@@ -2161,6 +2169,56 @@ describe("createOnlineHttpServer", () => {
     ]);
   });
 
+  it("applies public directory clock and result filters before pagination", async () => {
+    const timedTimeout = {
+      ...summaryForGame("game_timed_timeout_newer", "public"),
+      updatedAt: "2026-05-31T12:04:00.000Z",
+      endedAt: "2026-05-31T12:04:00.000Z",
+      status: "complete" as const,
+      archiveState: "archived" as const,
+      result: { winner: "w" as const, reason: "timeout" as const },
+    };
+    const baseCasualTimeout = summaryForGame("game_casual_timeout_middle", "public");
+    const casualTimeout = {
+      ...baseCasualTimeout,
+      updatedAt: "2026-05-31T12:03:00.000Z",
+      endedAt: "2026-05-31T12:03:00.000Z",
+      status: "complete" as const,
+      archiveState: "archived" as const,
+      hasTimeControl: false,
+      livePreview: withoutPreviewClock(baseCasualTimeout.livePreview),
+      result: { winner: "b" as const, reason: "timeout" as const },
+    };
+    const baseCasualResignation = summaryForGame("game_casual_resignation_old", "public");
+    const casualResignation = {
+      ...baseCasualResignation,
+      updatedAt: "2026-05-31T12:02:00.000Z",
+      endedAt: "2026-05-31T12:02:00.000Z",
+      status: "complete" as const,
+      archiveState: "archived" as const,
+      hasTimeControl: false,
+      livePreview: withoutPreviewClock(baseCasualResignation.livePreview),
+      result: { winner: "w" as const, reason: "resignation" as const },
+    };
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummaries: async () => [timedTimeout, casualResignation, casualTimeout],
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games?state=archived&clock=casual&result=timeout&limit=1`
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.games.map((game: OnlineGameSummary) => game.gameId)).toEqual([
+      "game_casual_timeout_middle",
+    ]);
+    expect(body.nextCursor).toBeUndefined();
+  });
+
   it("rejects invalid public directory query parameters and secret-looking queries", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
@@ -2174,6 +2232,12 @@ describe("createOnlineHttpServer", () => {
       "limit=0",
       "limit=101",
       "cursor=not-valid-cursor",
+      "clock=",
+      "clock=bullet",
+      "result=",
+      "result=draw",
+      "clock=timed&clock=casual",
+      "result=white&result=timeout",
       "token=secret",
       "sid=secret",
       "secret=value",

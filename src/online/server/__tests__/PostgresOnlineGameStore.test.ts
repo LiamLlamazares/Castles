@@ -322,9 +322,42 @@ class FakePostgresClient {
         if (/archive_state\s*=\s*'archived'/i.test(text)) {
           rows = rows.filter((row) => (row.payload as { archiveState?: string }).archiveState === "archived");
         }
+        if (/payload\s*@>\s*\$\d+::jsonb/i.test(text)) {
+          const clockFilter = values?.find((value) => {
+            const candidate = value as { hasTimeControl?: boolean } | undefined;
+            return typeof candidate?.hasTimeControl === "boolean";
+          }) as { hasTimeControl?: boolean } | undefined;
+          if (clockFilter) {
+            rows = rows.filter(
+              (row) =>
+                (row.payload as { hasTimeControl?: boolean }).hasTimeControl ===
+                clockFilter.hasTimeControl
+            );
+          }
+          const resultFilter = values?.find((value) => {
+            const candidate = value as { result?: { winner?: string; reason?: string } } | undefined;
+            return !!candidate?.result && (candidate.result.winner !== undefined || candidate.result.reason !== undefined);
+          }) as { result?: { winner?: string; reason?: string } } | undefined;
+          rows = rows.filter((row) => {
+            const payload = row.payload as { result?: { winner?: string; reason?: string } };
+            if (resultFilter?.result?.winner) {
+              return payload.result?.winner === resultFilter.result.winner;
+            }
+            if (resultFilter?.result?.reason) {
+              return payload.result?.reason === resultFilter.result.reason;
+            }
+            return true;
+          });
+        }
         if (/updated_at\s*</i.test(text)) {
-          const cursorUpdatedAt = values?.[1] as string;
-          const cursorGameId = values?.[2] as string;
+          const cursorIndex =
+            values?.findIndex(
+              (value) =>
+                typeof value === "string" &&
+                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+            ) ?? -1;
+          const cursorUpdatedAt = values?.[cursorIndex] as string;
+          const cursorGameId = values?.[cursorIndex + 1] as string;
           rows = rows.filter((row) => {
             const payload = row.payload as { updatedAt?: string; gameId?: string };
             return (
@@ -1949,6 +1982,56 @@ describe("PostgresOnlineGameStore", () => {
     expect(archivePage.games.map((summary) => summary.gameId)).toEqual(["game_public_archive"]);
     expect(archivePage.games[0].livePreview.spectatorCount).toBeUndefined();
     expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
+  });
+
+  it("filters public summary pages by clock and result in PostgreSQL", async () => {
+    const client = new FakePostgresClient();
+    const timedTimeout = createSummary("game_timed_timeout_newer", {
+      updatedAt: "2026-05-31T12:04:00.000Z",
+      endedAt: "2026-05-31T12:04:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      hasTimeControl: true,
+      result: { winner: "w", reason: "timeout" },
+    });
+    const casualTimeout = createSummary("game_casual_timeout_middle", {
+      updatedAt: "2026-05-31T12:03:00.000Z",
+      endedAt: "2026-05-31T12:03:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      hasTimeControl: false,
+      result: { winner: "b", reason: "timeout" },
+    });
+    const casualResignation = createSummary("game_casual_resignation_old", {
+      updatedAt: "2026-05-31T12:02:00.000Z",
+      endedAt: "2026-05-31T12:02:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      hasTimeControl: false,
+      result: { winner: "w", reason: "resignation" },
+    });
+    client.summaryRows = [
+      { payload: timedTimeout },
+      { payload: casualResignation },
+      { payload: casualTimeout },
+    ];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const page = await store.listGameSummaries({
+      visibility: "public",
+      state: "archived",
+      limit: 1,
+      clock: "casual",
+      result: "timeout",
+    });
+
+    expect(page.games.map((summary) => summary.gameId)).toEqual(["game_casual_timeout_middle"]);
+    expect(page.nextCursor).toBeUndefined();
+    const query = client.queries.find((candidate) => /from\s+online_game_summaries/i.test(candidate.text));
+    expect(query?.text).not.toMatch(/has_time_control/i);
+    expect(query?.text).toMatch(/payload\s*@>\s*\$\d+::jsonb/i);
+    expect(query?.values).toContainEqual({ hasTimeControl: false });
+    expect(query?.values).toContainEqual({ result: { reason: "timeout" } });
   });
 
   it("lists personal game summaries by participant identity across private and public visibility", async () => {

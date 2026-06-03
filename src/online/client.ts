@@ -10,7 +10,9 @@ import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   validateOnlineGameDirectoryResponse,
   validateOnlineGameSummary,
+  type OnlineGameDirectoryClockFilter,
   type OnlineGameDirectoryResponse,
+  type OnlineGameDirectoryResultFilter,
   type OnlineGameDirectoryState,
   type OnlineGameSummary,
 } from "./readModel";
@@ -1046,6 +1048,8 @@ export interface FetchOnlineGameSummariesOptions {
   state?: OnlineGameDirectoryState;
   limit?: number;
   cursor?: string;
+  clock?: OnlineGameDirectoryClockFilter;
+  result?: OnlineGameDirectoryResultFilter;
 }
 
 function buildOnlineDirectoryPath(options: FetchOnlineGameSummariesOptions = {}): string {
@@ -1053,6 +1057,8 @@ function buildOnlineDirectoryPath(options: FetchOnlineGameSummariesOptions = {})
   if (options.state) params.set("state", options.state);
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   if (options.cursor) params.set("cursor", options.cursor);
+  if (options.clock) params.set("clock", options.clock);
+  if (options.result) params.set("result", options.result);
   const query = params.toString();
   return query ? `/api/online/games?${query}` : "/api/online/games";
 }

@@ -509,6 +509,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [sort, tab]);
 
+  const gameDirectoryOptions = React.useMemo<FetchOnlineGameSummariesOptions>(() => ({
+    state: directoryState,
+    limit: 50,
+    ...(timeFilter !== "all" ? { clock: timeFilter } : {}),
+    ...(tab === "archive" && resultFilter !== "all" ? { result: resultFilter } : {}),
+  }), [directoryState, resultFilter, tab, timeFilter]);
+
   const loadPage = React.useCallback(async (
     mode: "replace" | "append",
     cursor?: string,
@@ -530,8 +537,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
     try {
       const response = await loadGames({
-        state: directoryState,
-        limit: 50,
+        ...gameDirectoryOptions,
         cursor,
       });
       if (requestIdRef.current !== requestId) return;
@@ -558,7 +564,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         gameLoadInFlightRef.current = false;
       }
     }
-  }, [directoryState, loadGames]);
+  }, [gameDirectoryOptions, loadGames]);
 
   const refreshGames = React.useCallback(() => {
     void loadPage("replace");
@@ -1696,9 +1702,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             {renderLiveOverview(publicActiveGames.length, watchFeaturedGame, "Watch live games overview", watchFeaturedReason)}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty online-browser-empty-compact">
-                <h2>{hasActiveFilters && publicGames.length > 0 ? "No public games match these filters." : emptyTitle}</h2>
+                <h2>{hasActiveFilters ? "No public games match these filters." : emptyTitle}</h2>
                 <p>
-                  {hasActiveFilters && publicGames.length > 0
+                  {hasActiveFilters
                     ? "Try a different search or clock setting."
                     : "Accepted public lobby games appear here automatically. Private and unlisted games stay off this page."}
                 </p>
@@ -1775,9 +1781,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             )}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty">
-                <h2>{hasActiveFilters && publicGames.length > 0 ? "No public games match these filters." : emptyTitle}</h2>
+                <h2>{hasActiveFilters ? "No public games match these filters." : emptyTitle}</h2>
                 <p>
-                  {hasActiveFilters && publicGames.length > 0
+                  {hasActiveFilters
                     ? "Try a different search, clock, or result setting."
                     : "Private and unlisted games stay off this page. Shared spectator links still work for people who already have them."}
                 </p>

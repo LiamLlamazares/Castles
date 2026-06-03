@@ -34,6 +34,11 @@ export type { OnlineGameVisibility } from "./visibility";
 export type OnlineArchiveState = "active" | "archived";
 export type OnlineGameSummaryStatus = "active" | "complete";
 export type OnlineGameDirectoryState = "active" | "archived" | "all";
+export type OnlineGameDirectoryClockFilter = "timed" | "casual";
+export type OnlineGameDirectoryResultFilter =
+  | "white"
+  | "black"
+  | OnlineGameResultDTO["reason"];
 
 export {
   canAccessOnlineGameSummary,
@@ -125,6 +130,8 @@ export interface OnlineGameDirectoryListOptions {
   state: OnlineGameDirectoryState;
   limit: number;
   cursor?: string;
+  clock?: OnlineGameDirectoryClockFilter;
+  result?: OnlineGameDirectoryResultFilter;
 }
 
 export interface OnlinePersonalGameDirectoryListOptions {
@@ -168,12 +175,21 @@ export const ONLINE_GAME_DIRECTORY_STATES = new Set<OnlineGameDirectoryState>([
   "archived",
   "all",
 ]);
+export const ONLINE_GAME_DIRECTORY_CLOCK_FILTERS = new Set<OnlineGameDirectoryClockFilter>([
+  "timed",
+  "casual",
+]);
 const RESULT_REASONS = new Set<OnlineGameResultDTO["reason"]>([
   "monarch_captured",
   "castle_control",
   "victory_points",
   "resignation",
   "timeout",
+]);
+export const ONLINE_GAME_DIRECTORY_RESULT_FILTERS = new Set<OnlineGameDirectoryResultFilter>([
+  "white",
+  "black",
+  ...RESULT_REASONS,
 ]);
 
 function bad(message: string): ValidationResult<never> {
@@ -291,6 +307,35 @@ export function decodeOnlineGameDirectoryCursor(
       gameId: parsed[1],
     },
   };
+}
+
+export function onlineGameSummaryMatchesDirectoryFilters(
+  summary: OnlineGameSummary,
+  options: OnlineGameDirectoryListOptions
+): boolean {
+  if (summary.visibility !== options.visibility) return false;
+  if (options.state === "active" && summary.status !== "active") return false;
+  if (
+    options.state === "archived" &&
+    (summary.status !== "complete" || summary.archiveState !== "archived")
+  ) {
+    return false;
+  }
+  if (options.clock === "timed" && !summary.hasTimeControl) return false;
+  if (options.clock === "casual" && summary.hasTimeControl) return false;
+  if (options.result) {
+    if (!summary.result) return false;
+    if (options.result === "white" && summary.result.winner !== "w") return false;
+    if (options.result === "black" && summary.result.winner !== "b") return false;
+    if (
+      options.result !== "white" &&
+      options.result !== "black" &&
+      summary.result.reason !== options.result
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function validateResult(value: unknown): ValidationResult<OnlineGameResultDTO> {

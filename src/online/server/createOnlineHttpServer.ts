@@ -38,10 +38,15 @@ import {
 import { sameOnlineAction } from "../actionIdempotency";
 import {
   ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT,
+  ONLINE_GAME_DIRECTORY_CLOCK_FILTERS,
   ONLINE_GAME_DIRECTORY_MAX_LIMIT,
+  ONLINE_GAME_DIRECTORY_RESULT_FILTERS,
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   ONLINE_GAME_DIRECTORY_STATES,
+  onlineGameSummaryMatchesDirectoryFilters,
+  type OnlineGameDirectoryClockFilter,
   type OnlineGameDirectoryListOptions,
+  type OnlineGameDirectoryResultFilter,
   type OnlineGameDirectoryResponse,
   OnlineGameSummary,
   decodeOnlineGameDirectoryCursor,
@@ -275,7 +280,7 @@ function parsePublicDirectoryOptions(
     return { ok: false, message: "Public directory query is invalid." };
   }
 
-  for (const name of ["state", "limit", "cursor"]) {
+  for (const name of ["state", "limit", "cursor", "clock", "result"]) {
     if (url.searchParams.getAll(name).length > 1) {
       return { ok: false, message: "Public directory query is invalid." };
     }
@@ -305,6 +310,24 @@ function parsePublicDirectoryOptions(
     }
   }
 
+  const rawClock = getSingleSearchParam(url.searchParams, "clock");
+  if (
+    rawClock !== null &&
+    !ONLINE_GAME_DIRECTORY_CLOCK_FILTERS.has(rawClock as OnlineGameDirectoryClockFilter)
+  ) {
+    return { ok: false, message: "Public directory clock filter is invalid." };
+  }
+  const clock = rawClock ?? undefined;
+
+  const rawResult = getSingleSearchParam(url.searchParams, "result");
+  if (
+    rawResult !== null &&
+    !ONLINE_GAME_DIRECTORY_RESULT_FILTERS.has(rawResult as OnlineGameDirectoryResultFilter)
+  ) {
+    return { ok: false, message: "Public directory result filter is invalid." };
+  }
+  const result = rawResult ?? undefined;
+
   return {
     ok: true,
     options: {
@@ -312,6 +335,8 @@ function parsePublicDirectoryOptions(
       state: state as OnlineGameDirectoryListOptions["state"],
       limit,
       cursor,
+      clock: clock as OnlineGameDirectoryClockFilter | undefined,
+      result: result as OnlineGameDirectoryResultFilter | undefined,
     },
   };
 }
@@ -389,15 +414,6 @@ function compareDirectorySummaries(left: OnlineGameSummary, right: OnlineGameSum
   return left.gameId.localeCompare(right.gameId);
 }
 
-function summaryMatchesDirectoryState(
-  summary: OnlineGameSummary,
-  state: OnlineGameDirectoryListOptions["state"]
-): boolean {
-  if (state === "all") return true;
-  if (state === "active") return summary.status === "active";
-  return summary.status === "complete" && summary.archiveState === "archived";
-}
-
 function applyDirectoryCursor(
   summaries: OnlineGameSummary[],
   cursor: string | undefined
@@ -419,8 +435,7 @@ function paginateDirectorySummaries(
 ): OnlineGameDirectoryResponse {
   const filtered = applyDirectoryCursor(
     summaries
-      .filter((summary) => summary.visibility === options.visibility)
-      .filter((summary) => summaryMatchesDirectoryState(summary, options.state))
+      .filter((summary) => onlineGameSummaryMatchesDirectoryFilters(summary, options))
       .sort(compareDirectorySummaries),
     options.cursor
   );

@@ -157,6 +157,26 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       where.push("status = 'complete'");
       where.push("archive_state = 'archived'");
     }
+    if (options.clock === "timed") {
+      const clockParam = values.length + 1;
+      values.push({ hasTimeControl: true });
+      where.push(`payload @> $${clockParam}::jsonb`);
+    } else if (options.clock === "casual") {
+      const clockParam = values.length + 1;
+      values.push({ hasTimeControl: false });
+      where.push(`payload @> $${clockParam}::jsonb`);
+    }
+    if (options.result) {
+      const resultParam = values.length + 1;
+      const resultFilter =
+        options.result === "white"
+          ? { result: { winner: "w" } }
+          : options.result === "black"
+            ? { result: { winner: "b" } }
+            : { result: { reason: options.result } };
+      values.push(resultFilter);
+      where.push(`payload @> $${resultParam}::jsonb`);
+    }
 
     if (options.cursor) {
       const cursor = decodeOnlineGameDirectoryCursor(options.cursor);
