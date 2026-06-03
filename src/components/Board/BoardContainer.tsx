@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import HexGrid from "../HexGrid";
 import PieceRenderer from "../PieceRenderer";
 import LegalMoveOverlay from "../LegalMoveOverlay";
+import LastMoveOverlay from "../LastMoveOverlay";
 import { LayoutService } from "../../Classes/Systems/LayoutService";
 import { Piece } from "../../Classes/Entities/Piece";
 import { Sanctuary } from "../../Classes/Entities/Sanctuary";
@@ -13,6 +14,7 @@ import { useClickHandler } from "../../hooks/useClickHandler";
 import { useTooltip } from "../../hooks/useTooltip";
 import { useGameView } from "../../hooks/useGameView";
 import { AbilitySystem } from "../../Classes/Systems/AbilitySystem";
+import { getMoveHighlightHexes } from "../../utils/MoveHighlightUtils";
 import type { TutorialGameEvent } from "../../tutorial/types";
 
 interface BoardContainerProps {
@@ -57,6 +59,8 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
       board,
       movingPiece,
       winner,
+      moveTree,
+      viewNodeId,
       onlineSession
   } = gameState;
   const isReadOnly =
@@ -106,6 +110,11 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
   );
 
   const emptyOverlaySet = useMemo(() => new Set<string>(), []);
+
+  const lastMoveHighlight = getMoveHighlightHexes(
+    moveTree.getViewNode(viewNodeId)?.move,
+    boardHexKeySet
+  );
 
   const abilityTargetSet = useMemo(() => {
     if (isReadOnly || !activeAbility || !movingPiece) return emptyOverlaySet;
@@ -262,6 +271,11 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
           showCastleRecruitment={viewState.showCastleRecruitment}
           showTerrainIcons={viewState.showTerrainIcons}
           showSanctuaryIcons={viewState.showSanctuaryIcons}
+        />
+        <LastMoveOverlay
+          highlight={lastMoveHighlight}
+          isBoardRotated={viewState.isBoardRotated}
+          layout={layout}
         />
         <PieceRenderer
           pieces={pieces}

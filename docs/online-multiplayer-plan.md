@@ -30,6 +30,7 @@ Current private-link beta:
 - Lichess-style open lobby seeks exist as a separate pre-game lifecycle from private challenges and public Watch/Archive summaries. Public seek lists are token-free; creator tokens stay in `sessionStorage`; accepting a seek creates a normal online game and reuses the token-stripped player handoff.
 - Challenge creator share links survive same-tab tokenless reloads for copying, then are cleared with challenge token storage whenever the user leaves the challenge flow or joins/opens another game surface.
 - Cancelled and expired owned lobby listings are cleared during restore/refresh and hidden defensively in the Online browser so they do not show dead Refresh controls.
+- Active online players can step backward and forward through the move list to inspect what happened, while non-analysis history review remains read-only and returns to live state before actions resume.
 - Local PostgreSQL restart smoke tooling verifies create, join, action persistence, shutdown, restart, and reload.
 - Local PostgreSQL concurrency smoke tooling verifies per-game locking and stale-action behavior.
 - The game shell has shared Play/Learn/Online/Library navigation, contextual game controls, guarded New Game flow, save feedback, mobile tutorial bounds, modal drawer focus management, shared challenge/online pending shells, and browser screenshot overlap checks.
@@ -579,6 +580,23 @@ Remaining work:
 
 - Keep smoke checks pinned to the expected commit on every live deploy.
 - Update the runbook again when accounts, migrations, multi-instance deployment, or managed release automation change the deploy shape.
+
+## Phase 6AB: Safe Live Online Move Replay
+
+Goal: let players review the previous move during a live online game without creating an analysis escape hatch or accidental action submission.
+
+Status: implemented and pushed on 2026-06-03, with a follow-up last-move highlight implemented locally the same day. Active online players can use Left/Right arrow replay just like spectators and completed games. While a live online player is viewing a historical node, piece selection, pass, resignation, promotion, and command-backed actions are read-only. Stepping forward onto the current move clears history mode immediately, so the next legal action can be submitted without needing an extra key press. The board marks the source and destination hexes for the currently viewed move, so players can see what changed without opening full analysis. A regression also covers direct castle capture on the final attack step entering the Recruitment phase when the captured castle can recruit.
+
+Verification:
+
+- Reviewer loop found and fixed resignation, promotion, and stale `viewNodeId` return-to-live bypasses; final review reported no findings.
+- Focused replay, last-move highlight, and castle-capture tests passed.
+- Full `npm test` and `npm run build` passed before commit `1750da0`.
+
+Remaining work:
+
+- Add richer animated piece movement and/or a last-action toast later if the static board highlight is not enough during fast play.
+- Keep active-player analysis handoff blocked until a future server-confirmed takeback/analysis model exists.
 
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 

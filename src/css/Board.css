@@ -133,6 +133,33 @@ body {
 .legalAttackDot:hover {
   fill: rgba(255, 0, 0, 0.5);
 }
+
+.last-move-overlay {
+  pointer-events: none;
+}
+
+.last-move-highlight {
+  fill: rgba(255, 214, 102, 0.24);
+  stroke: rgba(49, 43, 27, 0.84);
+  stroke-width: 5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(255, 214, 102, 0.75));
+}
+
+.last-move-highlight-from {
+  fill: rgba(255, 214, 102, 0.16);
+}
+
+.last-move-highlight-to {
+  fill: rgba(255, 214, 102, 0.30);
+}
+
+.last-move-link {
+  stroke: rgba(49, 43, 27, 0.66);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray: 10 11;
+}
 .legalAbilityDot {
   fill: rgba(0, 251, 255, 0.28);
   stroke: rgba(255, 215, 0, 0.95);

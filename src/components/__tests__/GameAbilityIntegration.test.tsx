@@ -1003,7 +1003,7 @@ describe("Game ability integration", () => {
   test("arrow-key replay lets active online players inspect history and return live", () => {
     const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
 
-    render(
+    const { container } = render(
       <ThemeProvider>
         <GameBoard
           initialBoard={getStartingBoard(6)}
@@ -1026,15 +1026,18 @@ describe("Game ability integration", () => {
 
     const firstMove = screen.getByRole("button", { name: "1. H12H11" });
     const liveMove = screen.getByRole("button", { name: "1. G13G12" });
+    expect(container.querySelector(".last-move-overlay")).toHaveAttribute("data-move-notation", "G13G12");
     expect(liveMove).toHaveAttribute("aria-current", "step");
 
     fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft" });
 
+    expect(container.querySelector(".last-move-overlay")).toHaveAttribute("data-move-notation", "H12H11");
     expect(firstMove).toHaveAttribute("aria-current", "step");
     expect(liveMove).not.toHaveAttribute("aria-current");
 
     fireEvent.keyDown(window, { code: "ArrowRight", key: "ArrowRight" });
 
+    expect(container.querySelector(".last-move-overlay")).toHaveAttribute("data-move-notation", "G13G12");
     expect(liveMove).toHaveAttribute("aria-current", "step");
     expect(firstMove).not.toHaveAttribute("aria-current");
   });
