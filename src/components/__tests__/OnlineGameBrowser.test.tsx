@@ -216,6 +216,31 @@ describe("OnlineGameBrowser", () => {
     expect(within(currentGames).getByRole("button", { name: "Refresh live public games" })).toHaveTextContent("Refresh live games");
   });
 
+  it("shows server-backed spectator counts for live public games", async () => {
+    const watchedGame = summary({ gameId: "game_watched_live", version: 12 });
+    watchedGame.livePreview = {
+      ...watchedGame.livePreview,
+      spectatorCount: 3,
+    };
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([watchedGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    const watch = await screen.findByRole("article", {
+      name: /Most active live game Ada vs Ben game_watched_live/i,
+    });
+
+    expect(watch).toHaveTextContent("3 watching");
+  });
+
   it("counts all public live games even when the Lobby preview is capped", async () => {
     const liveGames = Array.from({ length: 6 }, (_, index) =>
       summary({ gameId: `game_lobby_live_${index + 1}`, version: index + 1 })

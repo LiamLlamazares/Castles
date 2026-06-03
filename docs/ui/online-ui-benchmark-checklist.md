@@ -163,7 +163,7 @@ Phase 6S Online lobby visual clarity, 2026-06-02:
 - Closed owned listings are status-only panels. The page keeps one create/list path in the current-setup panel and no longer shows a duplicate terminal `Create New Listing` action.
 - Lobby side copy now says `Creator side`, and fixed-side listings explain the acceptor's side. Castle-control listings are rendered and searchable instead of only showing Victory-points scoring.
 - Quick Match copy now describes the actual open-listing flow instead of implying account/rating-style matchmaking.
-- The lobby surface uses quieter panel styling while keeping Watch and Online Archive separate from unsupported ratings, thumbnails, accounts, chat, and spectator-count features.
+- The lobby surface uses quieter panel styling while keeping Watch and Online Archive separate from unsupported ratings, accounts, chat, and global spectator-count features.
 - Reviewer cleanup added visible focus styling for closed owner panels, corrected accepted random-side owner copy, aligned search tokens with visible row metadata, and made scoring filter accessibility labels generic.
 - Final verification passed the full automated suite, client build, server build, diff check, browser online smoke, and Playwright screenshot/layout audit at 1440 x 900, 820 x 700, 430 x 932, 390 x 844, and 360 x 640. Screenshot artifacts are in `artifacts/ui-audit/phase6s-online-lobby`.
 
@@ -173,7 +173,7 @@ Phase 6T Public live-preview read model, 2026-06-02:
 - Lobby and Watch rows may show `White to move`, `Black to move`, turn phase, last move notation, move count, and a `Clock snapshot` when the public summary provides it.
 - Completed Online Archive rows must avoid active-game language such as "to move"; they can still show move count, result, last move, and whether the game was timed.
 - Row clocks are summary snapshots, not ticking live clocks. Do not animate them until the contract carries enough response-time basis to make that honest.
-- Continue excluding board thumbnails, spectator counts, ratings, account names, and TV-style ranking until separate backend read models exist.
+- Continue excluding ratings, account names, global spectator counts, and TV-style ranking until separate backend read models exist. Process-local live spectator counts may appear only when the current server response includes them, and they must be omitted from archived rows.
 - Startup rebuilds destructively replace stale materialized game-summary rows from the event log before serving the production app; this is intentional under the no-legacy-data direction.
 - Final verification passed focused Phase 6T tests, the full automated suite, client build, server build, diff check, local PostgreSQL restart smoke, browser online smoke, and desktop/mobile Lobby/Watch/Archive screenshot audit. Screenshot artifacts are in `artifacts/ui-audit/phase6t-live-preview`.
 
@@ -195,7 +195,7 @@ Phase 6V App shell deploy freshness, 2026-06-02:
 Next product slices accepted from reviewers:
 
 - Improve public board previews only after screenshot QA shows the compact thumbnail is readable on mobile.
-- Add spectator counts only after presence works across server instances.
+- Replace process-local spectator counts with shared cross-instance presence before multi-instance deployment or any TV-style ranking that depends on global watcher counts.
 - Continue Learn course polish with authored objective ids, richer lesson theory, and only add engine-graded objectives when the target board state is explicit and tested.
 - Improve navigation clarity in later slices by reducing duplicated online entry points where possible and continuing to separate private player links from public spectator/share actions.
 

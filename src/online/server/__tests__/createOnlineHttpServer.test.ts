@@ -2265,6 +2265,103 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(secretQueryBody)).not.toContain("value");
   });
 
+  it("decorates public game summaries with current connected spectator counts", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_watched_presence_http",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const publicSummary = summaryForGame(created.gameId, "public");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameSummaries: async () => [
+        {
+          ...publicSummary,
+          livePreview: {
+            ...publicSummary.livePreview,
+            spectatorCount: 99,
+          },
+        },
+      ],
+      loadGameSummary: async (gameId: string) =>
+        gameId === publicSummary.gameId
+          ? {
+              ...publicSummary,
+              livePreview: {
+                ...publicSummary.livePreview,
+                spectatorCount: 99,
+              },
+            }
+          : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const spectating = nextSocketMessage(socket, "spectator presence join");
+      socket.send(
+        JSON.stringify(versionedMessage({ type: "spectate", gameId: created.gameId }))
+      );
+      await expect(spectating).resolves.toMatchObject({ type: "spectating" });
+
+      const directoryResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`);
+      const directoryBody = await directoryResponse.json();
+      const summaryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}/summary`
+      );
+      const summaryBody = await summaryResponse.json();
+
+      expect(directoryResponse.status).toBe(200);
+      expect(summaryResponse.status).toBe(200);
+      expect(directoryBody.games[0].livePreview.spectatorCount).toBe(1);
+      expect(summaryBody.summary.livePreview.spectatorCount).toBe(1);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("strips stale response-only spectator counts before validating loaded summaries", async () => {
+    const archived = {
+      ...summaryForGame("game_stale_spectator_count_http", "public"),
+      updatedAt: "2026-05-31T12:03:00.000Z",
+      endedAt: "2026-05-31T12:03:00.000Z",
+      status: "complete" as const,
+      archiveState: "archived" as const,
+      result: { winner: "w" as const, reason: "resignation" as const },
+      livePreview: {
+        ...summaryForGame("game_stale_spectator_count_http", "public").livePreview,
+        spectatorCount: 9,
+      },
+    };
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummaries: async () => [archived],
+      loadGameSummary: async (gameId: string) =>
+        gameId === archived.gameId ? archived : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const directoryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games?state=archived`
+    );
+    const directoryBody = await directoryResponse.json();
+    const summaryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${archived.gameId}/summary`
+    );
+    const summaryBody = await summaryResponse.json();
+
+    expect(directoryResponse.status).toBe(200);
+    expect(summaryResponse.status).toBe(200);
+    expect(directoryBody.games[0].livePreview.spectatorCount).toBeUndefined();
+    expect(summaryBody.summary.livePreview.spectatorCount).toBeUndefined();
+  });
+
   it("lets an authenticated player publish an unlisted game without exposing bearer tokens", async () => {
     const service = new OnlineGameService({
       idFactory: () => "game_publish_http",

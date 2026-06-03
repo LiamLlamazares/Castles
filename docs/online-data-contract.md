@@ -90,7 +90,7 @@ stateDiagram-v2
 
 ### Durable Public Read Model
 
-`OnlineGameSummary` schema v1 is the public read-model boundary for lobby/archive-style features. It is token-free, rebuildable from the event log, and safe to return from unauthenticated public listing endpoints when `visibility === "public"`.
+`OnlineGameSummary` schema v3 is the public read-model boundary for lobby/archive-style features. It is token-free, rebuildable from the event log, and safe to return from unauthenticated public listing endpoints when `visibility === "public"`.
 
 Summary payloads must include:
 
@@ -99,7 +99,10 @@ Summary payloads must include:
 - lifecycle timestamps and version
 - `status`, `visibility`, and `archiveState`
 - token-free participants and result
+- `livePreview`: side to move, turn phase, move count, optional last move, optional clock snapshot, bounded board preview, and optional live spectator count
 - `lastEventId`
+
+`livePreview.spectatorCount` is response-only presence metadata. It is allowed only on active summaries, is omitted when the current count is zero or unknown, and must not be stored as durable archive/history data. In the current single-process deployment it is calculated from connected spectator WebSockets on the serving Node process; a future multi-instance deployment needs shared presence/pub-sub before the number can be global across all servers.
 
 Public directory list responses wrap summaries in schema v1:
 

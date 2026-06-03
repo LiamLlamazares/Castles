@@ -47,6 +47,8 @@ import {
   decodeOnlineGameDirectoryCursor,
   encodeOnlineGameDirectoryCursor,
   projectOnlineGameSummaries,
+  stripOnlineGameDirectoryResponseOnlyFields,
+  stripOnlineGameSummaryResponseOnlyFields,
   validateOnlineGameSummary,
   validateOnlineGameDirectoryResponse,
 } from "../readModel";
@@ -815,6 +817,45 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return next;
   };
 
+  const countConnectedSpectators = (gameId: string): number => {
+    let count = 0;
+    for (const connection of connections.values()) {
+      if (connection.role === "spectator" && connection.gameId === gameId) {
+        count += 1;
+      }
+    }
+    return count;
+  };
+
+  const stripLivePresence = (summary: OnlineGameSummary): OnlineGameSummary => {
+    if (summary.livePreview.spectatorCount === undefined) return summary;
+    const { spectatorCount: _spectatorCount, ...livePreview } = summary.livePreview;
+    return { ...summary, livePreview };
+  };
+
+  const withLiveServerPresence = (summary: OnlineGameSummary): OnlineGameSummary => {
+    const base = stripLivePresence(summary);
+    if (base.status !== "active") return base;
+
+    const spectatorCount = countConnectedSpectators(base.gameId);
+    if (spectatorCount <= 0) return base;
+
+    return {
+      ...base,
+      livePreview: {
+        ...base.livePreview,
+        spectatorCount,
+      },
+    };
+  };
+
+  const withLiveServerPresenceDirectory = (
+    response: OnlineGameDirectoryResponse
+  ): OnlineGameDirectoryResponse => ({
+    ...response,
+    games: response.games.map(withLiveServerPresence),
+  });
+
   const loadValidatedSummaryForGame = async (
     gameId: string
   ): Promise<
@@ -829,11 +870,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return { ok: false, reason: "summary_load_failed" };
       }
       if (!summary) return { ok: true, summary: null };
-      const validation = validateOnlineGameSummary(summary);
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(summary)
+      );
       if (!validation.ok) {
         return { ok: false, reason: "summary_invalid" };
       }
-      return { ok: true, summary: validation.value };
+      return { ok: true, summary: withLiveServerPresence(validation.value) };
     }
 
     if (!options.loadGameSummaries) return { ok: true, summary: null };
@@ -846,11 +889,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     for (const summary of summaries) {
       if (summary.gameId !== gameId) continue;
-      const validation = validateOnlineGameSummary(summary);
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(summary)
+      );
       if (!validation.ok) {
         return { ok: false, reason: "summary_invalid" };
       }
-      return { ok: true, summary: validation.value };
+      return { ok: true, summary: withLiveServerPresence(validation.value) };
     }
     return { ok: true, summary: null };
   };
@@ -893,27 +938,29 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   ): Promise<OnlineGameDirectoryResponse> => {
     if (options.listGameSummaries) {
       const response = await options.listGameSummaries(directoryOptions);
-      const validation = validateOnlineGameDirectoryResponse(response);
+      const validation = validateOnlineGameDirectoryResponse(
+        stripOnlineGameDirectoryResponseOnlyFields(response)
+      );
       if (!validation.ok) {
         throw new Error(validation.error.message);
       }
       if (validation.value.games.some((summary) => !canListOnlineGameSummary(summary))) {
         throw new Error("Public directory returned a hidden game summary.");
       }
-      return {
-        ...validation.value,
-      };
+      return withLiveServerPresenceDirectory(validation.value);
     }
 
     const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
     const validated = summaries.map((summary, index) => {
-      const validation = validateOnlineGameSummary(summary);
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(summary)
+      );
       if (!validation.ok) {
         throw new Error(`Invalid online game summary ${index + 1}: ${validation.error.message}`);
       }
       return validation.value;
     });
-    return paginateDirectorySummaries(validated, directoryOptions);
+    return withLiveServerPresenceDirectory(paginateDirectorySummaries(validated, directoryOptions));
   };
 
   const loadChallengeSummary = async (challengeId: string): Promise<OnlineChallengeSummary | null> => {

@@ -93,6 +93,7 @@ export interface OnlineGameSummaryLivePreview {
   moveCount: number;
   lastMove?: MoveRecord;
   clock?: OnlineGameSummaryPreviewClock;
+  spectatorCount?: number;
   boardPreview: OnlineGameSummaryBoardPreview;
 }
 
@@ -187,6 +188,24 @@ function bad(message: string): ValidationResult<never> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+export function stripOnlineGameSummaryResponseOnlyFields(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.livePreview)) return value;
+  if (!("spectatorCount" in value.livePreview)) return value;
+  const { spectatorCount: _spectatorCount, ...livePreview } = value.livePreview;
+  return {
+    ...value,
+    livePreview,
+  };
+}
+
+export function stripOnlineGameDirectoryResponseOnlyFields(value: unknown): unknown {
+  if (!isRecord(value) || !Array.isArray(value.games)) return value;
+  return {
+    ...value,
+    games: value.games.map(stripOnlineGameSummaryResponseOnlyFields),
+  };
 }
 
 function isBoundedString(value: unknown, maxLength = 256): value is string {
@@ -766,6 +785,18 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
   if (!value.hasTimeControl && clock) {
     return bad("summary.livePreview.clock is not allowed for casual games.");
   }
+
+  let spectatorCount: number | undefined;
+  if (value.livePreview.spectatorCount !== undefined) {
+    if (!isNonNegativeSafeInteger(value.livePreview.spectatorCount)) {
+      return bad("summary.livePreview.spectatorCount must be a non-negative integer.");
+    }
+    spectatorCount = value.livePreview.spectatorCount;
+  }
+  if (spectatorCount !== undefined && value.status !== "active") {
+    return bad("summary.livePreview.spectatorCount is only allowed for active games.");
+  }
+
   const boardPreview = validateBoardPreview(value.livePreview.boardPreview);
   if (!boardPreview.ok) return boardPreview;
 
@@ -816,6 +847,7 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
         moveCount: value.livePreview.moveCount,
         lastMove,
         clock,
+        ...(spectatorCount !== undefined ? { spectatorCount } : {}),
         boardPreview: boardPreview.value,
       },
       result,

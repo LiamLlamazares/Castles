@@ -22,6 +22,8 @@ import {
   encodeOnlineGameDirectoryCursor,
   projectOnlineGameSummaries,
   roleForOnlineSeat,
+  stripOnlineGameDirectoryResponseOnlyFields,
+  stripOnlineGameSummaryResponseOnlyFields,
   validateOnlineGameDirectoryResponse,
   validateOnlineGameSummary,
   type OnlineGameSummary,
@@ -204,6 +206,60 @@ describe("online read model", () => {
       ok: true,
       value: { updatedAt: active.updatedAt, gameId: active.gameId },
     });
+  });
+
+  it("accepts live spectator counts only on active summaries", () => {
+    const active = validSummary({
+      livePreview: {
+        ...validSummary().livePreview,
+        spectatorCount: 2,
+      },
+    });
+    const activeValidation = validateOnlineGameSummary(active);
+
+    expect(activeValidation).toEqual({
+      ok: true,
+      value: active,
+    });
+
+    const archived = validSummary({
+      endedAt: "2026-05-31T12:00:01.000Z",
+      status: "complete",
+      archiveState: "archived",
+      result: { winner: "w", reason: "resignation" },
+      livePreview: {
+        ...validSummary().livePreview,
+        spectatorCount: 1,
+      },
+    });
+
+    expect(validateOnlineGameSummary(archived).ok).toBe(false);
+    expect(
+      validateOnlineGameSummary({
+        ...active,
+        livePreview: { ...active.livePreview, spectatorCount: -1 },
+      }).ok
+    ).toBe(false);
+  });
+
+  it("strips response-only spectator counts without mutating summary envelopes", () => {
+    const active = validSummary({
+      livePreview: {
+        ...validSummary().livePreview,
+        spectatorCount: 2,
+      },
+    });
+    const strippedSummary = stripOnlineGameSummaryResponseOnlyFields(active);
+    const strippedDirectory = stripOnlineGameDirectoryResponseOnlyFields({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [active],
+    });
+
+    expect((strippedSummary as OnlineGameSummary).livePreview.spectatorCount).toBeUndefined();
+    expect(active.livePreview.spectatorCount).toBe(2);
+    expect(
+      (strippedDirectory as { games: OnlineGameSummary[] }).games[0].livePreview.spectatorCount
+    ).toBeUndefined();
   });
 
   it("rejects malformed public directory response envelopes", () => {

@@ -165,6 +165,11 @@ function formatPublicLiveCount(count: number): string {
   return `${count} public live ${count === 1 ? "game" : "games"}`;
 }
 
+function formatSpectatorCount(count: number | undefined): string | null {
+  if (!Number.isSafeInteger(count) || (count ?? 0) <= 0) return null;
+  return `${count} watching`;
+}
+
 function formatClockTime(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1_000));
   const hours = Math.floor(totalSeconds / 3_600);
@@ -805,6 +810,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? `Analyze replay ${white} vs ${black}, ${game.gameId}`
       : `Spectate ${white} vs ${black}, ${game.gameId}`;
     const featuredKicker = isArchivedGame ? "Featured replay" : "Most active live game";
+    const spectatorCountLabel = isArchivedGame
+      ? null
+      : formatSpectatorCount(game.livePreview.spectatorCount);
     const className = [
       "online-game-row",
       "online-public-game-row",
@@ -883,6 +891,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               </span>
             )}
             {game.livePreview.lastMove && <span>Last {game.livePreview.lastMove.notation}</span>}
+            {spectatorCountLabel && <span>{spectatorCountLabel}</span>}
             <span>{!isArchivedGame && game.hasTimeControl ? formatClockSnapshot(game) : game.hasTimeControl ? "Timed" : "Casual"}</span>
             <span>Updated {formatUpdatedAt(game.updatedAt)}</span>
           </div>

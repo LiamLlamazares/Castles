@@ -1858,11 +1858,47 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
   });
 
+  it("strips response-only spectator counts from loaded materialized summaries", async () => {
+    const client = new FakePostgresClient();
+    const archived = createSummary("game_stale_presence_pg", {
+      updatedAt: "2026-05-31T12:01:00.000Z",
+      endedAt: "2026-05-31T12:01:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      result: { winner: "w", reason: "resignation" },
+    });
+    client.summaryRows = [
+      {
+        payload: {
+          ...archived,
+          livePreview: {
+            ...archived.livePreview,
+            spectatorCount: 4,
+          },
+        },
+      },
+    ];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const summaries = await store.loadSummaries();
+    const single = await store.loadGameSummary("game_stale_presence_pg");
+
+    expect(summaries[0].livePreview.spectatorCount).toBeUndefined();
+    expect(single?.livePreview.spectatorCount).toBeUndefined();
+  });
+
   it("lists public summaries by state with limit and cursor without replaying events", async () => {
     const client = new FakePostgresClient();
     const activeNew = createSummary("game_public_active_new", {
       updatedAt: "2026-05-31T12:03:00.000Z",
     });
+    const activeNewWithStalePresence = {
+      ...activeNew,
+      livePreview: {
+        ...activeNew.livePreview,
+        spectatorCount: 5,
+      },
+    };
     const activeOld = createSummary("game_public_active_old", {
       updatedAt: "2026-05-31T12:02:00.000Z",
     });
@@ -1873,11 +1909,18 @@ describe("PostgresOnlineGameStore", () => {
       archiveState: "archived",
       result: { winner: "w", reason: "resignation" },
     });
+    const archiveWithStalePresence = {
+      ...archive,
+      livePreview: {
+        ...archive.livePreview,
+        spectatorCount: 6,
+      },
+    };
     client.summaryRows = [
       { payload: activeOld },
       { payload: createSummary("game_unlisted_hidden", { visibility: "unlisted" }) },
-      { payload: archive },
-      { payload: activeNew },
+      { payload: archiveWithStalePresence },
+      { payload: activeNewWithStalePresence },
     ];
     const store = new PostgresOnlineGameStore({ queryable: client });
 
@@ -1899,10 +1942,12 @@ describe("PostgresOnlineGameStore", () => {
     });
 
     expect(firstPage.games.map((summary) => summary.gameId)).toEqual(["game_public_active_new"]);
+    expect(firstPage.games[0].livePreview.spectatorCount).toBeUndefined();
     expect(firstPage.nextCursor).toEqual(expect.any(String));
     expect(secondPage.games.map((summary) => summary.gameId)).toEqual(["game_public_active_old"]);
     expect(secondPage.nextCursor).toBeUndefined();
     expect(archivePage.games.map((summary) => summary.gameId)).toEqual(["game_public_archive"]);
+    expect(archivePage.games[0].livePreview.spectatorCount).toBeUndefined();
     expect(client.queries.some((query) => /from\s+online_game_events/i.test(query.text))).toBe(false);
   });
 
@@ -1929,18 +1974,27 @@ describe("PostgresOnlineGameStore", () => {
         }),
       },
       {
-        payload: createSummary("game_unlisted_me_archived", {
-          visibility: "unlisted",
-          status: "complete",
-          archiveState: "archived",
-          endedAt: "2026-05-31T12:00:02.000Z",
-          updatedAt: "2026-05-31T12:00:02.000Z",
-          result: { winner: "b", reason: "resignation" },
-          participants: [
-            { seat: "w", role: "white", identity: opponent },
-            { seat: "b", role: "black", identity },
-          ],
-        }),
+        payload: (() => {
+          const archived = createSummary("game_unlisted_me_archived", {
+            visibility: "unlisted",
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-05-31T12:00:02.000Z",
+            updatedAt: "2026-05-31T12:00:02.000Z",
+            result: { winner: "b", reason: "resignation" },
+            participants: [
+              { seat: "w", role: "white", identity: opponent },
+              { seat: "b", role: "black", identity },
+            ],
+          });
+          return {
+            ...archived,
+            livePreview: {
+              ...archived.livePreview,
+              spectatorCount: 7,
+            },
+          };
+        })(),
       },
     ];
 
@@ -1956,6 +2010,7 @@ describe("PostgresOnlineGameStore", () => {
     ]);
     expect(page.games.map((summary) => summary.visibility)).toEqual(["private", "unlisted"]);
     expect(page.games[0].participants[0].identity).toEqual(identity);
+    expect(page.games[1].livePreview.spectatorCount).toBeUndefined();
     expect(
       client.queries.some(
         (query) =>

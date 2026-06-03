@@ -635,7 +635,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually thumbnails/clocks/spectator counts only from server-backed data.
+1. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually richer thumbnails/clocks from server-backed data. Live spectator counts are now response-decorated from current WebSocket state rather than persisted summary rows.
 2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

@@ -29,6 +29,7 @@ import {
   decodeOnlineGameDirectoryCursor,
   encodeOnlineGameDirectoryCursor,
   projectOnlineGameSummaries,
+  stripOnlineGameSummaryResponseOnlyFields,
   validateOnlineIdentity,
   validateOnlineGameSummary,
 } from "../readModel";
@@ -134,7 +135,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       "SELECT payload FROM online_game_summaries ORDER BY updated_at DESC, game_id ASC"
     );
     return result.rows.map((row, index) => {
-      const validation = validateOnlineGameSummary(row.payload);
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(row.payload)
+      );
       if (!validation.ok) {
         throw new Error(`Invalid online game summary ${index + 1}: ${validation.error.message}`);
       }
@@ -180,7 +183,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       values
     );
     const summaries = result.rows.map((row, index) => {
-      const validation = validateOnlineGameSummary(row.payload);
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(row.payload)
+      );
       if (!validation.ok) {
         throw new Error(`Invalid online game summary ${index + 1}: ${validation.error.message}`);
       }
@@ -252,7 +257,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       values
     );
     const summaries = result.rows.map((row, index) => {
-      const validation = validateOnlineGameSummary(row.payload);
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(row.payload)
+      );
       if (!validation.ok) {
         throw new Error(`Invalid personal online game summary ${index + 1}: ${validation.error.message}`);
       }
@@ -279,7 +286,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     );
     const row = result.rows[0];
     if (!row) return null;
-    const validation = validateOnlineGameSummary(row.payload);
+    const validation = validateOnlineGameSummary(
+      stripOnlineGameSummaryResponseOnlyFields(row.payload)
+    );
     if (!validation.ok) {
       throw new Error(`Invalid online game summary for ${gameId}: ${validation.error.message}`);
     }
