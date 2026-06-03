@@ -16,6 +16,10 @@ import type {
   OnlineGameSummary,
   OnlineGameSummaryParticipant,
 } from "../online/readModel";
+import {
+  normalizeOnlineGameDirectorySearchQuery,
+  onlineGameSummaryDirectorySearchText,
+} from "../online/readModel";
 import type {
   OpenSeekDirectoryResponse,
   OpenSeekSummary,
@@ -50,6 +54,7 @@ interface QuickMatchSetupSummary {
 
 const LOBBY_AUTO_REFRESH_MS = 30_000;
 const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
+const GAME_SEARCH_DEBOUNCE_MS = 300;
 const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
 
 interface OnlineGameBrowserProps {
@@ -122,23 +127,6 @@ function formatRecentOnlineGameRole(record: RecentOnlineGameRecord): string {
 
 function formatRecentOnlineGameScope(): string {
   return "Device-only replay";
-}
-
-function searchText(summary: OnlineGameSummary): string {
-  const white = participantName(summary.participants, "w");
-  const black = participantName(summary.participants, "b");
-  const sideToMove = formatSideToMove(summary.livePreview.sideToMove);
-  return [
-    summary.gameId,
-    white,
-    black,
-    summary.status,
-    summary.archiveState,
-    summary.result ? formatOnlineGameResult(summary.result) : "",
-    sideToMove,
-    summary.livePreview.turnPhase,
-    summary.livePreview.lastMove?.notation ?? "",
-  ].join(" ").toLowerCase();
 }
 
 function compareNewest(left: OnlineGameSummary, right: OnlineGameSummary): number {
@@ -397,6 +385,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [games, setGames] = React.useState<OnlineGameSummary[]>([]);
   const [openSeeks, setOpenSeeks] = React.useState<OpenSeekSummary[]>([]);
   const [query, setQuery] = React.useState("");
+  const [debouncedGameQuery, setDebouncedGameQuery] = React.useState("");
   const [sort, setSort] = React.useState<OnlineBrowserSort>("newest");
   const [timeFilter, setTimeFilter] = React.useState<OnlineBrowserTimeFilter>("all");
   const [seekSideFilter, setSeekSideFilter] = React.useState<OpenSeekSideFilter>("all");
@@ -509,12 +498,26 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [sort, tab]);
 
+  React.useEffect(() => {
+    if (tab === "lobby") {
+      setDebouncedGameQuery("");
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedGameQuery(normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim());
+    }, GAME_SEARCH_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [query, tab]);
+
   const gameDirectoryOptions = React.useMemo<FetchOnlineGameSummariesOptions>(() => ({
     state: directoryState,
     limit: 50,
     ...(timeFilter !== "all" ? { clock: timeFilter } : {}),
     ...(tab === "archive" && resultFilter !== "all" ? { result: resultFilter } : {}),
-  }), [directoryState, resultFilter, tab, timeFilter]);
+    ...(debouncedGameQuery !== "" && tab !== "lobby" ? { query: debouncedGameQuery } : {}),
+  }), [debouncedGameQuery, directoryState, resultFilter, tab, timeFilter]);
 
   const loadPage = React.useCallback(async (
     mode: "replace" | "append",
@@ -730,7 +733,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [publicGames]);
 
   const visibleGames = React.useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
     const filtered = publicGames.filter((game) => {
       const tabMatches =
         tab === "watch"
@@ -740,7 +743,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (timeFilter === "timed" && !game.hasTimeControl) return false;
       if (timeFilter === "casual" && game.hasTimeControl) return false;
       if (tab === "archive" && !matchesResultFilter(game, resultFilter)) return false;
-      return !normalizedQuery || searchText(game).includes(normalizedQuery);
+      return !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery);
     });
     return filtered.sort(
       sort === "watchers" && tab === "watch"

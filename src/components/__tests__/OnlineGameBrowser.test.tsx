@@ -562,6 +562,33 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("article", { name: /Lobby listing seek_creator_white_timed/i })).toBeInTheDocument();
   });
 
+  it("does not send Lobby listing search to current public game requests", async () => {
+    const loadGames = vi.fn().mockResolvedValue(directory([
+      summary({ gameId: "game_lobby_current" }),
+    ]));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={loadGames}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({ seekId: "seek_creator_white_timed", creatorSeat: "w" }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("game_lobby_current")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search lobby listings" }), {
+      target: { value: "creator plays white" },
+    });
+
+    expect(loadGames.mock.calls.every(([options]) => options && !("query" in options))).toBe(true);
+  });
+
   it("opens the Watch tab from the Lobby current-games section", async () => {
     render(
       <OnlineGameBrowser
@@ -1710,6 +1737,51 @@ describe("OnlineGameBrowser", () => {
     });
   });
 
+  it("requests public game search from the server and preserves it for pagination", async () => {
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_initial_page" })]))
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_search_match" })], "cursor-search"))
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_search_second_page" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("game_initial_page")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+      target: { value: "black   to   move" },
+    });
+
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "active",
+        limit: 50,
+        query: "black to move",
+        cursor: undefined,
+      });
+    });
+    expect(await screen.findByText("game_search_match")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "active",
+        limit: 50,
+        query: "black to move",
+        cursor: "cursor-search",
+      });
+    });
+    expect(await screen.findByText("game_search_second_page")).toBeInTheDocument();
+  });
+
   it("shows an honest empty Watch state while only public games are listable", async () => {
     render(
       <OnlineGameBrowser
@@ -2447,7 +2519,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByText("game_second_page")).toBeInTheDocument();
   });
 
-  it("keeps pagination reachable when filters hide the loaded page", async () => {
+  it("reloads the public directory when search changes instead of relying on an unfiltered cursor", async () => {
     const loadGames = vi
       .fn()
       .mockResolvedValueOnce(directory([
@@ -2474,13 +2546,12 @@ describe("OnlineGameBrowser", () => {
 
     expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
-
     expect(await screen.findByText("game_second_page_match")).toBeInTheDocument();
     expect(loadGames).toHaveBeenLastCalledWith({
       state: "active",
       limit: 50,
-      cursor: "cursor-filtered",
+      query: "second_page_match",
+      cursor: undefined,
     });
   });
 

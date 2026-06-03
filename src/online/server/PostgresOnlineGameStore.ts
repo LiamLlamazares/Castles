@@ -77,6 +77,10 @@ interface PostgresTransactionClient extends PostgresQueryable {
 
 const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
 
+function escapePostgresLike(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
 export interface PostgresOnlineGameStoreOptions {
   connectionString?: string;
   queryable?: PostgresQueryable;
@@ -176,6 +180,45 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
             : { result: { reason: options.result } };
       values.push(resultFilter);
       where.push(`payload @> $${resultParam}::jsonb`);
+    }
+    if (options.query) {
+      const searchParam = values.length + 1;
+      values.push(`%${escapePostgresLike(options.query.toLowerCase())}%`);
+      where.push(`(
+        LOWER(game_id) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(status) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(archive_state) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'result'->>'reason', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(REPLACE(COALESCE(payload->'result'->>'reason', ''), '_', ' ')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'result'->>'winner', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(CASE payload->'result'->>'winner' WHEN 'w' THEN 'white' WHEN 'b' THEN 'black' ELSE '' END, '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(
+          CONCAT(
+            COALESCE(CASE payload->'result'->>'winner' WHEN 'w' THEN 'white' WHEN 'b' THEN 'black' ELSE '' END, ''),
+            ' wins by ',
+            REPLACE(COALESCE(payload->'result'->>'reason', ''), '_', ' ')
+          )
+        ) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(
+          CONCAT(
+            COALESCE(CASE payload->'result'->>'winner' WHEN 'w' THEN 'white' WHEN 'b' THEN 'black' ELSE '' END, ''),
+            ' wins ',
+            CASE payload->'result'->>'reason'
+              WHEN 'timeout' THEN 'on time'
+              ELSE CONCAT('by ', REPLACE(COALESCE(payload->'result'->>'reason', ''), '_', ' '))
+            END
+          )
+        ) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'livePreview'->>'sideToMove', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(CASE payload->'livePreview'->>'sideToMove' WHEN 'w' THEN 'white to move' WHEN 'b' THEN 'black to move' ELSE '' END, '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'livePreview'->>'turnPhase', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'livePreview'->'lastMove'->>'notation', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(CASE WHEN (payload->>'hasTimeControl')::boolean THEN 'timed clock timed' ELSE 'casual no clock' END) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->0->>'role', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->1->>'role', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->0->'identity'->>'displayName', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->1->'identity'->>'displayName', '')) LIKE $${searchParam} ESCAPE '\\'
+      )`);
     }
 
     if (options.cursor) {

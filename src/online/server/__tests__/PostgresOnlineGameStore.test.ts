@@ -5,7 +5,11 @@ import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
-import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION, type OnlineGameSummary } from "../../readModel";
+import {
+  ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+  onlineGameSummaryDirectorySearchText,
+  type OnlineGameSummary,
+} from "../../readModel";
 import { hashOnlineToken } from "../onlineTokenCredentials";
 import {
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -348,6 +352,13 @@ class FakePostgresClient {
             }
             return true;
           });
+        }
+        if (/lower\(game_id\)\s+like/i.test(text)) {
+          const rawPattern = values?.find((value) => typeof value === "string" && value.startsWith("%"));
+          const query = typeof rawPattern === "string" ? rawPattern.slice(1, -1).toLowerCase() : "";
+          rows = rows.filter((row) =>
+            onlineGameSummaryDirectorySearchText(row.payload as OnlineGameSummary).includes(query)
+          );
         }
         if (/updated_at\s*</i.test(text)) {
           const cursorIndex =
@@ -2032,6 +2043,77 @@ describe("PostgresOnlineGameStore", () => {
     expect(query?.text).toMatch(/payload\s*@>\s*\$\d+::jsonb/i);
     expect(query?.values).toContainEqual({ hasTimeControl: false });
     expect(query?.values).toContainEqual({ result: { reason: "timeout" } });
+  });
+
+  it("filters public summary pages by visible search text in PostgreSQL before pagination", async () => {
+    const client = new FakePostgresClient();
+    const rawIdNonmatch = createSummary("game_newer_raw_id_nonmatch", {
+      updatedAt: "2026-05-31T12:04:00.000Z",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "ada_raw_id_w", displayName: "Caro" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "dani_b", displayName: "Dani" } },
+      ],
+    });
+    const visibleMatch = createSummary("game_older_visible_match", {
+      updatedAt: "2026-05-31T12:03:00.000Z",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "visible_w", displayName: "Ada" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b" } },
+      ],
+    });
+    client.summaryRows = [
+      { payload: rawIdNonmatch },
+      { payload: visibleMatch },
+    ];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const page = await store.listGameSummaries({
+      visibility: "public",
+      state: "active",
+      limit: 1,
+      query: "Ada",
+    });
+
+    expect(page.games.map((summary) => summary.gameId)).toEqual(["game_older_visible_match"]);
+    expect(page.nextCursor).toBeUndefined();
+    const query = client.queries.find((candidate) => /from\s+online_game_summaries/i.test(candidate.text));
+    expect(query?.text).toMatch(/LOWER\(game_id\)\s+LIKE/i);
+    expect(query?.text).toMatch(/identity'->>'displayName'/i);
+    expect(query?.text).not.toMatch(/payload::text/i);
+    expect(query?.values).toContain("%ada%");
+  });
+
+  it("filters public summary pages by displayed timeout result labels in PostgreSQL", async () => {
+    const client = new FakePostgresClient();
+    const timeoutSummary = createSummary("game_timeout_result", {
+      status: "complete",
+      archiveState: "archived",
+      hasTimeControl: true,
+      updatedAt: "2026-05-31T12:04:00.000Z",
+      endedAt: "2026-05-31T12:04:00.000Z",
+      result: { winner: "b", reason: "timeout" },
+    });
+    const resignationSummary = createSummary("game_resignation_result", {
+      status: "complete",
+      archiveState: "archived",
+      hasTimeControl: true,
+      updatedAt: "2026-05-31T12:03:00.000Z",
+      endedAt: "2026-05-31T12:03:00.000Z",
+      result: { winner: "w", reason: "resignation" },
+    });
+    client.summaryRows = [{ payload: timeoutSummary }, { payload: resignationSummary }];
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const page = await store.listGameSummaries({
+      visibility: "public",
+      state: "archived",
+      limit: 1,
+      query: "Black Wins On Time",
+    });
+
+    expect(page.games.map((summary) => summary.gameId)).toEqual(["game_timeout_result"]);
+    const query = client.queries.find((candidate) => /from\s+online_game_summaries/i.test(candidate.text));
+    expect(query?.values).toContain("%black wins on time%");
   });
 
   it("lists personal game summaries by participant identity across private and public visibility", async () => {

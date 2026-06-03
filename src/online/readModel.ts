@@ -29,6 +29,7 @@ export const ONLINE_GAME_SUMMARY_SCHEMA_VERSION = 3;
 export const ONLINE_GAME_DIRECTORY_SCHEMA_VERSION = 1;
 export const ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT = 25;
 export const ONLINE_GAME_DIRECTORY_MAX_LIMIT = 100;
+export const ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH = 80;
 
 export type { OnlineGameVisibility } from "./visibility";
 export type OnlineArchiveState = "active" | "archived";
@@ -132,6 +133,7 @@ export interface OnlineGameDirectoryListOptions {
   cursor?: string;
   clock?: OnlineGameDirectoryClockFilter;
   result?: OnlineGameDirectoryResultFilter;
+  query?: string;
 }
 
 export interface OnlinePersonalGameDirectoryListOptions {
@@ -335,7 +337,65 @@ export function onlineGameSummaryMatchesDirectoryFilters(
       return false;
     }
   }
+  if (
+    options.query &&
+    !onlineGameSummaryDirectorySearchText(summary).includes(options.query.toLowerCase())
+  ) {
+    return false;
+  }
   return true;
+}
+
+export function normalizeOnlineGameDirectorySearchQuery(value: string): string | null {
+  if (/[\u0000-\u001F\u007F]/.test(value)) {
+    return null;
+  }
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (normalized.length === 0 || normalized.length > ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH) {
+    return null;
+  }
+  return normalized.toLowerCase();
+}
+
+function resultSearchTerms(result: OnlineGameResultDTO | undefined): string[] {
+  if (!result) return [];
+  const winner = result.winner === "w" ? "white" : "black";
+  const reason = result.reason.replace(/_/g, " ");
+  const displayedReason = result.reason === "timeout" ? "on time" : `by ${reason}`;
+  return [
+    result.winner,
+    winner,
+    result.reason,
+    reason,
+    `${winner} wins`,
+    `${winner} wins by ${reason}`,
+    `${winner} wins ${displayedReason}`,
+  ];
+}
+
+function participantSearchTerms(participant: OnlineGameSummaryParticipant): string[] {
+  const displayName =
+    participant.identity.kind === "registered" ? participant.identity.displayName ?? "" : "";
+  return [
+    participant.seat,
+    participant.role,
+    participant.role === "white" ? "White" : "Black",
+    displayName,
+  ];
+}
+
+export function onlineGameSummaryDirectorySearchText(summary: OnlineGameSummary): string {
+  return [
+    summary.gameId,
+    summary.status,
+    summary.archiveState,
+    summary.hasTimeControl ? "timed clock timed" : "casual no clock",
+    summary.livePreview.sideToMove === "w" ? "white to move" : "black to move",
+    summary.livePreview.turnPhase,
+    summary.livePreview.lastMove?.notation ?? "",
+    ...summary.participants.flatMap(participantSearchTerms),
+    ...resultSearchTerms(summary.result),
+  ].join(" ").toLowerCase();
 }
 
 function validateResult(value: unknown): ValidationResult<OnlineGameResultDTO> {

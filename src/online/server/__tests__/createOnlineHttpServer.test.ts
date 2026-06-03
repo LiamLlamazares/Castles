@@ -2219,6 +2219,40 @@ describe("createOnlineHttpServer", () => {
     expect(body.nextCursor).toBeUndefined();
   });
 
+  it("applies public directory text search before pagination", async () => {
+    const newerNonmatch = {
+      ...summaryForGame("game_newer_nonmatch", "public"),
+      updatedAt: "2026-05-31T12:04:00.000Z",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "ada_raw_id_w", displayName: "Caro" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "dani_b", displayName: "Dani" } },
+      ],
+    } satisfies OnlineGameSummary;
+    const olderMatch = {
+      ...summaryForGame("game_older_match", "public"),
+      updatedAt: "2026-05-31T12:03:00.000Z",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "visible_match_w", displayName: "Ada" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_match_b" } },
+      ],
+    } satisfies OnlineGameSummary;
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      loadGameSummaries: async () => [newerNonmatch, olderMatch],
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/games?state=active&q=ada&limit=1`
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.games.map((game: OnlineGameSummary) => game.gameId)).toEqual(["game_older_match"]);
+    expect(JSON.stringify(body)).not.toContain("ada_raw_id_w");
+  });
+
   it("rejects invalid public directory query parameters and secret-looking queries", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
@@ -2238,6 +2272,10 @@ describe("createOnlineHttpServer", () => {
       "result=draw",
       "clock=timed&clock=casual",
       "result=white&result=timeout",
+      "q=",
+      "q=Ada%0ABen",
+      `q=${"a".repeat(81)}`,
+      "q=ada&q=ben",
       "token=secret",
       "sid=secret",
       "secret=value",

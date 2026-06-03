@@ -41,8 +41,10 @@ import {
   ONLINE_GAME_DIRECTORY_CLOCK_FILTERS,
   ONLINE_GAME_DIRECTORY_MAX_LIMIT,
   ONLINE_GAME_DIRECTORY_RESULT_FILTERS,
+  ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH,
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   ONLINE_GAME_DIRECTORY_STATES,
+  normalizeOnlineGameDirectorySearchQuery,
   onlineGameSummaryMatchesDirectoryFilters,
   type OnlineGameDirectoryClockFilter,
   type OnlineGameDirectoryListOptions,
@@ -280,7 +282,7 @@ function parsePublicDirectoryOptions(
     return { ok: false, message: "Public directory query is invalid." };
   }
 
-  for (const name of ["state", "limit", "cursor", "clock", "result"]) {
+  for (const name of ["state", "limit", "cursor", "clock", "result", "q"]) {
     if (url.searchParams.getAll(name).length > 1) {
       return { ok: false, message: "Public directory query is invalid." };
     }
@@ -328,6 +330,19 @@ function parsePublicDirectoryOptions(
   }
   const result = rawResult ?? undefined;
 
+  const rawQuery = getSingleSearchParam(url.searchParams, "q");
+  let query: string | undefined;
+  if (rawQuery !== null) {
+    const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(rawQuery);
+    if (!normalizedQuery) {
+      return {
+        ok: false,
+        message: `Public directory search must be 1-${ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH} visible characters.`,
+      };
+    }
+    query = normalizedQuery;
+  }
+
   return {
     ok: true,
     options: {
@@ -337,6 +352,7 @@ function parsePublicDirectoryOptions(
       cursor,
       clock: clock as OnlineGameDirectoryClockFilter | undefined,
       result: result as OnlineGameDirectoryResultFilter | undefined,
+      query,
     },
   };
 }

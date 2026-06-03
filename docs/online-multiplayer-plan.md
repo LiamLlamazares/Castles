@@ -614,13 +614,24 @@ Remaining work:
 
 Goal: make Watch/Archive clock and Archive result filters apply before pagination, so archive scanning does not depend on whichever page happened to be loaded first.
 
-Status: implemented locally on 2026-06-03. `GET /api/online/games` now accepts token-free `clock=timed|casual` and `result=white|black|resignation|timeout|castle_control|victory_points|monarch_captured` filters. The HTTP parser rejects invalid or duplicate values, the in-memory and PostgreSQL public directory paths apply these filters before cursor/limit pagination, and the Online browser sends Clock and Result controls through the shared client query helper. Text search remains local to the loaded page until a bounded server-side search/index strategy exists.
+Status: implemented and pushed on 2026-06-03. `GET /api/online/games` now accepts token-free `clock=timed|casual` and `result=white|black|resignation|timeout|castle_control|victory_points|monarch_captured` filters. The HTTP parser rejects invalid or duplicate values, the in-memory and PostgreSQL public directory paths apply these filters before cursor/limit pagination, and the Online browser sends Clock and Result controls through the shared client query helper.
 
 Remaining work:
 
-- Move text/player/game-id search server-side once there is a safe bounded query and index plan.
 - Keep Watch `Most watched in current list` scoped to the loaded page until spectator presence is shared across Node instances.
 - Continue Archive/replay row polish after the server can return the right filtered page.
+
+## Phase 6AE: Server-Backed Public Directory Search
+
+Goal: make Watch/Archive search apply before pagination without exposing secret-bearing data or raw identity ids.
+
+Status: implemented on 2026-06-03. `GET /api/online/games` accepts `q=<search>`, normalizes it to 1-80 visible characters, rejects duplicate/empty/control-character/secret-looking values, and applies it before cursor/limit pagination in both the in-memory and PostgreSQL public directory paths. The shared search text matches game id, registered display names, White/Black fallbacks, status/archive state, result labels, side-to-move labels, turn phase, timed/casual labels, and last-move notation. It intentionally does not search raw anonymous/session/registered ids, spectator counts, credentials, or full board JSON. Watch/Archive send a debounced `q`; Lobby search remains scoped to open seeks and does not affect the current-games preview.
+
+Remaining work:
+
+- Add richer indexed search once public archive volume grows beyond the bounded first-pass query.
+- Add clearer player/title metadata after accounts exist.
+- Continue Archive/replay row polish with the new server-backed filtered pages.
 
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
@@ -659,7 +670,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after the summary model grows: clock/result filters are now server-backed, while text search, player/game-id lookup, clearer replay metadata, and richer thumbnails/clocks still need bounded server-backed designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+1. Improve public directory scanability after the summary model grows: clock/result filters and bounded visible-text search are now server-backed, while clearer replay metadata, richer thumbnails/clocks, and account-backed player metadata still need designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

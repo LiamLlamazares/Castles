@@ -1050,6 +1050,7 @@ export interface FetchOnlineGameSummariesOptions {
   cursor?: string;
   clock?: OnlineGameDirectoryClockFilter;
   result?: OnlineGameDirectoryResultFilter;
+  query?: string;
 }
 
 function buildOnlineDirectoryPath(options: FetchOnlineGameSummariesOptions = {}): string {
@@ -1059,6 +1060,7 @@ function buildOnlineDirectoryPath(options: FetchOnlineGameSummariesOptions = {})
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.clock) params.set("clock", options.clock);
   if (options.result) params.set("result", options.result);
+  if (options.query?.trim()) params.set("q", options.query.trim());
   const query = params.toString();
   return query ? `/api/online/games?${query}` : "/api/online/games";
 }

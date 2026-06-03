@@ -20,6 +20,9 @@ import {
   canListOnlineGameSummary,
   decodeOnlineGameDirectoryCursor,
   encodeOnlineGameDirectoryCursor,
+  normalizeOnlineGameDirectorySearchQuery,
+  onlineGameSummaryDirectorySearchText,
+  onlineGameSummaryMatchesDirectoryFilters,
   projectOnlineGameSummaries,
   roleForOnlineSeat,
   stripOnlineGameDirectoryResponseOnlyFields,
@@ -206,6 +209,93 @@ describe("online read model", () => {
       ok: true,
       value: { updatedAt: active.updatedAt, gameId: active.gameId },
     });
+  });
+
+  it("normalizes and bounds public directory search queries", () => {
+    expect(normalizeOnlineGameDirectorySearchQuery("  Ada   timeout  ")).toBe("ada timeout");
+    expect(normalizeOnlineGameDirectorySearchQuery("")).toBeNull();
+    expect(normalizeOnlineGameDirectorySearchQuery("   ")).toBeNull();
+    expect(normalizeOnlineGameDirectorySearchQuery("Ada\nBen")).toBeNull();
+    expect(normalizeOnlineGameDirectorySearchQuery("a".repeat(81))).toBeNull();
+  });
+
+  it("searches public directory summaries by visible text without raw identity ids", () => {
+    const visibleSummary = validSummary({
+      gameId: "game_visible_search",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "private_user_w", displayName: "Ada" } },
+        { seat: "b", role: "black", identity: { kind: "session", id: "session_secret_b" } },
+      ],
+      livePreview: {
+        ...validSummary().livePreview,
+        sideToMove: "b",
+        turnPhase: "Attack",
+        lastMove: {
+          notation: "G13G12",
+          turnNumber: 1,
+          color: "w",
+          phase: "Movement",
+        },
+        moveCount: 1,
+      },
+    });
+    const searchText = onlineGameSummaryDirectorySearchText(visibleSummary);
+
+    expect(searchText).toContain("ada");
+    expect(searchText).toContain("black");
+    expect(searchText).toContain("black to move");
+    expect(searchText).toContain("g13g12");
+    expect(searchText).not.toContain("private_user_w");
+    expect(searchText).not.toContain("session_secret_b");
+  });
+
+  it("searches timeout results by displayed on-time label", () => {
+    const timeoutSummary = validSummary({
+      status: "complete",
+      archiveState: "archived",
+      endedAt: "2026-05-31T12:00:01.000Z",
+      result: { winner: "b", reason: "timeout" },
+    });
+
+    expect(onlineGameSummaryDirectorySearchText(timeoutSummary)).toContain("black wins on time");
+  });
+
+  it("matches public directory search before pagination can hide older matches", () => {
+    const matching = validSummary({
+      gameId: "game_older_matching",
+      visibility: "public",
+      updatedAt: "2026-05-31T12:00:01.000Z",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "ada_id", displayName: "Ada" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+      ],
+    });
+    const newerNonmatch = validSummary({
+      gameId: "game_newer_other",
+      visibility: "public",
+      updatedAt: "2026-05-31T12:00:02.000Z",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "caro_id", displayName: "Caro" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+      ],
+    });
+
+    expect(
+      onlineGameSummaryMatchesDirectoryFilters(newerNonmatch, {
+        visibility: "public",
+        state: "active",
+        limit: 1,
+        query: "ada",
+      })
+    ).toBe(false);
+    expect(
+      onlineGameSummaryMatchesDirectoryFilters(matching, {
+        visibility: "public",
+        state: "active",
+        limit: 1,
+        query: "ada",
+      })
+    ).toBe(true);
   });
 
   it("accepts live spectator counts only on active summaries", () => {
