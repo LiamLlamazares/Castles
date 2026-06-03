@@ -2100,7 +2100,9 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    const row = await screen.findByRole("article", { name: /Ada vs Ben/i });
+    const row = await screen.findByRole("article", {
+      name: "Ada vs Ben replay game_public_archive, White wins by resignation",
+    });
     expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true");
     expect(row).toHaveTextContent("Complete");
     expect(row).toHaveTextContent("Replay length 3 moves");

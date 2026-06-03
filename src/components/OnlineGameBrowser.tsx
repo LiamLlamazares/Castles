@@ -878,12 +878,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const boardPreview = game.livePreview.boardPreview;
     const previewCells = boardPreviewCells(boardPreview.radius);
     const boardPreviewLabel = boardPreviewImageLabel(game);
+    const rowAriaLabel = isArchivedGame
+      ? `${white} vs ${black} replay ${game.gameId}, ${resultLabel ?? "completed game"}`
+      : `${options.featured ? `${featuredKicker} ` : ""}${white} vs ${black} ${game.gameId}`;
 
     return (
       <article
         key={game.gameId}
         className={className}
-        aria-label={`${options.featured ? `${featuredKicker} ` : ""}${white} vs ${black} ${game.gameId}`}
+        aria-label={rowAriaLabel}
       >
         <div className="online-game-board-preview">
           <svg viewBox="0 0 100 100" role="img" aria-label={boardPreviewLabel} focusable="false">
