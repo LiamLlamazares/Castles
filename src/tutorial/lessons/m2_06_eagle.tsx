@@ -28,7 +28,19 @@ export function createM2L6(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'fly-past-blockers', text: 'Fly past the friendly blockers and threaten the enemy Swordsman.' },
+      {
+        id: 'fly-past-blockers',
+        text: 'Fly past the friendly blockers to the open hex beside the enemy Swordsman.',
+        completion: {
+          type: 'event',
+          eventTypes: ['move'],
+          phase: 'Movement',
+          actorPieceType: PieceType.Eagle,
+          actorColor: 'w',
+          sourceHexKey: '-3,3,0',
+          targetHexKey: '-1,1,0',
+        },
+      },
     ],
     hints: [
       'Flying ignores blockers on the route.',

@@ -29,7 +29,11 @@ export function createM5L7(): TutorialLesson {
     initialTurnCounter: 7,
     phoenixRecords: [{ respawnTurn: 8, owner: 'w' }],
     objectives: [
-      { id: 'capture-phoenix-with-giant', text: 'As Black, capture the nearby Phoenix with the Giant.' },
+      {
+        id: 'capture-phoenix-with-giant',
+        text: 'As Black, capture the nearby Phoenix with the Giant.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Giant, actorColor: 'b', targetPieceType: PieceType.Phoenix, targetColor: 'w' },
+      },
     ],
     hints: [
       'Compare the Phoenix with the Eagle: both fly, but only the Phoenix has rebirth.',

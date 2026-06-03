@@ -28,7 +28,11 @@ export function createM5L2(): TutorialLesson {
     layout,
     initialTurnCounter: 0,
     objectives: [
-      { id: 'pack-wolves-and-capture', text: 'Move the left Wolf beside the other Wolf, then capture the Giant during the Attack phase.' },
+      {
+        id: 'pack-wolves-and-capture',
+        text: 'Move the left Wolf beside the other Wolf, then capture the Giant during the Attack phase.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Wolf, actorColor: 'w', targetPieceType: PieceType.Giant, targetColor: 'b' },
+      },
     ],
     hints: [
       'A Wolf moves up to 3 hexes, so it can join the pack quickly.',

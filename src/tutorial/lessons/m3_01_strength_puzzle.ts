@@ -30,9 +30,21 @@ export function createM3L1(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      { id: 'two-swordsmen-capture-giant', text: 'Find the Giant that can be captured because two Swordsmen can both attack it this phase.' },
-      { id: 'lone-swordsman-cannot-capture-giant', text: 'Find the Giant that a lone Swordsman geometrically attacks but cannot legally start attacking because it cannot be captured this phase.' },
-      { id: 'dragon-overpowers-target', text: 'Find the target the Dragon can overpower alone.' },
+      {
+        id: 'two-swordsmen-capture-giant',
+        text: 'Find the Giant that can be captured because two Swordsmen can both attack it this phase.',
+        completion: { type: 'manual' },
+      },
+      {
+        id: 'lone-swordsman-cannot-capture-giant',
+        text: 'Find the Giant that a lone Swordsman geometrically attacks but cannot legally start attacking because it cannot be captured this phase.',
+        completion: { type: 'manual' },
+      },
+      {
+        id: 'dragon-overpowers-target',
+        text: 'Find the target the Dragon can overpower alone.',
+        completion: { type: 'manual' },
+      },
     ],
     hints: [
       'Equal or greater total attacking strength captures.',

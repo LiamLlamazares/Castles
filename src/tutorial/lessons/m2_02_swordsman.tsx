@@ -26,7 +26,11 @@ export function createM2L2(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'move-and-capture-swordsman', text: 'Move into position, then capture the enemy Swordsman.' },
+      {
+        id: 'move-and-capture-swordsman',
+        text: 'Move into position, then capture the enemy Swordsman.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Swordsman, actorColor: 'w', targetPieceType: PieceType.Swordsman, targetColor: 'b' },
+      },
     ],
     hints: ['Swordsmen move forward and attack forward diagonally.', 'If you cannot attack yet, pass through movement until the attack phase.'],
   };

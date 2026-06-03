@@ -4,7 +4,7 @@ import GameBoard from "../Game";
 import { ThemeProvider } from "../../contexts/ThemeContext";
 import { getAllLessons } from "../../tutorial";
 import { getLessonObjectives } from "../../tutorial/objectives";
-import { AbilityType } from "../../Constants";
+import { AbilityType, PieceType } from "../../Constants";
 
 vi.mock("../Game", () => ({
   default: vi.fn(() => <div data-testid="tutorial-board" />),
@@ -203,19 +203,19 @@ describe("Tutorial", () => {
     expect(emitTutorialEvent).toEqual(expect.any(Function));
 
     act(() => {
-      emitTutorialEvent?.({ type: "inspect", targetKind: "castle", hexKey: "-3,3,0" });
-    });
-    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
-
-    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
-    act(() => {
-      emitTutorialEvent?.({ type: "inspect", targetKind: "piece", hexKey: "3,-3,0" });
+      emitTutorialEvent?.({ type: "inspect", targetKind: "piece", hexKey: "-3,3,0" });
     });
     expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
       emitTutorialEvent?.({ type: "inspect", targetKind: "castle", hexKey: "3,-3,0" });
+    });
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({ type: "inspect", targetKind: "castle", hexKey: "-3,3,0" });
     });
 
     expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
@@ -268,7 +268,15 @@ describe("Tutorial", () => {
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
-      emitTutorialEvent?.({ type: "capture", notation: "J10xK11", phase: "Attack" });
+      emitTutorialEvent?.({
+        type: "capture",
+        notation: "J10xK11",
+        phase: "Attack",
+        actorPieceType: PieceType.Swordsman,
+        actorColor: "w",
+        targetPieceType: PieceType.Swordsman,
+        targetColor: "b",
+      });
     });
     expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
 
@@ -288,7 +296,14 @@ describe("Tutorial", () => {
     let emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
 
     act(() => {
-      emitTutorialEvent?.({ type: "move", notation: "G12G11", phase: "Movement", resultPhase: "Movement" });
+      emitTutorialEvent?.({
+        type: "move",
+        notation: "G12G11",
+        phase: "Movement",
+        resultPhase: "Movement",
+        actorPieceType: PieceType.Swordsman,
+        actorColor: "w",
+      });
     });
     expect(screen.getByText("1 / 3 goals completed")).toBeInTheDocument();
 
@@ -315,9 +330,33 @@ describe("Tutorial", () => {
     renderTutorial();
 
     fireEvent.click(screen.getByRole("button", { name: /Open 2\.4 Archer/ }));
-    const emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    let emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
-      emitTutorialEvent?.({ type: "attack", notation: "A1xA3", phase: "Attack", resultPhase: "Attack" });
+      emitTutorialEvent?.({
+        type: "attack",
+        notation: "A1xA3",
+        phase: "Attack",
+        resultPhase: "Attack",
+        actorPieceType: PieceType.Swordsman,
+        targetPieceType: PieceType.Swordsman,
+        targetColor: "b",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "attack",
+        notation: "A1xA3",
+        phase: "Attack",
+        resultPhase: "Attack",
+        actorPieceType: PieceType.Archer,
+        actorColor: "w",
+        targetPieceType: PieceType.Swordsman,
+        targetColor: "b",
+        targetHexKey: "0,0,0",
+      });
     });
 
     expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
@@ -347,13 +386,33 @@ describe("Tutorial", () => {
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
-      emitTutorialEvent?.({ type: "ability", abilityType: AbilityType.Fireball, notation: "WF:J10K11", phase: "Attack", pieceRemoved: false });
+      emitTutorialEvent?.({
+        type: "ability",
+        abilityType: AbilityType.Fireball,
+        notation: "WF:J10K11",
+        phase: "Attack",
+        actorPieceType: PieceType.Wizard,
+        actorColor: "w",
+        targetColor: "b",
+        targetHexKey: "0,-1,1",
+        pieceRemoved: false,
+      });
     });
     expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
-      emitTutorialEvent?.({ type: "ability", abilityType: AbilityType.Fireball, notation: "WF:J10K11", phase: "Attack", pieceRemoved: true });
+      emitTutorialEvent?.({
+        type: "ability",
+        abilityType: AbilityType.Fireball,
+        notation: "WF:J10K11",
+        phase: "Attack",
+        actorPieceType: PieceType.Wizard,
+        actorColor: "w",
+        targetColor: "b",
+        targetHexKey: "0,-1,1",
+        pieceRemoved: true,
+      });
     });
     expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
 
@@ -367,7 +426,17 @@ describe("Tutorial", () => {
 
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
-      emitTutorialEvent?.({ type: "ability", abilityType: AbilityType.RaiseDead, notation: "NR:J10K11", phase: "Attack", pieceAdded: true });
+      emitTutorialEvent?.({
+        type: "ability",
+        abilityType: AbilityType.RaiseDead,
+        notation: "NR:J10K11",
+        phase: "Attack",
+        actorPieceType: PieceType.Necromancer,
+        actorColor: "w",
+        createdPieceType: PieceType.Swordsman,
+        createdColor: "w",
+        pieceAdded: true,
+      });
     });
     expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
   });
@@ -378,7 +447,43 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: /Open 4\.2 Recruitment cycle/ }));
     let emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
-      emitTutorialEvent?.({ type: "recruitment", notation: "K11=Swo", phase: "Recruitment" });
+      emitTutorialEvent?.({
+        type: "recruitment",
+        notation: "K11=Swo",
+        phase: "Recruitment",
+        createdPieceType: PieceType.Swordsman,
+        createdColor: "w",
+        targetHexKey: "2,-2,0",
+        sourceCastleHexKey: "-3,3,0",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "recruitment",
+        notation: "L9=Swo",
+        phase: "Recruitment",
+        createdPieceType: PieceType.Swordsman,
+        createdColor: "w",
+        targetHexKey: "1,-1,0",
+        sourceCastleHexKey: "3,-3,0",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "recruitment",
+        notation: "L9=Swo",
+        phase: "Recruitment",
+        createdPieceType: PieceType.Swordsman,
+        createdColor: "w",
+        targetHexKey: "2,-2,0",
+        sourceCastleHexKey: "3,-3,0",
+      });
     });
     expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
 
@@ -386,7 +491,94 @@ describe("Tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: /Open 2\.12 Promotion/ }));
     emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
     act(() => {
-      emitTutorialEvent?.({ type: "promotion", notation: "J10K11=Arc", phase: "Movement" });
+      emitTutorialEvent?.({
+        type: "promotion",
+        notation: "J10K11=Arc",
+        phase: "Movement",
+        actorPieceType: PieceType.Swordsman,
+        actorColor: "w",
+        sourceHexKey: "0,-2,2",
+        targetHexKey: "1,-3,2",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
+  });
+
+  it("auto-completes source-specific castle and sanctuary objectives only from the intended source", () => {
+    renderTutorial();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open 4\.1 Castle control/ }));
+    let emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "capture",
+        notation: "K10xM9",
+        phase: "Movement",
+        actorPieceType: PieceType.Knight,
+        actorColor: "w",
+        sourceHexKey: "1,-1,0",
+        targetHexKey: "-3,3,0",
+        castleControlChanged: true,
+      });
+    });
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "capture",
+        notation: "K10xM9",
+        phase: "Movement",
+        actorPieceType: PieceType.Knight,
+        actorColor: "w",
+        sourceHexKey: "1,-1,0",
+        targetHexKey: "3,-3,0",
+        castleControlChanged: true,
+      });
+    });
+    expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
+
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Lesson controls" })).getByRole("button", { name: "Tutorial overview" }));
+    fireEvent.click(screen.getByRole("button", { name: /Open 4\.3 Sanctuary pledging/ }));
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "pledge",
+        notation: "P:WlfK10",
+        phase: "Recruitment",
+        createdPieceType: PieceType.Wolf,
+        createdColor: "w",
+        targetHexKey: "1,-1,0",
+        sourceSanctuaryHexKey: "1,-1,0",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "pledge",
+        notation: "P:WlfK10",
+        phase: "Recruitment",
+        createdPieceType: PieceType.Wolf,
+        createdColor: "w",
+        targetHexKey: "2,-2,0",
+        sourceSanctuaryHexKey: "0,0,0",
+      });
+    });
+    expect(screen.getByRole("button", { name: "Complete manually" })).toBeEnabled();
+
+    emitTutorialEvent = vi.mocked(GameBoard).mock.calls.at(-1)?.[0].onTutorialEvent;
+    act(() => {
+      emitTutorialEvent?.({
+        type: "pledge",
+        notation: "P:WlfK10",
+        phase: "Recruitment",
+        createdPieceType: PieceType.Wolf,
+        createdColor: "w",
+        targetHexKey: "1,-1,0",
+        sourceSanctuaryHexKey: "0,0,0",
+      });
     });
     expect(screen.getByRole("button", { name: "Goals complete" })).toBeDisabled();
   });

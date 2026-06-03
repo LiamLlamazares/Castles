@@ -21,7 +21,20 @@ export function createM4L1(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'capture-black-side-castle', text: 'Capture the black-side castle with the Knight.' },
+      {
+        id: 'capture-black-side-castle',
+        text: 'Capture the black-side castle with the Knight.',
+        completion: {
+          type: 'event',
+          eventTypes: ['capture'],
+          phase: 'Movement',
+          actorPieceType: PieceType.Knight,
+          actorColor: 'w',
+          sourceHexKey: '1,-1,0',
+          targetHexKey: '3,-3,0',
+          castleControlChanged: true,
+        },
+      },
     ],
     hints: ['Opponent-controlled castles block ordinary movement until captured.', 'Right-click the castle after capture to confirm the controller changed.'],
     instructions: 'First take an enemy castle; later you can recruit from it.',

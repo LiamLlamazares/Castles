@@ -28,7 +28,19 @@ export function createM4L3(): TutorialLesson {
     layout,
     initialTurnCounter: 4,
     objectives: [
-      { id: 'pledge-wolf-covenant', text: 'Pledge the Swordsman standing on the Wolf Covenant.' },
+      {
+        id: 'pledge-wolf-covenant',
+        text: 'Pledge the Swordsman standing on the Wolf Covenant.',
+        completion: {
+          type: 'event',
+          eventTypes: ['pledge'],
+          phase: 'Recruitment',
+          createdPieceType: PieceType.Wolf,
+          createdColor: 'w',
+          targetHexKey: '1,-1,0',
+          sourceSanctuaryHexKey: '0,0,0',
+        },
+      },
     ],
     hints: [
       'Pledging is separate from castle recruitment.',

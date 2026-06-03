@@ -24,7 +24,11 @@ export function createM2L3(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'cross-river-and-capture-giant', text: 'Move the Swordsman one hex up from the centre, then capture the Giant.' },
+      {
+        id: 'cross-river-and-capture-giant',
+        text: 'Move the Swordsman one hex up from the centre, then capture the Giant.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Swordsman, actorColor: 'w', targetPieceType: PieceType.Giant, targetColor: 'b' },
+      },
     ],
     hints: ['White Swordsmen become stronger on the black side of the board.'],
   };

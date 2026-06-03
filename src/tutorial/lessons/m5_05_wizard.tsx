@@ -3,7 +3,7 @@ import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { AbilityType, PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
@@ -31,7 +31,11 @@ export function createM5L5(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      { id: 'fireball-clustered-units', text: 'Select the Wizard and use Fireball on the clustered Swordsman and Archers.' },
+      {
+        id: 'fireball-clustered-units',
+        text: 'Select the Wizard and use Fireball on the clustered Swordsman and Archers.',
+        completion: { type: 'event', eventTypes: ['ability'], phase: 'Attack', abilityType: AbilityType.Fireball, actorPieceType: PieceType.Wizard, actorColor: 'w', targetColor: 'b', targetHexKey: '0,-1,1', pieceRemoved: true },
+      },
     ],
     hints: [
       'Wizard abilities are used during the Attack phase and consume that Wizard\'s attack for the turn.',

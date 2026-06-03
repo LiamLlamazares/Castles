@@ -28,7 +28,11 @@ export function createM5L3(): TutorialLesson {
     layout,
     initialTurnCounter: 0,
     objectives: [
-      { id: 'use-healer-aura-to-capture', text: 'Move the Swordsman and Healer so both stand beside the Giant, then use the strengthened Swordsman to capture it.' },
+      {
+        id: 'use-healer-aura-to-capture',
+        text: 'Move the Swordsman and Healer so both stand beside the Giant, then use the strengthened Swordsman to capture it.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Swordsman, actorColor: 'w', targetPieceType: PieceType.Giant, targetColor: 'b' },
+      },
     ],
     hints: [
       'You do not activate the Healer. The strength bonus is passive.',

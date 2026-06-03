@@ -8,7 +8,7 @@ import { Piece } from '../Classes/Entities/Piece';
 import { Sanctuary } from '../Classes/Entities/Sanctuary';
 import { LayoutService } from '../Classes/Systems/LayoutService';
 import { PhoenixRecord } from '../Classes/Core/GameState';
-import { AbilityType, PieceType, TurnPhase } from '../Constants';
+import { AbilityType, type Color, PieceType, type TurnPhase } from '../Constants';
 
 /**
  * Represents a single tutorial lesson with board setup and instructional content.
@@ -57,7 +57,48 @@ export interface TutorialLesson {
 export interface TutorialObjective {
   id: string;
   text: string;
+  completion: TutorialObjectiveCompletion;
 }
+
+export type TutorialInspectionRequirement =
+  | 'all-castles'
+  | 'all-sanctuaries'
+  | 'all-pieces'
+  | 'non-swordsmen-across-river';
+
+export type TutorialObjectiveCompletion =
+  | { type: 'manual' }
+  | {
+      type: 'inspection';
+      targetKind: 'hex' | 'castle' | 'sanctuary' | 'piece';
+      required?: TutorialInspectionRequirement;
+    }
+  | {
+      type: 'phase';
+      phase: TurnPhase;
+    }
+  | {
+      type: 'event';
+      eventTypes: TutorialGameEventType[];
+      phase?: TurnPhase;
+      resultPhase?: TurnPhase;
+      abilityType?: AbilityType;
+      pieceType?: PieceType;
+      pieceColor?: Color;
+      actorPieceType?: PieceType;
+      actorColor?: Color;
+      targetPieceType?: PieceType;
+      targetColor?: Color;
+      createdPieceType?: PieceType;
+      createdColor?: Color;
+      sourceHexKey?: string;
+      targetHexKey?: string;
+      sourceCastleHexKey?: string;
+      sourceSanctuaryHexKey?: string;
+      pieceRemoved?: boolean;
+      pieceAdded?: boolean;
+      castleControlChanged?: boolean;
+    };
 
 export type TutorialGameEventType =
   | 'move'
@@ -78,6 +119,17 @@ export interface TutorialGameEvent {
   hexKey?: string;
   targetKind?: 'hex' | 'castle' | 'sanctuary' | 'piece';
   pieceType?: PieceType;
+  pieceColor?: Color;
+  actorPieceType?: PieceType;
+  actorColor?: Color;
+  targetPieceType?: PieceType;
+  targetColor?: Color;
+  createdPieceType?: PieceType;
+  createdColor?: Color;
+  sourceHexKey?: string;
+  targetHexKey?: string;
+  sourceCastleHexKey?: string;
+  sourceSanctuaryHexKey?: string;
   abilityType?: AbilityType;
   pieceRemoved?: boolean;
   pieceAdded?: boolean;

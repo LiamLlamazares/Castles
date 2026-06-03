@@ -27,7 +27,11 @@ export function createM2L4(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      { id: 'attack-at-range-two', text: 'Use the Archer to attack the enemy at range 2.' },
+      {
+        id: 'attack-at-range-two',
+        text: 'Use the Archer to attack the enemy at range 2.',
+        completion: { type: 'event', eventTypes: ['attack'], phase: 'Attack', actorPieceType: PieceType.Archer, actorColor: 'w', targetPieceType: PieceType.Swordsman, targetColor: 'b', targetHexKey: '0,0,0' },
+      },
     ],
     hints: ['Archers cannot attack adjacent enemies.', 'Defended enemies can block ranged attacks; the defense lessons cover that soon.'],
   };

@@ -24,10 +24,9 @@ import { Castle } from "../Classes/Entities/Castle";
 import { LayoutService } from "../Classes/Systems/LayoutService";
 import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
-import { NotationService } from "../Classes/Systems/NotationService";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
-import { AbilityType, PieceTheme } from "../Constants";
+import { PieceTheme } from "../Constants";
 import type { OnlineClientSession } from "../online/types";
 import type {
   OnlineGameVisibility,
@@ -43,6 +42,10 @@ import { SavedGameStatus } from "../Classes/Services/GameLibraryRepository";
 import { createPieceMap } from "../utils/PieceMap";
 import PromotionModal from "./PromotionModal";
 import type { TutorialGameEvent } from "../tutorial/types";
+import {
+  buildTutorialGameEventFromMove,
+  type TutorialEventSnapshot,
+} from "../tutorial/eventMetadata";
 import TurnBanner from "./Turn_banner";
 import "../css/Board.css";
 
@@ -184,12 +187,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const focusBeforeDialogRef = React.useRef<HTMLElement | null>(null);
   const lastOnlineGameIdRef = React.useRef<string | null | undefined>(undefined);
   const lastTutorialMoveSignatureRef = React.useRef("");
-  const tutorialSnapshotRef = React.useRef<{
-    pieceCount: number;
-    graveyardLength: number;
-    piecesByHex: Record<string, string>;
-    castleOwnersByHex: Record<string, string>;
-  } | null>(null);
+  const tutorialSnapshotRef = React.useRef<TutorialEventSnapshot | null>(null);
 
   const showStatusMessage = React.useCallback((message: string) => {
     if (statusTimeoutRef.current !== null) {
@@ -818,14 +816,26 @@ const InnerGame: React.FC<GameBoardProps> = ({
       return;
     }
 
-    const currentSnapshot = {
+    const currentSnapshot: TutorialEventSnapshot = {
       pieceCount: pieces.length,
       graveyardLength: graveyard.length,
       piecesByHex: Object.fromEntries(
-        pieces.map((piece) => [piece.hex.getKey(), `${piece.color}:${piece.type}`])
-      ),
+        pieces.map((piece) => [piece.hex.getKey(), { color: piece.color, type: piece.type }])
+      ) as TutorialEventSnapshot["piecesByHex"],
       castleOwnersByHex: Object.fromEntries(
         castles.map((castle) => [castle.hex.getKey(), castle.owner])
+      ),
+      castlesByHex: Object.fromEntries(
+        castles.map((castle) => [
+          castle.hex.getKey(),
+          { color: castle.color, owner: castle.owner },
+        ])
+      ),
+      sanctuariesByHex: Object.fromEntries(
+        sanctuaries.map((sanctuary) => [
+          sanctuary.hex.getKey(),
+          { type: sanctuary.type, controller: sanctuary.controller },
+        ])
       ),
     };
     const previousSnapshot = tutorialSnapshotRef.current;
@@ -839,74 +849,18 @@ const InnerGame: React.FC<GameBoardProps> = ({
     }
     lastTutorialMoveSignatureRef.current = signature;
 
-    const pieceRemoved = previousSnapshot
-      ? pieces.length < previousSnapshot.pieceCount ||
-        graveyard.length > previousSnapshot.graveyardLength
-      : false;
-    const pieceAdded = previousSnapshot
-      ? pieces.length > previousSnapshot.pieceCount
-      : false;
-    const castleControlChanged = previousSnapshot
-      ? castles.some((castle) =>
-          previousSnapshot.castleOwnersByHex[castle.hex.getKey()] !== undefined &&
-          previousSnapshot.castleOwnersByHex[castle.hex.getKey()] !== castle.owner
-        )
-      : false;
-
-    const notation = latestMove.notation;
-    const capturedTargetKey = (() => {
-      const targetMatch = notation.match(/x([A-Z]\d+)/);
-      if (!targetMatch) return null;
-      try {
-        return NotationService.fromCoordinate(targetMatch[1]).getKey();
-      } catch {
-        return null;
-      }
-    })();
-    const capturedTargetChanged = !!(
-      previousSnapshot &&
-      capturedTargetKey &&
-      previousSnapshot.piecesByHex[capturedTargetKey] &&
-      previousSnapshot.piecesByHex[capturedTargetKey] !== currentSnapshot.piecesByHex[capturedTargetKey]
+    onTutorialEvent(
+      buildTutorialGameEventFromMove({
+        notation: latestMove.notation,
+        phase: latestMove.phase,
+        resultPhase: turnPhase,
+        previousSnapshot,
+        currentSnapshot,
+        castleHexKeys: new Set(castles.map((castle) => castle.hex.getKey())),
+      })
     );
-    let type: TutorialGameEvent["type"] = "move";
-    let abilityType: AbilityType | undefined;
-    if (notation.toLowerCase() === "pass") {
-      type = "pass";
-    } else if (notation.startsWith("P:")) {
-      type = "pledge";
-    } else if (/^[A-Z][TFR]:/.test(notation)) {
-      type = "ability";
-      const abilityCode = notation.charAt(1);
-      abilityType = abilityCode === "F"
-        ? AbilityType.Fireball
-        : abilityCode === "T"
-          ? AbilityType.Teleport
-          : abilityCode === "R"
-            ? AbilityType.RaiseDead
-            : undefined;
-    } else if (latestMove.phase === "Recruitment" && notation.includes("=")) {
-      type = "recruitment";
-    } else if (latestMove.phase === "Movement" && notation.includes("=")) {
-      type = "promotion";
-    } else if (notation.includes("x")) {
-      type = pieceRemoved || capturedTargetChanged || castleControlChanged ? "capture" : "attack";
-    } else if (latestMove.phase === "Movement") {
-      type = "move";
-    }
-
-    onTutorialEvent({
-      type,
-      notation,
-      phase: latestMove.phase,
-      resultPhase: turnPhase,
-      abilityType,
-      pieceRemoved,
-      pieceAdded,
-      castleControlChanged,
-    });
     tutorialSnapshotRef.current = currentSnapshot;
-  }, [castles, graveyard.length, isTutorialMode, moveHistory, onTutorialEvent, pieces.length, turnPhase]);
+  }, [castles, graveyard.length, isTutorialMode, moveHistory, onTutorialEvent, pieces.length, sanctuaries, turnPhase]);
 
   const [activeAbility, setActiveAbility] = React.useState<import('../Constants').AbilityType | null>(null);
   const shellClasses = [

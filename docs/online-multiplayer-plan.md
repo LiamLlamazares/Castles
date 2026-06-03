@@ -412,11 +412,11 @@ Remaining work:
 
 Goal: make Learn progress closer to a Lichess-style course without claiming engine-graded mastery.
 
-Status: implemented locally on 2026-06-02. Learn now separates resume position from completed lessons, stores checked objectives by authored lesson-scoped objective ids instead of array indexes or objective wording, derives completion from objective checks, and demotes completion if a checked objective is later unchecked. Unsupported legacy progress archaeology stays out of scope. Course copy now says lessons and objectives are completed rather than "mastered"; read-only lessons complete from Next, and clear action objectives can auto-complete from movement, capture, recruitment, promotion, pledge, ability, and inspection events.
+Status: implemented locally on 2026-06-02, with objective validation hardened on 2026-06-03. Learn now separates resume position from completed lessons, stores checked objectives by authored lesson-scoped objective ids instead of array indexes or objective wording, derives completion from objective checks, and demotes completion if a checked objective is later unchecked. Unsupported legacy progress archaeology stays out of scope. Course copy now says lessons and objectives are completed rather than "mastered"; read-only lessons complete from Next. Every authored objective now declares explicit completion metadata, so lesson copy no longer controls validation behavior. Clear action objectives can auto-complete from movement, capture, recruitment, promotion, pledge, ability, phase-change, and inspection events; puzzle, comparison, and free-practice objectives remain manual until the emitted events include precise target evidence.
 
 Remaining work:
 
-- Add engine-graded objectives only after each target board state and validation event is explicit and tested.
+- Add richer engine-graded objectives only after tutorial events carry explicit target/piece/hex evidence and each target board state is tested.
 - Add richer lesson theory and practice modules once the ruleset is stable enough to avoid teaching stale mechanics.
 
 ## Phase 6Q: Learn Course Presentation Polish

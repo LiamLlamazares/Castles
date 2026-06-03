@@ -274,6 +274,7 @@ export const BoardContainer: React.FC<BoardContainerProps> = ({
                 targetKind: "piece",
                 hexKey: piece.hex.getKey(),
                 pieceType: piece.type,
+                pieceColor: piece.color,
               });
               tooltip.togglePieceTooltip(piece);
             }

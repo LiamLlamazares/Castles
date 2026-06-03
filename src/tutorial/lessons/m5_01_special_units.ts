@@ -28,7 +28,11 @@ export function createM5L1(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'inspect-special-units', text: 'Inspect each special unit.' },
+      {
+        id: 'inspect-special-units',
+        text: 'Inspect each special unit.',
+        completion: { type: 'inspection', targetKind: 'piece', required: 'all-pieces' },
+      },
     ],
     instructions: 'Right-click any unit to compare its rules before the individual lessons.',
   };

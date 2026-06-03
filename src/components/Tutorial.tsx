@@ -6,10 +6,10 @@ import React, { useMemo, useState } from "react";
 import GameBoard from "./Game";
 import AppShellNav, { AppShellDestination } from "./AppShellNav";
 import { getAllLessons, TutorialLesson } from "../tutorial";
-import { getLessonObjectives } from "../tutorial/objectives";
+import { getLessonObjectives, getTutorialInspectionKey, objectiveMatchesTutorialEvent } from "../tutorial/objectives";
 import type { TutorialGameEvent } from "../tutorial/types";
 import { getImageByPieceType } from "./PieceImages";
-import { AbilityType, PieceType } from "../Constants";
+import { PieceType } from "../Constants";
 import { useTheme } from "../contexts/ThemeContext";
 import castleIcon from "../Assets/Images/misc/wcastle.svg";
 import dragonIcon from "../Assets/Images/misc/dragon2.svg";
@@ -224,96 +224,6 @@ function getLessonCardSummary(lesson: TutorialLesson): string {
     return lesson.description;
   }
   return getLessonObjectives(lesson)[0]?.text ?? "Interactive lesson";
-}
-
-function getRequiredInspectionKeys(lesson: TutorialLesson, objectiveText: string): string[] {
-  const lower = objectiveText.toLowerCase();
-  if (lower.includes("non-swordsman") && lower.includes("across the river")) {
-    return lesson.pieces
-      .filter((piece) =>
-        piece.type !== PieceType.Swordsman &&
-        ((piece.color === "w" && piece.hex.r < 0) || (piece.color === "b" && piece.hex.r > 0))
-      )
-      .map((piece) => piece.hex.getKey());
-  }
-  if (lower.includes("both castles") || lower.includes("each castle") || lower.includes("every castle")) {
-    return lesson.board.castles.map((castle) => castle.hex.getKey());
-  }
-  if (lower.includes("sanctuary")) {
-    return (lesson.sanctuaries ?? []).map((sanctuary) => sanctuary.hex.getKey());
-  }
-  if (lower.includes("each special unit") || lower.includes("each unit") || lower.includes("every unit")) {
-    return lesson.pieces.map((piece) => piece.hex.getKey());
-  }
-  return [];
-}
-
-function eventReachedPhase(event: TutorialGameEvent, targetPhase: "Attack" | "Recruitment"): boolean {
-  return event.resultPhase === targetPhase || event.phase === targetPhase;
-}
-
-function objectiveMatchesTutorialEvent(
-  lesson: TutorialLesson,
-  objectiveText: string,
-  event: TutorialGameEvent,
-  inspectedKeys: Set<string>
-): boolean {
-  const lower = objectiveText.toLowerCase();
-
-  if (/\bfind\b/.test(lower)) {
-    return false;
-  }
-
-  if (lower.includes("reach the attack phase") || lower.includes("reach attack phase")) {
-    return eventReachedPhase(event, "Attack");
-  }
-
-  if (
-    lower.includes("reach the castles phase") ||
-    lower.includes("reach castles phase")
-  ) {
-    return eventReachedPhase(event, "Recruitment");
-  }
-
-  if (lower.includes("pass after attack") || lower.includes("pass during attack")) {
-    return event.type === "pass" && event.phase === "Attack";
-  }
-
-  if (lower.includes("right-click") || lower.includes("right click") || lower.includes("inspect")) {
-    if (event.type !== "inspect") return false;
-    if (lower.includes("castle") && event.targetKind !== "castle") return false;
-    if (lower.includes("sanctuary") && event.targetKind !== "sanctuary") return false;
-    if ((lower.includes("unit") || lower.includes("piece")) && event.targetKind !== "piece") return false;
-    const requiredKeys = getRequiredInspectionKeys(lesson, objectiveText);
-    return requiredKeys.length === 0 || requiredKeys.every((key) => inspectedKeys.has(key));
-  }
-
-  if (lower.includes("recruit")) return event.type === "recruitment";
-  if (lower.includes("promot")) return event.type === "promotion";
-  if (lower.includes("pledge")) return event.type === "pledge";
-  if (lower.includes("fireball")) {
-    return event.type === "ability" && event.abilityType === AbilityType.Fireball && event.pieceRemoved === true;
-  }
-  if (lower.includes("raise dead")) {
-    return event.type === "ability" && event.abilityType === AbilityType.RaiseDead && event.pieceAdded === true;
-  }
-  if (lower.includes("teleport")) {
-    return event.type === "ability" && event.abilityType === AbilityType.Teleport;
-  }
-  if (lower.includes("ability")) {
-    return event.type === "ability" && event.abilityType !== undefined;
-  }
-  if (lower.includes("capture") || lower.includes("overpower") || lower.includes("defeat") || lower.includes("kill")) {
-    return event.type === "capture";
-  }
-  if (lower.includes("attack")) {
-    return event.type === "attack" || event.type === "capture";
-  }
-  if (lower.includes("move") || lower.includes("slide") || lower.includes("fly") || lower.includes("jump")) {
-    return event.type === "move";
-  }
-
-  return false;
 }
 
 function isLessonComplete(lesson: TutorialLesson, progress: TutorialProgressState): boolean {
@@ -585,8 +495,8 @@ const Tutorial: React.FC<TutorialProps> = ({
 
   const handleTutorialEvent = React.useCallback((event: TutorialGameEvent) => {
     const nextInspectedKeys = new Set(inspectedKeysByLessonId[lesson.id] ?? []);
-    if (event.type === "inspect" && event.hexKey) {
-      nextInspectedKeys.add(event.hexKey);
+    if (event.type === "inspect" && event.hexKey && event.targetKind) {
+      nextInspectedKeys.add(getTutorialInspectionKey(event.targetKind, event.hexKey));
       setInspectedKeysByLessonId((previous) => ({
         ...previous,
         [lesson.id]: Array.from(nextInspectedKeys),
@@ -594,7 +504,7 @@ const Tutorial: React.FC<TutorialProps> = ({
     }
 
     const matchingObjectiveIds = lessonObjectives
-      .filter((objective) => objectiveMatchesTutorialEvent(lesson, objective.text, event, nextInspectedKeys))
+      .filter((objective) => objectiveMatchesTutorialEvent(lesson, objective, event, nextInspectedKeys))
       .map((objective) => objective.id)
       .filter((objectiveId) => !checkedObjectiveIds.has(objectiveId));
 

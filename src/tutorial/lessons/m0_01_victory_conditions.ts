@@ -27,7 +27,11 @@ export function createM0L1(): TutorialLesson {
     layout,
     initialTurnCounter: 5,
     objectives: [
-      { id: 'inspect-castle-controllers', text: 'Right-click both castles to confirm their controller.' },
+      {
+        id: 'inspect-castle-controllers',
+        text: 'Right-click both castles to confirm their controller.',
+        completion: { type: 'inspection', targetKind: 'castle', required: 'all-castles' },
+      },
     ],
     instructions: 'No move is needed here.',
   };

@@ -43,9 +43,21 @@ export function createM2L0(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'move-white-swordsmen', text: 'Move one or two white Swordsmen toward the black Swordsmen.' },
-      { id: 'reach-attack-phase', text: 'Reach the Attack phase by moving or passing.' },
-      { id: 'pass-during-attack', text: 'Pass during Attack to continue through the phase.' },
+      {
+        id: 'move-white-swordsmen',
+        text: 'Move one or two white Swordsmen toward the black Swordsmen.',
+        completion: { type: 'event', eventTypes: ['move'], phase: 'Movement', actorPieceType: PieceType.Swordsman, actorColor: 'w' },
+      },
+      {
+        id: 'reach-attack-phase',
+        text: 'Reach the Attack phase by moving or passing.',
+        completion: { type: 'phase', phase: 'Attack' },
+      },
+      {
+        id: 'pass-during-attack',
+        text: 'Pass during Attack to continue through the phase.',
+        completion: { type: 'event', eventTypes: ['pass'], phase: 'Attack' },
+      },
     ],
     hints: [
       'If the game waits in the Attack phase, it may be because a capture is available.',

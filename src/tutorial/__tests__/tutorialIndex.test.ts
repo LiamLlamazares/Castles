@@ -7,7 +7,8 @@ import { Piece } from '../../Classes/Entities/Piece';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
 import { createPieceMap } from '../../utils/PieceMap';
 import { getAllLessons } from '..';
-import { getLessonObjectives } from '../objectives';
+import { getLessonObjectives, objectiveMatchesTutorialEvent } from '../objectives';
+import { buildTutorialGameEventFromMove, type TutorialEventSnapshot } from '../eventMetadata';
 
 const createLessonState = (lesson: ReturnType<typeof getAllLessons>[number]): GameState => ({
   pieces: lesson.pieces,
@@ -22,6 +23,47 @@ const createLessonState = (lesson: ReturnType<typeof getAllLessons>[number]): Ga
   phoenixRecords: lesson.phoenixRecords ?? [],
   viewNodeId: null,
 });
+
+const createTutorialSnapshot = (state: GameState): TutorialEventSnapshot => ({
+  pieceCount: state.pieces.length,
+  graveyardLength: state.graveyard.length,
+  piecesByHex: Object.fromEntries(
+    state.pieces.map((piece) => [piece.hex.getKey(), { color: piece.color, type: piece.type }])
+  ),
+  castleOwnersByHex: Object.fromEntries(
+    state.castles.map((castle) => [castle.hex.getKey(), castle.owner])
+  ),
+  castlesByHex: Object.fromEntries(
+    state.castles.map((castle) => [
+      castle.hex.getKey(),
+      { color: castle.color, owner: castle.owner },
+    ])
+  ),
+  sanctuariesByHex: Object.fromEntries(
+    state.sanctuaries.map((sanctuary) => [
+      sanctuary.hex.getKey(),
+      { type: sanctuary.type, controller: sanctuary.controller },
+    ])
+  ),
+});
+
+const buildLatestTutorialEvent = (
+  engine: GameEngine,
+  beforeState: GameState,
+  afterState: GameState
+) => {
+  const latestMove = afterState.moveTree.getHistoryLine().at(-1);
+  if (!latestMove) throw new Error('Expected action to record a move');
+
+  return buildTutorialGameEventFromMove({
+    notation: latestMove.notation,
+    phase: latestMove.phase,
+    resultPhase: engine.getTurnPhase(afterState.turnCounter),
+    previousSnapshot: createTutorialSnapshot(beforeState),
+    currentSnapshot: createTutorialSnapshot(afterState),
+    castleHexKeys: new Set(afterState.castles.map((castle) => castle.hex.getKey())),
+  });
+};
 
 const findPiece = (pieces: Piece[], type: PieceType, hex: Hex): Piece => {
   const piece = pieces.find((candidate) => candidate.type === type && candidate.hex.equals(hex));
@@ -102,6 +144,199 @@ describe('tutorial lesson index', () => {
         expect(objective.text.trim().length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it('gives every authored objective explicit completion metadata', () => {
+    const missingCompletions = getAllLessons()
+      .flatMap((lesson) =>
+        (lesson.objectives ?? [])
+          .filter((objective) => !objective.completion)
+          .map((objective) => `${lesson.id}:${objective.id}`)
+      );
+
+    expect(missingCompletions).toEqual([]);
+  });
+
+  it('keeps role-specific event objectives side-specific', () => {
+    const missingColorConstraints = getAllLessons()
+      .flatMap((lesson) =>
+        (lesson.objectives ?? []).flatMap((objective) => {
+          const completion = objective.completion;
+          if (completion.type !== 'event') return [];
+          const missing: string[] = [];
+          if (completion.actorPieceType && !completion.actorColor) {
+            missing.push('actorColor');
+          }
+          if (completion.targetPieceType && !completion.targetColor) {
+            missing.push('targetColor');
+          }
+          if (completion.createdPieceType && !completion.createdColor && !completion.eventTypes.includes('promotion')) {
+            missing.push('createdColor');
+          }
+          return missing.map((field) => `${lesson.id}:${objective.id}:${field}`);
+        })
+      );
+
+    expect(missingColorConstraints).toEqual([]);
+  });
+
+  it('keeps high-risk auto-completed objectives source and target specific', () => {
+    const lessons = new Map(getAllLessons().map((lesson) => [lesson.id, lesson]));
+    const getObjective = (lessonId: string, objectiveId: string) => {
+      const objective = lessons.get(lessonId)?.objectives?.find((candidate) => candidate.id === objectiveId);
+      if (!objective) throw new Error(`Missing objective ${lessonId}:${objectiveId}`);
+      return objective;
+    };
+
+    expect(getObjective('m4_l1_castle_control', 'capture-black-side-castle').completion).toMatchObject({
+      type: 'event',
+      eventTypes: ['capture'],
+      phase: 'Movement',
+      actorPieceType: PieceType.Knight,
+      actorColor: 'w',
+      sourceHexKey: '1,-1,0',
+      targetHexKey: '3,-3,0',
+      castleControlChanged: true,
+    });
+    expect(getObjective('m2_l6_eagle', 'fly-past-blockers').completion).toMatchObject({
+      type: 'event',
+      eventTypes: ['move'],
+      phase: 'Movement',
+      actorPieceType: PieceType.Eagle,
+      actorColor: 'w',
+      sourceHexKey: '-3,3,0',
+      targetHexKey: '-1,1,0',
+    });
+    expect(getObjective('m4_l2_recruitment', 'recruit-from-captured-castle').completion).toMatchObject({
+      type: 'event',
+      eventTypes: ['recruitment'],
+      phase: 'Recruitment',
+      createdPieceType: PieceType.Swordsman,
+      createdColor: 'w',
+      targetHexKey: '2,-2,0',
+      sourceCastleHexKey: '3,-3,0',
+    });
+    expect(getObjective('m4_l3_pledging', 'pledge-wolf-covenant').completion).toMatchObject({
+      type: 'event',
+      eventTypes: ['pledge'],
+      phase: 'Recruitment',
+      createdPieceType: PieceType.Wolf,
+      createdColor: 'w',
+      targetHexKey: '1,-1,0',
+      sourceSanctuaryHexKey: '0,0,0',
+    });
+    expect(getObjective('m2_l12_promotion', 'promote-swordsman').completion).toMatchObject({
+      type: 'event',
+      eventTypes: ['promotion'],
+      phase: 'Movement',
+      actorPieceType: PieceType.Swordsman,
+      actorColor: 'w',
+      sourceHexKey: '0,-2,2',
+      targetHexKey: '1,-3,2',
+    });
+  });
+
+  it('emits objective-satisfying metadata from real engine actions for high-risk tutorial goals', () => {
+    const lessons = new Map(getAllLessons().map((lesson) => [lesson.id, lesson]));
+    const expectActionToSatisfyObjective = (
+      lessonId: string,
+      objectiveId: string,
+      beforeState: GameState,
+      afterState: GameState,
+      engine: GameEngine
+    ) => {
+      const lesson = lessons.get(lessonId);
+      if (!lesson) throw new Error(`Missing lesson ${lessonId}`);
+      const objective = getLessonObjectives(lesson).find((candidate) => candidate.id === objectiveId);
+      if (!objective) throw new Error(`Missing objective ${lessonId}:${objectiveId}`);
+      const event = buildLatestTutorialEvent(engine, beforeState, afterState);
+
+      expect(objectiveMatchesTutorialEvent(lesson, objective, event, new Set())).toBe(true);
+    };
+
+    const castleLesson = lessons.get('m4_l1_castle_control');
+    if (!castleLesson) throw new Error('Missing castle lesson');
+    const castleEngine = new GameEngine(castleLesson.board);
+    const castleState = createLessonState(castleLesson);
+    const knight = findPiece(castleState.pieces, PieceType.Knight, new Hex(1, -1, 0));
+    const afterCastleCapture = castleEngine.applyMove(castleState, knight, new Hex(3, -3, 0));
+    expectActionToSatisfyObjective(
+      'm4_l1_castle_control',
+      'capture-black-side-castle',
+      castleState,
+      afterCastleCapture,
+      castleEngine
+    );
+
+    const recruitmentLesson = lessons.get('m4_l2_recruitment');
+    if (!recruitmentLesson) throw new Error('Missing recruitment lesson');
+    const recruitmentEngine = new GameEngine(recruitmentLesson.board);
+    const recruitmentState = createLessonState(recruitmentLesson);
+    const capturedCastle = recruitmentState.castles.find((castle) => castle.hex.equals(new Hex(3, -3, 0)));
+    if (!capturedCastle) throw new Error('Missing captured recruitment castle');
+    const afterRecruitment = recruitmentEngine.recruitPiece(recruitmentState, capturedCastle, new Hex(2, -2, 0));
+    expectActionToSatisfyObjective(
+      'm4_l2_recruitment',
+      'recruit-from-captured-castle',
+      recruitmentState,
+      afterRecruitment,
+      recruitmentEngine
+    );
+
+    const pledgeLesson = lessons.get('m4_l3_pledging');
+    if (!pledgeLesson) throw new Error('Missing pledge lesson');
+    const pledgeEngine = new GameEngine(pledgeLesson.board);
+    const pledgeState = createLessonState(pledgeLesson);
+    const afterPledge = pledgeEngine.pledge(pledgeState, new Hex(0, 0, 0), new Hex(1, -1, 0));
+    expectActionToSatisfyObjective(
+      'm4_l3_pledging',
+      'pledge-wolf-covenant',
+      pledgeState,
+      afterPledge,
+      pledgeEngine
+    );
+
+    const promotionLesson = lessons.get('m2_l12_promotion');
+    if (!promotionLesson) throw new Error('Missing promotion lesson');
+    const promotionEngine = new GameEngine(promotionLesson.board);
+    const promotionState = createLessonState(promotionLesson);
+    const swordsman = findPiece(promotionState.pieces, PieceType.Swordsman, new Hex(0, -2, 2));
+    const afterPromotionMove = promotionEngine.applyMove(promotionState, swordsman, new Hex(1, -3, 2));
+    if (!afterPromotionMove.promotionPending) throw new Error('Expected promotion pending state');
+    const afterPromotion = promotionEngine.promotePiece(afterPromotionMove, afterPromotionMove.promotionPending, PieceType.Archer);
+    expectActionToSatisfyObjective(
+      'm2_l12_promotion',
+      'promote-swordsman',
+      afterPromotionMove,
+      afterPromotion,
+      promotionEngine
+    );
+
+    const wizardLesson = lessons.get('m5_l5_wizard');
+    if (!wizardLesson) throw new Error('Missing wizard lesson');
+    const wizardEngine = new GameEngine(wizardLesson.board);
+    const wizardState = createLessonState(wizardLesson);
+    const afterFireball = wizardEngine.activateAbility(wizardState, new Hex(-2, 1, 1), new Hex(0, -1, 1), AbilityType.Fireball);
+    expectActionToSatisfyObjective(
+      'm5_l5_wizard',
+      'fireball-clustered-units',
+      wizardState,
+      afterFireball,
+      wizardEngine
+    );
+
+    const necromancerLesson = lessons.get('m5_l6_necromancer');
+    if (!necromancerLesson) throw new Error('Missing necromancer lesson');
+    const necromancerEngine = new GameEngine(necromancerLesson.board);
+    const necromancerState = createLessonState(necromancerLesson);
+    const afterRaiseDead = necromancerEngine.activateAbility(necromancerState, new Hex(-2, 1, 1), new Hex(-1, 0, 1), AbilityType.RaiseDead);
+    expectActionToSatisfyObjective(
+      'm5_l6_necromancer',
+      'raise-dead-adjacent-hex',
+      necromancerState,
+      afterRaiseDead,
+      necromancerEngine
+    );
   });
 
   it('adds standalone basic lessons for every standard recruitable piece', () => {
@@ -389,7 +624,11 @@ describe('tutorial lesson index', () => {
     expect(lesson.pieces.some((piece) => piece.type === PieceType.Eagle)).toBe(true);
     expect(lesson.phoenixRecords?.some((record) => record.owner === 'w')).toBe(true);
     expect(lesson.objectives).toEqual([
-      { id: 'capture-phoenix-with-giant', text: 'As Black, capture the nearby Phoenix with the Giant.' },
+      {
+        id: 'capture-phoenix-with-giant',
+        text: 'As Black, capture the nearby Phoenix with the Giant.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Giant, actorColor: 'b', targetPieceType: PieceType.Phoenix, targetColor: 'w' },
+      },
     ]);
     expect(lesson.hints?.some((hint) => hint.includes('Compare the Phoenix with the Eagle'))).toBe(true);
 

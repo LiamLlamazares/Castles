@@ -9,7 +9,7 @@ import { TutorialLesson } from '../types';
 export function createM4L2(): TutorialLesson {
   const castles: Castle[] = [
     new Castle(new Hex(-3, 3, 0), 'w', 0),
-    new Castle(new Hex(3, -3, 0), 'b', 3, false, 'w'),
+    new Castle(new Hex(3, -3, 0), 'b', 0, false, 'w'),
   ];
   const boardConfig: BoardConfig = { nSquares: 3, riverCrossingLength: 1, hasHighGround: false };
   const board = new Board(boardConfig, castles);
@@ -26,7 +26,19 @@ export function createM4L2(): TutorialLesson {
     layout,
     initialTurnCounter: 4,
     objectives: [
-      { id: 'recruit-from-captured-castle', text: 'Recruit beside the captured black-side castle, not the white-side castle.' },
+      {
+        id: 'recruit-from-captured-castle',
+        text: 'Recruit beside the captured black-side castle, not the white-side castle.',
+        completion: {
+          type: 'event',
+          eventTypes: ['recruitment'],
+          phase: 'Recruitment',
+          createdPieceType: PieceType.Swordsman,
+          createdColor: 'w',
+          targetHexKey: '2,-2,0',
+          sourceCastleHexKey: '3,-3,0',
+        },
+      },
     ],
     hints: [
       'You are already in the Castles phase from the captured black-side castle.',

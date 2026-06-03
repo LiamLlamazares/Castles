@@ -27,7 +27,11 @@ export function createM2L10(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'jump-and-capture-giant', text: 'Use the Dragon jump to get next to the Giant, then capture it.' },
+      {
+        id: 'jump-and-capture-giant',
+        text: 'Use the Dragon jump to get next to the Giant, then capture it.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Dragon, actorColor: 'w', targetPieceType: PieceType.Giant, targetColor: 'b' },
+      },
     ],
     hints: ['The Dragon flies over blockers but cannot land on an occupied hex.', 'Strength 3 makes it dangerous even to Giants and Monarchs.'],
   };

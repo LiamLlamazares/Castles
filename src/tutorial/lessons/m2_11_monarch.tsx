@@ -27,7 +27,11 @@ export function createM2L11(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'capture-enemy-monarch', text: 'Capture the enemy Monarch.' },
+      {
+        id: 'capture-enemy-monarch',
+        text: 'Capture the enemy Monarch.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', targetPieceType: PieceType.Monarch, targetColor: 'b' },
+      },
     ],
     hints: ['Capturing the enemy Monarch is one of the default win conditions.', 'Assassins are especially dangerous to Monarchs.'],
   };

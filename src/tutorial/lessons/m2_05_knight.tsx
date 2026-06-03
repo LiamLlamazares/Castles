@@ -26,7 +26,11 @@ export function createM2L5(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'slide-and-capture', text: 'Slide the Knight along a diagonal lane, then capture the target.' },
+      {
+        id: 'slide-and-capture',
+        text: 'Slide the Knight along a diagonal lane, then capture the target.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Knight, actorColor: 'w', targetPieceType: PieceType.Swordsman, targetColor: 'b' },
+      },
     ],
     hints: ['The Knight does not jump over blockers.', 'Use right-click to inspect its actual legal moves if the diagonal geometry feels odd at first.'],
   };

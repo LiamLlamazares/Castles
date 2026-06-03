@@ -33,8 +33,16 @@ export function createM4L4(): TutorialLesson {
     sanctuaries,
     layout,
     objectives: [
-      { id: 'inspect-cooldown-sanctuary', text: 'Right-click the cooldown sanctuary.' },
-      { id: 'inspect-cooldown-accelerators', text: 'Right-click the non-Swordsman pieces across the river.' },
+      {
+        id: 'inspect-cooldown-sanctuary',
+        text: 'Right-click the cooldown sanctuary.',
+        completion: { type: 'inspection', targetKind: 'sanctuary', required: 'all-sanctuaries' },
+      },
+      {
+        id: 'inspect-cooldown-accelerators',
+        text: 'Right-click the non-Swordsman pieces across the river.',
+        completion: { type: 'inspection', targetKind: 'piece', required: 'non-swordsmen-across-river' },
+      },
     ],
     hints: [
       'Archers, Knights, Eagles, Giants, Trebuchets, Assassins, Dragons, Monarchs, and sanctuary pieces all accelerate cooldown if they are across the river for the player who pledged the sanctuary.',

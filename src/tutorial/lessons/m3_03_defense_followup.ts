@@ -27,8 +27,16 @@ export function createM3L3(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      { id: 'capture-adjacent-defender', text: 'Use the Swordsman to capture one adjacent defender.' },
-      { id: 'archer-attacks-undefended-enemy', text: 'Then use the Archer against the enemy that is no longer defended.' },
+      {
+        id: 'capture-adjacent-defender',
+        text: 'Use the Swordsman to capture one adjacent defender.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Swordsman, actorColor: 'w', targetPieceType: PieceType.Swordsman, targetColor: 'b', targetHexKey: '1,-2,1' },
+      },
+      {
+        id: 'archer-attacks-undefended-enemy',
+        text: 'Then use the Archer against the enemy that is no longer defended.',
+        completion: { type: 'event', eventTypes: ['attack'], phase: 'Attack', actorPieceType: PieceType.Archer, actorColor: 'w', targetPieceType: PieceType.Swordsman, targetColor: 'b', targetHexKey: '2,-2,0' },
+      },
     ],
     hints: [
       'Do not start with the Archer if the target is still defended.',

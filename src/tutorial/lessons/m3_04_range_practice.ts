@@ -30,9 +30,21 @@ export function createM3L4(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      { id: 'find-too-close-for-archer', text: 'Find the enemy too close for the Archer.' },
-      { id: 'find-archer-range-target', text: 'Find the enemy at Archer range.' },
-      { id: 'find-trebuchet-range-target', text: 'Find the enemy at Trebuchet range.' },
+      {
+        id: 'find-too-close-for-archer',
+        text: 'Find the enemy too close for the Archer.',
+        completion: { type: 'manual' },
+      },
+      {
+        id: 'find-archer-range-target',
+        text: 'Find the enemy at Archer range.',
+        completion: { type: 'manual' },
+      },
+      {
+        id: 'find-trebuchet-range-target',
+        text: 'Find the enemy at Trebuchet range.',
+        completion: { type: 'manual' },
+      },
     ],
     hints: [
       'Archer: exactly range 2, or exactly range 3 from high ground.',

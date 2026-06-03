@@ -3,7 +3,7 @@ import { Board, BoardConfig } from '../../Classes/Core/Board';
 import { Castle } from '../../Classes/Entities/Castle';
 import { Hex } from '../../Classes/Entities/Hex';
 import { PieceFactory } from '../../Classes/Entities/PieceFactory';
-import { PieceType } from '../../Constants';
+import { AbilityType, PieceType } from '../../Constants';
 import { getStartingLayout } from '../../ConstantImports';
 import { PieceRules } from '../lessonContent';
 import { TutorialLesson } from '../types';
@@ -28,7 +28,11 @@ export function createM5L6(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      { id: 'raise-dead-adjacent-hex', text: 'Select the Necromancer and use Raise Dead on an adjacent empty hex.' },
+      {
+        id: 'raise-dead-adjacent-hex',
+        text: 'Select the Necromancer and use Raise Dead on an adjacent empty hex.',
+        completion: { type: 'event', eventTypes: ['ability'], phase: 'Attack', abilityType: AbilityType.RaiseDead, actorPieceType: PieceType.Necromancer, actorColor: 'w', createdPieceType: PieceType.Swordsman, createdColor: 'w', pieceAdded: true },
+      },
     ],
     hints: [
       'Raise Dead is an Attack-phase ability. It is not a capture, but it spends the Necromancer\'s attack action.',

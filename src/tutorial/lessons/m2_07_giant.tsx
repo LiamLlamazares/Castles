@@ -26,7 +26,11 @@ export function createM2L7(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'slide-and-overpower', text: 'Slide the Giant along a straight lane and overpower the enemy.' },
+      {
+        id: 'slide-and-overpower',
+        text: 'Slide the Giant along a straight lane and overpower the enemy.',
+        completion: { type: 'event', eventTypes: ['capture'], phase: 'Attack', actorPieceType: PieceType.Giant, actorColor: 'w', targetPieceType: PieceType.Knight, targetColor: 'b' },
+      },
     ],
     hints: ['The Giant cannot slide through occupied hexes.', 'Strength 2 means a lone strength-1 piece usually cannot capture it.'],
   };

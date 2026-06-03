@@ -29,7 +29,11 @@ export function createM5L4(): TutorialLesson {
     layout,
     initialTurnCounter: 2,
     objectives: [
-      { id: 'ranger-exact-range-three', text: 'Attack the enemy exactly 3 hexes away with the Ranger.' },
+      {
+        id: 'ranger-exact-range-three',
+        text: 'Attack the enemy exactly 3 hexes away with the Ranger.',
+        completion: { type: 'event', eventTypes: ['attack'], phase: 'Attack', actorPieceType: PieceType.Ranger, actorColor: 'w', targetPieceType: PieceType.Swordsman, targetColor: 'b', targetHexKey: '0,0,0' },
+      },
     ],
     hints: [
       'The Ranger cannot attack adjacent or range-2 enemies.',

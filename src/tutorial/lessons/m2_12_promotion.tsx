@@ -28,7 +28,19 @@ export function createM2L12(): TutorialLesson {
     pieces,
     layout,
     objectives: [
-      { id: 'promote-swordsman', text: 'Move the Swordsman onto the back edge and choose a promotion.' },
+      {
+        id: 'promote-swordsman',
+        text: 'Move the Swordsman onto the back edge and choose a promotion.',
+        completion: {
+          type: 'event',
+          eventTypes: ['promotion'],
+          phase: 'Movement',
+          actorPieceType: PieceType.Swordsman,
+          actorColor: 'w',
+          sourceHexKey: '0,-2,2',
+          targetHexKey: '1,-3,2',
+        },
+      },
     ],
     hints: ['River hexes cannot be promotion squares.'],
   };
