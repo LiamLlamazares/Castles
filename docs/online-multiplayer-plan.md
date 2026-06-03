@@ -661,7 +661,7 @@ Goal: make local deployment rehearsal fail early and safely before any smoke scr
 
 Status: implemented on 2026-06-03. A shared local PostgreSQL prerequisite helper now backs a new `npm run online:smoke:local:preflight` command and the existing restart, concurrency, and challenge smoke entrypoints. The preflight checks built client/server artifacts, PostgreSQL URL shape, local-host safety, `psql` availability through `PATH`, `PSQL_PATH`, or `PGCLIENT_BIN`, database readiness, and the default local smoke identity `castles_local`/`castles_local`. A disposable override remains available for explicitly non-production custom databases, but the default path now rejects localhost tunnels or copied production-style credentials before any smoke game is created. The readiness check uses `PG*` environment variables rather than placing the full connection URL in process arguments.
 
-Follow-up: the built-app browser smoke now matches the current setup flow. It no longer waits for the removed `Private Link` button, creates the low-level player/spectator regression game through the HTTP API, and keeps the user-facing challenge smoke on the `Invite Friend` path.
+Follow-up: the built-app browser smoke now matches the current setup flow. It no longer waits for the removed `Private Link` button, creates the low-level player/spectator regression game through the HTTP API, and keeps the user-facing challenge smoke on the `Invite Friend` path. A new `npm run online:smoke:local:browser` wrapper starts the built Node server on a private localhost port against the checked local PostgreSQL rehearsal database, runs the browser smoke, and shuts the server down through the local shutdown endpoint.
 
 Verification:
 

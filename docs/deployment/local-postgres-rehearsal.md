@@ -86,6 +86,7 @@ $env:NODE_ENV="test"
 npm run online:smoke:local
 npm run online:smoke:local:concurrency
 npm run online:smoke:local:challenges
+npm run online:smoke:local:browser
 ```
 
 The smoke scripts refuse non-local database hosts by default, and the preflight verifies that `DATABASE_URL` connects to database `castles_local` as user `castles_local`. This protects against accidentally running destructive local smoke games through a localhost SSH tunnel to a live database. Do not point `DATABASE_URL` at the live server database. If you intentionally use a disposable remote or custom local test database, set:
@@ -102,6 +103,7 @@ Expected result:
 Local restart smoke passed on http://127.0.0.1:<port> using game <game-id>
 Local PostgreSQL concurrency smoke passed using game <game-id>
 Local PostgreSQL challenge HTTP smoke passed using challenge <challenge-id> and game <game-id>
+Local built-server browser smoke passed on http://127.0.0.1:<port>
 ```
 
 What this checks:
@@ -124,6 +126,13 @@ The concurrency smoke additionally:
 - submits the same base-version action concurrently from both stores,
 - confirms exactly one action is accepted and the other returns a stale-action snapshot at the committed version,
 - submits a follow-up action from the second store and confirms the event log and summary reach version 2.
+
+The browser smoke additionally:
+
+- starts the built Node server on a private local port,
+- opens the built client in Playwright or Chrome,
+- checks Online navigation tabs, player/spectator joins, token scrubbing, stale-action recovery, reconnect guards, resignation sync, and the `Invite Friend` challenge flow,
+- shuts the local server down through the same private shutdown path.
 
 Do not point this script at the live database. The live server check remains:
 
