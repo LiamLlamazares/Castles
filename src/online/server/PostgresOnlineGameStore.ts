@@ -1,5 +1,9 @@
 import { Pool } from "pg";
-import { OnlineGameRoom, type OnlineGameRoomRecord } from "../OnlineGameRoom";
+import {
+  ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS,
+  OnlineGameRoom,
+  type OnlineGameRoomRecord,
+} from "../OnlineGameRoom";
 import { isValidClientActionId, sameOnlineAction } from "../actionIdempotency";
 import {
   type OnlineChallengeEvent,
@@ -548,6 +552,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         throw new OnlineGameSeatCredentialTerminalError(gameId);
       }
       await this.insertAdditionalCredential(gameId, seat, credential, client);
+      await this.pruneAdditionalCredentials(gameId, seat, client);
       const updated = await this.loadRecordForGame(gameId, client);
       if (!updated) {
         throw new Error(`Online game ${gameId} was not found after credential insert.`);
@@ -1304,6 +1309,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       END
       $$;
     `);
+    await this.pruneLegacyAdditionalCredentials();
     await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_game_events_order_idx
         ON online_game_events (id)
@@ -1581,6 +1587,48 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     );
   }
 
+  private async pruneAdditionalCredentials(
+    gameId: string,
+    seat: "w" | "b",
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        DELETE FROM online_game_additional_credentials
+        WHERE id IN (
+          SELECT id
+          FROM online_game_additional_credentials
+          WHERE game_id = $1 AND seat = $2
+          ORDER BY id DESC
+          OFFSET $3
+        )
+      `,
+      [gameId, seat, ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS]
+    );
+  }
+
+  private async pruneLegacyAdditionalCredentials(): Promise<void> {
+    await this.queryable.query(
+      `
+        DELETE FROM online_game_additional_credentials
+        WHERE id IN (
+          SELECT id
+          FROM (
+            SELECT
+              id,
+              ROW_NUMBER() OVER (
+                PARTITION BY game_id, seat
+                ORDER BY id DESC
+              ) AS newest_rank
+            FROM online_game_additional_credentials
+          ) ranked
+          WHERE newest_rank > $1
+        )
+      `,
+      [ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS]
+    );
+  }
+
   private async insertChallengeCredentials(
     challengeId: string,
     credentials: OnlineChallengeCredentials,
@@ -1759,7 +1807,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       }
       const entry = entries.get(gameId) ?? {};
       const key = seat === "w" ? "additionalWhiteCredentials" : "additionalBlackCredentials";
-      entry[key] = Array.from(new Set([...(entry[key] ?? []), tokenHash]));
+      entry[key] = Array.from(new Set([...(entry[key] ?? []), tokenHash])).slice(
+        -ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS
+      );
       entries.set(gameId, entry);
     }
 

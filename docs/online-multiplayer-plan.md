@@ -777,6 +777,18 @@ Tests/review/deploy gates:
 - Review: account/session security review focused on fail-closed bearer handling, current-session-only scope, token secrecy, and preserving the account-vs-game-token boundary.
 - Deploy: deploy only after the route works against PostgreSQL-backed `online_account_sessions`.
 
+## Phase 7H: Account Rejoin Credential Pruning
+
+Goal: keep account-authorized active-game recovery from accumulating unlimited valid player-seat token aliases.
+
+Status: implemented locally on 2026-06-03. Running game rooms and PostgreSQL persistence now cap additional account-rejoin credential aliases at five per game seat. The original invite credential remains the primary credential and is never pruned by this policy; adding a new account rejoin alias prunes only the oldest additional alias for that same game and seat. This keeps recent cross-device recovery working while bounding stale player-seat tokens.
+
+Tests/review/deploy gates:
+
+- Tests: in-memory service alias-cap tests, PostgreSQL store pruning tests, full suite, client build, server build, and local PostgreSQL browser smoke.
+- Review: account/session security review focused on preserving original invite credentials, pruning only stale rejoin aliases, and keeping raw player tokens out of events/summaries/logs.
+- Deploy: deploy only after PostgreSQL-backed account rejoin still works and old aliases are pruned on repeated rejoin.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
@@ -811,7 +823,6 @@ Tests/review/deploy gates:
 ## Next Immediate Work
 
 1. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-2. Add account session management before public launch: session revocation, sign-out-all, account deletion, and privacy copy.
-3. Add a rejoin-credential pruning or revocation policy so repeated cross-device recovery does not accumulate unlimited valid seat-token aliases.
-4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-5. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.
+2. Add remaining account session management before public launch: sign-out-all/session listing, account deletion, and privacy copy.
+3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

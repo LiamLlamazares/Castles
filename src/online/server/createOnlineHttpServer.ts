@@ -1025,6 +1025,35 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     connections.delete(socket);
   };
 
+  const closeStalePlayerSocket = (socket: WebSocket, connection: Extract<OnlineConnection, { role: "player" }>): void => {
+    sendSocketError(socket, {
+      code: "unauthorized",
+      message: "This player session is no longer authorized.",
+    });
+    log({
+      event: "online.socket.credential",
+      gameId: connection.gameId,
+      role: "player",
+      status: "rejected",
+      reason: "credential_pruned",
+    });
+    logSocketDisconnect(socket, "credential_pruned");
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      socket.close(1008, "player credential pruned");
+    }
+  };
+
+  const disconnectStalePlayerSockets = (gameId: string): void => {
+    const room = service.getRoom(gameId);
+    if (!room) return;
+    for (const [socket, connection] of Array.from(connections.entries())) {
+      if (connection.gameId !== gameId || connection.role !== "player") continue;
+      if (!room.authenticate(connection.token)) {
+        closeStalePlayerSocket(socket, connection);
+      }
+    }
+  };
+
   const enqueueGameAction = (gameId: string, operation: () => Promise<void>): Promise<void> => {
     const previous = actionQueues.get(gameId) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(operation);
@@ -2367,6 +2396,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           throw new Error(`Online game ${gameId.value} was not found while adding rejoin credential.`);
         }
         service.replaceRoom(record);
+        disconnectStalePlayerSockets(gameId.value);
       } catch (error) {
         if (error instanceof OnlineGameSeatCredentialTerminalError) {
           log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "game_over" });
@@ -3608,6 +3638,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const broadcastSnapshot = (gameId: string) => {
     const room = service.getRoom(gameId);
     if (!room) return;
+    disconnectStalePlayerSockets(gameId);
     const snapshot = room.getSnapshot();
     for (const [socket, connection] of connections) {
       if (connection.gameId === gameId) {
@@ -3871,6 +3902,40 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
+        const room = service.getRoom(currentConnection.gameId);
+        if (!room) {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "not_found",
+          });
+          sendSocketError(socket, {
+            code: "not_found",
+            message: "Online game no longer exists.",
+          });
+          return;
+        }
+
+        const playerColor = room.authenticate(currentConnection.token);
+        if (!playerColor) {
+          log({
+            event: "online.action",
+            gameId: currentConnection.gameId,
+            role: "player",
+            action: message.action.type,
+            status: "rejected",
+            reason: "unauthorized",
+          });
+          sendSocketError(socket, {
+            code: "unauthorized",
+            message: "This player token is not valid.",
+          });
+          return;
+        }
+
         if (options.applyGameAction) {
           try {
             const transition = await options.applyGameAction({
@@ -3952,40 +4017,6 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
               message: "The accepted action could not be saved.",
             });
           }
-          return;
-        }
-
-        const room = service.getRoomForToken(currentConnection.gameId, currentConnection.token);
-        if (!room) {
-          log({
-            event: "online.action",
-            gameId: currentConnection.gameId,
-            role: "player",
-            action: message.action.type,
-            status: "rejected",
-            reason: "not_found",
-          });
-          sendSocketError(socket, {
-            code: "not_found",
-            message: "Online game no longer exists.",
-          });
-          return;
-        }
-
-        const playerColor = room.authenticate(currentConnection.token);
-        if (!playerColor) {
-          log({
-            event: "online.action",
-            gameId: currentConnection.gameId,
-            role: "player",
-            action: message.action.type,
-            status: "rejected",
-            reason: "unauthorized",
-          });
-          sendSocketError(socket, {
-            code: "unauthorized",
-            message: "This player token is not valid.",
-          });
           return;
         }
 

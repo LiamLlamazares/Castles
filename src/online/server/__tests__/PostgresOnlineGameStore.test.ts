@@ -4,7 +4,7 @@ import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator"
 import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
-import { OnlineGameRoom } from "../../OnlineGameRoom";
+import { ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS, OnlineGameRoom } from "../../OnlineGameRoom";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
 import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
@@ -175,6 +175,35 @@ class FakePostgresClient {
       ) {
         this.additionalCredentialRows.push(credential);
       }
+    }
+    if (/delete from online_game_additional_credentials/i.test(text) && values) {
+      if (values.length === 1) {
+        const [maxRows] = values as [number];
+        const grouped = new Map<string, Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }>>();
+        for (const row of this.additionalCredentialRows) {
+          const key = `${row.gameId}:${row.seat}`;
+          grouped.set(key, [...(grouped.get(key) ?? []), row]);
+        }
+        const keep = new Set<string>();
+        for (const rows of grouped.values()) {
+          for (const row of rows.slice(-maxRows)) {
+            keep.add(`${row.gameId}:${row.seat}:${row.tokenHash}`);
+          }
+        }
+        this.additionalCredentialRows = this.additionalCredentialRows.filter((row) =>
+          keep.has(`${row.gameId}:${row.seat}:${row.tokenHash}`)
+        );
+        return { rows: [] };
+      }
+      const [gameId, seat, maxRows] = values as [string, "w" | "b", number];
+      const matching = this.additionalCredentialRows.filter(
+        (row) => row.gameId === gameId && row.seat === seat
+      );
+      const keep = new Set(matching.slice(-maxRows).map((row) => row.tokenHash));
+      this.additionalCredentialRows = this.additionalCredentialRows.filter(
+        (row) => row.gameId !== gameId || row.seat !== seat || keep.has(row.tokenHash)
+      );
+      return { rows: [] };
     }
     if (/insert into online_challenge_credentials/i.test(text) && values) {
       if (this.failNextChallengeCredentialInsert) {
@@ -1003,6 +1032,102 @@ describe("PostgresOnlineGameStore", () => {
     expect(restored.authenticate("w-token")).toBe("w");
     expect(restored.authenticate("fresh-white-token")).toBe("w");
     expect(restored.authenticate("b-token")).toBe("b");
+  });
+
+  it("prunes old account rejoin seat credential aliases per seat", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const event = createGameCreatedEvent("game_rejoin_prune");
+    const credentials = createGameCredentials();
+
+    await store.appendGameCreated(event, credentials);
+
+    let record;
+    for (let index = 0; index < ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS + 2; index += 1) {
+      record = await store.appendGameSeatCredential(
+        event.gameId,
+        "w",
+        hashOnlineToken(`fresh-white-token-${index}`)
+      );
+    }
+    await store.appendGameSeatCredential(event.gameId, "b", hashOnlineToken("fresh-black-token"));
+
+    expect(client.credentialRows).toEqual([
+      { gameId: event.gameId, seat: "w", tokenHash: credentials.whiteCredential },
+      { gameId: event.gameId, seat: "b", tokenHash: credentials.blackCredential },
+    ]);
+    expect(
+      client.additionalCredentialRows
+        .filter((row) => row.gameId === event.gameId && row.seat === "w")
+        .map((row) => row.tokenHash)
+    ).toEqual([
+      hashOnlineToken("fresh-white-token-2"),
+      hashOnlineToken("fresh-white-token-3"),
+      hashOnlineToken("fresh-white-token-4"),
+      hashOnlineToken("fresh-white-token-5"),
+      hashOnlineToken("fresh-white-token-6"),
+    ]);
+    expect(
+      client.additionalCredentialRows
+        .filter((row) => row.gameId === event.gameId && row.seat === "b")
+        .map((row) => row.tokenHash)
+    ).toEqual([hashOnlineToken("fresh-black-token")]);
+    expect(record?.additionalWhiteCredentials).toEqual([
+      hashOnlineToken("fresh-white-token-2"),
+      hashOnlineToken("fresh-white-token-3"),
+      hashOnlineToken("fresh-white-token-4"),
+      hashOnlineToken("fresh-white-token-5"),
+      hashOnlineToken("fresh-white-token-6"),
+    ]);
+
+    const restored = OnlineGameRoom.create({
+      ...record!,
+      verifyToken: (token, credential) => hashOnlineToken(token) === credential,
+    });
+    expect(restored.authenticate("w-token")).toBe("w");
+    expect(restored.authenticate("fresh-white-token-1")).toBeNull();
+    expect(restored.authenticate("fresh-white-token-6")).toBe("w");
+    expect(restored.authenticate("b-token")).toBe("b");
+  });
+
+  it("prunes legacy over-limit account rejoin aliases during store load", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const event = createGameCreatedEvent("game_rejoin_legacy_prune");
+    const credentials = createGameCredentials();
+    client.eventRows.push({ payload: event });
+    client.credentialRows.push(
+      { gameId: event.gameId, seat: "w", tokenHash: credentials.whiteCredential },
+      { gameId: event.gameId, seat: "b", tokenHash: credentials.blackCredential }
+    );
+    for (let index = 0; index < ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS + 2; index += 1) {
+      client.additionalCredentialRows.push({
+        gameId: event.gameId,
+        seat: "w",
+        tokenHash: hashOnlineToken(`legacy-white-token-${index}`),
+      });
+    }
+
+    const [record] = await store.load();
+
+    expect(
+      client.additionalCredentialRows
+        .filter((row) => row.gameId === event.gameId && row.seat === "w")
+        .map((row) => row.tokenHash)
+    ).toEqual([
+      hashOnlineToken("legacy-white-token-2"),
+      hashOnlineToken("legacy-white-token-3"),
+      hashOnlineToken("legacy-white-token-4"),
+      hashOnlineToken("legacy-white-token-5"),
+      hashOnlineToken("legacy-white-token-6"),
+    ]);
+    expect(record.additionalWhiteCredentials).toEqual([
+      hashOnlineToken("legacy-white-token-2"),
+      hashOnlineToken("legacy-white-token-3"),
+      hashOnlineToken("legacy-white-token-4"),
+      hashOnlineToken("legacy-white-token-5"),
+      hashOnlineToken("legacy-white-token-6"),
+    ]);
   });
 
   it("rejects raw credential strings before inserting created games", async () => {

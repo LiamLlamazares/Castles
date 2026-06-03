@@ -82,11 +82,15 @@ export interface OnlineGameRoomRecord {
 
 export type OnlineTokenVerifier = (token: string, credential: string) => boolean;
 
+export const ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS = 5;
+
 const defaultTokenVerifier: OnlineTokenVerifier = (token, credential) => token === credential;
 
 function normalizeCredentials(primary: string, additional: string[] | undefined): string[] {
-  const credentials = [primary, ...(additional ?? [])].filter(Boolean);
-  return Array.from(new Set(credentials));
+  const additionalCredentials = Array.from(
+    new Set((additional ?? []).filter((credential) => credential && credential !== primary))
+  ).slice(-ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS);
+  return [primary, ...additionalCredentials].filter(Boolean);
 }
 
 function reject(
@@ -176,6 +180,12 @@ export class OnlineGameRoom {
     if (!credentials.includes(credential)) {
       credentials.push(credential);
     }
+    const primary = credentials[0];
+    const additional = credentials
+      .slice(1)
+      .filter((candidate, index, candidates) => candidate !== primary && candidates.indexOf(candidate) === index)
+      .slice(-ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS);
+    credentials.splice(0, credentials.length, ...(primary ? [primary, ...additional] : additional));
   }
 
   get version(): number {

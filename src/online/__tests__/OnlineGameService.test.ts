@@ -9,6 +9,7 @@ import {
   onlineGameEventsToRecords,
 } from "../events";
 import { OnlineGameService } from "../OnlineGameService";
+import { ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS } from "../OnlineGameRoom";
 
 function createSetup() {
   const board = getStartingBoard(6);
@@ -65,6 +66,35 @@ describe("OnlineGameService", () => {
 
     expect(whiteRoom?.authenticate(created.white.token)).toBe("w");
     expect(blackRoom?.authenticate(created.black.token)).toBe("b");
+  });
+
+  it("bounds added seat credential aliases while preserving the original invite credential", () => {
+    const service = OnlineGameService.fromRecords([
+      {
+        gameId: "game_alias_cap",
+        whiteCredential: "primary-w",
+        blackCredential: "primary-b",
+        setup: createSetup(),
+        acceptedActions: [],
+      },
+    ]);
+
+    let record: ReturnType<OnlineGameService["addSeatCredential"]> = null;
+    for (let index = 0; index < ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS + 2; index += 1) {
+      record = service.addSeatCredential("game_alias_cap", "w", `alias-${index}`);
+    }
+
+    expect(record?.whiteCredential).toBe("primary-w");
+    expect(record?.additionalWhiteCredentials).toEqual([
+      "alias-2",
+      "alias-3",
+      "alias-4",
+      "alias-5",
+      "alias-6",
+    ]);
+    expect(service.getRoomForToken("game_alias_cap", "primary-w")).not.toBeNull();
+    expect(service.getRoomForToken("game_alias_cap", "alias-1")).toBeNull();
+    expect(service.getRoomForToken("game_alias_cap", "alias-6")).not.toBeNull();
   });
 
   it("rebuilds rooms from replayed game events", () => {

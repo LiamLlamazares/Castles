@@ -11,7 +11,7 @@ import {
   type OnlineGameCredentials,
   OnlineGameEvent,
 } from "../../events";
-import { OnlineGameRoom } from "../../OnlineGameRoom";
+import { ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS, OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import { OnlineGameSeatCredentialTerminalError } from "../OnlineGameStore";
@@ -357,6 +357,32 @@ function waitForSocketOpen(socket: WebSocket): Promise<void> {
       reject(error);
     };
     socket.once("open", onOpen);
+    socket.once("error", onError);
+  });
+}
+
+function waitForSocketClose(socket: WebSocket): Promise<void> {
+  if (socket.readyState === WebSocket.CLOSED) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error("Timed out waiting for WebSocket close"));
+    }, 3_000);
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.off("close", onClose);
+      socket.off("error", onError);
+    };
+    const onClose = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    socket.once("close", onClose);
     socket.once("error", onError);
   });
 }
@@ -813,6 +839,173 @@ describe("createOnlineHttpServer", () => {
       color: "w",
       snapshot: { gameId },
     });
+  });
+
+  it("closes player sockets whose account-rejoin alias is pruned", async () => {
+    const gameId = "game_account_rejoin_pruned_socket";
+    const record = {
+      gameId,
+      whiteCredential: hashOnlineToken("primary-w-token"),
+      blackCredential: hashOnlineToken("primary-b-token"),
+      additionalWhiteCredentials: Array.from(
+        { length: ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS },
+        (_value, index) => hashOnlineToken(`old-w-token-${index}`)
+      ),
+      setup: createClockedSetup(),
+      acceptedActions: [],
+    };
+    const service = OnlineGameService.fromRecords([record], {
+      tokenFactory: (seat) => `fresh-${seat}-token`,
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+    });
+    let registeredIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const appendGameSeatCredential = vi.fn((targetGameId: string, seat: "w" | "b", credential: string) => {
+      const updated = service.addSeatCredential(targetGameId, seat, credential);
+      if (!updated) throw new Error("missing room");
+      return updated;
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      appendGameSeatCredential,
+      loadGameSummary: (targetGameId) => {
+        if (targetGameId !== gameId || !registeredIdentity) return null;
+        return {
+          ...summaryForGame(gameId, "private"),
+          participants: [
+            { seat: "w", role: "white", identity: registeredIdentity },
+            { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+          ],
+        };
+      },
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const staleSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    try {
+      await waitForSocketOpen(staleSocket);
+      staleSocket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId,
+            token: "old-w-token-0",
+          })
+        )
+      );
+      await expect(nextSocketMessage(staleSocket, "stale alias join")).resolves.toMatchObject({
+        type: "joined",
+        color: "w",
+      });
+
+      const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ displayName: "Liam" }),
+      });
+      const account = await accountResponse.json();
+      registeredIdentity = account.account.identity;
+
+      const staleError = nextSocketMessage(staleSocket, "stale alias prune error");
+      const staleClose = waitForSocketClose(staleSocket);
+      const rejoinResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/account/games/${gameId}/rejoin`,
+        {
+          method: "POST",
+          headers: bearer(account.session.token),
+        }
+      );
+      const rejoined = await rejoinResponse.json();
+
+      expect(rejoinResponse.status).toBe(200);
+      expect(rejoined.gameInvite.token).toBe("fresh-w-token");
+      await expect(staleError).resolves.toMatchObject({
+        type: "error",
+        error: { code: "unauthorized" },
+      });
+      await staleClose;
+      expect(service.getRoomForToken(gameId, "old-w-token-0")).toBeNull();
+      expect(service.getRoomForToken(gameId, "old-w-token-1")).not.toBeNull();
+      expect(service.getRoomForToken(gameId, "fresh-w-token")).not.toBeNull();
+    } finally {
+      staleSocket.close();
+    }
+  });
+
+  it("rejects stale player socket actions before persistence when its alias is pruned", async () => {
+    const gameId = "game_stale_pruned_socket_action";
+    const service = OnlineGameService.fromRecords(
+      [
+        {
+          gameId,
+          whiteCredential: hashOnlineToken("primary-w-token"),
+          blackCredential: hashOnlineToken("primary-b-token"),
+          additionalWhiteCredentials: Array.from(
+            { length: ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS },
+            (_value, index) => hashOnlineToken(`old-w-token-${index}`)
+          ),
+          setup: createClockedSetup(),
+          acceptedActions: [],
+        },
+      ],
+      {
+        credentialFactory: hashOnlineToken,
+        verifyToken: verifyOnlineToken,
+      }
+    );
+    const applyGameAction = vi.fn(async () => {
+      throw new Error("stale socket action reached persistence");
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      applyGameAction,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const staleSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(staleSocket);
+      staleSocket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId,
+            token: "old-w-token-0",
+          })
+        )
+      );
+      await expect(nextSocketMessage(staleSocket, "stale action join")).resolves.toMatchObject({
+        type: "joined",
+        color: "w",
+      });
+
+      service.addSeatCredential(gameId, "w", hashOnlineToken("fresh-w-token"));
+      expect(service.getRoomForToken(gameId, "old-w-token-0")).toBeNull();
+
+      staleSocket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-action-stale-pruned-token",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(staleSocket, "stale pruned action rejection")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "unauthorized" },
+      });
+      expect(applyGameAction).not.toHaveBeenCalled();
+    } finally {
+      staleSocket.close();
+    }
   });
 
   it("does not rejoin an account game for a registered nonparticipant", async () => {
