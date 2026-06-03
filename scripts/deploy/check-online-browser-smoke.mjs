@@ -12,6 +12,7 @@ import {
   buildWebSocketUrl,
   createFetchWithTimeout,
   createWebSocketWaiters,
+  makeSmokeSetup,
   readJson,
   versionedSocketMessage,
 } from "./online-smoke-lib.mjs";
@@ -30,7 +31,6 @@ const fetchWithTimeout = createFetchWithTimeout(requestTimeoutMs);
 const { waitForSocketOpen, nextSocketMessage } = createWebSocketWaiters(socketTimeoutMs);
 const setupLabels = {
   configure: "Configure New Game",
-  privateLink: "Private Link",
   inviteFriend: "Invite Friend",
 };
 
@@ -47,6 +47,14 @@ function urlHasOnlineParams(urlText) {
   const params = new URL(urlText).searchParams;
   return ["onlineGame", "seat", "token", "view", "pgn", "game"].some((key) =>
     params.has(key)
+  );
+}
+
+async function assertNoQueryToken(page, context) {
+  const urlText = await page.url();
+  assert(
+    !new URL(urlText).searchParams.has("token"),
+    `${context} URL still contained a token: ${urlText}`
   );
 }
 
@@ -754,41 +762,23 @@ async function createDriver() {
   return (await createPlaywrightDriver()) ?? (await createChromeDriver());
 }
 
-async function createOnlineGameFromUi(white) {
-  await white.goto(baseUrl);
-  let startScreen;
-  try {
-    startScreen = await waitUntil("setup screen or game controls", async () => {
-      if (await white.hasButton(setupLabels.privateLink)) return "setup";
-      if (await white.hasButton("New Game")) return "game";
-      return null;
-    });
-  } catch (error) {
-    const currentUrl = await white.url().catch(() => "<unknown>");
-    const bodyText = await white.bodyText().catch(() => "");
-    throw new Error(
-      `${error.message}; current URL ${currentUrl}; body text: ${bodyText.slice(0, 500)}`
-    );
-  }
-  if (startScreen === "game") {
-    await white.waitForButton("New Game");
-    await white.clickButton("New Game");
-  }
-  await white.waitForButton(setupLabels.privateLink);
-  if (await white.hasButton("quick")) {
-    await white.clickButton("quick");
-  }
-  await white.clickButton(setupLabels.privateLink);
-  await white.waitForButton("Copy Opponent Invite");
-  await white.waitForButton("Copy Spectator Link");
-  await white.clickButton("Copy Opponent Invite");
-
-  const opponentInvite = await waitUntil("opponent invite clipboard", async () => {
-    const text = await white.getClipboard();
-    return text.includes("onlineGame=") && text.includes("seat=b") && text.includes("token=")
-      ? text
-      : null;
+async function createOnlineGameFromApi(white) {
+  const createResponse = await fetchWithTimeout(`${baseUrl}/api/online/games`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ setup: makeSmokeSetup() }),
   });
+  const created = await readJson(createResponse);
+  assert(createResponse.status === 201, `Browser smoke create failed with ${createResponse.status}`);
+  assert(created.gameId, "Browser smoke create did not return a game id");
+  assert(created.white?.url, "Browser smoke create did not return a white URL");
+  assert(created.black?.url, "Browser smoke create did not return a black URL");
+
+  await white.goto(created.white.url);
+  await white.waitForText("Online White");
+  await assertNoQueryToken(white, "White player");
+  await white.waitForButton("Copy Spectator Link");
+  const opponentInvite = created.black.url;
   await white.clickButton("Copy Spectator Link");
   const spectatorUrl = await waitUntil("spectator URL clipboard", async () => {
     const text = await white.getClipboard();
@@ -796,6 +786,10 @@ async function createOnlineGameFromUi(white) {
       ? text
       : null;
   });
+  assert(
+    !new URL(spectatorUrl).searchParams.has("token"),
+    `Spectator URL leaked a player token: ${spectatorUrl}`
+  );
   const gameId = new URL(await white.url()).searchParams.get("onlineGame");
   assert(gameId, "White URL did not include onlineGame after create");
   return { gameId, opponentInvite, spectatorUrl };
@@ -806,7 +800,7 @@ async function openSetupFromBase(page) {
   let startScreen;
   try {
     startScreen = await waitUntil("setup screen or game controls", async () => {
-      if (await page.hasButton(setupLabels.privateLink)) return "setup";
+      if (await page.hasButton(setupLabels.inviteFriend)) return "setup";
       if (await page.hasButton("New Game")) return "game";
       return null;
     });
@@ -820,7 +814,7 @@ async function openSetupFromBase(page) {
   if (startScreen === "game") {
     await page.clickButton("New Game");
   }
-  await page.waitForButton(setupLabels.privateLink);
+  await page.waitForButton(setupLabels.inviteFriend);
 }
 
 async function createChallengeFromUi(challenger) {
@@ -1047,7 +1041,7 @@ async function verifyAccessDeniedRecovery(driver, gameId) {
   await waitUntil("access-denied recovery URL to clear online params", async () =>
     !urlHasOnlineParams(await denied.url())
   );
-  await denied.waitForButton(setupLabels.privateLink);
+  await denied.waitForButton(setupLabels.inviteFriend);
 }
 
 async function runFlow(driver) {
@@ -1057,13 +1051,14 @@ async function runFlow(driver) {
   const black = await driver.newPage();
   const spectator = await driver.newPage();
 
-  const { gameId, opponentInvite, spectatorUrl } = await createOnlineGameFromUi(white);
+  const { gameId, opponentInvite, spectatorUrl } = await createOnlineGameFromApi(white);
   const initialSnapshot = await fetchSpectatorSnapshot(gameId, 0);
   await verifyAccessDeniedRecovery(driver, gameId);
   await verifyStaleActionContract(initialSnapshot.setup);
 
   await black.goto(opponentInvite);
   await black.waitForText("Online Black");
+  await assertNoQueryToken(black, "Black player");
   await black.waitForButton("Copy Spectator Link");
   assert(
     !(await black.hasButton("Copy Opponent Invite")),
@@ -1091,7 +1086,6 @@ async function runFlow(driver) {
 
   await white.goto(await white.url());
   await white.waitForText("Online White");
-  await white.waitForButton("Copy Opponent Invite");
   await white.waitForButton("Copy Spectator Link");
   await verifyBrowserReconnect(white);
 

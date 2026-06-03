@@ -147,7 +147,7 @@ Phase 6P Learn progress hardening, 2026-06-02:
 Phase 6Q Navigation wording and drawer icon polish, 2026-06-02:
 
 - The drawer Play entry now says `Configure New Game`, matching the setup/victory language and separating setup from the contextual in-game `New Game` control.
-- Setup primary actions now use product-language labels: `Play Local`, `Invite Friend`, `Create Lobby Listing`, and the lower-priority `Private Link`.
+- Setup primary actions now use product-language labels: `Play Local`, `Invite Friend`, and `List in Lobby`; the older direct `Private Link` setup path was removed so private online play goes through the clearer invite lifecycle.
 - Drawer icons remain real image assets but now have stable sizing, object fitting, opacity, and mobile spacing tests so blank marker-style placeholders do not silently return.
 - Mobile drawer section notes are hidden to reduce density while keeping the same section landmarks and destination labels.
 
