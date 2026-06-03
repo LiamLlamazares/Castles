@@ -258,6 +258,99 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onSignOutAllAccountSessions).toHaveBeenCalledTimes(1));
   });
 
+  it("confirms account deletion and explains retained game history", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
+    };
+    const onDeleteAccount = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        onDeleteAccount={onDeleteAccount}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    const deleteButton = screen.getByRole("button", { name: "Delete Account" });
+    expect(deleteButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(deleteButton);
+    const confirmation = screen.getByRole("region", { name: "Remove Liam" });
+
+    expect(deleteButton).toHaveAttribute("aria-expanded", "true");
+    expect(within(confirmation).getByText("Remove Liam")).toBeInTheDocument();
+    expect(within(confirmation).getByText(/This cannot be undone/)).toBeInTheDocument();
+    expect(within(confirmation).getByRole("button", { name: "Confirm Delete" })).toHaveFocus();
+
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("region", { name: "Remove Liam" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Remove Liam" })).getByRole("button", { name: "Confirm Delete" }));
+
+    await waitFor(() => expect(onDeleteAccount).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Remove Liam" })).not.toBeInTheDocument());
+  });
+
+  it("keeps account deletion confirmation open and refreshes sessions after failed deletion", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
+    };
+    const loadAccountSessions = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      sessions: [
+        {
+          sessionId: "account_session_current",
+          createdAt: "2026-06-03T12:00:00.000Z",
+          lastUsedAt: "2026-06-03T12:05:00.000Z",
+          current: true,
+        },
+      ],
+    });
+    const onDeleteAccount = vi.fn().mockRejectedValue(new Error("delete failed"));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        accountSessionId="account_session_current"
+        loadAccountSessions={loadAccountSessions}
+        onDeleteAccount={onDeleteAccount}
+      />
+    );
+
+    await waitFor(() => expect(loadAccountSessions).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Remove Liam" })).getByRole("button", { name: "Confirm Delete" }));
+
+    await waitFor(() => expect(onDeleteAccount).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("region", { name: "Remove Liam" })).toBeInTheDocument();
+    expect(screen.getByText("Could not delete account.")).toHaveClass("error");
+    await waitFor(() => expect(loadAccountSessions).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "Confirm Delete" })).toBeEnabled();
+  });
+
   it("shows signed-in account archive games without duplicating public archive rows", async () => {
     const account = {
       schemaVersion: 1 as const,

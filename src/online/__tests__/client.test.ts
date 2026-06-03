@@ -11,6 +11,7 @@ import {
   cancelOpenSeek,
   createOnlineChallenge,
   createOpenSeek,
+  deleteOnlineAccount,
   declineOnlineChallenge,
   fetchOnlineChallenge,
   fetchOnlineAccountGames,
@@ -831,6 +832,26 @@ describe("online client helpers", () => {
     });
   });
 
+  it("deletes online accounts with account bearer auth", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        deleted: true,
+      }),
+    });
+
+    await expect(deleteOnlineAccount({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      deleted: true,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/account", {
+      method: "DELETE",
+      headers: { authorization: "Bearer account-token" },
+    });
+  });
+
   it("rejects malformed account session list and revoke-all responses", async () => {
     await expect(
       fetchOnlineAccountSessions(
@@ -856,6 +877,18 @@ describe("online client helpers", () => {
         }) as any
       )
     ).rejects.toThrow("revokedSessions is invalid");
+    await expect(
+      deleteOnlineAccount(
+        { token: "account-token" },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            deleted: false,
+          }),
+        }) as any
+      )
+    ).rejects.toThrow("Online account was not deleted.");
   });
 
   it("sends account bearer auth on account-aware creation and matchmaking paths without body leakage", async () => {

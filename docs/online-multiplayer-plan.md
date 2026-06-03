@@ -801,10 +801,24 @@ Tests/review/deploy gates:
 - Review: account/session security review focused on token-free session metadata, account bearer separation from game credentials, fail-closed revoke-all behavior, and UI clarity between current-session sign-out and account-wide sign-out.
 - Deploy: deploy only after the route works against PostgreSQL-backed `online_account_sessions` and browser sign-out-everywhere does not clear local state on server failure.
 
+## Phase 7J: Account Deletion and Privacy Copy
+
+Goal: let beta account users remove the sign-in account and every account session before public account launch, while stating clearly what happens to historical game records.
+
+Status: implemented locally on 2026-06-03. The account store now deletes account records and cascades/removes account sessions while keeping display names permanently reserved once created. `DELETE /api/online/account` resolves the account bearer server-side, deletes the authenticated account, returns `{ protocolVersion, deleted: true }`, and fails closed if the bearer is invalid, deletion races after authentication, or persistence fails. The Online account panel exposes deletion behind an explicit confirmation and tells users that completed and active game records may still show the display name as part of game history. The browser keeps the local account session when deletion fails so the player can retry instead of silently losing access while the server account remains active.
+
+Retention contract: deletion removes login/account access and account sessions. It does not release the deleted account's display name for reuse, and it does not rewrite durable game events, game summaries, challenge events, open-seek summaries, local replay records, or exported games that already contain the registered display name. Historical anonymization remains a separate policy decision because changing game records after the fact can make archives inconsistent.
+
+Tests/review/deploy gates:
+
+- Tests: account-store deletion/cascade tests, HTTP route tests against PostgreSQL-backed store wiring plus unauthorized/race/persistence failures, client helper validation tests, Online account-panel confirmation tests, App deletion success/failure integration coverage, full suite, client build, server build, and local PostgreSQL browser smoke.
+- Review: account/session privacy review focused on deletion scope, fail-closed behavior, token secrecy, historical-retention copy, and preserving the account-vs-game-token boundary.
+- Deploy: deploy only after PostgreSQL-backed account deletion removes sessions and the browser does not clear local state on server failure.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
-- Add account deletion and account privacy copy before public account launch.
+- Define optional anonymization or erasure policy for account-linked historical game records before public launch.
 - Implement rating events/read models after result contracts are stable.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.
@@ -835,6 +849,6 @@ Tests/review/deploy gates:
 ## Next Immediate Work
 
 1. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-2. Add remaining account lifecycle work before public launch: account deletion, privacy copy, and retention policy for account-linked game history.
+2. Add remaining account lifecycle work before public launch: retention/anonymization policy for account-linked game history, then ratings and moderation contracts.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

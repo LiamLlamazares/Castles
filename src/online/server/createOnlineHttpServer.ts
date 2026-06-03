@@ -2339,6 +2339,47 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   });
 
+  app.delete("/api/online/account", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.delete", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
+    try {
+      const deleted = await accountStore.deleteAccount(auth.account.accountId);
+      log({
+        event: "online.account.delete",
+        status: deleted ? "accepted" : "rejected",
+        reason: deleted ? undefined : "already_deleted",
+      });
+      if (!deleted) {
+        res.status(409).json({
+          error: { code: "account_not_deleted", message: "Account could not be deleted." },
+        });
+        return;
+      }
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        deleted,
+      });
+    } catch (error) {
+      console.error("Failed to delete account", error);
+      log({ event: "online.account.delete", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account could not be deleted." },
+      });
+    }
+  });
+
   app.get("/api/online/account/games", async (req, res) => {
     if (!accountReadLimiter.take(getClientKey(req))) {
       res.status(429).json({

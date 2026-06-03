@@ -14,6 +14,7 @@ import {
   type OnlineAccountSessionSummary,
   type OnlineAccountSessionsResponse,
   type OnlineAccountSessionsRevokeResponse,
+  type OnlineAccountDeleteResponse,
 } from "./accounts";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
@@ -126,6 +127,7 @@ export type {
   OnlineAccountSessionSummary,
   OnlineAccountSessionsResponse,
   OnlineAccountSessionsRevokeResponse,
+  OnlineAccountDeleteResponse,
 };
 
 export interface CreatedOnlineChallenge {
@@ -832,6 +834,35 @@ export async function revokeAllOnlineAccountSessions(
   return {
     protocolVersion: ONLINE_PROTOCOL_VERSION,
     revokedSessions,
+  };
+}
+
+export async function deleteOnlineAccount(
+  account: OnlineAccountSessionParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountDeleteResponse> {
+  const response = await fetchImpl("/api/online/account", {
+    method: "DELETE",
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not delete online account (${response.status})`);
+  }
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online account delete response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Online account delete response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  if ((body as { deleted?: unknown }).deleted !== true) {
+    throw new Error("Online account was not deleted.");
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    deleted: true,
   };
 }
 

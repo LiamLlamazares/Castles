@@ -32,6 +32,7 @@ export interface OnlineAccountStore {
   revokeSessionToken(token: string): Promise<boolean>;
   listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
   revokeSessionsForAccount(accountId: string): Promise<number>;
+  deleteAccount(accountId: string): Promise<boolean>;
   checkReady?(): Promise<boolean> | boolean;
   close?(): Promise<void> | void;
 }
@@ -160,6 +161,14 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       this.sessionsByTokenHash.delete(session.tokenHash);
     }
     return sessions.length;
+  }
+
+  async deleteAccount(accountId: string): Promise<boolean> {
+    const account = this.accounts.get(accountId);
+    if (!account) return false;
+    this.accounts.delete(accountId);
+    await this.revokeSessionsForAccount(accountId);
+    return true;
   }
 
   async checkReady(): Promise<boolean> {

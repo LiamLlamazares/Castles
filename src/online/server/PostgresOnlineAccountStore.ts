@@ -93,6 +93,18 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
 
     try {
       return await this.withTransaction(async (queryable) => {
+        const displayNameKey = normalizeOnlineAccountDisplayNameKey(displayName.value);
+        await queryable.query(
+          `
+            INSERT INTO online_account_display_names (
+              display_name_normalized,
+              display_name,
+              reserved_at
+            )
+            VALUES ($1, $2, $3)
+          `,
+          [displayNameKey, displayName.value, input.createdAt]
+        );
         const accountResult = await queryable.query(
           `
             INSERT INTO online_accounts (
@@ -108,7 +120,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
           [
             input.accountId,
             displayName.value,
-            normalizeOnlineAccountDisplayNameKey(displayName.value),
+            displayNameKey,
             input.createdAt,
           ]
         );
@@ -218,6 +230,15 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return result.rows.length;
   }
 
+  async deleteAccount(accountId: string): Promise<boolean> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      "DELETE FROM online_accounts WHERE account_id = $1 RETURNING account_id",
+      [accountId]
+    );
+    return result.rows.length > 0;
+  }
+
   async checkReady(): Promise<boolean> {
     await this.ensureSchema();
     await this.queryable.query("SELECT 1");
@@ -245,6 +266,23 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_display_names (
+        display_name_normalized TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        reserved_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.queryable.query(`
+      INSERT INTO online_account_display_names (
+        display_name_normalized,
+        display_name,
+        reserved_at
+      )
+      SELECT display_name_normalized, display_name, created_at
+      FROM online_accounts
+      ON CONFLICT (display_name_normalized) DO NOTHING
     `);
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_account_sessions (

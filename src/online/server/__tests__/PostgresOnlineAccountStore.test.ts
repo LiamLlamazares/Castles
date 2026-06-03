@@ -9,20 +9,73 @@ import { hashOnlineToken } from "../onlineTokenCredentials";
 class FakeAccountQueryable {
   readonly accounts = new Map<string, any>();
   readonly accountsByDisplayName = new Map<string, string>();
+  readonly displayNameRegistry = new Map<string, string>();
   readonly sessionsByTokenHash = new Map<string, any>();
+  private transactionSnapshot?: {
+    accounts: Map<string, any>;
+    accountsByDisplayName: Map<string, string>;
+    displayNameRegistry: Map<string, string>;
+    sessionsByTokenHash: Map<string, any>;
+  };
 
   async query(text: string, values: unknown[] = []): Promise<{ rows: any[] }> {
     const normalizedText = text.replace(/\s+/g, " ").trim();
+    if (normalizedText === "BEGIN") {
+      this.transactionSnapshot = {
+        accounts: new Map(Array.from(this.accounts.entries()).map(([key, value]) => [key, { ...value }])),
+        accountsByDisplayName: new Map(this.accountsByDisplayName),
+        displayNameRegistry: new Map(this.displayNameRegistry),
+        sessionsByTokenHash: new Map(
+          Array.from(this.sessionsByTokenHash.entries()).map(([key, value]) => [key, { ...value }])
+        ),
+      };
+      return { rows: [] };
+    }
+    if (normalizedText === "COMMIT") {
+      this.transactionSnapshot = undefined;
+      return { rows: [] };
+    }
+    if (normalizedText === "ROLLBACK") {
+      if (this.transactionSnapshot) {
+        this.accounts.clear();
+        this.accountsByDisplayName.clear();
+        this.displayNameRegistry.clear();
+        this.sessionsByTokenHash.clear();
+        for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.sessionsByTokenHash) this.sessionsByTokenHash.set(key, value);
+        this.transactionSnapshot = undefined;
+      }
+      return { rows: [] };
+    }
     if (
-      normalizedText === "BEGIN" ||
-      normalizedText === "COMMIT" ||
-      normalizedText === "ROLLBACK" ||
       normalizedText === "SELECT 1" ||
       normalizedText.startsWith("CREATE TABLE") ||
       normalizedText.startsWith("CREATE INDEX") ||
       normalizedText.startsWith("CREATE UNIQUE INDEX") ||
       normalizedText.startsWith("DO $$")
     ) {
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_display_names")) {
+      if (values.length === 0) {
+        for (const account of this.accounts.values()) {
+          if (!this.displayNameRegistry.has(account.display_name_normalized)) {
+            this.displayNameRegistry.set(account.display_name_normalized, account.display_name);
+          }
+        }
+        return { rows: [] };
+      }
+      const [displayNameNormalized, displayName] = values as string[];
+      if (this.displayNameRegistry.has(displayNameNormalized)) {
+        const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
+        error.code = "23505";
+        error.constraint = "online_account_display_names_pkey";
+        throw error;
+      }
+      this.displayNameRegistry.set(displayNameNormalized, displayName);
       return { rows: [] };
     }
 
@@ -136,6 +189,20 @@ class FakeAccountQueryable {
       return { rows: [{ session_id: session.session_id }] };
     }
 
+    if (normalizedText.startsWith("DELETE FROM online_accounts")) {
+      const [accountId] = values as string[];
+      const account = this.accounts.get(accountId);
+      if (!account) return { rows: [] };
+      this.accounts.delete(accountId);
+      this.accountsByDisplayName.delete(account.display_name_normalized);
+      for (const [tokenHash, session] of Array.from(this.sessionsByTokenHash.entries())) {
+        if (session.account_id === accountId) {
+          this.sessionsByTokenHash.delete(tokenHash);
+        }
+      }
+      return { rows: [{ account_id: accountId }] };
+    }
+
     throw new Error(`Unexpected query: ${normalizedText}`);
   }
 }
@@ -246,6 +313,43 @@ describe("PostgresOnlineAccountStore", () => {
     });
   });
 
+  it("deletes accounts, clears their sessions, and keeps their display names reserved", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = new PostgresOnlineAccountStore({ queryable });
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_one",
+      displayName: "Liam",
+      tokenHash: hashOnlineToken("token-one"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+    queryable.sessionsByTokenHash.set(hashOnlineToken("token-two"), {
+      session_id: "account_session_two",
+      account_id: "account_liam",
+      token_hash: hashOnlineToken("token-two"),
+      created_at: "2026-06-03T12:01:00.000Z",
+      last_used_at: "2026-06-03T12:05:00.000Z",
+    });
+
+    await expect(store.deleteAccount("account_liam")).resolves.toBe(true);
+    await expect(store.resolveSessionToken("token-one", "2026-06-03T12:10:00.000Z")).resolves.toBeNull();
+    await expect(store.resolveSessionToken("token-two", "2026-06-03T12:10:00.000Z")).resolves.toBeNull();
+    expect(queryable.accounts.has("account_liam")).toBe(false);
+    expect(queryable.sessionsByTokenHash.size).toBe(0);
+    await expect(store.deleteAccount("account_liam")).resolves.toBe(false);
+
+    await expect(
+      store.createAccount({
+        accountId: "account_liam_new",
+        sessionId: "account_session_new",
+        displayName: "liam",
+        tokenHash: hashOnlineToken("token-new"),
+        createdAt: "2026-06-03T12:11:00.000Z",
+      })
+    ).rejects.toBeInstanceOf(DuplicateOnlineAccountDisplayNameError);
+  });
+
   it("rejects duplicate display names case-insensitively", async () => {
     const queryable = new FakeAccountQueryable();
     const store = new PostgresOnlineAccountStore({ queryable });
@@ -291,5 +395,20 @@ describe("PostgresOnlineAccountStore", () => {
         createdAt: "2026-06-03T12:01:00.000Z",
       })
     ).rejects.toBeInstanceOf(DuplicateOnlineAccountSessionCredentialError);
+
+    await expect(
+      store.createAccount({
+        accountId: "account_three",
+        sessionId: "account_session_three",
+        displayName: "Samir",
+        tokenHash: hashOnlineToken("fresh-token"),
+        createdAt: "2026-06-03T12:02:00.000Z",
+      })
+    ).resolves.toMatchObject({
+      account: {
+        accountId: "account_three",
+        displayName: "Samir",
+      },
+    });
   });
 });

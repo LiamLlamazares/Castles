@@ -157,20 +157,73 @@ function bearer(token: string): HeadersInit {
 class FakePostgresAccountQueryable {
   readonly accounts = new Map<string, any>();
   readonly accountsByDisplayName = new Map<string, string>();
+  readonly displayNameRegistry = new Map<string, string>();
   readonly sessionsByTokenHash = new Map<string, any>();
+  private transactionSnapshot?: {
+    accounts: Map<string, any>;
+    accountsByDisplayName: Map<string, string>;
+    displayNameRegistry: Map<string, string>;
+    sessionsByTokenHash: Map<string, any>;
+  };
 
   async query(text: string, values: unknown[] = []): Promise<{ rows: any[] }> {
     const normalizedText = text.replace(/\s+/g, " ").trim();
+    if (normalizedText === "BEGIN") {
+      this.transactionSnapshot = {
+        accounts: new Map(Array.from(this.accounts.entries()).map(([key, value]) => [key, { ...value }])),
+        accountsByDisplayName: new Map(this.accountsByDisplayName),
+        displayNameRegistry: new Map(this.displayNameRegistry),
+        sessionsByTokenHash: new Map(
+          Array.from(this.sessionsByTokenHash.entries()).map(([key, value]) => [key, { ...value }])
+        ),
+      };
+      return { rows: [] };
+    }
+    if (normalizedText === "COMMIT") {
+      this.transactionSnapshot = undefined;
+      return { rows: [] };
+    }
+    if (normalizedText === "ROLLBACK") {
+      if (this.transactionSnapshot) {
+        this.accounts.clear();
+        this.accountsByDisplayName.clear();
+        this.displayNameRegistry.clear();
+        this.sessionsByTokenHash.clear();
+        for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.sessionsByTokenHash) this.sessionsByTokenHash.set(key, value);
+        this.transactionSnapshot = undefined;
+      }
+      return { rows: [] };
+    }
     if (
-      normalizedText === "BEGIN" ||
-      normalizedText === "COMMIT" ||
-      normalizedText === "ROLLBACK" ||
       normalizedText === "SELECT 1" ||
       normalizedText.startsWith("CREATE TABLE") ||
       normalizedText.startsWith("CREATE INDEX") ||
       normalizedText.startsWith("CREATE UNIQUE INDEX") ||
       normalizedText.startsWith("DO $$")
     ) {
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_display_names")) {
+      if (values.length === 0) {
+        for (const account of this.accounts.values()) {
+          if (!this.displayNameRegistry.has(account.display_name_normalized)) {
+            this.displayNameRegistry.set(account.display_name_normalized, account.display_name);
+          }
+        }
+        return { rows: [] };
+      }
+      const [displayNameNormalized, displayName] = values as string[];
+      if (this.displayNameRegistry.has(displayNameNormalized)) {
+        const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
+        error.code = "23505";
+        error.constraint = "online_account_display_names_pkey";
+        throw error;
+      }
+      this.displayNameRegistry.set(displayNameNormalized, displayName);
       return { rows: [] };
     }
 
@@ -262,6 +315,20 @@ class FakePostgresAccountQueryable {
       if (!session) return { rows: [] };
       this.sessionsByTokenHash.delete(tokenHash);
       return { rows: [{ session_id: session.session_id }] };
+    }
+
+    if (normalizedText.startsWith("DELETE FROM online_accounts")) {
+      const [accountId] = values as string[];
+      const account = this.accounts.get(accountId);
+      if (!account) return { rows: [] };
+      this.accounts.delete(accountId);
+      this.accountsByDisplayName.delete(account.display_name_normalized);
+      for (const [tokenHash, session] of Array.from(this.sessionsByTokenHash.entries())) {
+        if (session.account_id === accountId) {
+          this.sessionsByTokenHash.delete(tokenHash);
+        }
+      }
+      return { rows: [{ account_id: accountId }] };
     }
 
     throw new Error(`Unexpected query: ${normalizedText}`);
@@ -661,7 +728,63 @@ describe("createOnlineHttpServer", () => {
     expect(meResponse.status).toBe(401);
   });
 
-  it("rejects account session management without a valid account bearer", async () => {
+  it("deletes an online account through the PostgreSQL account store route", async () => {
+    const logs: unknown[] = [];
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = new PostgresOnlineAccountStore({ queryable });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:10:00.000Z"),
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    queryable.sessionsByTokenHash.set(hashOnlineToken("other-account-token"), {
+      session_id: "account_session_other_browser",
+      account_id: account.account.accountId,
+      token_hash: hashOnlineToken("other-account-token"),
+      created_at: "2026-06-01T12:01:00.000Z",
+      last_used_at: "2026-06-01T12:02:00.000Z",
+    });
+
+    const deleteResponse = await fetch(`http://127.0.0.1:${port}/api/online/account`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const deleted = await deleteResponse.json();
+    const meResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+      headers: bearer(account.session.token),
+    });
+    const accountCountAfterDelete = queryable.accounts.size;
+    const sessionCountAfterDelete = queryable.sessionsByTokenHash.size;
+    const recreateResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "liam" }),
+    });
+    const recreateBody = await recreateResponse.json();
+
+    expect(accountResponse.status).toBe(201);
+    expect(deleteResponse.status).toBe(200);
+    expect(deleted).toEqual({ protocolVersion: ONLINE_PROTOCOL_VERSION, deleted: true });
+    expect(accountCountAfterDelete).toBe(0);
+    expect(sessionCountAfterDelete).toBe(0);
+    expect(meResponse.status).toBe(401);
+    expect(recreateResponse.status).toBe(409);
+    expect(recreateBody.error).toMatchObject({ message: "That display name is already taken." });
+    expect(JSON.stringify(logs)).not.toContain(account.session.token);
+    expect(logs).toContainEqual(expect.objectContaining({ event: "online.account.delete", status: "accepted" }));
+  });
+
+  it("rejects account management without a valid account bearer", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
       now: () => Date.parse("2026-06-01T12:00:00.000Z"),
@@ -674,6 +797,8 @@ describe("createOnlineHttpServer", () => {
       { path: "/api/online/account/sessions", init: { headers: bearer("bad-account-token") } },
       { path: "/api/online/account/sessions", init: { method: "DELETE" } },
       { path: "/api/online/account/sessions", init: { method: "DELETE", headers: bearer("bad-account-token") } },
+      { path: "/api/online/account", init: { method: "DELETE" } },
+      { path: "/api/online/account", init: { method: "DELETE", headers: bearer("bad-account-token") } },
     ]) {
       const response = await fetch(`http://127.0.0.1:${port}${request.path}`, request.init);
       const body = await response.json();
@@ -710,7 +835,35 @@ describe("createOnlineHttpServer", () => {
     expect(accountStore.revokeSessionsForAccount).toHaveBeenCalledWith(account.account.accountId);
   });
 
-  it("fails closed when account session list or revoke-all persistence fails", async () => {
+  it("does not return success when account deletion races after authentication", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    vi.spyOn(accountStore, "deleteAccount").mockResolvedValue(false);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    const deleteResponse = await fetch(`http://127.0.0.1:${port}/api/online/account`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const body = await deleteResponse.json();
+
+    expect(deleteResponse.status).toBe(409);
+    expect(body.error).toMatchObject({ code: "account_not_deleted" });
+    expect(accountStore.deleteAccount).toHaveBeenCalledWith(account.account.accountId);
+  });
+
+  it("fails closed when account session list, revoke-all, or account deletion persistence fails", async () => {
     const accountStore = new MemoryOnlineAccountStore();
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
@@ -729,6 +882,7 @@ describe("createOnlineHttpServer", () => {
     const account = await accountResponse.json();
     vi.spyOn(accountStore, "listSessionsForAccount").mockRejectedValueOnce(new Error("list unavailable"));
     vi.spyOn(accountStore, "revokeSessionsForAccount").mockRejectedValueOnce(new Error("delete unavailable"));
+    vi.spyOn(accountStore, "deleteAccount").mockRejectedValueOnce(new Error("delete account unavailable"));
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/sessions`, {
       headers: bearer(account.session.token),
@@ -739,11 +893,18 @@ describe("createOnlineHttpServer", () => {
       headers: bearer(account.session.token),
     });
     const revokeAllBody = await revokeAllResponse.json();
+    const deleteResponse = await fetch(`http://127.0.0.1:${port}/api/online/account`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const deleteBody = await deleteResponse.json();
 
     expect(listResponse.status).toBe(503);
     expect(listBody.error).toMatchObject({ code: "persistence_failed" });
     expect(revokeAllResponse.status).toBe(503);
     expect(revokeAllBody.error).toMatchObject({ code: "persistence_failed" });
+    expect(deleteResponse.status).toBe(503);
+    expect(deleteBody.error).toMatchObject({ code: "persistence_failed" });
     expect(consoleError).toHaveBeenCalled();
   });
 

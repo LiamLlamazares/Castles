@@ -39,6 +39,31 @@
   background: rgba(158, 208, 194, 0.045);
 }
 
+.online-browser-account-delete-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(218, 111, 101, 0.38);
+  border-radius: 6px;
+  background: rgba(94, 32, 28, 0.2);
+}
+
+.online-browser-account-delete-panel strong {
+  display: block;
+  margin-top: 2px;
+  color: #fff0ec;
+  font-size: 1rem;
+}
+
+.online-browser-account-delete-panel p {
+  margin: 4px 0 0;
+  color: #e8c8c1;
+  line-height: 1.35;
+}
+
 .online-browser-account-copy {
   min-width: 0;
 }
@@ -60,6 +85,10 @@
 .online-browser-account-message {
   color: #9ed0c2 !important;
   font-weight: 800;
+}
+
+.online-browser-account-message.error {
+  color: #ffb7a8 !important;
 }
 
 .online-browser-account-session-summary {
@@ -685,6 +714,7 @@
   }
 
   .online-browser-account-panel,
+  .online-browser-account-delete-panel,
   .online-browser-account-form,
   .online-browser-toolbar,
   .online-game-row,

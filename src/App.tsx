@@ -37,6 +37,7 @@ import {
   createOnlineAccount,
   createOnlineChallenge,
   createOpenSeek,
+  deleteOnlineAccount,
   declineOnlineChallenge,
   fetchOpenSeek,
   fetchOnlineAccountGames,
@@ -114,6 +115,7 @@ type OnlineAccountUiStatus =
   | "creating"
   | "signing-out"
   | "signing-out-all"
+  | "deleting"
   | "ready"
   | "error";
 
@@ -1125,6 +1127,45 @@ function App() {
       setOnlineAccount(session.account ?? onlineAccount);
       setOnlineAccountStatus("error");
       setOnlineAccountError("Could not sign out everywhere. Check your connection and try again.");
+      throw error;
+    }
+  }, [onlineAccount, onlineAccountSession]);
+
+  const handleDeleteOnlineAccount = useCallback(async () => {
+    const session = onlineAccountSession;
+    if (!session) {
+      forgetOnlineAccountSession();
+      setOnlineAccountSession(null);
+      setOnlineAccount(null);
+      setOnlineAccountStatus("signed-out");
+      setOnlineAccountError(null);
+      return;
+    }
+
+    setOnlineAccountStatus("deleting");
+    setOnlineAccountError(null);
+    try {
+      await deleteOnlineAccount({ token: session.token });
+      forgetOnlineAccountSession();
+      setOnlineAccountSession(null);
+      setOnlineAccount(null);
+      setOnlineAccountStatus("signed-out");
+      setOnlineAccountError(null);
+    } catch (error) {
+      console.error("Failed to delete online account", error);
+      const storedSession = resolveOnlineAccountSession();
+      if (storedSession?.token !== session.token) {
+        setOnlineAccountSession(storedSession);
+        setOnlineAccount(storedSession?.account ?? null);
+        setOnlineAccountStatus(
+          storedSession ? (storedSession.account ? "ready" : "checking") : "signed-out"
+        );
+        setOnlineAccountError(null);
+        return;
+      }
+      setOnlineAccount(session.account ?? onlineAccount);
+      setOnlineAccountStatus("error");
+      setOnlineAccountError("Could not delete account. Check your connection and try again.");
       throw error;
     }
   }, [onlineAccount, onlineAccountSession]);
@@ -2214,6 +2255,7 @@ function App() {
           accountSessionId={onlineAccountSession?.sessionId ?? null}
           loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}
           onSignOutAllAccountSessions={onlineAccountSession ? handleSignOutAllOnlineAccountSessions : undefined}
+          onDeleteAccount={onlineAccountSession ? handleDeleteOnlineAccount : undefined}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
         />
       )}

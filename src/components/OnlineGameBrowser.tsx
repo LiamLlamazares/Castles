@@ -58,6 +58,7 @@ type OnlineAccountUiStatus =
   | "creating"
   | "signing-out"
   | "signing-out-all"
+  | "deleting"
   | "ready"
   | "error";
 type QuickMatchStatus = "idle" | "pending" | "matched" | "waiting" | "error";
@@ -107,6 +108,7 @@ interface OnlineGameBrowserProps {
   accountSessionId?: string | null;
   loadAccountSessions?: () => Promise<OnlineAccountSessionsResponse>;
   onSignOutAllAccountSessions?: () => void | Promise<void>;
+  onDeleteAccount?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
@@ -452,6 +454,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   accountSessionId = null,
   loadAccountSessions,
   onSignOutAllAccountSessions,
+  onDeleteAccount,
   loadAccountGames,
   backLabel = "Back to game",
   initialTab = "lobby",
@@ -484,6 +487,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
   const [accountDisplayName, setAccountDisplayName] = React.useState("");
   const [accountActionMessage, setAccountActionMessage] = React.useState("");
+  const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
   const [accountSessions, setAccountSessions] = React.useState<OnlineAccountSessionSummary[]>([]);
   const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountGames, setAccountGames] = React.useState<OnlineGameSummary[]>([]);
@@ -500,9 +504,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
+  const deleteAccountConfirmButtonRef = React.useRef<HTMLButtonElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
   const closedOwnedSeekPanelRef = React.useRef<HTMLElement>(null);
   const [recentClearMessage, setRecentClearMessage] = React.useState("");
+  const deleteAccountConfirmPanelId = React.useId();
+  const deleteAccountConfirmHeadingId = React.useId();
+  const deleteAccountConfirmDescriptionId = React.useId();
 
   React.useEffect(() => {
     if (activeTab === undefined) {
@@ -586,6 +594,23 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [onSignOutAllAccountSessions]);
 
+  const handleDeleteAccount = React.useCallback(async () => {
+    if (!onDeleteAccount) return;
+    setAccountActionMessage("");
+    accountSessionsRequestIdRef.current += 1;
+    setAccountSessions([]);
+    setAccountSessionsStatus("idle");
+    try {
+      await onDeleteAccount();
+      setIsDeleteAccountConfirmOpen(false);
+      setAccountSessions([]);
+      setAccountSessionsStatus("idle");
+    } catch {
+      setAccountActionMessage("Could not delete account.");
+      void refreshAccountSessions();
+    }
+  }, [onDeleteAccount, refreshAccountSessions]);
+
   React.useEffect(() => {
     accountSessionsRequestIdRef.current += 1;
     setAccountSessions([]);
@@ -608,6 +633,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (accountStatus !== "error") return;
     setAccountActionMessage("");
   }, [accountStatus]);
+
+  React.useEffect(() => {
+    if (!isDeleteAccountConfirmOpen) return;
+    deleteAccountConfirmButtonRef.current?.focus();
+  }, [isDeleteAccountConfirmOpen]);
 
   React.useEffect(() => {
     if (quickMatchStatus !== "waiting") return;
@@ -1532,16 +1562,22 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     { id: "online", label: "Online" },
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
-  const accountStatusMessage =
-    accountStatus === "checking"
-      ? "Checking saved account..."
-      : accountStatus === "creating"
-        ? "Creating account..."
-        : accountStatus === "signing-out"
-          ? "Signing out..."
-          : accountStatus === "signing-out-all"
-            ? "Signing out everywhere..."
-        : accountError || accountActionMessage;
+  const accountStatusMessage = (() => {
+    switch (accountStatus) {
+      case "checking":
+        return "Checking saved account...";
+      case "creating":
+        return "Creating account...";
+      case "signing-out":
+        return "Signing out...";
+      case "signing-out-all":
+        return "Signing out everywhere...";
+      case "deleting":
+        return "Deleting account...";
+      default:
+        return accountError || accountActionMessage;
+    }
+  })();
   const currentAccountSession =
     accountSessionId
       ? accountSessions.find((session) => session.sessionId === accountSessionId) ??
@@ -1555,6 +1591,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         : accountSessionsStatus === "ready"
           ? `${formatCount(accountSessions.length, "active session")} for this account.`
           : "";
+  const accountStatusMessageClassName = [
+    "online-browser-account-message",
+    accountStatus === "error" || Boolean(accountError) || accountActionMessage.startsWith("Could not")
+      ? "error"
+      : "",
+  ].filter(Boolean).join(" ");
 
   return (
     <div className="online-browser-page">
@@ -1590,7 +1632,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </>
           )}
           {accountStatusMessage && (
-            <p className="online-browser-account-message" role="status" aria-live="polite">
+            <p className={accountStatusMessageClassName} role="status" aria-live="polite">
               {accountStatusMessage}
             </p>
           )}
@@ -1601,7 +1643,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               type="button"
               className="online-browser-button subtle"
               onClick={refreshAccountSessions}
-              disabled={!loadAccountSessions || accountSessionsStatus === "loading" || accountStatus === "signing-out" || accountStatus === "signing-out-all"}
+              disabled={!loadAccountSessions || accountSessionsStatus === "loading" || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
             >
               {accountSessionsStatus === "loading" ? "Refreshing" : "Refresh Sessions"}
             </button>
@@ -1609,7 +1651,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               type="button"
               className="online-browser-button subtle"
               onClick={onSignOutAccount}
-              disabled={!onSignOutAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all"}
+              disabled={!onSignOutAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
             >
               {accountStatus === "signing-out" ? "Signing Out" : "Sign Out"}
             </button>
@@ -1617,9 +1659,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               type="button"
               className="online-browser-button subtle online-browser-button-danger"
               onClick={handleSignOutAllAccountSessions}
-              disabled={!onSignOutAllAccountSessions || accountStatus === "signing-out" || accountStatus === "signing-out-all"}
+              disabled={!onSignOutAllAccountSessions || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
             >
               {accountStatus === "signing-out-all" ? "Signing Out Everywhere" : "Sign Out Everywhere"}
+            </button>
+            <button
+              type="button"
+              className="online-browser-button subtle online-browser-button-danger"
+              onClick={() => setIsDeleteAccountConfirmOpen(true)}
+              disabled={!onDeleteAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
+              aria-expanded={isDeleteAccountConfirmOpen}
+              aria-controls={isDeleteAccountConfirmOpen ? deleteAccountConfirmPanelId : undefined}
+            >
+              Delete Account
             </button>
           </div>
         ) : (
@@ -1645,6 +1697,41 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </form>
         )}
       </section>
+      {account && isDeleteAccountConfirmOpen && (
+        <section
+          className="online-browser-account-delete-panel"
+          id={deleteAccountConfirmPanelId}
+          aria-labelledby={deleteAccountConfirmHeadingId}
+          aria-describedby={deleteAccountConfirmDescriptionId}
+        >
+          <div>
+            <span className="online-browser-section-kicker">Delete account</span>
+            <strong id={deleteAccountConfirmHeadingId}>Remove {account.displayName}</strong>
+            <p id={deleteAccountConfirmDescriptionId}>
+              This deletes the sign-in account and signs it out everywhere. Active and completed game records stay in game history and may still show this display name. The display name stays reserved. This cannot be undone.
+            </p>
+          </div>
+          <div className="online-browser-account-actions">
+            <button
+              type="button"
+              className="online-browser-button subtle online-browser-button-danger"
+              onClick={handleDeleteAccount}
+              disabled={accountStatus === "deleting"}
+              ref={deleteAccountConfirmButtonRef}
+            >
+              {accountStatus === "deleting" ? "Deleting" : "Confirm Delete"}
+            </button>
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => setIsDeleteAccountConfirmOpen(false)}
+              disabled={accountStatus === "deleting"}
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className={`online-browser-toolbar online-browser-toolbar-${tab}`} aria-label="Online browser controls">
         <div className="online-browser-tabs" role="group" aria-label="Online game lists">

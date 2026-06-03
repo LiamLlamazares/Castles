@@ -49,6 +49,11 @@ export interface OnlineAccountSessionsRevokeResponse {
   revokedSessions: number;
 }
 
+export interface OnlineAccountDeleteResponse {
+  protocolVersion: number;
+  deleted: boolean;
+}
+
 function bad(message: string): ValidationResult<never> {
   return {
     ok: false,
