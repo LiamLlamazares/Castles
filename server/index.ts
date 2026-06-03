@@ -129,6 +129,8 @@ async function main() {
         return store.appendEvent(event);
       },
       appendGameVisibilityChanged: (event) => store.appendGameVisibilityChanged(event),
+      appendGameSeatCredential: (gameId, seat, credential) =>
+        store.appendGameSeatCredential(gameId, seat, credential),
       appendChallengeCreated: (event, credentials) =>
         store.appendChallengeCreated(event, credentials),
       appendChallengeEvent: (event) => store.appendChallengeEvent(event),

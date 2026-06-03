@@ -33,6 +33,8 @@ export interface OnlineGameRoomCreateInput {
   gameId: string;
   whiteCredential: string;
   blackCredential: string;
+  additionalWhiteCredentials?: string[];
+  additionalBlackCredentials?: string[];
   verifyToken?: OnlineTokenVerifier;
   clock?: OnlineClockRecord;
   acceptedActions?: AcceptedOnlineActionRecord[];
@@ -69,6 +71,8 @@ export interface OnlineGameRoomRecord {
   gameId: string;
   whiteCredential: string;
   blackCredential: string;
+  additionalWhiteCredentials?: string[];
+  additionalBlackCredentials?: string[];
   setup: OnlineGameSetupDTO;
   clock?: OnlineClockRecord;
   acceptedActions: AcceptedOnlineActionRecord[];
@@ -79,6 +83,11 @@ export interface OnlineGameRoomRecord {
 export type OnlineTokenVerifier = (token: string, credential: string) => boolean;
 
 const defaultTokenVerifier: OnlineTokenVerifier = (token, credential) => token === credential;
+
+function normalizeCredentials(primary: string, additional: string[] | undefined): string[] {
+  const credentials = [primary, ...(additional ?? [])].filter(Boolean);
+  return Array.from(new Set(credentials));
+}
 
 function reject(
   snapshot: OnlineGameSnapshotDTO,
@@ -112,8 +121,8 @@ export class OnlineGameRoom {
   private constructor(
     private readonly setup: OnlineGameSetupDTO,
     private readonly gameId: string,
-    private readonly whiteCredential: string,
-    private readonly blackCredential: string,
+    private readonly whiteCredentials: string[],
+    private readonly blackCredentials: string[],
     private readonly verifyToken: OnlineTokenVerifier,
     private readonly now: () => number
   ) {
@@ -131,8 +140,8 @@ export class OnlineGameRoom {
     const room = new OnlineGameRoom(
       input.setup,
       input.gameId,
-      input.whiteCredential,
-      input.blackCredential,
+      normalizeCredentials(input.whiteCredential, input.additionalWhiteCredentials),
+      normalizeCredentials(input.blackCredential, input.additionalBlackCredentials),
       input.verifyToken ?? defaultTokenVerifier,
       input.now ?? Date.now
     );
@@ -156,9 +165,17 @@ export class OnlineGameRoom {
 
   authenticate(token: string): Color | null {
     if (!token) return null;
-    if (this.whiteCredential && this.verifyToken(token, this.whiteCredential)) return "w";
-    if (this.blackCredential && this.verifyToken(token, this.blackCredential)) return "b";
+    if (this.whiteCredentials.some((credential) => this.verifyToken(token, credential))) return "w";
+    if (this.blackCredentials.some((credential) => this.verifyToken(token, credential))) return "b";
     return null;
+  }
+
+  addSeatCredential(seat: Color, credential: string): void {
+    if (!credential) return;
+    const credentials = seat === "w" ? this.whiteCredentials : this.blackCredentials;
+    if (!credentials.includes(credential)) {
+      credentials.push(credential);
+    }
   }
 
   get version(): number {
@@ -260,8 +277,14 @@ export class OnlineGameRoom {
   toRecord(): OnlineGameRoomRecord {
     return {
       gameId: this.gameId,
-      whiteCredential: this.whiteCredential,
-      blackCredential: this.blackCredential,
+      whiteCredential: this.whiteCredentials[0] ?? "",
+      blackCredential: this.blackCredentials[0] ?? "",
+      ...(this.whiteCredentials.length > 1
+        ? { additionalWhiteCredentials: this.whiteCredentials.slice(1) }
+        : {}),
+      ...(this.blackCredentials.length > 1
+        ? { additionalBlackCredentials: this.blackCredentials.slice(1) }
+        : {}),
       setup: this.setup,
       clock: this.cloneClockRecord(this.clockState),
       acceptedActions: [...this.acceptedActions],

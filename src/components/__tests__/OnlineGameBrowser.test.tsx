@@ -424,6 +424,54 @@ describe("OnlineGameBrowser", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers account rejoin for active account games without a local player token", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_active_rejoin",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_active_rejoin", displayName: "Liam" },
+    };
+    const activeAccount = summary({
+      gameId: "game_active_account_rejoin",
+      status: "active",
+      archiveState: "active",
+      visibility: "private",
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b" } },
+      ],
+    });
+    const onRejoinAccountGame = vi.fn();
+
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountGames={vi.fn().mockResolvedValue(directory([activeAccount]))}
+        resolveAccountGameJoin={vi.fn().mockReturnValue(null)}
+        onRejoinAccountGame={onRejoinAccountGame}
+      />
+    );
+
+    const activeGames = await screen.findByRole("region", { name: "Active account games" });
+    fireEvent.click(
+      within(activeGames).getByRole("button", {
+        name: "Rejoin account game Liam vs Black, game_active_account_rejoin",
+      })
+    );
+
+    expect(onRejoinAccountGame).toHaveBeenCalledWith(activeAccount);
+    expect(within(activeGames).queryByText("Open from original browser session or invite link")).not.toBeInTheDocument();
+  });
+
   it("reports account archive errors without falling back to possibly duplicated device rows", async () => {
     const account = {
       schemaVersion: 1 as const,

@@ -130,6 +130,21 @@ export class OnlineGameService {
     );
   }
 
+  createSeatToken(seat: "w" | "b"): string {
+    return this.tokenFactory(seat);
+  }
+
+  credentialForToken(token: string): string {
+    return this.credentialFactory(token);
+  }
+
+  addSeatCredential(gameId: string, seat: "w" | "b", credential: string): OnlineGameRoomRecord | null {
+    const room = this.getRoom(gameId);
+    if (!room) return null;
+    room.addSeatCredential(seat, credential);
+    return room.toRecord();
+  }
+
   getRoomForToken(gameId: string, token: string): OnlineGameRoom | null {
     const room = this.getRoom(gameId);
     if (!room || !room.authenticate(token)) return null;

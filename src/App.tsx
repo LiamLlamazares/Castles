@@ -58,6 +58,7 @@ import {
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
   rememberOpenSeekCreatorParams,
+  rejoinOnlineAccountGame,
   resolveOnlineAccountSession,
   removeOnlineChallengeTokenFromUrl,
   removeOnlineTokenFromUrl,
@@ -357,6 +358,7 @@ function App() {
     resolveOnlineAccountSession() ? "checking" : "signed-out"
   );
   const [onlineAccountError, setOnlineAccountError] = useState<string | null>(null);
+  const [rejoiningAccountGameId, setRejoiningAccountGameId] = useState<string | null>(null);
   const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
   const replayRequestIdRef = useRef(0);
   const onlineChallengePollInFlightRef = useRef(false);
@@ -1049,6 +1051,26 @@ function App() {
   const handleReturnToAccountGame = useCallback((join: OnlineJoinParams, visibility: OnlineGameVisibility) => {
     enterOnlineGameFromJoin(join, undefined, visibility);
   }, [enterOnlineGameFromJoin]);
+
+  const handleRejoinAccountGame = useCallback(async (game: OnlineGameSummary) => {
+    if (!onlineAccountSession) {
+      alert("Sign in to rejoin this account game.");
+      return;
+    }
+    setRejoiningAccountGameId(game.gameId);
+    try {
+      const response = await rejoinOnlineAccountGame(
+        { token: onlineAccountSession.token },
+        game.gameId
+      );
+      enterOnlineGameFromJoin(response.gameInvite, response.gameInvite.url, game.visibility);
+    } catch (error) {
+      console.error("Failed to rejoin account game", error);
+      alert("Could not rejoin this account game. Try the original invite link if you still have it.");
+    } finally {
+      setRejoiningAccountGameId(null);
+    }
+  }, [enterOnlineGameFromJoin, onlineAccountSession?.token]);
 
   const handleCreateOnlineChallenge = async (
     board: Board,
@@ -2081,6 +2103,8 @@ function App() {
           onReplay={handleReplayOnlineGame}
           resolveAccountGameJoin={resolveAccountGameJoin}
           onReturnToAccountGame={handleReturnToAccountGame}
+          onRejoinAccountGame={handleRejoinAccountGame}
+          rejoiningAccountGameId={rejoiningAccountGameId}
           recentOnlineGames={recentOnlineGames}
           onClearRecentOnlineGames={handleClearRecentOnlineGames}
           account={onlineAccount}

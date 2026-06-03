@@ -314,6 +314,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     account,
     resolveAccountGameJoin,
     onReturnToAccountGame,
+    onRejoinAccountGame,
+    rejoiningAccountGameId,
     recentOnlineGames = [],
     onClearRecentOnlineGames,
     backLabel = "Back to game",
@@ -349,6 +351,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       join: { gameId: string; seat: "w" | "b"; token: string },
       visibility: "private" | "unlisted" | "public"
     ) => void;
+    onRejoinAccountGame?: (game: any) => void;
+    rejoiningAccountGameId?: string | null;
     recentOnlineGames?: { gameId: string; status: string }[];
     onClearRecentOnlineGames?: () => void;
     backLabel?: string;
@@ -477,6 +481,39 @@ vi.mock("../components/OnlineGameBrowser", () => ({
           }}
         >
           Mock Return Active Account Game
+        </button>
+      )}
+      {account && onRejoinAccountGame && (
+        <button
+          type="button"
+          disabled={rejoiningAccountGameId === "game_private_account_rejoin"}
+          onClick={() =>
+            onRejoinAccountGame({
+              schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+              gameId: "game_private_account_rejoin",
+              rulesetVersion: "castles-beta-v1",
+              createdAt: "2026-06-03T12:00:00.000Z",
+              updatedAt: "2026-06-03T12:01:00.000Z",
+              version: 3,
+              status: "active",
+              visibility: "private",
+              archiveState: "active",
+              hasTimeControl: false,
+              participants: [
+                { seat: "w", role: "white", identity: account.identity },
+                { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+              ],
+              livePreview: {
+                sideToMove: "w",
+                turnPhase: "Movement",
+                moveCount: 1,
+                boardPreview: { radius: 6, pieces: [], castles: [] },
+              },
+              lastEventId: "evt_private_account_rejoin",
+            })
+          }
+        >
+          Mock Rejoin Active Account Game
         </button>
       )}
       {onOpenGame && (
@@ -2135,6 +2172,92 @@ describe("App game setup lifecycle", () => {
     });
     expect(screen.queryByRole("button", { name: "Mock Publish Current Game" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mock Unlist Current Game" })).not.toBeInTheDocument();
+  });
+
+  it("rejoins an active account game by storing a freshly issued seat token", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_private_rejoin",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_private_rejoin", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/games/game_private_account_rejoin/rejoin") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              gameInvite: {
+                gameId: "game_private_account_rejoin",
+                seat: "w",
+                token: "fresh-seat-token",
+                url: "https://castles.example/?onlineGame=game_private_account_rejoin&seat=w",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/games") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: 1, games: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Rejoin Active Account Game" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/account/games/game_private_account_rejoin/rejoin",
+        { method: "POST", headers: { authorization: "Bearer account-token" } }
+      );
+      expect(sessionStorage.getItem("castles_online_join:game_private_account_rejoin:w")).toBe("fresh-seat-token");
+      expect(onlineHookMocks.useOnlineGameConnection).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          gameId: "game_private_account_rejoin",
+          seat: "w",
+          token: "fresh-seat-token",
+        }),
+        expect.any(Function)
+      );
+    });
+    expect(window.location.search).toContain("onlineGame=game_private_account_rejoin");
+    expect(window.location.search).toContain("seat=w");
+    expect(window.location.search).not.toContain("token=");
+
+    const playerCallback = onlineHookMocks.useOnlineGameConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      playerCallback(spectatorSnapshot("game_private_account_rejoin"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Online session: player")).toBeInTheDocument();
+      expect(screen.getByText("Online visibility: private")).toBeInTheDocument();
+    });
   });
 
   it("shows access denied for an invalid challenge link", async () => {

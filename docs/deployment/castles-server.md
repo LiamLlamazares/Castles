@@ -600,6 +600,7 @@ psql -v ON_ERROR_STOP=1 <<'SQL'
 truncate table
   online_game_events,
   online_game_credentials,
+  online_game_additional_credentials,
   online_game_summaries,
   online_game_locks
 restart identity;
@@ -642,6 +643,7 @@ curl -sS https://castles.ls314.com/api/health | grep postgres
 load_castles_db_env
 psql -c "select count(*) from online_game_events;"
 psql -c "select count(*) from online_game_credentials;"
+psql -c "select count(*) from online_game_additional_credentials;"
 ```
 
 ## 5. Emergency Disable

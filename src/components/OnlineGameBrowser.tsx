@@ -86,6 +86,8 @@ interface OnlineGameBrowserProps {
   onSpectate: (gameId: string) => void;
   resolveAccountGameJoin?: (game: OnlineGameSummary, seat: "w" | "b") => OnlineJoinParams | null;
   onReturnToAccountGame?: (join: OnlineJoinParams, visibility: OnlineGameVisibility) => void;
+  onRejoinAccountGame?: (game: OnlineGameSummary) => void;
+  rejoiningAccountGameId?: string | null;
   recentOnlineGames?: RecentOnlineGameRecord[];
   onClearRecentOnlineGames?: () => void;
   account?: OnlineAccount | null;
@@ -426,6 +428,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onSpectate,
   resolveAccountGameJoin,
   onReturnToAccountGame,
+  onRejoinAccountGame,
+  rejoiningAccountGameId = null,
   recentOnlineGames = [],
   onClearRecentOnlineGames,
   account = null,
@@ -1212,6 +1216,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const storedJoin =
       accountSeat && resolveAccountGameJoin ? resolveAccountGameJoin(game, accountSeat) : null;
     const canReturn = !!storedJoin && !!onReturnToAccountGame;
+    const canRejoin = !storedJoin && !!onRejoinAccountGame;
+    const isRejoining = rejoiningAccountGameId === game.gameId;
     const canSpectate = canSpectateOnlineGameSummary(game);
     const seatLabel = accountSeat === "w" ? "White" : accountSeat === "b" ? "Black" : "unknown";
 
@@ -1242,6 +1248,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               aria-label={`Return to account game ${white} vs ${black}, ${game.gameId}`}
             >
               Return to Game
+            </button>
+          ) : canRejoin ? (
+            <button
+              type="button"
+              className="online-browser-button primary"
+              onClick={() => onRejoinAccountGame?.(game)}
+              disabled={isRejoining}
+              aria-label={`Rejoin account game ${white} vs ${black}, ${game.gameId}`}
+            >
+              {isRejoining ? "Rejoining..." : "Rejoin Game"}
             </button>
           ) : canSpectate ? (
             <button

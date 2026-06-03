@@ -78,6 +78,8 @@ export interface OnlineGameEventReplayOptions {
 export interface OnlineGameCredentials {
   whiteCredential: string;
   blackCredential: string;
+  additionalWhiteCredentials?: string[];
+  additionalBlackCredentials?: string[];
 }
 
 export type OnlineGameCredentialMap =
@@ -451,6 +453,12 @@ export function onlineGameEventsToRecords(
           gameId: event.gameId,
           whiteCredential: credentials?.whiteCredential ?? PROJECTION_ONLY_CREDENTIAL,
           blackCredential: credentials?.blackCredential ?? PROJECTION_ONLY_CREDENTIAL,
+          ...(credentials?.additionalWhiteCredentials?.length
+            ? { additionalWhiteCredentials: credentials.additionalWhiteCredentials }
+            : {}),
+          ...(credentials?.additionalBlackCredentials?.length
+            ? { additionalBlackCredentials: credentials.additionalBlackCredentials }
+            : {}),
           setup: event.setup,
           clock: event.clock,
           acceptedActions: [],

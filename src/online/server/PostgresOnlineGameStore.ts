@@ -65,6 +65,7 @@ import type {
   ResolvedOpenSeekCredential,
   ResolvedOnlineChallengeCredential,
 } from "./OnlineGameStore";
+import { OnlineGameSeatCredentialTerminalError } from "./OnlineGameStore";
 import { isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
 
 interface PostgresQueryable {
@@ -523,6 +524,35 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       await this.insertEvent(validated, client);
       await this.insertCredentials(validated.gameId, credentials, client);
       await this.refreshSummaryForGame(validated.gameId, client);
+    });
+  }
+
+  async appendGameSeatCredential(
+    gameId: string,
+    seat: "w" | "b",
+    credential: string
+  ): Promise<OnlineGameRoomRecord> {
+    if (typeof gameId !== "string" || !gameId || (seat !== "w" && seat !== "b")) {
+      throw new Error("Invalid online game seat credential target.");
+    }
+    if (typeof credential !== "string" || !isOnlineTokenCredentialHash(credential)) {
+      throw new Error(`Invalid online game credential hash for ${gameId}.`);
+    }
+    await this.ensureSchema();
+    return this.withGameTransaction(gameId, async (client) => {
+      const current = await this.loadRecordForGame(gameId, client);
+      if (!current) {
+        throw new Error(`Online game ${gameId} was not found.`);
+      }
+      if (current.result || current.timeout) {
+        throw new OnlineGameSeatCredentialTerminalError(gameId);
+      }
+      await this.insertAdditionalCredential(gameId, seat, credential, client);
+      const updated = await this.loadRecordForGame(gameId, client);
+      if (!updated) {
+        throw new Error(`Online game ${gameId} was not found after credential insert.`);
+      }
+      return updated;
     });
   }
 
@@ -1254,6 +1284,27 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       $$;
     `);
     await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_game_additional_credentials (
+        id BIGSERIAL PRIMARY KEY,
+        game_id TEXT NOT NULL,
+        seat TEXT NOT NULL CHECK (seat IN ('w', 'b')),
+        token_hash TEXT NOT NULL CONSTRAINT online_game_additional_credentials_token_hash_shape CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$'),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (game_id, seat, token_hash)
+      )
+    `);
+    await this.queryable.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE online_game_additional_credentials
+          ADD CONSTRAINT online_game_additional_credentials_token_hash_shape
+          CHECK (token_hash ~ '^sha256:[A-Za-z0-9_-]{43}$');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$;
+    `);
+    await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_game_events_order_idx
         ON online_game_events (id)
     `);
@@ -1514,6 +1565,22 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     );
   }
 
+  private async insertAdditionalCredential(
+    gameId: string,
+    seat: "w" | "b",
+    credential: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_game_additional_credentials (game_id, seat, token_hash)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (game_id, seat, token_hash) DO NOTHING
+      `,
+      [gameId, seat, credential]
+    );
+  }
+
   private async insertChallengeCredentials(
     challengeId: string,
     credentials: OnlineChallengeCredentials,
@@ -1635,26 +1702,33 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
   private async loadCredentials(
     queryable: PostgresQueryable = this.queryable
   ): Promise<Map<string, OnlineGameCredentials>> {
-    const result = await queryable.query(
+    const primary = await queryable.query(
       "SELECT game_id, seat, token_hash FROM online_game_credentials"
     );
-    return this.credentialsFromRows(result.rows);
+    const additional = await queryable.query(
+      "SELECT game_id, seat, token_hash FROM online_game_additional_credentials ORDER BY id ASC"
+    );
+    return this.credentialsFromRows(primary.rows, additional.rows);
   }
 
   private async loadCredentialsForGame(
     gameId: string,
     queryable: PostgresQueryable
   ): Promise<Map<string, OnlineGameCredentials>> {
-    const result = await queryable.query(
+    const primary = await queryable.query(
       "SELECT game_id, seat, token_hash FROM online_game_credentials WHERE game_id = $1",
       [gameId]
     );
-    return this.credentialsFromRows(result.rows);
+    const additional = await queryable.query(
+      "SELECT game_id, seat, token_hash FROM online_game_additional_credentials WHERE game_id = $1 ORDER BY id ASC",
+      [gameId]
+    );
+    return this.credentialsFromRows(primary.rows, additional.rows);
   }
 
-  private credentialsFromRows(rows: any[]): Map<string, OnlineGameCredentials> {
+  private credentialsFromRows(primaryRows: any[], additionalRows: any[] = []): Map<string, OnlineGameCredentials> {
     const entries = new Map<string, Partial<OnlineGameCredentials>>();
-    for (const row of rows) {
+    for (const row of primaryRows) {
       const gameId = row.game_id;
       const seat = row.seat;
       const tokenHash = row.token_hash;
@@ -1673,6 +1747,22 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       entries.set(gameId, entry);
     }
 
+    for (const row of additionalRows) {
+      const gameId = row.game_id;
+      const seat = row.seat;
+      const tokenHash = row.token_hash;
+      if (typeof gameId !== "string" || (seat !== "w" && seat !== "b")) {
+        throw new Error("Invalid online game additional credential row.");
+      }
+      if (typeof tokenHash !== "string" || !isOnlineTokenCredentialHash(tokenHash)) {
+        throw new Error(`Invalid online game additional credential for ${gameId}.`);
+      }
+      const entry = entries.get(gameId) ?? {};
+      const key = seat === "w" ? "additionalWhiteCredentials" : "additionalBlackCredentials";
+      entry[key] = Array.from(new Set([...(entry[key] ?? []), tokenHash]));
+      entries.set(gameId, entry);
+    }
+
     const credentials = new Map<string, OnlineGameCredentials>();
     for (const [gameId, entry] of entries) {
       if (!entry.whiteCredential || !entry.blackCredential) {
@@ -1681,6 +1771,12 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       credentials.set(gameId, {
         whiteCredential: entry.whiteCredential,
         blackCredential: entry.blackCredential,
+        ...(entry.additionalWhiteCredentials?.length
+          ? { additionalWhiteCredentials: entry.additionalWhiteCredentials }
+          : {}),
+        ...(entry.additionalBlackCredentials?.length
+          ? { additionalBlackCredentials: entry.additionalBlackCredentials }
+          : {}),
       });
     }
     return credentials;

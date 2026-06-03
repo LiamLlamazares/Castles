@@ -118,6 +118,7 @@ import type {
   ResolvedOpenSeekCredential,
   ResolvedOnlineChallengeCredential,
 } from "./OnlineGameStore";
+import { OnlineGameSeatCredentialTerminalError } from "./OnlineGameStore";
 import {
   hashOnlineToken,
   isOnlineTokenCredentialHash,
@@ -177,6 +178,11 @@ export interface CreateOnlineHttpServerOptions {
   appendGameVisibilityChanged?: (
     event: Extract<OnlineGameEvent, { type: "visibility_changed" }>
   ) => OnlineGameSummary | Promise<OnlineGameSummary>;
+  appendGameSeatCredential?: (
+    gameId: string,
+    seat: "w" | "b",
+    credential: string
+  ) => OnlineGameRoomRecord | Promise<OnlineGameRoomRecord>;
   appendChallengeCreated?: (
     event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
     credentials: OnlineChallengeCredentials
@@ -1223,6 +1229,16 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     );
   };
 
+  const seatForGameIdentity = (
+    summary: OnlineGameSummary,
+    identity: OnlineIdentity
+  ): "w" | "b" | null => {
+    const participant = summary.participants.find((candidate) =>
+      isSameOnlineIdentity(candidate.identity, identity)
+    );
+    return participant?.seat === "w" || participant?.seat === "b" ? participant.seat : null;
+  };
+
   const loadChallengeSummary = async (challengeId: string): Promise<OnlineChallengeSummary | null> => {
     return (await loadChallengeSummaries()).find((summary) => summary.challengeId === challengeId) ?? null;
   };
@@ -2190,6 +2206,139 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         error: { code: "persistence_failed", message: "Account game history could not be loaded." },
       });
     }
+  });
+
+  app.post("/api/online/account/games/:gameId/rejoin", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+
+    const gameId = validateOnlineGameId(req.params.gameId, "account.rejoin.gameId");
+    if (!gameId.ok) {
+      res.status(400).json({ error: gameId.error });
+      return;
+    }
+
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
+    await enqueueGameAction(gameId.value, async () => {
+      const lookup = await loadValidatedSummaryForGame(gameId.value);
+      if (!lookup.ok) {
+        log({ event: "online.account.rejoin", gameId: gameId.value, status: "failed", reason: lookup.reason });
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "Online game summary could not be loaded." },
+        });
+        return;
+      }
+      if (!lookup.summary) {
+        log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No active account game was found." },
+        });
+        return;
+      }
+
+      const seat = seatForGameIdentity(lookup.summary, auth.account.identity);
+      if (!seat) {
+        log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "not_participant" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No active account game was found." },
+        });
+        return;
+      }
+      if (lookup.summary.status !== "active" || lookup.summary.archiveState !== "active") {
+        log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "game_over" });
+        res.status(409).json({
+          error: { code: "game_over", message: "This account game is already complete." },
+        });
+        return;
+      }
+
+      const room = service.getRoom(gameId.value);
+      if (!room) {
+        log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No active account game was found." },
+        });
+        return;
+      }
+
+      const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
+      if (!timeout.ok) {
+        log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: timeout.error.code });
+        res
+          .status(httpStatusForOnlineError(timeout.error))
+          .json(responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot));
+        return;
+      }
+      if (timeout.timeout) {
+        broadcastSnapshot(gameId.value);
+        res.status(409).json({
+          error: { code: "game_over", message: "This account game is already complete." },
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          snapshot: (service.getRoom(gameId.value) ?? room).getSnapshot(),
+        });
+        return;
+      }
+
+      const token = service.createSeatToken(seat);
+      const credential = service.credentialForToken(token);
+      if (options.appendGameSeatCredential && !isOnlineTokenCredentialHash(credential)) {
+        log({
+          event: "online.account.rejoin",
+          gameId: gameId.value,
+          status: "failed",
+          reason: "invalid_credential_factory",
+        });
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "The account game could not be rejoined." },
+        });
+        return;
+      }
+
+      try {
+        const record = options.appendGameSeatCredential
+          ? await options.appendGameSeatCredential(gameId.value, seat, credential)
+          : service.addSeatCredential(gameId.value, seat, credential);
+        if (!record) {
+          throw new Error(`Online game ${gameId.value} was not found while adding rejoin credential.`);
+        }
+        service.replaceRoom(record);
+      } catch (error) {
+        if (error instanceof OnlineGameSeatCredentialTerminalError) {
+          log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "game_over" });
+          res.status(409).json({
+            error: { code: "game_over", message: "This account game is already complete." },
+          });
+          return;
+        }
+        log({ event: "online.account.rejoin", gameId: gameId.value, status: "failed", reason: "persistence_failed" });
+        console.error("Failed to persist account game rejoin credential", error);
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "The account game could not be rejoined." },
+        });
+        return;
+      }
+
+      log({ event: "online.account.rejoin", gameId: gameId.value, role: "player", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        gameInvite: {
+          gameId: gameId.value,
+          seat,
+          token,
+          url: buildTokenlessOnlineGameUrl(options.publicBaseUrl, gameId.value, seat),
+        },
+      });
+    });
   });
 
   const expireChallengeIfNeeded = async (

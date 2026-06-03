@@ -4,6 +4,7 @@ import { SanctuaryGenerator } from "../../../Classes/Systems/SanctuaryGenerator"
 import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
+import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
 import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
@@ -30,6 +31,7 @@ class FakePostgresClient {
   challengeEventRows: Array<{ payload: OnlineChallengeEvent }> = [];
   seekEventRows: Array<{ payload: OpenSeekEvent }> = [];
   credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }> = [];
+  additionalCredentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }> = [];
   challengeCredentialRows: Array<{
     challengeId: string;
     role: "challenger" | "challenged";
@@ -50,6 +52,7 @@ class FakePostgresClient {
     eventRows: Array<{ payload: OnlineGameEvent }>;
     challengeEventRows: Array<{ payload: OnlineChallengeEvent }>;
     credentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }>;
+    additionalCredentialRows: Array<{ gameId: string; seat: "w" | "b"; tokenHash: string }>;
     challengeCredentialRows: Array<{
       challengeId: string;
       role: "challenger" | "challenged";
@@ -71,6 +74,7 @@ class FakePostgresClient {
         challengeEventRows: this.challengeEventRows.map((row) => ({ payload: row.payload })),
         seekEventRows: this.seekEventRows.map((row) => ({ payload: row.payload })),
         credentialRows: this.credentialRows.map((row) => ({ ...row })),
+        additionalCredentialRows: this.additionalCredentialRows.map((row) => ({ ...row })),
         challengeCredentialRows: this.challengeCredentialRows.map((row) => ({ ...row })),
         seekCredentialRows: this.seekCredentialRows.map((row) => ({ ...row })),
         summaryRows: this.summaryRows.map((row) => ({ payload: row.payload })),
@@ -92,6 +96,7 @@ class FakePostgresClient {
         this.challengeEventRows = this.transactionSnapshot.challengeEventRows.map((row) => ({ payload: row.payload }));
         this.seekEventRows = this.transactionSnapshot.seekEventRows.map((row) => ({ payload: row.payload }));
         this.credentialRows = this.transactionSnapshot.credentialRows.map((row) => ({ ...row }));
+        this.additionalCredentialRows = this.transactionSnapshot.additionalCredentialRows.map((row) => ({ ...row }));
         this.challengeCredentialRows = this.transactionSnapshot.challengeCredentialRows.map((row) => ({ ...row }));
         this.seekCredentialRows = this.transactionSnapshot.seekCredentialRows.map((row) => ({ ...row }));
         this.summaryRows = this.transactionSnapshot.summaryRows.map((row) => ({ payload: row.payload }));
@@ -152,6 +157,23 @@ class FakePostgresClient {
           (row) => !(row.gameId === credential.gameId && row.seat === credential.seat)
         );
         this.credentialRows.push(credential);
+      }
+    }
+    if (/insert into online_game_additional_credentials/i.test(text) && values) {
+      const credential = {
+        gameId: values[0] as string,
+        seat: values[1] as "w" | "b",
+        tokenHash: values[2] as string,
+      };
+      if (
+        !this.additionalCredentialRows.some(
+          (row) =>
+            row.gameId === credential.gameId &&
+            row.seat === credential.seat &&
+            row.tokenHash === credential.tokenHash
+        )
+      ) {
+        this.additionalCredentialRows.push(credential);
       }
     }
     if (/insert into online_challenge_credentials/i.test(text) && values) {
@@ -503,9 +525,25 @@ class FakePostgresClient {
           .map((row) => ({ game_id: row.gameId, seat: row.seat, token_hash: row.tokenHash })),
       };
     }
+    if (/select\s+game_id,\s*seat,\s*token_hash\s+from\s+online_game_additional_credentials\s+where\s+game_id/i.test(text)) {
+      return {
+        rows: this.additionalCredentialRows
+          .filter((row) => row.gameId === values?.[0])
+          .map((row) => ({ game_id: row.gameId, seat: row.seat, token_hash: row.tokenHash })),
+      };
+    }
     if (/select\s+game_id,\s*seat,\s*token_hash\s+from\s+online_game_credentials/i.test(text)) {
       return {
         rows: this.credentialRows.map((row) => ({
+          game_id: row.gameId,
+          seat: row.seat,
+          token_hash: row.tokenHash,
+        })),
+      };
+    }
+    if (/select\s+game_id,\s*seat,\s*token_hash\s+from\s+online_game_additional_credentials/i.test(text)) {
+      return {
+        rows: this.additionalCredentialRows.map((row) => ({
           game_id: row.gameId,
           seat: row.seat,
           token_hash: row.tokenHash,
@@ -934,6 +972,37 @@ describe("PostgresOnlineGameStore", () => {
       { gameId: "game_credentials", seat: "w", tokenHash: credentials.whiteCredential },
       { gameId: "game_credentials", seat: "b", tokenHash: credentials.blackCredential },
     ]);
+  });
+
+  it("adds account rejoin seat credential aliases without replacing existing credentials", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const event = createGameCreatedEvent("game_rejoin_credentials");
+    const credentials = createGameCredentials();
+
+    await store.appendGameCreated(event, credentials);
+    const record = await store.appendGameSeatCredential(
+      event.gameId,
+      "w",
+      hashOnlineToken("fresh-white-token")
+    );
+
+    expect(client.credentialRows).toEqual([
+      { gameId: event.gameId, seat: "w", tokenHash: credentials.whiteCredential },
+      { gameId: event.gameId, seat: "b", tokenHash: credentials.blackCredential },
+    ]);
+    expect(client.additionalCredentialRows).toEqual([
+      { gameId: event.gameId, seat: "w", tokenHash: hashOnlineToken("fresh-white-token") },
+    ]);
+    expect(record.additionalWhiteCredentials).toEqual([hashOnlineToken("fresh-white-token")]);
+
+    const restored = OnlineGameRoom.create({
+      ...record,
+      verifyToken: (token, credential) => hashOnlineToken(token) === credential,
+    });
+    expect(restored.authenticate("w-token")).toBe("w");
+    expect(restored.authenticate("fresh-white-token")).toBe("w");
+    expect(restored.authenticate("b-token")).toBe("b");
   });
 
   it("rejects raw credential strings before inserting created games", async () => {

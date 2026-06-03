@@ -14,6 +14,7 @@ import {
 import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
+import { OnlineGameSeatCredentialTerminalError } from "../OnlineGameStore";
 import {
   createChallengeAcceptedEvent,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -38,7 +39,7 @@ import {
   type OpenSeekSummary,
 } from "../../seeks";
 import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
-import { verifyOnlineToken } from "../onlineTokenCredentials";
+import { hashOnlineToken, verifyOnlineToken } from "../onlineTokenCredentials";
 
 const servers: Array<{ close: (callback: () => void) => void }> = [];
 
@@ -402,6 +403,218 @@ describe("createOnlineHttpServer", () => {
 
     const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games`);
     expect(missingAuthResponse.status).toBe(401);
+  });
+
+  it("mints a fresh player token when a registered participant rejoins an active account game", async () => {
+    const gameId = "game_account_rejoin_route";
+    const record = {
+      gameId,
+      whiteCredential: hashOnlineToken("old-w-token"),
+      blackCredential: hashOnlineToken("old-b-token"),
+      setup: createClockedSetup(),
+      acceptedActions: [],
+    };
+    const service = OnlineGameService.fromRecords([record], {
+      tokenFactory: (seat) => `fresh-${seat}-token`,
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+    });
+    let registeredIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const appendGameSeatCredential = vi.fn((targetGameId: string, seat: "w" | "b", credential: string) => {
+      const updated = service.addSeatCredential(targetGameId, seat, credential);
+      if (!updated) throw new Error("missing room");
+      return updated;
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      appendGameSeatCredential,
+      loadGameSummary: (targetGameId) => {
+        if (targetGameId !== gameId || !registeredIdentity) return null;
+        return {
+          ...summaryForGame(gameId, "private"),
+          participants: [
+            { seat: "w", role: "white", identity: registeredIdentity },
+            { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+          ],
+        };
+      },
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    registeredIdentity = account.account.identity;
+
+    const rejoinResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/rejoin`,
+      {
+        method: "POST",
+        headers: bearer(account.session.token),
+      }
+    );
+    const rejoined = await rejoinResponse.json();
+
+    expect(rejoinResponse.status).toBe(200);
+    expect(rejoined).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      gameInvite: {
+        gameId,
+        seat: "w",
+        token: "fresh-w-token",
+        url: "https://castles.example/play?onlineGame=game_account_rejoin_route&seat=w",
+      },
+    });
+    expect(rejoined.gameInvite.url).not.toContain("token=");
+    expect(appendGameSeatCredential).toHaveBeenCalledWith(
+      gameId,
+      "w",
+      hashOnlineToken("fresh-w-token")
+    );
+    expect(service.getRoomForToken(gameId, "old-w-token")).not.toBeNull();
+    expect(service.getRoomForToken(gameId, "fresh-w-token")).not.toBeNull();
+
+    const joinResponse = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}`, {
+      headers: bearer("fresh-w-token"),
+    });
+    const joined = await joinResponse.json();
+
+    expect(joinResponse.status).toBe(200);
+    expect(joined).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      color: "w",
+      snapshot: { gameId },
+    });
+  });
+
+  it("does not rejoin an account game for a registered nonparticipant", async () => {
+    const gameId = "game_account_rejoin_nonparticipant";
+    const service = OnlineGameService.fromRecords(
+      [
+        {
+          gameId,
+          whiteCredential: hashOnlineToken("old-w-token"),
+          blackCredential: hashOnlineToken("old-b-token"),
+          setup: createClockedSetup(),
+          acceptedActions: [],
+        },
+      ],
+      {
+        tokenFactory: (seat) => `fresh-${seat}-token`,
+        credentialFactory: hashOnlineToken,
+        verifyToken: verifyOnlineToken,
+      }
+    );
+    const appendGameSeatCredential = vi.fn();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      appendGameSeatCredential,
+      loadGameSummary: (targetGameId) => {
+        if (targetGameId !== gameId) return null;
+        return {
+          ...summaryForGame(gameId, "private"),
+          participants: [
+            { seat: "w", role: "white", identity: { kind: "registered", id: "other_account", displayName: "Other" } },
+            { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+          ],
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    const rejoinResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/rejoin`,
+      {
+        method: "POST",
+        headers: bearer(account.session.token),
+      }
+    );
+    const body = await rejoinResponse.json();
+
+    expect(rejoinResponse.status).toBe(404);
+    expect(body.error).toMatchObject({ code: "not_found" });
+    expect(appendGameSeatCredential).not.toHaveBeenCalled();
+    expect(service.getRoomForToken(gameId, "fresh-w-token")).toBeNull();
+  });
+
+  it("reports game_over when account rejoin persistence finds a terminal game race", async () => {
+    const gameId = "game_account_rejoin_terminal_race";
+    const service = OnlineGameService.fromRecords(
+      [
+        {
+          gameId,
+          whiteCredential: hashOnlineToken("old-w-token"),
+          blackCredential: hashOnlineToken("old-b-token"),
+          setup: createClockedSetup(),
+          acceptedActions: [],
+        },
+      ],
+      {
+        tokenFactory: (seat) => `fresh-${seat}-token`,
+        credentialFactory: hashOnlineToken,
+        verifyToken: verifyOnlineToken,
+      }
+    );
+    let registeredIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const appendGameSeatCredential = vi.fn(() => {
+      throw new OnlineGameSeatCredentialTerminalError(gameId);
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      appendGameSeatCredential,
+      loadGameSummary: (targetGameId) => {
+        if (targetGameId !== gameId || !registeredIdentity) return null;
+        return {
+          ...summaryForGame(gameId, "private"),
+          participants: [
+            { seat: "w", role: "white", identity: registeredIdentity },
+            { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+          ],
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    registeredIdentity = account.account.identity;
+    const rejoinResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/rejoin`,
+      {
+        method: "POST",
+        headers: bearer(account.session.token),
+      }
+    );
+    const body = await rejoinResponse.json();
+
+    expect(rejoinResponse.status).toBe(409);
+    expect(body.error).toMatchObject({ code: "game_over" });
+    expect(appendGameSeatCredential).toHaveBeenCalledWith(
+      gameId,
+      "w",
+      hashOnlineToken("fresh-w-token")
+    );
+    expect(service.getRoomForToken(gameId, "fresh-w-token")).toBeNull();
   });
 
   it("creates and lists token-free public open seeks", async () => {

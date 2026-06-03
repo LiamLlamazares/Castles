@@ -32,6 +32,7 @@ import {
   rememberOnlineAccountSession,
   rememberOnlineOpponentInviteUrl,
   rememberOnlineJoinParams,
+  rejoinOnlineAccountGame,
   removeOnlineChallengeTokenFromUrl,
   resolveOnlineChallengeParams,
   resolveOnlineChallengeShareUrl,
@@ -667,6 +668,18 @@ describe("online client helpers", () => {
             }),
           ],
         }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          gameInvite: {
+            gameId: "game_account_rejoin",
+            seat: "w",
+            token: "fresh-seat-token",
+            url: "https://castles.example/?onlineGame=game_account_rejoin&seat=w",
+          },
+        }),
       });
 
     await expect(createOnlineAccount("Liam", fetchImpl as any)).resolves.toMatchObject({
@@ -685,6 +698,20 @@ describe("online client helpers", () => {
     ).resolves.toMatchObject({
       games: [{ visibility: "private" }],
     });
+    await expect(
+      rejoinOnlineAccountGame(
+        { token: "account-token" },
+        "game_account_rejoin",
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      gameInvite: {
+        gameId: "game_account_rejoin",
+        seat: "w",
+        token: "fresh-seat-token",
+        url: "https://castles.example/?onlineGame=game_account_rejoin&seat=w",
+      },
+    });
 
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
@@ -701,6 +728,11 @@ describe("online client helpers", () => {
       3,
       "/api/online/account/games?state=archived&limit=10&cursor=cursor_123",
       { headers: { authorization: "Bearer account-token" } }
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      4,
+      "/api/online/account/games/game_account_rejoin/rejoin",
+      { method: "POST", headers: { authorization: "Bearer account-token" } }
     );
   });
 

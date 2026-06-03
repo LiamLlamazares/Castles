@@ -741,10 +741,22 @@ Tests/review/deploy gates:
 - Review: account/session review focused on preserving the boundary between account sessions, player seat tokens, spectator access, and private-game visibility.
 - Deploy: deploy only after active and completed account game lists still load from PostgreSQL-backed account history.
 
+## Phase 7E: Account-Authorized Active Game Rejoin
+
+Goal: let signed-in players recover their own active account games across browser sessions without turning account bearer tokens into move credentials.
+
+Status: implemented locally on 2026-06-03. `POST /api/online/account/games/:gameId/rejoin` resolves the account from the bearer session, loads the canonical game summary, verifies that the registered account is one of the two active participants, adjudicates pending timeout state, and mints a fresh seat token for that account's own side. The raw seat token is returned only in the response body, while the URL remains token-free. PostgreSQL stores the new seat credential as an additive credential hash in `online_game_additional_credentials`, so the original invite token remains valid and rejoin credentials survive service reloads. The browser stores the fresh seat token in the same per-game session-storage slot used by normal joins, then enters the private or public game as a player.
+
+Tests/review/deploy gates:
+
+- Tests: account rejoin route success/nonparticipant coverage, Postgres additional-credential reload coverage, client helper tests, Online browser rejoin button coverage, App integration coverage, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit.
+- Review: account/session security review focused on account bearer vs player seat-token separation, participant authorization, terminal-game rejection, private-game recovery, credential hash persistence, and accidental token leakage through URLs or summaries.
+- Deploy: deploy only after the route works against PostgreSQL-backed summaries and added seat credential hashes are available after a room reload. This is still a single-node deployment feature; multi-instance deployments need sticky routing, shared room refresh, or pub/sub before account-rejoin tokens are guaranteed to work on every app instance.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
-- Expose account-backed personal game history in the UI for registered players, including finished friend-link games and public games, while keeping local storage as the anonymous fallback.
+- Expose richer account-backed personal game history in the UI for registered players, including finished friend-link games and public games, while keeping local storage as the anonymous fallback.
 - Implement rating events/read models after result contracts are stable.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.
@@ -774,9 +786,10 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Verify Phase 7D with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
-2. Design true cross-device account-seat recovery separately. Current storage supports one credential hash per seat, so robust cross-device recovery needs either multi-token seat credentials or explicit account-authorized move submission, plus revocation semantics.
-3. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-4. Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer challenge/open-seek flows for account-owned games.
-5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-6. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.
+1. Verify Phase 7E with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
+2. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+3. Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer challenge/open-seek flows for account-owned games.
+4. Add account session management before public launch: session revocation, sign-out-all, account deletion, and privacy copy.
+5. Add a rejoin-credential pruning or revocation policy so repeated cross-device recovery does not accumulate unlimited valid seat-token aliases.
+6. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+7. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

@@ -110,6 +110,10 @@ export interface OnlineChallengeResponse {
   gameInvite?: OnlineChallengeGameInvite;
 }
 
+export interface OnlineAccountGameRejoinResponse {
+  gameInvite: OnlineChallengeGameInvite;
+}
+
 export interface CreatedOnlineChallenge {
   challengeId: string;
   summary: OnlineChallengeSummary;
@@ -1262,6 +1266,40 @@ export async function fetchOnlineAccountGames(
     throw new Error(`Online account game history response was malformed: ${validation.error.message}`);
   }
   return validation.value;
+}
+
+export async function rejoinOnlineAccountGame(
+  account: OnlineAccountSessionParams,
+  gameId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountGameRejoinResponse> {
+  const response = await fetchImpl(
+    `/api/online/account/games/${encodeURIComponent(gameId)}/rejoin`,
+    {
+      method: "POST",
+      headers: accountAuthorizationHeader(account),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Could not rejoin online account game (${response.status})`);
+  }
+
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online account game rejoin response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Online account game rejoin response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  return {
+    gameInvite: validateTokenlessGameInvite(
+      (body as { gameInvite?: unknown }).gameInvite,
+      "Online account game rejoin"
+    ),
+  };
 }
 
 export async function fetchOnlineGameSummaries(

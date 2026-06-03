@@ -29,6 +29,12 @@ export type AppendableOnlineGameEvent = Exclude<
   { type: "game_created" } | { type: "visibility_changed" }
 >;
 
+export class OnlineGameSeatCredentialTerminalError extends Error {
+  constructor(gameId: string) {
+    super(`Online game ${gameId} is already terminal.`);
+  }
+}
+
 export interface OnlineGameStoreLoadOptions {
   onEventError?: (line: number, error: unknown) => void;
 }
@@ -51,6 +57,11 @@ export interface OnlineGameStore {
     event: Extract<OnlineGameEvent, { type: "game_created" }>,
     credentials: OnlineGameCredentials
   ): Promise<void>;
+  appendGameSeatCredential(
+    gameId: string,
+    seat: "w" | "b",
+    credential: string
+  ): Promise<OnlineGameRoomRecord>;
   appendEvent(event: AppendableOnlineGameEvent): Promise<void>;
   appendGameVisibilityChanged(
     event: Extract<OnlineGameEvent, { type: "visibility_changed" }>
