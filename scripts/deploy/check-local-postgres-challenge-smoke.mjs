@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -8,6 +7,7 @@ import {
   assertProtocolVersionedBody,
   readJson,
 } from "./online-smoke-lib.mjs";
+import { checkLocalPostgresPrereqs } from "./local-postgres-prereqs.mjs";
 
 const require = createRequire(import.meta.url);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -38,40 +38,10 @@ const credentialsModulePath = path.join(
   "onlineTokenCredentials.js"
 );
 
-function isLocalDatabaseHost(databaseUrlText) {
-  let databaseUrl;
-  try {
-    databaseUrl = new URL(databaseUrlText);
-  } catch {
-    throw new Error("DATABASE_URL must be a valid PostgreSQL connection URL.");
-  }
-
-  const hostname = databaseUrl.hostname.toLowerCase();
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
-}
-
-function requireLocalInputs() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL is required. Example: postgresql://castles_local:castles_local_dev@localhost:5432/castles_local"
-    );
-  }
-  if (
-    process.env.CASTLES_ALLOW_NONLOCAL_SMOKE_DB !== "1" &&
-    !isLocalDatabaseHost(process.env.DATABASE_URL)
-  ) {
-    throw new Error(
-      "Refusing to run local challenge smoke against a non-local DATABASE_URL host. Use a localhost database, or set CASTLES_ALLOW_NONLOCAL_SMOKE_DB=1 only for a disposable non-production database."
-    );
-  }
-  if (
-    !existsSync(storeModulePath) ||
-    !existsSync(httpModulePath) ||
-    !existsSync(serviceModulePath) ||
-    !existsSync(credentialsModulePath)
-  ) {
-    throw new Error("Built server modules were not found. Run npm run server:build first.");
-  }
+async function requireLocalInputs() {
+  await checkLocalPostgresPrereqs({
+    repoRoot,
+  });
 }
 
 function createSmokeSetup() {
@@ -107,9 +77,9 @@ function closeServer(server) {
 
 function fragmentChallengeToken(urlText) {
   const url = new URL(urlText);
-  assert(!url.searchParams.has("token"), `Challenge URL leaked a query token: ${urlText}`);
+  assert(!url.searchParams.has("token"), "Challenge URL leaked a query token");
   const token = new URLSearchParams(url.hash.slice(1)).get("challengeToken");
-  assert(token, `Challenge URL did not include a fragment challenge token: ${urlText}`);
+  assert(token, "Challenge URL did not include a fragment challenge token");
   return token;
 }
 
@@ -118,7 +88,7 @@ function bearer(token) {
 }
 
 async function main() {
-  requireLocalInputs();
+  await requireLocalInputs();
   const { PostgresOnlineGameStore } = require(storeModulePath);
   const { createOnlineHttpServer } = require(httpModulePath);
   const { OnlineGameService } = require(serviceModulePath);

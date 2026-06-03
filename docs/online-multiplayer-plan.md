@@ -655,6 +655,23 @@ Remaining work:
 - If live rows later need ticking clocks, add a component-level refresh/ticker that is explicitly bounded and tested for background-tab behavior.
 - Keep multi-instance clock freshness independent from spectator presence; `serverNow` is per HTTP response and does not need shared pub/sub.
 
+## Phase 6AH: Local PostgreSQL Smoke Preflight
+
+Goal: make local deployment rehearsal fail early and safely before any smoke script mutates a database.
+
+Status: implemented on 2026-06-03. A shared local PostgreSQL prerequisite helper now backs a new `npm run online:smoke:local:preflight` command and the existing restart, concurrency, and challenge smoke entrypoints. The preflight checks built client/server artifacts, PostgreSQL URL shape, local-host safety, `psql` availability through `PATH`, `PSQL_PATH`, or `PGCLIENT_BIN`, database readiness, and the default local smoke identity `castles_local`/`castles_local`. A disposable override remains available for explicitly non-production custom databases, but the default path now rejects localhost tunnels or copied production-style credentials before any smoke game is created. The readiness check uses `PG*` environment variables rather than placing the full connection URL in process arguments.
+
+Verification:
+
+- Focused prerequisite tests cover local/non-local URL handling, password-redacted output, `PGCLIENT_BIN` directory expansion, `psql` readiness parsing, identity rejection, artifact checks, and successful preflight.
+- Local PostgreSQL preflight, restart persistence smoke, concurrency smoke, and challenge HTTP smoke passed against the clean `castles_local` rehearsal database.
+- Full `npm test`, client build, server build, and diff hygiene passed after reviewer findings were fixed.
+
+Remaining work:
+
+- Keep live deployment smoke pinned to the expected commit after each server push.
+- Revisit the runbook when migrations, account tables, or managed release automation are introduced.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -695,4 +712,4 @@ Tests/review/deploy gates:
 1. Improve public directory scanability after the summary model grows: clock/result filters, bounded visible-text search, replay-specific archive row metadata, and response-time live clocks are now covered, while account-backed player metadata and archive-detail pages still need designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.
+4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

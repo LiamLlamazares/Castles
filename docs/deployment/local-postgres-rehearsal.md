@@ -59,6 +59,15 @@ $env:PGPASSWORD="castles_local_dev"
 Remove-Item Env:\PGPASSWORD
 ```
 
+If an old local rehearsal database contains incompatible pre-release games, reset only the local app tables instead of adding legacy compatibility:
+
+```powershell
+& $psql "postgresql://castles_local:castles_local_dev@localhost:5432/castles_local" -Atc "select current_database(), current_user, inet_server_addr(), inet_server_port();"
+& $psql "postgresql://castles_local:castles_local_dev@localhost:5432/castles_local" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE online_game_events, online_game_credentials, online_game_summaries, online_game_locks, online_challenge_events, online_challenge_credentials, online_challenge_summaries, online_challenge_locks, online_seek_events, online_seek_credentials, online_seek_summaries, online_seek_locks RESTART IDENTITY;"
+```
+
+Only run that reset after the first command shows `castles_local` on localhost. Do not run it against the live database.
+
 ## 3. Run the Restart Smoke Check
 
 ```powershell
@@ -72,26 +81,32 @@ $env:GIT_COMMIT="0123456789abcdef0123456789abcdef01234567"
 npm run build
 npm run server:build
 npm run server:check-config
+npm run online:smoke:local:preflight
 $env:NODE_ENV="test"
 npm run online:smoke:local
 npm run online:smoke:local:concurrency
+npm run online:smoke:local:challenges
 ```
 
-The smoke script refuses non-local database hosts by default. Do not point `DATABASE_URL` at the live server database. If you intentionally use a disposable remote test database, set:
+The smoke scripts refuse non-local database hosts by default, and the preflight verifies that `DATABASE_URL` connects to database `castles_local` as user `castles_local`. This protects against accidentally running destructive local smoke games through a localhost SSH tunnel to a live database. Do not point `DATABASE_URL` at the live server database. If you intentionally use a disposable remote or custom local test database, set:
 
 ```powershell
-$env:CASTLES_ALLOW_NONLOCAL_SMOKE_DB="1"
+$env:CASTLES_ALLOW_DISPOSABLE_SMOKE_DB="1"
 ```
+
+The older `CASTLES_ALLOW_NONLOCAL_SMOKE_DB=1` override still works, but prefer `CASTLES_ALLOW_DISPOSABLE_SMOKE_DB=1` because it describes the safety requirement more accurately.
 
 Expected result:
 
 ```text
 Local restart smoke passed on http://127.0.0.1:<port> using game <game-id>
 Local PostgreSQL concurrency smoke passed using game <game-id>
+Local PostgreSQL challenge HTTP smoke passed using challenge <challenge-id> and game <game-id>
 ```
 
 What this checks:
 
+- the preflight confirms the built client/server artifacts exist, `DATABASE_URL` is local or explicitly marked disposable, `psql` is installed or configured with `PSQL_PATH` or `PGCLIENT_BIN`, and the database identity is safe for local smoke;
 - starts the built Node server on a private local port,
 - confirms `/api/health` reports PostgreSQL,
 - creates an online game,

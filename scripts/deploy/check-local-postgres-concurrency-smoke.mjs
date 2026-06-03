@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { assert, makeSmokeSetup } from "./online-smoke-lib.mjs";
+import { checkLocalPostgresPrereqs } from "./local-postgres-prereqs.mjs";
 
 const require = createRequire(import.meta.url);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -33,35 +33,10 @@ const credentialsModulePath = path.join(
   "onlineTokenCredentials.js"
 );
 
-function isLocalDatabaseHost(databaseUrlText) {
-  let databaseUrl;
-  try {
-    databaseUrl = new URL(databaseUrlText);
-  } catch {
-    throw new Error("DATABASE_URL must be a valid PostgreSQL connection URL.");
-  }
-
-  const hostname = databaseUrl.hostname.toLowerCase();
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
-}
-
-function requireLocalInputs() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL is required. Example: postgresql://castles_local:castles_local_dev@localhost:5432/castles_local"
-    );
-  }
-  if (
-    process.env.CASTLES_ALLOW_NONLOCAL_SMOKE_DB !== "1" &&
-    !isLocalDatabaseHost(process.env.DATABASE_URL)
-  ) {
-    throw new Error(
-      "Refusing to run local concurrency smoke against a non-local DATABASE_URL host. Use a localhost database, or set CASTLES_ALLOW_NONLOCAL_SMOKE_DB=1 only for a disposable non-production database."
-    );
-  }
-  if (!existsSync(storeModulePath) || !existsSync(eventsModulePath) || !existsSync(credentialsModulePath)) {
-    throw new Error("Built server modules were not found. Run npm run server:build first.");
-  }
+async function requireLocalInputs() {
+  await checkLocalPostgresPrereqs({
+    repoRoot,
+  });
 }
 
 function createGameId() {
@@ -71,7 +46,7 @@ function createGameId() {
 }
 
 async function main() {
-  requireLocalInputs();
+  await requireLocalInputs();
   const { PostgresOnlineGameStore } = require(storeModulePath);
   const { createOnlineGameCreatedEvent } = require(eventsModulePath);
   const { hashOnlineToken } = require(credentialsModulePath);

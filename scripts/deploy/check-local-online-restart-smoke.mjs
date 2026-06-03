@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { checkLocalPostgresPrereqs } from "./local-postgres-prereqs.mjs";
 import {
   assert,
   assertDefaultOnlineClock,
@@ -33,35 +33,10 @@ const localShutdownToken = `local-smoke-${Date.now().toString(36)}-${Math.random
 const fetchWithTimeout = createFetchWithTimeout(requestTimeoutMs);
 const { waitForSocketOpen, nextSocketMessage } = createWebSocketWaiters(socketTimeoutMs);
 
-function isLocalDatabaseHost(databaseUrlText) {
-  let databaseUrl;
-  try {
-    databaseUrl = new URL(databaseUrlText);
-  } catch {
-    throw new Error("DATABASE_URL must be a valid PostgreSQL connection URL.");
-  }
-
-  const hostname = databaseUrl.hostname.toLowerCase();
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
-}
-
-function requireLocalInputs() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL is required. Example: postgresql://castles_local:castles_local_dev@localhost:5432/castles_local"
-    );
-  }
-  if (
-    process.env.CASTLES_ALLOW_NONLOCAL_SMOKE_DB !== "1" &&
-    !isLocalDatabaseHost(process.env.DATABASE_URL)
-  ) {
-    throw new Error(
-      "Refusing to run local smoke against a non-local DATABASE_URL host. Use a localhost database, or set CASTLES_ALLOW_NONLOCAL_SMOKE_DB=1 only for a disposable non-production database."
-    );
-  }
-  if (!existsSync(serverEntry)) {
-    throw new Error("Built server entry was not found. Run npm run server:build first.");
-  }
+async function requireLocalInputs() {
+  await checkLocalPostgresPrereqs({
+    repoRoot,
+  });
 }
 
 function findFreePort() {
@@ -285,7 +260,7 @@ async function withServer(port, callback) {
 }
 
 async function main() {
-  requireLocalInputs();
+  await requireLocalInputs();
   const port = await findFreePort();
 
   const played = await withServer(port, (baseUrl) => playOnePass(baseUrl));
