@@ -806,6 +806,11 @@ function normalizeOpenSeekSeat(value: unknown): "w" | "b" | "random" | null {
   return value === "w" || value === "b" || value === "random" ? value : null;
 }
 
+function normalizeDirectGameCreatorSeat(value: unknown): "w" | "b" | null {
+  if (value === undefined) return "w";
+  return value === "w" || value === "b" ? value : null;
+}
+
 function normalizeOnlineSetupForCreation(setup: OnlineGameSetupDTO): OnlineGameSetupDTO {
   return setup.timeControl
     ? setup
@@ -976,7 +981,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     | { ok: true; identity: OnlineIdentity | null }
     | { ok: false; status: number; error: OnlineReject; reason: string }
   > => {
-    if (!getBearerToken(req.headers.authorization)) {
+    if (req.headers.authorization === undefined) {
       return { ok: true, identity: null };
     }
     const resolved = await resolveAccountBearer(req);
@@ -3187,12 +3192,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
-    const normalizedSetup = setup.value.timeControl
-      ? setup.value
-      : {
-          ...setup.value,
-          timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL },
-        };
+    const creatorSeat = normalizeDirectGameCreatorSeat(req.body?.creatorSeat);
+    if (!creatorSeat) {
+      log({ event: "online.game.create", status: "rejected", reason: "bad_creator_seat" });
+      res.status(400).json({
+        error: { code: "bad_request", message: "Online game creatorSeat must be w or b." },
+      });
+      return;
+    }
+
+    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    if (!accountIdentity.ok) {
+      log({ event: "online.game.create", status: "rejected", reason: accountIdentity.reason });
+      res.status(accountIdentity.status).json({ error: accountIdentity.error });
+      return;
+    }
+
+    const normalizedSetup = normalizeOnlineSetupForCreation(setup.value);
 
     const created = service.createGame(normalizedSetup, {
       publicBaseUrl: options.publicBaseUrl,
@@ -3209,8 +3225,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         gameId: record.gameId,
         setup: record.setup,
         clock: record.clock,
-        whiteIdentity: { kind: "anonymous", id: `anon_${record.gameId}_w` },
-        blackIdentity: { kind: "anonymous", id: `anon_${record.gameId}_b` },
+        whiteIdentity:
+          accountIdentity.identity && creatorSeat === "w"
+            ? accountIdentity.identity
+            : { kind: "anonymous", id: `anon_${record.gameId}_w` },
+        blackIdentity:
+          accountIdentity.identity && creatorSeat === "b"
+            ? accountIdentity.identity
+            : { kind: "anonymous", id: `anon_${record.gameId}_b` },
       });
       const credentials: OnlineGameCredentials = {
         whiteCredential: record.whiteCredential,

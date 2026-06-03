@@ -3,6 +3,7 @@ import {
   buildOnlineWebSocketUrl,
   buildSpectatorUrl,
   createOnlineAccount,
+  createOnlineGame,
   acceptOnlineChallenge,
   cancelOnlineChallenge,
   acceptOpenSeek,
@@ -782,6 +783,20 @@ describe("online client helpers", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
+          gameId: "game_direct_account",
+          white: {
+            token: "white-token",
+            url: "https://castles.example/?onlineGame=game_direct_account&seat=w&token=white-token",
+          },
+          black: {
+            token: "black-token",
+            url: "https://castles.example/?onlineGame=game_direct_account&seat=b&token=black-token",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
           challengeId: "challenge_123",
           summary: challengeSummary,
           challenger: { url: "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenger" },
@@ -823,11 +838,24 @@ describe("online client helpers", () => {
         }),
       });
 
+    await createOnlineGame(setup, { account, creatorSeat: "b" }, fetchImpl as any);
     await createOnlineChallenge(setup, { challengerSeat: "w", visibility: "unlisted", account }, fetchImpl as any);
     await createOpenSeek(setup, { creatorSeat: "random", creatorSessionId: "anon_creator", account }, fetchImpl as any);
     await acceptOpenSeek("seek_123", { acceptorSessionId: "anon_acceptor", account }, fetchImpl as any);
     await startQuickMatch(setup, { sessionId: "anon_match", account }, fetchImpl as any);
 
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "/api/online/games",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer account-token",
+        },
+        body: JSON.stringify({ setup, creatorSeat: "b" }),
+      })
+    );
     for (const [, request] of fetchImpl.mock.calls) {
       expect(request.headers).toMatchObject({ authorization: "Bearer account-token" });
       if ("body" in request) {

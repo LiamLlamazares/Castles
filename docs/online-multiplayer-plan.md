@@ -753,6 +753,18 @@ Tests/review/deploy gates:
 - Review: account/session security review focused on account bearer vs player seat-token separation, participant authorization, terminal-game rejection, private-game recovery, credential hash persistence, and accidental token leakage through URLs or summaries.
 - Deploy: deploy only after the route works against PostgreSQL-backed summaries and added seat credential hashes are available after a room reload. This is still a single-node deployment feature; multi-instance deployments need sticky routing, shared room refresh, or pub/sub before account-rejoin tokens are guaranteed to work on every app instance.
 
+## Phase 7F: Account-Bound Direct Game Creation
+
+Goal: make the low-level direct online-game creation path consistent with challenge, lobby, and Quick Match account identity rules, so signed-in private/friend-link games can enter account history and account rejoin.
+
+Status: implemented locally on 2026-06-03. `POST /api/online/games` now accepts the existing account bearer session and an optional `creatorSeat` of `w` or `b`, defaulting to white. When a valid account bearer is present, the server binds that registered account identity to the selected creator seat in the durable `game_created` event; the other seat remains anonymous. The route still accepts anonymous direct creation when no account bearer is provided, and invalid account bearers fail closed instead of being ignored.
+
+Tests/review/deploy gates:
+
+- Tests: direct-create route account binding coverage, client helper bearer/body coverage, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit if visible direct-create UI is changed.
+- Review: account/session review focused on not accepting client-provided identity, binding exactly one seat, preserving anonymous fallback, and keeping raw account tokens out of event bodies.
+- Deploy: deploy only after account history still lists signed-in direct-created games through PostgreSQL-backed summaries.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
@@ -786,10 +798,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Verify Phase 7E with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
-2. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-3. Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer challenge/open-seek flows for account-owned games.
-4. Add account session management before public launch: session revocation, sign-out-all, account deletion, and privacy copy.
-5. Add a rejoin-credential pruning or revocation policy so repeated cross-device recovery does not accumulate unlimited valid seat-token aliases.
-6. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-7. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.
+1. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+2. Add account session management before public launch: session revocation, sign-out-all, account deletion, and privacy copy.
+3. Add a rejoin-credential pruning or revocation policy so repeated cross-device recovery does not accumulate unlimited valid seat-token aliases.
+4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+5. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

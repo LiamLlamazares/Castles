@@ -8,7 +8,7 @@ This document records the current contract decisions for online multiplayer. The
 
 ### Disposable Beta Events
 
-`OnlineGameEvent` schema v2 is a private-beta event stream. It is valid for the current single-node beta, but it is not a permanent public contract yet. Creation events are token-free: `game_created` stores only `gameId`, setup, and optional clock state. Version 2 requires `clientActionId` on every `action_accepted` event; because there are no production users, old beta event logs can be reset instead of migrated.
+`OnlineGameEvent` schema v2 is a private-beta event stream. It is valid for the current single-node beta, but it is not a permanent public contract yet. Creation events are token-free: `game_created` stores `gameId`, setup, optional clock state, and optional public player identities. Version 2 requires `clientActionId` on every `action_accepted` event; because there are no production users, old beta event logs can be reset instead of migrated.
 
 Player credentials live outside the event stream in private server-side credential records keyed by `gameId + seat`. Those records store token hashes, not raw invite tokens. Because the app has no production users, incompatible beta data can be reset rather than migrated.
 
@@ -136,7 +136,7 @@ Online summaries support three identity kinds:
 - `session`: a public, non-secret browser/session surrogate that can later back challenges without an account.
 - `registered`: an account identity with optional display name.
 
-Game creation events may now carry `whiteIdentity` and `blackIdentity`. Accepted challenges and accepted open lobby listings bind those identities into the durable `game_created` event before the game summary is projected, so a rebuild preserves the same participants. Direct-created games currently use explicit generated anonymous identities for both seats.
+Game creation events may carry `whiteIdentity` and `blackIdentity`. Accepted challenges and accepted open lobby listings bind those identities into the durable `game_created` event before the game summary is projected, so a rebuild preserves the same participants. Direct-created games use explicit generated anonymous identities for both seats when signed out; when a valid account bearer is present, the server binds that registered account identity to the selected creator seat and generates an anonymous identity for the other seat.
 
 Identity `id` values in public summaries are never authentication secrets. Do not put cookies, bearer tokens, raw private invite tokens, or server auth session ids in `OnlineIdentity.id`. Use a separate private credential table for authentication material.
 
@@ -161,7 +161,7 @@ Game seat credentials can have more than one valid hash per seat. The primary `o
 
 The browser may persist the returned account session token in local storage so a display-name account survives reloads. This local account session is an account bearer credential only: it must not be copied into URLs, public summaries, move history, game events, challenge events, open-seek summaries, local recent replay records, logs, or exported game files. Game seat tokens, challenge tokens, and open-seek creator tokens continue to use their existing credential-specific storage flows and must not be substituted for the account bearer token.
 
-When an account bearer is present on safe creation paths, the server uses the registered account identity instead of trusting a browser-supplied anonymous/session id. This currently applies to open seek creation, open seek acceptance, Quick Match, and challenge creation. Direct low-level game creation remains anonymous until a creator-seat contract is designed.
+When an account bearer is present on safe creation paths, the server uses the registered account identity instead of trusting a browser-supplied anonymous/session id. This currently applies to direct game creation, open seek creation, open seek acceptance, Quick Match, and challenge creation. Direct game creation accepts an optional `creatorSeat` of `w` or `b`, defaulting to `w`; the authenticated account is bound only to that seat, while the other seat remains anonymous until a future join-identity binding exists.
 
 ## Challenge Lifecycle Contract
 

@@ -350,6 +350,138 @@ describe("createOnlineHttpServer", () => {
     expect(seek.summary.creatorIdentity).toEqual(account.account.identity);
   });
 
+  it("keeps direct-created games anonymous without account auth and ignores client identity fields", async () => {
+    const events: OnlineGameEvent[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      onGameCreated: (event) => {
+        events.push(event);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        whiteIdentity: { kind: "registered", id: "spoof_white", displayName: "Spoof White" },
+        blackIdentity: { kind: "registered", id: "spoof_black", displayName: "Spoof Black" },
+      }),
+    });
+    const created = await createResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(events).toHaveLength(1);
+    expect(JSON.stringify(events[0])).not.toContain("spoof");
+    expect(events[0]).toMatchObject({
+      type: "game_created",
+      gameId: created.gameId,
+      whiteIdentity: { kind: "anonymous", id: `anon_${created.gameId}_w` },
+      blackIdentity: { kind: "anonymous", id: `anon_${created.gameId}_b` },
+    });
+  });
+
+  it("uses server-resolved account identity for direct-created game creator seats", async () => {
+    const events: OnlineGameEvent[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      onGameCreated: (event) => {
+        events.push(event);
+      },
+      loadGameSummaries: () => projectOnlineGameSummaries(events),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    const defaultSeatResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const defaultSeatGame = await defaultSeatResponse.json();
+    const blackSeatResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ setup: createSetup(), creatorSeat: "b" }),
+    });
+    const blackSeatGame = await blackSeatResponse.json();
+
+    expect(defaultSeatResponse.status).toBe(201);
+    expect(blackSeatResponse.status).toBe(201);
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      type: "game_created",
+      gameId: defaultSeatGame.gameId,
+      whiteIdentity: account.account.identity,
+      blackIdentity: { kind: "anonymous", id: `anon_${defaultSeatGame.gameId}_b` },
+    });
+    expect(events[1]).toMatchObject({
+      type: "game_created",
+      gameId: blackSeatGame.gameId,
+      blackIdentity: account.account.identity,
+      whiteIdentity: { kind: "anonymous", id: `anon_${blackSeatGame.gameId}_w` },
+    });
+    expect(JSON.stringify(events)).not.toContain(account.session.token);
+
+    const historyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games?state=all`, {
+      headers: bearer(account.session.token),
+    });
+    const history = await historyResponse.json();
+
+    expect(historyResponse.status).toBe(200);
+    expect(history.games).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gameId: defaultSeatGame.gameId,
+          participants: expect.arrayContaining([
+            { seat: "w", role: "white", identity: account.account.identity },
+          ]),
+        }),
+        expect.objectContaining({
+          gameId: blackSeatGame.gameId,
+          participants: expect.arrayContaining([
+            { seat: "b", role: "black", identity: account.account.identity },
+          ]),
+        }),
+      ])
+    );
+  });
+
+  it("fails closed for malformed or invalid account bearer on direct-created games", async () => {
+    const events: OnlineGameEvent[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      onGameCreated: (event) => {
+        events.push(event);
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    for (const authorization of ["Bearer", "Bearer ", "Bearer bad-token"]) {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization },
+        body: JSON.stringify({ setup: createSetup() }),
+      });
+      const body = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(body.error).toMatchObject({ code: "unauthorized" });
+    }
+    expect(events).toHaveLength(0);
+  });
+
   it("lists account game history from the authenticated account identity", async () => {
     const listPersonalGameSummaries = vi.fn((options: OnlinePersonalGameDirectoryListOptions): OnlineGameDirectoryResponse => {
       const summary = summaryForGame("game_private_history", "private");

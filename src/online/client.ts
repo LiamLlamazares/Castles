@@ -697,14 +697,25 @@ export async function fetchOnlineAccountMe(
   };
 }
 
+export interface CreateOnlineGameRequestOptions {
+  account?: OnlineAccountSessionParams;
+  creatorSeat?: "w" | "b";
+}
+
 export async function createOnlineGame(
   setup: OnlineGameSetupDTO,
+  optionsOrFetch: CreateOnlineGameRequestOptions | typeof fetch = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<CreatedOnlineGame> {
-  const response = await fetchImpl("/api/online/games", {
+  const options = typeof optionsOrFetch === "function" ? {} : optionsOrFetch;
+  const resolvedFetch = typeof optionsOrFetch === "function" ? optionsOrFetch : fetchImpl;
+  const response = await resolvedFetch("/api/online/games", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ setup }),
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(options.account) },
+    body: JSON.stringify({
+      setup,
+      ...(options.creatorSeat ? { creatorSeat: options.creatorSeat } : {}),
+    }),
   });
 
   if (!response.ok) {
