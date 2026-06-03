@@ -282,3 +282,4 @@ For every screenshot, check:
 - Tutorial layout test: short mobile viewports use the compact split and stable quick-nav/text classes.
 - Public directory tests: list response validation, state filters, limits/cursors, single-summary lookup, secret-query rejection, and hidden-game exclusion.
 - Watch/Archive tests: tab-state loading, sort/time/result filters, filtered no-results, filtered-empty pagination reachability, and long-row action reachability.
+- Local UI audit: `npm run ui:audit:local` seeds and cleans up open-listing/live/archive fixtures, waits for seeded rows, captures Play, Online Lobby/Watch/Archive, Tutorial, Library, local/online/spectator board, and drawer screenshots on desktop/mobile/short-mobile, and fails on horizontal overflow, clipped interactive controls, text overflow, unreachable required text, and obvious interactive overlaps at initial and scrolled container positions.

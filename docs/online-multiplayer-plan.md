@@ -675,6 +675,17 @@ Remaining work:
 - Keep live deployment smoke pinned to the expected commit after each server push.
 - Revisit the runbook when migrations, account tables, or managed release automation are introduced.
 
+## Phase 6AI: Repeatable Local UI Layout Audit
+
+Goal: stop Phase 6 UI polish from depending on one-off screenshots by adding a local built-app audit that covers representative pages and viewports.
+
+Status: implemented locally on 2026-06-03. `npm run ui:audit:local` starts the built Node server on a private localhost port against the checked local PostgreSQL rehearsal database, seeds open lobby, live public, and archived public game fixtures, waits for those rows to render, opens Playwright Chromium, captures desktop/mobile/short-mobile screenshots for Play setup, Online Lobby/Watch/Archive, Tutorial overview/lesson, Library, local game board, online player board, online spectator board, and the game drawer, then fails on horizontal page overflow, horizontally clipped interactive controls, text overflow inside interactive controls, required text that cannot be reached by scrolling audited containers, and obvious overlapping interactive targets at both initial and scrolled container positions. It navigates player pages through tokenless URLs backed by session storage and cleans up seeded fixtures before shutdown. Screenshots and metrics are written under ignored `artifacts/ui-audit/phase6ai-local-layout`.
+
+Remaining work:
+
+- Run this audit with the browser online smoke before Phase 6 is considered stable enough to move to Phase 7.
+- Treat new P0/P1 findings from this audit as Phase 6 blockers; move lower-priority visual polish into later UI phases so Phase 6 does not grow without a cutoff.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
