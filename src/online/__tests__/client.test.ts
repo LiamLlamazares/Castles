@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
   buildSpectatorUrl,
+  createOnlineAccount,
   acceptOnlineChallenge,
   cancelOnlineChallenge,
   acceptOpenSeek,
@@ -10,6 +11,8 @@ import {
   createOpenSeek,
   declineOnlineChallenge,
   fetchOnlineChallenge,
+  fetchOnlineAccountGames,
+  fetchOnlineAccountMe,
   fetchOpenSeek,
   fetchOpenSeekDirectory,
   fetchOnlineGameSummaries,
@@ -481,6 +484,83 @@ describe("online client helpers", () => {
     expect(listOpenSeekCreatorParams(storageAdapter)).toEqual([
       { seekId: "seek_456", token: "second-token" },
     ]);
+  });
+
+  it("creates accounts and fetches account history with bearer auth", async () => {
+    const account = {
+      schemaVersion: 1,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          account,
+          session: { sessionId: "account_session_liam", token: "account-token" },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          account,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          schemaVersion: 1,
+          games: [
+            publicSummary({
+              visibility: "private",
+              participants: [
+                { seat: "w", role: "white", identity: account.identity },
+                { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b" } },
+              ],
+            }),
+          ],
+        }),
+      });
+
+    await expect(createOnlineAccount("Liam", fetchImpl as any)).resolves.toMatchObject({
+      account,
+      session: { token: "account-token" },
+    });
+    await expect(fetchOnlineAccountMe({ token: "account-token" }, fetchImpl as any)).resolves.toMatchObject({
+      account,
+    });
+    await expect(
+      fetchOnlineAccountGames(
+        { token: "account-token" },
+        { state: "archived", limit: 10, cursor: "cursor_123" },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      games: [{ visibility: "private" }],
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "/api/online/accounts",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      })
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/account/me", {
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      3,
+      "/api/online/account/games?state=archived&limit=10&cursor=cursor_123",
+      { headers: { authorization: "Bearer account-token" } }
+    );
   });
 
   it("creates, fetches, cancels, lists, and accepts open seeks with validated responses", async () => {

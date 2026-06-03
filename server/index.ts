@@ -83,7 +83,7 @@ function isLoopbackAddress(address: string | undefined): boolean {
 async function main() {
   const config = parseServerRuntimeConfig(process.env, process.cwd());
   assertServerRuntimeFiles(config);
-  const { backend: storeBackend, healthStorePath, store } = createOnlineGameStoreFromEnv(
+  const { backend: storeBackend, healthStorePath, store, accountStore } = createOnlineGameStoreFromEnv(
     process.env
   );
 
@@ -150,7 +150,9 @@ async function main() {
       adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),
       loadGameSummaries: () => store.loadSummaries(),
       listGameSummaries: (options) => store.listGameSummaries(options),
+      listPersonalGameSummaries: (options) => store.listPersonalGameSummaries(options),
       loadGameSummary: (gameId) => store.loadGameSummary(gameId),
+      accountStore,
       onLog: (event) => {
         console.log(formatOnlineServerLogEvent(event));
       },
@@ -159,7 +161,13 @@ async function main() {
         commit: config.commit,
         storePath: healthStorePath,
         storeBackend,
-        checkStoreReady: () => store.checkReady(),
+        checkStoreReady: async () => {
+          const gameStoreReady = await store.checkReady();
+          const accountStoreReady = accountStore.checkReady
+            ? await accountStore.checkReady()
+            : true;
+          return gameStoreReady && accountStoreReady;
+        },
       },
     });
 
@@ -184,6 +192,12 @@ async function main() {
         await store.close();
       } catch (error) {
         console.error("Failed to close online game store", error);
+        process.exitCode = 1;
+      }
+      try {
+        await accountStore.close?.();
+      } catch (error) {
+        console.error("Failed to close online account store", error);
         process.exitCode = 1;
       }
     };
@@ -251,6 +265,11 @@ async function main() {
         await store.close();
       } catch (closeError) {
         console.error("Failed to close online game store after startup failure", closeError);
+      }
+      try {
+        await accountStore.close?.();
+      } catch (closeError) {
+        console.error("Failed to close online account store after startup failure", closeError);
       }
     }
     throw error;

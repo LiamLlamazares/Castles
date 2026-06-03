@@ -7,6 +7,12 @@ import { validateOnlineGameSnapshot } from "./protocol";
 import { ONLINE_PROTOCOL_VERSION, isSupportedOnlineProtocolVersion } from "./protocolVersion";
 import { stringContainsDurableSecret } from "./secretSafety";
 import {
+  validateOnlineAccount,
+  type OnlineAccount,
+  type OnlineAccountCreateResponse,
+  type OnlineAccountMeResponse,
+} from "./accounts";
+import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   validateOnlineGameDirectoryResponse,
   validateOnlineGameSummary,
@@ -66,6 +72,10 @@ export interface OpenSeekResponse {
   role: "creator";
   summary: OpenSeekSummary;
   gameInvite?: OnlineChallengeGameInvite;
+}
+
+export interface OnlineAccountSessionParams {
+  token: string;
 }
 
 export interface OpenSeekAcceptResponse {
@@ -540,6 +550,78 @@ export async function copyOnlineInviteUrl(
   await clipboard.writeText(inviteUrl);
 }
 
+function accountAuthorizationHeader(account?: OnlineAccountSessionParams): Record<string, string> {
+  return account ? { authorization: `Bearer ${account.token}` } : {};
+}
+
+function validateOnlineAccountResponse(body: unknown, label: string): OnlineAccount {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} response was malformed.`);
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(`${label} response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
+  const account = validateOnlineAccount((body as { account?: unknown }).account);
+  if (!account.ok) {
+    throw new Error(`${label} response was malformed: ${account.error.message}`);
+  }
+  return account.value;
+}
+
+export async function createOnlineAccount(
+  displayName: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountCreateResponse> {
+  const response = await fetchImpl("/api/online/accounts", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ displayName }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not create online account (${response.status})`);
+  }
+
+  const body = await response.json();
+  const account = validateOnlineAccountResponse(body, "Online account creation");
+  const session = (body as { session?: unknown }).session;
+  if (
+    !session ||
+    typeof session !== "object" ||
+    Array.isArray(session) ||
+    typeof (session as { sessionId?: unknown }).sessionId !== "string" ||
+    typeof (session as { token?: unknown }).token !== "string"
+  ) {
+    throw new Error("Online account creation response was malformed: session is invalid.");
+  }
+
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    account,
+    session: {
+      sessionId: (session as { sessionId: string }).sessionId,
+      token: (session as { token: string }).token,
+    },
+  };
+}
+
+export async function fetchOnlineAccountMe(
+  account: OnlineAccountSessionParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountMeResponse> {
+  const response = await fetchImpl("/api/online/account/me", {
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load online account (${response.status})`);
+  }
+  const body = await response.json();
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    account: validateOnlineAccountResponse(body, "Online account"),
+  };
+}
+
 export async function createOnlineGame(
   setup: OnlineGameSetupDTO,
   fetchImpl: typeof fetch = fetch
@@ -559,13 +641,18 @@ export async function createOnlineGame(
 
 export async function createOnlineChallenge(
   setup: OnlineGameSetupDTO,
-  options: { challengerSeat?: "w" | "b" | "random"; visibility?: "private" | "unlisted" } = {},
+  options: {
+    challengerSeat?: "w" | "b" | "random";
+    visibility?: "private" | "unlisted";
+    account?: OnlineAccountSessionParams;
+  } = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<CreatedOnlineChallenge> {
+  const { account, ...bodyOptions } = options;
   const response = await fetchImpl("/api/online/challenges", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ setup, ...options }),
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
+    body: JSON.stringify({ setup, ...bodyOptions }),
   });
 
   if (!response.ok) {
@@ -891,14 +978,20 @@ function validateOpenSeekAcceptResponse(body: unknown, label: string): OpenSeekA
 
 export async function createOpenSeek(
   setup: OnlineGameSetupDTO,
-  options: { creatorSeat?: OpenSeekSeat; creatorSessionId?: string; expiresInMs?: number } = {},
+  options: {
+    creatorSeat?: OpenSeekSeat;
+    creatorSessionId?: string;
+    expiresInMs?: number;
+    account?: OnlineAccountSessionParams;
+  } = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<CreatedOpenSeek> {
-  const creatorSessionId = options.creatorSessionId ?? resolveOnlineAnonymousSessionId();
+  const { account, ...bodyOptions } = options;
+  const creatorSessionId = bodyOptions.creatorSessionId ?? resolveOnlineAnonymousSessionId();
   const response = await fetchImpl("/api/online/seeks", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ setup, ...options, creatorSessionId }),
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
+    body: JSON.stringify({ setup, ...bodyOptions, creatorSessionId }),
   });
 
   if (!response.ok) {
@@ -969,13 +1062,14 @@ export async function cancelOpenSeek(
 
 export async function acceptOpenSeek(
   seekId: string,
-  options: { acceptorSessionId?: string } = {},
+  options: { acceptorSessionId?: string; account?: OnlineAccountSessionParams } = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<OpenSeekAcceptResponse> {
-  const acceptorSessionId = options.acceptorSessionId ?? resolveOnlineAnonymousSessionId();
+  const { account, ...bodyOptions } = options;
+  const acceptorSessionId = bodyOptions.acceptorSessionId ?? resolveOnlineAnonymousSessionId();
   const response = await fetchImpl(`/api/online/seeks/${encodeURIComponent(seekId)}/accept`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
     body: JSON.stringify({ acceptorSessionId }),
   });
 
@@ -988,14 +1082,15 @@ export async function acceptOpenSeek(
 
 export async function startQuickMatch(
   setup: OnlineGameSetupDTO,
-  options: { sessionId?: string; expiresInMs?: number } = {},
+  options: { sessionId?: string; expiresInMs?: number; account?: OnlineAccountSessionParams } = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<QuickMatchResponse> {
-  const sessionId = options.sessionId ?? resolveOnlineAnonymousSessionId();
+  const { account, ...bodyOptions } = options;
+  const sessionId = bodyOptions.sessionId ?? resolveOnlineAnonymousSessionId();
   const response = await fetchImpl("/api/online/matchmaking/quick", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ setup, ...options, sessionId }),
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
+    body: JSON.stringify({ setup, ...bodyOptions, sessionId }),
   });
 
   if (!response.ok) {
@@ -1079,6 +1174,42 @@ export async function fetchOnlineGameDirectory(
   const validation = validateOnlineGameDirectoryResponse(body);
   if (!validation.ok) {
     throw new Error(`Online game summary response was malformed: ${validation.error.message}`);
+  }
+  return validation.value;
+}
+
+export interface FetchOnlineAccountGamesOptions {
+  state?: OnlineGameDirectoryState;
+  limit?: number;
+  cursor?: string;
+}
+
+function buildOnlineAccountGamesPath(options: FetchOnlineAccountGamesOptions = {}): string {
+  const params = new URLSearchParams();
+  if (options.state) params.set("state", options.state);
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
+  const query = params.toString();
+  return query ? `/api/online/account/games?${query}` : "/api/online/account/games";
+}
+
+export async function fetchOnlineAccountGames(
+  account: OnlineAccountSessionParams,
+  options: FetchOnlineAccountGamesOptions = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameDirectoryResponse> {
+  const response = await fetchImpl(buildOnlineAccountGamesPath(options), {
+    headers: accountAuthorizationHeader(account),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch online account games (${response.status})`);
+  }
+
+  const body = await response.json();
+  const validation = validateOnlineGameDirectoryResponse(body);
+  if (!validation.ok) {
+    throw new Error(`Online account game history response was malformed: ${validation.error.message}`);
   }
   return validation.value;
 }

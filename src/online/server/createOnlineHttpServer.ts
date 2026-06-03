@@ -48,9 +48,11 @@ import {
   onlineGameSummaryMatchesDirectoryFilters,
   type OnlineGameDirectoryClockFilter,
   type OnlineGameDirectoryListOptions,
+  type OnlinePersonalGameDirectoryListOptions,
   type OnlineGameDirectoryResultFilter,
   type OnlineGameDirectoryResponse,
   OnlineGameSummary,
+  type OnlineIdentity,
   decodeOnlineGameDirectoryCursor,
   encodeOnlineGameDirectoryCursor,
   projectOnlineGameSummaries,
@@ -129,6 +131,17 @@ import {
   isSecretLikeKey,
   stringContainsDurableSecret,
 } from "../secretSafety";
+import {
+  normalizeOnlineAccountDisplayName,
+  type OnlineAccount,
+} from "../accounts";
+import {
+  DuplicateOnlineAccountDisplayNameError,
+  DuplicateOnlineAccountIdError,
+  DuplicateOnlineAccountSessionCredentialError,
+  MemoryOnlineAccountStore,
+  type OnlineAccountStore,
+} from "./OnlineAccountStore";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -148,8 +161,10 @@ const DEFAULT_HEALTH_READINESS_TIMEOUT_MS = 1_500;
 const DEFAULT_CHALLENGE_EXPIRES_IN_MS = 24 * 60 * 60 * 1000;
 const MIN_CHALLENGE_EXPIRES_IN_MS = 5 * 60 * 1000;
 const MAX_CHALLENGE_EXPIRES_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 
 type PublicSessionIdentity = { kind: "session"; id: string };
+type PublicPlayerIdentity = OnlineIdentity;
 
 export interface CreateOnlineHttpServerOptions {
   publicBaseUrl: string;
@@ -208,7 +223,11 @@ export interface CreateOnlineHttpServerOptions {
   listGameSummaries?: (
     options: OnlineGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
+  listPersonalGameSummaries?: (
+    options: OnlinePersonalGameDirectoryListOptions
+  ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
   loadGameSummary?: (gameId: string) => OnlineGameSummary | null | Promise<OnlineGameSummary | null>;
+  accountStore?: OnlineAccountStore;
   onLog?: (event: OnlineServerLogEvent) => void;
   now?: () => number;
   health?: {
@@ -357,6 +376,63 @@ function parsePublicDirectoryOptions(
   };
 }
 
+function parsePersonalDirectoryOptions(
+  originalUrl: string,
+  identity: OnlineIdentity
+):
+  | { ok: true; options: OnlinePersonalGameDirectoryListOptions }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Personal history query is invalid." };
+  }
+
+  for (const name of ["state", "limit", "cursor"]) {
+    if (url.searchParams.getAll(name).length > 1) {
+      return { ok: false, message: "Personal history query is invalid." };
+    }
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "state" && name !== "limit" && name !== "cursor") {
+      return { ok: false, message: "Personal history query is invalid." };
+    }
+  }
+
+  const state = getSingleSearchParam(url.searchParams, "state") ?? "all";
+  if (!ONLINE_GAME_DIRECTORY_STATES.has(state as OnlinePersonalGameDirectoryListOptions["state"])) {
+    return { ok: false, message: "Personal history state is invalid." };
+  }
+
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > ONLINE_GAME_DIRECTORY_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Personal history limit is invalid." };
+  }
+
+  const cursor = getSingleSearchParam(url.searchParams, "cursor") ?? undefined;
+  if (cursor) {
+    const decoded = decodeOnlineGameDirectoryCursor(cursor);
+    if (!decoded.ok) {
+      return { ok: false, message: "Personal history cursor is invalid." };
+    }
+  }
+
+  return {
+    ok: true,
+    options: {
+      identity,
+      state: state as OnlinePersonalGameDirectoryListOptions["state"],
+      limit,
+      cursor,
+    },
+  };
+}
+
 function parseOpenSeekDirectoryOptions(
   originalUrl: string
 ): { ok: true; options: OpenSeekDirectoryListOptions } | { ok: false; message: string } {
@@ -452,6 +528,38 @@ function paginateDirectorySummaries(
   const filtered = applyDirectoryCursor(
     summaries
       .filter((summary) => onlineGameSummaryMatchesDirectoryFilters(summary, options))
+      .sort(compareDirectorySummaries),
+    options.cursor
+  );
+  const games = filtered.slice(0, options.limit);
+  const nextCursor =
+    filtered.length > options.limit && games.length > 0
+      ? encodeOnlineGameDirectoryCursor(games[games.length - 1])
+      : undefined;
+  return {
+    schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+    games,
+    nextCursor,
+  };
+}
+
+function personalGameSummaryMatchesDirectoryFilters(
+  summary: OnlineGameSummary,
+  options: OnlinePersonalGameDirectoryListOptions
+): boolean {
+  if (options.state !== "all" && summary.archiveState !== options.state) return false;
+  return summary.participants.some((participant) =>
+    isSameOnlineIdentity(participant.identity, options.identity)
+  );
+}
+
+function paginatePersonalDirectorySummaries(
+  summaries: OnlineGameSummary[],
+  options: OnlinePersonalGameDirectoryListOptions
+): OnlineGameDirectoryResponse {
+  const filtered = applyDirectoryCursor(
+    summaries
+      .filter((summary) => personalGameSummaryMatchesDirectoryFilters(summary, options))
       .sort(compareDirectorySummaries),
     options.cursor
   );
@@ -613,6 +721,18 @@ function defaultOpenSeekTokenFactory(): string {
   return randomBytes(18).toString("base64url");
 }
 
+function defaultAccountIdFactory(): string {
+  return `account_${randomBytes(9).toString("base64url")}`;
+}
+
+function defaultAccountSessionIdFactory(): string {
+  return `account_session_${randomBytes(9).toString("base64url")}`;
+}
+
+function defaultAccountSessionTokenFactory(): string {
+  return randomBytes(ACCOUNT_SESSION_TOKEN_BYTES).toString("base64url");
+}
+
 function buildChallengeUrl(
   publicBaseUrl: string,
   challengeId: string,
@@ -723,6 +843,10 @@ function normalizePublicSessionIdentity(
   return { ok: true, identity: { kind: "session", id: value } };
 }
 
+function publicPlayerIdentityQueueKey(identity: PublicPlayerIdentity): string {
+  return `${identity.kind}:${identity.id}`;
+}
+
 function normalizeChallengeVisibility(value: unknown): "private" | "unlisted" | null {
   if (value === undefined) return "unlisted";
   return value === "private" || value === "unlisted" ? value : null;
@@ -771,12 +895,15 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       verifyToken: verifyOnlineToken,
       now: options.now,
     });
+  const accountStore = options.accountStore ?? new MemoryOnlineAccountStore();
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
   const connections = new Map<WebSocket, OnlineConnection>();
   const disconnectedSockets = new WeakSet<WebSocket>();
   const actionQueues = new Map<string, Promise<void>>();
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
+  const accountCreateLimiter = new FixedWindowRateLimiter(10, 60_000);
+  const accountReadLimiter = new FixedWindowRateLimiter(120, 10_000);
   const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
   const createOpenSeekLimiter = new FixedWindowRateLimiter(20, 60_000);
   const quickMatchLimiter = new FixedWindowRateLimiter(20, 60_000);
@@ -797,6 +924,58 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     } catch (error) {
       console.error("Online server log hook failed", error);
     }
+  };
+
+  const resolveAccountBearer = async (
+    req: Request
+  ): Promise<
+    | { ok: true; account: OnlineAccount; sessionId: string }
+    | { ok: false; status: number; error: OnlineReject; reason: string }
+  > => {
+    const token = getBearerToken(req.headers.authorization);
+    if (!token) {
+      return {
+        ok: false,
+        status: 401,
+        error: { code: "unauthorized", message: "Account session is required." },
+        reason: "missing_account_token",
+      };
+    }
+    try {
+      const usedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const resolved = await accountStore.resolveSessionToken(token, usedAt);
+      if (!resolved) {
+        return {
+          ok: false,
+          status: 401,
+          error: { code: "unauthorized", message: "Account session is invalid." },
+          reason: "bad_account_token",
+        };
+      }
+      return { ok: true, account: resolved.account, sessionId: resolved.sessionId };
+    } catch (error) {
+      console.error("Failed to resolve account session", error);
+      return {
+        ok: false,
+        status: 503,
+        error: { code: "persistence_failed", message: "Account session could not be checked." },
+        reason: "account_store_failed",
+      };
+    }
+  };
+
+  const resolveOptionalAccountIdentity = async (
+    req: Request
+  ): Promise<
+    | { ok: true; identity: OnlineIdentity | null }
+    | { ok: false; status: number; error: OnlineReject; reason: string }
+  > => {
+    if (!getBearerToken(req.headers.authorization)) {
+      return { ok: true, identity: null };
+    }
+    const resolved = await resolveAccountBearer(req);
+    if (!resolved.ok) return resolved;
+    return { ok: true, identity: resolved.account.identity };
   };
 
   const runQuickMatchForSession = async <T>(
@@ -1006,6 +1185,42 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return validation.value;
     });
     return withLiveServerPresenceDirectory(paginateDirectorySummaries(validated, directoryOptions));
+  };
+
+  const listPersonalGameDirectory = async (
+    directoryOptions: OnlinePersonalGameDirectoryListOptions
+  ): Promise<OnlineGameDirectoryResponse> => {
+    if (options.listPersonalGameSummaries) {
+      const response = await options.listPersonalGameSummaries(directoryOptions);
+      const validation = validateOnlineGameDirectoryResponse(
+        stripOnlineGameDirectoryResponseOnlyFields(response)
+      );
+      if (!validation.ok) {
+        throw new Error(validation.error.message);
+      }
+      if (
+        validation.value.games.some(
+          (summary) => !personalGameSummaryMatchesDirectoryFilters(summary, directoryOptions)
+        )
+      ) {
+        throw new Error("Personal history returned a game for a different identity.");
+      }
+      return withLiveServerPresenceDirectory(validation.value);
+    }
+
+    const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
+    const validated = summaries.map((summary, index) => {
+      const validation = validateOnlineGameSummary(
+        stripOnlineGameSummaryResponseOnlyFields(summary)
+      );
+      if (!validation.ok) {
+        throw new Error(`Invalid online game summary ${index + 1}: ${validation.error.message}`);
+      }
+      return validation.value;
+    });
+    return withLiveServerPresenceDirectory(
+      paginatePersonalDirectorySummaries(validated, directoryOptions)
+    );
   };
 
   const loadChallengeSummary = async (challengeId: string): Promise<OnlineChallengeSummary | null> => {
@@ -1321,7 +1536,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const createOpenSeekForIdentity = async (
     setup: OnlineGameSetupDTO,
     creatorSeat: OpenSeekSeat,
-    creatorIdentity: PublicSessionIdentity,
+    creatorIdentity: PublicPlayerIdentity,
     expiresInMs: number,
     createdAt: string
   ): Promise<{ seekId: string; summary: OpenSeekSummary; token: string }> => {
@@ -1561,7 +1776,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
   const isActiveSeekForSession = (
     summary: OpenSeekSummary,
-    identity: PublicSessionIdentity,
+    identity: PublicPlayerIdentity,
     now: string
   ): boolean => {
     if (summary.status !== "open" && summary.status !== "accepted") return false;
@@ -1575,7 +1790,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   };
 
   const loadActiveSeekForSession = async (
-    identity: PublicSessionIdentity,
+    identity: PublicPlayerIdentity,
     now: string
   ): Promise<OpenSeekSummary | null> => {
     return (await loadOpenSeekSummaries()).find((summary) =>
@@ -1585,7 +1800,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
   const acceptOpenSeekSummary = async (
     summary: OpenSeekSummary,
-    acceptorIdentity: PublicSessionIdentity,
+    acceptorIdentity: PublicPlayerIdentity,
     acceptedAt: string
   ) => {
     if (
@@ -1870,6 +2085,113 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     next();
   });
 
+  app.post("/api/online/accounts", async (req, res) => {
+    if (!accountCreateLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: {
+          code: "rate_limited",
+          message: "Too many accounts have been created from this client. Try again shortly.",
+        },
+      });
+      return;
+    }
+
+    const displayName = normalizeOnlineAccountDisplayName(req.body?.displayName);
+    if (!displayName.ok) {
+      res.status(400).json({ error: displayName.error });
+      return;
+    }
+
+    const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+    const token = defaultAccountSessionTokenFactory();
+    try {
+      const resolved = await accountStore.createAccount({
+        accountId: defaultAccountIdFactory(),
+        sessionId: defaultAccountSessionIdFactory(),
+        displayName: displayName.value,
+        tokenHash: hashOnlineToken(token),
+        createdAt,
+      });
+      res.status(201).json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        account: resolved.account,
+        session: {
+          sessionId: resolved.sessionId,
+          token,
+        },
+      });
+      log({ event: "online.account.create", status: "accepted" });
+    } catch (error) {
+      if (
+        error instanceof DuplicateOnlineAccountDisplayNameError ||
+        error instanceof DuplicateOnlineAccountIdError ||
+        error instanceof DuplicateOnlineAccountSessionCredentialError
+      ) {
+        res.status(409).json({
+          error: {
+            code: "bad_request",
+            message:
+              error instanceof DuplicateOnlineAccountDisplayNameError
+                ? "That display name is already taken."
+                : "Account credential collision. Try again.",
+          },
+        });
+        return;
+      }
+      console.error("Failed to create account", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "The account could not be created." },
+      });
+    }
+  });
+
+  app.get("/api/online/account/me", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    res.json({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      account: auth.account,
+    });
+  });
+
+  app.get("/api/online/account/games", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const parsed = parsePersonalDirectoryOptions(req.originalUrl, auth.account.identity);
+    if (!parsed.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: parsed.message },
+      });
+      return;
+    }
+    try {
+      res.json(await listPersonalGameDirectory(parsed.options));
+    } catch (error) {
+      console.error("Failed to load account game history", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account game history could not be loaded." },
+      });
+    }
+  });
+
   const expireChallengeIfNeeded = async (
     summary: OnlineChallengeSummary,
     expiredAt = new Date(options.now?.() ?? Date.now()).toISOString()
@@ -1950,7 +2272,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       });
       return;
     }
-    const creatorIdentity = normalizePublicSessionIdentity(req.body?.creatorSessionId, "creatorSessionId");
+    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    if (!accountIdentity.ok) {
+      res.status(accountIdentity.status).json({ error: accountIdentity.error });
+      return;
+    }
+    const creatorIdentity = accountIdentity.identity
+      ? { ok: true as const, identity: accountIdentity.identity }
+      : normalizePublicSessionIdentity(req.body?.creatorSessionId, "creatorSessionId");
     if (!creatorIdentity.ok) {
       res.status(400).json({ error: creatorIdentity.error });
       return;
@@ -2091,7 +2420,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: seekId.error });
       return;
     }
-    const acceptorIdentity = normalizePublicSessionIdentity(req.body?.acceptorSessionId, "acceptorSessionId");
+    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    if (!accountIdentity.ok) {
+      res.status(accountIdentity.status).json({ error: accountIdentity.error });
+      return;
+    }
+    const acceptorIdentity = accountIdentity.identity
+      ? { ok: true as const, identity: accountIdentity.identity }
+      : normalizePublicSessionIdentity(req.body?.acceptorSessionId, "acceptorSessionId");
     if (!acceptorIdentity.ok) {
       res.status(400).json({ error: acceptorIdentity.error });
       return;
@@ -2147,7 +2483,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: setup.error });
       return;
     }
-    const sessionIdentity = normalizePublicSessionIdentity(req.body?.sessionId, "sessionId");
+    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    if (!accountIdentity.ok) {
+      res.status(accountIdentity.status).json({ error: accountIdentity.error });
+      return;
+    }
+    const sessionIdentity = accountIdentity.identity
+      ? { ok: true as const, identity: accountIdentity.identity }
+      : normalizePublicSessionIdentity(req.body?.sessionId, "sessionId");
     if (!sessionIdentity.ok) {
       res.status(400).json({ error: sessionIdentity.error });
       return;
@@ -2162,7 +2505,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const setupSignature = canonicalSetupSignature(normalizedSetup);
 
     try {
-      const response = await runQuickMatchForSession(sessionIdentity.identity.id, async () => {
+      const response = await runQuickMatchForSession(publicPlayerIdentityQueueKey(sessionIdentity.identity), async () => {
         const checkedAt = new Date(options.now?.() ?? Date.now()).toISOString();
         if (await loadActiveSeekForSession(sessionIdentity.identity, checkedAt)) {
           return {
@@ -2274,6 +2617,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: expiry.error });
       return;
     }
+    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    if (!accountIdentity.ok) {
+      res.status(accountIdentity.status).json({ error: accountIdentity.error });
+      return;
+    }
 
     const normalizedSetup = setup.value.timeControl
       ? setup.value
@@ -2292,7 +2640,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     while (challengerToken === challengedToken) {
       challengedToken = defaultChallengeTokenFactory();
     }
-    const challengerIdentity = { kind: "session" as const, id: `${challengeId}_challenger` };
+    const challengerIdentity = accountIdentity.identity ?? { kind: "session" as const, id: `${challengeId}_challenger` };
     const challengedIdentity = { kind: "session" as const, id: `${challengeId}_challenged` };
 
     try {

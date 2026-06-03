@@ -126,7 +126,7 @@ No-account recent online replays are a browser convenience, not durable account 
 
 Opening a recent replay must still go through the server's spectator snapshot policy. Public and unlisted games can be replayed only if that token-free spectator path is allowed; private games need a future authenticated replay endpoint or a token-safe credential design.
 
-Once registered accounts exist, signed-in player history should be server-backed and attached to the account identity. Local recent replays may remain as an anonymous/offline fallback, but they must not be the source of truth for a signed-in user's archive.
+Signed-in player history is server-backed and attached to the account identity. Local recent replays may remain as an anonymous/offline fallback, but they must not be the source of truth for a signed-in user's archive once account UI is wired to the account-history endpoint.
 
 ## Identity Primitive
 
@@ -134,13 +134,29 @@ Online summaries support three identity kinds:
 
 - `anonymous`: a generated per-game or temporary identity.
 - `session`: a public, non-secret browser/session surrogate that can later back challenges without an account.
-- `registered`: a future account identity with optional display name.
+- `registered`: an account identity with optional display name.
 
 Game creation events may now carry `whiteIdentity` and `blackIdentity`. Accepted challenges and accepted open lobby listings bind those identities into the durable `game_created` event before the game summary is projected, so a rebuild preserves the same participants. Direct-created games currently use explicit generated anonymous identities for both seats.
 
 Identity `id` values in public summaries are never authentication secrets. Do not put cookies, bearer tokens, raw private invite tokens, or server auth session ids in `OnlineIdentity.id`. Use a separate private credential table for authentication material.
 
-The PostgreSQL store has a backend-only personal-history query that can find public, unlisted, and private summaries for a server-resolved identity. There is intentionally no public HTTP endpoint for this yet. Future account/session endpoints must derive the identity from the authenticated server session, not from a request body, query parameter, or browser-supplied session id.
+The PostgreSQL store has a personal-history query that can find public, unlisted, and private summaries for a server-resolved identity. `GET /api/online/account/games` exposes that query only after resolving the account bearer token server-side. It accepts `state`, `limit`, and `cursor`; it must not accept a request-body identity, query identity, browser session id, token-like query parameter, or arbitrary visibility override.
+
+## Account Session Contract
+
+Account v1 is intentionally narrow. It supports display-name account creation, bearer-token account sessions, current-account lookup, and account-owned game history. It does not yet include passwords, email, profiles, ratings, roles, moderation, session revocation UI, or account deletion.
+
+Routes:
+
+- `POST /api/online/accounts`: accepts `{ displayName }`, normalizes visible whitespace, enforces a case-insensitive unique display name, creates an account id and session id, stores only the session token hash, and returns `{ protocolVersion, account, session: { sessionId, token } }`. The raw session token is returned once to the client and must not be stored in public summaries or logs.
+- `GET /api/online/account/me`: requires `Authorization: Bearer <account-session-token>` and returns `{ protocolVersion, account }`.
+- `GET /api/online/account/games?state=active|archived|all&limit=...&cursor=...`: requires the account bearer token and returns `OnlineGameDirectoryResponse` rows whose participants include the server-resolved account identity. It may include private and unlisted rows for that account.
+
+Account sessions are independent from game player tokens, challenge tokens, and open-seek creator tokens. A game/challenge bearer token authorizes seat-specific game access; an account bearer token identifies the signed-in user for account-owned operations and history. Do not use one kind of bearer token as the other.
+
+Account session token hashes must be unique in storage so one bearer token maps to at most one account session. Raw account session tokens are never stored.
+
+When an account bearer is present on safe creation paths, the server uses the registered account identity instead of trusting a browser-supplied anonymous/session id. This currently applies to open seek creation, open seek acceptance, Quick Match, and challenge creation. Direct low-level game creation remains anonymous until a creator-seat contract is designed.
 
 ## Challenge Lifecycle Contract
 
@@ -227,5 +243,5 @@ Server spectator authorization now prefers `loadGameSummary(gameId)` when the co
 ## Next Contract Changes
 
 1. Add archive detail/search read models if the summary payload stops being enough for richer analysis pages.
-2. Add a public account/session ownership layer before exposing account-bound personal history, account-bound private challenges, ratings, and moderation.
+2. Expand the account/session ownership layer before account-bound private challenges, ratings, profiles, and moderation.
 3. Revalidate or disconnect spectator sockets before allowing mid-game visibility changes to `private`.

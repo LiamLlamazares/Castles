@@ -1,4 +1,6 @@
 import type { OnlineGameStore } from "./OnlineGameStore";
+import type { OnlineAccountStore } from "./OnlineAccountStore";
+import { PostgresOnlineAccountStore } from "./PostgresOnlineAccountStore";
 import { PostgresOnlineGameStore } from "./PostgresOnlineGameStore";
 
 export type OnlineStoreBackend = "postgres";
@@ -7,6 +9,7 @@ export interface ConfiguredOnlineGameStore {
   backend: OnlineStoreBackend;
   healthStorePath: string;
   store: OnlineGameStore;
+  accountStore: OnlineAccountStore;
 }
 
 function validatePostgresConnectionString(connectionString: string): string {
@@ -47,6 +50,7 @@ export function createOnlineGameStoreFromEnv(
       backend,
       healthStorePath: "postgres",
       store: new PostgresOnlineGameStore({ connectionString }),
+      accountStore: new PostgresOnlineAccountStore({ connectionString }),
     };
   }
 

@@ -30,7 +30,7 @@ By default the Node service binds to `127.0.0.1`, so nginx can reach it locally 
 
 Use this when DNS and nginx are already serving HTTPS and proxying to `127.0.0.1:3000`, and the only missing piece is the Node app service. This is the smallest path for a server "lift" to a new domain.
 
-Do not install PostgreSQL locally in this path. The database is PostgreSQL, but it lives wherever `DATABASE_URL` points. Keep the real `DATABASE_URL` only in `/etc/castles/castles.env` or the server's secret manager; never commit it.
+Do not install PostgreSQL locally in this path. The database is PostgreSQL, but it lives wherever `DATABASE_URL` points. The Node service creates and checks the online game, challenge, lobby, and account/session tables on startup. Keep the real `DATABASE_URL` only in `/etc/castles/castles.env` or the server's secret manager; never commit it.
 
 1. Confirm nginx/DNS and identify whether Node is missing:
 
@@ -137,7 +137,7 @@ node scripts/deploy/check-online-smoke.mjs "https://${app_domain}" "$sha"
 npm run online:smoke:browser -- "https://${app_domain}" "$sha"
 ```
 
-If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.
+If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If `server:check-config` fails, fix the PostgreSQL URL, permissions, or schema-readiness error before restarting. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.
 
 ## 0. Fresh Server Reinstall From Zero
 

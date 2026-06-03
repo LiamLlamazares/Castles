@@ -23,10 +23,11 @@ async function main() {
   const config = parseServerRuntimeConfig(env, process.cwd());
   assertServerRuntimeFiles(config);
 
-  const { backend, healthStorePath, store } = createOnlineGameStoreFromEnv(env);
+  const { backend, healthStorePath, store, accountStore } = createOnlineGameStoreFromEnv(env);
   let replayedRooms = 0;
   try {
     await store.checkReady();
+    await accountStore.checkReady?.();
     replayedRooms = (
       await store.load({
         onEventError: (line, error) => {
@@ -36,6 +37,7 @@ async function main() {
     ).length;
   } finally {
     await store.close();
+    await accountStore.close?.();
   }
 
   console.log(

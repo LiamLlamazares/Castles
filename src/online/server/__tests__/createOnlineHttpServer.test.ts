@@ -23,7 +23,10 @@ import {
 } from "../../challenges";
 import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+  ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   projectOnlineGameSummaries,
+  type OnlinePersonalGameDirectoryListOptions,
+  type OnlineGameDirectoryResponse,
   type OnlineGameSummary,
 } from "../../readModel";
 import {
@@ -297,6 +300,110 @@ afterEach(async () => {
 });
 
 describe("createOnlineHttpServer", () => {
+  it("creates accounts and uses server-resolved account identity for open seeks", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+
+    expect(accountResponse.status).toBe(201);
+    expect(account).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      account: {
+        displayName: "Liam",
+        identity: { kind: "registered", displayName: "Liam" },
+      },
+      session: {
+        token: expect.any(String),
+      },
+    });
+
+    const meResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+      headers: bearer(account.session.token),
+    });
+    const me = await meResponse.json();
+
+    expect(meResponse.status).toBe(200);
+    expect(me.account).toEqual(account.account);
+
+    const createSeekResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+      }),
+    });
+    const seek = await createSeekResponse.json();
+
+    expect(createSeekResponse.status).toBe(201);
+    expect(seek.summary.creatorIdentity).toEqual(account.account.identity);
+  });
+
+  it("lists account game history from the authenticated account identity", async () => {
+    const listPersonalGameSummaries = vi.fn((options: OnlinePersonalGameDirectoryListOptions): OnlineGameDirectoryResponse => {
+      const summary = summaryForGame("game_private_history", "private");
+      return {
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        games: [
+          {
+            ...summary,
+            participants: [
+              { seat: "w" as const, role: "white" as const, identity: options.identity },
+              { seat: "b" as const, role: "black" as const, identity: { kind: "anonymous" as const, id: "anon_b" } },
+            ],
+          },
+        ],
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      listPersonalGameSummaries,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Samir" }),
+    });
+    const account = await accountResponse.json();
+    const historyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games?state=all&limit=5`, {
+      headers: bearer(account.session.token),
+    });
+    const history = await historyResponse.json();
+
+    expect(historyResponse.status).toBe(200);
+    expect(listPersonalGameSummaries).toHaveBeenCalledWith({
+      identity: account.account.identity,
+      state: "all",
+      limit: 5,
+      cursor: undefined,
+    });
+    expect(history.games).toHaveLength(1);
+    expect(history.games[0]).toMatchObject({
+      gameId: "game_private_history",
+      visibility: "private",
+    });
+    expect(history.games[0].participants).toContainEqual(
+      expect.objectContaining({ identity: account.account.identity })
+    );
+
+    const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games`);
+    expect(missingAuthResponse.status).toBe(401);
+  });
+
   it("creates and lists token-free public open seeks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

@@ -681,19 +681,36 @@ Goal: stop Phase 6 UI polish from depending on one-off screenshots by adding a l
 
 Status: implemented locally on 2026-06-03. `npm run ui:audit:local` starts the built Node server on a private localhost port against the checked local PostgreSQL rehearsal database, seeds open lobby, live public, and archived public game fixtures, waits for those rows to render, opens Playwright Chromium, captures desktop/mobile/short-mobile screenshots for Play setup, Online Lobby/Watch/Archive, Tutorial overview/lesson, Library, local game board, online player board, online spectator board, and the game drawer, then fails on horizontal page overflow, horizontally clipped interactive controls, text overflow inside interactive controls, required text that cannot be reached by scrolling audited containers, and obvious overlapping interactive targets at both initial and scrolled container positions. It navigates player pages through tokenless URLs backed by session storage and cleans up seeded fixtures before shutdown. Screenshots and metrics are written under ignored `artifacts/ui-audit/phase6ai-local-layout`.
 
-Remaining work:
+Gate result: passed with `npm run online:smoke:local:browser` and `npm run ui:audit:local` before Phase 7A began. Phase 6 is now closed except for P0/P1 bugs that block a live match or make a deployed page unusable. Lower-priority visual polish should move into later UI phases so Phase 6 does not keep expanding.
 
-- Run this audit with the browser online smoke before Phase 6 is considered stable enough to move to Phase 7.
-- Treat new P0/P1 findings from this audit as Phase 6 blockers; move lower-priority visual polish into later UI phases so Phase 6 does not grow without a cutoff.
-
-## Phase 7: Ratings, Fair Play, Moderation, Admin
+## Phase 7: Accounts, Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
 
+## Phase 7A: Account Session and Personal History Foundation
+
+Goal: add the first server-resolved account identity layer without yet adding passwords, profiles, ratings, chat, or moderation.
+
+Status: implemented locally on 2026-06-03. The server now has account/session endpoints, PostgreSQL-backed `online_accounts` and `online_account_sessions` tables, account bearer resolution, and an authenticated personal-history endpoint. Account tokens are stored separately from public identities; `OnlineIdentity.id` remains a public non-secret registered-account id. Open seek creation, open seek acceptance, Quick Match, and challenge creation can use the authenticated account identity when an account bearer is present, while anonymous browser-session ids remain the fallback. Personal game history is derived from the server-resolved account identity and can include private, unlisted, and public game summaries for that account. Direct game/challenge bearer tokens remain separate from account sessions.
+
 Work:
 
-- Add account-backed identity if required by ratings and moderation.
-- Expose account-backed personal game history for registered players, including finished friend-link games and public games, using the Phase 6Z backend query foundation rather than local storage.
+- Add a visible account UI: create/sign-in/session persistence, current account display, sign-out, and account error states.
+- Move signed-in archive/history UI to the account-backed endpoint while keeping device-local recent replays as the anonymous fallback.
+- Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer the challenge/open-seek flows for account-owned games.
+- Add account-bound challenge acceptance after a separate challenged-user binding design exists; do not infer challenged identity from an unauthenticated invite URL.
+- Add account deletion/session revocation and privacy copy before public account launch.
+
+Tests/review/deploy gates:
+
+- Tests: account create/me/history route tests, account store tests, client helper tests, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit when visible account UI is added.
+- Review: account/session security review focused on token storage, accidental public identity leakage, authorization separation from game/challenge bearer tokens, and personal-history privacy.
+- Deploy: `server:check-config` must verify both game and account stores against PostgreSQL before the Node service starts.
+
+Work:
+
+- Build on Phase 7A account-backed identity for ratings and moderation.
+- Expose account-backed personal game history in the UI for registered players, including finished friend-link games and public games, while keeping local storage as the anonymous fallback.
 - Implement rating events/read models after result contracts are stable.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.
@@ -723,7 +740,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after the summary model grows: clock/result filters, bounded visible-text search, replay-specific archive row metadata, and response-time live clocks are now covered, while account-backed player metadata and archive-detail pages still need designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
+1. Wire visible account UI onto the Phase 7A account/session endpoints, then move signed-in archive/history views to `GET /api/online/account/games`.
+2. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

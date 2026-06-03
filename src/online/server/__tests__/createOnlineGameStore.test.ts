@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { createOnlineGameStoreFromEnv } from "../createOnlineGameStore";
 
@@ -12,6 +13,7 @@ describe("createOnlineGameStoreFromEnv", () => {
     expect(configured.backend).toBe("postgres");
     expect(configured.healthStorePath).toBe("postgres");
     expect(configured.store).toBeInstanceOf(PostgresOnlineGameStore);
+    expect(configured.accountStore).toBeInstanceOf(PostgresOnlineAccountStore);
   });
 
   it("requires DATABASE_URL when PostgreSQL persistence is selected", () => {
