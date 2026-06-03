@@ -217,6 +217,20 @@ describe('Game Flow Integration Tests', () => {
       expect(updatedCastle!.recruitment_cooldown).toBe(0);
     });
 
+    it('direct castle attack on the final attack step enters Recruitment when the captured castle can recruit', () => {
+      const castles = createDefaultCastles(BOARD_SIZE);
+      const blackCastle = castles.find(c => c.color === 'b')!;
+      const adjacentHex = blackCastle.hex.cubeRing(1).find(h => board.hexSet.has(h.getKey()))!;
+      const attacker = PieceFactory.create(PieceType.Knight, adjacentHex, 'w');
+      const state = createState([attacker], 3, castles);
+
+      const newState = CombatMutator.applyCastleAttack(state, attacker, blackCastle.hex, board);
+
+      expect(TurnManager.getCurrentPlayer(newState.turnCounter)).toBe('w');
+      expect(TurnManager.getTurnPhase(newState.turnCounter)).toBe('Recruitment');
+      expect(RuleEngine.getRecruitmentHexes(newState, board).length).toBeGreaterThan(0);
+    });
+
     it('combined arms: damage accumulates across attacks', () => {
       // Two archers attacking a Giant (strength 2)
       const archer1 = PieceFactory.create(PieceType.Archer, new Hex(0, 5, -5), 'w');

@@ -1000,7 +1000,7 @@ describe("Game ability integration", () => {
     expect(firstMove).not.toHaveAttribute("aria-current");
   });
 
-  test("arrow-key replay does not pull a live online player game into history", () => {
+  test("arrow-key replay lets active online players inspect history and return live", () => {
     const { liveSnapshot, moveTree } = createTwoMoveHistoryFixture();
 
     render(
@@ -1029,6 +1029,11 @@ describe("Game ability integration", () => {
     expect(liveMove).toHaveAttribute("aria-current", "step");
 
     fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft" });
+
+    expect(firstMove).toHaveAttribute("aria-current", "step");
+    expect(liveMove).not.toHaveAttribute("aria-current");
+
+    fireEvent.keyDown(window, { code: "ArrowRight", key: "ArrowRight" });
 
     expect(liveMove).toHaveAttribute("aria-current", "step");
     expect(firstMove).not.toHaveAttribute("aria-current");

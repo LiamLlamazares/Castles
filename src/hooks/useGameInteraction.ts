@@ -18,6 +18,7 @@ interface UseGameInteractionProps {
   currentPlayer: Color;
   handleHexClick: (hex: import("../Classes/Entities/Hex").Hex) => void;
   movingPiece: Piece | null;
+  isHistoryReadOnly?: boolean;
   onlineSession?: OnlineClientSession;
 }
 
@@ -29,10 +30,15 @@ export const useGameInteraction = ({
   currentPlayer,
   handleHexClick,
   movingPiece,
+  isHistoryReadOnly = false,
   onlineSession
 }: UseGameInteractionProps) => {
 
   const handlePieceClick = useCallback((pieceClicked: Piece) => {
+    if (isHistoryReadOnly) {
+      setState(prev => prev.movingPiece ? { ...prev, movingPiece: null } : prev);
+      return;
+    }
     if (onlineSession?.result) {
       return;
     }
@@ -93,9 +99,13 @@ export const useGameInteraction = ({
             movingPiece: newMovingPiece
         };
     });
-  }, [currentPlayer, turnPhase, movingPiece, handleHexClick, setState, gameEngine, onlineSession]);
+  }, [currentPlayer, turnPhase, movingPiece, handleHexClick, setState, gameEngine, isHistoryReadOnly, onlineSession]);
 
   const handleResign = useCallback((player: Color) => {
+    if (isHistoryReadOnly) {
+      return;
+    }
+
     if (onlineSession) {
       if (onlineSession.result) return;
       if (onlineSession.role === "player" && onlineSession.isActionPending) return;
@@ -119,7 +129,7 @@ export const useGameInteraction = ({
         }
         return { ...prev, viewNodeId: null, movingPiece: null };
     });
-  }, [setState, onlineSession]);
+  }, [isHistoryReadOnly, setState, onlineSession]);
 
   return {
     handlePieceClick,

@@ -734,7 +734,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
     onTakeback: handleTakeback,
     onResize: viewState.incrementResizeVersion,
     onNavigate: stepHistory,
-    isHistoryNavigationEnabled: isAnalysisMode || isReadOnlyOnline || !!displayedWinner,
+    isHistoryNavigationEnabled: isAnalysisMode || !!onlineSession || !!displayedWinner,
     onNewGame: handleNewGame,
     isNewGameEnabled: !hasGameStarted || !!winner || !!onlineSession?.result,
   });

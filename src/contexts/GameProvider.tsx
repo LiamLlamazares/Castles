@@ -198,6 +198,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     currentPlayer,
     handleHexClick,
     movingPiece,
+    isHistoryReadOnly: !isAnalysisMode && isViewingHistory,
     onlineSession
   });
 
@@ -226,6 +227,10 @@ export const GameProvider: React.FC<GameProviderProps> = ({
 
   // =========== PROMOTION ===========
   const promotePiece = useCallback((newType: PieceType) => {
+    if (!isAnalysisMode && isViewingHistory) {
+      return;
+    }
+
     if (onlineSession) {
       if (onlineSession.result) return;
       if (onlineSession.role === "player" && onlineSession.isActionPending) return;
@@ -242,7 +247,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({
     if (!state.promotionPending) return;
     const newState = gameEngine.promotePiece(state, state.promotionPending, newType);
     setState((prev: GameState) => ({ ...prev, ...newState }));
-  }, [state, gameEngine, setState, onlineSession]);
+  }, [isAnalysisMode, isViewingHistory, state, gameEngine, setState, onlineSession]);
 
   const canPledge = useCallback((sanctuaryHex: Hex): boolean => {
       return gameEngine.canPledge(state, sanctuaryHex); 

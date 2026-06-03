@@ -109,6 +109,9 @@ export const useAnalysisMode = <T extends AnalysisModeState>(
         if (currentNode.children.length > 0) {
           const selectedChild = currentNode.children[currentNode.selectedChildIndex] || currentNode.children[0];
           if (!selectedChild.snapshot) return prev;
+          if (selectedChild === tree.current) {
+            return { ...prev, viewNodeId: null };
+          }
           return { ...prev, viewNodeId: selectedChild.id };
         }
         
