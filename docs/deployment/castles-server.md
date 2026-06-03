@@ -9,7 +9,7 @@ Before copying commands to another host, replace these site-specific values ever
 ```text
 linux user:        lukasz
 repo path:         /home/lukasz/Castles
-domain:            castles.ls314.com
+app domain:        castles.ls314.com
 node port:         3000
 systemd env file:  /etc/castles/castles.env
 database name:     castles
@@ -19,6 +19,125 @@ database user:     castles
 `deploy/systemd/castles-node.service` is committed for the current `lukasz` and `/home/lukasz/Castles` layout. If you change the linux user or repo path above, edit the service unit in the repo before copying it, or the validation step below must fail.
 
 The server must have Node, npm, git, nginx, and certbot. PostgreSQL only has to run on this server when `DATABASE_URL` points to localhost. If `DATABASE_URL` points to a managed or separate PostgreSQL host, do not install a local PostgreSQL server just for Castles; use the remote PostgreSQL URL in `/etc/castles/castles.env`. `psql` and `pg_dump` are still useful on the app server for verification and backups, but they are client tools in that setup.
+
+Use the public app domain, such as `castles.ls314.com` or `castles.ls314.xyz`, for `PUBLIC_BASE_URL`. A host/admin alias such as `contabo.ls314.xyz` can be useful for SSH or server management, but it should not become `PUBLIC_BASE_URL` unless players will actually open the app there.
+
+Public firewall ports are `80` and `443` for nginx plus `22` for SSH administration. The Node app port, usually `3000`, should stay bound behind nginx and does not need to be public. PostgreSQL port `5432` only needs to be reachable from the app server to the database host; do not open the app server's PostgreSQL port unless PostgreSQL intentionally runs there and external database clients need it.
+
+By default the Node service binds to `127.0.0.1`, so nginx can reach it locally but public clients cannot connect directly to port `3000`. Keep `CASTLES_BIND_HOST=127.0.0.1` for the normal nginx-backed deployment.
+
+## Quick Path: Existing nginx, Remote PostgreSQL
+
+Use this when DNS and nginx are already serving HTTPS and proxying to `127.0.0.1:3000`, and the only missing piece is the Node app service. This is the smallest path for a server "lift" to a new domain.
+
+Do not install PostgreSQL locally in this path. The database is PostgreSQL, but it lives wherever `DATABASE_URL` points. Keep the real `DATABASE_URL` only in `/etc/castles/castles.env` or the server's secret manager; never commit it.
+
+1. Confirm nginx/DNS and identify whether Node is missing:
+
+```bash
+app_domain="<app-domain>"
+curl -I "https://${app_domain}/" || true
+curl -sS "https://${app_domain}/api/health" || true
+curl -sS http://127.0.0.1:3000/api/health || true
+sudo nginx -T | grep -E "server_name|127\\.0\\.0\\.1:3000|location /ws" -n
+```
+
+If external HTTPS works but `/api/health` returns `502 Bad Gateway`, and the localhost health check fails, nginx is probably fine and the Node service is not running or not listening on port `3000`.
+
+2. Install the system tools if they are missing:
+
+```bash
+sudo apt update
+sudo apt install -y git nginx certbot python3-certbot-nginx curl postgresql-client
+if [ ! -x /usr/bin/node ] || [ ! -x /usr/bin/npm ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+  sudo apt install -y nodejs
+fi
+/usr/bin/node --version
+/usr/bin/npm --version
+```
+
+3. Clone or update the reviewed commit:
+
+```bash
+deploy_user="lukasz"
+repo="/home/${deploy_user}/Castles"
+sha="<40-character-reviewed-commit-sha>"
+
+if [ ! -d "$repo/.git" ]; then
+  sudo -u "$deploy_user" git clone https://github.com/LiamLlamazares/Castles.git "$repo"
+fi
+
+cd "$repo"
+sudo -u "$deploy_user" git fetch origin online-action-log
+sudo -u "$deploy_user" git checkout --detach "$sha"
+test "$(sudo -u "$deploy_user" git rev-parse HEAD)" = "$sha"
+sudo -u "$deploy_user" npm ci
+sudo -u "$deploy_user" npm run build
+sudo -u "$deploy_user" npm run server:build
+```
+
+4. Create or update `/etc/castles/castles.env` without committing secrets:
+
+```bash
+app_domain="<app-domain>"
+sha="<40-character-reviewed-commit-sha>"
+repo="/home/lukasz/Castles"
+sudo install -d -m 700 /etc/castles
+sudo tee /etc/castles/castles.env >/dev/null <<ENV
+NODE_ENV=production
+PORT=3000
+CASTLES_BIND_HOST=127.0.0.1
+PUBLIC_BASE_URL=https://${app_domain}
+ONLINE_STORE_BACKEND=postgres
+DATABASE_URL=postgresql://<user>:<url-encoded-password>@<postgres-host>:5432/<database>
+CASTLES_STATIC_DIR=${repo}/build
+CASTLES_REQUIRE_STATIC_DIR=1
+BUILD_ID=$(date -u +%Y%m%d-%H%M%S)
+GIT_COMMIT=${sha}
+ENV
+sudo chmod 600 /etc/castles/castles.env
+```
+
+For the current remote-database setup, the database host should be the provided PostgreSQL host, not `localhost`. URL-encode the username and password inside `DATABASE_URL`; do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL.
+
+5. Verify the remote database connection from the app server:
+
+```bash
+db_url="$(sudo awk -F= '$1=="DATABASE_URL"{print substr($0, index($0, "=") + 1)}' /etc/castles/castles.env)"
+psql "$db_url" -c "select 1 as castles_db_ready;"
+```
+
+If this fails, fix the database URL, database firewall/allowlist, user permissions, or SSL mode before starting Node.
+
+6. Install and restart the Node service:
+
+```bash
+deploy_user="lukasz"
+repo="/home/${deploy_user}/Castles"
+cd "$repo"
+grep -qx "User=${deploy_user}" deploy/systemd/castles-node.service
+grep -qx "WorkingDirectory=${repo}" deploy/systemd/castles-node.service
+sudo cp deploy/systemd/castles-node.service /etc/systemd/system/castles-node.service
+sudo systemctl daemon-reload
+sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
+sudo systemctl enable castles-node.service
+sudo systemctl restart castles-node.service
+systemctl is-active castles-node.service
+curl -sS http://127.0.0.1:3000/api/health
+```
+
+7. Verify through the public domain:
+
+```bash
+app_domain="<app-domain>"
+sha="<40-character-reviewed-commit-sha>"
+curl -sS "https://${app_domain}/api/health"
+node scripts/deploy/check-online-smoke.mjs "https://${app_domain}" "$sha"
+npm run online:smoke:browser -- "https://${app_domain}" "$sha"
+```
+
+If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.
 
 ## 0. Fresh Server Reinstall From Zero
 
@@ -61,7 +180,7 @@ The systemd unit uses `/usr/bin/npm`, so Node must be installed system-wide. An 
 ```bash
 deploy_user="lukasz"
 repo="/home/${deploy_user}/Castles"
-sha="<reviewed-commit-sha>"
+sha="<40-character-reviewed-commit-sha>"
 sudo -u "$deploy_user" git clone https://github.com/LiamLlamazares/Castles.git "$repo"
 cd "$repo"
 sudo -u "$deploy_user" git fetch origin online-action-log
@@ -87,13 +206,14 @@ sudo install -d -m 700 /etc/castles
 sudo tee /etc/castles/castles.env >/dev/null <<'ENV'
 NODE_ENV=production
 PORT=3000
+CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://<domain>
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://<user>:<password>@<postgres-host>:5432/<database>
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
 CASTLES_REQUIRE_STATIC_DIR=1
 BUILD_ID=<timestamp-or-release-id>
-GIT_COMMIT=<reviewed-commit-sha>
+GIT_COMMIT=<40-character-reviewed-commit-sha>
 ENV
 sudo chmod 600 /etc/castles/castles.env
 ```
@@ -213,7 +333,7 @@ sudo systemctl reload nginx
 9. Verify externally:
 
 ```bash
-sha="<reviewed-commit-sha>"
+sha="<40-character-reviewed-commit-sha>"
 curl -sS https://<domain>/api/health
 node scripts/deploy/check-online-smoke.mjs https://<domain> "$sha"
 npm run online:smoke:browser -- https://<domain> "$sha"
@@ -232,7 +352,7 @@ curl -sS http://127.0.0.1:3000/api/health
 On the server, set the reviewed commit SHA first:
 
 ```bash
-sha="<reviewed-commit-sha>"
+sha="<40-character-reviewed-commit-sha>"
 cd /home/lukasz/Castles
 hostname
 node --version
@@ -354,6 +474,7 @@ if [ ! -f /etc/castles/castles.env ]; then
 fi
 sudo cp -a /etc/castles/castles.env "$backup/castles.env.predeploy"
 sudo grep -qx "NODE_ENV=production" /etc/castles/castles.env || sudo sh -c 'printf "\nNODE_ENV=production\n" >> /etc/castles/castles.env'
+sudo grep -q "^CASTLES_BIND_HOST=" /etc/castles/castles.env || sudo sh -c 'printf "\nCASTLES_BIND_HOST=127.0.0.1\n" >> /etc/castles/castles.env'
 sudo grep -qx "CASTLES_REQUIRE_STATIC_DIR=1" /etc/castles/castles.env || sudo sh -c 'printf "\nCASTLES_REQUIRE_STATIC_DIR=1\n" >> /etc/castles/castles.env'
 sudo sed -i "s/GIT_COMMIT=.*/GIT_COMMIT=$sha/" /etc/castles/castles.env
 sudo sed -i "s/BUILD_ID=.*/BUILD_ID=$(date -u +%Y%m%d-%H%M%S)/" /etc/castles/castles.env
@@ -373,18 +494,21 @@ Review `/etc/castles/castles.env` before starting. It should contain:
 ```text
 NODE_ENV=production
 PORT=3000
+CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://castles.ls314.com
 ONLINE_STORE_BACKEND=postgres
-DATABASE_URL=postgresql://castles:<password>@localhost:5432/castles
+DATABASE_URL=postgresql://castles:<url-encoded-password>@<postgres-host>:5432/castles
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
 CASTLES_REQUIRE_STATIC_DIR=1
 BUILD_ID=<timestamp>
-GIT_COMMIT=<reviewed-commit-sha>
+GIT_COMMIT=<40-character-reviewed-commit-sha>
 ```
 
 Create or update the database and app user before starting the service. Replace the password with the same value used in `DATABASE_URL`.
 
-If `DATABASE_URL` points to a managed or separate PostgreSQL host, do this database/user setup on that database host or provider, not on the app server. On the app server, only the env file and connectivity check are required. The local `sudo -u postgres psql` block below is only for deployments where PostgreSQL intentionally runs on the same server as the app.
+If `DATABASE_URL` points to a managed or separate PostgreSQL host, do this database/user setup on that database host or provider, not on the app server. On the app server, only the env file and connectivity check are required.
+
+Same-server PostgreSQL only: run the local `sudo -u postgres psql` block below only when PostgreSQL intentionally runs on the same server as the app.
 
 Use a URL-encoded password in `DATABASE_URL`. For example, a literal password `p@$&;#` becomes `p%40%24%26%3B%23` inside the URL. In the SQL block below, escape a single quote in the literal password by writing it twice.
 
@@ -444,7 +568,7 @@ The `load_castles_db_env` helper above is reused by the verification snippet bel
 
 For a managed or separate PostgreSQL host, the verification block is the same after `load_castles_db_env`, provided the app server has the `psql` client installed and the database firewall allows this server to connect. If the provider does not allow `psql` from the app server, `sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env` is the minimum readiness check because it connects through the same Node PostgreSQL client used by the app.
 
-Install service/proxy config:
+Install service config and verify the existing proxy:
 
 ```bash
 if [ -f /etc/systemd/system/castles-node.service ]; then
@@ -457,32 +581,16 @@ else
   echo "No existing systemd unit found; this looks like a first deploy."
 fi
 
-if [ -f /etc/nginx/sites-available/castles ]; then
-  sudo diff -u /etc/nginx/sites-available/castles deploy/nginx/castles.conf || {
-    echo "Nginx config drift shown above. The live service is still running."
-    echo "Continue only if this diff is expected."
-    exit 1
-  }
-else
-  echo "No existing nginx site config found; this looks like a first deploy."
-fi
-
 sudo cp deploy/systemd/castles-node.service /etc/systemd/system/castles-node.service
-sudo cp deploy/nginx/castles.conf /etc/nginx/sites-available/castles
-sudo ln -sfn /etc/nginx/sites-available/castles /etc/nginx/sites-enabled/castles
-
 sudo nginx -t || {
-  echo "Nginx config failed. Restoring backed-up config; the live service was not stopped."
-  if [ -f "$backup/nginx-castles.conf" ]; then
-    sudo cp "$backup/nginx-castles.conf" /etc/nginx/sites-available/castles
-  else
-    sudo rm -f /etc/nginx/sites-available/castles
-    sudo rm -f /etc/nginx/sites-enabled/castles
-  fi
+  echo "Nginx config failed. The live service was not stopped."
   exit 1
 }
+sudo nginx -T | grep -E "server_name|127\\.0\\.0\\.1:3000|location /ws" -n
 sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env
 ```
+
+Do not copy `deploy/nginx/castles.conf` into a working lifted server unless you have reviewed the domain and certificate paths. That committed file is a template for the current `castles.ls314.com` host, and a new domain such as `castles.ls314.xyz` needs its own nginx `server_name` and certificate paths. If an nginx change is part of a reviewed deploy, apply it separately, run `sudo nginx -t`, and reload nginx only after the Node config check passes.
 
 The config check replays the online store before the live service is stopped. If it fails with old beta event rows, v1 action events missing `clientActionId`, or missing credential rows, reset disposable beta online data after confirming the backup above exists and only while the app still has no real users:
 

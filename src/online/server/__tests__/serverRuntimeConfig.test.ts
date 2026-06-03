@@ -23,6 +23,7 @@ describe("parseServerRuntimeConfig", () => {
 
     expect(config).toEqual({
       port: 3100,
+      bindHost: "127.0.0.1",
       publicBaseUrl: "https://castles.example",
       staticDir: "/srv/castles/build",
       requireStaticDir: true,
@@ -37,6 +38,7 @@ describe("parseServerRuntimeConfig", () => {
     const config = parseServerRuntimeConfig({}, "C:/repo/Castles");
 
     expect(config.port).toBe(3000);
+    expect(config.bindHost).toBe("127.0.0.1");
     expect(config.publicBaseUrl).toBe("http://localhost:3000");
     expect(config.staticDir).toBe("C:/repo/Castles/build");
     expect(config.requireStaticDir).toBe(false);
@@ -49,6 +51,46 @@ describe("parseServerRuntimeConfig", () => {
     expect(() => parseServerRuntimeConfig({ PORT: "70000" }, "/srv/castles")).toThrow(
       /PORT/
     );
+  });
+
+  it("allows an explicit bind host only as a host value", () => {
+    expect(
+      parseServerRuntimeConfig(
+        { CASTLES_BIND_HOST: "0.0.0.0" },
+        "/srv/castles"
+      ).bindHost
+    ).toBe("0.0.0.0");
+    expect(
+      parseServerRuntimeConfig(
+        { CASTLES_BIND_HOST: "::1" },
+        "/srv/castles"
+      ).bindHost
+    ).toBe("::1");
+
+    expect(() =>
+      parseServerRuntimeConfig(
+        { CASTLES_BIND_HOST: "http://127.0.0.1:3000" },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_BIND_HOST/);
+    expect(() =>
+      parseServerRuntimeConfig(
+        { CASTLES_BIND_HOST: "127.0.0.1:3000" },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_BIND_HOST/);
+    expect(() =>
+      parseServerRuntimeConfig(
+        { CASTLES_BIND_HOST: "localhost:3000" },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_BIND_HOST/);
+    expect(() =>
+      parseServerRuntimeConfig(
+        { CASTLES_BIND_HOST: "[::1]" },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_BIND_HOST/);
   });
 
   it("requires an explicit PUBLIC_BASE_URL in production", () => {

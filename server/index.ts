@@ -231,8 +231,10 @@ async function main() {
       console.warn(`Static build directory not found: ${config.staticDir}`);
     }
 
-    server.listen(config.port, () => {
-      console.log(`Castles online server listening on ${config.publicBaseUrl}`);
+    server.listen(config.port, config.bindHost, () => {
+      console.log(
+        `Castles online server listening on ${config.publicBaseUrl} via ${config.bindHost}:${config.port}`
+      );
       console.log(`Persisting online games with ${storeBackend} store at ${healthStorePath}`);
     });
 

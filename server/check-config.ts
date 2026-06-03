@@ -43,6 +43,7 @@ async function main() {
       {
         ok: true,
         port: config.port,
+        bindHost: config.bindHost,
         publicBaseUrl: config.publicBaseUrl,
         staticDir: config.staticDir,
         staticDirRequired: config.requireStaticDir,

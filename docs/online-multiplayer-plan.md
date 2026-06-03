@@ -569,6 +569,17 @@ Remaining work:
 - Add signed-in archive UI only after account identity exists, then keep device-local recent replays as an anonymous fallback.
 - Ratings remain deferred until result contracts, account identity, and moderation basics are strong enough.
 
+## Phase 6AA: Deployment Handoff and Reinstall Runbook
+
+Goal: make a server move or fresh reinstall understandable without live debugging or guessing which layer is responsible.
+
+Status: implemented locally on 2026-06-03. The production runbook now has a quick path for the current handoff shape where nginx already terminates HTTPS and proxies to `127.0.0.1:3000`, PostgreSQL is remote, and the missing piece may only be the Node service. The Node service now binds to `127.0.0.1` by default through `CASTLES_BIND_HOST`, so port `3000` stays behind nginx unless explicitly overridden. README now states that online multiplayer uses PostgreSQL through `ONLINE_STORE_BACKEND=postgres` and a secret `DATABASE_URL`, and points operators to the production runbook.
+
+Remaining work:
+
+- Keep smoke checks pinned to the expected commit on every live deploy.
+- Update the runbook again when accounts, migrations, multi-instance deployment, or managed release automation change the deploy shape.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -606,7 +617,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Harden Tutorial/Rules trust next: make each objective's validation metadata explicit, add engine-graded checks only where the board state and event are tested, and keep read-only lessons completable from Next.
-2. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually thumbnails/clocks/spectator counts only from server-backed data.
+1. Improve public directory scanability after the summary model grows: richer Watch/Archive filters, clearer replay metadata, and eventually thumbnails/clocks/spectator counts only from server-backed data.
+2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

@@ -36,6 +36,10 @@ The app is organized around a React UI and a TypeScript game engine.
 
 The canonical rules source is the in-app rules content in `src/rules/rulesContent.ts`. Use the Rules page in the app for the player-facing reference.
 
+## Online Server
+
+Online multiplayer uses the Node server in `server/` with PostgreSQL persistence. Production should set `ONLINE_STORE_BACKEND=postgres` and a secret `DATABASE_URL` in the server environment; do not commit database credentials. The production runbook is [docs/deployment/castles-server.md](docs/deployment/castles-server.md).
+
 ## Documentation
 
 *   **`docs/architecture.md`**: Current architecture and source-of-truth boundaries.

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 
 export interface ServerRuntimeConfig {
   port: number;
+  bindHost: string;
   publicBaseUrl: string;
   staticDir: string;
   requireStaticDir: boolean;
@@ -40,6 +41,21 @@ function parsePort(value: string | undefined): number {
     throw new Error("PORT must be an integer between 1 and 65535.");
   }
   return port;
+}
+
+function parseBindHost(value: string | undefined): string {
+  const raw = value?.trim();
+  if (!raw) return "127.0.0.1";
+  if (/\s/.test(raw) || raw.includes("/") || raw.includes("://")) {
+    throw new Error("CASTLES_BIND_HOST must be a hostname or IP address, not a URL.");
+  }
+  if (/^[A-Za-z0-9.-]+:\d+$/.test(raw)) {
+    throw new Error("CASTLES_BIND_HOST must not include a port; set PORT separately.");
+  }
+  if (raw.startsWith("[") || raw.endsWith("]")) {
+    throw new Error("CASTLES_BIND_HOST must not use URL-style IPv6 brackets.");
+  }
+  return raw;
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -104,6 +120,7 @@ export function parseServerRuntimeConfig(
   cwd: string = process.cwd()
 ): ServerRuntimeConfig {
   const port = parsePort(env.PORT);
+  const bindHost = parseBindHost(env.CASTLES_BIND_HOST);
   const publicBaseUrl = normalizePublicBaseUrl(env, port);
   requireProductionMetadata(env);
   const staticDir = env.CASTLES_STATIC_DIR?.trim()
@@ -127,6 +144,7 @@ export function parseServerRuntimeConfig(
 
   return {
     port,
+    bindHost,
     publicBaseUrl,
     staticDir: normalizePath(staticDir),
     requireStaticDir,
