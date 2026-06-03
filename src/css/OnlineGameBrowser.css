@@ -617,6 +617,24 @@
   line-height: 1.35;
 }
 
+.online-browser-account-subsection {
+  display: grid;
+  gap: 8px;
+}
+
+.online-account-active-game-row {
+  background: rgba(116, 199, 151, 0.07);
+  border-color: rgba(116, 199, 151, 0.2);
+}
+
+.online-game-action-note {
+  color: #d9d0b8;
+  font-size: 0.88rem;
+  font-weight: 800;
+  max-width: 220px;
+  text-align: right;
+}
+
 .online-recent-game-row {
   background: rgba(18, 22, 21, 0.5);
 }
@@ -713,6 +731,11 @@
   .online-browser-public-archive .online-browser-side-list-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .online-game-action-note {
+    max-width: none;
+    text-align: left;
   }
 }
 

@@ -469,6 +469,15 @@ export function resolveOnlineJoinParams(
   return token ? { gameId, seat, token } : null;
 }
 
+export function resolveStoredOnlineJoinParams(
+  gameId: string,
+  seat: "w" | "b",
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
+): OnlineJoinParams | null {
+  const token = storage?.getItem(storageKey(gameId, seat));
+  return token ? { gameId, seat, token } : null;
+}
+
 export function removeOnlineTokenFromUrl(urlText: string): string {
   const url = new URL(urlText);
   url.searchParams.delete("token");

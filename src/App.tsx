@@ -66,6 +66,7 @@ import {
   parseOnlineSpectatorParams,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
+  resolveStoredOnlineJoinParams,
   startQuickMatch,
   updateOnlineGameVisibility,
   OnlineChallengeParams,
@@ -79,6 +80,7 @@ import {
   FetchOnlineAccountGamesOptions,
 } from './online/client';
 import type { OnlineAccount } from './online/accounts';
+import type { OnlineGameSummary } from './online/readModel';
 import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from './online/types';
 import {
   clearRecentOnlineGames,
@@ -893,18 +895,29 @@ function App() {
     enterGameView();
   };
 
-  const enterOnlineGameFromInvite = (invite: OnlineChallengeGameInvite) => {
+  const enterOnlineGameFromJoin = (
+    join: OnlineJoinParams,
+    urlSource?: string,
+    knownVisibility?: OnlineGameVisibility
+  ) => {
     cancelPendingReplay();
     clearAnalysisReturn();
     forgetOnlineChallengeStorage(onlineChallenge);
     clearOpenSeekState();
-    const join = {
-      gameId: invite.gameId,
-      seat: invite.seat,
-      token: invite.token,
-    };
     rememberOnlineJoinParams(join);
-    const joinUrl = new URL(removeOnlineTokenFromUrl(invite.url));
+    const joinUrl = urlSource
+      ? new URL(removeOnlineTokenFromUrl(urlSource))
+      : new URL(window.location.href);
+    joinUrl.searchParams.delete("view");
+    joinUrl.searchParams.delete("pgn");
+    joinUrl.searchParams.delete("game");
+    joinUrl.searchParams.delete("onlineChallenge");
+    joinUrl.searchParams.delete("challengeRole");
+    joinUrl.searchParams.delete("challengeToken");
+    joinUrl.searchParams.set("onlineGame", join.gameId);
+    joinUrl.searchParams.set("seat", join.seat);
+    joinUrl.searchParams.delete("token");
+    joinUrl.hash = "";
     window.history.pushState(
       {},
       "",
@@ -919,9 +932,20 @@ function App() {
     setOnlineOpponentInviteUrl(null);
     setOnlineVisibilityByGameId(prev => ({
       ...prev,
-      [join.gameId]: "unlisted",
+      [join.gameId]: knownVisibility ?? prev[join.gameId] ?? "unlisted",
     }));
     enterGameView();
+  };
+
+  const enterOnlineGameFromInvite = (invite: OnlineChallengeGameInvite) => {
+    enterOnlineGameFromJoin(
+      {
+        gameId: invite.gameId,
+        seat: invite.seat,
+        token: invite.token,
+      },
+      invite.url
+    );
   };
 
   const handleSpectateOnlineGame = (gameId: string) => {
@@ -1017,6 +1041,14 @@ function App() {
     }
     return fetchOnlineAccountGames({ token: onlineAccountSession.token }, options);
   }, [onlineAccountSession?.token]);
+
+  const resolveAccountGameJoin = useCallback((game: OnlineGameSummary, seat: "w" | "b") => {
+    return resolveStoredOnlineJoinParams(game.gameId, seat);
+  }, []);
+
+  const handleReturnToAccountGame = useCallback((join: OnlineJoinParams, visibility: OnlineGameVisibility) => {
+    enterOnlineGameFromJoin(join, undefined, visibility);
+  }, [enterOnlineGameFromJoin]);
 
   const handleCreateOnlineChallenge = async (
     board: Board,
@@ -1622,6 +1654,8 @@ function App() {
   );
   const onlineSession = useMemo<OnlineClientSession | undefined>(() => {
     if (onlineJoin && onlineSnapshot) {
+      const visibility = onlineVisibilityByGameId[onlineJoin.gameId] ?? "unlisted";
+      const isPrivate = visibility === "private";
       return {
         gameId: onlineJoin.gameId,
         role: "player",
@@ -1632,11 +1666,11 @@ function App() {
         isActionPending: onlineConnection.isActionPending,
         clock: onlineSnapshot.clock,
         result: onlineSnapshot.result,
-        visibility: onlineVisibilityByGameId[onlineJoin.gameId] ?? "unlisted",
+        visibility,
         opponentInviteUrl: onlineJoin.seat === "w" ? onlineOpponentInviteUrl ?? undefined : undefined,
-        spectatorUrl: buildSpectatorUrl(window.location.href, onlineJoin.gameId),
+        spectatorUrl: isPrivate ? undefined : buildSpectatorUrl(window.location.href, onlineJoin.gameId),
         submitAction: onlineConnection.submitAction,
-        updateVisibility: handleUpdateOnlineVisibility,
+        updateVisibility: isPrivate ? undefined : handleUpdateOnlineVisibility,
       };
     }
 
@@ -2045,6 +2079,8 @@ function App() {
           onJoinOwnedSeek={openSeekResponse?.gameInvite ? handleJoinOwnedOpenSeek : undefined}
           onSpectate={handleSpectateOnlineGame}
           onReplay={handleReplayOnlineGame}
+          resolveAccountGameJoin={resolveAccountGameJoin}
+          onReturnToAccountGame={handleReturnToAccountGame}
           recentOnlineGames={recentOnlineGames}
           onClearRecentOnlineGames={handleClearRecentOnlineGames}
           account={onlineAccount}

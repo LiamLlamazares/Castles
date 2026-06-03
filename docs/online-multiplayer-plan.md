@@ -729,6 +729,18 @@ Tests/review/deploy gates:
 - Review: UI/security review focused on not mixing account history, public archive, device-local replay locators, and game seat tokens.
 - Deploy: deploy only after the account archive still loads with PostgreSQL-backed `GET /api/online/account/games`.
 
+## Phase 7D: Same-Browser Active Account Game Return
+
+Goal: let signed-in users see active account games and return to the local player seat when this browser session still has the saved game seat token, without treating account sessions as game seat tokens.
+
+Status: implemented locally on 2026-06-03. The account section now loads `GET /api/online/account/games?state=all`, separates active account games from completed account replays, and shows `Return to Game` only when session storage has the matching per-seat player token. Active account games without a local session token fall back to `Spectate` when the game visibility allows it; private games without the local token clearly require the original browser session or invite link. This improves local recovery after losing the URL while keeping account bearer tokens separate from move authorization.
+
+Tests/review/deploy gates:
+
+- Tests: client storage helper tests, Online browser active account return/spectate/private fallback tests, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit.
+- Review: account/session review focused on preserving the boundary between account sessions, player seat tokens, spectator access, and private-game visibility.
+- Deploy: deploy only after active and completed account game lists still load from PostgreSQL-backed account history.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
@@ -762,8 +774,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Verify Phase 7C with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
-2. Design account-seat rejoin/renewal separately before allowing signed-in users to recover player access from account history. The current account archive can analyze completed games, but it must not mint or expose game seat tokens casually.
+1. Verify Phase 7D with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
+2. Design true cross-device account-seat recovery separately. Current storage supports one credential hash per seat, so robust cross-device recovery needs either multi-token seat credentials or explicit account-authorized move submission, plus revocation semantics.
 3. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 4. Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer challenge/open-seek flows for account-owned games.
 5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.

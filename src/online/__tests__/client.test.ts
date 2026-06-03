@@ -40,6 +40,7 @@ import {
   resolveOnlineAccountSession,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
+  resolveStoredOnlineJoinParams,
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
   startQuickMatch,
@@ -189,6 +190,21 @@ describe("online client helpers", () => {
         storageAdapter
       )
     ).toEqual(join);
+  });
+
+  it("resolves a stored online join by game id and seat for same-browser account recovery", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+    const join = { gameId: "game_123", seat: "b" as const, token: "black-secret" };
+
+    rememberOnlineJoinParams(join, storageAdapter);
+
+    expect(resolveStoredOnlineJoinParams("game_123", "b", storageAdapter)).toEqual(join);
+    expect(resolveStoredOnlineJoinParams("game_123", "w", storageAdapter)).toBeNull();
   });
 
   it("forgets stored private invite and opponent invite credentials", () => {

@@ -228,7 +228,18 @@ describe("OnlineGameBrowser", () => {
         { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b" } },
       ],
     });
-    const loadAccountGames = vi.fn().mockResolvedValue(directory([accountArchive, publicArchive]));
+    const activeAccount = summary({
+      gameId: "game_active_account",
+      status: "active",
+      archiveState: "active",
+      visibility: "private",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_w" } },
+        { seat: "b", role: "black", identity: account.identity },
+      ],
+    });
+    const loadAccountGames = vi.fn().mockResolvedValue(directory([activeAccount, accountArchive, publicArchive]));
+    const onReturnToAccountGame = vi.fn();
 
     render(
       <OnlineGameBrowser
@@ -241,6 +252,12 @@ describe("OnlineGameBrowser", () => {
         account={account}
         accountStatus="ready"
         loadAccountGames={loadAccountGames}
+        resolveAccountGameJoin={(game, seat) =>
+          game.gameId === "game_active_account" && seat === "b"
+            ? { gameId: game.gameId, seat, token: "black-token" }
+            : null
+        }
+        onReturnToAccountGame={onReturnToAccountGame}
         recentOnlineGames={[
           {
             gameId: "game_private_account_archive",
@@ -260,15 +277,31 @@ describe("OnlineGameBrowser", () => {
     );
 
     const accountGames = await screen.findByRole("region", { name: "Your account games" });
+    const activeGames = await screen.findByRole("region", { name: "Active account games" });
+    const completedGames = await screen.findByRole("region", { name: "Completed account games" });
     const recentGames = await screen.findByRole("region", { name: "Recent online games on this device" });
-    expect(loadAccountGames).toHaveBeenCalledWith({ state: "archived", limit: 50 });
-    expect(within(accountGames).getByText("game_private_account_archive")).toBeInTheDocument();
+    expect(loadAccountGames).toHaveBeenCalledWith({ state: "all", limit: 50 });
+    expect(within(activeGames).getByText("game_active_account")).toBeInTheDocument();
+    expect(within(activeGames).getByText("Your seat Black")).toBeInTheDocument();
+    fireEvent.click(
+      within(activeGames).getByRole("button", {
+        name: "Return to account game White vs Liam, game_active_account",
+      })
+    );
+    expect(onReturnToAccountGame).toHaveBeenCalledWith({
+      gameId: "game_active_account",
+      seat: "b",
+      token: "black-token",
+    }, "private");
+    expect(within(completedGames).getByText("game_private_account_archive")).toBeInTheDocument();
     expect(within(accountGames).queryByText("game_public_archive")).not.toBeInTheDocument();
     expect(within(recentGames).getByText("game_device_only_archive")).toBeInTheDocument();
     expect(within(recentGames).queryByText("game_private_account_archive")).not.toBeInTheDocument();
     expect(screen.getByText("game_public_archive")).toBeInTheDocument();
 
-    expect(screen.getByRole("status")).toHaveTextContent("1 account game, 1 public replay, 1 device replay shown");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "1 active account game, 1 account replay, 1 public replay, 1 device replay shown"
+    );
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search online archive" }), {
       target: { value: "does-not-match" },
@@ -325,6 +358,70 @@ describe("OnlineGameBrowser", () => {
     expect(await screen.findByRole("region", { name: "Recent online games on this device" })).toHaveTextContent(
       "game_device_only_waits"
     );
+  });
+
+  it("falls back safely when active account games do not have a local player token", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_active_fallback",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_active_fallback", displayName: "Liam" },
+    };
+    const onSpectate = vi.fn();
+    const publicActive = summary({
+      gameId: "game_public_active_account",
+      status: "active",
+      archiveState: "active",
+      visibility: "unlisted",
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b" } },
+      ],
+    });
+    const privateActive = summary({
+      gameId: "game_private_active_account",
+      status: "active",
+      archiveState: "active",
+      visibility: "private",
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b_private" } },
+      ],
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={onSpectate}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountGames={vi.fn().mockResolvedValue(directory([publicActive, privateActive]))}
+        resolveAccountGameJoin={vi.fn().mockReturnValue(null)}
+      />
+    );
+
+    const activeGames = await screen.findByRole("region", { name: "Active account games" });
+    expect(activeGames).toHaveTextContent("game_public_active_account");
+    expect(activeGames).toHaveTextContent("game_private_active_account");
+    expect(activeGames).toHaveTextContent("Player token not in this browser session");
+    fireEvent.click(
+      within(activeGames).getByRole("button", {
+        name: "Spectate account game Liam vs Black, game_public_active_account",
+      })
+    );
+    expect(onSpectate).toHaveBeenCalledWith("game_public_active_account");
+    expect(activeGames).toHaveTextContent("Open from original browser session or invite link");
+    expect(
+      within(activeGames).queryByRole("button", {
+        name: "Spectate account game Liam vs Black, game_private_active_account",
+      })
+    ).not.toBeInTheDocument();
   });
 
   it("reports account archive errors without falling back to possibly duplicated device rows", async () => {

@@ -19,6 +19,8 @@ import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../online/readModel";
 import {
   rememberOnlineChallengeParams,
   rememberOnlineChallengeShareUrl,
+  rememberOnlineAccountSession,
+  rememberOnlineJoinParams,
   rememberOpenSeekCreatorParams,
   resolveOnlineChallengeShareUrl,
 } from "../online/client";
@@ -57,6 +59,7 @@ vi.mock("../components/Game", () => ({
     onlineSession?: {
       role: string;
       visibility?: string;
+      spectatorUrl?: string;
       updateVisibility?: (visibility: "public" | "unlisted") => Promise<unknown>;
     };
     sanctuarySettings?: { unlockTurn: number; cooldown: number };
@@ -86,6 +89,7 @@ vi.mock("../components/Game", () => ({
       <div>Game Ready</div>
       <div>Online session: {props.onlineSession?.role ?? "none"}</div>
       <div>Online visibility: {props.onlineSession?.visibility ?? "none"}</div>
+      <div>Online spectator URL: {props.onlineSession?.spectatorUrl ?? "none"}</div>
       <div>
         Initial castle owners: {
           props.initialCastles
@@ -307,6 +311,9 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     ownedSeekResponse,
     onRefreshOwnedSeek,
     onJoinOwnedSeek,
+    account,
+    resolveAccountGameJoin,
+    onReturnToAccountGame,
     recentOnlineGames = [],
     onClearRecentOnlineGames,
     backLabel = "Back to game",
@@ -330,6 +337,18 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     ownedSeekResponse?: { summary: { status: string } };
     onRefreshOwnedSeek?: () => void;
     onJoinOwnedSeek?: () => void;
+    account?: { identity: { kind: string; id: string; displayName?: string }; displayName: string };
+    resolveAccountGameJoin?: (
+      game: {
+        gameId: string;
+        visibility: "private" | "unlisted" | "public";
+      },
+      seat: "w" | "b"
+    ) => { gameId: string; seat: "w" | "b"; token: string } | null;
+    onReturnToAccountGame?: (
+      join: { gameId: string; seat: "w" | "b"; token: string },
+      visibility: "private" | "unlisted" | "public"
+    ) => void;
     recentOnlineGames?: { gameId: string; status: string }[];
     onClearRecentOnlineGames?: () => void;
     backLabel?: string;
@@ -414,6 +433,50 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       {onJoinOwnedSeek && (
         <button type="button" onClick={onJoinOwnedSeek}>
           Join accepted seek
+        </button>
+      )}
+      {account && resolveAccountGameJoin && onReturnToAccountGame && (
+        <button
+          type="button"
+          onClick={() => {
+            const activePrivateAccountGame = {
+              schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+              gameId: "game_private_account_return",
+              rulesetVersion: "castles-beta-v1",
+              createdAt: "2026-06-03T12:00:00.000Z",
+              updatedAt: "2026-06-03T12:01:00.000Z",
+              version: 3,
+              status: "active",
+              visibility: "private" as const,
+              archiveState: "active",
+              hasTimeControl: false,
+              participants: [
+                { seat: "w", role: "white", identity: account.identity },
+                { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+              ],
+              livePreview: {
+                sideToMove: "w",
+                turnPhase: "Movement",
+                moveCount: 1,
+                boardPreview: {
+                  radius: 6,
+                  pieces: [
+                    { q: 0, r: 6, s: -6, color: "w", type: PieceType.Monarch },
+                    { q: 0, r: -6, s: 6, color: "b", type: PieceType.Monarch },
+                  ],
+                  castles: [
+                    { q: 0, r: 6, s: -6, owner: "w" },
+                    { q: 0, r: -6, s: 6, owner: "b" },
+                  ],
+                },
+              },
+              lastEventId: "evt_private_account_return",
+            };
+            const join = resolveAccountGameJoin(activePrivateAccountGame, "w");
+            if (join) onReturnToAccountGame(join, activePrivateAccountGame.visibility);
+          }}
+        >
+          Mock Return Active Account Game
         </button>
       )}
       {onOpenGame && (
@@ -1998,6 +2061,80 @@ describe("App game setup lifecycle", () => {
     await waitFor(() => {
       expect(screen.getByText("Online visibility: unlisted")).toBeInTheDocument();
     });
+  });
+
+  it("returns to a private active account game without treating it as unlisted", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_private_return",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_private_return", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    rememberOnlineJoinParams({
+      gameId: "game_private_account_return",
+      seat: "w",
+      token: "white-seat-token",
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/games") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: 1, games: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ schemaVersion: 1, games: [] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Return Active Account Game" }));
+
+    await waitFor(() => {
+      expect(onlineHookMocks.useOnlineGameConnection).toHaveBeenLastCalledWith(
+        { gameId: "game_private_account_return", seat: "w", token: "white-seat-token" },
+        expect.any(Function)
+      );
+    });
+    expect(window.location.search).toContain("onlineGame=game_private_account_return");
+    expect(window.location.search).toContain("seat=w");
+    expect(window.location.search).not.toContain("token=");
+
+    const playerCallback = onlineHookMocks.useOnlineGameConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      playerCallback(spectatorSnapshot("game_private_account_return"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Online session: player")).toBeInTheDocument();
+      expect(screen.getByText("Online visibility: private")).toBeInTheDocument();
+      expect(screen.getByText("Online spectator URL: none")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "Mock Publish Current Game" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mock Unlist Current Game" })).not.toBeInTheDocument();
   });
 
   it("shows access denied for an invalid challenge link", async () => {

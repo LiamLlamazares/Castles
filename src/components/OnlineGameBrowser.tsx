@@ -17,12 +17,16 @@ import type {
   OnlineGameSummaryBoardPreviewHex,
   OnlineGameSummary,
   OnlineGameSummaryParticipant,
+  OnlineGameVisibility,
 } from "../online/readModel";
 import {
   ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH,
+  canSpectateOnlineGameSummary,
+  isSameOnlineIdentity,
   normalizeOnlineGameDirectorySearchQuery,
   onlineGameSummaryDirectorySearchText,
 } from "../online/readModel";
+import type { OnlineJoinParams } from "../online/client";
 import type {
   OpenSeekDirectoryResponse,
   OpenSeekSummary,
@@ -80,6 +84,8 @@ interface OnlineGameBrowserProps {
   ownedSeekIds?: string[];
   onReplay: (gameId: string) => void;
   onSpectate: (gameId: string) => void;
+  resolveAccountGameJoin?: (game: OnlineGameSummary, seat: "w" | "b") => OnlineJoinParams | null;
+  onReturnToAccountGame?: (join: OnlineJoinParams, visibility: OnlineGameVisibility) => void;
   recentOnlineGames?: RecentOnlineGameRecord[];
   onClearRecentOnlineGames?: () => void;
   account?: OnlineAccount | null;
@@ -418,6 +424,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   ownedSeekIds = [],
   onReplay,
   onSpectate,
+  resolveAccountGameJoin,
+  onReturnToAccountGame,
   recentOnlineGames = [],
   onClearRecentOnlineGames,
   account = null,
@@ -873,7 +881,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
     const requestId = ++accountGamesRequestIdRef.current;
     setAccountGamesStatus("loading");
-    loadAccountGames({ state: "archived", limit: 50 })
+    loadAccountGames({ state: "all", limit: 50 })
       .then((response) => {
         if (requestId !== accountGamesRequestIdRef.current) return;
         setAccountGames(response.games);
@@ -888,6 +896,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       accountGamesRequestIdRef.current += 1;
     };
   }, [account?.accountId, loadAccountGames, tab]);
+
+  const accountActiveGames = React.useMemo(() => {
+    if (tab !== "archive") return [];
+    const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
+    return accountGames
+      .filter((game) => game.status === "active" && game.archiveState === "active")
+      .filter((game) => timeFilter !== "timed" || game.hasTimeControl)
+      .filter((game) => timeFilter !== "casual" || !game.hasTimeControl)
+      .filter(() => resultFilter === "all")
+      .filter((game) => !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery))
+      .sort(compareNewest)
+      .slice(0, 8);
+  }, [accountGames, query, resultFilter, tab, timeFilter]);
 
   const accountArchivedGames = React.useMemo(() => {
     if (tab !== "archive") return [];
@@ -942,7 +963,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       : account && accountGamesStatus === "error"
         ? "account games unavailable"
         : account
-          ? formatCount(accountArchivedGames.length, "account game")
+          ? `${formatCount(accountActiveGames.length, "active account game")}, ${formatCount(accountArchivedGames.length, "account replay")}`
           : null;
   const archiveStatusParts = [
     accountArchiveStatusLabel,
@@ -1175,6 +1196,65 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           >
             Analyze Replay
           </button>
+        </div>
+      </article>
+    );
+  };
+
+  const renderAccountActiveGameRow = (game: OnlineGameSummary) => {
+    const white = participantName(game.participants, "w");
+    const black = participantName(game.participants, "b");
+    const accountSeat = account
+      ? game.participants.find((participant) =>
+          isSameOnlineIdentity(participant.identity, account.identity)
+        )?.seat
+      : undefined;
+    const storedJoin =
+      accountSeat && resolveAccountGameJoin ? resolveAccountGameJoin(game, accountSeat) : null;
+    const canReturn = !!storedJoin && !!onReturnToAccountGame;
+    const canSpectate = canSpectateOnlineGameSummary(game);
+    const seatLabel = accountSeat === "w" ? "White" : accountSeat === "b" ? "Black" : "unknown";
+
+    return (
+      <article key={game.gameId} className="online-game-row online-account-active-game-row" aria-label={`Active account game ${game.gameId}`}>
+        <div className="online-game-row-main">
+          <div className="online-game-players">
+            <span className="online-game-kicker">Active account game</span>
+            <strong>{white} vs {black}</strong>
+            <span>{game.gameId}</span>
+          </div>
+          <div className="online-game-meta">
+            <span className="online-game-pill active">Live</span>
+            <span>Your seat {seatLabel}</span>
+            <span>{formatMoveCount(game.livePreview.moveCount)}</span>
+            <span>{formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}</span>
+            {game.livePreview.lastMove && <span>Last {game.livePreview.lastMove.notation}</span>}
+            <span>{game.hasTimeControl ? formatClockSnapshot(game) : formatTimeControl(game)}</span>
+            {!storedJoin && <span>Player token not in this browser session</span>}
+          </div>
+        </div>
+        <div className="online-game-actions">
+          {canReturn && storedJoin ? (
+            <button
+              type="button"
+              className="online-browser-button primary"
+              onClick={() => onReturnToAccountGame(storedJoin, game.visibility)}
+              aria-label={`Return to account game ${white} vs ${black}, ${game.gameId}`}
+            >
+              Return to Game
+            </button>
+          ) : canSpectate ? (
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => onSpectate(game.gameId)}
+              aria-label={`Spectate account game ${white} vs ${black}, ${game.gameId}`}
+            >
+              Spectate
+            </button>
+          ) : (
+            <span className="online-game-action-note">Open from original browser session or invite link</span>
+          )}
         </div>
       </article>
     );
@@ -2004,7 +2084,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     onClick={() => {
                       const requestId = ++accountGamesRequestIdRef.current;
                       setAccountGamesStatus("loading");
-                      loadAccountGames?.({ state: "archived", limit: 50 })
+                      loadAccountGames?.({ state: "all", limit: 50 })
                         .then((response) => {
                           if (requestId !== accountGamesRequestIdRef.current) return;
                           setAccountGames(response.games);
@@ -2022,29 +2102,54 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   </button>
                 </div>
                 <p>
-                  Completed private, unlisted, and public games played as {account.displayName} appear here.
+                  Active and completed private, unlisted, and public games played as {account.displayName} appear here. Active games can return to play only when this browser session still has the saved player token.
                 </p>
                 {accountGamesStatus === "error" ? (
                   <div className="online-browser-empty online-browser-empty-compact">
                     <h2>Account games are unavailable.</h2>
                     <p>Refresh your account archive to try again.</p>
                   </div>
-                ) : accountGamesStatus === "loading" && accountArchivedGames.length === 0 ? (
+                ) : accountGamesStatus === "loading" && accountActiveGames.length === 0 && accountArchivedGames.length === 0 ? (
                   <div className="online-browser-empty online-browser-empty-compact">
                     <h2>Loading account games...</h2>
-                    <p>Your private and unlisted completed games will appear here.</p>
+                    <p>Your private and unlisted active games and completed replays will appear here.</p>
                   </div>
-                ) : accountArchivedGames.length === 0 && accountGamesStatus === "ready" ? (
+                ) : accountActiveGames.length === 0 && accountArchivedGames.length === 0 && accountGamesStatus === "ready" ? (
                   <div className="online-browser-empty online-browser-empty-compact">
                     <h2>{hasActiveFilters && accountGames.length > 0 ? "No account games match these filters." : "No account games yet."}</h2>
                     <p>
                       {hasActiveFilters && accountGames.length > 0
                         ? "Try a different search, clock, or result setting."
-                        : "Finished games will appear here after you play while signed in."}
+                        : "Active games and finished replays will appear here after you play while signed in."}
                     </p>
                   </div>
                 ) : (
-                  accountArchivedGames.map((game) => renderPublicGameRow(game, { context: "archive" }))
+                  <>
+                    {accountActiveGames.length > 0 && (
+                      <section className="online-browser-account-subsection" aria-label="Active account games">
+                        <div className="online-browser-side-list-header">
+                          <div className="online-browser-side-list-heading">
+                            <span className="online-browser-section-kicker">Live</span>
+                            <strong>Active games</strong>
+                          </div>
+                          <span>{formatCount(accountActiveGames.length, "game")}</span>
+                        </div>
+                        {accountActiveGames.map(renderAccountActiveGameRow)}
+                      </section>
+                    )}
+                    {accountArchivedGames.length > 0 && (
+                      <section className="online-browser-account-subsection" aria-label="Completed account games">
+                        <div className="online-browser-side-list-header">
+                          <div className="online-browser-side-list-heading">
+                            <span className="online-browser-section-kicker">Replays</span>
+                            <strong>Completed games</strong>
+                          </div>
+                          <span>{formatCount(accountArchivedGames.length, "replay")}</span>
+                        </div>
+                        {accountArchivedGames.map((game) => renderPublicGameRow(game, { context: "archive" }))}
+                      </section>
+                    )}
+                  </>
                 )}
               </section>
             )}
