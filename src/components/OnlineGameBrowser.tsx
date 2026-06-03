@@ -17,6 +17,7 @@ import type {
   OnlineGameSummaryParticipant,
 } from "../online/readModel";
 import {
+  ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH,
   normalizeOnlineGameDirectorySearchQuery,
   onlineGameSummaryDirectorySearchText,
 } from "../online/readModel";
@@ -1356,6 +1357,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             aria-label={tab === "lobby" ? "Search lobby listings" : "Search public games"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            maxLength={tab === "lobby" ? undefined : ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH}
             placeholder={tab === "lobby" ? "Listing id, creator side, clock, or scoring" : "Player, game id, or move"}
           />
         </label>

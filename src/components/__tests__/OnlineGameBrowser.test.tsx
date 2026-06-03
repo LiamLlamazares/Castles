@@ -589,6 +589,34 @@ describe("OnlineGameBrowser", () => {
     expect(loadGames.mock.calls.every(([options]) => options && !("query" in options))).toBe(true);
   });
 
+  it("bounds public game search length without limiting Lobby listing search", async () => {
+    const { rerender } = render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("searchbox", { name: "Search lobby listings" })).not.toHaveAttribute("maxLength");
+
+    rerender(
+      <OnlineGameBrowser
+        activeTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("searchbox", { name: "Search public games" })).toHaveAttribute("maxLength", "80");
+  });
+
   it("opens the Watch tab from the Lobby current-games section", async () => {
     render(
       <OnlineGameBrowser
