@@ -2336,6 +2336,7 @@ describe("createOnlineHttpServer", () => {
     });
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
+      now: () => 23_456,
       loadGameSummary,
     });
     servers.push(server);
@@ -2347,7 +2348,19 @@ describe("createOnlineHttpServer", () => {
     const publicBody = await publicResponse.json();
 
     expect(publicResponse.status).toBe(200);
-    expect(publicBody).toEqual({ schemaVersion: 1, summary: publicSummary });
+    expect(publicBody).toEqual({
+      schemaVersion: 1,
+      summary: {
+        ...publicSummary,
+        livePreview: {
+          ...publicSummary.livePreview,
+          clock: {
+            ...publicSummary.livePreview.clock!,
+            serverNow: 23_456,
+          },
+        },
+      },
+    });
 
     const privateResponse = await fetch(
       `http://127.0.0.1:${port}/api/online/games/${privateSummary.gameId}/summary`
@@ -2379,11 +2392,16 @@ describe("createOnlineHttpServer", () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       service,
+      now: () => 12_345,
       loadGameSummaries: async () => [
         {
           ...publicSummary,
           livePreview: {
             ...publicSummary.livePreview,
+            clock: {
+              ...publicSummary.livePreview.clock!,
+              serverNow: 99,
+            },
             spectatorCount: 99,
           },
         },
@@ -2394,6 +2412,10 @@ describe("createOnlineHttpServer", () => {
               ...publicSummary,
               livePreview: {
                 ...publicSummary.livePreview,
+                clock: {
+                  ...publicSummary.livePreview.clock!,
+                  serverNow: 99,
+                },
                 spectatorCount: 99,
               },
             }
@@ -2422,12 +2444,14 @@ describe("createOnlineHttpServer", () => {
       expect(summaryResponse.status).toBe(200);
       expect(directoryBody.games[0].livePreview.spectatorCount).toBe(1);
       expect(summaryBody.summary.livePreview.spectatorCount).toBe(1);
+      expect(directoryBody.games[0].livePreview.clock.serverNow).toBe(12_345);
+      expect(summaryBody.summary.livePreview.clock.serverNow).toBe(12_345);
     } finally {
       socket.close();
     }
   });
 
-  it("strips stale response-only spectator counts before validating loaded summaries", async () => {
+  it("strips stale response-only live fields before validating loaded summaries", async () => {
     const archived = {
       ...summaryForGame("game_stale_spectator_count_http", "public"),
       updatedAt: "2026-05-31T12:03:00.000Z",
@@ -2437,6 +2461,10 @@ describe("createOnlineHttpServer", () => {
       result: { winner: "w" as const, reason: "resignation" as const },
       livePreview: {
         ...summaryForGame("game_stale_spectator_count_http", "public").livePreview,
+        clock: {
+          ...summaryForGame("game_stale_spectator_count_http", "public").livePreview.clock!,
+          serverNow: 99,
+        },
         spectatorCount: 9,
       },
     };
@@ -2462,6 +2490,8 @@ describe("createOnlineHttpServer", () => {
     expect(summaryResponse.status).toBe(200);
     expect(directoryBody.games[0].livePreview.spectatorCount).toBeUndefined();
     expect(summaryBody.summary.livePreview.spectatorCount).toBeUndefined();
+    expect(directoryBody.games[0].livePreview.clock.serverNow).toBeUndefined();
+    expect(summaryBody.summary.livePreview.clock.serverNow).toBeUndefined();
   });
 
   it("lets an authenticated player publish an unlisted game without exposing bearer tokens", async () => {

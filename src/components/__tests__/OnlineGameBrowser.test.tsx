@@ -65,6 +65,7 @@ function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary 
               remainingMs: { w: 1_198_000, b: 1_200_000 },
               activeColor: "b" as const,
               runningSince: 2_000,
+              serverNow: 5_000,
             },
           }
         : {}),
@@ -1968,7 +1969,7 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("3 moves");
     expect(row).toHaveTextContent("Black to move, Attack");
     expect(row).toHaveTextContent("Last G13G12");
-    expect(row).toHaveTextContent("Clock snapshot W 19:58 B 20:00");
+    expect(row).toHaveTextContent("Clock W 19:58 B 19:57");
     expect(within(row).getByRole("img", {
       name: "Board preview: 2 White pieces 2 Black pieces 1 White-controlled castles 1 Black-controlled castles",
     })).toBeInTheDocument();

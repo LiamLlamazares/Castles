@@ -99,7 +99,7 @@ Summary payloads must include:
 - lifecycle timestamps and version
 - `status`, `visibility`, and `archiveState`
 - token-free participants and result
-- `livePreview`: side to move, turn phase, move count, optional last move, optional clock snapshot, bounded board preview, and optional live spectator count
+- `livePreview`: side to move, turn phase, move count, optional last move, optional clock basis, bounded board preview, and optional response-only live metadata
 - `lastEventId`
 
 For completed summaries, `endedAt` is the timestamp of the terminal gameplay event: resignation,
@@ -107,6 +107,8 @@ timeout adjudication, monarch capture, castle control, or victory-points complet
 visibility changes may update `updatedAt` and `lastEventId`, but they must not move `endedAt`.
 
 `livePreview.spectatorCount` is response-only presence metadata. It is allowed only on active summaries, is omitted when the current count is zero or unknown, and must not be stored as durable archive/history data. In the current single-process deployment it is calculated from connected spectator WebSockets on the serving Node process; a future multi-instance deployment needs shared presence/pub-sub before the number can be global across all servers.
+
+`livePreview.clock.serverNow` is also response-only live metadata. It is added only to active timed summaries so clients can estimate the displayed remaining time at the moment the directory or summary response was produced. Stored/materialized summaries keep only the clock basis: `timeControl`, `remainingMs`, `activeColor`, `runningSince`, and optional `flag`. `serverNow` must be stripped before validation for persistence or summary rebuilds, and archived summaries must not include it because their clocks are no longer running.
 
 Public directory list responses wrap summaries in schema v1:
 

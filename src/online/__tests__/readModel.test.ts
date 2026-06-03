@@ -325,10 +325,14 @@ describe("online read model", () => {
     ).toBe(true);
   });
 
-  it("accepts live spectator counts only on active summaries", () => {
+  it("accepts live response-only fields only on active summaries", () => {
     const active = validSummary({
       livePreview: {
         ...validSummary().livePreview,
+        clock: {
+          ...validSummary().livePreview.clock!,
+          serverNow: 4_000,
+        },
         spectatorCount: 2,
       },
     });
@@ -346,6 +350,10 @@ describe("online read model", () => {
       result: { winner: "w", reason: "resignation" },
       livePreview: {
         ...validSummary().livePreview,
+        clock: {
+          ...validSummary().livePreview.clock!,
+          serverNow: 4_000,
+        },
         spectatorCount: 1,
       },
     });
@@ -359,10 +367,14 @@ describe("online read model", () => {
     ).toBe(false);
   });
 
-  it("strips response-only spectator counts without mutating summary envelopes", () => {
+  it("strips response-only live fields without mutating summary envelopes", () => {
     const active = validSummary({
       livePreview: {
         ...validSummary().livePreview,
+        clock: {
+          ...validSummary().livePreview.clock!,
+          serverNow: 4_000,
+        },
         spectatorCount: 2,
       },
     });
@@ -373,9 +385,14 @@ describe("online read model", () => {
     });
 
     expect((strippedSummary as OnlineGameSummary).livePreview.spectatorCount).toBeUndefined();
+    expect((strippedSummary as OnlineGameSummary).livePreview.clock?.serverNow).toBeUndefined();
     expect(active.livePreview.spectatorCount).toBe(2);
+    expect(active.livePreview.clock?.serverNow).toBe(4_000);
     expect(
       (strippedDirectory as { games: OnlineGameSummary[] }).games[0].livePreview.spectatorCount
+    ).toBeUndefined();
+    expect(
+      (strippedDirectory as { games: OnlineGameSummary[] }).games[0].livePreview.clock?.serverNow
     ).toBeUndefined();
   });
 
@@ -875,7 +892,7 @@ describe("online read model", () => {
           ...validSummary().livePreview,
           clock: {
             ...validSummary().livePreview.clock!,
-            serverNow: Date.now(),
+            serverNow: "now",
           },
         },
       }).ok

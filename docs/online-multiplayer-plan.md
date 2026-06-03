@@ -644,6 +644,17 @@ Remaining work:
 - Add richer replay detail only after a separate archive-detail/read-model contract exists.
 - Keep recent device-only replays clearly separate from public archive rows until account-backed history exists.
 
+## Phase 6AG: Public Directory Clock Read Time
+
+Goal: make Watch/Lobby live rows show clock values based on a server response time instead of vague persisted snapshots.
+
+Status: implemented on 2026-06-03. Active timed public game summaries now receive a response-only `livePreview.clock.serverNow` from the HTTP server, while persisted/materialized summaries still store only the durable clock basis. Summary stripping and validation treat `serverNow` like spectator presence: it is active-game-only, safe for public responses, and removed before persistence checks. Watch/Lobby rows now render `Clock W ... B ...` from the response-time estimate; archived rows keep the stable time-control label.
+
+Remaining work:
+
+- If live rows later need ticking clocks, add a component-level refresh/ticker that is explicitly bounded and tested for background-tab behavior.
+- Keep multi-instance clock freshness independent from spectator presence; `serverNow` is per HTTP response and does not need shared pub/sub.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -681,7 +692,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after the summary model grows: clock/result filters, bounded visible-text search, and replay-specific archive row metadata are now covered, while richer clocks, account-backed player metadata, and archive-detail pages still need designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+1. Improve public directory scanability after the summary model grows: clock/result filters, bounded visible-text search, replay-specific archive row metadata, and response-time live clocks are now covered, while account-backed player metadata and archive-detail pages still need designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

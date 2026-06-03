@@ -69,6 +69,7 @@ export interface OnlineGameSummaryPreviewClock {
   remainingMs: { w: number; b: number };
   activeColor: Color | null;
   runningSince: number | null;
+  serverNow?: number;
   flag?: { color: Color; at: number };
 }
 
@@ -210,8 +211,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function stripOnlineGameSummaryResponseOnlyFields(value: unknown): unknown {
   if (!isRecord(value) || !isRecord(value.livePreview)) return value;
-  if (!("spectatorCount" in value.livePreview)) return value;
+  const hasSpectatorCount = "spectatorCount" in value.livePreview;
+  const clock = value.livePreview.clock;
+  const hasClockServerNow = isRecord(clock) && "serverNow" in clock;
+  if (!hasSpectatorCount && !hasClockServerNow) return value;
   const { spectatorCount: _spectatorCount, ...livePreview } = value.livePreview;
+  if (hasClockServerNow && isRecord(clock)) {
+    const { serverNow: _serverNow, ...clockWithoutServerNow } = clock;
+    livePreview.clock = clockWithoutServerNow;
+  }
   return {
     ...value,
     livePreview,
@@ -460,7 +468,6 @@ function validateSummaryMoveRecord(
 
 function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummaryPreviewClock> {
   if (!isRecord(value)) return bad("summary.clock must be an object.");
-  if ("serverNow" in value) return bad("summary.clock.serverNow is not allowed.");
   if (!isRecord(value.timeControl)) return bad("summary.clock.timeControl must be an object.");
   if (!isNonNegativeSafeInteger(value.timeControl.initialMs)) {
     return bad("summary.clock.timeControl.initialMs must be a non-negative integer.");
@@ -484,6 +491,13 @@ function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummar
   if ((value.activeColor === null) !== (value.runningSince === null)) {
     return bad("summary.clock.activeColor and runningSince must both be set or both be null.");
   }
+  let serverNow: number | undefined;
+  if (value.serverNow !== undefined) {
+    if (!isNonNegativeSafeInteger(value.serverNow)) {
+      return bad("summary.clock.serverNow must be a non-negative integer when present.");
+    }
+    serverNow = value.serverNow;
+  }
 
   let flag: OnlineGameSummaryPreviewClock["flag"];
   if (value.flag !== undefined) {
@@ -505,6 +519,7 @@ function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummar
       remainingMs: { w: value.remainingMs.w, b: value.remainingMs.b },
       activeColor: value.activeColor,
       runningSince: value.runningSince,
+      serverNow,
       flag,
     },
   };
@@ -910,6 +925,9 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
   }
   if (spectatorCount !== undefined && value.status !== "active") {
     return bad("summary.livePreview.spectatorCount is only allowed for active games.");
+  }
+  if (clock?.serverNow !== undefined && value.status !== "active") {
+    return bad("summary.livePreview.clock.serverNow is only allowed for active games.");
   }
 
   const boardPreview = validateBoardPreview(value.livePreview.boardPreview);

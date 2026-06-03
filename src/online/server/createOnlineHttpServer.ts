@@ -858,24 +858,38 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return count;
   };
 
-  const stripLivePresence = (summary: OnlineGameSummary): OnlineGameSummary => {
-    if (summary.livePreview.spectatorCount === undefined) return summary;
+  const stripLiveResponseFields = (summary: OnlineGameSummary): OnlineGameSummary => {
+    const hasSpectatorCount = summary.livePreview.spectatorCount !== undefined;
+    const hasClockServerNow = summary.livePreview.clock?.serverNow !== undefined;
+    if (!hasSpectatorCount && !hasClockServerNow) return summary;
+
     const { spectatorCount: _spectatorCount, ...livePreview } = summary.livePreview;
+    if (hasClockServerNow && livePreview.clock) {
+      const { serverNow: _serverNow, ...clock } = livePreview.clock;
+      livePreview.clock = clock;
+    }
     return { ...summary, livePreview };
   };
 
   const withLiveServerPresence = (summary: OnlineGameSummary): OnlineGameSummary => {
-    const base = stripLivePresence(summary);
+    const base = stripLiveResponseFields(summary);
     if (base.status !== "active") return base;
 
     const spectatorCount = countConnectedSpectators(base.gameId);
-    if (spectatorCount <= 0) return base;
+    const clock = base.livePreview.clock
+      ? {
+          ...base.livePreview.clock,
+          serverNow: options.now?.() ?? Date.now(),
+        }
+      : undefined;
+    if (spectatorCount <= 0 && !clock) return base;
 
     return {
       ...base,
       livePreview: {
         ...base.livePreview,
-        spectatorCount,
+        ...(clock ? { clock } : {}),
+        ...(spectatorCount > 0 ? { spectatorCount } : {}),
       },
     };
   };

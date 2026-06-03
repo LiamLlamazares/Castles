@@ -182,6 +182,19 @@ function formatClockTime(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function previewClockRemainingMs(
+  clock: NonNullable<OnlineGameSummary["livePreview"]["clock"]>,
+  player: "w" | "b"
+): number {
+  const elapsedMs =
+    clock.serverNow !== undefined &&
+    clock.activeColor === player &&
+    clock.runningSince !== null
+      ? Math.max(0, clock.serverNow - clock.runningSince)
+      : 0;
+  return Math.max(0, clock.remainingMs[player] - elapsedMs);
+}
+
 function formatTimeControl(summary: OnlineGameSummary): string {
   const clock = summary.livePreview.clock;
   if (!clock) return "Casual";
@@ -193,7 +206,7 @@ function formatTimeControl(summary: OnlineGameSummary): string {
 function formatClockSnapshot(summary: OnlineGameSummary): string {
   const clock = summary.livePreview.clock;
   if (!clock) return "Casual";
-  return `Clock snapshot W ${formatClockTime(clock.remainingMs.w)} B ${formatClockTime(clock.remainingMs.b)}`;
+  return `Clock W ${formatClockTime(previewClockRemainingMs(clock, "w"))} B ${formatClockTime(previewClockRemainingMs(clock, "b"))}`;
 }
 
 const PIECE_PREVIEW_LABELS: Record<PieceType, string> = {
