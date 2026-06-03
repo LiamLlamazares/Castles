@@ -599,7 +599,8 @@
 }
 
 .online-browser-account-games,
-.online-browser-recent-games {
+.online-browser-recent-games,
+.online-browser-public-archive {
   display: grid;
   gap: 8px;
   padding: 14px;
@@ -609,7 +610,8 @@
 }
 
 .online-browser-account-games p,
-.online-browser-recent-games p {
+.online-browser-recent-games p,
+.online-browser-public-archive p {
   margin: 0 2px 4px;
   color: #d9d0b8;
   line-height: 1.35;
@@ -707,7 +709,8 @@
   }
 
   .online-browser-account-games .online-browser-side-list-header,
-  .online-browser-recent-games .online-browser-side-list-header {
+  .online-browser-recent-games .online-browser-side-list-header,
+  .online-browser-public-archive .online-browser-side-list-header {
     align-items: stretch;
     flex-direction: column;
   }

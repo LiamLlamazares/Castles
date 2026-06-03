@@ -717,6 +717,18 @@ Tests/review/deploy gates:
 - Review: account UI/security review focused on bearer-session storage, duplicate public/account archive rows, signed-out fallback clarity, and not confusing account sessions with game seat tokens.
 - Deploy: deploy only after account table config check and browser smoke pass against PostgreSQL.
 
+## Phase 7C: Account Archive Scanability
+
+Goal: make the visible account archive read like a mixed archive surface rather than a public-only directory after account history is available.
+
+Status: implemented locally on 2026-06-03. The Archive tab now uses archive-specific search, sort, status, and section labels. Signed-in account games, device-only recent replays, and public replays are shown as distinct sections with a combined count in the status line. Device-only rows are deduped against both account and public archive rows, wait until account archive loading finishes for signed-in users, and only participate in filters their local metadata can satisfy: search by local game id/role is supported, while clock and result filters require server archive details. Direct low-level game creation remains anonymous for now; account-owned games continue to use challenge, open-seek, and Quick Match flows until a safe account-seat rejoin/renewal contract is designed.
+
+Tests/review/deploy gates:
+
+- Tests: focused Online browser tests for account archive counts, archive-specific search labels, archive sort labels, and filtered public replay empty states, then full suite/build/server build plus local PostgreSQL browser/UI checks.
+- Review: UI/security review focused on not mixing account history, public archive, device-local replay locators, and game seat tokens.
+- Deploy: deploy only after the account archive still loads with PostgreSQL-backed `GET /api/online/account/games`.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
@@ -750,8 +762,9 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Verify Phase 7B with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
-2. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-3. Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer challenge/open-seek flows for account-owned games.
-4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-5. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.
+1. Verify Phase 7C with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
+2. Design account-seat rejoin/renewal separately before allowing signed-in users to recover player access from account history. The current account archive can analyze completed games, but it must not mint or expose game seat tokens casually.
+3. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+4. Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer challenge/open-seek flows for account-owned games.
+5. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+6. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

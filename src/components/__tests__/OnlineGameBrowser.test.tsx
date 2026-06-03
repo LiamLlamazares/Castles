@@ -241,21 +241,128 @@ describe("OnlineGameBrowser", () => {
         account={account}
         accountStatus="ready"
         loadAccountGames={loadAccountGames}
+        recentOnlineGames={[
+          {
+            gameId: "game_private_account_archive",
+            role: "player",
+            seat: "w",
+            status: "complete",
+            lastSeenAt: "2026-06-03T13:00:00.000Z",
+          },
+          {
+            gameId: "game_device_only_archive",
+            role: "spectator",
+            status: "complete",
+            lastSeenAt: "2026-06-03T13:05:00.000Z",
+          },
+        ]}
       />
     );
 
     const accountGames = await screen.findByRole("region", { name: "Your account games" });
+    const recentGames = await screen.findByRole("region", { name: "Recent online games on this device" });
     expect(loadAccountGames).toHaveBeenCalledWith({ state: "archived", limit: 50 });
     expect(within(accountGames).getByText("game_private_account_archive")).toBeInTheDocument();
     expect(within(accountGames).queryByText("game_public_archive")).not.toBeInTheDocument();
+    expect(within(recentGames).getByText("game_device_only_archive")).toBeInTheDocument();
+    expect(within(recentGames).queryByText("game_private_account_archive")).not.toBeInTheDocument();
     expect(screen.getByText("game_public_archive")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+    expect(screen.getByRole("status")).toHaveTextContent("1 account game, 1 public replay, 1 device replay shown");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search online archive" }), {
       target: { value: "does-not-match" },
     });
     await waitFor(() => {
       expect(within(accountGames).getByText("No account games match these filters.")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Recent online games on this device" })).not.toBeInTheDocument();
     });
+  });
+
+  it("does not show device replay fallback while signed-in account archive is still loading", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_loading",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_loading", displayName: "Liam" },
+    };
+    const accountGames = deferredDirectory();
+
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountGames={vi.fn().mockReturnValue(accountGames.promise)}
+        recentOnlineGames={[
+          {
+            gameId: "game_device_only_waits",
+            role: "player",
+            seat: "b",
+            status: "complete",
+            lastSeenAt: "2026-06-03T13:00:00.000Z",
+          },
+        ]}
+      />
+    );
+
+    expect(await screen.findByText("Loading account games...")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("account games loading, 0 public replays shown");
+    expect(screen.queryByRole("region", { name: "Recent online games on this device" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      accountGames.resolve(directory([]));
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByRole("region", { name: "Recent online games on this device" })).toHaveTextContent(
+      "game_device_only_waits"
+    );
+  });
+
+  it("reports account archive errors without falling back to possibly duplicated device rows", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_error",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_error", displayName: "Liam" },
+    };
+
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountGames={vi.fn().mockRejectedValue(new Error("offline"))}
+        recentOnlineGames={[
+          {
+            gameId: "game_device_only_account_error",
+            role: "player",
+            seat: "w",
+            status: "complete",
+            lastSeenAt: "2026-06-03T13:00:00.000Z",
+          },
+        ]}
+      />
+    );
+
+    expect(await screen.findByText("Account games are unavailable.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("account games unavailable, 0 public replays shown");
+    expect(screen.queryByRole("region", { name: "Recent online games on this device" })).not.toBeInTheDocument();
   });
 
   it("loads lobby listings and public live games in the Lobby tab", async () => {
@@ -694,7 +801,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    expect(screen.getByRole("searchbox", { name: "Search public games" })).toHaveAttribute("maxLength", "80");
+    expect(screen.getByRole("searchbox", { name: "Search live public games" })).toHaveAttribute("maxLength", "80");
   });
 
   it("opens the Watch tab from the Lobby current-games section", async () => {
@@ -718,7 +825,7 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(within(currentGames).getByRole("button", { name: "Open Watch tab" }));
 
     expect(screen.getByRole("button", { name: "Live public games" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("searchbox", { name: "Search public games" })).toHaveValue("");
+    expect(screen.getByRole("searchbox", { name: "Search live public games" })).toHaveValue("");
     expect(screen.getByRole("region", { name: "Most active public live game" })).toHaveTextContent("game_lobby_watch_handoff");
   });
 
@@ -1831,7 +1938,7 @@ describe("OnlineGameBrowser", () => {
         cursor: undefined,
       });
     });
-    expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
+    expect(screen.getByText("No public replays match these filters.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Live public games" }));
 
@@ -1863,7 +1970,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(await screen.findByText("game_initial_page")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search live public games" }), {
       target: { value: "black   to   move" },
     });
 
@@ -2119,7 +2226,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("game_public_visible");
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search live public games" }), {
       target: { value: "Ada" },
     });
 
@@ -2128,7 +2235,7 @@ describe("OnlineGameBrowser", () => {
     expect(liveOverview).toHaveTextContent("Ada vs Ben, 5 moves");
     expect(screen.queryByText("game_public_hidden")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search live public games" }), {
       target: { value: "no matching game" },
     });
 
@@ -2232,7 +2339,7 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(screen.getByRole("button", { name: "Online Archive" }));
 
     await screen.findByText("game_public_archive_no_watchers");
-    const archiveSort = screen.getByRole("combobox", { name: "Sort public games" });
+    const archiveSort = screen.getByRole("combobox", { name: "Sort archive games" });
     expect(archiveSort).toHaveValue("newest");
     expect(screen.queryByRole("option", { name: "Most watched in current list" })).not.toBeInTheDocument();
   });
@@ -2287,17 +2394,44 @@ describe("OnlineGameBrowser", () => {
     expect(recent).toHaveTextContent("Played Black");
     expect(recent).toHaveTextContent("Device-only replay");
     expect(recent).toHaveTextContent(
-      "Completed online games opened in this browser can be replayed here when they are not already in the public archive."
+      "Completed online games opened in this browser can be replayed here when they are not already in your account or public archive."
+    );
+    expect(recent).toHaveTextContent(
+      "Search can match these local game ids; clock and result filters require server archive details."
     );
     expect(recent).not.toHaveTextContent("game_active_recent");
     expect(within(recent).queryByText("game_public_archive")).not.toBeInTheDocument();
 
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search online archive" }), {
+      target: { value: "not-this-device-game" },
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Recent online games on this device" })).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search online archive" }), {
+      target: { value: "unlisted" },
+    });
+    const filteredRecent = await screen.findByRole("region", { name: "Recent online games on this device" });
+    expect(filteredRecent).toHaveTextContent("game_unlisted_finished");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
+      target: { value: "white" },
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Recent online games on this device" })).not.toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
+      target: { value: "all" },
+    });
+    const restoredRecent = await screen.findByRole("region", { name: "Recent online games on this device" });
+
     fireEvent.click(
-      within(recent).getByRole("button", { name: "Analyze recent online replay game_unlisted_finished" })
+      within(restoredRecent).getByRole("button", { name: "Analyze recent online replay game_unlisted_finished" })
     );
     expect(onReplay).toHaveBeenCalledWith("game_unlisted_finished");
 
-    const clearButton = within(recent).getByRole("button", {
+    const clearButton = within(restoredRecent).getByRole("button", {
       name: "Clear recent online replays on this device",
     });
     expect(clearButton).toHaveTextContent("Clear Recent Replays");
@@ -2385,7 +2519,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("game_ada_public");
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search live public games" }), {
       target: { value: "caro" },
     });
 
@@ -2485,12 +2619,12 @@ describe("OnlineGameBrowser", () => {
       expect(screen.queryByText("game_white_archive")).not.toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search online archive" }), {
       target: { value: "no-such-game" },
     });
 
     await waitFor(() => {
-      expect(screen.getByText("No public games match these filters.")).toBeInTheDocument();
+      expect(screen.getByText("No public replays match these filters.")).toBeInTheDocument();
     });
   });
 
@@ -2656,7 +2790,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(await screen.findByText("game_first_page_no_match")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search live public games" }), {
       target: { value: "second_page_match" },
     });
 

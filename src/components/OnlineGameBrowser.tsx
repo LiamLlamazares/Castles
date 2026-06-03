@@ -139,6 +139,16 @@ function formatRecentOnlineGameScope(): string {
   return "Device-only replay";
 }
 
+function recentOnlineGameSearchText(record: RecentOnlineGameRecord): string {
+  return [
+    record.gameId,
+    formatRecentOnlineGameRole(record),
+    formatRecentOnlineGameScope(),
+    record.status,
+    record.seat === "w" ? "white" : record.seat === "b" ? "black" : "",
+  ].join(" ").toLowerCase();
+}
+
 function compareNewest(left: OnlineGameSummary, right: OnlineGameSummary): number {
   if (left.updatedAt !== right.updatedAt) return right.updatedAt.localeCompare(left.updatedAt);
   return left.gameId.localeCompare(right.gameId);
@@ -173,6 +183,10 @@ function formatMoveCount(count: number): string {
 
 function formatPublicLiveCount(count: number): string {
   return `${count} public live ${count === 1 ? "game" : "games"}`;
+}
+
+function formatCount(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function formatSpectatorCount(count: number | undefined): string | null {
@@ -836,12 +850,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const recentArchivedGames = React.useMemo(() => {
     if (tab !== "archive") return [];
-    const publicGameIds = new Set(publicGames.map((game) => game.gameId));
+    if (account && accountGamesStatus !== "ready") return [];
+    if (timeFilter !== "all" || resultFilter !== "all") return [];
+    const excludedGameIds = new Set([
+      ...publicGames.map((game) => game.gameId),
+      ...accountGames.map((game) => game.gameId),
+    ]);
+    const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
     return recentOnlineGames
       .filter((game) => game.status === "complete")
-      .filter((game) => !publicGameIds.has(game.gameId))
+      .filter((game) => !excludedGameIds.has(game.gameId))
+      .filter((game) => !normalizedQuery || recentOnlineGameSearchText(game).includes(normalizedQuery))
       .slice(0, 6);
-  }, [publicGames, recentOnlineGames, tab]);
+  }, [account, accountGames, accountGamesStatus, publicGames, query, recentOnlineGames, resultFilter, tab, timeFilter]);
 
   React.useEffect(() => {
     if (tab !== "archive" || !account || !loadAccountGames) {
@@ -900,6 +921,37 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     seekVpFilter !== "all";
   const hasActiveFilters =
     query.trim() !== "" || timeFilter !== "all" || (tab === "archive" && resultFilter !== "all");
+  const gameSearchAriaLabel =
+    tab === "lobby"
+      ? "Search lobby listings"
+      : tab === "watch"
+        ? "Search live public games"
+        : "Search online archive";
+  const gameSearchPlaceholder =
+    tab === "lobby"
+      ? "Listing id, creator side, clock, or scoring"
+      : tab === "watch"
+        ? "Player, game id, or move"
+        : "Player, game id, result, or move";
+  const gameBrowseControlsLabel =
+    tab === "watch" ? "Browse live public games" : "Browse online archive";
+  const gameSortAriaLabel = tab === "archive" ? "Sort archive games" : "Sort public games";
+  const accountArchiveStatusLabel =
+    account && accountGamesStatus === "loading"
+      ? "account games loading"
+      : account && accountGamesStatus === "error"
+        ? "account games unavailable"
+        : account
+          ? formatCount(accountArchivedGames.length, "account game")
+          : null;
+  const archiveStatusParts = [
+    accountArchiveStatusLabel,
+    formatCount(visibleGames.length, "public replay"),
+    recentArchivedGames.length > 0 ? formatCount(recentArchivedGames.length, "device replay") : null,
+  ].filter(Boolean);
+  const archiveStatusMessage = `${archiveStatusParts.join(", ")} shown${
+    nextCursor ? "; more public replays available" : ""
+  }`;
   const hasActiveOwnedSeek =
     ownedSeekIds.length > 0 &&
     (!ownedSeekResponse ||
@@ -1478,13 +1530,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </div>
           </div>
         ) : (
-          <div className="online-browser-filter-panel" role="group" aria-label={tab === "watch" ? "Browse live public games" : "Browse archived public games"}>
+          <div className="online-browser-filter-panel" role="group" aria-label={gameBrowseControlsLabel}>
             <div className="online-browser-control-title">{tab === "watch" ? "Browse live games" : "Browse archive"}</div>
             <div className="online-browser-filter-grid">
               <label className="online-browser-select">
                 <span>Sort</span>
                 <select
-                  aria-label="Sort public games"
+                  aria-label={gameSortAriaLabel}
                   value={tab === "archive" && sort === "watchers" ? "newest" : sort}
                   onChange={(event) => setSort(event.currentTarget.value as OnlineBrowserSort)}
                 >
@@ -1531,11 +1583,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <span>Search</span>
           <input
             type="search"
-            aria-label={tab === "lobby" ? "Search lobby listings" : "Search public games"}
+            aria-label={gameSearchAriaLabel}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             maxLength={tab === "lobby" ? undefined : ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH}
-            placeholder={tab === "lobby" ? "Listing id, creator side, clock, or scoring" : "Player, game id, or move"}
+            placeholder={gameSearchPlaceholder}
           />
         </label>
       </section>
@@ -1553,11 +1605,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </>
               )
           : status === "loading"
-            ? "Loading public games..."
+            ? tab === "archive" ? "Loading online archive..." : "Loading public games..."
             : status === "error"
-              ? "Could not load public games."
+              ? tab === "archive" ? "Could not load online archive." : "Could not load public games."
               : copyMessage || (tab === "archive" ? recentClearMessage : "") ||
-                `${visibleGames.length} public ${tab === "watch" ? "live" : "archived"} games shown${nextCursor ? "; more available" : ""}`}
+                (tab === "archive"
+                  ? archiveStatusMessage
+                  : `${visibleGames.length} public live games shown${nextCursor ? "; more available" : ""}`)}
       </div>
       {tab === "lobby" && seekStatus === "ready" && lastSeekCheckedAt ? (
         <div className="online-browser-visually-hidden" aria-live="off">
@@ -1935,7 +1989,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </section>
         </main>
       ) : (
-        <main className="online-browser-list" aria-label="Public archived games">
+        <main className="online-browser-list" aria-label="Online archive">
           <>
             {account && (
               <section className="online-browser-account-games" aria-label="Your account games">
@@ -2013,21 +2067,31 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   )}
                 </div>
                 <p>
-                  Completed online games opened in this browser can be replayed here when they are not already in the public archive.
+                  Completed online games opened in this browser can be replayed here when they are not already in your account or public archive.
+                  Search can match these local game ids; clock and result filters require server archive details.
                 </p>
                 {recentArchivedGames.map(renderRecentOnlineGameRow)}
               </section>
             )}
-            {visibleGames.length === 0 && status === "ready" ? (
-              <section className="online-browser-empty">
-                <h2>{hasActiveFilters ? "No public games match these filters." : emptyTitle}</h2>
-                <p>
-                  {hasActiveFilters
-                    ? "Try a different search, clock, or result setting."
-                    : "Private and unlisted games stay off this page. Shared spectator links still work for people who already have them."}
-                </p>
-              </section>
-            ) : visibleGames.map((game) => renderPublicGameRow(game, { context: tab === "archive" ? "archive" : "watch" }))}
+            <section className="online-browser-public-archive" aria-label="Public archive games">
+              <div className="online-browser-side-list-header">
+                <div className="online-browser-side-list-heading">
+                  <span className="online-browser-section-kicker">Public</span>
+                  <strong>Public archive</strong>
+                </div>
+                <span>{formatCount(visibleGames.length, "replay")}</span>
+              </div>
+              {visibleGames.length === 0 && status === "ready" ? (
+                <section className="online-browser-empty">
+                  <h2>{hasActiveFilters ? "No public replays match these filters." : emptyTitle}</h2>
+                  <p>
+                    {hasActiveFilters
+                      ? "Try a different search, clock, or result setting. Account and public replays use full server details; device-only replays appear only when their local game id can match."
+                      : "Private and unlisted games stay out of the public archive. Shared spectator links still work for people who already have them."}
+                  </p>
+                </section>
+              ) : visibleGames.map((game) => renderPublicGameRow(game, { context: "archive" }))}
+            </section>
             {nextCursor && status === "ready" && (
               <button
                 type="button"
