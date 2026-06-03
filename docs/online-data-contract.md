@@ -156,6 +156,8 @@ Account sessions are independent from game player tokens, challenge tokens, and 
 
 Account session token hashes must be unique in storage so one bearer token maps to at most one account session. Raw account session tokens are never stored.
 
+The browser may persist the returned account session token in local storage so a display-name account survives reloads. This local account session is an account bearer credential only: it must not be copied into URLs, public summaries, move history, game events, challenge events, open-seek summaries, local recent replay records, logs, or exported game files. Game seat tokens, challenge tokens, and open-seek creator tokens continue to use their existing credential-specific storage flows and must not be substituted for the account bearer token.
+
 When an account bearer is present on safe creation paths, the server uses the registered account identity instead of trusting a browser-supplied anonymous/session id. This currently applies to open seek creation, open seek acceptance, Quick Match, and challenge creation. Direct low-level game creation remains anonymous until a creator-seat contract is designed.
 
 ## Challenge Lifecycle Contract

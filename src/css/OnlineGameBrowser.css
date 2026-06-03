@@ -27,6 +27,66 @@
   border: 0 !important;
 }
 
+.online-browser-account-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, auto);
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(158, 208, 194, 0.16);
+  border-radius: 6px;
+  background: rgba(158, 208, 194, 0.045);
+}
+
+.online-browser-account-copy {
+  min-width: 0;
+}
+
+.online-browser-account-copy strong {
+  display: block;
+  margin-top: 2px;
+  color: #f7f1d6;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-account-copy p {
+  margin: 4px 0 0;
+  color: #d9d0b8;
+  line-height: 1.35;
+}
+
+.online-browser-account-message {
+  color: #9ed0c2 !important;
+  font-weight: 800;
+}
+
+.online-browser-account-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+.online-browser-account-form label {
+  display: grid;
+  gap: 6px;
+  color: #d9d0b8;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.online-browser-account-form input {
+  min-height: 42px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 9px 12px;
+  font: inherit;
+  min-width: 0;
+}
+
 .online-browser-toolbar {
   display: grid;
   grid-template-columns: minmax(180px, max-content) minmax(0, 1fr) minmax(220px, 0.45fr);
@@ -56,6 +116,7 @@
 
 .online-browser-page button:focus-visible,
 .online-browser-search input:focus-visible,
+.online-browser-account-form input:focus-visible,
 .online-browser-select select:focus-visible,
 .online-seek-owner-panel:focus-visible,
 .online-browser-closed-listing:focus-visible {
@@ -537,6 +598,7 @@
   font-size: 1rem;
 }
 
+.online-browser-account-games,
 .online-browser-recent-games {
   display: grid;
   gap: 8px;
@@ -546,6 +608,7 @@
   background: rgba(158, 208, 194, 0.055);
 }
 
+.online-browser-account-games p,
 .online-browser-recent-games p {
   margin: 0 2px 4px;
   color: #d9d0b8;
@@ -584,6 +647,8 @@
     padding: 20px;
   }
 
+  .online-browser-account-panel,
+  .online-browser-account-form,
   .online-browser-toolbar,
   .online-game-row,
   .online-seek-owner-panel,
@@ -641,6 +706,7 @@
     width: 100%;
   }
 
+  .online-browser-account-games .online-browser-side-list-header,
   .online-browser-recent-games .online-browser-side-list-header {
     align-items: stretch;
     flex-direction: column;

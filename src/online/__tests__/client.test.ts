@@ -8,6 +8,7 @@ import {
   acceptOpenSeek,
   copyOnlineInviteUrl,
   cancelOpenSeek,
+  createOnlineChallenge,
   createOpenSeek,
   declineOnlineChallenge,
   fetchOnlineChallenge,
@@ -19,6 +20,7 @@ import {
   fetchOnlineGameSummary,
   fetchOnlineSnapshot,
   fetchOnlineSpectatorSnapshot,
+  forgetOnlineAccountSession,
   formatOnlineConnectionStatus,
   formatOnlinePendingConnectionMessage,
   formatOnlineGameResult,
@@ -27,6 +29,7 @@ import {
   parseOnlineSpectatorParams,
   rememberOnlineChallengeParams,
   rememberOnlineChallengeShareUrl,
+  rememberOnlineAccountSession,
   rememberOnlineOpponentInviteUrl,
   rememberOnlineJoinParams,
   removeOnlineChallengeTokenFromUrl,
@@ -34,6 +37,7 @@ import {
   resolveOnlineChallengeShareUrl,
   removeOnlineTokenFromUrl,
   resolveOnlineAnonymousSessionId,
+  resolveOnlineAccountSession,
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   shouldApplyOnlineSnapshot,
@@ -299,7 +303,7 @@ describe("online client helpers", () => {
             gameId: "game_from_challenge",
             seat: "b",
             token: "challenge-token",
-            url: "https://castles.example/?onlineGame=game_from_challenge&seat=b&token=challenge-token",
+            url: "https://castles.example/?onlineGame=game_from_challenge&seat=b",
           },
         }),
       });
@@ -396,6 +400,87 @@ describe("online client helpers", () => {
     });
   });
 
+  it("rejects token-bearing accepted invite URLs from challenges and lobby accepts", async () => {
+    const setup = snapshot().setup;
+    const challengeSummary = {
+      schemaVersion: 1,
+      challengeId: "challenge_123",
+      challengerIdentity: { kind: "session", id: "challenge_123_challenger" },
+      challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+      challengerSeat: "w",
+      visibility: "unlisted",
+      setup,
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      expiresAt: "2026-06-04T12:00:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-03T12:02:00.000Z",
+      acceptedBy: { kind: "session", id: "challenge_123_challenged" },
+      gameId: "game_from_challenge",
+      whiteIdentity: { kind: "session", id: "challenge_123_challenger" },
+      blackIdentity: { kind: "session", id: "challenge_123_challenged" },
+      lastEventId: "challenge_evt_accepted",
+    };
+    const seekSummary = {
+      schemaVersion: 1,
+      seekId: "seek_123",
+      creatorIdentity: { kind: "session", id: "anon_creator" },
+      creatorSeat: "w",
+      setup,
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      expiresAt: "2026-06-03T12:10:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-03T12:02:00.000Z",
+      acceptedBy: { kind: "session", id: "anon_acceptor" },
+      gameId: "game_from_seek",
+      whiteIdentity: { kind: "session", id: "anon_creator" },
+      blackIdentity: { kind: "session", id: "anon_acceptor" },
+      lastEventId: "seek_evt_accepted",
+    };
+
+    await expect(
+      acceptOnlineChallenge(
+        { challengeId: "challenge_123", role: "challenged", token: "challenge-token" },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            role: "challenged",
+            summary: challengeSummary,
+            gameInvite: {
+              gameId: "game_from_challenge",
+              seat: "b",
+              token: "challenge-token",
+              url: "https://castles.example/?onlineGame=game_from_challenge&seat=b&token=challenge-token",
+            },
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/gameInvite URL must not contain tokens/i);
+
+    await expect(
+      acceptOpenSeek(
+        "seek_123",
+        { acceptorSessionId: "anon_acceptor" },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            role: "acceptor",
+            summary: seekSummary,
+            gameInvite: {
+              gameId: "game_from_seek",
+              seat: "b",
+              token: "acceptor-token",
+              url: "https://castles.example/?onlineGame=game_from_seek&seat=b&token=acceptor-token",
+            },
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/gameInvite URL must not contain tokens/i);
+  });
+
   it("forgets stored challenge tokens when leaving a challenge", () => {
     const storage = new Map<string, string>();
     const storageAdapter = {
@@ -486,6 +571,46 @@ describe("online client helpers", () => {
     ]);
   });
 
+  it("stores validated account sessions outside game and challenge credentials", () => {
+    const storage = new Map<string, string>();
+    const storageAdapter = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    };
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
+    };
+
+    rememberOnlineAccountSession(
+      { sessionId: "account_session_liam", token: "account-token", account },
+      storageAdapter
+    );
+
+    expect(resolveOnlineAccountSession(storageAdapter)).toEqual({
+      sessionId: "account_session_liam",
+      token: "account-token",
+      account,
+    });
+    const accountSessionStorageKey = [...storage.keys()][0];
+    expect(accountSessionStorageKey).toBeDefined();
+
+    forgetOnlineAccountSession(storageAdapter);
+    expect(resolveOnlineAccountSession(storageAdapter)).toBeNull();
+
+    storageAdapter.setItem(accountSessionStorageKey as string, JSON.stringify({
+      sessionId: "",
+      token: "account-token",
+      account,
+    }));
+    expect(resolveOnlineAccountSession(storageAdapter)).toBeNull();
+  });
+
   it("creates accounts and fetches account history with bearer auth", async () => {
     const account = {
       schemaVersion: 1,
@@ -563,6 +688,108 @@ describe("online client helpers", () => {
     );
   });
 
+  it("sends account bearer auth on account-aware creation and matchmaking paths without body leakage", async () => {
+    const account = { token: "account-token" };
+    const setup = snapshot().setup;
+    const challengeSummary = {
+      schemaVersion: 1,
+      challengeId: "challenge_123",
+      challengerIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+      challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+      challengerSeat: "w",
+      visibility: "unlisted",
+      setup,
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      expiresAt: "2026-06-04T12:00:00.000Z",
+      status: "pending",
+      lastEventId: "challenge_evt_created",
+    };
+    const openSeekSummary = {
+      schemaVersion: 1,
+      seekId: "seek_123",
+      creatorIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+      creatorSeat: "random",
+      setup,
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      expiresAt: "2026-06-03T12:10:00.000Z",
+      status: "open",
+      lastEventId: "seek_evt_created",
+    };
+    const acceptedSeekSummary = {
+      ...openSeekSummary,
+      creatorIdentity: { kind: "session", id: "other_creator" },
+      status: "accepted",
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      acceptedAt: "2026-06-03T12:02:00.000Z",
+      acceptedBy: { kind: "registered", id: "account_liam", displayName: "Liam" },
+      gameId: "game_from_seek",
+      whiteIdentity: { kind: "session", id: "other_creator" },
+      blackIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+      lastEventId: "seek_evt_accepted",
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          challengeId: "challenge_123",
+          summary: challengeSummary,
+          challenger: { url: "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenger" },
+          challenged: { url: "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenged" },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          seekId: "seek_123",
+          summary: openSeekSummary,
+          creator: { token: "creator-token" },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "acceptor",
+          summary: acceptedSeekSummary,
+          gameInvite: {
+            gameId: "game_from_seek",
+            seat: "b",
+            token: "seat-token",
+            url: "https://castles.example/?onlineGame=game_from_seek&seat=b",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          outcome: "waiting",
+          role: "creator",
+          seekId: "seek_123",
+          summary: openSeekSummary,
+          creator: { token: "creator-token" },
+        }),
+      });
+
+    await createOnlineChallenge(setup, { challengerSeat: "w", visibility: "unlisted", account }, fetchImpl as any);
+    await createOpenSeek(setup, { creatorSeat: "random", creatorSessionId: "anon_creator", account }, fetchImpl as any);
+    await acceptOpenSeek("seek_123", { acceptorSessionId: "anon_acceptor", account }, fetchImpl as any);
+    await startQuickMatch(setup, { sessionId: "anon_match", account }, fetchImpl as any);
+
+    for (const [, request] of fetchImpl.mock.calls) {
+      expect(request.headers).toMatchObject({ authorization: "Bearer account-token" });
+      if ("body" in request) {
+        const bodyText = request.body as string;
+        expect(bodyText).not.toContain("account-token");
+        expect(JSON.parse(bodyText)).not.toHaveProperty("account");
+      }
+    }
+  });
+
   it("creates, fetches, cancels, lists, and accepts open seeks with validated responses", async () => {
     const baseSummary = {
       schemaVersion: 1,
@@ -590,7 +817,7 @@ describe("online client helpers", () => {
       gameId: "game_from_seek",
       seat: "b",
       token: "acceptor-token",
-      url: "https://castles.example/?onlineGame=game_from_seek&seat=b&token=acceptor-token",
+      url: "https://castles.example/?onlineGame=game_from_seek&seat=b",
     };
     const fetchImpl = vi
       .fn()

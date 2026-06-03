@@ -40,7 +40,7 @@ Current constraints:
 - One writer process only; no cross-process coordination yet.
 - Private invite links are bearer secrets and require HTTPS.
 - Public spectator URLs expose games to anyone with the random game id.
-- Accounts, ratings, matchmaking, moderation, anti-cheat, and admin tooling are not implemented.
+- Display-name accounts and account-backed personal history exist as a beta foundation. Ratings, moderation, anti-cheat, admin tooling, passwords, and email are not implemented.
 
 ## Phase Gates
 
@@ -695,8 +695,6 @@ Status: implemented locally on 2026-06-03. The server now has account/session en
 
 Work:
 
-- Add a visible account UI: create/sign-in/session persistence, current account display, sign-out, and account error states.
-- Move signed-in archive/history UI to the account-backed endpoint while keeping device-local recent replays as the anonymous fallback.
 - Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer the challenge/open-seek flows for account-owned games.
 - Add account-bound challenge acceptance after a separate challenged-user binding design exists; do not infer challenged identity from an unauthenticated invite URL.
 - Add account deletion/session revocation and privacy copy before public account launch.
@@ -706,6 +704,18 @@ Tests/review/deploy gates:
 - Tests: account create/me/history route tests, account store tests, client helper tests, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit when visible account UI is added.
 - Review: account/session security review focused on token storage, accidental public identity leakage, authorization separation from game/challenge bearer tokens, and personal-history privacy.
 - Deploy: `server:check-config` must verify both game and account stores against PostgreSQL before the Node service starts.
+
+## Phase 7B: Visible Account UI and Account Archive
+
+Goal: expose the Phase 7A account/session foundation to players without adding passwords, ratings, profiles, or moderation yet.
+
+Status: implemented locally on 2026-06-03. The Online page now has a compact account panel for display-name account creation, saved-session refresh, current account display, sign-out, and account error messages. The browser persists the account session in local storage as an account bearer session, separate from game/challenge/seek credentials. Signed-in challenge creation, open lobby listing, open seek acceptance, and Quick Match pass the account bearer so server summaries use the registered identity. The Online Archive now has an account archive section backed by `GET /api/online/account/games`, while device-local recent replays remain the anonymous fallback.
+
+Tests/review/deploy gates:
+
+- Tests: client account-session storage coverage, Online page account panel/archive coverage, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit.
+- Review: account UI/security review focused on bearer-session storage, duplicate public/account archive rows, signed-out fallback clarity, and not confusing account sessions with game seat tokens.
+- Deploy: deploy only after account table config check and browser smoke pass against PostgreSQL.
 
 Work:
 
@@ -740,7 +750,8 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Wire visible account UI onto the Phase 7A account/session endpoints, then move signed-in archive/history views to `GET /api/online/account/games`.
+1. Verify Phase 7B with full tests, build, server build, local PostgreSQL browser smoke, UI audit, review, commit, and push.
 2. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
-4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.
+3. Decide whether direct low-level game creation should bind the creator's account to a chosen seat, or continue to prefer challenge/open-seek flows for account-owned games.
+4. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+5. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

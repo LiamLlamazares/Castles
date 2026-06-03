@@ -6,10 +6,12 @@ import {
   fetchOpenSeekDirectory,
   fetchOnlineGameDirectory,
   formatOnlineGameResult,
+  type FetchOnlineAccountGamesOptions,
   type FetchOpenSeekDirectoryOptions,
   type FetchOnlineGameSummariesOptions,
   type OpenSeekResponse,
 } from "../online/client";
+import type { OnlineAccount } from "../online/accounts";
 import type {
   OnlineGameDirectoryResponse,
   OnlineGameSummaryBoardPreviewHex,
@@ -44,6 +46,7 @@ type OnlineBrowserResultFilter =
   | "castle_control"
   | "victory_points"
   | "monarch_captured";
+type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "ready" | "error";
 type QuickMatchStatus = "idle" | "pending" | "matched" | "waiting" | "error";
 type QuickMatchOutcome = "matched" | "waiting" | void;
 
@@ -79,6 +82,12 @@ interface OnlineGameBrowserProps {
   onSpectate: (gameId: string) => void;
   recentOnlineGames?: RecentOnlineGameRecord[];
   onClearRecentOnlineGames?: () => void;
+  account?: OnlineAccount | null;
+  accountStatus?: OnlineAccountUiStatus;
+  accountError?: string | null;
+  onCreateAccount?: (displayName: string) => void | Promise<void>;
+  onSignOutAccount?: () => void;
+  loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
   activeTab?: OnlineBrowserTab;
@@ -397,6 +406,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onSpectate,
   recentOnlineGames = [],
   onClearRecentOnlineGames,
+  account = null,
+  accountStatus = account ? "ready" : "signed-out",
+  accountError = null,
+  onCreateAccount,
+  onSignOutAccount,
+  loadAccountGames,
   backLabel = "Back to game",
   initialTab = "lobby",
   activeTab,
@@ -426,8 +441,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [ownedSeekAction, setOwnedSeekAction] = React.useState<"refresh" | "join" | undefined>();
   const [lastSeekCheckedAt, setLastSeekCheckedAt] = React.useState("");
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
+  const [accountDisplayName, setAccountDisplayName] = React.useState("");
+  const [accountActionMessage, setAccountActionMessage] = React.useState("");
+  const [accountGames, setAccountGames] = React.useState<OnlineGameSummary[]>([]);
+  const [accountGamesStatus, setAccountGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
+  const accountGamesRequestIdRef = React.useRef(0);
   const gameLoadInFlightRef = React.useRef(false);
   const seekLoadInFlightRef = React.useRef(false);
   const ownedSeekRefreshInFlightRef = React.useRef(false);
@@ -480,6 +500,25 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     onClearRecentOnlineGames?.();
     archiveTabButtonRef.current?.focus();
   }, [onClearRecentOnlineGames]);
+
+  const handleCreateAccountSubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const displayName = accountDisplayName.trim();
+    if (!displayName || !onCreateAccount) return;
+    setAccountActionMessage("");
+    try {
+      await onCreateAccount(displayName);
+      setAccountDisplayName("");
+      setAccountActionMessage("Online account created.");
+    } catch {
+      setAccountActionMessage("Could not create that online account name.");
+    }
+  }, [accountDisplayName, onCreateAccount]);
+
+  React.useEffect(() => {
+    if (accountStatus !== "error") return;
+    setAccountActionMessage("");
+  }, [accountStatus]);
 
   React.useEffect(() => {
     if (quickMatchStatus !== "waiting") return;
@@ -803,6 +842,46 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => !publicGameIds.has(game.gameId))
       .slice(0, 6);
   }, [publicGames, recentOnlineGames, tab]);
+
+  React.useEffect(() => {
+    if (tab !== "archive" || !account || !loadAccountGames) {
+      setAccountGames([]);
+      setAccountGamesStatus("idle");
+      return;
+    }
+
+    const requestId = ++accountGamesRequestIdRef.current;
+    setAccountGamesStatus("loading");
+    loadAccountGames({ state: "archived", limit: 50 })
+      .then((response) => {
+        if (requestId !== accountGamesRequestIdRef.current) return;
+        setAccountGames(response.games);
+        setAccountGamesStatus("ready");
+      })
+      .catch(() => {
+        if (requestId !== accountGamesRequestIdRef.current) return;
+        setAccountGamesStatus("error");
+      });
+
+    return () => {
+      accountGamesRequestIdRef.current += 1;
+    };
+  }, [account?.accountId, loadAccountGames, tab]);
+
+  const accountArchivedGames = React.useMemo(() => {
+    if (tab !== "archive") return [];
+    const publicGameIds = new Set(publicGames.map((game) => game.gameId));
+    const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
+    return accountGames
+      .filter((game) => game.status === "complete" && game.archiveState === "archived")
+      .filter((game) => !publicGameIds.has(game.gameId))
+      .filter((game) => timeFilter !== "timed" || game.hasTimeControl)
+      .filter((game) => timeFilter !== "casual" || !game.hasTimeControl)
+      .filter((game) => matchesResultFilter(game, resultFilter))
+      .filter((game) => !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery))
+      .sort(sort === "moves" ? compareMostMoves : compareNewest)
+      .slice(0, 12);
+  }, [accountGames, publicGames, query, resultFilter, sort, tab, timeFilter]);
 
   const visibleOpenSeeks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -1242,6 +1321,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     { id: "online", label: "Online" },
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
+  const accountStatusMessage =
+    accountStatus === "checking"
+      ? "Checking saved account..."
+      : accountStatus === "creating"
+        ? "Creating account..."
+        : accountError || accountActionMessage;
 
   return (
     <div className="online-browser-page">
@@ -1255,6 +1340,59 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         onBack={onBack}
         destinations={navDestinations}
       />
+
+      <section className="online-browser-account-panel" aria-label="Online account">
+        <div className="online-browser-account-copy">
+          <span className="online-browser-section-kicker">Account</span>
+          {account ? (
+            <>
+              <strong>{account.displayName}</strong>
+              <p>Your signed-in games appear in your account archive.</p>
+            </>
+          ) : (
+            <>
+              <strong>Play with a display name</strong>
+              <p>Create a browser account to keep your online games attached to this display name.</p>
+            </>
+          )}
+          {accountStatusMessage && (
+            <p className="online-browser-account-message" role="status" aria-live="polite">
+              {accountStatusMessage}
+            </p>
+          )}
+        </div>
+        {account ? (
+          <button
+            type="button"
+            className="online-browser-button subtle"
+            onClick={onSignOutAccount}
+            disabled={!onSignOutAccount}
+          >
+            Sign Out
+          </button>
+        ) : (
+          <form className="online-browser-account-form" onSubmit={handleCreateAccountSubmit}>
+            <label>
+              <span>Display name</span>
+              <input
+                type="text"
+                value={accountDisplayName}
+                onChange={(event) => setAccountDisplayName(event.currentTarget.value)}
+                minLength={2}
+                maxLength={32}
+                autoComplete="nickname"
+              />
+            </label>
+            <button
+              type="submit"
+              className="online-browser-button primary"
+              disabled={!onCreateAccount || accountStatus === "creating" || accountDisplayName.trim().length < 2}
+            >
+              {accountStatus === "creating" ? "Creating..." : "Create Account"}
+            </button>
+          </form>
+        )}
+      </section>
 
       <section className={`online-browser-toolbar online-browser-toolbar-${tab}`} aria-label="Online browser controls">
         <div className="online-browser-tabs" role="group" aria-label="Online game lists">
@@ -1799,6 +1937,63 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ) : (
         <main className="online-browser-list" aria-label="Public archived games">
           <>
+            {account && (
+              <section className="online-browser-account-games" aria-label="Your account games">
+                <div className="online-browser-side-list-header">
+                  <div className="online-browser-side-list-heading">
+                    <span className="online-browser-section-kicker">Your games</span>
+                    <strong>Account archive</strong>
+                  </div>
+                  <button
+                    type="button"
+                    className="online-browser-button subtle online-browser-clear-recent"
+                    onClick={() => {
+                      const requestId = ++accountGamesRequestIdRef.current;
+                      setAccountGamesStatus("loading");
+                      loadAccountGames?.({ state: "archived", limit: 50 })
+                        .then((response) => {
+                          if (requestId !== accountGamesRequestIdRef.current) return;
+                          setAccountGames(response.games);
+                          setAccountGamesStatus("ready");
+                        })
+                        .catch(() => {
+                          if (requestId !== accountGamesRequestIdRef.current) return;
+                          setAccountGamesStatus("error");
+                        });
+                    }}
+                    disabled={!loadAccountGames || accountGamesStatus === "loading"}
+                    aria-label="Refresh your account archive"
+                  >
+                    {accountGamesStatus === "loading" ? "Refreshing..." : "Refresh Account Games"}
+                  </button>
+                </div>
+                <p>
+                  Completed private, unlisted, and public games played as {account.displayName} appear here.
+                </p>
+                {accountGamesStatus === "error" ? (
+                  <div className="online-browser-empty online-browser-empty-compact">
+                    <h2>Account games are unavailable.</h2>
+                    <p>Refresh your account archive to try again.</p>
+                  </div>
+                ) : accountGamesStatus === "loading" && accountArchivedGames.length === 0 ? (
+                  <div className="online-browser-empty online-browser-empty-compact">
+                    <h2>Loading account games...</h2>
+                    <p>Your private and unlisted completed games will appear here.</p>
+                  </div>
+                ) : accountArchivedGames.length === 0 && accountGamesStatus === "ready" ? (
+                  <div className="online-browser-empty online-browser-empty-compact">
+                    <h2>{hasActiveFilters && accountGames.length > 0 ? "No account games match these filters." : "No account games yet."}</h2>
+                    <p>
+                      {hasActiveFilters && accountGames.length > 0
+                        ? "Try a different search, clock, or result setting."
+                        : "Finished games will appear here after you play while signed in."}
+                    </p>
+                  </div>
+                ) : (
+                  accountArchivedGames.map((game) => renderPublicGameRow(game, { context: "archive" }))
+                )}
+              </section>
+            )}
             {recentArchivedGames.length > 0 && (
               <section className="online-browser-recent-games" aria-label="Recent online games on this device">
                 <div className="online-browser-side-list-header">

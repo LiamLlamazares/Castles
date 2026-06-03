@@ -78,6 +78,11 @@ export interface OnlineAccountSessionParams {
   token: string;
 }
 
+export interface StoredOnlineAccountSession extends OnlineAccountSessionParams {
+  sessionId: string;
+  account?: OnlineAccount;
+}
+
 export interface OpenSeekAcceptResponse {
   role: "acceptor";
   summary: OpenSeekSummary;
@@ -154,6 +159,7 @@ function openSeekCreatorStorageKey(seekId: string): string {
 
 const OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY = "castles_online_seek_creator:index";
 const ANONYMOUS_SESSION_STORAGE_KEY = "castles_online_anonymous_session_id";
+const ONLINE_ACCOUNT_SESSION_STORAGE_KEY = "castles_online_account_session_v1";
 
 function defaultAnonymousSessionIdFactory(): string {
   const randomId =
@@ -364,6 +370,62 @@ export function resolveOnlineAnonymousSessionId(
   }
   storage?.setItem(ANONYMOUS_SESSION_STORAGE_KEY, nextId);
   return nextId;
+}
+
+function isValidStoredAccountSessionId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 256;
+}
+
+function isValidStoredAccountToken(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 512;
+}
+
+function parseStoredOnlineAccountSession(value: unknown): StoredOnlineAccountSession | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const sessionId = (value as { sessionId?: unknown }).sessionId;
+  const token = (value as { token?: unknown }).token;
+  if (!isValidStoredAccountSessionId(sessionId) || !isValidStoredAccountToken(token)) return null;
+  const rawAccount = (value as { account?: unknown }).account;
+  if (rawAccount === undefined) {
+    return { sessionId, token };
+  }
+  const account = validateOnlineAccount(rawAccount, "storedAccount");
+  if (!account.ok) return null;
+  return { sessionId, token, account: account.value };
+}
+
+export function rememberOnlineAccountSession(
+  session: StoredOnlineAccountSession,
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.localStorage
+): void {
+  if (!storage) return;
+  storage.setItem(
+    ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
+    JSON.stringify({
+      sessionId: session.sessionId,
+      token: session.token,
+      ...(session.account ? { account: session.account } : {}),
+    })
+  );
+}
+
+export function resolveOnlineAccountSession(
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.localStorage
+): StoredOnlineAccountSession | null {
+  if (!storage) return null;
+  const raw = storage.getItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return parseStoredOnlineAccountSession(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function forgetOnlineAccountSession(
+  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.localStorage
+): void {
+  storage?.removeItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY);
 }
 
 export function resolveOnlineChallengeParams(
@@ -713,32 +775,11 @@ function validateOnlineChallengeResponse(
   if (gameInvite === undefined) {
     return { role, summary: summary.value };
   }
-  if (!gameInvite || typeof gameInvite !== "object" || Array.isArray(gameInvite)) {
-    throw new Error(`${label} response was malformed: gameInvite must be an object.`);
-  }
-  const invite = gameInvite as {
-    gameId?: unknown;
-    seat?: unknown;
-    token?: unknown;
-    url?: unknown;
-  };
-  if (
-    typeof invite.gameId !== "string" ||
-    (invite.seat !== "w" && invite.seat !== "b") ||
-    typeof invite.token !== "string" ||
-    typeof invite.url !== "string"
-  ) {
-    throw new Error(`${label} response was malformed: gameInvite is invalid.`);
-  }
+  const invite = validateTokenlessGameInvite(gameInvite, label);
   return {
     role,
     summary: summary.value,
-    gameInvite: {
-      gameId: invite.gameId,
-      seat: invite.seat,
-      token: invite.token,
-      url: invite.url,
-    },
+    gameInvite: invite,
   };
 }
 
@@ -952,7 +993,7 @@ function validateOpenSeekCreatorResponse(body: unknown, label: string): OpenSeek
   const gameInvite = (body as { gameInvite?: unknown }).gameInvite;
   return gameInvite === undefined
     ? { role: "creator", summary: summary.value }
-    : { role: "creator", summary: summary.value, gameInvite: validateGameInvite(gameInvite, label) };
+    : { role: "creator", summary: summary.value, gameInvite: validateTokenlessGameInvite(gameInvite, label) };
 }
 
 function validateOpenSeekAcceptResponse(body: unknown, label: string): OpenSeekAcceptResponse {
@@ -972,7 +1013,7 @@ function validateOpenSeekAcceptResponse(body: unknown, label: string): OpenSeekA
   return {
     role: "acceptor",
     summary: summary.value,
-    gameInvite: validateGameInvite((body as { gameInvite?: unknown }).gameInvite, label),
+    gameInvite: validateTokenlessGameInvite((body as { gameInvite?: unknown }).gameInvite, label),
   };
 }
 

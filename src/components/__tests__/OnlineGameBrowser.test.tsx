@@ -179,6 +179,85 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("creates an online account from the Online page account panel", async () => {
+    const onCreateAccount = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onCreateAccount={onCreateAccount}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    fireEvent.change(screen.getByRole("textbox", { name: "Display name" }), {
+      target: { value: "Liam" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
+
+    await waitFor(() => expect(onCreateAccount).toHaveBeenCalledWith("Liam"));
+    expect(await screen.findByText("Online account created.")).toBeInTheDocument();
+  });
+
+  it("shows signed-in account archive games without duplicating public archive rows", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
+    };
+    const publicArchive = summary({
+      gameId: "game_public_archive",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "public",
+    });
+    const accountArchive = summary({
+      gameId: "game_private_account_archive",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "unlisted",
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b" } },
+      ],
+    });
+    const loadAccountGames = vi.fn().mockResolvedValue(directory([accountArchive, publicArchive]));
+
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([publicArchive]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountGames={loadAccountGames}
+      />
+    );
+
+    const accountGames = await screen.findByRole("region", { name: "Your account games" });
+    expect(loadAccountGames).toHaveBeenCalledWith({ state: "archived", limit: 50 });
+    expect(within(accountGames).getByText("game_private_account_archive")).toBeInTheDocument();
+    expect(within(accountGames).queryByText("game_public_archive")).not.toBeInTheDocument();
+    expect(screen.getByText("game_public_archive")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search public games" }), {
+      target: { value: "does-not-match" },
+    });
+    await waitFor(() => {
+      expect(within(accountGames).getByText("No account games match these filters.")).toBeInTheDocument();
+    });
+  });
+
   it("loads lobby listings and public live games in the Lobby tab", async () => {
     const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([openSeek()]));
     const loadGames = vi.fn().mockResolvedValue(directory([

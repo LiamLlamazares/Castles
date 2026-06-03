@@ -1190,7 +1190,7 @@ describe("App game setup lifecycle", () => {
             gameId: "game_seek_accepted",
             seat: "b",
             token: "acceptor-token",
-            url: "https://castles.example/?onlineGame=game_seek_accepted&seat=b&token=acceptor-token",
+            url: "https://castles.example/?onlineGame=game_seek_accepted&seat=b",
           },
         }),
         { status: 200, headers: { "content-type": "application/json" } }
@@ -1387,7 +1387,7 @@ describe("App game setup lifecycle", () => {
               gameId: "game_creator_join",
               seat: "w",
               token: "creator-token",
-              url: "https://castles.example/?onlineGame=game_creator_join&seat=w&token=creator-token",
+              url: "https://castles.example/?onlineGame=game_creator_join&seat=w",
             },
           }),
           { status: 200, headers: { "content-type": "application/json" } }
@@ -2146,7 +2146,7 @@ describe("App game setup lifecycle", () => {
         gameId: "game_from_challenge_auto",
         seat: "w",
         token: "join-token",
-        url: "https://castles.example/?onlineGame=game_from_challenge_auto&seat=w&token=join-token",
+        url: "https://castles.example/?onlineGame=game_from_challenge_auto&seat=w",
       },
     };
     const fetchMock = vi
@@ -2374,7 +2374,7 @@ describe("App game setup lifecycle", () => {
               gameId: "game_from_challenge_join",
               seat: "w",
               token: "join-token",
-              url: "https://castles.example/?onlineGame=game_from_challenge_join&seat=w&token=join-token",
+              url: "https://castles.example/?onlineGame=game_from_challenge_join&seat=w",
             },
           }),
           { status: 200, headers: { "content-type": "application/json" } }

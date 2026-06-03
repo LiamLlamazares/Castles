@@ -34,25 +34,31 @@ import {
   cancelOnlineChallenge,
   cancelOpenSeek,
   copyOnlineInviteUrl,
+  createOnlineAccount,
   createOnlineChallenge,
   createOpenSeek,
   declineOnlineChallenge,
   fetchOpenSeek,
+  fetchOnlineAccountGames,
+  fetchOnlineAccountMe,
   fetchOnlineGameSummaries,
   fetchOnlineChallenge,
   fetchOnlineSpectatorSnapshot,
   formatOnlinePendingConnectionMessage,
+  forgetOnlineAccountSession,
   forgetOnlineChallengeParams,
   forgetOnlineChallengeShareUrl,
   forgetOnlineJoinParams,
   forgetOnlineOpponentInviteUrl,
   forgetOpenSeekCreatorParams,
   listOpenSeekCreatorParams,
+  rememberOnlineAccountSession,
   rememberOnlineChallengeParams,
   rememberOnlineChallengeShareUrl,
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
   rememberOpenSeekCreatorParams,
+  resolveOnlineAccountSession,
   removeOnlineChallengeTokenFromUrl,
   removeOnlineTokenFromUrl,
   resolveOnlineChallengeParams,
@@ -69,7 +75,10 @@ import {
   OpenSeekResponse,
   OnlineJoinParams,
   OnlineSpectatorParams,
+  StoredOnlineAccountSession,
+  FetchOnlineAccountGamesOptions,
 } from './online/client';
+import type { OnlineAccount } from './online/accounts';
 import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from './online/types';
 import {
   clearRecentOnlineGames,
@@ -92,6 +101,7 @@ import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online';
 type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
+type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "ready" | "error";
 
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
@@ -335,6 +345,16 @@ function App() {
   );
   const [openSeekResponse, setOpenSeekResponse] = useState<OpenSeekResponse | null>(null);
   const [onlineBrowserTab, setOnlineBrowserTab] = useState<OnlineBrowserInitialTab>("lobby");
+  const [onlineAccountSession, setOnlineAccountSession] = useState<StoredOnlineAccountSession | null>(() =>
+    resolveOnlineAccountSession()
+  );
+  const [onlineAccount, setOnlineAccount] = useState<OnlineAccount | null>(() =>
+    resolveOnlineAccountSession()?.account ?? null
+  );
+  const [onlineAccountStatus, setOnlineAccountStatus] = useState<OnlineAccountUiStatus>(() =>
+    resolveOnlineAccountSession() ? "checking" : "signed-out"
+  );
+  const [onlineAccountError, setOnlineAccountError] = useState<string | null>(null);
   const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
   const replayRequestIdRef = useRef(0);
   const onlineChallengePollInFlightRef = useRef(false);
@@ -344,6 +364,61 @@ function App() {
   const onlineSnapshotVisibility = onlineSnapshot
     ? onlineVisibilityByGameId[onlineSnapshot.gameId]
     : undefined;
+  const onlineAccountAuth = useMemo(
+    () => onlineAccountSession ? { token: onlineAccountSession.token } : undefined,
+    [onlineAccountSession?.token]
+  );
+
+  useEffect(() => {
+    if (!onlineAccountSession) {
+      setOnlineAccount(null);
+      setOnlineAccountStatus("signed-out");
+      setOnlineAccountError(null);
+      return;
+    }
+
+    let cancelled = false;
+    if (onlineAccountSession.account) {
+      setOnlineAccount(onlineAccountSession.account);
+      setOnlineAccountStatus("ready");
+    } else {
+      setOnlineAccountStatus("checking");
+    }
+
+    fetchOnlineAccountMe({ token: onlineAccountSession.token })
+      .then((response) => {
+        if (cancelled) return;
+        const nextSession = {
+          sessionId: onlineAccountSession.sessionId,
+          token: onlineAccountSession.token,
+          account: response.account,
+        };
+        rememberOnlineAccountSession(nextSession);
+        setOnlineAccountSession(nextSession);
+        setOnlineAccount(response.account);
+        setOnlineAccountStatus("ready");
+        setOnlineAccountError(null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "";
+        if (/\((401|403)\)/.test(message)) {
+          forgetOnlineAccountSession();
+          setOnlineAccountSession(null);
+          setOnlineAccount(null);
+          setOnlineAccountStatus("signed-out");
+          setOnlineAccountError("Your online account session expired.");
+          return;
+        }
+        setOnlineAccount(onlineAccountSession.account ?? null);
+        setOnlineAccountStatus("error");
+        setOnlineAccountError("Could not refresh online account. You can still play anonymously.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onlineAccountSession?.token]);
 
   useEffect(() => {
     if (isRulesPage || onlineJoin || onlineSpectator || onlineChallenge) return;
@@ -906,6 +981,43 @@ function App() {
     setRecentOnlineGames([]);
   }, []);
 
+  const handleCreateOnlineAccount = useCallback(async (displayName: string) => {
+    setOnlineAccountStatus("creating");
+    setOnlineAccountError(null);
+    try {
+      const created = await createOnlineAccount(displayName);
+      const nextSession = {
+        sessionId: created.session.sessionId,
+        token: created.session.token,
+        account: created.account,
+      };
+      rememberOnlineAccountSession(nextSession);
+      setOnlineAccountSession(nextSession);
+      setOnlineAccount(created.account);
+      setOnlineAccountStatus("ready");
+    } catch (error) {
+      console.error("Failed to create online account", error);
+      setOnlineAccountStatus(onlineAccountSession ? "error" : "signed-out");
+      setOnlineAccountError("Could not create that online account name.");
+      throw error;
+    }
+  }, [onlineAccountSession]);
+
+  const handleSignOutOnlineAccount = useCallback(() => {
+    forgetOnlineAccountSession();
+    setOnlineAccountSession(null);
+    setOnlineAccount(null);
+    setOnlineAccountStatus("signed-out");
+    setOnlineAccountError(null);
+  }, []);
+
+  const handleLoadOnlineAccountGames = useCallback((options?: FetchOnlineAccountGamesOptions) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineAccountGames({ token: onlineAccountSession.token }, options);
+  }, [onlineAccountSession?.token]);
+
   const handleCreateOnlineChallenge = async (
     board: Board,
     pieces: Piece[],
@@ -933,7 +1045,7 @@ function App() {
           initialPoolTypes,
           pieceTheme,
         }),
-        { challengerSeat: "w", visibility: "unlisted" }
+        { challengerSeat: "w", visibility: "unlisted", account: onlineAccountAuth }
       );
       const challenge = resolveOnlineChallengeParams(created.challenger.url);
       if (!challenge) {
@@ -981,7 +1093,7 @@ function App() {
         forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
       }
       clearOpenSeekState();
-      const created = await createOpenSeek(setup, { creatorSeat: "random" });
+      const created = await createOpenSeek(setup, { creatorSeat: "random", account: onlineAccountAuth });
       const creator = {
         seekId: created.seekId,
         token: created.creator.token,
@@ -1044,7 +1156,7 @@ function App() {
   const handleAcceptOpenSeek = async (seekId: string) => {
     cancelPendingReplay();
     clearAnalysisReturn();
-    const response = await acceptOpenSeek(seekId);
+    const response = await acceptOpenSeek(seekId, { account: onlineAccountAuth });
     enterOnlineGameFromInvite(response.gameInvite);
   };
 
@@ -1054,7 +1166,7 @@ function App() {
     }
     cancelPendingReplay();
     clearAnalysisReturn();
-    const response = await startQuickMatch(quickMatchSetup);
+    const response = await startQuickMatch(quickMatchSetup, { account: onlineAccountAuth });
     if (response.outcome === "matched") {
       window.setTimeout(() => {
         enterOnlineGameFromInvite(response.gameInvite);
@@ -1935,6 +2047,12 @@ function App() {
           onReplay={handleReplayOnlineGame}
           recentOnlineGames={recentOnlineGames}
           onClearRecentOnlineGames={handleClearRecentOnlineGames}
+          account={onlineAccount}
+          accountStatus={onlineAccountStatus}
+          accountError={onlineAccountError}
+          onCreateAccount={handleCreateOnlineAccount}
+          onSignOutAccount={handleSignOutOnlineAccount}
+          loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
         />
       )}
 
