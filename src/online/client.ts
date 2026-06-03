@@ -114,6 +114,11 @@ export interface OnlineAccountGameRejoinResponse {
   gameInvite: OnlineChallengeGameInvite;
 }
 
+export interface OnlineAccountSessionRevokeResponse {
+  protocolVersion: typeof ONLINE_PROTOCOL_VERSION;
+  revoked: boolean;
+}
+
 export interface CreatedOnlineChallenge {
   challengeId: string;
   summary: OnlineChallengeSummary;
@@ -163,7 +168,7 @@ function openSeekCreatorStorageKey(seekId: string): string {
 
 const OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY = "castles_online_seek_creator:index";
 const ANONYMOUS_SESSION_STORAGE_KEY = "castles_online_anonymous_session_id";
-const ONLINE_ACCOUNT_SESSION_STORAGE_KEY = "castles_online_account_session_v1";
+export const ONLINE_ACCOUNT_SESSION_STORAGE_KEY = "castles_online_account_session_v1";
 
 function defaultAnonymousSessionIdFactory(): string {
   const randomId =
@@ -694,6 +699,38 @@ export async function fetchOnlineAccountMe(
   return {
     protocolVersion: ONLINE_PROTOCOL_VERSION,
     account: validateOnlineAccountResponse(body, "Online account"),
+  };
+}
+
+export async function revokeOnlineAccountSession(
+  account: OnlineAccountSessionParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountSessionRevokeResponse> {
+  const response = await fetchImpl("/api/online/account/session", {
+    method: "DELETE",
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not revoke online account session (${response.status})`);
+  }
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online account session revoke response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Online account session revoke response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  if (typeof (body as { revoked?: unknown }).revoked !== "boolean") {
+    throw new Error("Online account session revoke response was malformed: revoked is invalid.");
+  }
+  if ((body as { revoked: boolean }).revoked !== true) {
+    throw new Error("Online account session was not revoked.");
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    revoked: (body as { revoked: boolean }).revoked,
   };
 }
 

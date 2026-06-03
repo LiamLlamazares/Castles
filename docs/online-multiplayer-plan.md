@@ -765,10 +765,22 @@ Tests/review/deploy gates:
 - Review: account/session review focused on not accepting client-provided identity, binding exactly one seat, preserving anonymous fallback, and keeping raw account tokens out of event bodies.
 - Deploy: deploy only after account history still lists signed-in direct-created games through PostgreSQL-backed summaries.
 
+## Phase 7G: Current Account Session Revocation
+
+Goal: make visible account sign-out revoke the current server-side account bearer session instead of only deleting browser-local state.
+
+Status: implemented locally on 2026-06-03. `DELETE /api/online/account/session` resolves the current account bearer token through the existing account-session path, deletes only that account session token hash, and returns `{ protocolVersion, revoked }`. The browser sign-out handler waits for revocation before clearing local account state; if revocation fails, it keeps the account session available so the player can retry. Other open tabs listen for account-session storage changes and clear stale signed-in UI when the shared local session is removed. This does not revoke game seat tokens, challenge tokens, open-seek creator tokens, other account sessions, or the account record.
+
+Tests/review/deploy gates:
+
+- Tests: account-store revocation tests, HTTP route revocation/rejection tests including PostgreSQL-backed account store wiring, client helper coverage, App sign-out success/failure/cross-tab integration coverage, full suite, client build, server build, and local PostgreSQL browser smoke.
+- Review: account/session security review focused on fail-closed bearer handling, current-session-only scope, token secrecy, and preserving the account-vs-game-token boundary.
+- Deploy: deploy only after the route works against PostgreSQL-backed `online_account_sessions`.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
-- Expose richer account-backed personal game history in the UI for registered players, including finished friend-link games and public games, while keeping local storage as the anonymous fallback.
+- Add sign-out-all/session listing, account deletion, and account privacy copy before public account launch.
 - Implement rating events/read models after result contracts are stable.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.

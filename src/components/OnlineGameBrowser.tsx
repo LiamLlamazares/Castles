@@ -50,7 +50,7 @@ type OnlineBrowserResultFilter =
   | "castle_control"
   | "victory_points"
   | "monarch_captured";
-type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "ready" | "error";
+type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "signing-out" | "ready" | "error";
 type QuickMatchStatus = "idle" | "pending" | "matched" | "waiting" | "error";
 type QuickMatchOutcome = "matched" | "waiting" | void;
 
@@ -94,7 +94,7 @@ interface OnlineGameBrowserProps {
   accountStatus?: OnlineAccountUiStatus;
   accountError?: string | null;
   onCreateAccount?: (displayName: string) => void | Promise<void>;
-  onSignOutAccount?: () => void;
+  onSignOutAccount?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
@@ -1474,6 +1474,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? "Checking saved account..."
       : accountStatus === "creating"
         ? "Creating account..."
+        : accountStatus === "signing-out"
+          ? "Signing out..."
         : accountError || accountActionMessage;
 
   return (
@@ -1514,9 +1516,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             type="button"
             className="online-browser-button subtle"
             onClick={onSignOutAccount}
-            disabled={!onSignOutAccount}
+            disabled={!onSignOutAccount || accountStatus === "signing-out"}
           >
-            Sign Out
+            {accountStatus === "signing-out" ? "Signing Out" : "Sign Out"}
           </button>
         ) : (
           <form className="online-browser-account-form" onSubmit={handleCreateAccountSubmit}>

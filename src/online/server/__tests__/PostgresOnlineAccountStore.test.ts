@@ -99,6 +99,14 @@ class FakeAccountQueryable {
       return { rows: [] };
     }
 
+    if (normalizedText.startsWith("DELETE FROM online_account_sessions")) {
+      const [tokenHash] = values as string[];
+      const session = this.sessionsByTokenHash.get(tokenHash);
+      if (!session) return { rows: [] };
+      this.sessionsByTokenHash.delete(tokenHash);
+      return { rows: [{ session_id: session.session_id }] };
+    }
+
     throw new Error(`Unexpected query: ${normalizedText}`);
   }
 }
@@ -137,6 +145,28 @@ describe("PostgresOnlineAccountStore", () => {
       },
     });
     expect(await store.resolveSessionToken("wrong-token", "2026-06-03T12:06:00.000Z")).toBeNull();
+  });
+
+  it("revokes account sessions without deleting the account", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = new PostgresOnlineAccountStore({ queryable });
+    const token = "account-session-token";
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      tokenHash: hashOnlineToken(token),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    expect(await store.resolveSessionToken(token, "2026-06-03T12:01:00.000Z")).toMatchObject({
+      sessionId: "account_session_liam",
+    });
+    await expect(store.revokeSessionToken(token)).resolves.toBe(true);
+    await expect(store.resolveSessionToken(token, "2026-06-03T12:02:00.000Z")).resolves.toBeNull();
+    await expect(store.revokeSessionToken(token)).resolves.toBe(false);
+    expect(queryable.accounts.get("account_liam")).toMatchObject({ account_id: "account_liam" });
   });
 
   it("rejects duplicate display names case-insensitively", async () => {

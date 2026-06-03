@@ -2184,6 +2184,56 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
   });
 
+  app.delete("/api/online/account/session", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.session.revoke", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
+    const token = getBearerToken(req.headers.authorization);
+    if (!token) {
+      log({ event: "online.account.session.revoke", status: "rejected", reason: "missing_account_token" });
+      res.status(401).json({
+        error: { code: "unauthorized", message: "Account session is required." },
+      });
+      return;
+    }
+
+    try {
+      const revoked = await accountStore.revokeSessionToken(token);
+      log({
+        event: "online.account.session.revoke",
+        status: revoked ? "accepted" : "rejected",
+        reason: revoked ? undefined : "already_revoked",
+      });
+      if (!revoked) {
+        res.status(409).json({
+          error: { code: "session_not_revoked", message: "Account session could not be revoked." },
+        });
+        return;
+      }
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        revoked,
+      });
+    } catch (error) {
+      console.error("Failed to revoke account session", error);
+      log({ event: "online.account.session.revoke", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account session could not be revoked." },
+      });
+    }
+  });
+
   app.get("/api/online/account/games", async (req, res) => {
     if (!accountReadLimiter.take(getClientKey(req))) {
       res.status(429).json({

@@ -23,6 +23,7 @@ export interface ResolvedOnlineAccountSession {
 export interface OnlineAccountStore {
   createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession>;
   resolveSessionToken(token: string, usedAt: string): Promise<ResolvedOnlineAccountSession | null>;
+  revokeSessionToken(token: string): Promise<boolean>;
   checkReady?(): Promise<boolean> | boolean;
   close?(): Promise<void> | void;
 }
@@ -113,6 +114,16 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       sessionId: session.sessionId,
       lastUsedAt: usedAt,
     };
+  }
+
+  async revokeSessionToken(token: string): Promise<boolean> {
+    if (typeof token !== "string" || token.length === 0) return false;
+    const tokenHash = hashOnlineToken(token);
+    const session = this.sessionsByTokenHash.get(tokenHash);
+    if (!session || !verifyOnlineToken(token, session.tokenHash)) return false;
+    this.sessionsByTokenHash.delete(session.tokenHash);
+    this.sessionsById.delete(session.sessionId);
+    return true;
   }
 
   async checkReady(): Promise<boolean> {

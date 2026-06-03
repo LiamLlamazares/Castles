@@ -15,6 +15,8 @@ import { OnlineGameRoom } from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import { OnlineGameSeatCredentialTerminalError } from "../OnlineGameStore";
+import { MemoryOnlineAccountStore } from "../OnlineAccountStore";
+import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
 import {
   createChallengeAcceptedEvent,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -150,6 +152,91 @@ function fragmentChallengeToken(url: string): string {
 
 function bearer(token: string): HeadersInit {
   return { authorization: `Bearer ${token}` };
+}
+
+class FakePostgresAccountQueryable {
+  readonly accounts = new Map<string, any>();
+  readonly accountsByDisplayName = new Map<string, string>();
+  readonly sessionsByTokenHash = new Map<string, any>();
+
+  async query(text: string, values: unknown[] = []): Promise<{ rows: any[] }> {
+    const normalizedText = text.replace(/\s+/g, " ").trim();
+    if (
+      normalizedText === "BEGIN" ||
+      normalizedText === "COMMIT" ||
+      normalizedText === "ROLLBACK" ||
+      normalizedText === "SELECT 1" ||
+      normalizedText.startsWith("CREATE TABLE") ||
+      normalizedText.startsWith("CREATE INDEX") ||
+      normalizedText.startsWith("CREATE UNIQUE INDEX") ||
+      normalizedText.startsWith("DO $$")
+    ) {
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_accounts")) {
+      const [accountId, displayName, displayNameNormalized, createdAt] = values as string[];
+      if (this.accounts.has(accountId) || this.accountsByDisplayName.has(displayNameNormalized)) {
+        const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
+        error.code = "23505";
+        error.constraint = this.accountsByDisplayName.has(displayNameNormalized)
+          ? "online_accounts_display_name_normalized_key"
+          : "online_accounts_pkey";
+        throw error;
+      }
+      const row = {
+        account_id: accountId,
+        display_name: displayName,
+        display_name_normalized: displayNameNormalized,
+        created_at: createdAt,
+        updated_at: createdAt,
+      };
+      this.accounts.set(accountId, row);
+      this.accountsByDisplayName.set(displayNameNormalized, accountId);
+      return { rows: [row] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_sessions")) {
+      const [sessionId, accountId, tokenHash, createdAt] = values as string[];
+      this.sessionsByTokenHash.set(tokenHash, {
+        session_id: sessionId,
+        account_id: accountId,
+        token_hash: tokenHash,
+        created_at: createdAt,
+        last_used_at: createdAt,
+      });
+      return { rows: [] };
+    }
+
+    if (normalizedText.includes("FROM online_account_sessions s INNER JOIN online_accounts a")) {
+      const [tokenHash] = values as string[];
+      const session = this.sessionsByTokenHash.get(tokenHash);
+      if (!session) return { rows: [] };
+      const account = this.accounts.get(session.account_id);
+      if (!account) return { rows: [] };
+      return { rows: [{ ...account, session_id: session.session_id }] };
+    }
+
+    if (normalizedText.startsWith("UPDATE online_account_sessions")) {
+      const [sessionId, usedAt] = values as string[];
+      for (const session of this.sessionsByTokenHash.values()) {
+        if (session.session_id === sessionId) {
+          session.last_used_at = usedAt;
+        }
+      }
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("DELETE FROM online_account_sessions")) {
+      const [tokenHash] = values as string[];
+      const session = this.sessionsByTokenHash.get(tokenHash);
+      if (!session) return { rows: [] };
+      this.sessionsByTokenHash.delete(tokenHash);
+      return { rows: [{ session_id: session.session_id }] };
+    }
+
+    throw new Error(`Unexpected query: ${normalizedText}`);
+  }
 }
 
 function pendingChallengeSummary(
@@ -348,6 +435,109 @@ describe("createOnlineHttpServer", () => {
 
     expect(createSeekResponse.status).toBe(201);
     expect(seek.summary.creatorIdentity).toEqual(account.account.identity);
+  });
+
+  it("revokes the current account session and rejects it afterwards", async () => {
+    const logs: unknown[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    const revokeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const revoked = await revokeResponse.json();
+    const meResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+      headers: bearer(account.session.token),
+    });
+    const secondRevokeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+
+    expect(revokeResponse.status).toBe(200);
+    expect(revoked).toEqual({ protocolVersion: ONLINE_PROTOCOL_VERSION, revoked: true });
+    expect(meResponse.status).toBe(401);
+    expect(secondRevokeResponse.status).toBe(401);
+    expect(JSON.stringify(logs)).not.toContain(account.session.token);
+    expect(logs).toContainEqual(
+      expect.objectContaining({ event: "online.account.session.revoke", status: "accepted" })
+    );
+  });
+
+  it("does not return success when account session revocation races after authentication", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    vi.spyOn(accountStore, "revokeSessionToken").mockResolvedValue(false);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    const revokeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const body = await revokeResponse.json();
+
+    expect(revokeResponse.status).toBe(409);
+    expect(body.error).toMatchObject({ code: "session_not_revoked" });
+  });
+
+  it("revokes account sessions through the PostgreSQL account store route", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = new PostgresOnlineAccountStore({ queryable });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+
+    expect(queryable.sessionsByTokenHash.size).toBe(1);
+
+    const revokeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const revoked = await revokeResponse.json();
+    const meResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+      headers: bearer(account.session.token),
+    });
+
+    expect(accountResponse.status).toBe(201);
+    expect(revokeResponse.status).toBe(200);
+    expect(revoked).toEqual({ protocolVersion: ONLINE_PROTOCOL_VERSION, revoked: true });
+    expect(queryable.sessionsByTokenHash.size).toBe(0);
+    expect(queryable.accounts.size).toBe(1);
+    expect(meResponse.status).toBe(401);
   });
 
   it("keeps direct-created games anonymous without account auth and ignores client identity fields", async () => {

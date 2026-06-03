@@ -51,6 +51,7 @@ import {
   forgetOnlineJoinParams,
   forgetOnlineOpponentInviteUrl,
   forgetOpenSeekCreatorParams,
+  ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
   listOpenSeekCreatorParams,
   rememberOnlineAccountSession,
   rememberOnlineChallengeParams,
@@ -59,6 +60,7 @@ import {
   rememberOnlineOpponentInviteUrl,
   rememberOpenSeekCreatorParams,
   rejoinOnlineAccountGame,
+  revokeOnlineAccountSession,
   resolveOnlineAccountSession,
   removeOnlineChallengeTokenFromUrl,
   removeOnlineTokenFromUrl,
@@ -104,7 +106,7 @@ import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online';
 type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
-type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "ready" | "error";
+type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "signing-out" | "ready" | "error";
 
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
@@ -372,6 +374,19 @@ function App() {
     () => onlineAccountSession ? { token: onlineAccountSession.token } : undefined,
     [onlineAccountSession?.token]
   );
+
+  useEffect(() => {
+    const handleOnlineAccountStorageChange = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== ONLINE_ACCOUNT_SESSION_STORAGE_KEY) return;
+      if (event.storageArea && event.storageArea !== window.localStorage) return;
+      setOnlineAccountSession(resolveOnlineAccountSession());
+    };
+
+    window.addEventListener("storage", handleOnlineAccountStorageChange);
+    return () => {
+      window.removeEventListener("storage", handleOnlineAccountStorageChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!onlineAccountSession) {
@@ -1029,13 +1044,42 @@ function App() {
     }
   }, [onlineAccountSession]);
 
-  const handleSignOutOnlineAccount = useCallback(() => {
-    forgetOnlineAccountSession();
-    setOnlineAccountSession(null);
-    setOnlineAccount(null);
-    setOnlineAccountStatus("signed-out");
+  const handleSignOutOnlineAccount = useCallback(async () => {
+    const session = onlineAccountSession;
+    if (!session) {
+      forgetOnlineAccountSession();
+      setOnlineAccount(null);
+      setOnlineAccountStatus("signed-out");
+      setOnlineAccountError(null);
+      return;
+    }
+
+    setOnlineAccountStatus("signing-out");
     setOnlineAccountError(null);
-  }, []);
+    try {
+      await revokeOnlineAccountSession({ token: session.token });
+      forgetOnlineAccountSession();
+      setOnlineAccountSession(null);
+      setOnlineAccount(null);
+      setOnlineAccountStatus("signed-out");
+      setOnlineAccountError(null);
+    } catch (error) {
+      console.error("Failed to revoke online account session", error);
+      const storedSession = resolveOnlineAccountSession();
+      if (storedSession?.token !== session.token) {
+        setOnlineAccountSession(storedSession);
+        setOnlineAccount(storedSession?.account ?? null);
+        setOnlineAccountStatus(
+          storedSession ? (storedSession.account ? "ready" : "checking") : "signed-out"
+        );
+        setOnlineAccountError(null);
+        return;
+      }
+      setOnlineAccount(session.account ?? onlineAccount);
+      setOnlineAccountStatus("error");
+      setOnlineAccountError("Could not sign out. Check your connection and try again.");
+    }
+  }, [onlineAccount, onlineAccountSession]);
 
   const handleLoadOnlineAccountGames = useCallback((options?: FetchOnlineAccountGamesOptions) => {
     if (!onlineAccountSession) {

@@ -17,6 +17,7 @@ import {
 } from "../online/seeks";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../online/readModel";
 import {
+  ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
   rememberOnlineChallengeParams,
   rememberOnlineChallengeShareUrl,
   rememberOnlineAccountSession,
@@ -316,6 +317,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onReturnToAccountGame,
     onRejoinAccountGame,
     rejoiningAccountGameId,
+    onSignOutAccount,
     recentOnlineGames = [],
     onClearRecentOnlineGames,
     backLabel = "Back to game",
@@ -353,6 +355,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     ) => void;
     onRejoinAccountGame?: (game: any) => void;
     rejoiningAccountGameId?: string | null;
+    onSignOutAccount?: () => void;
     recentOnlineGames?: { gameId: string; status: string }[];
     onClearRecentOnlineGames?: () => void;
     backLabel?: string;
@@ -368,6 +371,11 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       <div>
         Recent online games: {recentOnlineGames.map((game) => `${game.gameId}:${game.status}`).join(",") || "none"}
       </div>
+      {account && onSignOutAccount && (
+        <button type="button" onClick={onSignOutAccount}>
+          Mock Sign Out Account
+        </button>
+      )}
       {onClearRecentOnlineGames && (
         <button type="button" onClick={onClearRecentOnlineGames}>
           Clear recent online replays
@@ -2257,6 +2265,224 @@ describe("App game setup lifecycle", () => {
     await waitFor(() => {
       expect(screen.getByText("Online session: player")).toBeInTheDocument();
       expect(screen.getByText("Online visibility: private")).toBeInTheDocument();
+    });
+  });
+
+  it("revokes the saved account session when signing out", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_sign_out",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_sign_out", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/session") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, revoked: true }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Sign Out Account" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/account/session",
+        { method: "DELETE", headers: { authorization: "Bearer account-token" } }
+      );
+      expect(localStorage.getItem("castles_online_account_session_v1")).toBeNull();
+    });
+    expect(screen.queryByRole("button", { name: "Mock Sign Out Account" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the account session available when sign-out revocation fails", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_sign_out_retry",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_sign_out_retry", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/session") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ error: { code: "persistence_failed", message: "Nope." } }),
+            { status: 503, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Sign Out Account" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/account/session",
+        { method: "DELETE", headers: { authorization: "Bearer account-token" } }
+      );
+      expect(screen.getByRole("button", { name: "Mock Sign Out Account" })).toBeInTheDocument();
+      expect(localStorage.getItem("castles_online_account_session_v1")).toContain("account-token");
+    });
+    expect(consoleError).toHaveBeenCalled();
+  });
+
+  it("clears signed-in account UI when another tab removes the account session", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_cross_tab",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_cross_tab", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input) === "/api/online/account/me") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ protocolVersion: 1, account }),
+              { status: 200, headers: { "content-type": "application/json" } }
+            )
+          );
+        }
+        return Promise.resolve(new Response("{}", { status: 404 }));
+      })
+    );
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    expect(await screen.findByRole("button", { name: "Mock Sign Out Account" })).toBeInTheDocument();
+
+    const oldValue = localStorage.getItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY);
+    localStorage.removeItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY);
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
+          oldValue,
+          newValue: null,
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Mock Sign Out Account" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not restore signed-in UI when sign-out fails after another tab cleared the session", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_cross_tab_sign_out",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_cross_tab_sign_out", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const pendingRevoke = deferredResponse();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/session") {
+        return pendingRevoke.promise;
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Sign Out Account" }));
+
+    const oldValue = localStorage.getItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY);
+    localStorage.removeItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY);
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
+          oldValue,
+          newValue: null,
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Mock Sign Out Account" })).not.toBeInTheDocument();
+    });
+
+    pendingRevoke.resolve(
+      new Response(
+        JSON.stringify({ error: { code: "persistence_failed", message: "Nope." } }),
+        { status: 503, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Mock Sign Out Account" })).not.toBeInTheDocument();
+      expect(localStorage.getItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY)).toBeNull();
     });
   });
 

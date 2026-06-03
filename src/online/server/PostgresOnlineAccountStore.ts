@@ -179,6 +179,17 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     };
   }
 
+  async revokeSessionToken(token: string): Promise<boolean> {
+    await this.ensureSchema();
+    if (typeof token !== "string" || token.length === 0) return false;
+    const tokenHash = hashOnlineToken(token);
+    const result = await this.queryable.query(
+      "DELETE FROM online_account_sessions WHERE token_hash = $1 RETURNING session_id",
+      [tokenHash]
+    );
+    return result.rows.length > 0;
+  }
+
   async checkReady(): Promise<boolean> {
     await this.ensureSchema();
     await this.queryable.query("SELECT 1");

@@ -55,6 +55,7 @@ import {
   listOpenSeekCreatorParams,
   rememberOpenSeekCreatorParams,
   resolveOpenSeekCreatorParams,
+  revokeOnlineAccountSession,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
@@ -681,6 +682,13 @@ describe("online client helpers", () => {
             url: "https://castles.example/?onlineGame=game_account_rejoin&seat=w",
           },
         }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          revoked: true,
+        }),
       });
 
     await expect(createOnlineAccount("Liam", fetchImpl as any)).resolves.toMatchObject({
@@ -713,6 +721,10 @@ describe("online client helpers", () => {
         url: "https://castles.example/?onlineGame=game_account_rejoin&seat=w",
       },
     });
+    await expect(revokeOnlineAccountSession({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      revoked: true,
+    });
 
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
@@ -735,6 +747,25 @@ describe("online client helpers", () => {
       "/api/online/account/games/game_account_rejoin/rejoin",
       { method: "POST", headers: { authorization: "Bearer account-token" } }
     );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      5,
+      "/api/online/account/session",
+      { method: "DELETE", headers: { authorization: "Bearer account-token" } }
+    );
+  });
+
+  it("rejects account session revocation responses that did not revoke the session", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        revoked: false,
+      }),
+    });
+
+    await expect(
+      revokeOnlineAccountSession({ token: "account-token" }, fetchImpl as any)
+    ).rejects.toThrow("Online account session was not revoked.");
   });
 
   it("sends account bearer auth on account-aware creation and matchmaking paths without body leakage", async () => {
