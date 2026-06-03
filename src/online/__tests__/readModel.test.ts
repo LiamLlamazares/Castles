@@ -111,6 +111,33 @@ function createPreviewEvent(
   };
 }
 
+function createTerminalCaptureEvent(
+  gameId = "game_terminal_capture"
+): Extract<OnlineGameEvent, { type: "game_created" }> {
+  const board = new Board(
+    { nSquares: 3, riverCrossingLength: 100, hasHighGround: false },
+    []
+  );
+  const pieces = [
+    new Piece(new Hex(0, 0, 0), "w", PieceType.Monarch),
+    new Piece(new Hex(1, -1, 0), "b", PieceType.Monarch),
+  ];
+
+  return {
+    ...envelope(0),
+    type: "game_created",
+    gameId,
+    setup: serializeOnlineGameSetup({
+      board,
+      pieces,
+      sanctuaries: [],
+      gameRules: { vpModeEnabled: false },
+      initialPoolTypes: [],
+      pieceTheme: "Castles",
+    }),
+  };
+}
+
 function validSummary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
   const hasTimeControl = overrides.hasTimeControl ?? true;
   return {
@@ -612,6 +639,86 @@ describe("online read model", () => {
       version: 1,
       visibility: "public",
       result: { winner: "w", reason: "resignation" },
+      lastEventId: "evt-2",
+    });
+    expect(validateOnlineGameSummary(summary).ok).toBe(true);
+  });
+
+  it("keeps non-resignation terminal action end time before later visibility changes", () => {
+    const [summary] = projectOnlineGameSummaries([
+      createTerminalCaptureEvent("game_capture_then_publish"),
+      {
+        ...envelope(1),
+        type: "action_accepted",
+        gameId: "game_capture_then_publish",
+        playerColor: "w",
+        clientActionId: "client-action-capture-then-publish",
+        version: 1,
+        playedAt: 2_000,
+        action: {
+          type: "ATTACK",
+          baseVersion: 0,
+          from: { q: 0, r: 0, s: 0 },
+          target: { q: 1, r: -1, s: 0 },
+        },
+      },
+      {
+        ...envelope(2),
+        type: "visibility_changed",
+        gameId: "game_capture_then_publish",
+        visibility: "public",
+      },
+    ] as OnlineGameEvent[]);
+
+    expect(summary).toMatchObject({
+      gameId: "game_capture_then_publish",
+      status: "complete",
+      archiveState: "archived",
+      endedAt: "2026-05-31T12:00:01.000Z",
+      updatedAt: "2026-05-31T12:00:02.000Z",
+      version: 1,
+      visibility: "public",
+      result: { winner: "w", reason: "monarch_captured" },
+      lastEventId: "evt-2",
+    });
+    expect(validateOnlineGameSummary(summary).ok).toBe(true);
+  });
+
+  it("keeps timeout adjudication end time before later visibility changes", () => {
+    const [summary] = projectOnlineGameSummaries([
+      createEvent("game_timeout_then_publish"),
+      {
+        ...envelope(1),
+        type: "timeout_adjudicated",
+        gameId: "game_timeout_then_publish",
+        playerColor: "w",
+        version: 1,
+        adjudicatedAt: 61_000,
+        result: { winner: "b", reason: "timeout" },
+        clock: {
+          remainingMs: { w: 0, b: 1_200_000 },
+          activeColor: null,
+          runningSince: null,
+          flag: { color: "w", at: 61_000 },
+        },
+      },
+      {
+        ...envelope(2),
+        type: "visibility_changed",
+        gameId: "game_timeout_then_publish",
+        visibility: "public",
+      },
+    ] as OnlineGameEvent[]);
+
+    expect(summary).toMatchObject({
+      gameId: "game_timeout_then_publish",
+      status: "complete",
+      archiveState: "archived",
+      endedAt: "2026-05-31T12:00:01.000Z",
+      updatedAt: "2026-05-31T12:00:02.000Z",
+      version: 1,
+      visibility: "public",
+      result: { winner: "b", reason: "timeout" },
       lastEventId: "evt-2",
     });
     expect(validateOnlineGameSummary(summary).ok).toBe(true);

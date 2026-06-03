@@ -724,6 +724,16 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
     allowMissingCredentialsForProjection: true,
   });
   const metadataByGame = new Map<string, SummaryMetadata>();
+  const terminalVersionByGame = new Map<string, number>();
+
+  for (const record of records) {
+    const terminalVersion = record.timeout?.version ?? (
+      record.result ? record.acceptedActions.at(-1)?.version : undefined
+    );
+    if (typeof terminalVersion === "number" && Number.isSafeInteger(terminalVersion)) {
+      terminalVersionByGame.set(record.gameId, terminalVersion);
+    }
+  }
 
   for (const event of events) {
     if (event.type === "game_created") {
@@ -758,7 +768,7 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
 
     if (
       event.type === "timeout_adjudicated" ||
-      (event.type === "action_accepted" && event.action.type === "RESIGN")
+      (event.type === "action_accepted" && terminalVersionByGame.get(event.gameId) === event.version)
     ) {
       metadata.endedAt = event.createdAt;
     }

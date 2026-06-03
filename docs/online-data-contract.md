@@ -1,6 +1,6 @@
 # Online Data Contract
 
-Last refreshed: 2026-06-01
+Last refreshed: 2026-06-03
 
 This document records the current contract decisions for online multiplayer. The app still has no production users, so incompatible beta data can be reset instead of migrated.
 
@@ -101,6 +101,10 @@ Summary payloads must include:
 - token-free participants and result
 - `livePreview`: side to move, turn phase, move count, optional last move, optional clock snapshot, bounded board preview, and optional live spectator count
 - `lastEventId`
+
+For completed summaries, `endedAt` is the timestamp of the terminal gameplay event: resignation,
+timeout adjudication, monarch capture, castle control, or victory-points completion. Later
+visibility changes may update `updatedAt` and `lastEventId`, but they must not move `endedAt`.
 
 `livePreview.spectatorCount` is response-only presence metadata. It is allowed only on active summaries, is omitted when the current count is zero or unknown, and must not be stored as durable archive/history data. In the current single-process deployment it is calculated from connected spectator WebSockets on the serving Node process; a future multi-instance deployment needs shared presence/pub-sub before the number can be global across all servers.
 

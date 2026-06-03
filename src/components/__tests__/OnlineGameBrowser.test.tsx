@@ -2103,6 +2103,12 @@ describe("OnlineGameBrowser", () => {
     const row = await screen.findByRole("article", { name: /Ada vs Ben/i });
     expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true");
     expect(row).toHaveTextContent("Complete");
+    expect(row).toHaveTextContent("Replay length 3 moves");
+    expect(row).toHaveTextContent("Final position Black, Attack");
+    expect(row).toHaveTextContent("Last move G13G12");
+    expect(row).toHaveTextContent("Timed 20+20");
+    expect(row).toHaveTextContent(/Ended /);
+    expect(row).toHaveTextContent(/Started /);
     expect(row).toHaveTextContent("White wins by resignation");
     fireEvent.click(within(row).getByRole("button", { name: "Analyze replay Ada vs Ben, game_public_archive" }));
 

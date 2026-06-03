@@ -633,6 +633,17 @@ Remaining work:
 - Add clearer player/title metadata after accounts exist.
 - Continue Archive/replay row polish with the new server-backed filtered pages.
 
+## Phase 6AF: Archive Replay Row Clarity
+
+Goal: make completed public games scan like replays instead of live rows with a different button.
+
+Status: implemented on 2026-06-03. Online Archive rows now show replay-specific metadata from the existing public summary: result, replay length, final side/phase, last move, time control, started time, and ended time. Live-only controls such as spectator-link copying and watcher labels remain hidden for archived games. The read model now pins `endedAt` to the terminal gameplay event for resignations, timeouts, monarch captures, castle-control wins, and victory-points wins, so later visibility changes can update `updatedAt` without moving the displayed completion time.
+
+Remaining work:
+
+- Add richer replay detail only after a separate archive-detail/read-model contract exists.
+- Keep recent device-only replays clearly separate from public archive rows until account-backed history exists.
+
 ## Phase 7: Ratings, Fair Play, Moderation, Admin
 
 Goal: add public-service trust and governance features.
@@ -670,7 +681,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after the summary model grows: clock/result filters and bounded visible-text search are now server-backed, while clearer replay metadata, richer thumbnails/clocks, and account-backed player metadata still need designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+1. Improve public directory scanability after the summary model grows: clock/result filters, bounded visible-text search, and replay-specific archive row metadata are now covered, while richer clocks, account-backed player metadata, and archive-detail pages still need designs. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 2. Revisit saved/replayed online games after account identity exists: completed friend-link games should become account history, while the current device-local recent list remains the anonymous fallback.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: service-worker policy tests, expected-commit health checks, and browser smoke after each live push.

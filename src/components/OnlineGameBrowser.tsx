@@ -182,6 +182,14 @@ function formatClockTime(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatTimeControl(summary: OnlineGameSummary): string {
+  const clock = summary.livePreview.clock;
+  if (!clock) return "Casual";
+  const initialMinutes = Math.floor(clock.timeControl.initialMs / 60_000);
+  const incrementSeconds = Math.floor(clock.timeControl.incrementMs / 1_000);
+  return `Timed ${initialMinutes}+${incrementSeconds}`;
+}
+
 function formatClockSnapshot(summary: OnlineGameSummary): string {
   const clock = summary.livePreview.clock;
   if (!clock) return "Casual";
@@ -931,7 +939,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <span className={`online-game-pill ${game.status}`}>
               {game.status === "active" ? "Live" : "Complete"}
             </span>
-            <span>{formatMoveCount(game.livePreview.moveCount)}</span>
+            {!isArchivedGame && <span>{formatMoveCount(game.livePreview.moveCount)}</span>}
             {options.featured && !isArchivedGame && (
               <span>
                 {options.featuredReason === "watchers"
@@ -939,15 +947,30 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   : "Most moves in current list"}
               </span>
             )}
+            {isArchivedGame && <span>Replay length {formatMoveCount(game.livePreview.moveCount)}</span>}
             {!isArchivedGame && (
               <span>
                 {formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}
               </span>
             )}
-            {game.livePreview.lastMove && <span>Last {game.livePreview.lastMove.notation}</span>}
+            {isArchivedGame && (
+              <span>
+                Final position {formatSideToMove(game.livePreview.sideToMove)}, {game.livePreview.turnPhase}
+              </span>
+            )}
+            {game.livePreview.lastMove && (
+              <span>{isArchivedGame ? "Last move" : "Last"} {game.livePreview.lastMove.notation}</span>
+            )}
             {spectatorCountLabel && <span>{spectatorCountLabel}</span>}
-            <span>{!isArchivedGame && game.hasTimeControl ? formatClockSnapshot(game) : game.hasTimeControl ? "Timed" : "Casual"}</span>
-            <span>Updated {formatUpdatedAt(game.updatedAt)}</span>
+            <span>{!isArchivedGame && game.hasTimeControl ? formatClockSnapshot(game) : formatTimeControl(game)}</span>
+            {isArchivedGame && game.endedAt ? (
+              <>
+                <span>Ended {formatUpdatedAt(game.endedAt)}</span>
+                <span>Started {formatUpdatedAt(game.createdAt)}</span>
+              </>
+            ) : (
+              <span>Updated {formatUpdatedAt(game.updatedAt)}</span>
+            )}
           </div>
           {resultLabel && <div className="online-game-result">{resultLabel}</div>}
         </div>
