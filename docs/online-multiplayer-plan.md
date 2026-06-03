@@ -815,11 +815,63 @@ Tests/review/deploy gates:
 - Review: account/session privacy review focused on deletion scope, fail-closed behavior, token secrecy, historical-retention copy, and preserving the account-vs-game-token boundary.
 - Deploy: deploy only after PostgreSQL-backed account deletion removes sessions and the browser does not clear local state on server failure.
 
+## Phase 7K: Rating Math Foundation
+
+Goal: add tested, swappable rating primitives before wiring live games, matchmaking, profiles, friends, leaderboards, or moderation to ratings.
+
+Status: implemented locally on 2026-06-03. `src/online/ratings.ts` defines a modular rating-engine contract with `glicko2-beta-v1` as the default Lichess-inspired Glicko-2 baseline, Castles beta defaults, durable engine ids on rating records, provisional display formatting, inactive-period deviation growth, and Glicko-2 rating-period updates. The tests include the standard worked example, engine-swappability coverage, invalid future-engine rejection, output validation coverage, and input validation coverage. Ratings are not yet applied to completed games, lobby rows, account archives, leaderboards, or matchmaking, so no current game becomes rated by this phase.
+
+Contract notes:
+
+- Glicko-2 is the default unless Castles has a documented, stronger game-specific reason to use another rating engine.
+- Rating records store a durable engine id so future engines cannot accidentally reinterpret old records without an explicit registry/migration decision.
+- New account ratings start at 1500 with beta deviation 500 and volatility 0.06. The high initial deviation is an intentional beta choice while Castles balance is unsettled and should be revisited before public rated play.
+- Ratings above deviation 110 are provisional and display with a question mark.
+- Side/seat advantage adjustment is intentionally out of scope for Phase 7K because Castles balance is not established enough to model it. Future rated-game results can add side/seat context behind the rating-engine interface.
+- The next implementation must add an explicit rated-game flag before writing rating events.
+- The server must derive rating participants from durable account-backed game participants, not display names or browser-provided identity fields.
+- Rated profiles and leaderboards are deferred until rated-game writes exist. Basic profiles, follows, friend challenges, and privacy controls may ship before ratings because they solve account discovery and private-match workflows without affecting competitive standings. Initial leaderboards should prefer rating/rating confidence; experimental metrics such as loss-of-superiority or Bayesian strength displays need a separate definition and reviewer pass before UI exposure.
+
+Tests/review/deploy gates:
+
+- Tests: pure rating math tests, engine-selection tests, game-result-to-rating tests once game integration begins, leaderboard query tests once leaderboards exist, full suite, client build, server build, and a reviewer pass focused on formula fidelity and preventing accidental rated-game side effects.
+- Review: rating/fair-play review focused on Glicko-2 correctness, provisional display, casual-vs-rated separation, and account-identity derivation.
+- Deploy: deploy only after rated-game integration remains off unless explicitly enabled by the future rated-game contract.
+
+## Phase 7L: Friends, Follows, and Social Privacy
+
+Goal: add lightweight friend functionality without turning accounts into an unsafe social network or creating moderation-heavy surfaces too early.
+
+Recommended shape:
+
+- Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.
+- Define direction clearly: "friends" means accounts I follow/trust, not arbitrary accounts that follow me. Presence, challenges, and friend-only visibility should use the viewer's own follow list or an explicit invite list, never the follower's claim that they follow the player.
+- Do not show vanity follower counts by default. The useful product surface is "people I follow" and "friends currently online", not public popularity.
+- Keep v1 profiles structured: display name, rating only if rated play is enabled, public/account-authorized game links, follow/challenge/rematch/block/report actions, and privacy-respecting presence. Defer bios, avatars, status messages, public walls, comments, and freeform profile text.
+- Add exact display-name profile lookup, follow/unfollow, a following list, online/last-seen presence when allowed by privacy settings, and an online-friends drawer or panel. Do not expose raw internal account ids in search results; search should be bounded, rate-limited, and should not include presence.
+- Add friend shortcuts: challenge this player from the current setup, copy a direct invite for this player, spectate their public game, ask for a rematch after a completed game, and optionally follow or challenge a recent opponent. Add per-friend challenge presets later: last setup, current setup, casual/rated flag once ratings exist, and quick rematch with the same settings.
+- Add privacy controls before broad exposure: allow follows from everyone/nobody, show online presence to accounts I follow/everyone/nobody, accept challenges from accounts I follow/everyone/nobody, and block accounts. Presence should default to hidden or visible only to accounts the user follows. Last-seen should be coarse, optional, and never expose private/unlisted games.
+- Blocking must remove existing follow edges, prevent follows, challenges, messages if messages exist, friend-only lobby visibility, presence exposure, rematch suggestions, recent-opponent shortcuts, challenge inbox entries, and profile/action discovery where practical.
+- Friend-only lobby listings can come after the follow graph exists: visible to everyone, accounts the creator follows, or explicitly invited accounts. This should be built as an access-control rule on seek visibility, not as a client-side filter. Decide whether visibility is snapshotted at listing creation or evaluated live, and ensure hidden listings do not leak through counts, cursors, or empty-result timing.
+- Add friend-aware discovery only where it helps play: a friends filter in Watch, a friends filter in Online Archive/account history, head-to-head/recent games when the viewer is authorized to see them, and a compact "friends playing now" section. Do not turn this into a global feed until moderation and privacy rules are stronger.
+- Add a small challenge inbox/status surface before broader notifications: incoming challenge, accepted/declined/cancelled, rematch request, and expiring invite. Keep it rate-limited and dismissible; add per-pair cooldowns, a temporary "not available now" state, auto-decline from blocked users, report/block from invite, and no repeated notification loop after decline.
+- Private notes or nicknames for followed players can be useful if they are local/private to the current account or device and never public.
+- Defer private messages, chat, timelines, teams/clubs, push/email notifications, public comments, and study-like collaboration until moderation tools exist. These are useful, but they multiply abuse-handling requirements.
+- Treat friend leaderboards as a later optional layer after rated-game writes exist. Rating/confidence can be ranked; games played should be an activity stat, not the main skill leaderboard. Experimental LOS or Bayesian displays need a separate math/product review before exposure.
+
+Tests/review/deploy gates:
+
+- Tests: follow/unfollow idempotency, one-way directionality, profile lookup anti-enumeration, privacy blocks, challenge permission checks, rematch permission checks, friend-only seek visibility/count/cursor filtering, online presence list filtering, challenge-inbox rate limits, per-pair cooldowns, and no token/id leakage in friend APIs.
+- Review: privacy/moderation review focused on one-way follows, block enforcement, follower-count avoidance, challenge-spam prevention, profile enumeration, and presence leakage.
+- Deploy: deploy only after privacy defaults are conservative and friend visibility cannot expose private games or bearer credentials.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
 - Define optional anonymization or erasure policy for account-linked historical game records before public launch.
-- Implement rating events/read models after result contracts are stable.
+- Implement rated-game events/read models after the rated-game flag and result-to-rating contract are stable.
+- Add basic account profiles, follows, and friend links in Phase 7L before ratings; add rated profile fields and leaderboards only after rated-game writes exist. Start with rating/confidence leaderboards; treat games-played and LOS-style/Bayesian metrics as optional analytics that need a separate product and math review.
+- Add lightweight follows/friends before private messages or social feeds. Friend challenges and spectating are higher priority than timelines, inboxes, or clubs.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.
 
