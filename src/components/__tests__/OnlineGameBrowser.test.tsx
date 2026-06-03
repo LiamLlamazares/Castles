@@ -16,6 +16,7 @@ import {
 } from "../../online/seeks";
 import { PieceType } from "../../Constants";
 import { ONLINE_RULESET_VERSION } from "../../online/events";
+import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
 
 function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
   const gameId = overrides.gameId ?? "game_public_active";
@@ -201,6 +202,60 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onCreateAccount).toHaveBeenCalledWith("Liam"));
     expect(await screen.findByText("Online account created.")).toBeInTheDocument();
+  });
+
+  it("shows account session status and signs out everywhere", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
+    };
+    const loadAccountSessions = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      sessions: [
+        {
+          sessionId: "account_session_current",
+          createdAt: "2026-06-03T12:00:00.000Z",
+          lastUsedAt: "2026-06-03T12:05:00.000Z",
+          current: true,
+        },
+        {
+          sessionId: "account_session_other",
+          createdAt: "2026-06-03T12:01:00.000Z",
+          lastUsedAt: "2026-06-03T12:04:00.000Z",
+          current: false,
+        },
+      ],
+    });
+    const onSignOutAllAccountSessions = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountSessionId="account_session_current"
+        loadAccountSessions={loadAccountSessions}
+        onSignOutAllAccountSessions={onSignOutAllAccountSessions}
+        onSignOutAccount={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText(/2 active sessions for this account/)).toBeInTheDocument();
+    expect(screen.getByText(/Current session last used/)).toBeInTheDocument();
+    expect(loadAccountSessions).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Sessions" }));
+    await waitFor(() => expect(loadAccountSessions).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out Everywhere" }));
+
+    await waitFor(() => expect(onSignOutAllAccountSessions).toHaveBeenCalledTimes(1));
   });
 
   it("shows signed-in account archive games without duplicating public archive rows", async () => {

@@ -227,6 +227,35 @@ class FakePostgresAccountQueryable {
       return { rows: [] };
     }
 
+    if (normalizedText.startsWith("SELECT session_id, created_at, last_used_at FROM online_account_sessions")) {
+      const [accountId] = values as string[];
+      const rows = Array.from(this.sessionsByTokenHash.values())
+        .filter((session) => session.account_id === accountId)
+        .sort((left, right) => {
+          if (left.last_used_at !== right.last_used_at) return right.last_used_at.localeCompare(left.last_used_at);
+          if (left.created_at !== right.created_at) return right.created_at.localeCompare(left.created_at);
+          return left.session_id.localeCompare(right.session_id);
+        })
+        .map((session) => ({
+          session_id: session.session_id,
+          created_at: session.created_at,
+          last_used_at: session.last_used_at,
+        }));
+      return { rows };
+    }
+
+    if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
+      const [accountId] = values as string[];
+      const rows: Array<{ session_id: string }> = [];
+      for (const [tokenHash, session] of Array.from(this.sessionsByTokenHash.entries())) {
+        if (session.account_id === accountId) {
+          this.sessionsByTokenHash.delete(tokenHash);
+          rows.push({ session_id: session.session_id });
+        }
+      }
+      return { rows };
+    }
+
     if (normalizedText.startsWith("DELETE FROM online_account_sessions")) {
       const [tokenHash] = values as string[];
       const session = this.sessionsByTokenHash.get(tokenHash);
@@ -564,6 +593,158 @@ describe("createOnlineHttpServer", () => {
     expect(queryable.sessionsByTokenHash.size).toBe(0);
     expect(queryable.accounts.size).toBe(1);
     expect(meResponse.status).toBe(401);
+  });
+
+  it("lists account sessions and revokes every account session through PostgreSQL", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = new PostgresOnlineAccountStore({ queryable });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:10:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    queryable.sessionsByTokenHash.set(hashOnlineToken("other-account-token"), {
+      session_id: "account_session_other_browser",
+      account_id: account.account.accountId,
+      token_hash: hashOnlineToken("other-account-token"),
+      created_at: "2026-06-01T12:01:00.000Z",
+      last_used_at: "2026-06-01T12:02:00.000Z",
+    });
+
+    const sessionsResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/sessions`, {
+      headers: bearer(account.session.token),
+    });
+    const sessions = await sessionsResponse.json();
+
+    expect(sessionsResponse.status).toBe(200);
+    expect(sessions).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      sessions: expect.arrayContaining([
+        expect.objectContaining({
+          sessionId: account.session.sessionId,
+          current: true,
+          createdAt: "2026-06-01T12:10:00.000Z",
+          lastUsedAt: "2026-06-01T12:10:00.000Z",
+        }),
+        expect.objectContaining({
+          sessionId: "account_session_other_browser",
+          current: false,
+        }),
+      ]),
+    });
+    expect(sessions.sessions).toHaveLength(2);
+    expect(JSON.stringify(sessions)).not.toContain(account.session.token);
+    expect(JSON.stringify(sessions)).not.toContain("other-account-token");
+
+    const revokeAllResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/sessions`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const revoked = await revokeAllResponse.json();
+    const meResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+      headers: bearer(account.session.token),
+    });
+
+    expect(revokeAllResponse.status).toBe(200);
+    expect(revoked).toEqual({ protocolVersion: ONLINE_PROTOCOL_VERSION, revokedSessions: 2 });
+    expect(queryable.sessionsByTokenHash.size).toBe(0);
+    expect(queryable.accounts.size).toBe(1);
+    expect(meResponse.status).toBe(401);
+  });
+
+  it("rejects account session management without a valid account bearer", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    for (const request of [
+      { path: "/api/online/account/sessions", init: {} },
+      { path: "/api/online/account/sessions", init: { headers: bearer("bad-account-token") } },
+      { path: "/api/online/account/sessions", init: { method: "DELETE" } },
+      { path: "/api/online/account/sessions", init: { method: "DELETE", headers: bearer("bad-account-token") } },
+    ]) {
+      const response = await fetch(`http://127.0.0.1:${port}${request.path}`, request.init);
+      const body = await response.json();
+      expect(response.status).toBe(401);
+      expect(body.error).toMatchObject({ code: "unauthorized" });
+    }
+  });
+
+  it("does not return success when account session revoke-all races after authentication", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    vi.spyOn(accountStore, "revokeSessionsForAccount").mockResolvedValue(0);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    const revokeAllResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/sessions`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const body = await revokeAllResponse.json();
+
+    expect(revokeAllResponse.status).toBe(409);
+    expect(body.error).toMatchObject({ code: "sessions_not_revoked" });
+    expect(accountStore.revokeSessionsForAccount).toHaveBeenCalledWith(account.account.accountId);
+  });
+
+  it("fails closed when account session list or revoke-all persistence fails", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Liam" }),
+    });
+    const account = await accountResponse.json();
+    vi.spyOn(accountStore, "listSessionsForAccount").mockRejectedValueOnce(new Error("list unavailable"));
+    vi.spyOn(accountStore, "revokeSessionsForAccount").mockRejectedValueOnce(new Error("delete unavailable"));
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/sessions`, {
+      headers: bearer(account.session.token),
+    });
+    const listBody = await listResponse.json();
+    const revokeAllResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/sessions`, {
+      method: "DELETE",
+      headers: bearer(account.session.token),
+    });
+    const revokeAllBody = await revokeAllResponse.json();
+
+    expect(listResponse.status).toBe(503);
+    expect(listBody.error).toMatchObject({ code: "persistence_failed" });
+    expect(revokeAllResponse.status).toBe(503);
+    expect(revokeAllBody.error).toMatchObject({ code: "persistence_failed" });
+    expect(consoleError).toHaveBeenCalled();
   });
 
   it("keeps direct-created games anonymous without account auth and ignores client identity fields", async () => {

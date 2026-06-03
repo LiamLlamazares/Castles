@@ -9,6 +9,8 @@ import {
   type FetchOnlineAccountGamesOptions,
   type FetchOpenSeekDirectoryOptions,
   type FetchOnlineGameSummariesOptions,
+  type OnlineAccountSessionsResponse,
+  type OnlineAccountSessionSummary,
   type OpenSeekResponse,
 } from "../online/client";
 import type { OnlineAccount } from "../online/accounts";
@@ -50,7 +52,14 @@ type OnlineBrowserResultFilter =
   | "castle_control"
   | "victory_points"
   | "monarch_captured";
-type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "signing-out" | "ready" | "error";
+type OnlineAccountUiStatus =
+  | "signed-out"
+  | "checking"
+  | "creating"
+  | "signing-out"
+  | "signing-out-all"
+  | "ready"
+  | "error";
 type QuickMatchStatus = "idle" | "pending" | "matched" | "waiting" | "error";
 type QuickMatchOutcome = "matched" | "waiting" | void;
 
@@ -95,6 +104,9 @@ interface OnlineGameBrowserProps {
   accountError?: string | null;
   onCreateAccount?: (displayName: string) => void | Promise<void>;
   onSignOutAccount?: () => void | Promise<void>;
+  accountSessionId?: string | null;
+  loadAccountSessions?: () => Promise<OnlineAccountSessionsResponse>;
+  onSignOutAllAccountSessions?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
@@ -437,6 +449,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   accountError = null,
   onCreateAccount,
   onSignOutAccount,
+  accountSessionId = null,
+  loadAccountSessions,
+  onSignOutAllAccountSessions,
   loadAccountGames,
   backLabel = "Back to game",
   initialTab = "lobby",
@@ -469,11 +484,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
   const [accountDisplayName, setAccountDisplayName] = React.useState("");
   const [accountActionMessage, setAccountActionMessage] = React.useState("");
+  const [accountSessions, setAccountSessions] = React.useState<OnlineAccountSessionSummary[]>([]);
+  const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountGames, setAccountGames] = React.useState<OnlineGameSummary[]>([]);
   const [accountGamesStatus, setAccountGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
   const accountGamesRequestIdRef = React.useRef(0);
+  const accountSessionsRequestIdRef = React.useRef(0);
   const gameLoadInFlightRef = React.useRef(false);
   const seekLoadInFlightRef = React.useRef(false);
   const ownedSeekRefreshInFlightRef = React.useRef(false);
@@ -540,6 +558,51 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setAccountActionMessage("Could not create that online account name.");
     }
   }, [accountDisplayName, onCreateAccount]);
+
+  const refreshAccountSessions = React.useCallback(async () => {
+    if (!account || !loadAccountSessions) return;
+    const requestId = ++accountSessionsRequestIdRef.current;
+    setAccountSessionsStatus("loading");
+    try {
+      const response = await loadAccountSessions();
+      if (requestId !== accountSessionsRequestIdRef.current) return;
+      setAccountSessions(response.sessions);
+      setAccountSessionsStatus("ready");
+    } catch {
+      if (requestId !== accountSessionsRequestIdRef.current) return;
+      setAccountSessionsStatus("error");
+    }
+  }, [account?.accountId, loadAccountSessions]);
+
+  const handleSignOutAllAccountSessions = React.useCallback(async () => {
+    if (!onSignOutAllAccountSessions) return;
+    setAccountActionMessage("");
+    try {
+      await onSignOutAllAccountSessions();
+      setAccountSessions([]);
+      setAccountSessionsStatus("idle");
+    } catch {
+      setAccountActionMessage("Could not sign out everywhere.");
+    }
+  }, [onSignOutAllAccountSessions]);
+
+  React.useEffect(() => {
+    accountSessionsRequestIdRef.current += 1;
+    setAccountSessions([]);
+    setAccountSessionsStatus(account && loadAccountSessions ? "loading" : "idle");
+    if (!account || !loadAccountSessions) return;
+    const requestId = accountSessionsRequestIdRef.current;
+    loadAccountSessions()
+      .then((response) => {
+        if (requestId !== accountSessionsRequestIdRef.current) return;
+        setAccountSessions(response.sessions);
+        setAccountSessionsStatus("ready");
+      })
+      .catch(() => {
+        if (requestId !== accountSessionsRequestIdRef.current) return;
+        setAccountSessionsStatus("error");
+      });
+  }, [account?.accountId, loadAccountSessions]);
 
   React.useEffect(() => {
     if (accountStatus !== "error") return;
@@ -1476,7 +1539,22 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         ? "Creating account..."
         : accountStatus === "signing-out"
           ? "Signing out..."
+          : accountStatus === "signing-out-all"
+            ? "Signing out everywhere..."
         : accountError || accountActionMessage;
+  const currentAccountSession =
+    accountSessionId
+      ? accountSessions.find((session) => session.sessionId === accountSessionId) ??
+        accountSessions.find((session) => session.current)
+      : accountSessions.find((session) => session.current);
+  const accountSessionCountLabel =
+    accountSessionsStatus === "loading"
+      ? "Loading active sessions..."
+      : accountSessionsStatus === "error"
+        ? "Could not load active sessions."
+        : accountSessionsStatus === "ready"
+          ? `${formatCount(accountSessions.length, "active session")} for this account.`
+          : "";
 
   return (
     <div className="online-browser-page">
@@ -1498,6 +1576,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <>
               <strong>{account.displayName}</strong>
               <p>Your signed-in games appear in your account archive.</p>
+              {accountSessionCountLabel && (
+                <p className="online-browser-account-session-summary">
+                  {accountSessionCountLabel}
+                  {currentAccountSession ? ` Current session last used ${formatUpdatedAt(currentAccountSession.lastUsedAt)}.` : ""}
+                </p>
+              )}
             </>
           ) : (
             <>
@@ -1512,14 +1596,32 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           )}
         </div>
         {account ? (
-          <button
-            type="button"
-            className="online-browser-button subtle"
-            onClick={onSignOutAccount}
-            disabled={!onSignOutAccount || accountStatus === "signing-out"}
-          >
-            {accountStatus === "signing-out" ? "Signing Out" : "Sign Out"}
-          </button>
+          <div className="online-browser-account-actions">
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={refreshAccountSessions}
+              disabled={!loadAccountSessions || accountSessionsStatus === "loading" || accountStatus === "signing-out" || accountStatus === "signing-out-all"}
+            >
+              {accountSessionsStatus === "loading" ? "Refreshing" : "Refresh Sessions"}
+            </button>
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={onSignOutAccount}
+              disabled={!onSignOutAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all"}
+            >
+              {accountStatus === "signing-out" ? "Signing Out" : "Sign Out"}
+            </button>
+            <button
+              type="button"
+              className="online-browser-button subtle online-browser-button-danger"
+              onClick={handleSignOutAllAccountSessions}
+              disabled={!onSignOutAllAccountSessions || accountStatus === "signing-out" || accountStatus === "signing-out-all"}
+            >
+              {accountStatus === "signing-out-all" ? "Signing Out Everywhere" : "Sign Out Everywhere"}
+            </button>
+          </div>
         ) : (
           <form className="online-browser-account-form" onSubmit={handleCreateAccountSubmit}>
             <label>

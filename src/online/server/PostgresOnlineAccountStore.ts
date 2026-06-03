@@ -10,6 +10,7 @@ import {
   DuplicateOnlineAccountDisplayNameError,
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
+  type OnlineAccountSessionListItem,
   type OnlineAccountStore,
   type ResolvedOnlineAccountSession,
 } from "./OnlineAccountStore";
@@ -188,6 +189,33 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       [tokenHash]
     );
     return result.rows.length > 0;
+  }
+
+  async listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        SELECT session_id, created_at, last_used_at
+        FROM online_account_sessions
+        WHERE account_id = $1
+        ORDER BY last_used_at DESC, created_at DESC, session_id ASC
+      `,
+      [accountId]
+    );
+    return result.rows.map((row) => ({
+      sessionId: String(row.session_id),
+      createdAt: timestampToIso(row.created_at),
+      lastUsedAt: timestampToIso(row.last_used_at),
+    }));
+  }
+
+  async revokeSessionsForAccount(accountId: string): Promise<number> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      "DELETE FROM online_account_sessions WHERE account_id = $1 RETURNING session_id",
+      [accountId]
+    );
+    return result.rows.length;
   }
 
   async checkReady(): Promise<boolean> {

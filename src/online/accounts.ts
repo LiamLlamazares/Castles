@@ -32,6 +32,23 @@ export interface OnlineAccountMeResponse {
   account: OnlineAccount;
 }
 
+export interface OnlineAccountSessionSummary {
+  sessionId: string;
+  createdAt: string;
+  lastUsedAt: string;
+  current: boolean;
+}
+
+export interface OnlineAccountSessionsResponse {
+  protocolVersion: number;
+  sessions: OnlineAccountSessionSummary[];
+}
+
+export interface OnlineAccountSessionsRevokeResponse {
+  protocolVersion: number;
+  revokedSessions: number;
+}
+
 function bad(message: string): ValidationResult<never> {
   return {
     ok: false,

@@ -99,6 +99,35 @@ class FakeAccountQueryable {
       return { rows: [] };
     }
 
+    if (normalizedText.startsWith("SELECT session_id, created_at, last_used_at FROM online_account_sessions")) {
+      const [accountId] = values as string[];
+      const rows = Array.from(this.sessionsByTokenHash.values())
+        .filter((session) => session.account_id === accountId)
+        .sort((left, right) => {
+          if (left.last_used_at !== right.last_used_at) return right.last_used_at.localeCompare(left.last_used_at);
+          if (left.created_at !== right.created_at) return right.created_at.localeCompare(left.created_at);
+          return left.session_id.localeCompare(right.session_id);
+        })
+        .map((session) => ({
+          session_id: session.session_id,
+          created_at: session.created_at,
+          last_used_at: session.last_used_at,
+        }));
+      return { rows };
+    }
+
+    if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
+      const [accountId] = values as string[];
+      const rows: Array<{ session_id: string }> = [];
+      for (const [tokenHash, session] of Array.from(this.sessionsByTokenHash.entries())) {
+        if (session.account_id === accountId) {
+          this.sessionsByTokenHash.delete(tokenHash);
+          rows.push({ session_id: session.session_id });
+        }
+      }
+      return { rows };
+    }
+
     if (normalizedText.startsWith("DELETE FROM online_account_sessions")) {
       const [tokenHash] = values as string[];
       const session = this.sessionsByTokenHash.get(tokenHash);
@@ -167,6 +196,54 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.resolveSessionToken(token, "2026-06-03T12:02:00.000Z")).resolves.toBeNull();
     await expect(store.revokeSessionToken(token)).resolves.toBe(false);
     expect(queryable.accounts.get("account_liam")).toMatchObject({ account_id: "account_liam" });
+  });
+
+  it("lists and revokes all account sessions without returning token hashes", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = new PostgresOnlineAccountStore({ queryable });
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_one",
+      displayName: "Liam",
+      tokenHash: hashOnlineToken("token-one"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+    queryable.sessionsByTokenHash.set(hashOnlineToken("token-two"), {
+      session_id: "account_session_two",
+      account_id: "account_liam",
+      token_hash: hashOnlineToken("token-two"),
+      created_at: "2026-06-03T12:01:00.000Z",
+      last_used_at: "2026-06-03T12:05:00.000Z",
+    });
+    queryable.sessionsByTokenHash.set(hashOnlineToken("other-token"), {
+      session_id: "account_session_other",
+      account_id: "account_other",
+      token_hash: hashOnlineToken("other-token"),
+      created_at: "2026-06-03T12:02:00.000Z",
+      last_used_at: "2026-06-03T12:06:00.000Z",
+    });
+
+    await expect(store.listSessionsForAccount("account_liam")).resolves.toEqual([
+      {
+        sessionId: "account_session_two",
+        createdAt: "2026-06-03T12:01:00.000Z",
+        lastUsedAt: "2026-06-03T12:05:00.000Z",
+      },
+      {
+        sessionId: "account_session_one",
+        createdAt: "2026-06-03T12:00:00.000Z",
+        lastUsedAt: "2026-06-03T12:00:00.000Z",
+      },
+    ]);
+    expect(JSON.stringify(await store.listSessionsForAccount("account_liam"))).not.toContain("sha256:");
+
+    await expect(store.revokeSessionsForAccount("account_liam")).resolves.toBe(2);
+    await expect(store.listSessionsForAccount("account_liam")).resolves.toEqual([]);
+    expect(queryable.accounts.get("account_liam")).toMatchObject({ account_id: "account_liam" });
+    expect(queryable.sessionsByTokenHash.get(hashOnlineToken("other-token"))).toMatchObject({
+      session_id: "account_session_other",
+    });
   });
 
   it("rejects duplicate display names case-insensitively", async () => {

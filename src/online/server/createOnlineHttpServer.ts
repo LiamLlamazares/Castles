@@ -2213,6 +2213,41 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
   });
 
+  app.get("/api/online/account/sessions", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.sessions.list", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
+    try {
+      const sessions = await accountStore.listSessionsForAccount(auth.account.accountId);
+      log({ event: "online.account.sessions.list", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        sessions: sessions.map((session) => ({
+          sessionId: session.sessionId,
+          createdAt: session.createdAt,
+          lastUsedAt: session.lastUsedAt,
+          current: session.sessionId === auth.sessionId,
+        })),
+      });
+    } catch (error) {
+      console.error("Failed to list account sessions", error);
+      log({ event: "online.account.sessions.list", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account sessions could not be loaded." },
+      });
+    }
+  });
+
   app.delete("/api/online/account/session", async (req, res) => {
     if (!accountReadLimiter.take(getClientKey(req))) {
       res.status(429).json({
@@ -2259,6 +2294,47 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.account.session.revoke", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account session could not be revoked." },
+      });
+    }
+  });
+
+  app.delete("/api/online/account/sessions", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.sessions.revoke", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
+    try {
+      const revokedSessions = await accountStore.revokeSessionsForAccount(auth.account.accountId);
+      log({
+        event: "online.account.sessions.revoke",
+        status: revokedSessions > 0 ? "accepted" : "rejected",
+        reason: revokedSessions > 0 ? undefined : "already_revoked",
+      });
+      if (revokedSessions <= 0) {
+        res.status(409).json({
+          error: { code: "sessions_not_revoked", message: "Account sessions could not be revoked." },
+        });
+        return;
+      }
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        revokedSessions,
+      });
+    } catch (error) {
+      console.error("Failed to revoke account sessions", error);
+      log({ event: "online.account.sessions.revoke", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account sessions could not be revoked." },
       });
     }
   });

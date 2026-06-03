@@ -62,6 +62,18 @@
   font-weight: 800;
 }
 
+.online-browser-account-session-summary {
+  font-size: 0.92rem;
+}
+
+.online-browser-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+  min-width: 0;
+}
+
 .online-browser-account-form {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto;
@@ -648,6 +660,11 @@
   opacity: 0.5;
 }
 
+.online-browser-button-danger {
+  border-color: rgba(218, 111, 101, 0.55);
+  color: #ffd7d2;
+}
+
 .online-browser-load-more {
   justify-self: center;
   min-width: min(260px, 100%);
@@ -678,6 +695,14 @@
   .online-browser-live-overview,
   .online-browser-watch-grid {
     grid-template-columns: 1fr;
+  }
+
+  .online-browser-account-actions {
+    justify-content: stretch;
+  }
+
+  .online-browser-account-actions .online-browser-button {
+    flex: 1 1 160px;
   }
 
   .online-public-game-row {

@@ -41,6 +41,7 @@ import {
   fetchOpenSeek,
   fetchOnlineAccountGames,
   fetchOnlineAccountMe,
+  fetchOnlineAccountSessions,
   fetchOnlineGameSummaries,
   fetchOnlineChallenge,
   fetchOnlineSpectatorSnapshot,
@@ -60,6 +61,7 @@ import {
   rememberOnlineOpponentInviteUrl,
   rememberOpenSeekCreatorParams,
   rejoinOnlineAccountGame,
+  revokeAllOnlineAccountSessions,
   revokeOnlineAccountSession,
   resolveOnlineAccountSession,
   removeOnlineChallengeTokenFromUrl,
@@ -106,7 +108,14 @@ import type { PhoenixRecord } from './Classes/Core/GameState';
 
 type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online';
 type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
-type OnlineAccountUiStatus = "signed-out" | "checking" | "creating" | "signing-out" | "ready" | "error";
+type OnlineAccountUiStatus =
+  | "signed-out"
+  | "checking"
+  | "creating"
+  | "signing-out"
+  | "signing-out-all"
+  | "ready"
+  | "error";
 
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
@@ -1081,11 +1090,57 @@ function App() {
     }
   }, [onlineAccount, onlineAccountSession]);
 
+  const handleSignOutAllOnlineAccountSessions = useCallback(async () => {
+    const session = onlineAccountSession;
+    if (!session) {
+      forgetOnlineAccountSession();
+      setOnlineAccountSession(null);
+      setOnlineAccount(null);
+      setOnlineAccountStatus("signed-out");
+      setOnlineAccountError(null);
+      return;
+    }
+
+    setOnlineAccountStatus("signing-out-all");
+    setOnlineAccountError(null);
+    try {
+      await revokeAllOnlineAccountSessions({ token: session.token });
+      forgetOnlineAccountSession();
+      setOnlineAccountSession(null);
+      setOnlineAccount(null);
+      setOnlineAccountStatus("signed-out");
+      setOnlineAccountError(null);
+    } catch (error) {
+      console.error("Failed to revoke all online account sessions", error);
+      const storedSession = resolveOnlineAccountSession();
+      if (storedSession?.token !== session.token) {
+        setOnlineAccountSession(storedSession);
+        setOnlineAccount(storedSession?.account ?? null);
+        setOnlineAccountStatus(
+          storedSession ? (storedSession.account ? "ready" : "checking") : "signed-out"
+        );
+        setOnlineAccountError(null);
+        return;
+      }
+      setOnlineAccount(session.account ?? onlineAccount);
+      setOnlineAccountStatus("error");
+      setOnlineAccountError("Could not sign out everywhere. Check your connection and try again.");
+      throw error;
+    }
+  }, [onlineAccount, onlineAccountSession]);
+
   const handleLoadOnlineAccountGames = useCallback((options?: FetchOnlineAccountGamesOptions) => {
     if (!onlineAccountSession) {
       throw new Error("No online account session is available.");
     }
     return fetchOnlineAccountGames({ token: onlineAccountSession.token }, options);
+  }, [onlineAccountSession?.token]);
+
+  const handleLoadOnlineAccountSessions = useCallback(() => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineAccountSessions({ token: onlineAccountSession.token });
   }, [onlineAccountSession?.token]);
 
   const resolveAccountGameJoin = useCallback((game: OnlineGameSummary, seat: "w" | "b") => {
@@ -2156,6 +2211,9 @@ function App() {
           accountError={onlineAccountError}
           onCreateAccount={handleCreateOnlineAccount}
           onSignOutAccount={handleSignOutOnlineAccount}
+          accountSessionId={onlineAccountSession?.sessionId ?? null}
+          loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}
+          onSignOutAllAccountSessions={onlineAccountSession ? handleSignOutAllOnlineAccountSessions : undefined}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
         />
       )}

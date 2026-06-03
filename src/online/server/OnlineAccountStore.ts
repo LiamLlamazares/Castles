@@ -20,10 +20,18 @@ export interface ResolvedOnlineAccountSession {
   lastUsedAt: string;
 }
 
+export interface OnlineAccountSessionListItem {
+  sessionId: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
 export interface OnlineAccountStore {
   createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession>;
   resolveSessionToken(token: string, usedAt: string): Promise<ResolvedOnlineAccountSession | null>;
   revokeSessionToken(token: string): Promise<boolean>;
+  listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
+  revokeSessionsForAccount(accountId: string): Promise<number>;
   checkReady?(): Promise<boolean> | boolean;
   close?(): Promise<void> | void;
 }
@@ -50,6 +58,7 @@ interface MemorySessionRecord {
   sessionId: string;
   accountId: string;
   tokenHash: string;
+  createdAt: string;
   lastUsedAt: string;
 }
 
@@ -87,6 +96,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       sessionId: input.sessionId,
       accountId: input.accountId,
       tokenHash: input.tokenHash,
+      createdAt: input.createdAt,
       lastUsedAt: input.createdAt,
     };
     this.accounts.set(account.accountId, account);
@@ -124,6 +134,32 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     this.sessionsByTokenHash.delete(session.tokenHash);
     this.sessionsById.delete(session.sessionId);
     return true;
+  }
+
+  async listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]> {
+    return Array.from(this.sessionsById.values())
+      .filter((session) => session.accountId === accountId)
+      .sort((left, right) => {
+        if (left.lastUsedAt !== right.lastUsedAt) return right.lastUsedAt.localeCompare(left.lastUsedAt);
+        if (left.createdAt !== right.createdAt) return right.createdAt.localeCompare(left.createdAt);
+        return left.sessionId.localeCompare(right.sessionId);
+      })
+      .map((session) => ({
+        sessionId: session.sessionId,
+        createdAt: session.createdAt,
+        lastUsedAt: session.lastUsedAt,
+      }));
+  }
+
+  async revokeSessionsForAccount(accountId: string): Promise<number> {
+    const sessions = Array.from(this.sessionsById.values()).filter(
+      (session) => session.accountId === accountId
+    );
+    for (const session of sessions) {
+      this.sessionsById.delete(session.sessionId);
+      this.sessionsByTokenHash.delete(session.tokenHash);
+    }
+    return sessions.length;
   }
 
   async checkReady(): Promise<boolean> {

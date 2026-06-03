@@ -789,10 +789,22 @@ Tests/review/deploy gates:
 - Review: account/session security review focused on preserving original invite credentials, pruning only stale rejoin aliases, and keeping raw player tokens out of events/summaries/logs.
 - Deploy: deploy only after PostgreSQL-backed account rejoin still works and old aliases are pruned on repeated rejoin.
 
+## Phase 7I: Account Session List and Sign Out Everywhere
+
+Goal: give signed-in users basic control over account sessions before public account launch, without adding passwords, profiles, or account deletion yet.
+
+Status: implemented locally on 2026-06-03. The account store now lists token-free account sessions and can revoke every session for an account. `GET /api/online/account/sessions` returns only session id, created time, last-used time, and a current-session flag after resolving the account bearer server-side. `DELETE /api/online/account/sessions` revokes all server-side account sessions for that account and fails closed if no sessions are revoked after authentication. The Online account panel shows active session count, supports manual session refresh, and adds `Sign Out Everywhere`, which waits for server revocation before clearing the local browser account session.
+
+Tests/review/deploy gates:
+
+- Tests: account-store session listing/revoke-all tests, HTTP route tests against PostgreSQL-backed store wiring, client helper validation tests, Online account-panel tests, App sign-out-everywhere wiring tests, full suite, client build, server build, and local PostgreSQL browser smoke.
+- Review: account/session security review focused on token-free session metadata, account bearer separation from game credentials, fail-closed revoke-all behavior, and UI clarity between current-session sign-out and account-wide sign-out.
+- Deploy: deploy only after the route works against PostgreSQL-backed `online_account_sessions` and browser sign-out-everywhere does not clear local state on server failure.
+
 Work:
 
 - Build on Phase 7A account-backed identity for ratings and moderation.
-- Add sign-out-all/session listing, account deletion, and account privacy copy before public account launch.
+- Add account deletion and account privacy copy before public account launch.
 - Implement rating events/read models after result contracts are stable.
 - Add fair-play signals, reporting, blocking, moderation queues, and admin audit logs.
 - Define retention, privacy, appeal, and abuse-handling policies.
@@ -823,6 +835,6 @@ Tests/review/deploy gates:
 ## Next Immediate Work
 
 1. Improve public directory scanability after account metadata exists: display registered names where safe, then design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
-2. Add remaining account session management before public launch: sign-out-all/session listing, account deletion, and privacy copy.
+2. Add remaining account lifecycle work before public launch: account deletion, privacy copy, and retention policy for account-linked game history.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

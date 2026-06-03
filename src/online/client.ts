@@ -11,6 +11,9 @@ import {
   type OnlineAccount,
   type OnlineAccountCreateResponse,
   type OnlineAccountMeResponse,
+  type OnlineAccountSessionSummary,
+  type OnlineAccountSessionsResponse,
+  type OnlineAccountSessionsRevokeResponse,
 } from "./accounts";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
@@ -118,6 +121,12 @@ export interface OnlineAccountSessionRevokeResponse {
   protocolVersion: typeof ONLINE_PROTOCOL_VERSION;
   revoked: boolean;
 }
+
+export type {
+  OnlineAccountSessionSummary,
+  OnlineAccountSessionsResponse,
+  OnlineAccountSessionsRevokeResponse,
+};
 
 export interface CreatedOnlineChallenge {
   challengeId: string;
@@ -731,6 +740,98 @@ export async function revokeOnlineAccountSession(
   return {
     protocolVersion: ONLINE_PROTOCOL_VERSION,
     revoked: (body as { revoked: boolean }).revoked,
+  };
+}
+
+function validateOnlineAccountSessionSummary(
+  value: unknown,
+  label: string
+): OnlineAccountSessionSummary {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const sessionId = (value as { sessionId?: unknown }).sessionId;
+  const createdAt = (value as { createdAt?: unknown }).createdAt;
+  const lastUsedAt = (value as { lastUsedAt?: unknown }).lastUsedAt;
+  const current = (value as { current?: unknown }).current;
+  if (!isValidStoredAccountSessionId(sessionId)) {
+    throw new Error(`${label} was malformed: sessionId is invalid.`);
+  }
+  if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt))) {
+    throw new Error(`${label} was malformed: createdAt is invalid.`);
+  }
+  if (typeof lastUsedAt !== "string" || Number.isNaN(Date.parse(lastUsedAt))) {
+    throw new Error(`${label} was malformed: lastUsedAt is invalid.`);
+  }
+  if (typeof current !== "boolean") {
+    throw new Error(`${label} was malformed: current is invalid.`);
+  }
+  return {
+    sessionId,
+    createdAt,
+    lastUsedAt,
+    current,
+  };
+}
+
+export async function fetchOnlineAccountSessions(
+  account: OnlineAccountSessionParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountSessionsResponse> {
+  const response = await fetchImpl("/api/online/account/sessions", {
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load online account sessions (${response.status})`);
+  }
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online account sessions response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Online account sessions response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  const sessions = (body as { sessions?: unknown }).sessions;
+  if (!Array.isArray(sessions)) {
+    throw new Error("Online account sessions response was malformed: sessions is invalid.");
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    sessions: sessions.map((session, index) =>
+      validateOnlineAccountSessionSummary(session, `Online account sessions response.sessions[${index}]`)
+    ),
+  };
+}
+
+export async function revokeAllOnlineAccountSessions(
+  account: OnlineAccountSessionParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountSessionsRevokeResponse> {
+  const response = await fetchImpl("/api/online/account/sessions", {
+    method: "DELETE",
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not revoke online account sessions (${response.status})`);
+  }
+  const body = await response.json();
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online account sessions revoke response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Online account sessions revoke response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  const revokedSessions = (body as { revokedSessions?: unknown }).revokedSessions;
+  if (typeof revokedSessions !== "number" || !Number.isSafeInteger(revokedSessions) || revokedSessions <= 0) {
+    throw new Error("Online account sessions revoke response was malformed: revokedSessions is invalid.");
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    revokedSessions,
   };
 }
 

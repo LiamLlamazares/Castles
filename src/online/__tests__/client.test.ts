@@ -15,6 +15,7 @@ import {
   fetchOnlineChallenge,
   fetchOnlineAccountGames,
   fetchOnlineAccountMe,
+  fetchOnlineAccountSessions,
   fetchOpenSeek,
   fetchOpenSeekDirectory,
   fetchOnlineGameSummaries,
@@ -34,6 +35,7 @@ import {
   rememberOnlineOpponentInviteUrl,
   rememberOnlineJoinParams,
   rejoinOnlineAccountGame,
+  revokeAllOnlineAccountSessions,
   removeOnlineChallengeTokenFromUrl,
   resolveOnlineChallengeParams,
   resolveOnlineChallengeShareUrl,
@@ -766,6 +768,94 @@ describe("online client helpers", () => {
     await expect(
       revokeOnlineAccountSession({ token: "account-token" }, fetchImpl as any)
     ).rejects.toThrow("Online account session was not revoked.");
+  });
+
+  it("loads and revokes all online account sessions", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          sessions: [
+            {
+              sessionId: "account_session_current",
+              createdAt: "2026-06-03T12:00:00.000Z",
+              lastUsedAt: "2026-06-03T12:05:00.000Z",
+              current: true,
+            },
+            {
+              sessionId: "account_session_other",
+              createdAt: "2026-06-03T12:01:00.000Z",
+              lastUsedAt: "2026-06-03T12:04:00.000Z",
+              current: false,
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          revokedSessions: 2,
+        }),
+      });
+
+    await expect(fetchOnlineAccountSessions({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      sessions: [
+        {
+          sessionId: "account_session_current",
+          createdAt: "2026-06-03T12:00:00.000Z",
+          lastUsedAt: "2026-06-03T12:05:00.000Z",
+          current: true,
+        },
+        {
+          sessionId: "account_session_other",
+          createdAt: "2026-06-03T12:01:00.000Z",
+          lastUsedAt: "2026-06-03T12:04:00.000Z",
+          current: false,
+        },
+      ],
+    });
+    await expect(revokeAllOnlineAccountSessions({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      revokedSessions: 2,
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/api/online/account/sessions", {
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/account/sessions", {
+      method: "DELETE",
+      headers: { authorization: "Bearer account-token" },
+    });
+  });
+
+  it("rejects malformed account session list and revoke-all responses", async () => {
+    await expect(
+      fetchOnlineAccountSessions(
+        { token: "account-token" },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            sessions: [{ sessionId: "account_session_bad", createdAt: "nope", lastUsedAt: "also-nope", current: true }],
+          }),
+        }) as any
+      )
+    ).rejects.toThrow("createdAt is invalid");
+    await expect(
+      revokeAllOnlineAccountSessions(
+        { token: "account-token" },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            revokedSessions: 0,
+          }),
+        }) as any
+      )
+    ).rejects.toThrow("revokedSessions is invalid");
   });
 
   it("sends account bearer auth on account-aware creation and matchmaking paths without body leakage", async () => {
