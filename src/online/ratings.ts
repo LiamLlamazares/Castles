@@ -166,6 +166,24 @@ export function updateOnlineRating(
   return updated;
 }
 
+export function validateOnlineRating(value: unknown, label = "rating"): OnlineRating {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  const candidate = value as Partial<OnlineRating>;
+  const rating: OnlineRating = {
+    schemaVersion: candidate.schemaVersion as typeof ONLINE_RATING_SCHEMA_VERSION,
+    engineId: candidate.engineId as string,
+    rating: candidate.rating as number,
+    deviation: candidate.deviation as number,
+    volatility: candidate.volatility as number,
+    games: candidate.games as number,
+    updatedAt: candidate.updatedAt === undefined ? null : candidate.updatedAt,
+  };
+  assertValidRating(rating, label);
+  return rating;
+}
+
 function ratingToMu(rating: number): number {
   return (rating - ONLINE_RATING_BASE) / ONLINE_RATING_SCALE;
 }
@@ -250,6 +268,16 @@ function assertValidRating(rating: OnlineRating, label: string): void {
   if (!Number.isSafeInteger(rating.games) || rating.games < 0) {
     throw new Error(`${label}.games is invalid.`);
   }
+  if (rating.updatedAt !== null && !isIsoDateString(rating.updatedAt)) {
+    throw new Error(`${label}.updatedAt is invalid.`);
+  }
+}
+
+function isIsoDateString(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+  const timestamp = Date.parse(value);
+  return !Number.isNaN(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
 function assertValidRatingValue(value: number, label: string): void {

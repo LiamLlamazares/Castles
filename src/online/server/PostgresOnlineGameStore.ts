@@ -24,6 +24,13 @@ import {
   validateOnlineGameEvent,
 } from "../events";
 import {
+  createDefaultOnlineRating,
+  GLICKO2_ONLINE_RATING_ENGINE_ID,
+  updateDefaultOnlineRating,
+  validateOnlineRating,
+  type OnlineRating,
+} from "../ratings";
+import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   type OnlineGameDirectoryListOptions,
   type OnlineGameDirectoryResponse,
@@ -65,6 +72,7 @@ import type {
   OnlineGameStoreActionInput,
   OnlineGameStoreActionResult,
   OnlineGameStoreLoadOptions,
+  OnlineRatedGameResultRecord,
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
   ResolvedOpenSeekCredential,
@@ -82,6 +90,13 @@ interface PostgresTransactionClient extends PostgresQueryable {
 }
 
 const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
+const ONLINE_RATING_RESULT_REASONS = new Set<OnlineRatedGameResultRecord["reason"]>([
+  "monarch_captured",
+  "castle_control",
+  "victory_points",
+  "resignation",
+  "timeout",
+]);
 
 function escapePostgresLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
@@ -1072,7 +1087,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
           clock: timeout.clock,
         });
         await this.insertEvent(event, client);
-        await this.refreshSummaryForGame(input.gameId, client);
+        const summary = await this.refreshSummaryForGame(input.gameId, client);
+        if (summary) {
+          await this.applyRatedGameResult(room.toRecord(), summary, client);
+        }
         if (existingEvent && !duplicateConflict) {
           return {
             ok: true,
@@ -1159,7 +1177,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         clock: acceptedAction.clock,
       });
       await this.insertEvent(event, client);
-      await this.refreshSummaryForGame(input.gameId, client);
+      const summary = await this.refreshSummaryForGame(input.gameId, client);
+      if (summary) {
+        await this.applyRatedGameResult(roomRecord, summary, client);
+      }
       return {
         ok: true,
         event,
@@ -1210,7 +1231,10 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         clock: timeout.clock,
       });
       await this.insertEvent(event, client);
-      await this.refreshSummaryForGame(input.gameId, client);
+      const summary = await this.refreshSummaryForGame(input.gameId, client);
+      if (summary) {
+        await this.applyRatedGameResult(room.toRecord(), summary, client);
+      }
       return {
         ok: true,
         event,
@@ -1218,6 +1242,22 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         snapshot: room.getSnapshot(),
       };
     });
+  }
+
+  async loadAccountRating(accountId: string): Promise<OnlineRating | null> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      "SELECT payload FROM online_account_ratings WHERE account_id = $1",
+      [accountId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return validateOnlineRating(row.payload, `online account rating ${accountId}`);
+  }
+
+  async loadRatedGameResult(gameId: string): Promise<OnlineRatedGameResultRecord | null> {
+    await this.ensureSchema();
+    return this.loadRatedGameResultForGame(gameId, this.queryable);
   }
 
   async checkReady(): Promise<boolean> {
@@ -1488,6 +1528,36 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_seek_summaries_open_expiry_idx
         ON online_seek_summaries (status, expires_at, updated_at DESC, seek_id ASC)
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_ratings (
+        account_id TEXT PRIMARY KEY,
+        payload JSONB NOT NULL,
+        updated_at TIMESTAMPTZ
+      )
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_rating_results (
+        game_id TEXT PRIMARY KEY,
+        white_account_id TEXT NOT NULL,
+        black_account_id TEXT NOT NULL,
+        winner TEXT NOT NULL CHECK (winner IN ('w', 'b')),
+        reason TEXT NOT NULL,
+        engine_id TEXT NOT NULL,
+        applied_at TIMESTAMPTZ NOT NULL,
+        white_before JSONB NOT NULL,
+        white_after JSONB NOT NULL,
+        black_before JSONB NOT NULL,
+        black_after JSONB NOT NULL
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_rating_results_white_account_idx
+        ON online_rating_results (white_account_id, applied_at DESC, game_id ASC)
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_rating_results_black_account_idx
+        ON online_rating_results (black_account_id, applied_at DESC, game_id ASC)
     `);
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_game_locks (
@@ -2259,6 +2329,234 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     }
     await this.upsertOpenSeekSummary(summary, queryable);
     return summary;
+  }
+
+  private async applyRatedGameResult(
+    record: OnlineGameRoomRecord,
+    summary: OnlineGameSummary,
+    queryable: PostgresQueryable
+  ): Promise<OnlineRatedGameResultRecord | null> {
+    if (record.setup.ratingMode !== "rated") return null;
+    if (summary.status !== "complete" || !summary.result || !record.result) return null;
+    if (
+      record.result.winner !== summary.result.winner ||
+      record.result.reason !== summary.result.reason
+    ) {
+      throw new Error(`Rated result mismatch while applying rating for ${summary.gameId}.`);
+    }
+
+    const white = summary.participants.find((participant) => participant.seat === "w");
+    const black = summary.participants.find((participant) => participant.seat === "b");
+    if (white?.identity.kind !== "registered" || black?.identity.kind !== "registered") {
+      return null;
+    }
+    if (white.identity.id === black.identity.id) return null;
+
+    const existing = await this.loadRatedGameResultForGame(summary.gameId, queryable);
+    if (existing) return existing;
+
+    const appliedAt = summary.endedAt ?? summary.updatedAt;
+    const accountIds = [white.identity.id, black.identity.id].sort();
+    await this.insertMissingDefaultRatings(accountIds, queryable);
+    const ratings = await this.loadAccountRatingsForUpdate(accountIds, queryable);
+    const whiteBefore = ratings.get(white.identity.id);
+    const blackBefore = ratings.get(black.identity.id);
+    if (!whiteBefore || !blackBefore) {
+      throw new Error(`Missing account ratings while applying rated result for ${summary.gameId}.`);
+    }
+
+    const whiteScore = summary.result.winner === "w" ? 1 : 0;
+    const blackScore = summary.result.winner === "b" ? 1 : 0;
+    const whiteAfter = updateDefaultOnlineRating(
+      whiteBefore,
+      [{ opponent: { rating: blackBefore.rating, deviation: blackBefore.deviation }, score: whiteScore }],
+      { updatedAt: appliedAt }
+    );
+    const blackAfter = updateDefaultOnlineRating(
+      blackBefore,
+      [{ opponent: { rating: whiteBefore.rating, deviation: whiteBefore.deviation }, score: blackScore }],
+      { updatedAt: appliedAt }
+    );
+
+    const result: OnlineRatedGameResultRecord = {
+      gameId: summary.gameId,
+      whiteAccountId: white.identity.id,
+      blackAccountId: black.identity.id,
+      winner: summary.result.winner,
+      reason: summary.result.reason,
+      engineId: GLICKO2_ONLINE_RATING_ENGINE_ID,
+      appliedAt,
+      whiteBefore,
+      whiteAfter,
+      blackBefore,
+      blackAfter,
+    };
+
+    await this.upsertAccountRating(result.whiteAccountId, whiteAfter, queryable);
+    await this.upsertAccountRating(result.blackAccountId, blackAfter, queryable);
+    await this.insertRatedGameResult(result, queryable);
+    return result;
+  }
+
+  private async insertMissingDefaultRatings(
+    accountIds: string[],
+    queryable: PostgresQueryable
+  ): Promise<void> {
+    for (const accountId of accountIds) {
+      await queryable.query(
+        `
+          INSERT INTO online_account_ratings (account_id, payload, updated_at)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (account_id) DO NOTHING
+        `,
+        [accountId, createDefaultOnlineRating(null), null]
+      );
+    }
+  }
+
+  private async loadAccountRatingsForUpdate(
+    accountIds: string[],
+    queryable: PostgresQueryable
+  ): Promise<Map<string, OnlineRating>> {
+    const result = await queryable.query(
+      `
+        SELECT account_id, payload
+        FROM online_account_ratings
+        WHERE account_id = ANY($1::text[])
+        ORDER BY account_id ASC
+        FOR UPDATE
+      `,
+      [accountIds]
+    );
+    const ratings = new Map<string, OnlineRating>();
+    for (const row of result.rows) {
+      if (typeof row.account_id !== "string") {
+        throw new Error("Invalid online account rating row.");
+      }
+      ratings.set(
+        row.account_id,
+        validateOnlineRating(row.payload, `online account rating ${row.account_id}`)
+      );
+    }
+    return ratings;
+  }
+
+  private async upsertAccountRating(
+    accountId: string,
+    rating: OnlineRating,
+    queryable: PostgresQueryable
+  ): Promise<void> {
+    const validated = validateOnlineRating(rating, `online account rating ${accountId}`);
+    await queryable.query(
+      `
+        INSERT INTO online_account_ratings (account_id, payload, updated_at)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (account_id) DO UPDATE
+        SET
+          payload = EXCLUDED.payload,
+          updated_at = EXCLUDED.updated_at
+      `,
+      [accountId, validated, validated.updatedAt]
+    );
+  }
+
+  private async insertRatedGameResult(
+    result: OnlineRatedGameResultRecord,
+    queryable: PostgresQueryable
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_rating_results (
+          game_id,
+          white_account_id,
+          black_account_id,
+          winner,
+          reason,
+          engine_id,
+          applied_at,
+          white_before,
+          white_after,
+          black_before,
+          black_after
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `,
+      [
+        result.gameId,
+        result.whiteAccountId,
+        result.blackAccountId,
+        result.winner,
+        result.reason,
+        result.engineId,
+        result.appliedAt,
+        result.whiteBefore,
+        result.whiteAfter,
+        result.blackBefore,
+        result.blackAfter,
+      ]
+    );
+  }
+
+  private async loadRatedGameResultForGame(
+    gameId: string,
+    queryable: PostgresQueryable
+  ): Promise<OnlineRatedGameResultRecord | null> {
+    const result = await queryable.query(
+      `
+        SELECT
+          game_id,
+          white_account_id,
+          black_account_id,
+          winner,
+          reason,
+          engine_id,
+          applied_at,
+          white_before,
+          white_after,
+          black_before,
+          black_after
+        FROM online_rating_results
+        WHERE game_id = $1
+      `,
+      [gameId]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return this.ratedGameResultFromRow(row);
+  }
+
+  private ratedGameResultFromRow(row: any): OnlineRatedGameResultRecord {
+    if (
+      typeof row.game_id !== "string" ||
+      typeof row.white_account_id !== "string" ||
+      typeof row.black_account_id !== "string" ||
+      (row.winner !== "w" && row.winner !== "b") ||
+      typeof row.reason !== "string" ||
+      !ONLINE_RATING_RESULT_REASONS.has(row.reason as OnlineRatedGameResultRecord["reason"]) ||
+      typeof row.engine_id !== "string"
+    ) {
+      throw new Error("Invalid online rating result row.");
+    }
+    const appliedAt = this.isoStringFromPostgresTimestamp(row.applied_at, "rating result applied_at");
+    return {
+      gameId: row.game_id,
+      whiteAccountId: row.white_account_id,
+      blackAccountId: row.black_account_id,
+      winner: row.winner,
+      reason: row.reason as OnlineRatedGameResultRecord["reason"],
+      engineId: row.engine_id,
+      appliedAt,
+      whiteBefore: validateOnlineRating(row.white_before, "rating result white_before"),
+      whiteAfter: validateOnlineRating(row.white_after, "rating result white_after"),
+      blackBefore: validateOnlineRating(row.black_before, "rating result black_before"),
+      blackAfter: validateOnlineRating(row.black_after, "rating result black_after"),
+    };
+  }
+
+  private isoStringFromPostgresTimestamp(value: unknown, label: string): string {
+    const date = typeof value === "string" ? new Date(value) : value instanceof Date ? value : null;
+    if (date && !Number.isNaN(date.getTime())) return date.toISOString();
+    throw new Error(`Invalid ${label}.`);
   }
 
   private async upsertSummary(

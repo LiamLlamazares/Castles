@@ -11,6 +11,7 @@ import type {
   OpenSeekSummary,
 } from "../seeks";
 import type { OnlineGameCredentials, OnlineGameEvent } from "../events";
+import type { OnlineRating } from "../ratings";
 import type {
   OnlineGameDirectoryListOptions,
   OnlineGameDirectoryResponse,
@@ -20,6 +21,7 @@ import type {
 } from "../readModel";
 import type {
   OnlineActionDTO,
+  OnlineGameResultDTO,
   OnlineGameSnapshotDTO,
   OnlineReject,
 } from "../types";
@@ -107,8 +109,24 @@ export interface OnlineGameStore {
   adjudicateGameTimeout(
     input: OnlineGameStoreTimeoutInput
   ): Promise<OnlineGameStoreTimeoutResult>;
+  loadAccountRating(accountId: string): Promise<OnlineRating | null>;
+  loadRatedGameResult(gameId: string): Promise<OnlineRatedGameResultRecord | null>;
   checkReady(): Promise<boolean>;
   close(): Promise<void>;
+}
+
+export interface OnlineRatedGameResultRecord {
+  gameId: string;
+  whiteAccountId: string;
+  blackAccountId: string;
+  winner: "w" | "b";
+  reason: OnlineGameResultDTO["reason"];
+  engineId: string;
+  appliedAt: string;
+  whiteBefore: OnlineRating;
+  whiteAfter: OnlineRating;
+  blackBefore: OnlineRating;
+  blackAfter: OnlineRating;
 }
 
 export type OnlineChallengeRole = "challenger" | "challenged";

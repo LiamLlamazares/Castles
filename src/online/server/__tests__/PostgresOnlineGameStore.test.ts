@@ -24,6 +24,10 @@ import {
   createOpenSeekCancelledEvent,
   type OpenSeekEvent,
 } from "../../seeks";
+import {
+  GLICKO2_ONLINE_RATING_ENGINE_ID,
+  type OnlineRating,
+} from "../../ratings";
 
 class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
@@ -39,6 +43,20 @@ class FakePostgresClient {
     identity: unknown;
   }> = [];
   seekCredentialRows: Array<{ seekId: string; tokenHash: string; identity: unknown }> = [];
+  ratingRows: Array<{ accountId: string; rating: OnlineRating; updatedAt: string | null }> = [];
+  ratingResultRows: Array<{
+    gameId: string;
+    whiteAccountId: string;
+    blackAccountId: string;
+    winner: "w" | "b";
+    reason: string;
+    engineId: string;
+    appliedAt: string;
+    whiteBefore: OnlineRating;
+    whiteAfter: OnlineRating;
+    blackBefore: OnlineRating;
+    blackAfter: OnlineRating;
+  }> = [];
   summaryRows: Array<{ payload: unknown }> = [];
   challengeSummaryRows: Array<{ payload: unknown }> = [];
   seekSummaryRows: Array<{ payload: unknown }> = [];
@@ -47,6 +65,7 @@ class FakePostgresClient {
   failNextChallengeCredentialInsert = false;
   failNextChallengeSummaryInsert = false;
   failNextSeekSummaryInsert = false;
+  failNextRatingResultInsert = false;
   failRollback = false;
   private transactionSnapshot: {
     eventRows: Array<{ payload: OnlineGameEvent }>;
@@ -61,6 +80,20 @@ class FakePostgresClient {
     }>;
     seekEventRows: Array<{ payload: OpenSeekEvent }>;
     seekCredentialRows: Array<{ seekId: string; tokenHash: string; identity: unknown }>;
+    ratingRows: Array<{ accountId: string; rating: OnlineRating; updatedAt: string | null }>;
+    ratingResultRows: Array<{
+      gameId: string;
+      whiteAccountId: string;
+      blackAccountId: string;
+      winner: "w" | "b";
+      reason: string;
+      engineId: string;
+      appliedAt: string;
+      whiteBefore: OnlineRating;
+      whiteAfter: OnlineRating;
+      blackBefore: OnlineRating;
+      blackAfter: OnlineRating;
+    }>;
     summaryRows: Array<{ payload: unknown }>;
     challengeSummaryRows: Array<{ payload: unknown }>;
     seekSummaryRows: Array<{ payload: unknown }>;
@@ -77,6 +110,14 @@ class FakePostgresClient {
         additionalCredentialRows: this.additionalCredentialRows.map((row) => ({ ...row })),
         challengeCredentialRows: this.challengeCredentialRows.map((row) => ({ ...row })),
         seekCredentialRows: this.seekCredentialRows.map((row) => ({ ...row })),
+        ratingRows: this.ratingRows.map((row) => ({ ...row, rating: { ...row.rating } })),
+        ratingResultRows: this.ratingResultRows.map((row) => ({
+          ...row,
+          whiteBefore: { ...row.whiteBefore },
+          whiteAfter: { ...row.whiteAfter },
+          blackBefore: { ...row.blackBefore },
+          blackAfter: { ...row.blackAfter },
+        })),
         summaryRows: this.summaryRows.map((row) => ({ payload: row.payload })),
         challengeSummaryRows: this.challengeSummaryRows.map((row) => ({ payload: row.payload })),
         seekSummaryRows: this.seekSummaryRows.map((row) => ({ payload: row.payload })),
@@ -99,6 +140,14 @@ class FakePostgresClient {
         this.additionalCredentialRows = this.transactionSnapshot.additionalCredentialRows.map((row) => ({ ...row }));
         this.challengeCredentialRows = this.transactionSnapshot.challengeCredentialRows.map((row) => ({ ...row }));
         this.seekCredentialRows = this.transactionSnapshot.seekCredentialRows.map((row) => ({ ...row }));
+        this.ratingRows = this.transactionSnapshot.ratingRows.map((row) => ({ ...row, rating: { ...row.rating } }));
+        this.ratingResultRows = this.transactionSnapshot.ratingResultRows.map((row) => ({
+          ...row,
+          whiteBefore: { ...row.whiteBefore },
+          whiteAfter: { ...row.whiteAfter },
+          blackBefore: { ...row.blackBefore },
+          blackAfter: { ...row.blackAfter },
+        }));
         this.summaryRows = this.transactionSnapshot.summaryRows.map((row) => ({ payload: row.payload }));
         this.challengeSummaryRows = this.transactionSnapshot.challengeSummaryRows.map((row) => ({ payload: row.payload }));
         this.seekSummaryRows = this.transactionSnapshot.seekSummaryRows.map((row) => ({ payload: row.payload }));
@@ -246,6 +295,86 @@ class FakePostgresClient {
         throw new Error("duplicate seek credential");
       }
       this.seekCredentialRows.push(credential);
+    }
+    if (/insert into online_account_ratings/i.test(text) && values) {
+      const accountId = values[0] as string;
+      const rating = values[1] as OnlineRating;
+      const updatedAt = (values[2] as string | null | undefined) ?? null;
+      const existingIndex = this.ratingRows.findIndex((row) => row.accountId === accountId);
+      if (existingIndex >= 0) {
+        if (/do\s+update/i.test(text)) {
+          this.ratingRows[existingIndex] = {
+            accountId,
+            rating,
+            updatedAt,
+          };
+        }
+      } else {
+        this.ratingRows.push({ accountId, rating, updatedAt });
+      }
+      return { rows: [] };
+    }
+    if (/insert into online_rating_results/i.test(text) && values) {
+      if (this.failNextRatingResultInsert) {
+        this.failNextRatingResultInsert = false;
+        throw new Error("rating result insert unavailable");
+      }
+      const result = {
+        gameId: values[0] as string,
+        whiteAccountId: values[1] as string,
+        blackAccountId: values[2] as string,
+        winner: values[3] as "w" | "b",
+        reason: values[4] as string,
+        engineId: values[5] as string,
+        appliedAt: values[6] as string,
+        whiteBefore: values[7] as OnlineRating,
+        whiteAfter: values[8] as OnlineRating,
+        blackBefore: values[9] as OnlineRating,
+        blackAfter: values[10] as OnlineRating,
+      };
+      if (this.ratingResultRows.some((row) => row.gameId === result.gameId)) {
+        throw new Error("duplicate rating result");
+      }
+      this.ratingResultRows.push(result);
+      return { rows: [] };
+    }
+    if (/select\s+payload\s+from\s+online_account_ratings\s+where\s+account_id/i.test(text)) {
+      return {
+        rows: this.ratingRows
+          .filter((row) => row.accountId === values?.[0])
+          .map((row) => ({ payload: row.rating })),
+      };
+    }
+    if (/select\s+account_id,\s*payload\s+from\s+online_account_ratings/i.test(text)) {
+      const accountIds = new Set((values?.[0] as string[] | undefined) ?? []);
+      return {
+        rows: this.ratingRows
+          .filter((row) => accountIds.has(row.accountId))
+          .sort((left, right) => left.accountId.localeCompare(right.accountId))
+          .map((row) => ({
+            account_id: row.accountId,
+            payload: row.rating,
+          })),
+      };
+    }
+    if (/from\s+online_rating_results\s+where\s+game_id/i.test(text)) {
+      return {
+        rows: this.ratingResultRows
+          .filter((row) => row.gameId === values?.[0])
+          .map((row) => ({
+            game_id: row.gameId,
+            white_account_id: row.whiteAccountId,
+            black_account_id: row.blackAccountId,
+            winner: row.winner,
+            reason: row.reason,
+            engine_id: row.engineId,
+            applied_at: row.appliedAt,
+            white_before: row.whiteBefore,
+            white_after: row.whiteAfter,
+            black_before: row.blackBefore,
+            black_after: row.blackAfter,
+          })),
+      };
     }
     if (/delete\s+from\s+online_game_summaries/i.test(text)) {
       if (/where\s+game_id/i.test(text)) {
@@ -654,6 +783,41 @@ function createClockedGameCreatedEvent(
   };
 }
 
+const ratedWhiteIdentity = {
+  kind: "registered",
+  id: "account_rated_white",
+  displayName: "Rated White",
+} as const;
+
+const ratedBlackIdentity = {
+  kind: "registered",
+  id: "account_rated_black",
+  displayName: "Rated Black",
+} as const;
+
+function createRegisteredGameCreatedEvent(
+  gameId: string,
+  options: {
+    ratingMode?: "casual" | "rated";
+    clocked?: boolean;
+    whiteIdentity?: typeof ratedWhiteIdentity;
+    blackIdentity?: typeof ratedBlackIdentity;
+  } = {}
+): Extract<OnlineGameEvent, { type: "game_created" }> {
+  const created = options.clocked
+    ? createClockedGameCreatedEvent(gameId)
+    : createGameCreatedEvent(gameId);
+  return {
+    ...created,
+    setup: {
+      ...created.setup,
+      ...(options.ratingMode ? { ratingMode: options.ratingMode } : {}),
+    },
+    whiteIdentity: options.whiteIdentity ?? ratedWhiteIdentity,
+    blackIdentity: options.blackIdentity ?? ratedBlackIdentity,
+  };
+}
+
 function createVisibilityChangedEvent(
   gameId = "game_pg",
   visibility: "public" | "unlisted" = "public"
@@ -962,6 +1126,8 @@ describe("PostgresOnlineGameStore", () => {
     expect(client.queries.some((query) => /create table if not exists online_seek_summaries/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_seek_credentials/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create table if not exists online_seek_locks/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_account_ratings/i.test(query.text))).toBe(true);
+    expect(client.queries.some((query) => /create table if not exists online_rating_results/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /create unique index if not exists/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /online_game_summaries_payload_identity_idx/i.test(query.text))).toBe(true);
     expect(client.queries.some((query) => /online_challenge_events_one_create_per_challenge/i.test(query.text))).toBe(true);
@@ -1814,6 +1980,160 @@ describe("PostgresOnlineGameStore", () => {
       "game_created",
       "timeout_adjudicated",
     ]);
+  });
+
+  it("applies registered rated resignation results to both account ratings exactly once", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(
+      client,
+      createRegisteredGameCreatedEvent("game_rated_resignation", { ratingMode: "rated" })
+    );
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const first = await store.applyGameAction({
+      gameId: "game_rated_resignation",
+      token: "w-token",
+      clientActionId: "client-action-rated-resign",
+      action: { type: "RESIGN", baseVersion: 0 },
+      now: () => 2_000,
+    });
+    const retry = await store.applyGameAction({
+      gameId: "game_rated_resignation",
+      token: "w-token",
+      clientActionId: "client-action-rated-resign",
+      action: { type: "RESIGN", baseVersion: 0 },
+      now: () => 99_000,
+    });
+
+    expect(first.ok).toBe(true);
+    expect(retry.ok).toBe(true);
+    if (!first.ok || !retry.ok) throw new Error("expected rated resignation to succeed");
+    expect(first.snapshot.result).toEqual({ winner: "b", reason: "resignation" });
+    expect(retry.snapshot.result).toEqual({ winner: "b", reason: "resignation" });
+
+    const whiteRating = await store.loadAccountRating(ratedWhiteIdentity.id);
+    const blackRating = await store.loadAccountRating(ratedBlackIdentity.id);
+    const ratedResult = await store.loadRatedGameResult("game_rated_resignation");
+
+    expect(whiteRating).toMatchObject({ games: 1, engineId: GLICKO2_ONLINE_RATING_ENGINE_ID });
+    expect(blackRating).toMatchObject({ games: 1, engineId: GLICKO2_ONLINE_RATING_ENGINE_ID });
+    expect(whiteRating?.rating).toBeLessThan(1500);
+    expect(blackRating?.rating).toBeGreaterThan(1500);
+    expect(ratedResult).toMatchObject({
+      gameId: "game_rated_resignation",
+      whiteAccountId: ratedWhiteIdentity.id,
+      blackAccountId: ratedBlackIdentity.id,
+      winner: "b",
+      reason: "resignation",
+      engineId: GLICKO2_ONLINE_RATING_ENGINE_ID,
+      whiteBefore: { rating: 1500, games: 0 },
+      blackBefore: { rating: 1500, games: 0 },
+      whiteAfter: { games: 1 },
+      blackAfter: { games: 1 },
+    });
+    expect(client.ratingResultRows).toHaveLength(1);
+  });
+
+  it("does not apply ratings to completed casual account games", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(
+      client,
+      createRegisteredGameCreatedEvent("game_casual_resignation", { ratingMode: "casual" })
+    );
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.applyGameAction({
+      gameId: "game_casual_resignation",
+      token: "w-token",
+      clientActionId: "client-action-casual-resign",
+      action: { type: "RESIGN", baseVersion: 0 },
+      now: () => 2_000,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await store.loadRatedGameResult("game_casual_resignation")).toBeNull();
+    expect(await store.loadAccountRating(ratedWhiteIdentity.id)).toBeNull();
+    expect(await store.loadAccountRating(ratedBlackIdentity.id)).toBeNull();
+    expect(client.ratingResultRows).toHaveLength(0);
+  });
+
+  it("does not apply ratings to completed rated games without two registered accounts", async () => {
+    const client = new FakePostgresClient();
+    const created = createGameCreatedEvent("game_rated_anonymous_resignation");
+    seedCreatedGame(client, {
+      ...created,
+      setup: { ...created.setup, ratingMode: "rated" },
+    });
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.applyGameAction({
+      gameId: "game_rated_anonymous_resignation",
+      token: "w-token",
+      clientActionId: "client-action-rated-anonymous-resign",
+      action: { type: "RESIGN", baseVersion: 0 },
+      now: () => 2_000,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await store.loadRatedGameResult("game_rated_anonymous_resignation")).toBeNull();
+    expect(client.ratingRows).toHaveLength(0);
+    expect(client.ratingResultRows).toHaveLength(0);
+  });
+
+  it("applies registered rated timeout results in timeout adjudication transactions", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(
+      client,
+      createRegisteredGameCreatedEvent("game_rated_timeout", {
+        ratingMode: "rated",
+        clocked: true,
+      })
+    );
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    const result = await store.adjudicateGameTimeout({
+      gameId: "game_rated_timeout",
+      now: () => 61_000,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected timeout adjudication to succeed");
+    expect(result.snapshot).toMatchObject({
+      result: { winner: "b", reason: "timeout" },
+    });
+    expect(await store.loadRatedGameResult("game_rated_timeout")).toMatchObject({
+      gameId: "game_rated_timeout",
+      winner: "b",
+      reason: "timeout",
+    });
+    expect(await store.loadAccountRating(ratedWhiteIdentity.id)).toMatchObject({ games: 1 });
+    expect(await store.loadAccountRating(ratedBlackIdentity.id)).toMatchObject({ games: 1 });
+  });
+
+  it("rolls back terminal rated actions when rating result persistence fails", async () => {
+    const client = new FakePostgresClient();
+    seedCreatedGame(
+      client,
+      createRegisteredGameCreatedEvent("game_rated_rating_rollback", { ratingMode: "rated" })
+    );
+    client.failNextRatingResultInsert = true;
+    const store = new PostgresOnlineGameStore({ queryable: client });
+
+    await expect(
+      store.applyGameAction({
+        gameId: "game_rated_rating_rollback",
+        token: "w-token",
+        clientActionId: "client-action-rating-rollback",
+        action: { type: "RESIGN", baseVersion: 0 },
+        now: () => 2_000,
+      })
+    ).rejects.toThrow(/rating result insert unavailable/);
+
+    expect(client.eventRows.map((row) => row.payload.type)).toEqual(["game_created"]);
+    expect(client.summaryRows).toHaveLength(0);
+    expect(client.ratingRows).toHaveLength(0);
+    expect(client.ratingResultRows).toHaveLength(0);
+    expect(client.queries.some((query) => /^\s*rollback\s*$/i.test(query.text))).toBe(true);
   });
 
   it("adjudicates timeouts against the locked persisted game state", async () => {
