@@ -706,6 +706,36 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByText("seek_page_one_other")).not.toBeInTheDocument();
   });
 
+  it("clears stale lobby load-more errors after a successful retry", async () => {
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_initial_page" })], "seek_cursor_2"))
+      .mockRejectedValueOnce(new Error("network unavailable"))
+      .mockResolvedValueOnce(seekDirectory([openSeek({ seekId: "seek_second_page" })]));
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("seek_initial_page")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more listings" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Could not load more lobby listings.");
+    fireEvent.click(screen.getByRole("button", { name: "Load more listings" }));
+
+    expect(await screen.findByText("seek_second_page")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("status")).not.toHaveTextContent("Could not load more lobby listings.");
+    });
+  });
+
   it("filters loaded Watch games by followed registered participants", async () => {
     const socialProps = socialPropsWithFollowing([publicProfile("Samir", { following: true })]);
     const loadGames = vi.fn().mockResolvedValue(directory([

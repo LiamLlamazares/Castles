@@ -1035,7 +1035,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setSeekNextCursor(response.nextCursor);
       setLastSeekCheckedAt(formatLastChecked(new Date()));
       setSeekStatus("ready");
-      setSeekActionMessage((current) => current === AUTO_REFRESH_PAUSED_MESSAGE ? "" : current);
+      setSeekActionMessage((current) =>
+        current === AUTO_REFRESH_PAUSED_MESSAGE || current === "Could not load more lobby listings." ? "" : current
+      );
     } catch (error) {
       if (seekRequestIdRef.current !== requestId) return;
       console.error("[OnlineGameBrowser] Failed to load open seeks", error);
