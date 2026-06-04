@@ -1,4 +1,9 @@
 import type { ValidationResult } from "./validation";
+import {
+  formatOnlineRating,
+  isOnlineRatingProvisional,
+  type OnlineRating,
+} from "./ratings";
 
 export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
 
@@ -11,6 +16,15 @@ export type OnlineAccountPresenceStatus = "online" | "recent" | "away" | "offlin
 export interface OnlineAccountPresence {
   visibility: OnlineAccountPresenceVisibility;
   status: OnlineAccountPresenceStatus | null;
+}
+
+export interface OnlineAccountPublicRating {
+  schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
+  rating: number;
+  display: string;
+  provisional: boolean;
+  games: number;
+  updatedAt: string | null;
 }
 
 export interface OnlineAccountPrivacySettings {
@@ -30,12 +44,24 @@ export interface OnlineAccountPrivacyPatch {
 export interface OnlineAccountPublicProfile {
   schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
   displayName: string;
+  rating?: OnlineAccountPublicRating;
   presence: OnlineAccountPresence;
   relationship: {
     self: boolean;
     following: boolean;
     followedBy: boolean;
     blocked: boolean;
+  };
+}
+
+export function createOnlineAccountPublicRating(rating: OnlineRating): OnlineAccountPublicRating {
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    rating: Math.round(rating.rating),
+    display: formatOnlineRating(rating),
+    provisional: isOnlineRatingProvisional(rating),
+    games: rating.games,
+    updatedAt: rating.updatedAt,
   };
 }
 

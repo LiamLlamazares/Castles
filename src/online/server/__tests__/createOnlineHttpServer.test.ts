@@ -176,11 +176,13 @@ class FakePostgresAccountQueryable {
   readonly accountsByDisplayName = new Map<string, string>();
   readonly displayNameRegistry = new Map<string, string>();
   readonly sessionsByTokenHash = new Map<string, any>();
+  readonly ratingRows = new Map<string, any>();
   private transactionSnapshot?: {
     accounts: Map<string, any>;
     accountsByDisplayName: Map<string, string>;
     displayNameRegistry: Map<string, string>;
     sessionsByTokenHash: Map<string, any>;
+    ratingRows: Map<string, any>;
   };
 
   release(): void {}
@@ -195,6 +197,7 @@ class FakePostgresAccountQueryable {
         sessionsByTokenHash: new Map(
           Array.from(this.sessionsByTokenHash.entries()).map(([key, value]) => [key, { ...value }])
         ),
+        ratingRows: new Map(Array.from(this.ratingRows.entries()).map(([key, value]) => [key, { ...value }])),
       };
       return { rows: [] };
     }
@@ -208,10 +211,12 @@ class FakePostgresAccountQueryable {
         this.accountsByDisplayName.clear();
         this.displayNameRegistry.clear();
         this.sessionsByTokenHash.clear();
+        this.ratingRows.clear();
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
         for (const [key, value] of this.transactionSnapshot.sessionsByTokenHash) this.sessionsByTokenHash.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.ratingRows) this.ratingRows.set(key, value);
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -226,6 +231,12 @@ class FakePostgresAccountQueryable {
       normalizedText.startsWith("DO $$")
     ) {
       return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("SELECT payload FROM online_account_ratings WHERE account_id")) {
+      const [accountId] = values as string[];
+      const rating = this.ratingRows.get(accountId);
+      return { rows: rating ? [{ payload: rating }] : [] };
     }
 
     if (normalizedText.startsWith("INSERT INTO online_account_display_names")) {

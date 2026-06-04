@@ -8,6 +8,7 @@ import {
 } from "../accounts";
 import {
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+  createOnlineAccountPublicRating,
   defaultOnlineAccountPrivacySettings,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
@@ -15,6 +16,7 @@ import {
   type OnlineAccountPublicProfile,
   type OnlineAccountSocialActionResult,
 } from "../social";
+import { validateOnlineRating } from "../ratings";
 import {
   CreateOnlineAccountStoreInput,
   CreateOnlineAccountPasswordSessionInput,
@@ -697,6 +699,13 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       CREATE INDEX IF NOT EXISTS online_account_blocks_blocked_idx
         ON online_account_blocks (blocked_account_id)
     `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_ratings (
+        account_id TEXT PRIMARY KEY,
+        payload JSONB NOT NULL,
+        updated_at TIMESTAMPTZ
+      )
+    `);
   }
 
   private async loadAccountByDisplayName(displayName: string): Promise<OnlineAccount | null> {
@@ -782,6 +791,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return {
       schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
       displayName: target.displayName,
+      ...(await this.createPublicRating(target.accountId, queryable)),
       presence: await this.createPresence(viewerAccountId, target, queryable, viewedAt),
       relationship: {
         self: viewerAccountId === target.accountId,
@@ -791,6 +801,19 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         blocked: await this.hasBlock(viewerAccountId, target.accountId, queryable),
       },
     };
+  }
+
+  private async createPublicRating(
+    accountId: string,
+    queryable: PostgresQueryable
+  ): Promise<Pick<OnlineAccountPublicProfile, "rating">> {
+    const result = await queryable.query(
+      "SELECT payload FROM online_account_ratings WHERE account_id = $1",
+      [accountId]
+    );
+    if (result.rows.length === 0) return {};
+    const rating = validateOnlineRating(result.rows[0].payload, `online account rating ${accountId}`);
+    return { rating: createOnlineAccountPublicRating(rating) };
   }
 
   private async createPresence(

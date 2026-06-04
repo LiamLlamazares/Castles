@@ -1010,9 +1010,18 @@ describe("online client helpers", () => {
   });
 
   it("loads profiles, follows accounts, blocks accounts, and updates privacy with bearer auth", async () => {
+    const rating = {
+      schemaVersion: 1,
+      rating: 1500,
+      display: "1500?",
+      provisional: true,
+      games: 0,
+      updatedAt: null,
+    };
     const profile = {
       schemaVersion: 1,
       displayName: "Samir",
+      rating,
       presence: { visibility: "visible", status: "online" },
       relationship: { self: false, following: false, blocked: false },
     };
@@ -1187,6 +1196,36 @@ describe("online client helpers", () => {
         }) as any
       )
     ).rejects.toThrow(/must not contain secrets/);
+
+    await expect(
+      fetchOnlineAccountProfile(
+        { token: "account-token" },
+        "Samir",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            profile: {
+              schemaVersion: 1,
+              displayName: "Samir",
+              rating: {
+                schemaVersion: 1,
+                engineId: "glicko2-beta-v1",
+                rating: 1500,
+                display: "1500?",
+                provisional: true,
+                deviation: 500,
+                volatility: 0.06,
+                games: 0,
+                updatedAt: null,
+              },
+              presence: { visibility: "hidden", status: null },
+              relationship: { self: false, following: false, blocked: false },
+            },
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/rating contains unsupported data/);
 
     await expect(
       fetchOnlineAccountPrivacy(

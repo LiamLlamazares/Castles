@@ -6,6 +6,7 @@ import {
 } from "../OnlineAccountStore";
 import { hashOnlineToken } from "../onlineTokenCredentials";
 import { hashOnlineAccountPassword } from "../onlinePasswordCredentials";
+import { createDefaultOnlineRating, type OnlineRating } from "../../ratings";
 
 const TEST_PASSWORD_HASH =
   "scrypt:v1:16384:8:1:AAAAAAAAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -18,6 +19,7 @@ class FakeAccountQueryable {
   readonly privacySettings = new Map<string, any>();
   readonly follows = new Set<string>();
   readonly blocks = new Set<string>();
+  readonly ratingRows = new Map<string, OnlineRating>();
   readonly advisoryLocks: string[] = [];
   private transactionSnapshot?: {
     accounts: Map<string, any>;
@@ -27,6 +29,7 @@ class FakeAccountQueryable {
     privacySettings: Map<string, any>;
     follows: Set<string>;
     blocks: Set<string>;
+    ratingRows: Map<string, OnlineRating>;
   };
 
   release(): void {}
@@ -46,6 +49,7 @@ class FakeAccountQueryable {
         ),
         follows: new Set(this.follows),
         blocks: new Set(this.blocks),
+        ratingRows: new Map(Array.from(this.ratingRows.entries()).map(([key, value]) => [key, { ...value }])),
       };
       return { rows: [] };
     }
@@ -62,6 +66,7 @@ class FakeAccountQueryable {
         this.privacySettings.clear();
         this.follows.clear();
         this.blocks.clear();
+        this.ratingRows.clear();
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
@@ -69,6 +74,7 @@ class FakeAccountQueryable {
         for (const [key, value] of this.transactionSnapshot.privacySettings) this.privacySettings.set(key, value);
         for (const key of this.transactionSnapshot.follows) this.follows.add(key);
         for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
+        for (const [key, value] of this.transactionSnapshot.ratingRows) this.ratingRows.set(key, value);
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -87,6 +93,12 @@ class FakeAccountQueryable {
       const [left, right] = values as string[];
       this.advisoryLocks.push(`${left}|${right}`);
       return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("SELECT payload FROM online_account_ratings WHERE account_id")) {
+      const [accountId] = values as string[];
+      const rating = this.ratingRows.get(accountId);
+      return { rows: rating ? [{ payload: rating }] : [] };
     }
 
     if (normalizedText.startsWith("INSERT INTO online_account_display_names")) {
@@ -661,6 +673,7 @@ describe("PostgresOnlineAccountStore", () => {
       tokenHash: hashOnlineToken("token-dani"),
       createdAt: "2026-06-03T12:02:00.000Z",
     });
+    queryable.ratingRows.set("account_samir", createDefaultOnlineRating("2026-06-03T12:03:00.000Z"));
 
     await expect(store.getPrivacySettings("account_samir")).resolves.toMatchObject({
       followPolicy: "everyone",
@@ -677,11 +690,22 @@ describe("PostgresOnlineAccountStore", () => {
       status: "ok",
       profile: {
         displayName: "Samir",
+        rating: {
+          schemaVersion: 1,
+          rating: 1500,
+          display: "1500?",
+          provisional: true,
+          games: 0,
+          updatedAt: "2026-06-03T12:03:00.000Z",
+        },
         presence: { visibility: "hidden", status: null },
         relationship: { self: false, following: true, followedBy: false, blocked: false },
       },
     });
     expect(JSON.stringify(follow)).not.toContain("account_samir");
+    expect(JSON.stringify(follow)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(follow)).not.toContain("deviation");
+    expect(JSON.stringify(follow)).not.toContain("volatility");
     await expect(store.resolveChallengeTarget("account_liam", "Samir")).resolves.toEqual({
       status: "not_allowed",
     });
@@ -697,6 +721,14 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.listFollowingProfiles("account_liam", "2026-06-03T12:04:00.000Z")).resolves.toEqual([
       expect.objectContaining({
         displayName: "Samir",
+        rating: {
+          schemaVersion: 1,
+          rating: 1500,
+          display: "1500?",
+          provisional: true,
+          games: 0,
+          updatedAt: "2026-06-03T12:03:00.000Z",
+        },
         presence: { visibility: "visible", status: "online" },
         relationship: { self: false, following: true, followedBy: true, blocked: false },
       }),

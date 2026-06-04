@@ -24,6 +24,7 @@ import { PieceType } from "../../Constants";
 import { ONLINE_RULESET_VERSION } from "../../online/events";
 import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
 import { OnlineRequestError } from "../../online/client";
+import type { OnlineAccountPublicRating } from "../../online/social";
 
 function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
   const gameId = overrides.gameId ?? "game_public_active";
@@ -177,11 +178,13 @@ function accountFixture(displayName = "Liam") {
 function publicProfile(
   displayName: string,
   relationship: { self?: boolean; following?: boolean; followedBy?: boolean; blocked?: boolean } = {},
-  presence: { visibility?: "visible" | "hidden"; status?: "online" | "recent" | "away" | "offline" | null } = {}
+  presence: { visibility?: "visible" | "hidden"; status?: "online" | "recent" | "away" | "offline" | null } = {},
+  rating?: OnlineAccountPublicRating
 ) {
   return {
     schemaVersion: 1 as const,
     displayName,
+    ...(rating ? { rating } : {}),
     presence: {
       visibility: presence.visibility ?? "hidden",
       status: presence.status ?? null,
@@ -192,6 +195,18 @@ function publicProfile(
       followedBy: relationship.followedBy ?? false,
       blocked: relationship.blocked ?? false,
     },
+  };
+}
+
+function publicRating(overrides: Partial<OnlineAccountPublicRating> = {}): OnlineAccountPublicRating {
+  return {
+    schemaVersion: 1,
+    rating: 1500,
+    display: "1500?",
+    provisional: true,
+    games: 0,
+    updatedAt: null,
+    ...overrides,
   };
 }
 
@@ -622,6 +637,49 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(within(profileCard).getByRole("button", { name: "Copy challenge invite for Ada" }));
     await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Ada"));
     expect(await within(people).findByText("Challenge invite copied for Ada.")).toBeInTheDocument();
+  });
+
+  it("shows public rating summaries on profile cards and followed players", async () => {
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile(
+        "Ada",
+        {},
+        { visibility: "visible", status: "online" },
+        publicRating({ rating: 1612, display: "1612", provisional: false, games: 24, updatedAt: "2026-06-04T12:00:00.000Z" })
+      ),
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Samir", { following: true }, {}, publicRating()),
+        ])}
+        loadAccountProfile={loadAccountProfile}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const following = await within(people).findByRole("region", { name: "Followed players" });
+    const samirRow = within(following).getByText("Samir").closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(within(samirRow as HTMLElement).getByTitle("0 rated games")).toHaveTextContent("1500?");
+
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Ada" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    const profileCard = await within(people).findByRole("article", { name: "Profile Ada" });
+    expect(within(profileCard).getByTitle("24 rated games")).toHaveTextContent("1612");
   });
 
   it("lets signed-in players watch public live games from profile cards", async () => {

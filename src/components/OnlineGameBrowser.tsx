@@ -564,6 +564,13 @@ function presenceBadgeClassName(profile: OnlineAccountPublicProfile): string {
   return "presence-offline";
 }
 
+function profileRatingTitle(profile: OnlineAccountPublicProfile): string {
+  const rating = profile.rating;
+  if (!rating) return "";
+  const suffix = rating.games === 1 ? "rated game" : "rated games";
+  return `${rating.games} ${suffix}`;
+}
+
 function compareProfilesByDisplayName(
   left: OnlineAccountPublicProfile,
   right: OnlineAccountPublicProfile
@@ -3478,6 +3485,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       <div className="online-browser-online-now-main">
                         <strong>{profile.displayName}</strong>
                         <div className="online-browser-social-badges">
+                          {profile.rating && (
+                            <span className="online-browser-rating-badge" title={profileRatingTitle(profile)}>
+                              {profile.rating.display}
+                            </span>
+                          )}
                           <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
                           {pinned && <span className="online-browser-pinned-badge">Pinned</span>}
                           {liveGame && <span>Playing now</span>}
@@ -3696,6 +3708,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               <div className="online-browser-profile-main">
                 <strong>{socialProfile.displayName}</strong>
                 <div className="online-browser-social-badges">
+                  {socialProfile.rating && (
+                    <span className="online-browser-rating-badge" title={profileRatingTitle(socialProfile)}>
+                      {socialProfile.rating.display}
+                    </span>
+                  )}
                   <span className={presenceBadgeClassName(socialProfile)}>{formatPresenceLabel(socialProfile)}</span>
                   <span>{formatRelationshipLabel(socialProfile)}</span>
                   {socialProfilePendingChallenge && (
@@ -3864,6 +3881,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       <div>
                         <strong>{profile.displayName}</strong>
                         <div className="online-browser-social-badges">
+                          {profile.rating && (
+                            <span className="online-browser-rating-badge" title={profileRatingTitle(profile)}>
+                              {profile.rating.display}
+                            </span>
+                          )}
                           <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
                           {pinned && <span className="online-browser-pinned-badge">Pinned</span>}
                           {liveGame && <span>Playing now</span>}

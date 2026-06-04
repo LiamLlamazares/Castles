@@ -756,7 +756,7 @@ function validateOnlineAccountPublicProfile(
     throw new Error(`${label} was malformed.`);
   }
   const record = value as Record<string, unknown>;
-  const allowedProfileKeys = new Set(["schemaVersion", "displayName", "presence", "relationship"]);
+  const allowedProfileKeys = new Set(["schemaVersion", "displayName", "rating", "presence", "relationship"]);
   for (const key of Object.keys(record)) {
     if (!allowedProfileKeys.has(key)) {
       throw new Error(`${label} was malformed: profile contains unsupported data.`);
@@ -770,6 +770,54 @@ function validateOnlineAccountPublicProfile(
   }
   if (stringContainsDurableSecret(record.displayName)) {
     throw new Error(`${label} was malformed: displayName must not contain secrets.`);
+  }
+  let rating: OnlineAccountPublicProfile["rating"];
+  if (record.rating !== undefined) {
+    const ratingRecord = record.rating;
+    if (!ratingRecord || typeof ratingRecord !== "object" || Array.isArray(ratingRecord)) {
+      throw new Error(`${label} was malformed: rating is invalid.`);
+    }
+    const allowedRatingKeys = new Set(["schemaVersion", "rating", "display", "provisional", "games", "updatedAt"]);
+    for (const key of Object.keys(ratingRecord as Record<string, unknown>)) {
+      if (!allowedRatingKeys.has(key)) {
+        throw new Error(`${label} was malformed: rating contains unsupported data.`);
+      }
+    }
+    const ratingObject = ratingRecord as Record<string, unknown>;
+    if (ratingObject.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+      throw new Error(`${label} was malformed: rating schemaVersion is invalid.`);
+    }
+    if (typeof ratingObject.rating !== "number" || !Number.isSafeInteger(ratingObject.rating)) {
+      throw new Error(`${label} was malformed: rating value is invalid.`);
+    }
+    if (
+      typeof ratingObject.display !== "string" ||
+      ratingObject.display.length === 0 ||
+      ratingObject.display.length > 16 ||
+      stringContainsDurableSecret(ratingObject.display)
+    ) {
+      throw new Error(`${label} was malformed: rating display is invalid.`);
+    }
+    if (typeof ratingObject.provisional !== "boolean") {
+      throw new Error(`${label} was malformed: rating provisional flag is invalid.`);
+    }
+    if (typeof ratingObject.games !== "number" || !Number.isSafeInteger(ratingObject.games) || ratingObject.games < 0) {
+      throw new Error(`${label} was malformed: rating games is invalid.`);
+    }
+    if (
+      ratingObject.updatedAt !== null &&
+      (typeof ratingObject.updatedAt !== "string" || Number.isNaN(Date.parse(ratingObject.updatedAt)))
+    ) {
+      throw new Error(`${label} was malformed: rating updatedAt is invalid.`);
+    }
+    rating = {
+      schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+      rating: ratingObject.rating,
+      display: ratingObject.display,
+      provisional: ratingObject.provisional,
+      games: ratingObject.games,
+      updatedAt: ratingObject.updatedAt as string | null,
+    };
   }
   const presence = record.presence;
   if (!presence || typeof presence !== "object" || Array.isArray(presence)) {
@@ -822,6 +870,7 @@ function validateOnlineAccountPublicProfile(
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: record.displayName,
+    ...(rating ? { rating } : {}),
     presence: {
       visibility: presenceRecord.visibility,
       status: presenceRecord.status,

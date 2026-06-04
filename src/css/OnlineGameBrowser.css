@@ -349,6 +349,12 @@
   color: #ffe19a;
 }
 
+.online-browser-social-badges span.online-browser-rating-badge,
+.online-browser-following-row span.online-browser-rating-badge {
+  background: rgba(155, 211, 255, 0.18);
+  color: #d8efff;
+}
+
 .online-browser-social-badges span.presence-offline,
 .online-browser-following-row span.presence-offline,
 .online-browser-social-badges span.presence-hidden,
