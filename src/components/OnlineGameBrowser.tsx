@@ -84,6 +84,7 @@ type OnlineAccountUiStatus =
   | "signed-out"
   | "checking"
   | "creating"
+  | "signing-in"
   | "signing-out"
   | "signing-out-all"
   | "deleting"
@@ -135,7 +136,8 @@ interface OnlineGameBrowserProps {
   account?: OnlineAccount | null;
   accountStatus?: OnlineAccountUiStatus;
   accountError?: string | null;
-  onCreateAccount?: (displayName: string) => void | Promise<void>;
+  onCreateAccount?: (displayName: string, password: string) => void | Promise<void>;
+  onSignInAccount?: (displayName: string, password: string) => void | Promise<void>;
   onSignOutAccount?: () => void | Promise<void>;
   accountSessionId?: string | null;
   loadAccountSessions?: () => Promise<OnlineAccountSessionsResponse>;
@@ -837,6 +839,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   accountStatus = account ? "ready" : "signed-out",
   accountError = null,
   onCreateAccount,
+  onSignInAccount,
   onSignOutAccount,
   accountSessionId = null,
   loadAccountSessions,
@@ -891,6 +894,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [isSeekLoadingMore, setIsSeekLoadingMore] = React.useState(false);
   const [seekNextCursor, setSeekNextCursor] = React.useState<string | undefined>();
   const [accountDisplayName, setAccountDisplayName] = React.useState("");
+  const [accountPassword, setAccountPassword] = React.useState("");
   const [accountActionMessage, setAccountActionMessage] = React.useState("");
   const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
   const [accountSessions, setAccountSessions] = React.useState<OnlineAccountSessionSummary[]>([]);
@@ -1042,16 +1046,31 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const handleCreateAccountSubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const displayName = accountDisplayName.trim();
-    if (!displayName || !onCreateAccount) return;
+    if (!displayName || accountPassword.length < 8 || !onCreateAccount) return;
     setAccountActionMessage("");
     try {
-      await onCreateAccount(displayName);
+      await onCreateAccount(displayName, accountPassword);
       setAccountDisplayName("");
+      setAccountPassword("");
       setAccountActionMessage("Online account created.");
     } catch {
       setAccountActionMessage("Could not create that online account name.");
     }
-  }, [accountDisplayName, onCreateAccount]);
+  }, [accountDisplayName, accountPassword, onCreateAccount]);
+
+  const handleSignInAccountClick = React.useCallback(async () => {
+    const displayName = accountDisplayName.trim();
+    if (!displayName || accountPassword.length < 8 || !onSignInAccount) return;
+    setAccountActionMessage("");
+    try {
+      await onSignInAccount(displayName, accountPassword);
+      setAccountDisplayName("");
+      setAccountPassword("");
+      setAccountActionMessage("Signed in.");
+    } catch {
+      setAccountActionMessage("Could not sign in with that display name and password.");
+    }
+  }, [accountDisplayName, accountPassword, onSignInAccount]);
 
   const refreshAccountSessions = React.useCallback(async () => {
     if (!account || !loadAccountSessions) return;
@@ -3035,6 +3054,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         return "Checking saved account...";
       case "creating":
         return "Creating account...";
+      case "signing-in":
+        return "Signing in...";
       case "signing-out":
         return "Signing out...";
       case "signing-out-all":
@@ -3134,8 +3155,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </>
           ) : (
             <>
-              <strong>Play with a display name</strong>
-              <p>Create a browser account to keep your online games attached to this display name.</p>
+              <strong>Create or sign in</strong>
+              <p>Use a display name and password to keep your online games attached across devices.</p>
             </>
           )}
           {accountStatusMessage && (
@@ -3194,12 +3215,43 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 autoComplete="nickname"
               />
             </label>
+            <label>
+              <span>Password</span>
+              <input
+                type="password"
+                value={accountPassword}
+                onChange={(event) => setAccountPassword(event.currentTarget.value)}
+                minLength={8}
+                maxLength={128}
+                autoComplete="current-password"
+              />
+            </label>
             <button
               type="submit"
               className="online-browser-button primary"
-              disabled={!onCreateAccount || accountStatus === "creating" || accountDisplayName.trim().length < 2}
+              disabled={
+                !onCreateAccount ||
+                accountStatus === "creating" ||
+                accountStatus === "signing-in" ||
+                accountDisplayName.trim().length < 2 ||
+                accountPassword.length < 8
+              }
             >
               {accountStatus === "creating" ? "Creating..." : "Create Account"}
+            </button>
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={handleSignInAccountClick}
+              disabled={
+                !onSignInAccount ||
+                accountStatus === "creating" ||
+                accountStatus === "signing-in" ||
+                accountDisplayName.trim().length < 2 ||
+                accountPassword.length < 8
+              }
+            >
+              {accountStatus === "signing-in" ? "Signing In..." : "Sign In"}
             </button>
           </form>
         )}

@@ -6,6 +6,8 @@ import type { ValidationResult } from "./validation";
 export const ONLINE_ACCOUNT_SCHEMA_VERSION = 1;
 export const ONLINE_ACCOUNT_DISPLAY_NAME_MIN_LENGTH = 2;
 export const ONLINE_ACCOUNT_DISPLAY_NAME_MAX_LENGTH = 32;
+export const ONLINE_ACCOUNT_PASSWORD_MIN_LENGTH = 8;
+export const ONLINE_ACCOUNT_PASSWORD_MAX_LENGTH = 128;
 
 export interface OnlineAccount {
   schemaVersion: typeof ONLINE_ACCOUNT_SCHEMA_VERSION;
@@ -26,6 +28,8 @@ export interface OnlineAccountCreateResponse {
   account: OnlineAccount;
   session: OnlineAccountSessionPublic;
 }
+
+export type OnlineAccountSignInResponse = OnlineAccountCreateResponse;
 
 export interface OnlineAccountMeResponse {
   protocolVersion: number;
@@ -96,6 +100,21 @@ export function normalizeOnlineAccountDisplayName(value: unknown): ValidationRes
 
 export function normalizeOnlineAccountDisplayNameKey(displayName: string): string {
   return normalizeVisibleWhitespace(displayName).toLowerCase();
+}
+
+export function normalizeOnlineAccountPassword(value: unknown): ValidationResult<string> {
+  if (typeof value !== "string") {
+    return bad("Password must be text.");
+  }
+  if (value.length < ONLINE_ACCOUNT_PASSWORD_MIN_LENGTH || value.length > ONLINE_ACCOUNT_PASSWORD_MAX_LENGTH) {
+    return bad(
+      `Password must be ${ONLINE_ACCOUNT_PASSWORD_MIN_LENGTH}-${ONLINE_ACCOUNT_PASSWORD_MAX_LENGTH} characters.`
+    );
+  }
+  if (/[\u0000-\u001f\u007f]/.test(value)) {
+    return bad("Password must not contain control characters.");
+  }
+  return { ok: true, value };
 }
 
 export function onlineAccountIdentity(account: Pick<OnlineAccount, "accountId" | "displayName">): OnlineRegisteredIdentity {

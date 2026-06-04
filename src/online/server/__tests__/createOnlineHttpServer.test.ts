@@ -156,11 +156,15 @@ function bearer(token: string): HeadersInit {
   return { authorization: `Bearer ${token}` };
 }
 
-async function createAccountViaApi(port: number, displayName: string): Promise<any> {
+async function createAccountViaApi(
+  port: number,
+  displayName: string,
+  password = "account-password"
+): Promise<any> {
   const response = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({ displayName, password }),
   });
   const body = await response.json();
   expect(response.status).toBe(201);
@@ -216,6 +220,7 @@ class FakePostgresAccountQueryable {
       normalizedText === "SELECT 1" ||
       normalizedText.startsWith("SELECT pg_advisory_xact_lock") ||
       normalizedText.startsWith("CREATE TABLE") ||
+      normalizedText.startsWith("ALTER TABLE") ||
       normalizedText.startsWith("CREATE INDEX") ||
       normalizedText.startsWith("CREATE UNIQUE INDEX") ||
       normalizedText.startsWith("DO $$")
@@ -244,7 +249,7 @@ class FakePostgresAccountQueryable {
     }
 
     if (normalizedText.startsWith("INSERT INTO online_accounts")) {
-      const [accountId, displayName, displayNameNormalized, createdAt] = values as string[];
+      const [accountId, displayName, displayNameNormalized, passwordHash, createdAt] = values as string[];
       if (this.accounts.has(accountId) || this.accountsByDisplayName.has(displayNameNormalized)) {
         const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
         error.code = "23505";
@@ -257,6 +262,7 @@ class FakePostgresAccountQueryable {
         account_id: accountId,
         display_name: displayName,
         display_name_normalized: displayNameNormalized,
+        password_hash: passwordHash,
         created_at: createdAt,
         updated_at: createdAt,
       };
@@ -311,6 +317,13 @@ class FakePostgresAccountQueryable {
           last_used_at: session.last_used_at,
         }));
       return { rows };
+    }
+
+    if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at, password_hash FROM online_accounts WHERE display_name_normalized")) {
+      const [displayNameNormalized] = values as string[];
+      const accountId = this.accountsByDisplayName.get(displayNameNormalized);
+      const account = accountId ? this.accounts.get(accountId) : undefined;
+      return { rows: account ? [account] : [] };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
@@ -544,7 +557,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
 
@@ -580,6 +593,59 @@ describe("createOnlineHttpServer", () => {
 
     expect(createSeekResponse.status).toBe(201);
     expect(seek.summary.creatorIdentity).toEqual(account.account.identity);
+  });
+
+  it("requires account passwords and signs in from a second device", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const missingPasswordResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "NoPassword" }),
+    });
+    const account = await createAccountViaApi(port, "Liam", "correct-horse-battery-staple");
+    const wrongPasswordResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "liam", password: "wrong-password" }),
+    });
+    const secondDeviceResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "liam", password: "correct-horse-battery-staple" }),
+    });
+    const secondDevice = await secondDeviceResponse.json();
+    const firstMeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+      headers: bearer(account.session.token),
+    });
+    const secondMeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+      headers: bearer(secondDevice.session.token),
+    });
+
+    expect(missingPasswordResponse.status).toBe(400);
+    expect(wrongPasswordResponse.status).toBe(401);
+    expect(secondDeviceResponse.status).toBe(200);
+    expect(secondDevice).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      account: {
+        accountId: account.account.accountId,
+        displayName: "Liam",
+      },
+      session: {
+        sessionId: expect.any(String),
+        token: expect.any(String),
+      },
+    });
+    expect(secondDevice.session.sessionId).not.toBe(account.session.sessionId);
+    expect(secondDevice.session.token).not.toBe(account.session.token);
+    expect(JSON.stringify(secondDevice)).not.toContain("correct-horse-battery-staple");
+    expect(firstMeResponse.status).toBe(200);
+    expect(secondMeResponse.status).toBe(200);
   });
 
   it("supports exact profile lookup, follows, privacy, and blocks without exposing account ids", async () => {
@@ -874,7 +940,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     const revokeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
@@ -914,7 +980,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     const revokeResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
@@ -941,7 +1007,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
 
@@ -978,7 +1044,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     queryable.sessionsByTokenHash.set(hashOnlineToken("other-account-token"), {
@@ -1046,7 +1112,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     queryable.sessionsByTokenHash.set(hashOnlineToken("other-account-token"), {
@@ -1070,7 +1136,7 @@ describe("createOnlineHttpServer", () => {
     const recreateResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "liam" }),
+      body: JSON.stringify({ displayName: "liam", password: "account-password" }),
     });
     const recreateBody = await recreateResponse.json();
 
@@ -1123,7 +1189,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     const revokeAllResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/sessions`, {
@@ -1151,7 +1217,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     const deleteResponse = await fetch(`http://127.0.0.1:${port}/api/online/account`, {
@@ -1179,7 +1245,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     vi.spyOn(accountStore, "listSessionsForAccount").mockRejectedValueOnce(new Error("list unavailable"));
@@ -1260,7 +1326,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     const defaultSeatResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
@@ -1369,7 +1435,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Samir" }),
+      body: JSON.stringify({ displayName: "Samir", password: "account-password" }),
     });
     const account = await accountResponse.json();
     const historyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games?state=all&limit=5`, {
@@ -1607,7 +1673,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     registeredIdentity = account.account.identity;
@@ -1716,7 +1782,7 @@ describe("createOnlineHttpServer", () => {
       const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ displayName: "Liam" }),
+        body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
       });
       const account = await accountResponse.json();
       registeredIdentity = account.account.identity;
@@ -1860,7 +1926,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     const rejoinResponse = await fetch(
@@ -1921,7 +1987,7 @@ describe("createOnlineHttpServer", () => {
     const accountResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName: "Liam" }),
+      body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
     });
     const account = await accountResponse.json();
     registeredIdentity = account.account.identity;

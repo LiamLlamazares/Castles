@@ -3,6 +3,7 @@ import {
   createOnlineAccountRecord,
   normalizeOnlineAccountDisplayName,
   normalizeOnlineAccountDisplayNameKey,
+  normalizeOnlineAccountPassword,
   type OnlineAccount,
 } from "../accounts";
 import {
@@ -16,6 +17,7 @@ import {
 } from "../social";
 import {
   CreateOnlineAccountStoreInput,
+  CreateOnlineAccountPasswordSessionInput,
   DuplicateOnlineAccountDisplayNameError,
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
@@ -25,6 +27,10 @@ import {
   type ResolvedOnlineAccountSession,
 } from "./OnlineAccountStore";
 import { hashOnlineToken, isOnlineTokenCredentialHash } from "./onlineTokenCredentials";
+import {
+  isOnlineAccountPasswordCredentialHash,
+  verifyOnlineAccountPassword,
+} from "./onlinePasswordCredentials";
 
 interface PostgresQueryable {
   query(text: string, values?: unknown[]): Promise<{ rows: any[] }>;
@@ -113,6 +119,9 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     if (!isOnlineTokenCredentialHash(input.tokenHash)) {
       throw new Error("Account session token hash is invalid.");
     }
+    if (!isOnlineAccountPasswordCredentialHash(input.passwordHash)) {
+      throw new Error("Account password hash is invalid.");
+    }
 
     try {
       return await this.withTransaction(async (queryable) => {
@@ -134,16 +143,18 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
               account_id,
               display_name,
               display_name_normalized,
+              password_hash,
               created_at,
               updated_at
             )
-            VALUES ($1, $2, $3, $4, $4)
+            VALUES ($1, $2, $3, $4, $5, $5)
             RETURNING account_id, display_name, created_at, updated_at
           `,
           [
             input.accountId,
             displayName.value,
             displayNameKey,
+            input.passwordHash,
             input.createdAt,
           ]
         );
@@ -177,6 +188,61 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
           throw new DuplicateOnlineAccountSessionCredentialError();
         }
         throw new DuplicateOnlineAccountIdError(input.accountId);
+      }
+      throw error;
+    }
+  }
+
+  async createSessionWithPassword(
+    input: CreateOnlineAccountPasswordSessionInput
+  ): Promise<ResolvedOnlineAccountSession | null> {
+    await this.ensureSchema();
+    const displayName = normalizeOnlineAccountDisplayName(input.displayName);
+    if (!displayName.ok) return null;
+    const password = normalizeOnlineAccountPassword(input.password);
+    if (!password.ok) return null;
+    if (!isOnlineTokenCredentialHash(input.tokenHash)) {
+      throw new Error("Account session token hash is invalid.");
+    }
+
+    try {
+      return await this.withTransaction(async (queryable) => {
+        const accountResult = await queryable.query(
+          `
+            SELECT account_id, display_name, created_at, updated_at, password_hash
+            FROM online_accounts
+            WHERE display_name_normalized = $1
+            LIMIT 1
+          `,
+          [normalizeOnlineAccountDisplayNameKey(displayName.value)]
+        );
+        if (accountResult.rows.length === 0) return null;
+        const row = accountResult.rows[0];
+        const passwordHash = typeof row.password_hash === "string" ? row.password_hash : "";
+        if (!(await verifyOnlineAccountPassword(password.value, passwordHash))) return null;
+
+        await queryable.query(
+          `
+            INSERT INTO online_account_sessions (
+              session_id,
+              account_id,
+              token_hash,
+              created_at,
+              last_used_at
+            )
+            VALUES ($1, $2, $3, $4, $4)
+          `,
+          [input.sessionId, String(row.account_id), input.tokenHash, input.createdAt]
+        );
+        return {
+          account: accountFromRow(row),
+          sessionId: input.sessionId,
+          lastUsedAt: input.createdAt,
+        };
+      });
+    } catch (error) {
+      if (isPostgresUniqueViolation(error)) {
+        throw new DuplicateOnlineAccountSessionCredentialError();
       }
       throw error;
     }
@@ -542,9 +608,14 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         account_id TEXT PRIMARY KEY,
         display_name TEXT NOT NULL,
         display_name_normalized TEXT NOT NULL UNIQUE,
+        password_hash TEXT,
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       )
+    `);
+    await this.queryable.query(`
+      ALTER TABLE online_accounts
+        ADD COLUMN IF NOT EXISTS password_hash TEXT
     `);
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_account_display_names (

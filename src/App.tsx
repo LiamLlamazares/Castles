@@ -85,6 +85,7 @@ import {
   resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   resolveStoredOnlineJoinParams,
+  signInOnlineAccount,
   startQuickMatch,
   unblockOnlineAccount,
   unfollowOnlineAccount,
@@ -133,6 +134,7 @@ type OnlineAccountUiStatus =
   | "signed-out"
   | "checking"
   | "creating"
+  | "signing-in"
   | "signing-out"
   | "signing-out-all"
   | "deleting"
@@ -1119,11 +1121,11 @@ function App() {
     setRecentOnlineGames([]);
   }, []);
 
-  const handleCreateOnlineAccount = useCallback(async (displayName: string) => {
+  const handleCreateOnlineAccount = useCallback(async (displayName: string, password: string) => {
     setOnlineAccountStatus("creating");
     setOnlineAccountError(null);
     try {
-      const created = await createOnlineAccount(displayName);
+      const created = await createOnlineAccount(displayName, password);
       const nextSession = {
         sessionId: created.session.sessionId,
         token: created.session.token,
@@ -1137,6 +1139,28 @@ function App() {
       console.error("Failed to create online account", error);
       setOnlineAccountStatus(onlineAccountSession ? "error" : "signed-out");
       setOnlineAccountError("Could not create that online account name.");
+      throw error;
+    }
+  }, [onlineAccountSession]);
+
+  const handleSignInOnlineAccount = useCallback(async (displayName: string, password: string) => {
+    setOnlineAccountStatus("signing-in");
+    setOnlineAccountError(null);
+    try {
+      const signedIn = await signInOnlineAccount(displayName, password);
+      const nextSession = {
+        sessionId: signedIn.session.sessionId,
+        token: signedIn.session.token,
+        account: signedIn.account,
+      };
+      rememberOnlineAccountSession(nextSession);
+      setOnlineAccountSession(nextSession);
+      setOnlineAccount(signedIn.account);
+      setOnlineAccountStatus("ready");
+    } catch (error) {
+      console.error("Failed to sign in online account", error);
+      setOnlineAccountStatus(onlineAccountSession ? "error" : "signed-out");
+      setOnlineAccountError("Could not sign in with that display name and password.");
       throw error;
     }
   }, [onlineAccountSession]);
@@ -2542,6 +2566,7 @@ function App() {
           accountStatus={onlineAccountStatus}
           accountError={onlineAccountError}
           onCreateAccount={handleCreateOnlineAccount}
+          onSignInAccount={handleSignInOnlineAccount}
           onSignOutAccount={handleSignOutOnlineAccount}
           accountSessionId={onlineAccountSession?.sessionId ?? null}
           loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}

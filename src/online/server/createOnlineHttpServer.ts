@@ -143,6 +143,7 @@ import {
 import {
   normalizeOnlineAccountDisplayName,
   normalizeOnlineAccountDisplayNameKey,
+  normalizeOnlineAccountPassword,
   type OnlineAccount,
 } from "../accounts";
 import {
@@ -156,6 +157,7 @@ import {
   MemoryOnlineAccountStore,
   type OnlineAccountStore,
 } from "./OnlineAccountStore";
+import { hashOnlineAccountPassword } from "./onlinePasswordCredentials";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -1006,6 +1008,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const actionQueues = new Map<string, Promise<void>>();
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
   const accountCreateLimiter = new FixedWindowRateLimiter(10, 60_000);
+  const accountAuthLimiter = new FixedWindowRateLimiter(30, 60_000);
   const accountReadLimiter = new FixedWindowRateLimiter(120, 10_000);
   const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
   const createOpenSeekLimiter = new FixedWindowRateLimiter(20, 60_000);
@@ -2625,6 +2628,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: displayName.error });
       return;
     }
+    const password = normalizeOnlineAccountPassword(req.body?.password);
+    if (!password.ok) {
+      res.status(400).json({ error: password.error });
+      return;
+    }
 
     const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
     const token = defaultAccountSessionTokenFactory();
@@ -2633,6 +2641,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         accountId: defaultAccountIdFactory(),
         sessionId: defaultAccountSessionIdFactory(),
         displayName: displayName.value,
+        passwordHash: await hashOnlineAccountPassword(password.value),
         tokenHash: hashOnlineToken(token),
         createdAt,
       });
@@ -2665,6 +2674,71 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       console.error("Failed to create account", error);
       res.status(503).json({
         error: { code: "persistence_failed", message: "The account could not be created." },
+      });
+    }
+  });
+
+  app.post("/api/online/account/session", async (req, res) => {
+    if (!accountAuthLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
+      });
+      return;
+    }
+
+    const displayName = normalizeOnlineAccountDisplayName(req.body?.displayName);
+    if (!displayName.ok) {
+      res.status(400).json({ error: displayName.error });
+      return;
+    }
+    const password = normalizeOnlineAccountPassword(req.body?.password);
+    if (!password.ok) {
+      res.status(400).json({ error: password.error });
+      return;
+    }
+
+    const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+    const token = defaultAccountSessionTokenFactory();
+    try {
+      const resolved = await accountStore.createSessionWithPassword({
+        sessionId: defaultAccountSessionIdFactory(),
+        displayName: displayName.value,
+        password: password.value,
+        tokenHash: hashOnlineToken(token),
+        createdAt,
+      });
+      if (!resolved) {
+        res.status(401).json({
+          error: {
+            code: "unauthorized",
+            message: "Display name or password is incorrect.",
+          },
+        });
+        log({ event: "online.account.session.create", status: "rejected", reason: "bad_credentials" });
+        return;
+      }
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        account: resolved.account,
+        session: {
+          sessionId: resolved.sessionId,
+          token,
+        },
+      });
+      log({ event: "online.account.session.create", status: "accepted" });
+    } catch (error) {
+      if (error instanceof DuplicateOnlineAccountSessionCredentialError) {
+        res.status(409).json({
+          error: {
+            code: "bad_request",
+            message: "Account credential collision. Try again.",
+          },
+        });
+        return;
+      }
+      console.error("Failed to create account session", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "The account session could not be created." },
       });
     }
   });

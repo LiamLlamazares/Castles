@@ -1085,20 +1085,45 @@ async function postOnlineAccountChallengeAction(
 
 export async function createOnlineAccount(
   displayName: string,
+  password: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<OnlineAccountCreateResponse> {
   const response = await fetchImpl("/api/online/accounts", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({ displayName, password }),
   });
 
   if (!response.ok) {
     throw new Error(`Could not create online account (${response.status})`);
   }
 
-  const body = await response.json();
-  const account = validateOnlineAccountResponse(body, "Online account creation");
+  return validateOnlineAccountSessionResponse(await response.json(), "Online account creation");
+}
+
+export async function signInOnlineAccount(
+  displayName: string,
+  password: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountCreateResponse> {
+  const response = await fetchImpl("/api/online/account/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ displayName, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not sign in online account (${response.status})`);
+  }
+
+  return validateOnlineAccountSessionResponse(await response.json(), "Online account sign-in");
+}
+
+function validateOnlineAccountSessionResponse(
+  body: unknown,
+  label: string
+): OnlineAccountCreateResponse {
+  const account = validateOnlineAccountResponse(body, label);
   const session = (body as { session?: unknown }).session;
   if (
     !session ||
@@ -1107,7 +1132,7 @@ export async function createOnlineAccount(
     typeof (session as { sessionId?: unknown }).sessionId !== "string" ||
     typeof (session as { token?: unknown }).token !== "string"
   ) {
-    throw new Error("Online account creation response was malformed: session is invalid.");
+    throw new Error(`${label} response was malformed: session is invalid.`);
   }
 
   return {

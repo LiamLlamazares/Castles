@@ -5,6 +5,10 @@ import {
   DuplicateOnlineAccountSessionCredentialError,
 } from "../OnlineAccountStore";
 import { hashOnlineToken } from "../onlineTokenCredentials";
+import { hashOnlineAccountPassword } from "../onlinePasswordCredentials";
+
+const TEST_PASSWORD_HASH =
+  "scrypt:v1:16384:8:1:AAAAAAAAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 class FakeAccountQueryable {
   readonly accounts = new Map<string, any>();
@@ -72,6 +76,7 @@ class FakeAccountQueryable {
     if (
       normalizedText === "SELECT 1" ||
       normalizedText.startsWith("CREATE TABLE") ||
+      normalizedText.startsWith("ALTER TABLE") ||
       normalizedText.startsWith("CREATE INDEX") ||
       normalizedText.startsWith("CREATE UNIQUE INDEX") ||
       normalizedText.startsWith("DO $$")
@@ -105,7 +110,7 @@ class FakeAccountQueryable {
     }
 
     if (normalizedText.startsWith("INSERT INTO online_accounts")) {
-      const [accountId, displayName, displayNameNormalized, createdAt] = values as string[];
+      const [accountId, displayName, displayNameNormalized, passwordHash, createdAt] = values as string[];
       if (this.accounts.has(accountId) || this.accountsByDisplayName.has(displayNameNormalized)) {
         const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
         error.code = "23505";
@@ -118,6 +123,7 @@ class FakeAccountQueryable {
         account_id: accountId,
         display_name: displayName,
         display_name_normalized: displayNameNormalized,
+        password_hash: passwordHash,
         created_at: createdAt,
         updated_at: createdAt,
       };
@@ -202,6 +208,13 @@ class FakeAccountQueryable {
           last_used_at: session.last_used_at,
         }));
       return { rows };
+    }
+
+    if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at, password_hash FROM online_accounts WHERE display_name_normalized")) {
+      const [displayNameNormalized] = values as string[];
+      const accountId = this.accountsByDisplayName.get(displayNameNormalized);
+      const account = accountId ? this.accounts.get(accountId) : undefined;
+      return { rows: account ? [account] : [] };
     }
 
     if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE display_name_normalized")) {
@@ -369,6 +382,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_liam",
       sessionId: "account_session_liam",
       displayName: "  Liam   Castles ",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken(token),
       createdAt: "2026-06-03T12:00:00.000Z",
     });
@@ -395,6 +409,52 @@ describe("PostgresOnlineAccountStore", () => {
     expect(await store.resolveSessionToken("wrong-token", "2026-06-03T12:06:00.000Z")).toBeNull();
   });
 
+  it("creates new sessions after verifying account passwords", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      passwordHash: await hashOnlineAccountPassword("correct-horse-battery-staple"),
+      tokenHash: hashOnlineToken("first-device-token"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    await expect(
+      store.createSessionWithPassword({
+        sessionId: "account_session_wrong",
+        displayName: "liam",
+        password: "wrong-password",
+        tokenHash: hashOnlineToken("wrong-device-token"),
+        createdAt: "2026-06-03T12:05:00.000Z",
+      })
+    ).resolves.toBeNull();
+
+    const signedIn = await store.createSessionWithPassword({
+      sessionId: "account_session_second",
+      displayName: "liam",
+      password: "correct-horse-battery-staple",
+      tokenHash: hashOnlineToken("second-device-token"),
+      createdAt: "2026-06-03T12:06:00.000Z",
+    });
+
+    expect(signedIn).toMatchObject({
+      sessionId: "account_session_second",
+      account: {
+        accountId: "account_liam",
+        displayName: "Liam",
+      },
+    });
+    await expect(store.resolveSessionToken("first-device-token", "2026-06-03T12:07:00.000Z")).resolves.toMatchObject({
+      sessionId: "account_session_liam",
+    });
+    await expect(store.resolveSessionToken("second-device-token", "2026-06-03T12:08:00.000Z")).resolves.toMatchObject({
+      sessionId: "account_session_second",
+    });
+  });
+
   it("revokes account sessions without deleting the account", async () => {
     const queryable = new FakeAccountQueryable();
     const store = createStore(queryable);
@@ -404,6 +464,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_liam",
       sessionId: "account_session_liam",
       displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken(token),
       createdAt: "2026-06-03T12:00:00.000Z",
     });
@@ -425,6 +486,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_liam",
       sessionId: "account_session_one",
       displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken("token-one"),
       createdAt: "2026-06-03T12:00:00.000Z",
     });
@@ -473,6 +535,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_liam",
       sessionId: "account_session_one",
       displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken("token-one"),
       createdAt: "2026-06-03T12:00:00.000Z",
     });
@@ -496,6 +559,7 @@ describe("PostgresOnlineAccountStore", () => {
         accountId: "account_liam_new",
         sessionId: "account_session_new",
         displayName: "liam",
+        passwordHash: TEST_PASSWORD_HASH,
         tokenHash: hashOnlineToken("token-new"),
         createdAt: "2026-06-03T12:11:00.000Z",
       })
@@ -510,6 +574,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_one",
       sessionId: "account_session_one",
       displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken("token-one"),
       createdAt: "2026-06-03T12:00:00.000Z",
     });
@@ -519,6 +584,7 @@ describe("PostgresOnlineAccountStore", () => {
         accountId: "account_two",
         sessionId: "account_session_two",
         displayName: "liam",
+        passwordHash: TEST_PASSWORD_HASH,
         tokenHash: hashOnlineToken("token-two"),
         createdAt: "2026-06-03T12:01:00.000Z",
       })
@@ -534,6 +600,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_one",
       sessionId: "account_session_one",
       displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash,
       createdAt: "2026-06-03T12:00:00.000Z",
     });
@@ -543,6 +610,7 @@ describe("PostgresOnlineAccountStore", () => {
         accountId: "account_two",
         sessionId: "account_session_two",
         displayName: "Samir",
+        passwordHash: TEST_PASSWORD_HASH,
         tokenHash,
         createdAt: "2026-06-03T12:01:00.000Z",
       })
@@ -553,6 +621,7 @@ describe("PostgresOnlineAccountStore", () => {
         accountId: "account_three",
         sessionId: "account_session_three",
         displayName: "Samir",
+        passwordHash: TEST_PASSWORD_HASH,
         tokenHash: hashOnlineToken("fresh-token"),
         createdAt: "2026-06-03T12:02:00.000Z",
       })
@@ -572,6 +641,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_liam",
       sessionId: "account_session_liam",
       displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken("token-liam"),
       createdAt: "2026-06-03T12:00:00.000Z",
     });
@@ -579,6 +649,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_samir",
       sessionId: "account_session_samir",
       displayName: "Samir",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken("token-samir"),
       createdAt: "2026-06-03T12:01:00.000Z",
     });
@@ -586,6 +657,7 @@ describe("PostgresOnlineAccountStore", () => {
       accountId: "account_dani",
       sessionId: "account_session_dani",
       displayName: "Dani",
+      passwordHash: TEST_PASSWORD_HASH,
       tokenHash: hashOnlineToken("token-dani"),
       createdAt: "2026-06-03T12:02:00.000Z",
     });

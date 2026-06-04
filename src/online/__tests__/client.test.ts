@@ -57,6 +57,7 @@ import {
   resolveStoredOnlineJoinParams,
   shouldApplyOnlineSnapshot,
   shouldApplyOnlineSnapshotVersion,
+  signInOnlineAccount,
   startQuickMatch,
   updateOnlineGameVisibility,
   forgetOnlineChallengeParams,
@@ -733,7 +734,7 @@ describe("online client helpers", () => {
         }),
       });
 
-    await expect(createOnlineAccount("Liam", fetchImpl as any)).resolves.toMatchObject({
+    await expect(createOnlineAccount("Liam", "account-password", fetchImpl as any)).resolves.toMatchObject({
       account,
       session: { token: "account-token" },
     });
@@ -784,6 +785,7 @@ describe("online client helpers", () => {
       expect.objectContaining({
         method: "POST",
         headers: { "content-type": "application/json" },
+        body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
       })
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/account/me", {
@@ -808,6 +810,45 @@ describe("online client helpers", () => {
       6,
       "/api/online/account/session",
       { method: "DELETE", headers: { authorization: "Bearer account-token" } }
+    );
+  });
+
+  it("signs in online accounts with a display name and password", async () => {
+    const account = {
+      schemaVersion: 1,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        account,
+        session: {
+          sessionId: "account_session_second_device",
+          token: "second-device-token",
+        },
+      }),
+    });
+
+    await expect(signInOnlineAccount("Liam", "account-password", fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      account,
+      session: {
+        sessionId: "account_session_second_device",
+        token: "second-device-token",
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/online/account/session",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ displayName: "Liam", password: "account-password" }),
+      })
     );
   });
 

@@ -339,13 +339,43 @@ describe("OnlineGameBrowser", () => {
     );
 
     await screen.findByText("No lobby listings yet.");
-    fireEvent.change(screen.getByRole("textbox", { name: "Display name" }), {
+    fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Liam" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "account-password" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
 
-    await waitFor(() => expect(onCreateAccount).toHaveBeenCalledWith("Liam"));
+    await waitFor(() => expect(onCreateAccount).toHaveBeenCalledWith("Liam", "account-password"));
     expect(await screen.findByText("Online account created.")).toBeInTheDocument();
+  });
+
+  it("signs into an online account from the Online page account panel", async () => {
+    const onSignInAccount = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onSignInAccount={onSignInAccount}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Liam" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "account-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+
+    await waitFor(() => expect(onSignInAccount).toHaveBeenCalledWith("Liam", "account-password"));
+    expect(await screen.findByText("Signed in.")).toBeInTheDocument();
   });
 
   it("shows account session status and signs out everywhere", async () => {

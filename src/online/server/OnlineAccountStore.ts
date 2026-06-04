@@ -2,6 +2,7 @@ import {
   createOnlineAccountRecord,
   normalizeOnlineAccountDisplayName,
   normalizeOnlineAccountDisplayNameKey,
+  normalizeOnlineAccountPassword,
   type OnlineAccount,
 } from "../accounts";
 import {
@@ -13,11 +14,24 @@ import {
   type OnlineAccountSocialActionResult,
 } from "../social";
 import { hashOnlineToken, isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
+import {
+  isOnlineAccountPasswordCredentialHash,
+  verifyOnlineAccountPassword,
+} from "./onlinePasswordCredentials";
 
 export interface CreateOnlineAccountStoreInput {
   accountId: string;
   sessionId: string;
   displayName: string;
+  passwordHash: string;
+  tokenHash: string;
+  createdAt: string;
+}
+
+export interface CreateOnlineAccountPasswordSessionInput {
+  sessionId: string;
+  displayName: string;
+  password: string;
   tokenHash: string;
   createdAt: string;
 }
@@ -45,6 +59,7 @@ export type OnlineAccountChallengeTargetResult =
 
 export interface OnlineAccountStore {
   createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession>;
+  createSessionWithPassword(input: CreateOnlineAccountPasswordSessionInput): Promise<ResolvedOnlineAccountSession | null>;
   resolveSessionToken(token: string, usedAt: string): Promise<ResolvedOnlineAccountSession | null>;
   revokeSessionToken(token: string): Promise<boolean>;
   listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
@@ -92,6 +107,7 @@ interface MemorySessionRecord {
 export class MemoryOnlineAccountStore implements OnlineAccountStore {
   private readonly accounts = new Map<string, OnlineAccount>();
   private readonly displayNameKeys = new Map<string, string>();
+  private readonly passwordHashesByAccountId = new Map<string, string>();
   private readonly sessionsById = new Map<string, MemorySessionRecord>();
   private readonly sessionsByTokenHash = new Map<string, MemorySessionRecord>();
   private readonly following = new Map<string, Set<string>>();
@@ -105,6 +121,9 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     }
     if (!isOnlineTokenCredentialHash(input.tokenHash)) {
       throw new Error("Account session token hash is invalid.");
+    }
+    if (!isOnlineAccountPasswordCredentialHash(input.passwordHash)) {
+      throw new Error("Account password hash is invalid.");
     }
     if (this.accounts.has(input.accountId)) {
       throw new DuplicateOnlineAccountIdError(input.accountId);
@@ -131,9 +150,46 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     };
     this.accounts.set(account.accountId, account);
     this.displayNameKeys.set(displayNameKey, account.accountId);
+    this.passwordHashesByAccountId.set(account.accountId, input.passwordHash);
     this.sessionsById.set(input.sessionId, session);
     this.sessionsByTokenHash.set(input.tokenHash, session);
 
+    return {
+      account,
+      sessionId: input.sessionId,
+      lastUsedAt: input.createdAt,
+    };
+  }
+
+  async createSessionWithPassword(
+    input: CreateOnlineAccountPasswordSessionInput
+  ): Promise<ResolvedOnlineAccountSession | null> {
+    const displayName = normalizeOnlineAccountDisplayName(input.displayName);
+    if (!displayName.ok) return null;
+    const password = normalizeOnlineAccountPassword(input.password);
+    if (!password.ok) return null;
+    if (!isOnlineTokenCredentialHash(input.tokenHash)) {
+      throw new Error("Account session token hash is invalid.");
+    }
+    const accountId = this.displayNameKeys.get(normalizeOnlineAccountDisplayNameKey(displayName.value));
+    if (!accountId) return null;
+    const account = this.accounts.get(accountId);
+    const passwordHash = this.passwordHashesByAccountId.get(accountId);
+    if (!account || !passwordHash) return null;
+    if (!(await verifyOnlineAccountPassword(password.value, passwordHash))) return null;
+    if (this.sessionsById.has(input.sessionId) || this.sessionsByTokenHash.has(input.tokenHash)) {
+      throw new DuplicateOnlineAccountSessionCredentialError();
+    }
+
+    const session: MemorySessionRecord = {
+      sessionId: input.sessionId,
+      accountId,
+      tokenHash: input.tokenHash,
+      createdAt: input.createdAt,
+      lastUsedAt: input.createdAt,
+    };
+    this.sessionsById.set(input.sessionId, session);
+    this.sessionsByTokenHash.set(input.tokenHash, session);
     return {
       account,
       sessionId: input.sessionId,
@@ -197,6 +253,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     if (!account) return false;
     this.accounts.delete(accountId);
     await this.revokeSessionsForAccount(accountId);
+    this.passwordHashesByAccountId.delete(accountId);
     this.privacySettings.delete(accountId);
     this.following.delete(accountId);
     this.blocks.delete(accountId);
