@@ -1458,6 +1458,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     () => followingProfiles.filter(isProfileOnline),
     [followingProfiles]
   );
+  const onlineNowRailProfiles = React.useMemo(
+    () => onlineFollowingProfiles.slice(0, 6),
+    [onlineFollowingProfiles]
+  );
   const visibleFollowingProfiles = followingPresenceFilter === "online" ? onlineFollowingProfiles : followingProfiles;
   const friendFilterActive = canUseAccountSocial && friendFilter === "followed";
   const friendFilterUnavailable = friendFilterActive && followingStatus !== "ready";
@@ -2306,6 +2310,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, onChallengeAccount]);
 
+  const selectSocialProfile = React.useCallback((profile: OnlineAccountPublicProfile, message = `Selected ${profile.displayName}.`) => {
+    setSocialLookupName(profile.displayName);
+    setSocialProfile(profile);
+    setSocialLookupStatus("ready");
+    setSocialMessage(message);
+    window.setTimeout(() => socialProfileCardRef.current?.focus(), 0);
+  }, []);
+
   const handleFollowPolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!onUpdateAccountPrivacy) return;
@@ -2740,6 +2752,78 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             {socialMessage}
           </p>
 
+          {followingStatus === "ready" && onlineNowRailProfiles.length > 0 && (
+            <section className="online-browser-online-now" aria-label="Online followed players now">
+              <div className="online-browser-online-now-heading">
+                <div className="online-browser-following-list-title">
+                  <strong>Online now</strong>
+                  <span>{formatCount(onlineFollowingProfiles.length, "player")}</span>
+                </div>
+                {onlineFollowingProfiles.length > onlineNowRailProfiles.length && (
+                  <span className="online-browser-online-now-overflow">
+                    +{onlineFollowingProfiles.length - onlineNowRailProfiles.length} more online
+                  </span>
+                )}
+              </div>
+              <div className="online-browser-online-now-rows">
+                {onlineNowRailProfiles.map((profile) => {
+                  const profileKey = normalizeDisplayNameKey(profile.displayName);
+                  const liveGame = liveGameByFollowedDisplayName.get(profileKey);
+                  const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+                  const canInteractWithProfile = !profile.relationship.blocked && !profile.relationship.self;
+                  const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
+                  const liveGameBlack = liveGame ? participantName(liveGame.participants, "b") : "";
+                  return (
+                    <article key={profile.displayName} className="online-browser-online-now-card">
+                      <div className="online-browser-online-now-main">
+                        <strong>{profile.displayName}</strong>
+                        <div className="online-browser-social-badges">
+                          <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
+                          {liveGame && <span>Playing now</span>}
+                          {pendingChallenge && (
+                            <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="online-browser-online-now-actions">
+                        {liveGame && canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button primary"
+                            onClick={() => onSpectate(liveGame.gameId)}
+                            aria-label={`Watch ${profile.displayName}'s live game from online now ${liveGameWhite} vs ${liveGameBlack}, ${liveGame.gameId}`}
+                          >
+                            Watch
+                          </button>
+                        )}
+                        {!pendingChallenge && onChallengeAccount && canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button neutral"
+                            onClick={() => void runSocialChallengeAction(profile.displayName)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Challenge ${profile.displayName} from online now`}
+                          >
+                            Challenge
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="online-browser-button subtle"
+                          onClick={() => selectSocialProfile(profile, `Selected ${profile.displayName} from online now.`)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Select ${profile.displayName} from online now`}
+                        >
+                          Select
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {canUseAccountChallenges && (
             <section className="online-browser-following-list online-browser-account-challenges" aria-label="Account challenges">
               <div className="online-browser-following-list-heading">
@@ -3072,13 +3156,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         <button
                           type="button"
                           className="online-browser-button subtle"
-                          onClick={() => {
-                            setSocialLookupName(profile.displayName);
-                            setSocialProfile(profile);
-                            setSocialLookupStatus("ready");
-                            setSocialMessage(`Selected ${profile.displayName}.`);
-                            window.setTimeout(() => socialProfileCardRef.current?.focus(), 0);
-                          }}
+                          onClick={() => selectSocialProfile(profile)}
                           disabled={socialAction !== undefined}
                           aria-label={`Select ${profile.displayName}`}
                         >

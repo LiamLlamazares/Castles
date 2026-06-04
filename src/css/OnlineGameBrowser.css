@@ -212,6 +212,59 @@
   padding: 12px;
 }
 
+.online-browser-online-now {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(116, 199, 151, 0.26);
+  border-radius: 6px;
+  background: rgba(23, 44, 34, 0.22);
+}
+
+.online-browser-online-now-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.online-browser-online-now-overflow {
+  color: #c7dfd7;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.online-browser-online-now-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.online-browser-online-now-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.online-browser-online-now-main {
+  min-width: 0;
+}
+
+.online-browser-online-now-card strong {
+  display: block;
+  color: #f7f1d6;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-online-now-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .online-browser-profile-card,
 .online-browser-following-row {
   display: grid;
@@ -1039,6 +1092,11 @@
     flex-wrap: wrap;
   }
 
+  .online-browser-online-now-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   .online-browser-following-filter {
     width: 100%;
   }
@@ -1137,6 +1195,7 @@
   .online-browser-quick-match-actions,
   .online-browser-section-actions,
   .online-browser-social-actions,
+  .online-browser-online-now-actions,
   .online-game-actions {
     display: grid;
     grid-template-columns: 1fr;

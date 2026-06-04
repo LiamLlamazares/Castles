@@ -631,6 +631,64 @@ describe("OnlineGameBrowser", () => {
     expect(onSpectate).toHaveBeenCalledWith("game_friend_live");
   });
 
+  it("shows an online-now rail for followed players with quick actions", async () => {
+    const onSpectate = vi.fn();
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+    const followedLiveGame = summary({
+      gameId: "game_friend_rail_live",
+      participants: [
+        registeredParticipant("w", "Ben"),
+        registeredParticipant("b", "Samir"),
+      ],
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([followedLiveGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={onSpectate}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Zed", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Mira", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Omar", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Ada", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Ben", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Yara", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Samir", { following: true, followedBy: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Kai", { following: true }, { visibility: "visible", status: "away" }),
+        ])}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const onlineNow = await within(people).findByRole("region", { name: "Online followed players now" });
+    expect(onlineNow).toHaveTextContent("Online now");
+    expect(onlineNow).toHaveTextContent("7 players");
+    expect(onlineNow).toHaveTextContent("+1 more online");
+    expect(within(onlineNow).queryByText("Kai")).not.toBeInTheDocument();
+    expect(within(onlineNow).queryByText("Zed")).not.toBeInTheDocument();
+
+    const samirCard = within(onlineNow).getByText("Samir").closest("article");
+    expect(samirCard).not.toBeNull();
+    expect(samirCard as HTMLElement).toHaveTextContent("Playing now");
+    fireEvent.click(within(samirCard as HTMLElement).getByRole("button", {
+      name: "Watch Samir's live game from online now Ben vs Samir, game_friend_rail_live",
+    }));
+    expect(onSpectate).toHaveBeenCalledWith("game_friend_rail_live");
+
+    fireEvent.click(within(samirCard as HTMLElement).getByRole("button", { name: "Challenge Samir from online now" }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+
+    fireEvent.click(within(samirCard as HTMLElement).getByRole("button", { name: "Select Samir from online now" }));
+    expect(await within(people).findByRole("article", { name: "Profile Samir" })).toHaveTextContent("Mutual friend");
+    expect(await within(people).findByText("Selected Samir from online now.")).toBeInTheDocument();
+  });
+
   it("labels mutual friends and accounts that follow the signed-in player", async () => {
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
