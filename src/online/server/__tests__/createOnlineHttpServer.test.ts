@@ -706,7 +706,7 @@ describe("createOnlineHttpServer", () => {
         schemaVersion: 1,
         displayName: "Samir",
         presence: { visibility: "hidden", status: null },
-        relationship: { self: false, following: false, blocked: false },
+        relationship: { self: false, following: false, followedBy: false, blocked: false },
       },
     });
     expect(JSON.stringify(profile)).not.toContain(samir.account.accountId);
@@ -714,13 +714,13 @@ describe("createOnlineHttpServer", () => {
     expect(followResponse.status).toBe(200);
     expect(followed.profile).toMatchObject({
       displayName: "Samir",
-      relationship: { self: false, following: true, blocked: false },
+      relationship: { self: false, following: true, followedBy: false, blocked: false },
     });
     expect(repeatFollowResponse.status).toBe(200);
     expect(unfollowResponse.status).toBe(200);
     expect(unfollowed.profile).toMatchObject({
       displayName: "Samir",
-      relationship: { self: false, following: false, blocked: false },
+      relationship: { self: false, following: false, followedBy: false, blocked: false },
     });
     expect(repeatUnfollowResponse.status).toBe(200);
     expect(refollowResponse.status).toBe(200);
@@ -728,7 +728,7 @@ describe("createOnlineHttpServer", () => {
     expect(following.following).toEqual([
       expect.objectContaining({
         displayName: "Samir",
-        relationship: { self: false, following: true, blocked: false },
+        relationship: { self: false, following: true, followedBy: false, blocked: false },
       }),
     ]);
     expect(JSON.stringify(following)).not.toContain(samir.account.accountId);
@@ -752,7 +752,7 @@ describe("createOnlineHttpServer", () => {
     expect(repeatFollowAfterPrivacyResponse.status).toBe(200);
     expect(repeatFollowAfterPrivacy.profile).toMatchObject({
       displayName: "Samir",
-      relationship: { self: false, following: true, blocked: false },
+      relationship: { self: false, following: true, followedBy: false, blocked: false },
     });
     expect(refusedFollowResponse.status).toBe(409);
     expect(refusedFollow.error).toMatchObject({ code: "not_allowed" });
@@ -760,7 +760,7 @@ describe("createOnlineHttpServer", () => {
     expect(blockResponse.status).toBe(200);
     expect(blocked.profile).toMatchObject({
       displayName: "Liam",
-      relationship: { self: false, following: false, blocked: true },
+      relationship: { self: false, following: false, followedBy: false, blocked: true },
     });
     expect(repeatBlockResponse.status).toBe(200);
     expect(hiddenProfileResponse.status).toBe(404);
@@ -773,11 +773,53 @@ describe("createOnlineHttpServer", () => {
     expect(liamUnblockResponse.status).toBe(200);
     expect(unblocked.profile).toMatchObject({
       displayName: "Samir",
-      relationship: { self: false, following: false, blocked: false },
+      relationship: { self: false, following: false, followedBy: false, blocked: false },
     });
     expect(repeatUnblockResponse.status).toBe(200);
     expect(JSON.stringify(logs)).not.toContain(liam.session.token);
     expect(JSON.stringify(logs)).not.toContain(samir.session.token);
+  });
+
+  it("reports when followed accounts follow the viewer back", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const profileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`, {
+      headers: bearer(liam.session.token),
+    });
+    const profile = await profileResponse.json();
+    const followingResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows`, {
+      headers: bearer(liam.session.token),
+    });
+    const following = await followingResponse.json();
+
+    expect(profileResponse.status).toBe(200);
+    expect(profile.profile).toMatchObject({
+      displayName: "Samir",
+      relationship: { self: false, following: true, followedBy: true, blocked: false },
+    });
+    expect(followingResponse.status).toBe(200);
+    expect(following.following).toEqual([
+      expect.objectContaining({
+        displayName: "Samir",
+        relationship: { self: false, following: true, followedBy: true, blocked: false },
+      }),
+    ]);
   });
 
   it("rejects social routes with invalid account bearers before accepting social input", async () => {

@@ -34,6 +34,7 @@ export interface OnlineAccountPublicProfile {
   relationship: {
     self: boolean;
     following: boolean;
+    followedBy: boolean;
     blocked: boolean;
   };
 }

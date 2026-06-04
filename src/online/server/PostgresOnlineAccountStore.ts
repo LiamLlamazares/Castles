@@ -715,6 +715,8 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       relationship: {
         self: viewerAccountId === target.accountId,
         following: await this.hasFollow(viewerAccountId, target.accountId, queryable),
+        followedBy:
+          viewerAccountId !== target.accountId && await this.hasFollow(target.accountId, viewerAccountId, queryable),
         blocked: await this.hasBlock(viewerAccountId, target.accountId, queryable),
       },
     };

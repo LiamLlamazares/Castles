@@ -175,7 +175,7 @@ function accountFixture(displayName = "Liam") {
 
 function publicProfile(
   displayName: string,
-  relationship: { self?: boolean; following?: boolean; blocked?: boolean } = {},
+  relationship: { self?: boolean; following?: boolean; followedBy?: boolean; blocked?: boolean } = {},
   presence: { visibility?: "visible" | "hidden"; status?: "online" | "recent" | "away" | "offline" | null } = {}
 ) {
   return {
@@ -188,6 +188,7 @@ function publicProfile(
     relationship: {
       self: relationship.self ?? false,
       following: relationship.following ?? false,
+      followedBy: relationship.followedBy ?? false,
       blocked: relationship.blocked ?? false,
     },
   };
@@ -628,6 +629,49 @@ describe("OnlineGameBrowser", () => {
       name: "Watch Samir's live game Ben vs Samir, game_friend_live",
     }));
     expect(onSpectate).toHaveBeenCalledWith("game_friend_live");
+  });
+
+  it("labels mutual friends and accounts that follow the signed-in player", async () => {
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Mira", { followedBy: true }, { visibility: "visible", status: "recent" }),
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Ada", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Samir", { following: true, followedBy: true }, { visibility: "visible", status: "online" }),
+        ])}
+        loadAccountProfile={loadAccountProfile}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    const samirRow = (await within(following).findByText("Samir")).closest("article");
+    const adaRow = within(following).getByText("Ada").closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(adaRow).not.toBeNull();
+    expect(samirRow as HTMLElement).toHaveTextContent("Mutual friend");
+    expect(adaRow as HTMLElement).toHaveTextContent("Following");
+    expect(adaRow as HTMLElement).not.toHaveTextContent("Mutual friend");
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Mira" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    const profileCard = await within(people).findByRole("article", { name: "Profile Mira" });
+    expect(profileCard).toHaveTextContent("Follows you");
+    expect(profileCard).not.toHaveTextContent("Not followed");
   });
 
   it("surfaces incoming account challenge actions in followed-player rows", async () => {

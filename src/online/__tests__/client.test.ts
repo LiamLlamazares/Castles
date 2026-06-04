@@ -939,13 +939,17 @@ describe("online client helpers", () => {
     };
     const followedProfile = {
       ...profile,
-      relationship: { self: false, following: true, blocked: false },
+      relationship: { self: false, following: true, followedBy: true, blocked: false },
+    };
+    const normalizedProfile = {
+      ...profile,
+      relationship: { self: false, following: false, followedBy: false, blocked: false },
     };
     const blockedProfile = {
       schemaVersion: 1,
       displayName: "Liam",
       presence: { visibility: "hidden", status: null },
-      relationship: { self: false, following: false, blocked: true },
+      relationship: { self: false, following: false, followedBy: false, blocked: true },
     };
     const privacy = {
       schemaVersion: 1,
@@ -996,7 +1000,7 @@ describe("online client helpers", () => {
 
     await expect(fetchOnlineAccountProfile({ token: "account-token" }, "Samir", fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
-      profile,
+      profile: normalizedProfile,
     });
     await expect(followOnlineAccount({ token: "account-token" }, "Samir", fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -1004,7 +1008,7 @@ describe("online client helpers", () => {
     });
     await expect(unfollowOnlineAccount({ token: "account-token" }, "Samir", fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
-      profile,
+      profile: normalizedProfile,
     });
     await expect(fetchOnlineAccountFollowing({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -1016,7 +1020,7 @@ describe("online client helpers", () => {
     });
     await expect(unblockOnlineAccount({ token: "account-token" }, "Liam", fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
-      profile: { ...blockedProfile, relationship: { self: false, following: false, blocked: false } },
+      profile: { ...blockedProfile, relationship: { self: false, following: false, followedBy: false, blocked: false } },
     });
     await expect(fetchOnlineAccountPrivacy({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,

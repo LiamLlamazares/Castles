@@ -359,6 +359,16 @@ function formatPresenceLabel(profile: OnlineAccountPublicProfile): string {
   }
 }
 
+function formatRelationshipLabel(profile: OnlineAccountPublicProfile): string {
+  const relationship = profile.relationship;
+  if (relationship.self) return "Self";
+  if (relationship.blocked) return "Blocked";
+  if (relationship.following && relationship.followedBy) return "Mutual friend";
+  if (relationship.following) return "Following";
+  if (relationship.followedBy) return "Follows you";
+  return "Not followed";
+}
+
 function presenceBadgeClassName(profile: OnlineAccountPublicProfile): string {
   if (profile.presence.visibility === "hidden") return "presence-hidden";
   if (profile.presence.status === "online") return "presence-online";
@@ -2769,12 +2779,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 <strong>{socialProfile.displayName}</strong>
                 <div className="online-browser-social-badges">
                   <span className={presenceBadgeClassName(socialProfile)}>{formatPresenceLabel(socialProfile)}</span>
-                  {socialProfile.relationship.self && <span>Self</span>}
-                  {socialProfile.relationship.following && <span>Following</span>}
-                  {socialProfile.relationship.blocked && <span>Blocked</span>}
-                  {!socialProfile.relationship.self &&
-                    !socialProfile.relationship.following &&
-                    !socialProfile.relationship.blocked && <span>Not followed</span>}
+                  <span>{formatRelationshipLabel(socialProfile)}</span>
                 </div>
               </div>
               {!socialProfile.relationship.self && (
@@ -2883,7 +2888,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           {pendingChallenge && (
                             <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
                           )}
-                          <span>{profile.relationship.following ? "Following" : "Not followed"}</span>
+                          <span>{formatRelationshipLabel(profile)}</span>
                         </div>
                       </div>
                       <div className="online-browser-social-actions">

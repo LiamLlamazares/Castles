@@ -359,6 +359,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       relationship: {
         self: target.accountId === viewerAccountId,
         following: this.hasFollow(viewerAccountId, target.accountId),
+        followedBy: target.accountId !== viewerAccountId && this.hasFollow(target.accountId, viewerAccountId),
         blocked: this.hasBlock(viewerAccountId, target.accountId),
       },
     };

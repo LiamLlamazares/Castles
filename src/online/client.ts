@@ -746,7 +746,7 @@ function validateOnlineAccountPublicProfile(
     throw new Error(`${label} was malformed: relationship is invalid.`);
   }
   const relationshipRecord = relationship as Record<string, unknown>;
-  const allowedRelationshipKeys = new Set(["self", "following", "blocked"]);
+  const allowedRelationshipKeys = new Set(["self", "following", "followedBy", "blocked"]);
   for (const key of Object.keys(relationshipRecord)) {
     if (!allowedRelationshipKeys.has(key)) {
       throw new Error(`${label} was malformed: relationship contains unsupported data.`);
@@ -755,7 +755,8 @@ function validateOnlineAccountPublicProfile(
   if (
     typeof relationshipRecord.self !== "boolean" ||
     typeof relationshipRecord.following !== "boolean" ||
-    typeof relationshipRecord.blocked !== "boolean"
+    typeof relationshipRecord.blocked !== "boolean" ||
+    (relationshipRecord.followedBy !== undefined && typeof relationshipRecord.followedBy !== "boolean")
   ) {
     throw new Error(`${label} was malformed: relationship is invalid.`);
   }
@@ -769,6 +770,7 @@ function validateOnlineAccountPublicProfile(
     relationship: {
       self: relationshipRecord.self,
       following: relationshipRecord.following,
+      followedBy: relationshipRecord.followedBy === true,
       blocked: relationshipRecord.blocked,
     },
   };

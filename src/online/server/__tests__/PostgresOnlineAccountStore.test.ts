@@ -606,7 +606,7 @@ describe("PostgresOnlineAccountStore", () => {
       profile: {
         displayName: "Samir",
         presence: { visibility: "hidden", status: null },
-        relationship: { self: false, following: true, blocked: false },
+        relationship: { self: false, following: true, followedBy: false, blocked: false },
       },
     });
     expect(JSON.stringify(follow)).not.toContain("account_samir");
@@ -626,7 +626,7 @@ describe("PostgresOnlineAccountStore", () => {
       expect.objectContaining({
         displayName: "Samir",
         presence: { visibility: "visible", status: "online" },
-        relationship: { self: false, following: true, blocked: false },
+        relationship: { self: false, following: true, followedBy: true, blocked: false },
       }),
     ]);
 
@@ -648,7 +648,7 @@ describe("PostgresOnlineAccountStore", () => {
       status: "ok",
       profile: {
         displayName: "Samir",
-        relationship: { self: false, following: true, blocked: false },
+        relationship: { self: false, following: true, followedBy: true, blocked: false },
       },
     });
     await expect(
@@ -661,7 +661,7 @@ describe("PostgresOnlineAccountStore", () => {
       status: "ok",
       profile: {
         displayName: "Liam",
-        relationship: { self: false, following: false, blocked: true },
+        relationship: { self: false, following: false, followedBy: false, blocked: true },
       },
     });
     await expect(store.getProfileForDisplayName("account_liam", "Samir")).resolves.toBeNull();
@@ -689,12 +689,12 @@ describe("PostgresOnlineAccountStore", () => {
       status: "ok",
       profile: {
         displayName: "Samir",
-        relationship: { self: false, following: false, blocked: false },
+        relationship: { self: false, following: false, followedBy: false, blocked: false },
       },
     });
     await expect(store.getProfileForDisplayName("account_liam", "Samir")).resolves.toMatchObject({
       displayName: "Samir",
-      relationship: { self: false, following: false, blocked: false },
+      relationship: { self: false, following: false, followedBy: false, blocked: false },
     });
     expect(queryable.advisoryLocks).toContain("account_liam|account_samir");
   });
