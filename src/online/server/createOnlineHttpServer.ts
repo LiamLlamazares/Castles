@@ -846,9 +846,11 @@ function normalizeDirectGameCreatorSeat(value: unknown): "w" | "b" | null {
 }
 
 function normalizeOnlineSetupForCreation(setup: OnlineGameSetupDTO): OnlineGameSetupDTO {
-  return setup.timeControl
-    ? setup
-    : { ...setup, timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL } };
+  return {
+    ...setup,
+    timeControl: setup.timeControl ?? { ...DEFAULT_ONLINE_TIME_CONTROL },
+    ratingMode: setup.ratingMode ?? "casual",
+  };
 }
 
 function sortObjectKeys(value: unknown): unknown {
@@ -866,7 +868,10 @@ function sortObjectKeys(value: unknown): unknown {
 }
 
 function canonicalSetupSignature(setup: OnlineGameSetupDTO): string {
-  return JSON.stringify(sortObjectKeys(setup));
+  return JSON.stringify(sortObjectKeys({
+    ...setup,
+    ratingMode: setup.ratingMode ?? "casual",
+  }));
 }
 
 function normalizePublicSessionIdentity(
@@ -3795,12 +3800,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       resolvedChallengerIdentity = accountIdentity.identity;
     }
 
-    const normalizedSetup = setup.value.timeControl
-      ? setup.value
-      : {
-          ...setup.value,
-          timeControl: { ...DEFAULT_ONLINE_TIME_CONTROL },
-        };
+    const normalizedSetup = normalizeOnlineSetupForCreation(setup.value);
     let challengeId = defaultChallengeIdFactory();
     while (await loadChallengeSummary(challengeId)) {
       challengeId = defaultChallengeIdFactory();

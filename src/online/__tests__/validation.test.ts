@@ -45,6 +45,32 @@ describe("online validation", () => {
     }
   });
 
+  it("preserves casual and rated setup modes in online setup validation", () => {
+    const casual = validateOnlineGameSetup({ ...createSetup(), ratingMode: "casual" });
+    const rated = validateOnlineGameSetup({ ...createSetup(), ratingMode: "rated" });
+
+    expect(casual.ok).toBe(true);
+    expect(rated.ok).toBe(true);
+    if (casual.ok) {
+      expect(casual.value.ratingMode).toBe("casual");
+    }
+    if (rated.ok) {
+      expect(rated.value.ratingMode).toBe("rated");
+    }
+  });
+
+  it("rejects invalid online rating modes", () => {
+    const result = validateOnlineGameSetup({
+      ...createSetup(),
+      ratingMode: "ranked",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain("ratingMode");
+    }
+  });
+
   it("rejects invalid online time controls", () => {
     const setup = {
       ...createSetup(),

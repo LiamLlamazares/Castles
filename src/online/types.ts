@@ -93,6 +93,8 @@ export interface GameStateDTO {
   victoryPoints?: { w: number; b: number };
 }
 
+export type OnlineRatingMode = "casual" | "rated";
+
 export interface OnlineGameSetupDTO {
   board: BoardDTO;
   pieces: PieceDTO[];
@@ -102,6 +104,7 @@ export interface OnlineGameSetupDTO {
   initialPoolTypes?: SanctuaryType[];
   pieceTheme?: PieceTheme;
   timeControl?: { initial: number; increment: number };
+  ratingMode?: OnlineRatingMode;
 }
 
 export interface OnlineGameResultDTO {

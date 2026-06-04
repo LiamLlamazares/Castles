@@ -819,7 +819,7 @@ Tests/review/deploy gates:
 
 Goal: add tested, swappable rating primitives before wiring live games, matchmaking, profiles, friends, leaderboards, or moderation to ratings.
 
-Status: implemented locally on 2026-06-03. `src/online/ratings.ts` defines a modular rating-engine contract with `glicko2-beta-v1` as the default Lichess-inspired Glicko-2 baseline, Castles beta defaults, durable engine ids on rating records, provisional display formatting, inactive-period deviation growth, and Glicko-2 rating-period updates. The tests include the standard worked example, engine-swappability coverage, invalid future-engine rejection, output validation coverage, and input validation coverage. Ratings are not yet applied to completed games, lobby rows, account archives, leaderboards, or matchmaking, so no current game becomes rated by this phase.
+Status: implemented locally on 2026-06-03, with setup-level rated/casual protocol metadata added locally on 2026-06-04. `src/online/ratings.ts` defines a modular rating-engine contract with `glicko2-beta-v1` as the default Lichess-inspired Glicko-2 baseline, Castles beta defaults, durable engine ids on rating records, provisional display formatting, inactive-period deviation growth, and Glicko-2 rating-period updates. Online setup payloads now carry `ratingMode?: "casual" | "rated"`; server-created games, challenges, lobby seeks, and quick-match fallback listings normalize missing setup modes to `"casual"`, and setup matching keeps casual and rated requests separate. The tests include the standard worked example, engine-swappability coverage, invalid future-engine rejection, rating input/output validation coverage, setup-mode validation, setup-mode serialization, default casual game creation, rated game creation, and casual-vs-rated quick-match separation. Ratings are not yet applied to completed games, lobby rows, account archives, leaderboards, profiles, or matchmaking, so no current game writes rating changes by this phase.
 
 Contract notes:
 
@@ -828,13 +828,13 @@ Contract notes:
 - New account ratings start at 1500 with beta deviation 500 and volatility 0.06. The high initial deviation is an intentional beta choice while Castles balance is unsettled and should be revisited before public rated play.
 - Ratings above deviation 110 are provisional and display with a question mark.
 - Side/seat advantage adjustment is intentionally out of scope for Phase 7K because Castles balance is not established enough to model it. Future rated-game results can add side/seat context behind the rating-engine interface.
-- The next implementation must add an explicit rated-game flag before writing rating events.
+- The setup-level rated/casual flag exists as protocol metadata. The next rating implementation must add the rated result contract and rating-write gates before writing rating events.
 - The server must derive rating participants from durable account-backed game participants, not display names or browser-provided identity fields.
 - Rated profiles and leaderboards are deferred until rated-game writes exist. Basic profiles, follows, friend challenges, and privacy controls may ship before ratings because they solve account discovery and private-match workflows without affecting competitive standings. Initial leaderboards should prefer rating/rating confidence; experimental metrics such as loss-of-superiority or Bayesian strength displays need a separate definition and reviewer pass before UI exposure.
 
 Tests/review/deploy gates:
 
-- Tests: pure rating math tests, engine-selection tests, game-result-to-rating tests once game integration begins, leaderboard query tests once leaderboards exist, full suite, client build, server build, and a reviewer pass focused on formula fidelity and preventing accidental rated-game side effects.
+- Tests: pure rating math tests, engine-selection tests, setup-mode validation/serialization tests, game-result-to-rating tests once game integration begins, leaderboard query tests once leaderboards exist, full suite, client build, server build, and a reviewer pass focused on formula fidelity and preventing accidental rated-game side effects.
 - Review: rating/fair-play review focused on Glicko-2 correctness, provisional display, casual-vs-rated separation, and account-identity derivation.
 - Deploy: deploy only after rated-game integration remains off unless explicitly enabled by the future rated-game contract.
 

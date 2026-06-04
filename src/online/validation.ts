@@ -359,6 +359,14 @@ export function validateOnlineGameSetup(value: unknown): ValidationResult<Online
     };
   }
 
+  let ratingMode: OnlineGameSetupDTO["ratingMode"];
+  if (value.ratingMode !== undefined) {
+    if (value.ratingMode !== "casual" && value.ratingMode !== "rated") {
+      return bad("setup.ratingMode must be either casual or rated.");
+    }
+    ratingMode = value.ratingMode;
+  }
+
   return {
     ok: true,
     value: {
@@ -370,6 +378,7 @@ export function validateOnlineGameSetup(value: unknown): ValidationResult<Online
       initialPoolTypes,
       pieceTheme,
       timeControl,
+      ratingMode,
     },
   };
 }

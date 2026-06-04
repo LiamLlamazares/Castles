@@ -28,6 +28,7 @@ export interface OnlineSetupInput {
   initialPoolTypes?: SanctuaryType[];
   pieceTheme?: OnlineGameSetupDTO["pieceTheme"];
   timeControl?: { initial: number; increment: number };
+  ratingMode?: OnlineGameSetupDTO["ratingMode"];
 }
 
 export interface HydratedOnlineGameSetup {
@@ -39,6 +40,7 @@ export interface HydratedOnlineGameSetup {
   initialPoolTypes?: SanctuaryType[];
   pieceTheme?: OnlineGameSetupDTO["pieceTheme"];
   timeControl?: { initial: number; increment: number };
+  ratingMode?: OnlineGameSetupDTO["ratingMode"];
 }
 
 export interface HydratedOnlineState {
@@ -150,6 +152,7 @@ export function serializeOnlineGameSetup(input: OnlineSetupInput): OnlineGameSet
     initialPoolTypes: input.initialPoolTypes ? [...input.initialPoolTypes] : undefined,
     pieceTheme: input.pieceTheme,
     timeControl: input.timeControl,
+    ratingMode: input.ratingMode,
   };
 }
 
@@ -165,6 +168,7 @@ export function hydrateOnlineGameSetupDTO(
     initialPoolTypes: dto.initialPoolTypes ? [...dto.initialPoolTypes] : undefined,
     pieceTheme: dto.pieceTheme,
     timeControl: dto.timeControl,
+    ratingMode: dto.ratingMode,
   };
 }
 

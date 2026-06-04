@@ -1801,6 +1801,9 @@ describe("createOnlineHttpServer", () => {
         status: "open",
         creatorSeat: "random",
         creatorIdentity: { kind: "session", id: "session_creator" },
+        setup: {
+          ratingMode: "casual",
+        },
       },
       creator: {
         token: expect.any(String),
@@ -1816,6 +1819,9 @@ describe("createOnlineHttpServer", () => {
     expect(list.seeks[0]).toMatchObject({
       seekId: created.seekId,
       status: "open",
+      setup: {
+        ratingMode: "casual",
+      },
     });
   });
 
@@ -2261,6 +2267,43 @@ describe("createOnlineHttpServer", () => {
     expect(quick).toMatchObject({
       outcome: "waiting",
       role: "creator",
+    });
+    expect(quick.seekId).not.toBe(created.seekId);
+  });
+
+  it("quick match does not pair rated requests with casual open seeks", async () => {
+    const listedSetup = { ...createTaggedClockedSetup(), ratingMode: "casual" as const };
+    const submittedSetup = { ...createTaggedClockedSetup(), ratingMode: "rated" as const };
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: listedSetup, creatorSessionId: "session_creator" }),
+    });
+    const created = await createResponse.json();
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: submittedSetup, sessionId: "session_waiting" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "waiting",
+      role: "creator",
+      summary: {
+        setup: {
+          ratingMode: "rated",
+        },
+      },
     });
     expect(quick.seekId).not.toBe(created.seekId);
   });
@@ -2917,6 +2960,7 @@ describe("createOnlineHttpServer", () => {
       setup: {
         ...setup,
         timeControl: { initial: 20, increment: 20 },
+        ratingMode: "casual",
       },
     });
     expect(body.challenger.url).toContain("onlineChallenge=");
@@ -4949,12 +4993,36 @@ describe("createOnlineHttpServer", () => {
 
     expect(snapshotResponse.status).toBe(200);
     expect(snapshotBody.snapshot.setup.timeControl).toEqual({ initial: 20, increment: 20 });
+    expect(snapshotBody.snapshot.setup.ratingMode).toBe("casual");
     expect(snapshotBody.snapshot.clock).toMatchObject({
       timeControl: { initialMs: 1_200_000, incrementMs: 20_000 },
       activeColor: "w",
     });
     expect(snapshotBody.snapshot.clock.remainingMs.w).toBeGreaterThan(1_199_000);
     expect(snapshotBody.snapshot.clock.remainingMs.b).toBe(1_200_000);
+  });
+
+  it("preserves rated setup mode when creating a direct online game", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: { ...createSetup(), ratingMode: "rated" } }),
+    });
+    const created = await createResponse.json();
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: { authorization: `Bearer ${created.white.token}` } }
+    );
+    const snapshotBody = await snapshotResponse.json();
+
+    expect(snapshotResponse.status).toBe(200);
+    expect(snapshotBody.snapshot.setup.ratingMode).toBe("rated");
   });
 
   it("rejects structurally invalid setup data with a 400", async () => {

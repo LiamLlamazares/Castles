@@ -29,6 +29,7 @@ describe("online serialization", () => {
       gameRules: { vpModeEnabled: false },
       initialPoolTypes: [SanctuaryType.WolfCovenant],
       pieceTheme: "Castles",
+      ratingMode: "rated",
     });
 
     const hydrated = hydrateOnlineGameSetupDTO(setup);
@@ -43,6 +44,7 @@ describe("online serialization", () => {
       sanctuaries.map((s) => s.hex.getKey())
     );
     expect(hydrated.initialPoolTypes).toEqual([SanctuaryType.WolfCovenant]);
+    expect(hydrated.ratingMode).toBe("rated");
   });
 
   it("hydrates board DTO castles instead of regenerating default castle positions", () => {
