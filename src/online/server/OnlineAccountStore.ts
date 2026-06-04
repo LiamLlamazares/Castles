@@ -33,6 +33,15 @@ export interface OnlineAccountSessionListItem {
   lastUsedAt: string;
 }
 
+export type OnlineAccountChallengeTargetResult =
+  | {
+      status: "ok";
+      account: OnlineAccount;
+    }
+  | {
+      status: "not_found" | "self" | "blocked" | "not_allowed";
+    };
+
 export interface OnlineAccountStore {
   createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession>;
   resolveSessionToken(token: string, usedAt: string): Promise<ResolvedOnlineAccountSession | null>;
@@ -46,6 +55,7 @@ export interface OnlineAccountStore {
   unfollowAccount(followerAccountId: string, targetDisplayName: string): Promise<OnlineAccountSocialActionResult>;
   blockAccount(blockerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
   unblockAccount(blockerAccountId: string, targetDisplayName: string): Promise<OnlineAccountSocialActionResult>;
+  resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
   updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
   checkReady?(): Promise<boolean> | boolean;
@@ -282,6 +292,24 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     this.blocks.get(blockerAccountId)?.delete(target.accountId);
     if (this.hasBlock(target.accountId, blockerAccountId)) return { status: "blocked" };
     return { status: "ok", profile: this.createProfile(blockerAccountId, target) };
+  }
+
+  async resolveChallengeTarget(
+    challengerAccountId: string,
+    targetDisplayName: string
+  ): Promise<OnlineAccountChallengeTargetResult> {
+    const target = this.getAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === challengerAccountId) return { status: "self" };
+    if (this.hasBlock(challengerAccountId, target.accountId) || this.hasBlock(target.accountId, challengerAccountId)) {
+      return { status: "blocked" };
+    }
+    const privacy = await this.getPrivacySettings(target.accountId);
+    if (privacy.challengePolicy === "nobody") return { status: "not_allowed" };
+    if (privacy.challengePolicy === "followed" && !this.hasFollow(target.accountId, challengerAccountId)) {
+      return { status: "not_allowed" };
+    }
+    return { status: "ok", account: target };
   }
 
   async getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings> {

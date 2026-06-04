@@ -410,16 +410,16 @@ describe("OnlineGameBrowser", () => {
         profile: visibleProfile,
       });
     });
-    const onUpdateAccountPrivacy = vi.fn().mockResolvedValue({
+    const onUpdateAccountPrivacy = vi.fn().mockImplementation((patch) => Promise.resolve({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       privacy: {
         schemaVersion: 1,
-        followPolicy: "nobody",
+        followPolicy: patch.followPolicy ?? "nobody",
         presencePolicy: "followed",
-        challengePolicy: "followed",
+        challengePolicy: patch.challengePolicy ?? "followed",
         updatedAt: "2026-06-04T12:00:00.000Z",
       },
-    });
+    }));
 
     render(
       <OnlineGameBrowser
@@ -482,6 +482,77 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ followPolicy: "nobody" }));
     expect(await within(people).findByText("New follow permission: Nobody. Existing follows are not removed.")).toBeInTheDocument();
+
+    fireEvent.change(within(people).getByRole("combobox", { name: "Who can challenge me" }), {
+      target: { value: "everyone" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Save Challenges" }));
+
+    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ challengePolicy: "everyone" }));
+    expect(await within(people).findByText("New challenge permission: Everyone. Existing challenge links are not removed.")).toBeInTheDocument();
+  });
+
+  it("lets signed-in players challenge visible and followed accounts", async () => {
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Ada"),
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        loadAccountProfile={loadAccountProfile}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const followingName = await within(people).findByText("Samir");
+    const followingRow = followingName.closest("article");
+    expect(followingRow).not.toBeNull();
+    fireEvent.click(within(followingRow as HTMLElement).getByRole("button", { name: "Challenge Samir" }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Ada" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    const profileCard = await within(people).findByRole("article", { name: "Profile Ada" });
+    fireEvent.click(within(profileCard).getByRole("button", { name: "Challenge Ada" }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada"));
+  });
+
+  it("shows a challenge error when the challenge handler rejects", async () => {
+    const onChallengeAccount = vi.fn().mockRejectedValue(new Error("setup required"));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.click(await within(people).findByRole("button", { name: "Challenge Samir" }));
+
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByText("Could not create a challenge for Samir.")).toBeInTheDocument();
   });
 
   it("ignores stale social lookup responses after the account changes", async () => {
@@ -583,8 +654,11 @@ describe("OnlineGameBrowser", () => {
     );
 
     const people = await screen.findByRole("region", { name: "People" });
-    expect(await within(people).findByText("Could not load follow privacy.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(people).getAllByText("Could not load social privacy.")).toHaveLength(2)
+    );
     expect(within(people).getByRole("combobox", { name: "Who can newly follow me" })).toBeDisabled();
+    expect(within(people).getByRole("combobox", { name: "Who can challenge me" })).toBeDisabled();
   });
 
   it("filters loaded Lobby listings and current games by followed registered players", async () => {

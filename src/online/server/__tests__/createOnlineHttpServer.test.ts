@@ -2907,6 +2907,150 @@ describe("createOnlineHttpServer", () => {
     expect(viewBody.gameInvite).toBeUndefined();
   });
 
+  it("creates targeted account challenge links when target challenge privacy allows it", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    const notFollowedResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "samir",
+      }),
+    });
+    expect(notFollowedResponse.status).toBe(409);
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "samir",
+      }),
+    });
+    const created = await createResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(created.summary.challengerIdentity).toEqual(liam.account.identity);
+    expect(created.summary.challengedIdentity).toEqual(samir.account.identity);
+    expect(new URL(created.challenged.url).hash).toContain("challengeToken=");
+    expect(new URL(created.challenged.url).searchParams.has("token")).toBe(false);
+
+    const challengedToken = fragmentChallengeToken(created.challenged.url);
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}/accept`,
+      { method: "POST", headers: bearer(challengedToken) }
+    );
+    const accepted = await acceptResponse.json();
+
+    expect(acceptResponse.status).toBe(200);
+    expect(accepted.summary).toMatchObject({
+      status: "accepted",
+      acceptedBy: samir.account.identity,
+      blackIdentity: samir.account.identity,
+    });
+  });
+
+  it("allows targeted account challenges from anyone when target challenge privacy is everyone", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+      body: JSON.stringify({ challengePolicy: "everyone" }),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const created = await createResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(created.summary.challengerIdentity).toEqual(liam.account.identity);
+    expect(created.summary.challengedIdentity).toEqual(samir.account.identity);
+  });
+
+  it("rejects targeted account challenges that are unauthorized, hidden, self, or blocked", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const dani = await createAccountViaApi(port, "Dani");
+    const ben = await createAccountViaApi(port, "Ben");
+
+    const requestTarget = (displayName: string, token?: string) =>
+      fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? bearer(token) : {}),
+        },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName: displayName,
+        }),
+      });
+
+    const unauthenticated = await requestTarget("Dani");
+    const unknown = await requestTarget("Missing", liam.session.token);
+    const self = await requestTarget("Liam", liam.session.token);
+    await fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(dani.session.token) },
+      body: JSON.stringify({ challengePolicy: "nobody" }),
+    });
+    const noChallenges = await requestTarget("Dani", liam.session.token);
+    await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Liam`, {
+      method: "PUT",
+      headers: bearer(ben.session.token),
+    });
+    const blocked = await requestTarget("Ben", liam.session.token);
+
+    expect(unauthenticated.status).toBe(401);
+    expect(unknown.status).toBe(404);
+    expect(self.status).toBe(400);
+    expect(noChallenges.status).toBe(409);
+    expect(blocked.status).toBe(404);
+  });
+
   it("accepts a private challenge and lets both sides immediately join the created game", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

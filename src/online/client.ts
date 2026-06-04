@@ -1146,6 +1146,7 @@ export async function createOnlineChallenge(
   options: {
     challengerSeat?: "w" | "b" | "random";
     visibility?: "private" | "unlisted";
+    challengedDisplayName?: string;
     account?: OnlineAccountSessionParams;
   } = {},
   fetchImpl: typeof fetch = fetch

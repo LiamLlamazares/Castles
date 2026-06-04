@@ -1034,6 +1034,34 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
+  const challengeTargetError = (
+    status: "not_found" | "self" | "blocked" | "not_allowed"
+  ): { status: number; error: OnlineReject } => {
+    switch (status) {
+      case "not_found":
+      case "blocked":
+        return {
+          status: 404,
+          error: { code: "not_found", message: "No online account was found for that challenge." },
+        };
+      case "self":
+        return {
+          status: 400,
+          error: { code: "bad_request", message: "You cannot challenge your own account." },
+        };
+      case "not_allowed":
+        return {
+          status: 409,
+          error: { code: "not_allowed", message: "That account is not accepting challenges." },
+        };
+      default:
+        return {
+          status: 500,
+          error: { code: "persistence_failed", message: "Challenge target result was incomplete." },
+        };
+    }
+  };
+
   const runQuickMatchForSession = async <T>(
     sessionId: string,
     task: () => Promise<T>
@@ -3326,10 +3354,53 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: expiry.error });
       return;
     }
-    const accountIdentity = await resolveOptionalAccountIdentity(req);
-    if (!accountIdentity.ok) {
-      res.status(accountIdentity.status).json({ error: accountIdentity.error });
+
+    const challengedDisplayName =
+      req.body?.challengedDisplayName === undefined
+        ? null
+        : normalizeOnlineAccountDisplayName(req.body.challengedDisplayName);
+    if (challengedDisplayName && !challengedDisplayName.ok) {
+      res.status(400).json({ error: challengedDisplayName.error });
       return;
+    }
+
+    let resolvedChallengerIdentity: OnlineIdentity | null = null;
+    let resolvedChallengedIdentity: OnlineIdentity | null = null;
+    if (challengedDisplayName) {
+      const auth = await resolveAccountBearer(req);
+      if (!auth.ok) {
+        res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      try {
+        const target = await accountStore.resolveChallengeTarget(
+          auth.account.accountId,
+          challengedDisplayName.value
+        );
+        if (target.status !== "ok") {
+          const failure = challengeTargetError(target.status);
+          res.status(failure.status).json({ error: failure.error });
+          return;
+        }
+        resolvedChallengerIdentity = auth.account.identity;
+        resolvedChallengedIdentity = target.account.identity;
+      } catch (error) {
+        console.error("Failed to resolve online challenge target", error);
+        res.status(503).json({
+          error: {
+            code: "persistence_failed",
+            message: "The online challenge target could not be checked.",
+          },
+        });
+        return;
+      }
+    } else {
+      const accountIdentity = await resolveOptionalAccountIdentity(req);
+      if (!accountIdentity.ok) {
+        res.status(accountIdentity.status).json({ error: accountIdentity.error });
+        return;
+      }
+      resolvedChallengerIdentity = accountIdentity.identity;
     }
 
     const normalizedSetup = setup.value.timeControl
@@ -3349,8 +3420,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     while (challengerToken === challengedToken) {
       challengedToken = defaultChallengeTokenFactory();
     }
-    const challengerIdentity = accountIdentity.identity ?? { kind: "session" as const, id: `${challengeId}_challenger` };
-    const challengedIdentity = { kind: "session" as const, id: `${challengeId}_challenged` };
+    const challengerIdentity =
+      resolvedChallengerIdentity ?? { kind: "session" as const, id: `${challengeId}_challenger` };
+    const challengedIdentity =
+      resolvedChallengedIdentity ?? { kind: "session" as const, id: `${challengeId}_challenged` };
 
     try {
       const event = createChallengeCreatedEvent(

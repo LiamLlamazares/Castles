@@ -586,6 +586,9 @@ describe("PostgresOnlineAccountStore", () => {
       challengePolicy: "followed",
       updatedAt: null,
     });
+    await expect(store.resolveChallengeTarget("account_liam", "Samir")).resolves.toEqual({
+      status: "not_allowed",
+    });
 
     const follow = await store.followAccount("account_liam", "samir", "2026-06-03T12:03:00.000Z");
     expect(follow).toMatchObject({
@@ -596,6 +599,17 @@ describe("PostgresOnlineAccountStore", () => {
       },
     });
     expect(JSON.stringify(follow)).not.toContain("account_samir");
+    await expect(store.resolveChallengeTarget("account_liam", "Samir")).resolves.toEqual({
+      status: "not_allowed",
+    });
+    await store.followAccount("account_samir", "Liam", "2026-06-03T12:03:30.000Z");
+    await expect(store.resolveChallengeTarget("account_liam", "Samir")).resolves.toMatchObject({
+      status: "ok",
+      account: {
+        accountId: "account_samir",
+        displayName: "Samir",
+      },
+    });
 
     await expect(store.listFollowingProfiles("account_liam")).resolves.toEqual([
       expect.objectContaining({
@@ -641,6 +655,9 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.getProfileForDisplayName("account_liam", "Samir")).resolves.toBeNull();
     await expect(store.listFollowingProfiles("account_liam")).resolves.toEqual([]);
     await expect(store.followAccount("account_liam", "Samir", "2026-06-03T12:07:00.000Z")).resolves.toEqual({
+      status: "blocked",
+    });
+    await expect(store.resolveChallengeTarget("account_liam", "Samir")).resolves.toEqual({
       status: "blocked",
     });
     await expect(store.unfollowAccount("account_liam", "Samir")).resolves.toEqual({

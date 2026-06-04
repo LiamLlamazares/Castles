@@ -1277,34 +1277,25 @@ function App() {
     }
   }, [enterOnlineGameFromJoin, onlineAccountSession?.token]);
 
-  const handleCreateOnlineChallenge = async (
-    board: Board,
-    pieces: Piece[],
-    timeControl?: { initial: number, increment: number },
-    sanctuaries?: Sanctuary[],
-    _selectedSanctuaryTypes?: SanctuaryType[],
-    sanctuarySettings?: { unlockTurn: number, cooldown: number },
-    gameRules?: { vpModeEnabled: boolean },
-    initialPoolTypes?: SanctuaryType[],
-    pieceTheme?: PieceTheme
-  ) => {
+  const createChallengeFromSetup = async (
+    setup: OnlineGameSetupDTO,
+    options: { challengedDisplayName?: string } = {}
+  ): Promise<boolean> => {
     try {
       cancelPendingReplay();
       clearAnalysisReturn();
       clearAutosave();
       clearOpenSeekState();
       const created = await createOnlineChallenge(
-        serializeOnlineGameSetup({
-          board,
-          pieces,
-          sanctuaries: sanctuaries ?? [],
-          timeControl,
-          sanctuarySettings,
-          gameRules,
-          initialPoolTypes,
-          pieceTheme,
-        }),
-        { challengerSeat: "w", visibility: "unlisted", account: onlineAccountAuth }
+        setup,
+        {
+          challengerSeat: "w",
+          visibility: "unlisted",
+          account: onlineAccountAuth,
+          ...(options.challengedDisplayName
+            ? { challengedDisplayName: options.challengedDisplayName }
+            : {}),
+        }
       );
       const challenge = resolveOnlineChallengeParams(created.challenger.url);
       if (!challenge) {
@@ -1328,12 +1319,63 @@ function App() {
         summary: created.summary,
       });
       setOnlineChallengeShareUrl(created.challenged.url);
+      setOnlineChallengeShareMessage(
+        options.challengedDisplayName
+          ? `Challenge link ready for ${options.challengedDisplayName}.`
+          : ""
+      );
       setOnlineChallengeStatus("idle");
       setOnlineChallengeError(null);
       setView('challenge');
+      return true;
     } catch (error) {
       console.error("Failed to create online challenge", error);
-      alert("Could not create an online challenge. Make sure the Node server is running.");
+      alert(
+        options.challengedDisplayName
+          ? `Could not create a challenge for ${options.challengedDisplayName}. They may not accept challenges from this account.`
+          : "Could not create an online challenge. Make sure the Node server is running."
+      );
+      return false;
+    }
+  };
+
+  const handleCreateOnlineChallenge = async (
+    board: Board,
+    pieces: Piece[],
+    timeControl?: { initial: number, increment: number },
+    sanctuaries?: Sanctuary[],
+    _selectedSanctuaryTypes?: SanctuaryType[],
+    sanctuarySettings?: { unlockTurn: number, cooldown: number },
+    gameRules?: { vpModeEnabled: boolean },
+    initialPoolTypes?: SanctuaryType[],
+    pieceTheme?: PieceTheme
+  ) => {
+    await createChallengeFromSetup(
+      serializeOnlineGameSetup({
+        board,
+        pieces,
+        sanctuaries: sanctuaries ?? [],
+        timeControl,
+        sanctuarySettings,
+        gameRules,
+        initialPoolTypes,
+        pieceTheme,
+      })
+    );
+  };
+
+  const handleChallengeOnlineAccount = async (displayName: string) => {
+    if (!onlineAccountAuth) {
+      alert("Sign in before challenging an account.");
+      throw new Error("Online account sign-in is required before challenging an account.");
+    }
+    if (!onlineLobbySetup) {
+      alert("Choose a Play setup before challenging an account.");
+      throw new Error("A Play setup is required before challenging an account.");
+    }
+    const created = await createChallengeFromSetup(onlineLobbySetup, { challengedDisplayName: displayName });
+    if (!created) {
+      throw new Error("Targeted online challenge was not created.");
     }
   };
 
@@ -2328,6 +2370,7 @@ function App() {
           onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
           onBlockAccount={onlineAccountSession ? handleBlockOnlineAccount : undefined}
           onUnblockAccount={onlineAccountSession ? handleUnblockOnlineAccount : undefined}
+          onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
           loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}
           onUpdateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}
         />

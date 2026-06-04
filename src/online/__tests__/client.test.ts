@@ -1097,7 +1097,7 @@ describe("online client helpers", () => {
       schemaVersion: 1,
       challengeId: "challenge_123",
       challengerIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
-      challengedIdentity: { kind: "session", id: "challenge_123_challenged" },
+      challengedIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
       challengerSeat: "w",
       visibility: "unlisted",
       setup,
@@ -1192,7 +1192,11 @@ describe("online client helpers", () => {
       });
 
     await createOnlineGame(setup, { account, creatorSeat: "b" }, fetchImpl as any);
-    await createOnlineChallenge(setup, { challengerSeat: "w", visibility: "unlisted", account }, fetchImpl as any);
+    await createOnlineChallenge(
+      setup,
+      { challengerSeat: "w", visibility: "unlisted", challengedDisplayName: "Samir", account },
+      fetchImpl as any
+    );
     await createOpenSeek(setup, { creatorSeat: "random", creatorSessionId: "anon_creator", account }, fetchImpl as any);
     await acceptOpenSeek("seek_123", { acceptorSessionId: "anon_acceptor", account }, fetchImpl as any);
     await startQuickMatch(setup, { sessionId: "anon_match", account }, fetchImpl as any);
@@ -1217,6 +1221,9 @@ describe("online client helpers", () => {
         expect(JSON.parse(bodyText)).not.toHaveProperty("account");
       }
     }
+    expect(JSON.parse((fetchImpl.mock.calls[1][1] as RequestInit).body as string)).toMatchObject({
+      challengedDisplayName: "Samir",
+    });
   });
 
   it("creates, fetches, cancels, lists, and accepts open seeks with validated responses", async () => {

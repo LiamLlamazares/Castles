@@ -19,6 +19,7 @@ import {
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
   type OnlineAccountSessionListItem,
+  type OnlineAccountChallengeTargetResult,
   type OnlineAccountStore,
   type ResolvedOnlineAccountSession,
 } from "./OnlineAccountStore";
@@ -425,6 +426,34 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         status: "ok",
         profile: await this.createProfile(blockerAccountId, target, queryable),
       };
+    });
+  }
+
+  async resolveChallengeTarget(
+    challengerAccountId: string,
+    targetDisplayName: string
+  ): Promise<OnlineAccountChallengeTargetResult> {
+    await this.ensureSchema();
+    const target = await this.loadAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === challengerAccountId) return { status: "self" };
+    return this.withTransaction(async (queryable) => {
+      await this.lockSocialPair(queryable, challengerAccountId, target.accountId);
+      if (
+        await this.hasBlock(challengerAccountId, target.accountId, queryable) ||
+        await this.hasBlock(target.accountId, challengerAccountId, queryable)
+      ) {
+        return { status: "blocked" };
+      }
+      const privacy = await this.getPrivacySettingsForAccount(target.accountId, queryable);
+      if (privacy.challengePolicy === "nobody") return { status: "not_allowed" };
+      if (
+        privacy.challengePolicy === "followed" &&
+        !(await this.hasFollow(target.accountId, challengerAccountId, queryable))
+      ) {
+        return { status: "not_allowed" };
+      }
+      return { status: "ok", account: target };
     });
   }
 
