@@ -137,6 +137,10 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  parseOnlineAccountPrivacyPatch,
+  type OnlineAccountSocialActionResult,
+} from "../social";
+import {
   DuplicateOnlineAccountDisplayNameError,
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
@@ -683,6 +687,8 @@ function httpStatusForOnlineError(error: OnlineReject): number {
       return 404;
     case "rate_limited":
       return 429;
+    case "not_allowed":
+      return 409;
     case "persistence_failed":
       return 503;
     default:
@@ -987,6 +993,45 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const resolved = await resolveAccountBearer(req);
     if (!resolved.ok) return resolved;
     return { ok: true, identity: resolved.account.identity };
+  };
+
+  const parseProfileDisplayNameParam = (raw: unknown): string | null => {
+    const displayName = normalizeOnlineAccountDisplayName(raw);
+    return displayName.ok ? displayName.value : null;
+  };
+
+  const socialActionError = (
+    result: OnlineAccountSocialActionResult,
+    actionLabel: string
+  ): { status: number; error: OnlineReject } => {
+    switch (result.status) {
+      case "not_found":
+      case "blocked":
+        return {
+          status: 404,
+          error: { code: "not_found", message: "No online account was found for that action." },
+        };
+      case "self":
+        return {
+          status: 400,
+          error: { code: "bad_request", message: `You cannot ${actionLabel} your own account.` },
+        };
+      case "not_allowed":
+        return {
+          status: 409,
+          error: { code: "not_allowed", message: "That account is not accepting follows." },
+        };
+      case "ok":
+        return {
+          status: 500,
+          error: { code: "persistence_failed", message: "Social action result was incomplete." },
+        };
+      default:
+        return {
+          status: 500,
+          error: { code: "persistence_failed", message: "Social action result was invalid." },
+        };
+    }
   };
 
   const runQuickMatchForSession = async <T>(
@@ -2211,6 +2256,319 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       account: auth.account,
     });
+  });
+
+  app.get("/api/online/profiles/:displayName", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.profile.lookup", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Profile display name is invalid." },
+      });
+      return;
+    }
+    try {
+      const profile = await accountStore.getProfileForDisplayName(auth.account.accountId, displayName);
+      if (!profile) {
+        log({ event: "online.account.profile.lookup", status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No online account was found for that profile." },
+        });
+        return;
+      }
+      log({ event: "online.account.profile.lookup", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile,
+      });
+    } catch (error) {
+      console.error("Failed to load account profile", error);
+      log({ event: "online.account.profile.lookup", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Online profile could not be loaded." },
+      });
+    }
+  });
+
+  app.get("/api/online/account/follows", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.follows.list", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    try {
+      const following = await accountStore.listFollowingProfiles(auth.account.accountId);
+      log({ event: "online.account.follows.list", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        following,
+      });
+    } catch (error) {
+      console.error("Failed to list followed accounts", error);
+      log({ event: "online.account.follows.list", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Followed accounts could not be loaded." },
+      });
+    }
+  });
+
+  app.put("/api/online/account/follows/:displayName", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.follow", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Follow target display name is invalid." },
+      });
+      return;
+    }
+    try {
+      const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const result = await accountStore.followAccount(auth.account.accountId, displayName, createdAt);
+      if (result.status !== "ok" || !result.profile) {
+        const failure = socialActionError(result, "follow");
+        log({ event: "online.account.follow", status: "rejected", reason: result.status });
+        res.status(failure.status).json({ error: failure.error });
+        return;
+      }
+      log({ event: "online.account.follow", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: result.profile,
+      });
+    } catch (error) {
+      console.error("Failed to follow account", error);
+      log({ event: "online.account.follow", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account could not be followed." },
+      });
+    }
+  });
+
+  app.delete("/api/online/account/follows/:displayName", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.unfollow", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Follow target display name is invalid." },
+      });
+      return;
+    }
+    try {
+      const result = await accountStore.unfollowAccount(auth.account.accountId, displayName);
+      if (result.status !== "ok" || !result.profile) {
+        const failure = socialActionError(result, "unfollow");
+        log({ event: "online.account.unfollow", status: "rejected", reason: result.status });
+        res.status(failure.status).json({ error: failure.error });
+        return;
+      }
+      log({ event: "online.account.unfollow", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: result.profile,
+      });
+    } catch (error) {
+      console.error("Failed to unfollow account", error);
+      log({ event: "online.account.unfollow", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account could not be unfollowed." },
+      });
+    }
+  });
+
+  app.put("/api/online/account/blocks/:displayName", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.block", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Block target display name is invalid." },
+      });
+      return;
+    }
+    try {
+      const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const result = await accountStore.blockAccount(auth.account.accountId, displayName, createdAt);
+      if (result.status !== "ok" || !result.profile) {
+        const failure = socialActionError(result, "block");
+        log({ event: "online.account.block", status: "rejected", reason: result.status });
+        res.status(failure.status).json({ error: failure.error });
+        return;
+      }
+      log({ event: "online.account.block", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: result.profile,
+      });
+    } catch (error) {
+      console.error("Failed to block account", error);
+      log({ event: "online.account.block", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account could not be blocked." },
+      });
+    }
+  });
+
+  app.delete("/api/online/account/blocks/:displayName", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.unblock", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Block target display name is invalid." },
+      });
+      return;
+    }
+    try {
+      const result = await accountStore.unblockAccount(auth.account.accountId, displayName);
+      if (result.status !== "ok" || !result.profile) {
+        const failure = socialActionError(result, "unblock");
+        log({ event: "online.account.unblock", status: "rejected", reason: result.status });
+        res.status(failure.status).json({ error: failure.error });
+        return;
+      }
+      log({ event: "online.account.unblock", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: result.profile,
+      });
+    } catch (error) {
+      console.error("Failed to unblock account", error);
+      log({ event: "online.account.unblock", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account could not be unblocked." },
+      });
+    }
+  });
+
+  app.get("/api/online/account/privacy", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.privacy.get", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    try {
+      const privacy = await accountStore.getPrivacySettings(auth.account.accountId);
+      log({ event: "online.account.privacy.get", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        privacy,
+      });
+    } catch (error) {
+      console.error("Failed to load account privacy settings", error);
+      log({ event: "online.account.privacy.get", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account privacy settings could not be loaded." },
+      });
+    }
+  });
+
+  app.patch("/api/online/account/privacy", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.privacy.update", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const patch = parseOnlineAccountPrivacyPatch(req.body);
+    if (!patch.ok) {
+      res.status(400).json({ error: patch.error });
+      return;
+    }
+    try {
+      const updatedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const privacy = await accountStore.updatePrivacySettings(auth.account.accountId, patch.value, updatedAt);
+      if (!privacy) {
+        log({ event: "online.account.privacy.update", status: "rejected", reason: "not_found" });
+        res.status(409).json({
+          error: { code: "bad_request", message: "Account privacy settings could not be updated." },
+        });
+        return;
+      }
+      log({ event: "online.account.privacy.update", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        privacy,
+      });
+    } catch (error) {
+      console.error("Failed to update account privacy settings", error);
+      log({ event: "online.account.privacy.update", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account privacy settings could not be updated." },
+      });
+    }
   });
 
   app.get("/api/online/account/sessions", async (req, res) => {

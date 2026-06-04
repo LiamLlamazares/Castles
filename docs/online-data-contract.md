@@ -169,6 +169,29 @@ Display names are permanently reserved when an account is created. Account delet
 
 When an account bearer is present on safe creation paths, the server uses the registered account identity instead of trusting a browser-supplied anonymous/session id. This currently applies to direct game creation, open seek creation, open seek acceptance, Quick Match, and challenge creation. Direct game creation accepts an optional `creatorSeat` of `w` or `b`, defaulting to `w`; the authenticated account is bound only to that seat, while the other seat remains anonymous until a future join-identity binding exists.
 
+## Account Social Contract
+
+Social v1 is an account-authenticated backend/client-helper foundation for exact profile lookup, one-way follows, blocks, and privacy settings. It does not yet add UI surfaces, presence broadcasting, friend-only lobby listings, challenge inboxes, private messages, public profile text, ratings, or leaderboards.
+
+Every social route requires `Authorization: Bearer <account-session-token>`. The server resolves the viewer account from that bearer; clients cannot provide viewer account ids in request bodies. Profile and follow-list responses expose display names and relationship booleans only. They must not expose raw account ids, account identities, session ids, bearer tokens, token hashes, game seat tokens, challenge tokens, open-seek creator tokens, or internal database keys.
+
+Social routes:
+
+- `GET /api/online/profiles/:displayName`: exact display-name lookup for the authenticated viewer. If the target does not exist or has blocked the viewer, the route returns `not_found` rather than exposing private relationship state.
+- `GET /api/online/account/follows`: returns the authenticated viewer's following list as token-free public profiles. Accounts blocked by either side are omitted.
+- `PUT /api/online/account/follows/:displayName`: follows an exact display name. The route rejects self-follows, missing targets, blocked relationships, and targets whose follow privacy is `nobody`. Repeating the same follow is idempotent.
+- `DELETE /api/online/account/follows/:displayName`: removes a follow edge and returns the current target profile when visible.
+- `PUT /api/online/account/blocks/:displayName`: blocks an exact display name. Blocking is idempotent, rejects self-blocks, and removes follow edges in both directions.
+- `DELETE /api/online/account/blocks/:displayName`: removes the viewer's block edge and returns the current target profile when visible.
+- `GET /api/online/account/privacy`: returns privacy settings. Missing persisted settings use defaults.
+- `PATCH /api/online/account/privacy`: accepts only `followPolicy`, `presencePolicy`, and `challengePolicy` fields.
+
+Privacy v1 defaults are `followPolicy: "everyone"`, `presencePolicy: "followed"`, and `challengePolicy: "followed"`. `followed` means accounts the user has chosen to follow/trust, not arbitrary accounts that follow the user. Presence and challenge enforcement are not wired yet; future implementations must use this directionality and must not treat incoming followers as trusted friends.
+
+If an unfollow, block, or unblock request names a real account that is hidden because that account blocks the viewer, the server may still apply the viewer's cleanup/block mutation, but the response must stay hidden and return `not_found` instead of a profile.
+
+PostgreSQL persists social state in `online_account_privacy_settings`, `online_account_follows`, and `online_account_blocks`. All three reference `online_accounts` with `ON DELETE CASCADE`, while `online_account_display_names` remains a permanent reservation registry. Account deletion removes social state but still does not release the display name. Follow, unfollow, block, and unblock mutations must serialize the affected account pair inside the transaction, so a block cannot race with a follow and leave a stale trust edge behind.
+
 ## Rating Contract
 
 Rating v1 is a modular rating-engine foundation, not a live rated-game system yet. The default engine is `glicko2-beta-v1`, a Lichess-inspired Glicko-2 baseline unless Castles develops a stronger game-specific reason to switch. A rating record has schema version 1, durable engine id, rating, deviation, volatility, game count, and optional update timestamp. New account ratings start at 1500 with beta deviation 500 and volatility 0.06; the deviation is intentionally higher than the common 350 unrated default because Castles rules and balance are still in beta, and it should be revisited before public rated play. Ratings whose deviation is above 110 are provisional and should be displayed with a question mark. Pure rating updates can process one rating period with zero or more scored results, but game completion does not yet write rating events, summary ratings, matchmaking ratings, or account profile ratings.

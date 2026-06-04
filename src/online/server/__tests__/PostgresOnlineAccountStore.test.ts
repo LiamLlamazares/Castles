@@ -11,12 +11,21 @@ class FakeAccountQueryable {
   readonly accountsByDisplayName = new Map<string, string>();
   readonly displayNameRegistry = new Map<string, string>();
   readonly sessionsByTokenHash = new Map<string, any>();
+  readonly privacySettings = new Map<string, any>();
+  readonly follows = new Set<string>();
+  readonly blocks = new Set<string>();
+  readonly advisoryLocks: string[] = [];
   private transactionSnapshot?: {
     accounts: Map<string, any>;
     accountsByDisplayName: Map<string, string>;
     displayNameRegistry: Map<string, string>;
     sessionsByTokenHash: Map<string, any>;
+    privacySettings: Map<string, any>;
+    follows: Set<string>;
+    blocks: Set<string>;
   };
+
+  release(): void {}
 
   async query(text: string, values: unknown[] = []): Promise<{ rows: any[] }> {
     const normalizedText = text.replace(/\s+/g, " ").trim();
@@ -28,6 +37,11 @@ class FakeAccountQueryable {
         sessionsByTokenHash: new Map(
           Array.from(this.sessionsByTokenHash.entries()).map(([key, value]) => [key, { ...value }])
         ),
+        privacySettings: new Map(
+          Array.from(this.privacySettings.entries()).map(([key, value]) => [key, { ...value }])
+        ),
+        follows: new Set(this.follows),
+        blocks: new Set(this.blocks),
       };
       return { rows: [] };
     }
@@ -41,10 +55,16 @@ class FakeAccountQueryable {
         this.accountsByDisplayName.clear();
         this.displayNameRegistry.clear();
         this.sessionsByTokenHash.clear();
+        this.privacySettings.clear();
+        this.follows.clear();
+        this.blocks.clear();
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
         for (const [key, value] of this.transactionSnapshot.sessionsByTokenHash) this.sessionsByTokenHash.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.privacySettings) this.privacySettings.set(key, value);
+        for (const key of this.transactionSnapshot.follows) this.follows.add(key);
+        for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -56,6 +76,11 @@ class FakeAccountQueryable {
       normalizedText.startsWith("CREATE UNIQUE INDEX") ||
       normalizedText.startsWith("DO $$")
     ) {
+      return { rows: [] };
+    }
+    if (normalizedText.startsWith("SELECT pg_advisory_xact_lock")) {
+      const [left, right] = values as string[];
+      this.advisoryLocks.push(`${left}|${right}`);
       return { rows: [] };
     }
 
@@ -169,6 +194,92 @@ class FakeAccountQueryable {
       return { rows };
     }
 
+    if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE display_name_normalized")) {
+      const [displayNameNormalized] = values as string[];
+      const accountId = this.accountsByDisplayName.get(displayNameNormalized);
+      const account = accountId ? this.accounts.get(accountId) : undefined;
+      return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE account_id")) {
+      const [accountId] = values as string[];
+      const account = this.accounts.get(accountId);
+      return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT 1 FROM online_account_follows")) {
+      const [followerAccountId, followedAccountId] = values as string[];
+      return { rows: this.follows.has(socialKey(followerAccountId, followedAccountId)) ? [{ "?column?": 1 }] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT 1 FROM online_account_blocks")) {
+      const [blockerAccountId, blockedAccountId] = values as string[];
+      return { rows: this.blocks.has(socialKey(blockerAccountId, blockedAccountId)) ? [{ "?column?": 1 }] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT follow_policy, presence_policy, challenge_policy, updated_at FROM online_account_privacy_settings")) {
+      const [accountId] = values as string[];
+      const privacy = this.privacySettings.get(accountId);
+      return { rows: privacy ? [privacy] : [] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_privacy_settings")) {
+      const [accountId, followPolicy, presencePolicy, challengePolicy, updatedAt] = values as string[];
+      const row = {
+        account_id: accountId,
+        follow_policy: followPolicy,
+        presence_policy: presencePolicy,
+        challenge_policy: challengePolicy,
+        updated_at: updatedAt,
+      };
+      this.privacySettings.set(accountId, row);
+      return { rows: [row] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_follows")) {
+      const [followerAccountId, followedAccountId] = values as string[];
+      this.follows.add(socialKey(followerAccountId, followedAccountId));
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("DELETE FROM online_account_follows WHERE (follower_account_id")) {
+      const [leftAccountId, rightAccountId] = values as string[];
+      this.follows.delete(socialKey(leftAccountId, rightAccountId));
+      this.follows.delete(socialKey(rightAccountId, leftAccountId));
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("DELETE FROM online_account_follows WHERE follower_account_id")) {
+      const [followerAccountId, followedAccountId] = values as string[];
+      this.follows.delete(socialKey(followerAccountId, followedAccountId));
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("SELECT a.account_id, a.display_name, a.created_at, a.updated_at FROM online_account_follows")) {
+      const [followerAccountId] = values as string[];
+      const rows = Array.from(this.follows)
+        .map(splitSocialKey)
+        .filter(([left]) => left === followerAccountId)
+        .map(([, followed]) => this.accounts.get(followed))
+        .filter((account): account is any => !!account)
+        .filter((account) => !this.blocks.has(socialKey(account.account_id, followerAccountId)))
+        .filter((account) => !this.blocks.has(socialKey(followerAccountId, account.account_id)))
+        .sort((left, right) => String(left.display_name).localeCompare(String(right.display_name)));
+      return { rows };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_blocks")) {
+      const [blockerAccountId, blockedAccountId] = values as string[];
+      this.blocks.add(socialKey(blockerAccountId, blockedAccountId));
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("DELETE FROM online_account_blocks")) {
+      const [blockerAccountId, blockedAccountId] = values as string[];
+      this.blocks.delete(socialKey(blockerAccountId, blockedAccountId));
+      return { rows: [] };
+    }
+
     if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
       const [accountId] = values as string[];
       const rows: Array<{ session_id: string }> = [];
@@ -195,6 +306,15 @@ class FakeAccountQueryable {
       if (!account) return { rows: [] };
       this.accounts.delete(accountId);
       this.accountsByDisplayName.delete(account.display_name_normalized);
+      this.privacySettings.delete(accountId);
+      for (const key of Array.from(this.follows)) {
+        const [follower, followed] = splitSocialKey(key);
+        if (follower === accountId || followed === accountId) this.follows.delete(key);
+      }
+      for (const key of Array.from(this.blocks)) {
+        const [blocker, blocked] = splitSocialKey(key);
+        if (blocker === accountId || blocked === accountId) this.blocks.delete(key);
+      }
       for (const [tokenHash, session] of Array.from(this.sessionsByTokenHash.entries())) {
         if (session.account_id === accountId) {
           this.sessionsByTokenHash.delete(tokenHash);
@@ -207,10 +327,32 @@ class FakeAccountQueryable {
   }
 }
 
+function socialKey(left: string, right: string): string {
+  return `${left}\u0000${right}`;
+}
+
+function splitSocialKey(key: string): [string, string] {
+  const [left, right] = key.split("\u0000");
+  return [left, right];
+}
+
+function createStore(queryable: FakeAccountQueryable): PostgresOnlineAccountStore {
+  return new PostgresOnlineAccountStore({
+    queryable,
+    transactionClientFactory: async () => queryable,
+  });
+}
+
 describe("PostgresOnlineAccountStore", () => {
+  it("requires an explicit transaction client factory for custom queryables", () => {
+    expect(() => new PostgresOnlineAccountStore({ queryable: new FakeAccountQueryable() })).toThrow(
+      /transactionClientFactory/
+    );
+  });
+
   it("creates accounts and resolves account sessions by token", async () => {
     const queryable = new FakeAccountQueryable();
-    const store = new PostgresOnlineAccountStore({ queryable });
+    const store = createStore(queryable);
     const token = "account-session-token";
 
     const created = await store.createAccount({
@@ -245,7 +387,7 @@ describe("PostgresOnlineAccountStore", () => {
 
   it("revokes account sessions without deleting the account", async () => {
     const queryable = new FakeAccountQueryable();
-    const store = new PostgresOnlineAccountStore({ queryable });
+    const store = createStore(queryable);
     const token = "account-session-token";
 
     await store.createAccount({
@@ -267,7 +409,7 @@ describe("PostgresOnlineAccountStore", () => {
 
   it("lists and revokes all account sessions without returning token hashes", async () => {
     const queryable = new FakeAccountQueryable();
-    const store = new PostgresOnlineAccountStore({ queryable });
+    const store = createStore(queryable);
 
     await store.createAccount({
       accountId: "account_liam",
@@ -315,7 +457,7 @@ describe("PostgresOnlineAccountStore", () => {
 
   it("deletes accounts, clears their sessions, and keeps their display names reserved", async () => {
     const queryable = new FakeAccountQueryable();
-    const store = new PostgresOnlineAccountStore({ queryable });
+    const store = createStore(queryable);
 
     await store.createAccount({
       accountId: "account_liam",
@@ -352,7 +494,7 @@ describe("PostgresOnlineAccountStore", () => {
 
   it("rejects duplicate display names case-insensitively", async () => {
     const queryable = new FakeAccountQueryable();
-    const store = new PostgresOnlineAccountStore({ queryable });
+    const store = createStore(queryable);
 
     await store.createAccount({
       accountId: "account_one",
@@ -375,7 +517,7 @@ describe("PostgresOnlineAccountStore", () => {
 
   it("rejects duplicate session token hashes", async () => {
     const queryable = new FakeAccountQueryable();
-    const store = new PostgresOnlineAccountStore({ queryable });
+    const store = createStore(queryable);
     const tokenHash = hashOnlineToken("shared-token");
 
     await store.createAccount({
@@ -410,5 +552,121 @@ describe("PostgresOnlineAccountStore", () => {
         displayName: "Samir",
       },
     });
+  });
+
+  it("persists profiles, follows, privacy settings, and blocks without exposing account ids", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      tokenHash: hashOnlineToken("token-liam"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+    await store.createAccount({
+      accountId: "account_samir",
+      sessionId: "account_session_samir",
+      displayName: "Samir",
+      tokenHash: hashOnlineToken("token-samir"),
+      createdAt: "2026-06-03T12:01:00.000Z",
+    });
+    await store.createAccount({
+      accountId: "account_dani",
+      sessionId: "account_session_dani",
+      displayName: "Dani",
+      tokenHash: hashOnlineToken("token-dani"),
+      createdAt: "2026-06-03T12:02:00.000Z",
+    });
+
+    await expect(store.getPrivacySettings("account_samir")).resolves.toMatchObject({
+      followPolicy: "everyone",
+      presencePolicy: "followed",
+      challengePolicy: "followed",
+      updatedAt: null,
+    });
+
+    const follow = await store.followAccount("account_liam", "samir", "2026-06-03T12:03:00.000Z");
+    expect(follow).toMatchObject({
+      status: "ok",
+      profile: {
+        displayName: "Samir",
+        relationship: { self: false, following: true, blocked: false },
+      },
+    });
+    expect(JSON.stringify(follow)).not.toContain("account_samir");
+
+    await expect(store.listFollowingProfiles("account_liam")).resolves.toEqual([
+      expect.objectContaining({
+        displayName: "Samir",
+        relationship: { self: false, following: true, blocked: false },
+      }),
+    ]);
+
+    await expect(
+      store.updatePrivacySettings(
+        "account_samir",
+        { followPolicy: "nobody", presencePolicy: "nobody" },
+        "2026-06-03T12:04:00.000Z"
+      )
+    ).resolves.toMatchObject({
+      followPolicy: "nobody",
+      presencePolicy: "nobody",
+      challengePolicy: "followed",
+      updatedAt: "2026-06-03T12:04:00.000Z",
+    });
+    await expect(
+      store.followAccount("account_liam", "Samir", "2026-06-03T12:04:30.000Z")
+    ).resolves.toMatchObject({
+      status: "ok",
+      profile: {
+        displayName: "Samir",
+        relationship: { self: false, following: true, blocked: false },
+      },
+    });
+    await expect(
+      store.followAccount("account_dani", "Samir", "2026-06-03T12:05:00.000Z")
+    ).resolves.toEqual({ status: "not_allowed" });
+
+    await expect(
+      store.blockAccount("account_samir", "Liam", "2026-06-03T12:06:00.000Z")
+    ).resolves.toMatchObject({
+      status: "ok",
+      profile: {
+        displayName: "Liam",
+        relationship: { self: false, following: false, blocked: true },
+      },
+    });
+    await expect(store.getProfileForDisplayName("account_liam", "Samir")).resolves.toBeNull();
+    await expect(store.listFollowingProfiles("account_liam")).resolves.toEqual([]);
+    await expect(store.followAccount("account_liam", "Samir", "2026-06-03T12:07:00.000Z")).resolves.toEqual({
+      status: "blocked",
+    });
+    await expect(store.unfollowAccount("account_liam", "Samir")).resolves.toEqual({
+      status: "blocked",
+    });
+
+    await expect(
+      store.blockAccount("account_liam", "Samir", "2026-06-03T12:08:00.000Z")
+    ).resolves.toEqual({
+      status: "blocked",
+    });
+    await expect(store.unblockAccount("account_samir", "Liam")).resolves.toEqual({
+      status: "blocked",
+    });
+    await expect(store.getProfileForDisplayName("account_samir", "Liam")).resolves.toBeNull();
+    await expect(store.unblockAccount("account_liam", "Samir")).resolves.toMatchObject({
+      status: "ok",
+      profile: {
+        displayName: "Samir",
+        relationship: { self: false, following: false, blocked: false },
+      },
+    });
+    await expect(store.getProfileForDisplayName("account_liam", "Samir")).resolves.toMatchObject({
+      displayName: "Samir",
+      relationship: { self: false, following: false, blocked: false },
+    });
+    expect(queryable.advisoryLocks).toContain("account_liam|account_samir");
   });
 });

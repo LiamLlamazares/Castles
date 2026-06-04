@@ -154,6 +154,17 @@ function bearer(token: string): HeadersInit {
   return { authorization: `Bearer ${token}` };
 }
 
+async function createAccountViaApi(port: number, displayName: string): Promise<any> {
+  const response = await fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ displayName }),
+  });
+  const body = await response.json();
+  expect(response.status).toBe(201);
+  return body;
+}
+
 class FakePostgresAccountQueryable {
   readonly accounts = new Map<string, any>();
   readonly accountsByDisplayName = new Map<string, string>();
@@ -165,6 +176,8 @@ class FakePostgresAccountQueryable {
     displayNameRegistry: Map<string, string>;
     sessionsByTokenHash: Map<string, any>;
   };
+
+  release(): void {}
 
   async query(text: string, values: unknown[] = []): Promise<{ rows: any[] }> {
     const normalizedText = text.replace(/\s+/g, " ").trim();
@@ -199,6 +212,7 @@ class FakePostgresAccountQueryable {
     }
     if (
       normalizedText === "SELECT 1" ||
+      normalizedText.startsWith("SELECT pg_advisory_xact_lock") ||
       normalizedText.startsWith("CREATE TABLE") ||
       normalizedText.startsWith("CREATE INDEX") ||
       normalizedText.startsWith("CREATE UNIQUE INDEX") ||
@@ -333,6 +347,13 @@ class FakePostgresAccountQueryable {
 
     throw new Error(`Unexpected query: ${normalizedText}`);
   }
+}
+
+function createPostgresAccountStore(queryable: FakePostgresAccountQueryable): PostgresOnlineAccountStore {
+  return new PostgresOnlineAccountStore({
+    queryable,
+    transactionClientFactory: async () => queryable,
+  });
 }
 
 function pendingChallengeSummary(
@@ -559,6 +580,242 @@ describe("createOnlineHttpServer", () => {
     expect(seek.summary.creatorIdentity).toEqual(account.account.identity);
   });
 
+  it("supports exact profile lookup, follows, privacy, and blocks without exposing account ids", async () => {
+    const logs: unknown[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+
+    const unauthProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`);
+    const profileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/samir`, {
+      headers: bearer(liam.session.token),
+    });
+    const profile = await profileResponse.json();
+    const followResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+    const followed = await followResponse.json();
+    const repeatFollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+    const unfollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "DELETE",
+      headers: bearer(liam.session.token),
+    });
+    const unfollowed = await unfollowResponse.json();
+    const repeatUnfollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "DELETE",
+      headers: bearer(liam.session.token),
+    });
+    const refollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+    const followingResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows`, {
+      headers: bearer(liam.session.token),
+    });
+    const following = await followingResponse.json();
+    const selfFollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+
+    const privacyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+      headers: bearer(samir.session.token),
+    });
+    const privacy = await privacyResponse.json();
+    const updatePrivacyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+      body: JSON.stringify({ followPolicy: "nobody", presencePolicy: "nobody" }),
+    });
+    const updatedPrivacy = await updatePrivacyResponse.json();
+    const invalidPrivacyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+      body: JSON.stringify({ followerCount: true }),
+    });
+    const repeatFollowAfterPrivacyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+    const repeatFollowAfterPrivacy = await repeatFollowAfterPrivacyResponse.json();
+    const refusedFollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(dani.session.token),
+    });
+    const refusedFollow = await refusedFollowResponse.json();
+
+    const blockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+    const blocked = await blockResponse.json();
+    const repeatBlockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+    const hiddenProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`, {
+      headers: bearer(liam.session.token),
+    });
+    const blockedFollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+    const hiddenUnfollowResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "DELETE",
+      headers: bearer(liam.session.token),
+    });
+    const followingAfterBlockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows`, {
+      headers: bearer(liam.session.token),
+    });
+    const followingAfterBlock = await followingAfterBlockResponse.json();
+    const reciprocalBlockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+    const unblockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Liam`, {
+      method: "DELETE",
+      headers: bearer(samir.session.token),
+    });
+    const liamUnblockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Samir`, {
+      method: "DELETE",
+      headers: bearer(liam.session.token),
+    });
+    const unblocked = await liamUnblockResponse.json();
+    const repeatUnblockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Samir`, {
+      method: "DELETE",
+      headers: bearer(liam.session.token),
+    });
+
+    expect(unauthProfileResponse.status).toBe(401);
+    expect(profileResponse.status).toBe(200);
+    expect(profile).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: {
+        schemaVersion: 1,
+        displayName: "Samir",
+        relationship: { self: false, following: false, blocked: false },
+      },
+    });
+    expect(JSON.stringify(profile)).not.toContain(samir.account.accountId);
+
+    expect(followResponse.status).toBe(200);
+    expect(followed.profile).toMatchObject({
+      displayName: "Samir",
+      relationship: { self: false, following: true, blocked: false },
+    });
+    expect(repeatFollowResponse.status).toBe(200);
+    expect(unfollowResponse.status).toBe(200);
+    expect(unfollowed.profile).toMatchObject({
+      displayName: "Samir",
+      relationship: { self: false, following: false, blocked: false },
+    });
+    expect(repeatUnfollowResponse.status).toBe(200);
+    expect(refollowResponse.status).toBe(200);
+    expect(followingResponse.status).toBe(200);
+    expect(following.following).toEqual([
+      expect.objectContaining({
+        displayName: "Samir",
+        relationship: { self: false, following: true, blocked: false },
+      }),
+    ]);
+    expect(JSON.stringify(following)).not.toContain(samir.account.accountId);
+    expect(selfFollowResponse.status).toBe(400);
+
+    expect(privacyResponse.status).toBe(200);
+    expect(privacy.privacy).toMatchObject({
+      followPolicy: "everyone",
+      presencePolicy: "followed",
+      challengePolicy: "followed",
+      updatedAt: null,
+    });
+    expect(updatePrivacyResponse.status).toBe(200);
+    expect(updatedPrivacy.privacy).toMatchObject({
+      followPolicy: "nobody",
+      presencePolicy: "nobody",
+      challengePolicy: "followed",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+    });
+    expect(invalidPrivacyResponse.status).toBe(400);
+    expect(repeatFollowAfterPrivacyResponse.status).toBe(200);
+    expect(repeatFollowAfterPrivacy.profile).toMatchObject({
+      displayName: "Samir",
+      relationship: { self: false, following: true, blocked: false },
+    });
+    expect(refusedFollowResponse.status).toBe(409);
+    expect(refusedFollow.error).toMatchObject({ code: "not_allowed" });
+
+    expect(blockResponse.status).toBe(200);
+    expect(blocked.profile).toMatchObject({
+      displayName: "Liam",
+      relationship: { self: false, following: false, blocked: true },
+    });
+    expect(repeatBlockResponse.status).toBe(200);
+    expect(hiddenProfileResponse.status).toBe(404);
+    expect(blockedFollowResponse.status).toBe(404);
+    expect(hiddenUnfollowResponse.status).toBe(404);
+    expect(followingAfterBlockResponse.status).toBe(200);
+    expect(followingAfterBlock.following).toEqual([]);
+    expect(reciprocalBlockResponse.status).toBe(404);
+    expect(unblockResponse.status).toBe(404);
+    expect(liamUnblockResponse.status).toBe(200);
+    expect(unblocked.profile).toMatchObject({
+      displayName: "Samir",
+      relationship: { self: false, following: false, blocked: false },
+    });
+    expect(repeatUnblockResponse.status).toBe(200);
+    expect(JSON.stringify(logs)).not.toContain(liam.session.token);
+    expect(JSON.stringify(logs)).not.toContain(samir.session.token);
+  });
+
+  it("rejects social routes with invalid account bearers before accepting social input", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const requests: Array<{ path: string; init?: RequestInit }> = [
+      { path: "/api/online/profiles/Samir" },
+      { path: "/api/online/account/follows" },
+      { path: "/api/online/account/follows/Samir", init: { method: "PUT" } },
+      { path: "/api/online/account/follows/Samir", init: { method: "DELETE" } },
+      { path: "/api/online/account/blocks/Samir", init: { method: "PUT" } },
+      { path: "/api/online/account/blocks/Samir", init: { method: "DELETE" } },
+      { path: "/api/online/account/privacy" },
+      {
+        path: "/api/online/account/privacy",
+        init: {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ unsupported: true }),
+        },
+      },
+    ];
+
+    for (const request of requests) {
+      const response = await fetch(`http://127.0.0.1:${port}${request.path}`, {
+        ...request.init,
+        headers: { ...(request.init?.headers ?? {}), ...bearer("bad-account-token") },
+      });
+      const body = await response.json();
+      expect(response.status).toBe(401);
+      expect(body.error).toMatchObject({ code: "unauthorized" });
+    }
+  });
+
   it("revokes the current account session and rejects it afterwards", async () => {
     const logs: unknown[] = [];
     const { server } = createOnlineHttpServer({
@@ -627,7 +884,7 @@ describe("createOnlineHttpServer", () => {
 
   it("revokes account sessions through the PostgreSQL account store route", async () => {
     const queryable = new FakePostgresAccountQueryable();
-    const accountStore = new PostgresOnlineAccountStore({ queryable });
+    const accountStore = createPostgresAccountStore(queryable);
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
       accountStore,
@@ -664,7 +921,7 @@ describe("createOnlineHttpServer", () => {
 
   it("lists account sessions and revokes every account session through PostgreSQL", async () => {
     const queryable = new FakePostgresAccountQueryable();
-    const accountStore = new PostgresOnlineAccountStore({ queryable });
+    const accountStore = createPostgresAccountStore(queryable);
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
       accountStore,
@@ -731,7 +988,7 @@ describe("createOnlineHttpServer", () => {
   it("deletes an online account through the PostgreSQL account store route", async () => {
     const logs: unknown[] = [];
     const queryable = new FakePostgresAccountQueryable();
-    const accountStore = new PostgresOnlineAccountStore({ queryable });
+    const accountStore = createPostgresAccountStore(queryable);
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
       accountStore,

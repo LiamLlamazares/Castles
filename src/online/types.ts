@@ -25,6 +25,7 @@ export type OnlineRejectCode =
   | "bad_json"
   | "not_joined"
   | "unknown_message"
+  | "not_allowed"
   | "rate_limited"
   | "persistence_failed";
 

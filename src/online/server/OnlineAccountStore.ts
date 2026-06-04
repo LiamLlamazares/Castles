@@ -4,6 +4,13 @@ import {
   normalizeOnlineAccountDisplayNameKey,
   type OnlineAccount,
 } from "../accounts";
+import {
+  defaultOnlineAccountPrivacySettings,
+  type OnlineAccountPrivacyPatch,
+  type OnlineAccountPrivacySettings,
+  type OnlineAccountPublicProfile,
+  type OnlineAccountSocialActionResult,
+} from "../social";
 import { hashOnlineToken, isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
 
 export interface CreateOnlineAccountStoreInput {
@@ -33,6 +40,14 @@ export interface OnlineAccountStore {
   listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
   revokeSessionsForAccount(accountId: string): Promise<number>;
   deleteAccount(accountId: string): Promise<boolean>;
+  getProfileForDisplayName(viewerAccountId: string, displayName: string): Promise<OnlineAccountPublicProfile | null>;
+  listFollowingProfiles(accountId: string): Promise<OnlineAccountPublicProfile[]>;
+  followAccount(followerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
+  unfollowAccount(followerAccountId: string, targetDisplayName: string): Promise<OnlineAccountSocialActionResult>;
+  blockAccount(blockerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
+  unblockAccount(blockerAccountId: string, targetDisplayName: string): Promise<OnlineAccountSocialActionResult>;
+  getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
+  updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
   checkReady?(): Promise<boolean> | boolean;
   close?(): Promise<void> | void;
 }
@@ -68,6 +83,9 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   private readonly displayNameKeys = new Map<string, string>();
   private readonly sessionsById = new Map<string, MemorySessionRecord>();
   private readonly sessionsByTokenHash = new Map<string, MemorySessionRecord>();
+  private readonly following = new Map<string, Set<string>>();
+  private readonly blocks = new Map<string, Set<string>>();
+  private readonly privacySettings = new Map<string, OnlineAccountPrivacySettings>();
 
   async createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession> {
     const displayName = normalizeOnlineAccountDisplayName(input.displayName);
@@ -168,10 +186,160 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     if (!account) return false;
     this.accounts.delete(accountId);
     await this.revokeSessionsForAccount(accountId);
+    this.privacySettings.delete(accountId);
+    this.following.delete(accountId);
+    this.blocks.delete(accountId);
+    for (const followed of this.following.values()) followed.delete(accountId);
+    for (const blocked of this.blocks.values()) blocked.delete(accountId);
     return true;
+  }
+
+  async getProfileForDisplayName(
+    viewerAccountId: string,
+    displayName: string
+  ): Promise<OnlineAccountPublicProfile | null> {
+    const target = this.getAccountByDisplayName(displayName);
+    if (!target) return null;
+    if (target.accountId !== viewerAccountId && this.hasBlock(target.accountId, viewerAccountId)) {
+      return null;
+    }
+    return this.createProfile(viewerAccountId, target);
+  }
+
+  async listFollowingProfiles(accountId: string): Promise<OnlineAccountPublicProfile[]> {
+    const followedAccountIds = Array.from(this.following.get(accountId) ?? []);
+    return followedAccountIds
+      .map((targetAccountId) => this.accounts.get(targetAccountId))
+      .filter((account): account is OnlineAccount => !!account)
+      .filter((account) => !this.hasBlock(account.accountId, accountId) && !this.hasBlock(accountId, account.accountId))
+      .map((account) => this.createProfile(accountId, account))
+      .sort((left, right) => left.displayName.localeCompare(right.displayName));
+  }
+
+  async followAccount(
+    followerAccountId: string,
+    targetDisplayName: string,
+    _createdAt: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    const target = this.getAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === followerAccountId) return { status: "self" };
+    if (this.hasBlock(followerAccountId, target.accountId) || this.hasBlock(target.accountId, followerAccountId)) {
+      return { status: "blocked" };
+    }
+    if (this.hasFollow(followerAccountId, target.accountId)) {
+      return {
+        status: "ok",
+        profile: this.createProfile(followerAccountId, target),
+      };
+    }
+    const privacy = await this.getPrivacySettings(target.accountId);
+    if (privacy.followPolicy === "nobody") return { status: "not_allowed" };
+    this.getOrCreateSet(this.following, followerAccountId).add(target.accountId);
+    return {
+      status: "ok",
+      profile: this.createProfile(followerAccountId, target),
+    };
+  }
+
+  async unfollowAccount(
+    followerAccountId: string,
+    targetDisplayName: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    const target = this.getAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === followerAccountId) return { status: "self" };
+    this.following.get(followerAccountId)?.delete(target.accountId);
+    if (this.hasBlock(target.accountId, followerAccountId)) return { status: "blocked" };
+    return { status: "ok", profile: this.createProfile(followerAccountId, target) };
+  }
+
+  async blockAccount(
+    blockerAccountId: string,
+    targetDisplayName: string,
+    _createdAt: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    const target = this.getAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === blockerAccountId) return { status: "self" };
+    this.getOrCreateSet(this.blocks, blockerAccountId).add(target.accountId);
+    this.following.get(blockerAccountId)?.delete(target.accountId);
+    this.following.get(target.accountId)?.delete(blockerAccountId);
+    if (this.hasBlock(target.accountId, blockerAccountId)) return { status: "blocked" };
+    return {
+      status: "ok",
+      profile: this.createProfile(blockerAccountId, target),
+    };
+  }
+
+  async unblockAccount(
+    blockerAccountId: string,
+    targetDisplayName: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    const target = this.getAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === blockerAccountId) return { status: "self" };
+    this.blocks.get(blockerAccountId)?.delete(target.accountId);
+    if (this.hasBlock(target.accountId, blockerAccountId)) return { status: "blocked" };
+    return { status: "ok", profile: this.createProfile(blockerAccountId, target) };
+  }
+
+  async getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings> {
+    return this.privacySettings.get(accountId) ?? defaultOnlineAccountPrivacySettings();
+  }
+
+  async updatePrivacySettings(
+    accountId: string,
+    patch: OnlineAccountPrivacyPatch,
+    updatedAt: string
+  ): Promise<OnlineAccountPrivacySettings | null> {
+    if (!this.accounts.has(accountId)) return null;
+    const current = await this.getPrivacySettings(accountId);
+    const updated: OnlineAccountPrivacySettings = {
+      ...current,
+      ...patch,
+      updatedAt,
+    };
+    this.privacySettings.set(accountId, updated);
+    return updated;
   }
 
   async checkReady(): Promise<boolean> {
     return true;
+  }
+
+  private getAccountByDisplayName(displayName: string): OnlineAccount | null {
+    const normalized = normalizeOnlineAccountDisplayName(displayName);
+    if (!normalized.ok) return null;
+    const accountId = this.displayNameKeys.get(normalizeOnlineAccountDisplayNameKey(normalized.value));
+    return accountId ? this.accounts.get(accountId) ?? null : null;
+  }
+
+  private createProfile(viewerAccountId: string, target: OnlineAccount): OnlineAccountPublicProfile {
+    return {
+      schemaVersion: 1,
+      displayName: target.displayName,
+      relationship: {
+        self: target.accountId === viewerAccountId,
+        following: this.hasFollow(viewerAccountId, target.accountId),
+        blocked: this.hasBlock(viewerAccountId, target.accountId),
+      },
+    };
+  }
+
+  private hasFollow(followerAccountId: string, followedAccountId: string): boolean {
+    return this.following.get(followerAccountId)?.has(followedAccountId) ?? false;
+  }
+
+  private hasBlock(blockerAccountId: string, blockedAccountId: string): boolean {
+    return this.blocks.get(blockerAccountId)?.has(blockedAccountId) ?? false;
+  }
+
+  private getOrCreateSet(map: Map<string, Set<string>>, key: string): Set<string> {
+    const current = map.get(key);
+    if (current) return current;
+    const created = new Set<string>();
+    map.set(key, created);
+    return created;
   }
 }

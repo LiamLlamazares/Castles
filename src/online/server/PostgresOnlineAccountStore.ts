@@ -6,6 +6,14 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+  defaultOnlineAccountPrivacySettings,
+  type OnlineAccountPrivacyPatch,
+  type OnlineAccountPrivacySettings,
+  type OnlineAccountPublicProfile,
+  type OnlineAccountSocialActionResult,
+} from "../social";
+import {
   CreateOnlineAccountStoreInput,
   DuplicateOnlineAccountDisplayNameError,
   DuplicateOnlineAccountIdError,
@@ -52,14 +60,27 @@ function accountFromRow(row: Record<string, unknown>): OnlineAccount {
   });
 }
 
+function privacyFromRow(row: Record<string, unknown>): OnlineAccountPrivacySettings {
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    followPolicy: String(row.follow_policy) as OnlineAccountPrivacySettings["followPolicy"],
+    presencePolicy: String(row.presence_policy) as OnlineAccountPrivacySettings["presencePolicy"],
+    challengePolicy: String(row.challenge_policy) as OnlineAccountPrivacySettings["challengePolicy"],
+    updatedAt: timestampToIso(row.updated_at),
+  };
+}
+
 export class PostgresOnlineAccountStore implements OnlineAccountStore {
   private readonly queryable: PostgresQueryable;
-  private readonly transactionClientFactory?: () => Promise<PostgresTransactionClient>;
+  private readonly transactionClientFactory: () => Promise<PostgresTransactionClient>;
   private readonly closeConnection?: () => Promise<void>;
   private schemaReady?: Promise<void>;
 
   constructor(options: PostgresOnlineAccountStoreOptions) {
     if (options.queryable) {
+      if (!options.transactionClientFactory) {
+        throw new Error("PostgresOnlineAccountStore requires transactionClientFactory when queryable is supplied.");
+      }
       this.queryable = options.queryable;
       this.transactionClientFactory = options.transactionClientFactory;
       this.closeConnection = options.close;
@@ -239,6 +260,231 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return result.rows.length > 0;
   }
 
+  async getProfileForDisplayName(
+    viewerAccountId: string,
+    displayName: string
+  ): Promise<OnlineAccountPublicProfile | null> {
+    await this.ensureSchema();
+    const target = await this.loadAccountByDisplayName(displayName);
+    if (!target) return null;
+    if (target.accountId !== viewerAccountId && await this.hasBlock(target.accountId, viewerAccountId)) {
+      return null;
+    }
+    return this.createProfile(viewerAccountId, target);
+  }
+
+  async listFollowingProfiles(accountId: string): Promise<OnlineAccountPublicProfile[]> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        SELECT a.account_id, a.display_name, a.created_at, a.updated_at
+        FROM online_account_follows f
+        INNER JOIN online_accounts a ON a.account_id = f.followed_account_id
+        WHERE f.follower_account_id = $1
+          AND NOT EXISTS (
+            SELECT 1 FROM online_account_blocks b
+            WHERE b.blocker_account_id = f.followed_account_id
+              AND b.blocked_account_id = $1
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM online_account_blocks b
+            WHERE b.blocker_account_id = $1
+              AND b.blocked_account_id = f.followed_account_id
+          )
+        ORDER BY lower(a.display_name) ASC, a.display_name ASC
+      `,
+      [accountId]
+    );
+    return Promise.all(result.rows.map((row) => this.createProfile(accountId, accountFromRow(row))));
+  }
+
+  async followAccount(
+    followerAccountId: string,
+    targetDisplayName: string,
+    createdAt: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    await this.ensureSchema();
+    const target = await this.loadAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === followerAccountId) return { status: "self" };
+    return this.withTransaction(async (queryable) => {
+      await this.lockSocialPair(queryable, followerAccountId, target.accountId);
+      if (await this.hasBlock(followerAccountId, target.accountId, queryable) || await this.hasBlock(target.accountId, followerAccountId, queryable)) {
+        return { status: "blocked" };
+      }
+      if (await this.hasFollow(followerAccountId, target.accountId, queryable)) {
+        return {
+          status: "ok",
+          profile: await this.createProfile(followerAccountId, target, queryable),
+        };
+      }
+      const privacy = await this.getPrivacySettingsForAccount(target.accountId, queryable);
+      if (privacy.followPolicy === "nobody") return { status: "not_allowed" };
+      await queryable.query(
+        `
+          INSERT INTO online_account_follows (
+            follower_account_id,
+            followed_account_id,
+            created_at
+          )
+          VALUES ($1, $2, $3)
+          ON CONFLICT (follower_account_id, followed_account_id) DO NOTHING
+        `,
+        [followerAccountId, target.accountId, createdAt]
+      );
+      return {
+        status: "ok",
+        profile: await this.createProfile(followerAccountId, target, queryable),
+      };
+    });
+  }
+
+  async unfollowAccount(
+    followerAccountId: string,
+    targetDisplayName: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    await this.ensureSchema();
+    const target = await this.loadAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === followerAccountId) return { status: "self" };
+    return this.withTransaction(async (queryable) => {
+      await this.lockSocialPair(queryable, followerAccountId, target.accountId);
+      await queryable.query(
+        "DELETE FROM online_account_follows WHERE follower_account_id = $1 AND followed_account_id = $2",
+        [followerAccountId, target.accountId]
+      );
+      if (await this.hasBlock(target.accountId, followerAccountId, queryable)) {
+        return { status: "blocked" };
+      }
+      return {
+        status: "ok",
+        profile: await this.createProfile(followerAccountId, target, queryable),
+      };
+    });
+  }
+
+  async blockAccount(
+    blockerAccountId: string,
+    targetDisplayName: string,
+    createdAt: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    await this.ensureSchema();
+    const target = await this.loadAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === blockerAccountId) return { status: "self" };
+    return this.withTransaction(async (queryable) => {
+      await this.lockSocialPair(queryable, blockerAccountId, target.accountId);
+      await queryable.query(
+        `
+          INSERT INTO online_account_blocks (
+            blocker_account_id,
+            blocked_account_id,
+            created_at
+          )
+          VALUES ($1, $2, $3)
+          ON CONFLICT (blocker_account_id, blocked_account_id) DO NOTHING
+        `,
+        [blockerAccountId, target.accountId, createdAt]
+      );
+      await queryable.query(
+        `
+          DELETE FROM online_account_follows
+          WHERE (follower_account_id = $1 AND followed_account_id = $2)
+             OR (follower_account_id = $2 AND followed_account_id = $1)
+        `,
+        [blockerAccountId, target.accountId]
+      );
+      if (await this.hasBlock(target.accountId, blockerAccountId, queryable)) {
+        return { status: "blocked" };
+      }
+      return {
+        status: "ok",
+        profile: await this.createProfile(blockerAccountId, target, queryable),
+      };
+    });
+  }
+
+  async unblockAccount(
+    blockerAccountId: string,
+    targetDisplayName: string
+  ): Promise<OnlineAccountSocialActionResult> {
+    await this.ensureSchema();
+    const target = await this.loadAccountByDisplayName(targetDisplayName);
+    if (!target) return { status: "not_found" };
+    if (target.accountId === blockerAccountId) return { status: "self" };
+    return this.withTransaction(async (queryable) => {
+      await this.lockSocialPair(queryable, blockerAccountId, target.accountId);
+      await queryable.query(
+        "DELETE FROM online_account_blocks WHERE blocker_account_id = $1 AND blocked_account_id = $2",
+        [blockerAccountId, target.accountId]
+      );
+      if (await this.hasBlock(target.accountId, blockerAccountId, queryable)) {
+        return { status: "blocked" };
+      }
+      return {
+        status: "ok",
+        profile: await this.createProfile(blockerAccountId, target, queryable),
+      };
+    });
+  }
+
+  async getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings> {
+    await this.ensureSchema();
+    return this.getPrivacySettingsForAccount(accountId, this.queryable);
+  }
+
+  private async getPrivacySettingsForAccount(
+    accountId: string,
+    queryable: PostgresQueryable
+  ): Promise<OnlineAccountPrivacySettings> {
+    const result = await queryable.query(
+      `
+        SELECT follow_policy, presence_policy, challenge_policy, updated_at
+        FROM online_account_privacy_settings
+        WHERE account_id = $1
+        LIMIT 1
+      `,
+      [accountId]
+    );
+    return result.rows.length > 0 ? privacyFromRow(result.rows[0]) : defaultOnlineAccountPrivacySettings();
+  }
+
+  async updatePrivacySettings(
+    accountId: string,
+    patch: OnlineAccountPrivacyPatch,
+    updatedAt: string
+  ): Promise<OnlineAccountPrivacySettings | null> {
+    await this.ensureSchema();
+    const account = await this.loadAccountById(accountId);
+    if (!account) return null;
+    const current = await this.getPrivacySettings(accountId);
+    const next = {
+      ...current,
+      ...patch,
+      updatedAt,
+    };
+    const result = await this.queryable.query(
+      `
+        INSERT INTO online_account_privacy_settings (
+          account_id,
+          follow_policy,
+          presence_policy,
+          challenge_policy,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (account_id) DO UPDATE SET
+          follow_policy = EXCLUDED.follow_policy,
+          presence_policy = EXCLUDED.presence_policy,
+          challenge_policy = EXCLUDED.challenge_policy,
+          updated_at = EXCLUDED.updated_at
+        RETURNING follow_policy, presence_policy, challenge_policy, updated_at
+      `,
+      [accountId, next.followPolicy, next.presencePolicy, next.challengePolicy, updatedAt]
+    );
+    return privacyFromRow(result.rows[0]);
+  }
+
   async checkReady(): Promise<boolean> {
     await this.ensureSchema();
     await this.queryable.query("SELECT 1");
@@ -312,19 +558,143 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       CREATE UNIQUE INDEX IF NOT EXISTS online_account_sessions_token_hash_unique_idx
         ON online_account_sessions (token_hash)
     `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_privacy_settings (
+        account_id TEXT PRIMARY KEY REFERENCES online_accounts(account_id) ON DELETE CASCADE,
+        follow_policy TEXT NOT NULL CHECK (follow_policy IN ('everyone', 'nobody')),
+        presence_policy TEXT NOT NULL CHECK (presence_policy IN ('followed', 'everyone', 'nobody')),
+        challenge_policy TEXT NOT NULL CHECK (challenge_policy IN ('followed', 'everyone', 'nobody')),
+        updated_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_follows (
+        follower_account_id TEXT NOT NULL REFERENCES online_accounts(account_id) ON DELETE CASCADE,
+        followed_account_id TEXT NOT NULL REFERENCES online_accounts(account_id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (follower_account_id, followed_account_id),
+        CHECK (follower_account_id <> followed_account_id)
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_account_follows_followed_idx
+        ON online_account_follows (followed_account_id)
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_blocks (
+        blocker_account_id TEXT NOT NULL REFERENCES online_accounts(account_id) ON DELETE CASCADE,
+        blocked_account_id TEXT NOT NULL REFERENCES online_accounts(account_id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (blocker_account_id, blocked_account_id),
+        CHECK (blocker_account_id <> blocked_account_id)
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_account_blocks_blocked_idx
+        ON online_account_blocks (blocked_account_id)
+    `);
+  }
+
+  private async loadAccountByDisplayName(displayName: string): Promise<OnlineAccount | null> {
+    const normalized = normalizeOnlineAccountDisplayName(displayName);
+    if (!normalized.ok) return null;
+    const result = await this.queryable.query(
+      `
+        SELECT account_id, display_name, created_at, updated_at
+        FROM online_accounts
+        WHERE display_name_normalized = $1
+        LIMIT 1
+      `,
+      [normalizeOnlineAccountDisplayNameKey(normalized.value)]
+    );
+    return result.rows.length > 0 ? accountFromRow(result.rows[0]) : null;
+  }
+
+  private async loadAccountById(accountId: string): Promise<OnlineAccount | null> {
+    const result = await this.queryable.query(
+      `
+        SELECT account_id, display_name, created_at, updated_at
+        FROM online_accounts
+        WHERE account_id = $1
+        LIMIT 1
+      `,
+      [accountId]
+    );
+    return result.rows.length > 0 ? accountFromRow(result.rows[0]) : null;
+  }
+
+  private async hasFollow(
+    followerAccountId: string,
+    followedAccountId: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<boolean> {
+    const result = await queryable.query(
+      `
+        SELECT 1
+        FROM online_account_follows
+        WHERE follower_account_id = $1 AND followed_account_id = $2
+        LIMIT 1
+      `,
+      [followerAccountId, followedAccountId]
+    );
+    return result.rows.length > 0;
+  }
+
+  private async lockSocialPair(
+    queryable: PostgresQueryable,
+    leftAccountId: string,
+    rightAccountId: string
+  ): Promise<void> {
+    const [first, second] = [leftAccountId, rightAccountId].sort();
+    await queryable.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+      [first, second]
+    );
+  }
+
+  private async hasBlock(
+    blockerAccountId: string,
+    blockedAccountId: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<boolean> {
+    const result = await queryable.query(
+      `
+        SELECT 1
+        FROM online_account_blocks
+        WHERE blocker_account_id = $1 AND blocked_account_id = $2
+        LIMIT 1
+      `,
+      [blockerAccountId, blockedAccountId]
+    );
+    return result.rows.length > 0;
+  }
+
+  private async createProfile(
+    viewerAccountId: string,
+    target: OnlineAccount,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<OnlineAccountPublicProfile> {
+    return {
+      schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+      displayName: target.displayName,
+      relationship: {
+        self: viewerAccountId === target.accountId,
+        following: await this.hasFollow(viewerAccountId, target.accountId, queryable),
+        blocked: await this.hasBlock(viewerAccountId, target.accountId, queryable),
+      },
+    };
   }
 
   private async withTransaction<T>(operation: (queryable: PostgresQueryable) => Promise<T>): Promise<T> {
-    const client = await this.transactionClientFactory?.();
-    const queryable = client ?? this.queryable;
+    const client = await this.transactionClientFactory();
     try {
-      await queryable.query("BEGIN");
-      const result = await operation(queryable);
-      await queryable.query("COMMIT");
+      await client.query("BEGIN");
+      const result = await operation(client);
+      await client.query("COMMIT");
       return result;
     } catch (error) {
       try {
-        await queryable.query("ROLLBACK");
+        await client.query("ROLLBACK");
       } catch (rollbackError) {
         throw new AggregateError(
           [error, rollbackError],
@@ -333,7 +703,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       }
       throw error;
     } finally {
-      client?.release();
+      client.release();
     }
   }
 }

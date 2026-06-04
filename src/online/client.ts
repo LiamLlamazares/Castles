@@ -17,6 +17,15 @@ import {
   type OnlineAccountDeleteResponse,
 } from "./accounts";
 import {
+  ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+  type OnlineAccountFollowingResponse,
+  type OnlineAccountPrivacyPatch,
+  type OnlineAccountPrivacyResponse,
+  type OnlineAccountPrivacySettings,
+  type OnlineAccountProfileResponse,
+  type OnlineAccountPublicProfile,
+} from "./social";
+import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   validateOnlineGameDirectoryResponse,
   validateOnlineGameSummary,
@@ -128,6 +137,11 @@ export type {
   OnlineAccountSessionsResponse,
   OnlineAccountSessionsRevokeResponse,
   OnlineAccountDeleteResponse,
+  OnlineAccountFollowingResponse,
+  OnlineAccountPrivacyPatch,
+  OnlineAccountPrivacyResponse,
+  OnlineAccountProfileResponse,
+  OnlineAccountPublicProfile,
 };
 
 export interface CreatedOnlineChallenge {
@@ -657,6 +671,239 @@ function validateOnlineAccountResponse(body: unknown, label: string): OnlineAcco
     throw new Error(`${label} response was malformed: ${account.error.message}`);
   }
   return account.value;
+}
+
+function validateVersionedObject(body: unknown, label: string): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} response was malformed.`);
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(`${label} response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`);
+  }
+  return body as Record<string, unknown>;
+}
+
+function validateOnlineAccountPublicProfile(
+  value: unknown,
+  label: string
+): OnlineAccountPublicProfile {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedProfileKeys = new Set(["schemaVersion", "displayName", "relationship"]);
+  for (const key of Object.keys(record)) {
+    if (!allowedProfileKeys.has(key)) {
+      throw new Error(`${label} was malformed: profile contains unsupported data.`);
+    }
+  }
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label} was malformed: schemaVersion is invalid.`);
+  }
+  if (typeof record.displayName !== "string" || record.displayName.length === 0) {
+    throw new Error(`${label} was malformed: displayName is invalid.`);
+  }
+  if (stringContainsDurableSecret(record.displayName)) {
+    throw new Error(`${label} was malformed: displayName must not contain secrets.`);
+  }
+  const relationship = record.relationship;
+  if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
+    throw new Error(`${label} was malformed: relationship is invalid.`);
+  }
+  const relationshipRecord = relationship as Record<string, unknown>;
+  const allowedRelationshipKeys = new Set(["self", "following", "blocked"]);
+  for (const key of Object.keys(relationshipRecord)) {
+    if (!allowedRelationshipKeys.has(key)) {
+      throw new Error(`${label} was malformed: relationship contains unsupported data.`);
+    }
+  }
+  if (
+    typeof relationshipRecord.self !== "boolean" ||
+    typeof relationshipRecord.following !== "boolean" ||
+    typeof relationshipRecord.blocked !== "boolean"
+  ) {
+    throw new Error(`${label} was malformed: relationship is invalid.`);
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    displayName: record.displayName,
+    relationship: {
+      self: relationshipRecord.self,
+      following: relationshipRecord.following,
+      blocked: relationshipRecord.blocked,
+    },
+  };
+}
+
+function validateOnlineAccountPrivacySettings(
+  value: unknown,
+  label: string
+): OnlineAccountPrivacySettings {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label} was malformed: schemaVersion is invalid.`);
+  }
+  if (record.followPolicy !== "everyone" && record.followPolicy !== "nobody") {
+    throw new Error(`${label} was malformed: followPolicy is invalid.`);
+  }
+  if (
+    record.presencePolicy !== "followed" &&
+    record.presencePolicy !== "everyone" &&
+    record.presencePolicy !== "nobody"
+  ) {
+    throw new Error(`${label} was malformed: presencePolicy is invalid.`);
+  }
+  if (
+    record.challengePolicy !== "followed" &&
+    record.challengePolicy !== "everyone" &&
+    record.challengePolicy !== "nobody"
+  ) {
+    throw new Error(`${label} was malformed: challengePolicy is invalid.`);
+  }
+  if (record.updatedAt !== null && (typeof record.updatedAt !== "string" || Number.isNaN(Date.parse(record.updatedAt)))) {
+    throw new Error(`${label} was malformed: updatedAt is invalid.`);
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    followPolicy: record.followPolicy,
+    presencePolicy: record.presencePolicy,
+    challengePolicy: record.challengePolicy,
+    updatedAt: record.updatedAt,
+  };
+}
+
+function validateProfileResponse(body: unknown, label: string): OnlineAccountProfileResponse {
+  const record = validateVersionedObject(body, label);
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    profile: validateOnlineAccountPublicProfile(record.profile, `${label}.profile`),
+  };
+}
+
+export async function fetchOnlineAccountProfile(
+  account: OnlineAccountSessionParams,
+  displayName: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountProfileResponse> {
+  const response = await fetchImpl(`/api/online/profiles/${encodeURIComponent(displayName)}`, {
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load online profile (${response.status})`);
+  }
+  return validateProfileResponse(await response.json(), "Online profile");
+}
+
+export async function fetchOnlineAccountFollowing(
+  account: OnlineAccountSessionParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountFollowingResponse> {
+  const response = await fetchImpl("/api/online/account/follows", {
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load followed online accounts (${response.status})`);
+  }
+  const record = validateVersionedObject(await response.json(), "Online following");
+  if (!Array.isArray(record.following)) {
+    throw new Error("Online following response was malformed: following is invalid.");
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    following: record.following.map((profile, index) =>
+      validateOnlineAccountPublicProfile(profile, `Online following.following[${index}]`)
+    ),
+  };
+}
+
+async function putOrDeleteOnlineAccountRelationship(
+  account: OnlineAccountSessionParams,
+  kind: "follows" | "blocks",
+  displayName: string,
+  method: "PUT" | "DELETE",
+  label: string,
+  fetchImpl: typeof fetch
+): Promise<OnlineAccountProfileResponse> {
+  const response = await fetchImpl(`/api/online/account/${kind}/${encodeURIComponent(displayName)}`, {
+    method,
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not ${label} online account (${response.status})`);
+  }
+  return validateProfileResponse(await response.json(), `Online ${label}`);
+}
+
+export function followOnlineAccount(
+  account: OnlineAccountSessionParams,
+  displayName: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountProfileResponse> {
+  return putOrDeleteOnlineAccountRelationship(account, "follows", displayName, "PUT", "follow", fetchImpl);
+}
+
+export function unfollowOnlineAccount(
+  account: OnlineAccountSessionParams,
+  displayName: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountProfileResponse> {
+  return putOrDeleteOnlineAccountRelationship(account, "follows", displayName, "DELETE", "unfollow", fetchImpl);
+}
+
+export function blockOnlineAccount(
+  account: OnlineAccountSessionParams,
+  displayName: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountProfileResponse> {
+  return putOrDeleteOnlineAccountRelationship(account, "blocks", displayName, "PUT", "block", fetchImpl);
+}
+
+export function unblockOnlineAccount(
+  account: OnlineAccountSessionParams,
+  displayName: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountProfileResponse> {
+  return putOrDeleteOnlineAccountRelationship(account, "blocks", displayName, "DELETE", "unblock", fetchImpl);
+}
+
+export async function fetchOnlineAccountPrivacy(
+  account: OnlineAccountSessionParams,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountPrivacyResponse> {
+  const response = await fetchImpl("/api/online/account/privacy", {
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load online account privacy (${response.status})`);
+  }
+  const record = validateVersionedObject(await response.json(), "Online account privacy");
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    privacy: validateOnlineAccountPrivacySettings(record.privacy, "Online account privacy.privacy"),
+  };
+}
+
+export async function updateOnlineAccountPrivacy(
+  account: OnlineAccountSessionParams,
+  patch: OnlineAccountPrivacyPatch,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountPrivacyResponse> {
+  const response = await fetchImpl("/api/online/account/privacy", {
+    method: "PATCH",
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not update online account privacy (${response.status})`);
+  }
+  const record = validateVersionedObject(await response.json(), "Online account privacy update");
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    privacy: validateOnlineAccountPrivacySettings(record.privacy, "Online account privacy update.privacy"),
+  };
 }
 
 export async function createOnlineAccount(

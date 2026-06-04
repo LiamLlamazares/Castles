@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
   buildSpectatorUrl,
+  blockOnlineAccount,
   createOnlineAccount,
   createOnlineGame,
   acceptOnlineChallenge,
@@ -14,8 +15,11 @@ import {
   deleteOnlineAccount,
   declineOnlineChallenge,
   fetchOnlineChallenge,
+  fetchOnlineAccountFollowing,
   fetchOnlineAccountGames,
   fetchOnlineAccountMe,
+  fetchOnlineAccountPrivacy,
+  fetchOnlineAccountProfile,
   fetchOnlineAccountSessions,
   fetchOpenSeek,
   fetchOpenSeekDirectory,
@@ -59,6 +63,10 @@ import {
   rememberOpenSeekCreatorParams,
   resolveOpenSeekCreatorParams,
   revokeOnlineAccountSession,
+  followOnlineAccount,
+  unfollowOnlineAccount,
+  unblockOnlineAccount,
+  updateOnlineAccountPrivacy,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
@@ -755,6 +763,197 @@ describe("online client helpers", () => {
       "/api/online/account/session",
       { method: "DELETE", headers: { authorization: "Bearer account-token" } }
     );
+  });
+
+  it("loads profiles, follows accounts, blocks accounts, and updates privacy with bearer auth", async () => {
+    const profile = {
+      schemaVersion: 1,
+      displayName: "Samir",
+      relationship: { self: false, following: false, blocked: false },
+    };
+    const followedProfile = {
+      ...profile,
+      relationship: { self: false, following: true, blocked: false },
+    };
+    const blockedProfile = {
+      schemaVersion: 1,
+      displayName: "Liam",
+      relationship: { self: false, following: false, blocked: true },
+    };
+    const privacy = {
+      schemaVersion: 1,
+      followPolicy: "everyone",
+      presencePolicy: "followed",
+      challengePolicy: "followed",
+      updatedAt: null,
+    };
+    const updatedPrivacy = {
+      ...privacy,
+      followPolicy: "nobody",
+      presencePolicy: "nobody",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile: followedProfile }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, following: [followedProfile] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile: blockedProfile }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile: { ...blockedProfile, relationship: { self: false, following: false, blocked: false } } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, privacy }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, privacy: updatedPrivacy }),
+      });
+
+    await expect(fetchOnlineAccountProfile({ token: "account-token" }, "Samir", fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile,
+    });
+    await expect(followOnlineAccount({ token: "account-token" }, "Samir", fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: followedProfile,
+    });
+    await expect(unfollowOnlineAccount({ token: "account-token" }, "Samir", fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile,
+    });
+    await expect(fetchOnlineAccountFollowing({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      following: [followedProfile],
+    });
+    await expect(blockOnlineAccount({ token: "account-token" }, "Liam", fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: blockedProfile,
+    });
+    await expect(unblockOnlineAccount({ token: "account-token" }, "Liam", fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: { ...blockedProfile, relationship: { self: false, following: false, blocked: false } },
+    });
+    await expect(fetchOnlineAccountPrivacy({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      privacy,
+    });
+    await expect(
+      updateOnlineAccountPrivacy(
+        { token: "account-token" },
+        { followPolicy: "nobody", presencePolicy: "nobody" },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      privacy: updatedPrivacy,
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/api/online/profiles/Samir", {
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/account/follows/Samir", {
+      method: "PUT",
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "/api/online/account/follows/Samir", {
+      method: "DELETE",
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(4, "/api/online/account/follows", {
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(5, "/api/online/account/blocks/Liam", {
+      method: "PUT",
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(6, "/api/online/account/blocks/Liam", {
+      method: "DELETE",
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(7, "/api/online/account/privacy", {
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(8, "/api/online/account/privacy", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", authorization: "Bearer account-token" },
+      body: JSON.stringify({ followPolicy: "nobody", presencePolicy: "nobody" }),
+    });
+  });
+
+  it("rejects malformed social profile and privacy responses", async () => {
+    await expect(
+      fetchOnlineAccountProfile(
+        { token: "account-token" },
+        "Samir",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            profile: {
+              schemaVersion: 1,
+              accountId: "account_samir",
+              displayName: "Samir",
+              relationship: { self: false, following: false, blocked: false },
+            },
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/unsupported data/);
+
+    await expect(
+      fetchOnlineAccountProfile(
+        { token: "account-token" },
+        "Samir",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            profile: {
+              schemaVersion: 1,
+              displayName: "Bearer abc.def.ghi",
+              relationship: { self: false, following: false, blocked: false },
+            },
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/must not contain secrets/);
+
+    await expect(
+      fetchOnlineAccountPrivacy(
+        { token: "account-token" },
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            privacy: {
+              schemaVersion: 1,
+              followPolicy: "friends",
+              presencePolicy: "followed",
+              challengePolicy: "followed",
+              updatedAt: null,
+            },
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/followPolicy is invalid/);
   });
 
   it("rejects account session revocation responses that did not revoke the session", async () => {
