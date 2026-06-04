@@ -166,6 +166,29 @@ function participantProfileName(
   return identityDisplayName(participant.identity);
 }
 
+function accountOpponentProfileNames(
+  summary: OnlineGameSummary,
+  account: OnlineAccount | null | undefined
+): string[] {
+  if (!account) return [];
+  const accountParticipant = summary.participants.find((participant) =>
+    isSameOnlineIdentity(participant.identity, account.identity)
+  );
+  if (!accountParticipant) return [];
+  const seen = new Set<string>();
+  const opponents: string[] = [];
+  for (const participant of summary.participants) {
+    if (participant.seat === accountParticipant.seat) continue;
+    const displayName = identityDisplayName(participant.identity);
+    if (!displayName) continue;
+    const key = normalizeDisplayNameKey(displayName);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    opponents.push(displayName);
+  }
+  return opponents;
+}
+
 function identityDisplayName(identity: OnlineIdentity): string | null {
   return identity.kind === "registered" && identity.displayName ? identity.displayName : null;
 }
@@ -1800,6 +1823,46 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     );
   };
 
+  const renderGameRowSocialActions = (
+    game: OnlineGameSummary,
+    options: { allowChallenge?: boolean } = {}
+  ) => {
+    if (!canUseAccountSocial) return null;
+    const opponentProfileNames = accountOpponentProfileNames(game, account);
+    if (opponentProfileNames.length === 0) return null;
+    return opponentProfileNames.map((profileName) => {
+      const profileKey = normalizeDisplayNameKey(profileName);
+      const isFollowed = followedDisplayNames.has(profileKey);
+      const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+      return (
+        <React.Fragment key={`${game.gameId}:${profileKey}`}>
+          {!isFollowed && onFollowAccount && (
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => void runSocialProfileAction("follow", profileName)}
+              disabled={socialAction !== undefined}
+              aria-label={`Follow ${profileName} from ${game.gameId}`}
+            >
+              Follow
+            </button>
+          )}
+          {options.allowChallenge && !pendingChallenge && onChallengeAccount && (
+            <button
+              type="button"
+              className="online-browser-button neutral"
+              onClick={() => void runSocialChallengeAction(profileName)}
+              disabled={socialAction !== undefined}
+              aria-label={`Challenge ${profileName} from ${game.gameId}`}
+            >
+              Challenge
+            </button>
+          )}
+        </React.Fragment>
+      );
+    });
+  };
+
   const renderPublicGameRow = (
     game: OnlineGameSummary,
     options: {
@@ -1807,6 +1870,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       featured?: boolean;
       context?: "watch" | "archive";
       featuredReason?: "moves" | "watchers";
+      showOpponentSocialActions?: boolean;
     } = {}
   ) => {
     const white = participantName(game.participants, "w");
@@ -1965,6 +2029,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               Copy Link
             </button>
           )}
+          {options.showOpponentSocialActions && renderGameRowSocialActions(game, { allowChallenge: isArchivedGame })}
         </div>
       </article>
     );
@@ -2071,6 +2136,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           ) : (
             <span className="online-game-action-note">Open from original browser session or invite link</span>
           )}
+          {renderGameRowSocialActions(game)}
         </div>
       </article>
     );
@@ -4039,7 +4105,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           </div>
                           <span>{formatCount(accountArchivedGames.length, "replay")}</span>
                         </div>
-                        {accountArchivedGames.map((game) => renderPublicGameRow(game, { context: "archive" }))}
+                        {accountArchivedGames.map((game) =>
+                          renderPublicGameRow(game, { context: "archive", showOpponentSocialActions: true })
+                        )}
                       </section>
                     )}
                   </>

@@ -2372,6 +2372,114 @@ describe("OnlineGameBrowser", () => {
     });
   });
 
+  it("lets signed-in players follow and challenge registered opponents from account game rows", async () => {
+    const account = accountFixture("Liam");
+    const followedProfile = publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" });
+    let currentFollowing = false;
+    const loadAccountFollowing = vi.fn().mockImplementation(() => Promise.resolve({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      following: currentFollowing ? [followedProfile] : [],
+    }));
+    const onFollowAccount = vi.fn().mockImplementation((displayName: string) => {
+      currentFollowing = true;
+      return Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: publicProfile(displayName, { following: true }, { visibility: "visible", status: "online" }),
+      });
+    });
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+    const accountArchive = summary({
+      gameId: "game_account_archive_samir",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "unlisted",
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Samir").identity },
+      ],
+    });
+    const activeAccount = summary({
+      gameId: "game_active_account_samir",
+      status: "active",
+      archiveState: "active",
+      visibility: "unlisted",
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Samir").identity },
+      ],
+    });
+    const publicArchive = summary({
+      gameId: "game_public_archive_samir_only",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "public",
+      participants: [
+        registeredParticipant("w", "Samir"),
+        registeredParticipant("b", "Ada"),
+      ],
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([publicArchive]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountFollowing={loadAccountFollowing}
+        loadAccountGames={vi.fn().mockResolvedValue(directory([activeAccount, accountArchive]))}
+        onFollowAccount={onFollowAccount}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const activeGames = await screen.findByRole("region", { name: "Active account games" });
+    const activeRow = (await within(activeGames).findByText("game_active_account_samir")).closest("article");
+    expect(activeRow).not.toBeNull();
+    expect(within(activeRow as HTMLElement).getByRole("button", {
+      name: "Follow Samir from game_active_account_samir",
+    })).toBeInTheDocument();
+    expect(within(activeRow as HTMLElement).queryByRole("button", {
+      name: "Challenge Samir from game_active_account_samir",
+    })).not.toBeInTheDocument();
+
+    const completedGames = await screen.findByRole("region", { name: "Completed account games" });
+    const accountReplayRow = (await within(completedGames).findByText("game_account_archive_samir")).closest("article");
+    expect(accountReplayRow).not.toBeNull();
+    expect(within(accountReplayRow as HTMLElement).getByRole("button", {
+      name: "Follow Samir from game_account_archive_samir",
+    })).toBeInTheDocument();
+    expect(within(accountReplayRow as HTMLElement).getByRole("button", {
+      name: "Challenge Samir from game_account_archive_samir",
+    })).toBeInTheDocument();
+
+    const publicReplayRow = (await screen.findByText("game_public_archive_samir_only")).closest("article");
+    expect(publicReplayRow).not.toBeNull();
+    expect(within(publicReplayRow as HTMLElement).queryByRole("button", {
+      name: "Follow Samir from game_public_archive_samir_only",
+    })).not.toBeInTheDocument();
+    expect(within(publicReplayRow as HTMLElement).queryByRole("button", {
+      name: "Challenge Samir from game_public_archive_samir_only",
+    })).not.toBeInTheDocument();
+
+    fireEvent.click(within(accountReplayRow as HTMLElement).getByRole("button", {
+      name: "Follow Samir from game_account_archive_samir",
+    }));
+    await waitFor(() => expect(onFollowAccount).toHaveBeenCalledWith("Samir"));
+    await waitFor(() => expect(within(accountReplayRow as HTMLElement).queryByRole("button", {
+      name: "Follow Samir from game_account_archive_samir",
+    })).not.toBeInTheDocument());
+
+    fireEvent.click(within(accountReplayRow as HTMLElement).getByRole("button", {
+      name: "Challenge Samir from game_account_archive_samir",
+    }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+  });
+
   it("does not show device replay fallback while signed-in account archive is still loading", async () => {
     const account = {
       schemaVersion: 1 as const,
