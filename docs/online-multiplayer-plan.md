@@ -1,6 +1,6 @@
 # Online Multiplayer Master Roadmap
 
-Last refreshed: 2026-06-02
+Last refreshed: 2026-06-04
 
 This document is the source of truth for Castles online multiplayer work. The current direction assumes no legacy compatibility burden: old online drafts, incomplete protocols, and pre-roadmap UI assumptions may be replaced instead of preserved.
 
@@ -842,7 +842,7 @@ Tests/review/deploy gates:
 
 Goal: add lightweight friend functionality without turning accounts into an unsafe social network or creating moderation-heavy surfaces too early.
 
-Status: backend/client-helper slice implemented and pushed on 2026-06-04; first visible UI slice implemented locally the same day. Social v1 now has authenticated exact profile lookup, one-way follow/unfollow, following-list reads, block/unblock, privacy get/patch, PostgreSQL persistence, memory-store parity, strict client response validation that rejects internal identity fields in profile payloads, and a signed-in Online People panel for exact lookup, follow/unfollow, block/unblock, following refresh, and enforced follow privacy. This slice intentionally does not add online/last-seen presence, friend-only lobby listings, friend Watch/Archive filters, challenge inboxes, private notes, challenge presets, ratings, or leaderboards yet.
+Status: backend/client-helper and visible Online People slices are implemented and pushed through 2026-06-04. Social v1 now has authenticated exact profile lookup, one-way follow/unfollow, following-list reads, block/unblock, privacy get/patch, PostgreSQL persistence, memory-store parity, strict client response validation that rejects internal identity fields in profile payloads, and a signed-in Online People panel for exact lookup, follow/unfollow, block/unblock, following refresh, presence-aware following rows, All/Online friend filtering, mutual/follows-you labels, friend challenge/watch shortcuts, a small account challenge surface, and follow/presence/challenge privacy controls. It still does not add friend-only lobby listings, friend Watch/Archive filters, private notes, private messages, public profile text, ratings, leaderboards, reports, or moderation queues.
 
 Recommended shape:
 
@@ -866,7 +866,7 @@ Recommended shape:
 
 Tests/review/deploy gates:
 
-- Tests: follow/unfollow idempotency, one-way directionality, profile lookup anti-enumeration, privacy blocks, challenge permission checks, rematch permission checks, friend-only seek visibility/count/cursor filtering, online presence list filtering, challenge-inbox rate limits, per-pair cooldowns, and no token/id leakage in friend APIs. The current slices cover exact profile lookup, follow/unfollow, following lists, follow privacy, block cleanup/hiding, strict client no-internal-id validation, PostgreSQL persistence, HTTP bearer-auth behavior, and the visible Online People panel.
+- Tests: follow/unfollow idempotency, one-way directionality, profile lookup anti-enumeration, privacy blocks, challenge permission checks, rematch permission checks, friend-only seek visibility/count/cursor filtering, online presence list filtering, challenge-inbox rate limits, per-pair cooldowns, and no token/id leakage in friend APIs. The current slices cover exact profile lookup, follow/unfollow, following lists, follow privacy, block cleanup/hiding, strict client no-internal-id validation, PostgreSQL persistence, HTTP bearer-auth behavior, presence-aware following rows, All/Online friend filtering, mutual/follows-you labels, friend challenge/watch shortcuts, account challenge status/actions, follow/presence/challenge privacy controls, and the visible Online People panel.
 - Review: privacy/moderation review focused on one-way follows, block enforcement, follower-count avoidance, challenge-spam prevention, profile enumeration, and presence leakage.
 - Deploy: deploy only after privacy defaults are conservative and friend visibility cannot expose private games or bearer credentials.
 

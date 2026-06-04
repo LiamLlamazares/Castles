@@ -833,6 +833,68 @@ describe("OnlineGameBrowser", () => {
     expect(rows[4]).toHaveTextContent("Presence hidden");
   });
 
+  it("filters followed players to online accounts without losing the full list", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Ada", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Ben", { following: true }, { visibility: "visible", status: "recent" }),
+          publicProfile("Zed", { following: true }),
+        ])}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    expect(await within(following).findByText("Ada")).toBeInTheDocument();
+    expect(within(following).getByText("3 players")).toBeInTheDocument();
+
+    fireEvent.click(within(following).getByRole("button", { name: "Show online followed players" }));
+    expect(within(following).getByText("1 online")).toBeInTheDocument();
+    let rows = within(following).getAllByRole("article");
+    expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual(["Ada"]);
+
+    fireEvent.click(within(following).getByRole("button", { name: "Show all followed players" }));
+    expect(within(following).getByText("3 players")).toBeInTheDocument();
+    rows = within(following).getAllByRole("article");
+    expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual(["Ada", "Ben", "Zed"]);
+  });
+
+  it("shows an empty online-friends state when followed players are offline or hidden", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Mira", { following: true }, { visibility: "visible", status: "away" }),
+          publicProfile("Zed", { following: true }),
+        ])}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    expect(await within(following).findByText("Mira")).toBeInTheDocument();
+
+    fireEvent.click(within(following).getByRole("button", { name: "Show online followed players" }));
+
+    expect(within(following).getByText("0 online")).toBeInTheDocument();
+    expect(within(following).getByText("No followed players online.")).toBeInTheDocument();
+    expect(within(following).queryByRole("article")).not.toBeInTheDocument();
+  });
+
   it("auto-refreshes followed-player presence while visible", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const loadAccountFollowing = vi
@@ -881,7 +943,9 @@ describe("OnlineGameBrowser", () => {
 
     expect(loadAccountFollowing).toHaveBeenCalledTimes(2);
     expect(within(following).getByText("Samir")).toBeInTheDocument();
-    expect(within(following).getByText("Online")).toBeInTheDocument();
+    const samirRow = within(following).getByText("Samir").closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(within(samirRow as HTMLElement).getByText("Online")).toBeInTheDocument();
   });
 
   it("loads account challenges automatically and still allows manual refresh", async () => {

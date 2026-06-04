@@ -52,6 +52,7 @@ type OnlineBrowserTab = "lobby" | "watch" | "archive";
 type OnlineBrowserSort = "newest" | "moves" | "watchers";
 type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
 type OnlineFriendFilter = "all" | "followed";
+type OnlineFollowingPresenceFilter = "all" | "online";
 type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
 type OpenSeekClockFilter = "all" | "timed" | "casual";
 type OpenSeekVpFilter = "all" | "enabled" | "disabled";
@@ -367,6 +368,10 @@ function formatRelationshipLabel(profile: OnlineAccountPublicProfile): string {
   if (relationship.following) return "Following";
   if (relationship.followedBy) return "Follows you";
   return "Not followed";
+}
+
+function isProfileOnline(profile: OnlineAccountPublicProfile): boolean {
+  return profile.presence.visibility === "visible" && profile.presence.status === "online";
 }
 
 function presenceBadgeClassName(profile: OnlineAccountPublicProfile): string {
@@ -709,6 +714,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "refresh" | "privacy" | undefined>();
   const [followingProfiles, setFollowingProfiles] = React.useState<OnlineAccountPublicProfile[]>([]);
   const [followingStatus, setFollowingStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [followingPresenceFilter, setFollowingPresenceFilter] = React.useState<OnlineFollowingPresenceFilter>("all");
   const [followPolicy, setFollowPolicy] = React.useState<OnlineAccountFollowPolicy>("everyone");
   const [followPolicyDraft, setFollowPolicyDraft] = React.useState<OnlineAccountFollowPolicy>("everyone");
   const [presencePolicy, setPresencePolicy] = React.useState<OnlineAccountPresencePolicy>("followed");
@@ -1424,6 +1430,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     () => new Set(followingProfiles.map((profile) => normalizeDisplayNameKey(profile.displayName))),
     [followingProfiles]
   );
+  const onlineFollowingProfiles = React.useMemo(
+    () => followingProfiles.filter(isProfileOnline),
+    [followingProfiles]
+  );
+  const visibleFollowingProfiles = followingPresenceFilter === "online" ? onlineFollowingProfiles : followingProfiles;
   const friendFilterActive = canUseAccountSocial && friendFilter === "followed";
   const friendFilterUnavailable = friendFilterActive && followingStatus !== "ready";
   const filteredPublicActiveGames = React.useMemo(() => {
@@ -2846,14 +2857,38 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
           <section className="online-browser-following-list" aria-label="Followed players">
             <div className="online-browser-following-list-heading">
-              <strong>Following</strong>
-              <span>
-                {followingStatus === "loading"
-                  ? "Loading"
-                  : followingStatus === "error"
-                    ? "Unavailable"
-                    : formatCount(followingProfiles.length, "player")}
-              </span>
+              <div className="online-browser-following-list-title">
+                <strong>Following</strong>
+                <span>
+                  {followingStatus === "loading"
+                    ? "Loading"
+                    : followingStatus === "error"
+                      ? "Unavailable"
+                      : followingPresenceFilter === "online"
+                        ? `${onlineFollowingProfiles.length} online`
+                        : formatCount(followingProfiles.length, "player")}
+                </span>
+              </div>
+              <div className="online-browser-following-filter" role="group" aria-label="Followed players filter">
+                <button
+                  type="button"
+                  aria-label="Show all followed players"
+                  aria-pressed={followingPresenceFilter === "all"}
+                  className={followingPresenceFilter === "all" ? "active" : ""}
+                  onClick={() => setFollowingPresenceFilter("all")}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  aria-label="Show online followed players"
+                  aria-pressed={followingPresenceFilter === "online"}
+                  className={followingPresenceFilter === "online" ? "active" : ""}
+                  onClick={() => setFollowingPresenceFilter("online")}
+                >
+                  Online
+                </button>
+              </div>
             </div>
             {followingStatus === "error" ? (
               <p>Could not load followed players.</p>
@@ -2861,9 +2896,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               <p>Loading followed players...</p>
             ) : followingProfiles.length === 0 ? (
               <p>No followed players yet.</p>
+            ) : visibleFollowingProfiles.length === 0 ? (
+              <p>No followed players online.</p>
             ) : (
               <div className="online-browser-following-rows">
-                {followingProfiles.map((profile) => {
+                {visibleFollowingProfiles.map((profile) => {
                   const profileKey = normalizeDisplayNameKey(profile.displayName);
                   const liveGame = liveGameByFollowedDisplayName.get(profileKey);
                   const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);

@@ -1,6 +1,6 @@
 # Online Data Contract
 
-Last refreshed: 2026-06-03
+Last refreshed: 2026-06-04
 
 This document records the current contract decisions for online multiplayer. The app still has no production users, so incompatible beta data can be reset instead of migrated.
 
@@ -171,9 +171,9 @@ When an account bearer is present on safe creation paths, the server uses the re
 
 ## Account Social Contract
 
-Social v1 is an account-authenticated foundation for exact profile lookup, one-way follows, blocks, and privacy settings. The first visible UI exposes exact lookup, follow/unfollow, block/unblock, following-list refresh, and the enforced follow privacy control. It does not yet add presence broadcasting, friend-only lobby listings, challenge inboxes, private messages, public profile text, ratings, or leaderboards.
+Social v1 is an account-authenticated foundation for exact profile lookup, one-way follows, blocks, privacy settings, privacy-filtered coarse presence, and account-to-account challenge targeting. The visible UI exposes exact lookup, follow/unfollow, block/unblock, following-list refresh, presence-aware following rows with All/Online filtering, mutual/follows-you labels, friend challenge/watch shortcuts, a small account challenge status surface, and follow/presence/challenge privacy controls. It does not yet add friend-only lobby listings, challenge inboxes, private messages, public profile text, ratings, leaderboards, reports, or moderation queues.
 
-Every social route requires `Authorization: Bearer <account-session-token>`. The server resolves the viewer account from that bearer; clients cannot provide viewer account ids in request bodies. Profile and follow-list responses expose display names and relationship booleans only. They must not expose raw account ids, account identities, session ids, bearer tokens, token hashes, game seat tokens, challenge tokens, open-seek creator tokens, or internal database keys.
+Every social route requires `Authorization: Bearer <account-session-token>`. The server resolves the viewer account from that bearer; clients cannot provide viewer account ids in request bodies. Profile and follow-list responses expose display names, privacy-filtered coarse presence, and relationship booleans only. Relationship booleans currently include `self`, `following`, `followedBy`, and `blocked`. They must not expose raw account ids, account identities, session ids, bearer tokens, token hashes, game seat tokens, challenge tokens, open-seek creator tokens, or internal database keys.
 
 Social routes:
 
@@ -186,7 +186,7 @@ Social routes:
 - `GET /api/online/account/privacy`: returns privacy settings. Missing persisted settings use defaults.
 - `PATCH /api/online/account/privacy`: accepts only `followPolicy`, `presencePolicy`, and `challengePolicy` fields.
 
-Privacy v1 defaults are `followPolicy: "everyone"`, `presencePolicy: "followed"`, and `challengePolicy: "followed"`. `followed` means accounts the user has chosen to follow/trust, not arbitrary accounts that follow the user. The visible UI currently exposes only `followPolicy`, because that setting is already enforced by follow creation. Presence and challenge enforcement are not wired yet; future implementations must use this directionality and must not treat incoming followers as trusted friends.
+Privacy v1 defaults are `followPolicy: "everyone"`, `presencePolicy: "followed"`, and `challengePolicy: "followed"`. `followed` means accounts the user has chosen to follow/trust, not arbitrary accounts that follow the user. The visible UI exposes all three privacy settings. Follow creation, profile/follow-list presence visibility, and account challenge target resolution use these policies server-side. Future friend-only lobby or archive visibility must preserve this directionality and must not treat incoming followers as trusted friends.
 
 If an unfollow, block, or unblock request names a real account that is hidden because that account blocks the viewer, the server may still apply the viewer's cleanup/block mutation, but the response must stay hidden and return `not_found` instead of a profile.
 
