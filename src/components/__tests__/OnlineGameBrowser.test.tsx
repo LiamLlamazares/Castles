@@ -2740,7 +2740,10 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(within(accountReplayRow as HTMLElement).getByRole("button", {
       name: "Rematch Samir from game_account_archive_samir",
     }));
-    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir", {
+      intent: "rematch",
+      sourceGameId: "game_account_archive_samir",
+    }));
     expect(await screen.findByText("Rematch challenge created for Samir.")).toBeInTheDocument();
   });
 

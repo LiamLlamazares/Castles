@@ -56,6 +56,11 @@ type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
 type OnlineFriendFilter = "all" | "followed";
 type OnlineFollowingPresenceFilter = "all" | "online";
 type OnlineAccountChallengeFilter = NonNullable<FetchOnlineAccountChallengesOptions["state"]>;
+type OnlineAccountChallengeIntent = "challenge" | "rematch";
+interface OnlineAccountChallengeActionOptions {
+  intent?: OnlineAccountChallengeIntent;
+  sourceGameId?: string;
+}
 type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
 type OpenSeekClockFilter = "all" | "timed" | "casual";
 type OpenSeekVpFilter = "all" | "enabled" | "disabled";
@@ -139,7 +144,7 @@ interface OnlineGameBrowserProps {
   onUnfollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onBlockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onUnblockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
-  onChallengeAccount?: (displayName: string) => void | Promise<void>;
+  onChallengeAccount?: (displayName: string, options?: OnlineAccountChallengeActionOptions) => void | Promise<void>;
   onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
   loadAccountPrivacy?: () => Promise<OnlineAccountPrivacyResponse>;
   onUpdateAccountPrivacy?: (patch: OnlineAccountPrivacyPatch) => Promise<OnlineAccountPrivacyResponse>;
@@ -1904,7 +1909,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const renderGameRowSocialActions = (
     game: OnlineGameSummary,
-    options: { allowChallenge?: boolean; challengeIntent?: "challenge" | "rematch" } = {}
+    options: { allowChallenge?: boolean; challengeIntent?: OnlineAccountChallengeIntent } = {}
   ) => {
     if (!canUseAccountSocial) return null;
     const opponentProfileNames = accountOpponentProfileNames(game, account);
@@ -1932,7 +1937,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <button
               type="button"
               className="online-browser-button neutral"
-              onClick={() => void runSocialChallengeAction(profileName, challengeIntent)}
+              onClick={() => void runSocialChallengeAction(
+                profileName,
+                challengeIntent === "rematch"
+                  ? { intent: "rematch", sourceGameId: game.gameId }
+                  : undefined
+              )}
               disabled={socialAction !== undefined}
               aria-label={`${challengeLabel} ${profileName} from ${game.gameId}`}
             >
@@ -2634,15 +2644,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const runSocialChallengeAction = React.useCallback(async (
     displayName: string,
-    intent: "challenge" | "rematch" = "challenge"
+    options: OnlineAccountChallengeActionOptions = {}
   ) => {
     if (!onChallengeAccount) return;
+    const intent = options.intent ?? "challenge";
     const requestId = ++socialMutationRequestIdRef.current;
     const accountId = account?.accountId;
     setSocialAction("challenge");
     setSocialMessage("");
     try {
-      await onChallengeAccount(displayName);
+      if (options.intent || options.sourceGameId) {
+        await onChallengeAccount(displayName, options);
+      } else {
+        await onChallengeAccount(displayName);
+      }
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       setSocialMessage(
         intent === "rematch"
