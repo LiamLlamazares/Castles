@@ -84,6 +84,7 @@ interface QuickMatchSetupSummary {
 
 const LOBBY_AUTO_REFRESH_MS = 30_000;
 const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
+const ACCOUNT_CHALLENGE_AUTO_REFRESH_MS = 1_000;
 const GAME_SEARCH_DEBOUNCE_MS = 300;
 const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
 
@@ -693,8 +694,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const gameLoadInFlightRef = React.useRef(false);
   const seekLoadInFlightRef = React.useRef(false);
   const ownedSeekRefreshInFlightRef = React.useRef(false);
+  const accountChallengeLoadInFlightRef = React.useRef(false);
   const seekAutoRefreshPausedUntilRef = React.useRef(0);
+  const accountChallengeAutoRefreshPausedUntilRef = React.useRef(0);
   const seekActionByIdRef = React.useRef(seekActionById);
+  const accountChallengeActionByIdRef = React.useRef(accountChallengeActionById);
+  const completedAccountChallengeIdsRef = React.useRef(new Set<string>());
   const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -744,6 +749,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     seekActionByIdRef.current = seekActionById;
   }, [seekActionById]);
 
+  React.useEffect(() => {
+    accountChallengeActionByIdRef.current = accountChallengeActionById;
+  }, [accountChallengeActionById]);
+
   const visibleOwnedSeekResponse = React.useMemo(() => {
     const status = ownedSeekResponse?.summary.status;
     return status === "open" || status === "accepted" ? ownedSeekResponse : null;
@@ -792,20 +801,39 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, loadAccountSessions]);
 
-  const refreshAccountChallenges = React.useCallback(async () => {
+  const refreshAccountChallenges = React.useCallback(async (options: { background?: boolean } = {}) => {
     if (!account || !loadAccountChallenges) return;
+    if (accountChallengeLoadInFlightRef.current) return;
+    if (Object.values(accountChallengeActionByIdRef.current).some((action) => action !== undefined)) return;
+    const background = options.background === true;
     const requestId = ++accountChallengesRequestIdRef.current;
-    setAccountChallengesStatus("loading");
+    accountChallengeLoadInFlightRef.current = true;
+    if (!background) {
+      setAccountChallengesStatus("loading");
+    }
     try {
       const response = await loadAccountChallenges({ state: "pending" });
       if (requestId !== accountChallengesRequestIdRef.current) return;
-      setAccountChallenges(response.challenges);
+      setAccountChallenges(
+        response.challenges.filter((item) =>
+          !completedAccountChallengeIdsRef.current.has(item.summary.challengeId)
+        )
+      );
       setAccountChallengesStatus("ready");
     } catch (error) {
       if (requestId !== accountChallengesRequestIdRef.current) return;
-      console.error("[OnlineGameBrowser] Failed to load account challenges", error);
-      setAccountChallenges([]);
-      setAccountChallengesStatus("error");
+      if (isRateLimitError(error)) {
+        accountChallengeAutoRefreshPausedUntilRef.current = Date.now() + LOBBY_RATE_LIMIT_BACKOFF_MS;
+      }
+      if (!background) {
+        console.error("[OnlineGameBrowser] Failed to load account challenges", error);
+        setAccountChallenges([]);
+        setAccountChallengesStatus("error");
+      }
+    } finally {
+      if (requestId === accountChallengesRequestIdRef.current) {
+        accountChallengeLoadInFlightRef.current = false;
+      }
     }
   }, [account?.accountId, loadAccountChallenges]);
 
@@ -825,6 +853,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setAccountChallengeActionById((current) => ({ ...current, [challengeId]: action }));
     try {
       const response = await handler(challengeId);
+      if (response.summary.status !== "pending") {
+        completedAccountChallengeIdsRef.current.add(challengeId);
+      }
       setAccountChallenges((current) =>
         current
           .map((candidate) =>
@@ -978,10 +1009,32 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   React.useEffect(() => {
     accountChallengesRequestIdRef.current += 1;
+    accountChallengeLoadInFlightRef.current = false;
+    accountChallengeAutoRefreshPausedUntilRef.current = 0;
+    completedAccountChallengeIdsRef.current.clear();
     setAccountChallenges([]);
     setAccountChallengeActionById({});
     setAccountChallengesStatus("idle");
   }, [account?.accountId, canUseAccountChallenges]);
+
+  React.useEffect(() => {
+    if (!canUseAccountChallenges) return;
+    void refreshAccountChallenges();
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() < accountChallengeAutoRefreshPausedUntilRef.current) return;
+      void refreshAccountChallenges({ background: true });
+    };
+    const interval = window.setInterval(refreshIfVisible, ACCOUNT_CHALLENGE_AUTO_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      refreshIfVisible();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [canUseAccountChallenges, refreshAccountChallenges]);
 
   React.useEffect(() => {
     if (accountStatus !== "error") return;
