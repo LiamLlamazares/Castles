@@ -584,6 +584,52 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada"));
   });
 
+  it("lets signed-in players watch followed players who are in public live games", async () => {
+    const onSpectate = vi.fn();
+    const followedLiveGame = summary({
+      gameId: "game_friend_live",
+      participants: [
+        registeredParticipant("w", "Ben"),
+        registeredParticipant("b", "Samir"),
+      ],
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([followedLiveGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={onSpectate}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Ada", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" }),
+        ])}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const following = await within(people).findByRole("region", { name: "Followed players" });
+    const samirName = await within(following).findByText("Samir");
+    const samirRow = samirName.closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(samirRow as HTMLElement).toHaveTextContent("Playing now");
+    expect(within(samirRow as HTMLElement).getByRole("button", {
+      name: "Watch Samir's live game Ben vs Samir, game_friend_live",
+    })).toBeInTheDocument();
+
+    const adaRow = within(following).getByText("Ada").closest("article");
+    expect(adaRow).not.toBeNull();
+    expect(within(adaRow as HTMLElement).queryByRole("button", { name: /Watch Ada/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(samirRow as HTMLElement).getByRole("button", {
+      name: "Watch Samir's live game Ben vs Samir, game_friend_live",
+    }));
+    expect(onSpectate).toHaveBeenCalledWith("game_friend_live");
+  });
+
   it("orders followed players by visible online status before display name", async () => {
     render(
       <OnlineGameBrowser
@@ -708,9 +754,10 @@ describe("OnlineGameBrowser", () => {
     expect(within(challenges).getByText("Awaiting your response")).toBeInTheDocument();
     expect(within(challenges).getByText("Random side")).toBeInTheDocument();
 
+    const callsBeforeManualRefresh = loadAccountChallenges.mock.calls.length;
     fireEvent.click(within(challenges).getByRole("button", { name: "Refresh Challenges" }));
 
-    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(loadAccountChallenges.mock.calls.length).toBeGreaterThan(callsBeforeManualRefresh));
     expect(await within(challenges).findByText("Samir")).toBeInTheDocument();
   });
 

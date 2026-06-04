@@ -1420,6 +1420,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (!friendFilterActive) return publicActiveGames;
     return publicActiveGames.filter((game) => gameHasFollowedParticipant(game, followedDisplayNames));
   }, [followedDisplayNames, friendFilterActive, publicActiveGames]);
+  const liveGameByFollowedDisplayName = React.useMemo(() => {
+    const liveGames = new Map<string, OnlineGameSummary>();
+    for (const game of publicActiveGames) {
+      for (const participant of game.participants) {
+        const displayName = identityDisplayName(participant.identity);
+        if (!displayName) continue;
+        const key = normalizeDisplayNameKey(displayName);
+        if (!followedDisplayNames.has(key) || liveGames.has(key)) continue;
+        liveGames.set(key, game);
+      }
+    }
+    return liveGames;
+  }, [followedDisplayNames, publicActiveGames]);
 
   const visibleGames = React.useMemo(() => {
     const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
@@ -2833,54 +2846,71 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               <p>No followed players yet.</p>
             ) : (
               <div className="online-browser-following-rows">
-                {followingProfiles.map((profile) => (
-                  <article key={profile.displayName} className="online-browser-following-row">
-                    <div>
-                      <strong>{profile.displayName}</strong>
-                      <div className="online-browser-social-badges">
-                        <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
-                        <span>{profile.relationship.following ? "Following" : "Not followed"}</span>
+                {followingProfiles.map((profile) => {
+                  const liveGame = liveGameByFollowedDisplayName.get(normalizeDisplayNameKey(profile.displayName));
+                  const canInteractWithProfile = !profile.relationship.blocked && !profile.relationship.self;
+                  const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
+                  const liveGameBlack = liveGame ? participantName(liveGame.participants, "b") : "";
+                  return (
+                    <article key={profile.displayName} className="online-browser-following-row">
+                      <div>
+                        <strong>{profile.displayName}</strong>
+                        <div className="online-browser-social-badges">
+                          <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
+                          {liveGame && <span>Playing now</span>}
+                          <span>{profile.relationship.following ? "Following" : "Not followed"}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="online-browser-social-actions">
-                      {onChallengeAccount && !profile.relationship.blocked && !profile.relationship.self && (
+                      <div className="online-browser-social-actions">
+                        {liveGame && canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button primary"
+                            onClick={() => onSpectate(liveGame.gameId)}
+                            aria-label={`Watch ${profile.displayName}'s live game ${liveGameWhite} vs ${liveGameBlack}, ${liveGame.gameId}`}
+                          >
+                            Watch
+                          </button>
+                        )}
+                        {onChallengeAccount && canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button neutral"
+                            onClick={() => void runSocialChallengeAction(profile.displayName)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Challenge ${profile.displayName}`}
+                          >
+                            Challenge
+                          </button>
+                        )}
                         <button
                           type="button"
-                          className="online-browser-button neutral"
-                          onClick={() => void runSocialChallengeAction(profile.displayName)}
+                          className="online-browser-button subtle"
+                          onClick={() => {
+                            setSocialLookupName(profile.displayName);
+                            setSocialProfile(profile);
+                            setSocialLookupStatus("ready");
+                            setSocialMessage(`Selected ${profile.displayName}.`);
+                            window.setTimeout(() => socialProfileCardRef.current?.focus(), 0);
+                          }}
                           disabled={socialAction !== undefined}
-                          aria-label={`Challenge ${profile.displayName}`}
+                          aria-label={`Select ${profile.displayName}`}
                         >
-                          Challenge
+                          Select
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        className="online-browser-button subtle"
-                        onClick={() => {
-                          setSocialLookupName(profile.displayName);
-                          setSocialProfile(profile);
-                          setSocialLookupStatus("ready");
-                          setSocialMessage(`Selected ${profile.displayName}.`);
-                          window.setTimeout(() => socialProfileCardRef.current?.focus(), 0);
-                        }}
-                        disabled={socialAction !== undefined}
-                        aria-label={`Select ${profile.displayName}`}
-                      >
-                        Select
-                      </button>
-                      <button
-                        type="button"
-                        className="online-browser-button subtle"
-                        onClick={() => void runSocialProfileAction("unfollow", profile.displayName)}
-                        disabled={socialAction !== undefined}
-                        aria-label={`Unfollow ${profile.displayName} from following list`}
-                      >
-                        Unfollow
-                      </button>
-                    </div>
-                  </article>
-                ))}
+                        <button
+                          type="button"
+                          className="online-browser-button subtle"
+                          onClick={() => void runSocialProfileAction("unfollow", profile.displayName)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Unfollow ${profile.displayName} from following list`}
+                        >
+                          Unfollow
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>
