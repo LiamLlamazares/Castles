@@ -1825,6 +1825,143 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("hides followed-only open seeks from anonymous and unrelated viewers before pagination", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+
+    const publicResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        creatorSessionId: "public_creator",
+      }),
+    });
+    const publicSeek = await publicResponse.json();
+    const followedResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        visibility: "followed",
+      }),
+    });
+    const followedSeek = await followedResponse.json();
+
+    expect(publicResponse.status).toBe(201);
+    expect(followedResponse.status).toBe(201);
+    expect(followedSeek.summary).toMatchObject({
+      visibility: "followed",
+      creatorIdentity: liam.account.identity,
+    });
+
+    const anonymousList = await fetch(`http://127.0.0.1:${port}/api/online/seeks?limit=1`);
+    const anonymousBody = await anonymousList.json();
+    const samirList = await fetch(`http://127.0.0.1:${port}/api/online/seeks?limit=2`, {
+      headers: bearer(samir.session.token),
+    });
+    const samirBody = await samirList.json();
+    const daniList = await fetch(`http://127.0.0.1:${port}/api/online/seeks?limit=2`, {
+      headers: bearer(dani.session.token),
+    });
+    const daniBody = await daniList.json();
+
+    expect(anonymousBody.seeks.map((seek: OpenSeekSummary) => seek.seekId)).toEqual([publicSeek.seekId]);
+    expect(JSON.stringify(anonymousBody)).not.toContain(followedSeek.seekId);
+    expect(samirBody.seeks.map((seek: OpenSeekSummary) => seek.seekId)).toContain(followedSeek.seekId);
+    expect(daniBody.seeks.map((seek: OpenSeekSummary) => seek.seekId)).toEqual([publicSeek.seekId]);
+    expect(JSON.stringify(daniBody)).not.toContain(followedSeek.seekId);
+  });
+
+  it("allows only followed accounts to accept followed-only open seeks", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        visibility: "followed",
+      }),
+    });
+    const created = await createResponse.json();
+
+    const unrelatedAccept = await fetch(`http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(dani.session.token) },
+      body: JSON.stringify({}),
+    });
+    const followedAccept = await fetch(`http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+      body: JSON.stringify({}),
+    });
+    const accepted = await followedAccept.json();
+
+    expect(unrelatedAccept.status).toBe(404);
+    expect(followedAccept.status).toBe(200);
+    expect(accepted).toMatchObject({
+      role: "acceptor",
+      summary: {
+        seekId: created.seekId,
+        status: "accepted",
+        visibility: "followed",
+      },
+    });
+  });
+
+  it("rejects followed-only open seeks from anonymous creators", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        creatorSessionId: "session_creator",
+        visibility: "followed",
+      }),
+    });
+    const body = await createResponse.json();
+
+    expect(createResponse.status).toBe(400);
+    expect(body.error.message).toContain("registered account");
+  });
+
   it("filters public open seeks by side clock and victory points before pagination", async () => {
     const summaries = [
       openSeekSummary("seek_casual_newer", {

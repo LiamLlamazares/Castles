@@ -11,6 +11,7 @@ export const ONLINE_SEEK_DIRECTORY_MAX_LIMIT = 100;
 
 export type OpenSeekSeat = "w" | "b" | "random";
 export type OpenSeekStatus = "open" | "accepted" | "cancelled" | "expired";
+export type OpenSeekVisibility = "public" | "followed";
 export type OpenSeekDirectoryState = "open";
 export type OpenSeekDirectoryClockFilter = "timed" | "casual";
 export type OpenSeekDirectoryVpFilter = "enabled" | "disabled";
@@ -28,6 +29,7 @@ export type OpenSeekEvent =
       creatorIdentity: OnlineIdentity;
       creatorSeat: OpenSeekSeat;
       setup: OnlineGameSetupDTO;
+      visibility?: OpenSeekVisibility;
       expiresAt: string;
     })
   | (OpenSeekEventEnvelope & {
@@ -58,6 +60,7 @@ export interface OpenSeekSummary {
   creatorIdentity: OnlineIdentity;
   creatorSeat: OpenSeekSeat;
   setup: OnlineGameSetupDTO;
+  visibility?: OpenSeekVisibility;
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
@@ -97,6 +100,7 @@ export interface OpenSeekDirectoryResponse {
 const MAX_ID_LENGTH = 128;
 const SEEK_SEATS = new Set<OpenSeekSeat>(["w", "b", "random"]);
 const SEEK_STATUSES = new Set<OpenSeekStatus>(["open", "accepted", "cancelled", "expired"]);
+const SEEK_VISIBILITIES = new Set<OpenSeekVisibility>(["public", "followed"]);
 export const OPEN_SEEK_DIRECTORY_STATES = new Set<OpenSeekDirectoryState>(["open"]);
 export const OPEN_SEEK_DIRECTORY_CLOCK_FILTERS = new Set<OpenSeekDirectoryClockFilter>([
   "timed",
@@ -236,6 +240,9 @@ export function validateOpenSeekEvent(value: unknown): ValidationResult<OpenSeek
     }
     const setup = validateOnlineGameSetup(value.setup);
     if (!setup.ok) return setup;
+    if (value.visibility !== undefined && !SEEK_VISIBILITIES.has(value.visibility as OpenSeekVisibility)) {
+      return bad("event.visibility must be public or followed.");
+    }
     if (!isIsoDateString(value.expiresAt)) return bad("event.expiresAt must be a valid timestamp.");
     if (timestamp(value.expiresAt) <= timestamp(envelope.value.createdAt)) {
       return bad("event.expiresAt must be later than event.createdAt.");
@@ -249,6 +256,7 @@ export function validateOpenSeekEvent(value: unknown): ValidationResult<OpenSeek
         creatorIdentity: creatorIdentity.value,
         creatorSeat: value.creatorSeat as OpenSeekSeat,
         setup: setup.value,
+        visibility: (value.visibility as OpenSeekVisibility | undefined) ?? "public",
         expiresAt: value.expiresAt,
       },
     };
@@ -386,6 +394,7 @@ export function projectOpenSeekSummaries(events: OpenSeekEvent[]): OpenSeekSumma
         creatorIdentity: event.creatorIdentity,
         creatorSeat: event.creatorSeat,
         setup: event.setup,
+        visibility: event.visibility ?? "public",
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
         expiresAt: event.expiresAt,
@@ -486,6 +495,11 @@ export function validateOpenSeekSummary(value: unknown): ValidationResult<OpenSe
   }
   const setup = validateOnlineGameSetup(value.setup);
   if (!setup.ok) return setup;
+  const visibility =
+    value.visibility === undefined ? "public" : value.visibility;
+  if (!SEEK_VISIBILITIES.has(visibility as OpenSeekVisibility)) {
+    return bad("summary.visibility must be public or followed.");
+  }
   if (!isIsoDateString(value.createdAt)) return bad("summary.createdAt must be a valid timestamp.");
   if (!isIsoDateString(value.updatedAt)) return bad("summary.updatedAt must be a valid timestamp.");
   if (!isIsoDateString(value.expiresAt)) return bad("summary.expiresAt must be a valid timestamp.");
@@ -531,6 +545,7 @@ export function validateOpenSeekSummary(value: unknown): ValidationResult<OpenSe
     creatorIdentity: creatorIdentity.value,
     creatorSeat: value.creatorSeat as OpenSeekSeat,
     setup: setup.value,
+    visibility: visibility as OpenSeekVisibility,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     expiresAt: value.expiresAt,

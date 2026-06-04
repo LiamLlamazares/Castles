@@ -48,6 +48,7 @@ import {
   type OpenSeekDirectoryVpFilter,
   type OpenSeekSummary,
   type OpenSeekSeat,
+  type OpenSeekVisibility,
 } from "./seeks";
 import {
   OnlineConnectionStatus,
@@ -1580,6 +1581,7 @@ export async function createOpenSeek(
   setup: OnlineGameSetupDTO,
   options: {
     creatorSeat?: OpenSeekSeat;
+    visibility?: OpenSeekVisibility;
     creatorSessionId?: string;
     expiresInMs?: number;
     account?: OnlineAccountSessionParams;
@@ -1707,6 +1709,7 @@ export interface FetchOpenSeekDirectoryOptions {
   creatorSeat?: OpenSeekSeat;
   clock?: OpenSeekDirectoryClockFilter;
   vp?: OpenSeekDirectoryVpFilter;
+  account?: OnlineAccountSessionParams;
 }
 
 function buildOpenSeekDirectoryPath(options: FetchOpenSeekDirectoryOptions = {}): string {
@@ -1725,7 +1728,11 @@ export async function fetchOpenSeekDirectory(
   options: FetchOpenSeekDirectoryOptions = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<OpenSeekDirectoryResponse> {
-  const response = await fetchImpl(buildOpenSeekDirectoryPath(options));
+  const { account } = options;
+  const path = buildOpenSeekDirectoryPath(options);
+  const response = account
+    ? await fetchImpl(path, { headers: accountAuthorizationHeader(account) })
+    : await fetchImpl(path);
 
   if (!response.ok) {
     throw new Error(`Could not fetch open seeks (${response.status})`);

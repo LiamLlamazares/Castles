@@ -3534,6 +3534,35 @@ describe("OnlineGameBrowser", () => {
     expect(listButton).not.toBeDisabled();
   });
 
+  it("lets signed-in players list the current setup for followed players only", async () => {
+    const onCreateSeek = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        onCreateSeek={onCreateSeek}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    const followedButton = screen.getByRole("button", {
+      name: "Create followed-player lobby listing from current Play setup",
+    });
+    expect(followedButton).toHaveTextContent("List for Followed Players");
+
+    fireEvent.click(followedButton);
+
+    await waitFor(() => {
+      expect(onCreateSeek).toHaveBeenCalledWith("followed");
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Listed for accounts you follow.");
+  });
+
   it("keeps conflicting lobby actions disabled after a matched quick match result", async () => {
     render(
       <OnlineGameBrowser

@@ -1537,6 +1537,70 @@ describe("online client helpers", () => {
     );
   });
 
+  it("sends followed-only open seek visibility and authenticated directory headers without leaking account tokens into URLs", async () => {
+    const setup = snapshot().setup;
+    const account = { token: "account-token" };
+    const followedSummary = {
+      schemaVersion: 1,
+      seekId: "seek_followed",
+      creatorIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+      creatorSeat: "random",
+      setup,
+      visibility: "followed",
+      createdAt: "2026-06-01T12:00:00.000Z",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+      expiresAt: "2026-06-01T12:10:00.000Z",
+      status: "open",
+      lastEventId: "seek_evt_followed",
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          seekId: "seek_followed",
+          summary: followedSummary,
+          creator: { token: "creator-token" },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          schemaVersion: 1,
+          seeks: [followedSummary],
+        }),
+      });
+
+    await createOpenSeek(
+      setup,
+      { creatorSeat: "random", visibility: "followed", account },
+      fetchImpl as any
+    );
+    await fetchOpenSeekDirectory({ limit: 10, account }, fetchImpl as any);
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "/api/online/seeks",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer account-token",
+        },
+      })
+    );
+    expect(JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string)).toMatchObject({
+      visibility: "followed",
+    });
+    expect((fetchImpl.mock.calls[1][0] as string)).toBe("/api/online/seeks?limit=10");
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "/api/online/seeks?limit=10",
+      { headers: { authorization: "Bearer account-token" } }
+    );
+  });
+
   it("starts quick match and validates matched and waiting outcomes", async () => {
     const setup = snapshot().setup;
     const baseSummary = {

@@ -95,6 +95,7 @@ import {
   type OpenSeekEvent,
   type OpenSeekSeat,
   type OpenSeekSummary,
+  type OpenSeekVisibility,
   type OpenSeekDirectoryVpFilter,
 } from "../seeks";
 import {
@@ -840,6 +841,11 @@ function normalizeOpenSeekSeat(value: unknown): "w" | "b" | "random" | null {
   return value === "w" || value === "b" || value === "random" ? value : null;
 }
 
+function normalizeOpenSeekVisibility(value: unknown): OpenSeekVisibility | null {
+  if (value === undefined) return "public";
+  return value === "public" || value === "followed" ? value : null;
+}
+
 function normalizeDirectGameCreatorSeat(value: unknown): "w" | "b" | null {
   if (value === undefined) return "w";
   return value === "w" || value === "b" ? value : null;
@@ -1032,6 +1038,50 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const resolved = await resolveAccountBearer(req);
     if (!resolved.ok) return resolved;
     return { ok: true, identity: resolved.account.identity };
+  };
+
+  const resolveOptionalAccountSession = async (
+    req: Request
+  ): Promise<
+    | { ok: true; account: OnlineAccount | null; identity: OnlineIdentity | null }
+    | { ok: false; status: number; error: OnlineReject; reason: string }
+  > => {
+    if (req.headers.authorization === undefined) {
+      return { ok: true, account: null, identity: null };
+    }
+    const resolved = await resolveAccountBearer(req);
+    if (!resolved.ok) return resolved;
+    return { ok: true, account: resolved.account, identity: resolved.account.identity };
+  };
+
+  const canAccountViewOpenSeek = async (
+    summary: OpenSeekSummary,
+    viewerAccount: OnlineAccount | null
+  ): Promise<boolean> => {
+    if ((summary.visibility ?? "public") === "public") return true;
+    if (summary.creatorIdentity.kind !== "registered") return false;
+    if (!viewerAccount) return false;
+    if (isSameOpenSeekIdentity(viewerAccount.identity, summary.creatorIdentity)) return true;
+    if (!summary.creatorIdentity.displayName) return false;
+    const creatorProfile = await accountStore.getProfileForDisplayName(
+      viewerAccount.accountId,
+      summary.creatorIdentity.displayName
+    );
+    return creatorProfile?.relationship.followedBy === true &&
+      creatorProfile.relationship.blocked !== true;
+  };
+
+  const filterOpenSeekSummariesForViewer = async (
+    summaries: OpenSeekSummary[],
+    viewerAccount: OnlineAccount | null
+  ): Promise<OpenSeekSummary[]> => {
+    const visible: OpenSeekSummary[] = [];
+    for (const summary of summaries) {
+      if (await canAccountViewOpenSeek(summary, viewerAccount)) {
+        visible.push(summary);
+      }
+    }
+    return visible;
   };
 
   const parseProfileDisplayNameParam = (raw: unknown): string | null => {
@@ -1752,23 +1802,29 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   };
 
   const listPublicOpenSeekDirectory = async (
-    directoryOptions: OpenSeekDirectoryListOptions
+    directoryOptions: OpenSeekDirectoryListOptions,
+    viewerAccount: OnlineAccount | null = null,
+    source: "access-controlled" | "store-paginated" = "access-controlled"
   ): Promise<OpenSeekDirectoryResponse> => {
     const now = new Date(options.now?.() ?? Date.now()).toISOString();
-    if (options.listOpenSeekSummaries) {
+    if (source === "store-paginated" && options.listOpenSeekSummaries) {
       const response = await options.listOpenSeekSummaries(directoryOptions);
       const validation = validateOpenSeekDirectoryResponse(response);
       if (!validation.ok) throw new Error(validation.error.message);
+      const visible = await filterOpenSeekSummariesForViewer(validation.value.seeks, viewerAccount);
       return {
         ...validation.value,
-        seeks: validation.value.seeks.filter((summary) => canListOpenSeekSummary(summary, now)),
+        seeks: visible.filter((summary) => canListOpenSeekSummary(summary, now)),
       };
     }
 
-    return paginateOpenSeekSummaries(await loadOpenSeekSummaries(), directoryOptions, now);
+    const visible = await filterOpenSeekSummariesForViewer(await loadOpenSeekSummaries(), viewerAccount);
+    return paginateOpenSeekSummaries(visible, directoryOptions, now);
   };
 
-  const listQuickMatchOpenSeekCandidates = async (): Promise<OpenSeekSummary[]> => {
+  const listQuickMatchOpenSeekCandidates = async (
+    viewerAccount: OnlineAccount | null
+  ): Promise<OpenSeekSummary[]> => {
     const candidates: OpenSeekSummary[] = [];
     const seenCursors = new Set<string>();
     let cursor: string | undefined;
@@ -1779,7 +1835,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         limit: ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
         ...(cursor ? { cursor } : {}),
       };
-      const directory = await listPublicOpenSeekDirectory(directoryOptions);
+      const directory = await listPublicOpenSeekDirectory(directoryOptions, viewerAccount, "store-paginated");
       candidates.push(...directory.seeks);
       if (!directory.nextCursor) break;
       if (seenCursors.has(directory.nextCursor)) {
@@ -1824,6 +1880,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     setup: OnlineGameSetupDTO,
     creatorSeat: OpenSeekSeat,
     creatorIdentity: PublicPlayerIdentity,
+    visibility: OpenSeekVisibility,
     expiresInMs: number,
     createdAt: string
   ): Promise<{ seekId: string; summary: OpenSeekSummary; token: string }> => {
@@ -1840,6 +1897,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         creatorIdentity,
         creatorSeat,
         setup,
+        visibility,
         expiresAt,
       },
       { createdAt }
@@ -3371,7 +3429,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         });
         return;
       }
-      const directory = await listPublicOpenSeekDirectory(parsed.options);
+      const accountSession = await resolveOptionalAccountSession(req);
+      if (!accountSession.ok) {
+        res.status(accountSession.status).json({ error: accountSession.error });
+        return;
+      }
+      const directory = await listPublicOpenSeekDirectory(parsed.options, accountSession.account);
       res.json(directory);
       log({ event: "online.seek.list", status: "accepted" });
     } catch (error) {
@@ -3406,9 +3469,25 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       });
       return;
     }
-    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    const visibility = normalizeOpenSeekVisibility(req.body?.visibility);
+    if (!visibility) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Open seek visibility must be public or followed." },
+      });
+      return;
+    }
+    const accountIdentity = await resolveOptionalAccountSession(req);
     if (!accountIdentity.ok) {
       res.status(accountIdentity.status).json({ error: accountIdentity.error });
+      return;
+    }
+    if (visibility === "followed" && accountIdentity.identity?.kind !== "registered") {
+      res.status(400).json({
+        error: {
+          code: "bad_request",
+          message: "Followed-only open seeks require a registered account creator.",
+        },
+      });
       return;
     }
     const creatorIdentity = accountIdentity.identity
@@ -3432,6 +3511,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         normalizedSetup,
         creatorSeat,
         creatorIdentity.identity,
+        visibility,
         expiry.value,
         createdAt
       );
@@ -3554,7 +3634,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: seekId.error });
       return;
     }
-    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    const accountIdentity = await resolveOptionalAccountSession(req);
     if (!accountIdentity.ok) {
       res.status(accountIdentity.status).json({ error: accountIdentity.error });
       return;
@@ -3570,6 +3650,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     try {
       const loadedSummary = await loadOpenSeekSummary(seekId.value);
       if (!loadedSummary) {
+        res.status(404).json({
+          error: { code: "not_found", message: "No open seek was found for that id." },
+        });
+        return;
+      }
+      if (!(await canAccountViewOpenSeek(loadedSummary, accountIdentity.account))) {
         res.status(404).json({
           error: { code: "not_found", message: "No open seek was found for that id." },
         });
@@ -3617,7 +3703,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(400).json({ error: setup.error });
       return;
     }
-    const accountIdentity = await resolveOptionalAccountIdentity(req);
+    const accountIdentity = await resolveOptionalAccountSession(req);
     if (!accountIdentity.ok) {
       res.status(accountIdentity.status).json({ error: accountIdentity.error });
       return;
@@ -3653,7 +3739,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           };
         }
 
-        const candidates = await listQuickMatchOpenSeekCandidates();
+        const candidates = await listQuickMatchOpenSeekCandidates(accountIdentity.account);
         for (const candidate of candidates) {
           if (isSameOpenSeekIdentity(candidate.creatorIdentity, sessionIdentity.identity)) continue;
           if (canonicalSetupSignature(candidate.setup) !== setupSignature) continue;
@@ -3689,6 +3775,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           normalizedSetup,
           "random",
           sessionIdentity.identity,
+          "public",
           expiry.value,
           createdAt
         );

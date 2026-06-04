@@ -43,6 +43,7 @@ import type { OnlineJoinParams } from "../online/client";
 import type {
   OpenSeekDirectoryResponse,
   OpenSeekSummary,
+  OpenSeekVisibility,
 } from "../online/seeks";
 import type { RecentOnlineGameRecord } from "../online/recentGames";
 import { PieceType } from "../Constants";
@@ -100,7 +101,7 @@ interface OnlineGameBrowserProps {
   onConfigureSetup?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
-  onCreateSeek?: () => void | Promise<void>;
+  onCreateSeek?: (visibility?: OpenSeekVisibility) => void | Promise<void>;
   onQuickMatch?: () => QuickMatchOutcome | Promise<QuickMatchOutcome>;
   quickMatchSetupSummary?: QuickMatchSetupSummary;
   onAcceptSeek?: (seekId: string) => void | Promise<void>;
@@ -2289,13 +2290,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   };
 
-  const runCreateSeek = async () => {
+  const runCreateSeek = async (visibility: OpenSeekVisibility = "public") => {
     if (!onCreateSeek || createSeekDisabled) return;
     setCreateSeekPending(true);
     setQuickMatchStatus("idle");
     setSeekActionMessage("");
     try {
-      await onCreateSeek();
+      await onCreateSeek(visibility);
+      setSeekActionMessage(
+        visibility === "followed"
+          ? "Listed for accounts you follow."
+          : "Listed in the public Lobby."
+      );
     } catch (error) {
       console.error("[OnlineGameBrowser] Failed to list current setup", error);
       setSeekActionMessage("Could not list the current setup.");
@@ -4032,15 +4038,28 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       </button>
                     )}
                     {onCreateSeek && (
-                      <button
-                        type="button"
-                        className="online-browser-button neutral online-browser-create-seek"
-                        onClick={() => void runCreateSeek()}
-                        disabled={createSeekDisabled}
-                        aria-label="Create public lobby listing from current Play setup"
-                      >
-                        {createSeekPending ? "Listing..." : "Create Lobby Listing"}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="online-browser-button neutral online-browser-create-seek"
+                          onClick={() => void runCreateSeek()}
+                          disabled={createSeekDisabled}
+                          aria-label="Create public lobby listing from current Play setup"
+                        >
+                          {createSeekPending ? "Listing..." : "Create Lobby Listing"}
+                        </button>
+                        {account && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle online-browser-create-seek"
+                            onClick={() => void runCreateSeek("followed")}
+                            disabled={createSeekDisabled}
+                            aria-label="Create followed-player lobby listing from current Play setup"
+                          >
+                            {createSeekPending ? "Listing..." : "List for Followed Players"}
+                          </button>
+                        )}
+                      </>
                     )}
                   </>
                 ) : (

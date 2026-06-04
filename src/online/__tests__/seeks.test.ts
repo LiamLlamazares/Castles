@@ -148,6 +148,29 @@ describe("open seek contract", () => {
     expect(JSON.stringify(event)).not.toContain("token");
   });
 
+  it("projects followed-only seek visibility while defaulting legacy seeks to public", () => {
+    const followed = projectOpenSeekSummaries([createdEvent({ visibility: "followed" })])[0];
+    const legacy = projectOpenSeekSummaries([
+      { ...createdEvent(), visibility: undefined },
+    ])[0];
+
+    expect(followed.visibility).toBe("followed");
+    expect(validateOpenSeekSummary(followed)).toMatchObject({
+      ok: true,
+      value: { visibility: "followed" },
+    });
+    expect(legacy.visibility).toBe("public");
+    expect(validateOpenSeekSummary({ ...legacy, visibility: undefined })).toMatchObject({
+      ok: true,
+      value: { visibility: "public" },
+    });
+  });
+
+  it("rejects invalid seek visibility values", () => {
+    expect(validateOpenSeekEvent({ ...createdEvent(), visibility: "private" }).ok).toBe(false);
+    expect(validateOpenSeekSummary({ ...pendingSummary(), visibility: "private" }).ok).toBe(false);
+  });
+
   it("rejects durable token, credential, session secret, auth, cookie, and invite fields", () => {
     const invalidPayloads = [
       { token: "secret" },

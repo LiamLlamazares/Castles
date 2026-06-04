@@ -44,6 +44,7 @@ import {
   declineOnlineAccountChallenge,
   blockOnlineAccount,
   fetchOpenSeek,
+  fetchOpenSeekDirectory,
   fetchOnlineAccountChallenges,
   fetchOnlineAccountGames,
   fetchOnlineAccountFollowing,
@@ -97,10 +98,12 @@ import {
   StoredOnlineAccountSession,
   FetchOnlineAccountChallengesOptions,
   FetchOnlineAccountGamesOptions,
+  FetchOpenSeekDirectoryOptions,
   OnlineAccountPrivacyPatch,
 } from './online/client';
 import type { OnlineAccount } from './online/accounts';
 import type { OnlineGameSummary } from './online/readModel';
+import type { OpenSeekVisibility } from './online/seeks';
 import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from './online/types';
 import {
   clearRecentOnlineGames,
@@ -1202,6 +1205,13 @@ function App() {
     return fetchOnlineAccountChallenges({ token: onlineAccountSession.token }, options);
   }, [onlineAccountSession?.token]);
 
+  const handleLoadOpenSeekDirectory = useCallback((options?: FetchOpenSeekDirectoryOptions) => {
+    return fetchOpenSeekDirectory({
+      ...options,
+      account: onlineAccountAuth,
+    });
+  }, [onlineAccountAuth]);
+
   const handleAcceptOnlineAccountChallenge = useCallback(async (challengeId: string) => {
     if (!onlineAccountSession) {
       throw new Error("No online account session is available.");
@@ -1440,7 +1450,10 @@ function App() {
     setOnlineChallengeShareMessage(`Challenge invite copied for ${displayName}.`);
   };
 
-  const createOpenSeekFromSetup = async (setup: OnlineGameSetupDTO) => {
+  const createOpenSeekFromSetup = async (
+    setup: OnlineGameSetupDTO,
+    visibility: OpenSeekVisibility = "public"
+  ) => {
     try {
       cancelPendingReplay();
       clearAnalysisReturn();
@@ -1455,7 +1468,7 @@ function App() {
         forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
       }
       clearOpenSeekState();
-      const created = await createOpenSeek(setup, { creatorSeat: "random", account: onlineAccountAuth });
+      const created = await createOpenSeek(setup, { creatorSeat: "random", visibility, account: onlineAccountAuth });
       const creator = {
         seekId: created.seekId,
         token: created.creator.token,
@@ -1507,12 +1520,12 @@ function App() {
     );
   };
 
-  const handleListCurrentSetupInLobby = async () => {
+  const handleListCurrentSetupInLobby = async (visibility: OpenSeekVisibility = "public") => {
     if (!onlineLobbySetup) {
       alert("Choose a Play setup before listing a lobby game.");
       return;
     }
-    await createOpenSeekFromSetup(onlineLobbySetup);
+    await createOpenSeekFromSetup(onlineLobbySetup, visibility);
   };
 
   const handleAcceptOpenSeek = async (seekId: string) => {
@@ -2401,6 +2414,7 @@ function App() {
           onCreateSeek={onlineLobbySetup ? handleListCurrentSetupInLobby : undefined}
           onQuickMatch={onlineLobbySetup ? handleQuickMatch : undefined}
           quickMatchSetupSummary={quickMatchSetupSummary}
+          loadOpenSeeks={handleLoadOpenSeekDirectory}
           onAcceptSeek={handleAcceptOpenSeek}
           onCancelSeek={handleCancelOpenSeek}
           ownedSeekIds={openSeekCreator ? [openSeekCreator.seekId] : []}

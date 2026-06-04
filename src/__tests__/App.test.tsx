@@ -308,6 +308,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onCancelSeek,
     onQuickMatch,
     quickMatchSetupSummary,
+    loadOpenSeeks,
     ownedSeekIds = [],
     ownedSeekResponse,
     onRefreshOwnedSeek,
@@ -335,11 +336,12 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     initialTab?: string;
     activeTab?: "lobby" | "watch" | "archive";
     onTabChange?: (tab: "lobby" | "watch" | "archive") => void;
-    onCreateSeek?: () => void;
+    onCreateSeek?: (visibility?: "public" | "followed") => void;
     onAcceptSeek?: (seekId: string) => void;
     onCancelSeek?: (seekId: string) => void;
     onQuickMatch?: () => "matched" | "waiting" | void | Promise<"matched" | "waiting" | void>;
     quickMatchSetupSummary?: { boardRadius: number; clock: string; scoring: string };
+    loadOpenSeeks?: (options?: { limit?: number }) => Promise<unknown>;
     ownedSeekIds?: string[];
     ownedSeekResponse?: { summary: { status: string } };
     onRefreshOwnedSeek?: () => void;
@@ -437,8 +439,18 @@ vi.mock("../components/OnlineGameBrowser", () => ({
         </>
       )}
       {onCreateSeek && (
-        <button type="button" onClick={onCreateSeek}>
+        <button type="button" onClick={() => onCreateSeek()}>
           Browser Create Seek
+        </button>
+      )}
+      {loadOpenSeeks && (
+        <button
+          type="button"
+          onClick={() => {
+            void loadOpenSeeks({ limit: 10 }).catch(() => undefined);
+          }}
+        >
+          Mock Load Lobby Listings
         </button>
       )}
       {onAcceptSeek && (
@@ -2731,6 +2743,59 @@ describe("App game setup lifecycle", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Mock Sign Out Account" })).not.toBeInTheDocument();
       expect(localStorage.getItem(ONLINE_ACCOUNT_SESSION_STORAGE_KEY)).toBeNull();
+    });
+  });
+
+  it("loads lobby listings with the signed-in account bearer", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_lobby_followed",
+      displayName: "Liam",
+      createdAt: "2026-06-04T12:00:00.000Z",
+      updatedAt: "2026-06-04T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_lobby_followed", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/seeks?limit=10") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: 1, seeks: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ schemaVersion: 1, games: [] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Load Lobby Listings" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/seeks?limit=10",
+        { headers: { authorization: "Bearer account-token" } }
+      );
     });
   });
 
