@@ -85,6 +85,7 @@ interface QuickMatchSetupSummary {
 const LOBBY_AUTO_REFRESH_MS = 30_000;
 const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
 const ACCOUNT_CHALLENGE_AUTO_REFRESH_MS = 1_000;
+const FOLLOWING_AUTO_REFRESH_MS = 30_000;
 const GAME_SEARCH_DEBOUNCE_MS = 300;
 const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
 
@@ -371,6 +372,29 @@ function compareProfilesByDisplayName(
   right: OnlineAccountPublicProfile
 ): number {
   return left.displayName.localeCompare(right.displayName);
+}
+
+function profilePresenceRank(profile: OnlineAccountPublicProfile): number {
+  if (profile.presence.visibility === "hidden") return 4;
+  switch (profile.presence.status) {
+    case "online":
+      return 0;
+    case "recent":
+      return 1;
+    case "away":
+      return 2;
+    case "offline":
+    default:
+      return 3;
+  }
+}
+
+function compareProfilesByPresence(
+  left: OnlineAccountPublicProfile,
+  right: OnlineAccountPublicProfile
+): number {
+  const rankDelta = profilePresenceRank(left) - profilePresenceRank(right);
+  return rankDelta !== 0 ? rankDelta : compareProfilesByDisplayName(left, right);
 }
 
 function formatClockTime(ms: number): string {
@@ -695,8 +719,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const seekLoadInFlightRef = React.useRef(false);
   const ownedSeekRefreshInFlightRef = React.useRef(false);
   const accountChallengeLoadInFlightRef = React.useRef(false);
+  const followingLoadInFlightRef = React.useRef(false);
   const seekAutoRefreshPausedUntilRef = React.useRef(0);
   const accountChallengeAutoRefreshPausedUntilRef = React.useRef(0);
+  const followingAutoRefreshPausedUntilRef = React.useRef(0);
   const seekActionByIdRef = React.useRef(seekActionById);
   const accountChallengeActionByIdRef = React.useRef(accountChallengeActionById);
   const completedAccountChallengeIdsRef = React.useRef(new Set<string>());
@@ -938,26 +964,37 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       });
   }, [account?.accountId, loadAccountSessions]);
 
-  const refreshFollowingProfiles = React.useCallback(async (options: { quiet?: boolean } = {}) => {
+  const refreshFollowingProfiles = React.useCallback(async (options: { quiet?: boolean; background?: boolean } = {}) => {
     if (!account || !loadAccountFollowing) return;
+    if (followingLoadInFlightRef.current) return;
+    const background = options.background === true;
     const requestId = ++accountFollowingRequestIdRef.current;
-    if (!options.quiet) {
+    followingLoadInFlightRef.current = true;
+    if (!options.quiet && !background) {
       setFollowingStatus("loading");
       setSocialAction("refresh");
     }
     try {
       const response = await loadAccountFollowing();
       if (requestId !== accountFollowingRequestIdRef.current) return;
-      setFollowingProfiles([...response.following].sort(compareProfilesByDisplayName));
+      setFollowingProfiles([...response.following].sort(compareProfilesByPresence));
       setFollowingStatus("ready");
     } catch (error) {
       if (requestId !== accountFollowingRequestIdRef.current) return;
-      console.error("[OnlineGameBrowser] Failed to load followed accounts", error);
-      setFollowingProfiles([]);
-      setFollowingStatus("error");
+      if (isRateLimitError(error)) {
+        followingAutoRefreshPausedUntilRef.current = Date.now() + LOBBY_RATE_LIMIT_BACKOFF_MS;
+      }
+      if (!background) {
+        console.error("[OnlineGameBrowser] Failed to load followed accounts", error);
+        setFollowingProfiles([]);
+        setFollowingStatus("error");
+      }
     } finally {
-      if (requestId === accountFollowingRequestIdRef.current && !options.quiet) {
-        setSocialAction(undefined);
+      if (requestId === accountFollowingRequestIdRef.current) {
+        followingLoadInFlightRef.current = false;
+        if (!options.quiet && !background) {
+          setSocialAction(undefined);
+        }
       }
     }
   }, [account?.accountId, loadAccountFollowing]);
@@ -988,6 +1025,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     accountPrivacyRequestIdRef.current += 1;
     socialLookupRequestIdRef.current += 1;
     socialMutationRequestIdRef.current += 1;
+    followingLoadInFlightRef.current = false;
+    followingAutoRefreshPausedUntilRef.current = 0;
     setSocialLookupName("");
     setSocialProfile(null);
     setSocialLookupStatus("idle");
@@ -1006,6 +1045,24 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     void refreshFollowingProfiles({ quiet: true });
     void refreshAccountPrivacy();
   }, [account?.accountId, canUseAccountSocial, refreshAccountPrivacy, refreshFollowingProfiles]);
+
+  React.useEffect(() => {
+    if (!canUseAccountSocial) return;
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() < followingAutoRefreshPausedUntilRef.current) return;
+      void refreshFollowingProfiles({ background: true });
+    };
+    const interval = window.setInterval(refreshIfVisible, FOLLOWING_AUTO_REFRESH_MS);
+    const handleVisibilityChange = () => {
+      refreshIfVisible();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [canUseAccountSocial, refreshFollowingProfiles]);
 
   React.useEffect(() => {
     accountChallengesRequestIdRef.current += 1;
@@ -2060,9 +2117,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         (candidate) => candidate.displayName.toLowerCase() !== profile.displayName.toLowerCase()
       );
       if (profile.relationship.following && !profile.relationship.blocked && !profile.relationship.self) {
-        return [...withoutProfile, profile].sort(compareProfilesByDisplayName);
+        return [...withoutProfile, profile].sort(compareProfilesByPresence);
       }
-      return withoutProfile.sort(compareProfilesByDisplayName);
+      return withoutProfile.sort(compareProfilesByPresence);
     });
   }, []);
 

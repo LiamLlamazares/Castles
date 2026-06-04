@@ -584,6 +584,96 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada"));
   });
 
+  it("orders followed players by visible online status before display name", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Zed", { following: true }),
+          publicProfile("Mira", { following: true }, { visibility: "visible", status: "offline" }),
+          publicProfile("Omar", { following: true }, { visibility: "visible", status: "away" }),
+          publicProfile("Ada", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Ben", { following: true }, { visibility: "visible", status: "recent" }),
+        ])}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    expect(await within(following).findByText("Ada")).toBeInTheDocument();
+    const rows = within(following).getAllByRole("article");
+
+    expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual([
+      "Ada",
+      "Ben",
+      "Omar",
+      "Mira",
+      "Zed",
+    ]);
+    expect(rows[0]).toHaveTextContent("Online");
+    expect(rows[1]).toHaveTextContent("Active recently");
+    expect(rows[2]).toHaveTextContent("Away");
+    expect(rows[3]).toHaveTextContent("Offline");
+    expect(rows[4]).toHaveTextContent("Presence hidden");
+  });
+
+  it("auto-refreshes followed-player presence while visible", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const loadAccountFollowing = vi
+      .fn()
+      .mockResolvedValueOnce({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        following: [
+          publicProfile("Samir", { following: true }, { visibility: "visible", status: "offline" }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        following: [
+          publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" }),
+        ],
+      });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountFollowing={loadAccountFollowing}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const following = screen.getByRole("region", { name: "Followed players" });
+    expect(loadAccountFollowing).toHaveBeenCalledTimes(1);
+    expect(within(following).getByText("Samir")).toBeInTheDocument();
+    expect(within(following).getByText("Offline")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadAccountFollowing).toHaveBeenCalledTimes(2);
+    expect(within(following).getByText("Samir")).toBeInTheDocument();
+    expect(within(following).getByText("Online")).toBeInTheDocument();
+  });
+
   it("loads account challenges automatically and still allows manual refresh", async () => {
     const account = accountFixture("Liam");
     const loadAccountChallenges = vi.fn().mockResolvedValue({
