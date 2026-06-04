@@ -122,12 +122,48 @@ function seekDirectory(
   };
 }
 
+function accountFixture(displayName = "Liam") {
+  return {
+    schemaVersion: 1 as const,
+    accountId: `account_${displayName.toLowerCase()}`,
+    displayName,
+    createdAt: "2026-06-03T12:00:00.000Z",
+    updatedAt: "2026-06-03T12:00:00.000Z",
+    identity: { kind: "registered" as const, id: `account_${displayName.toLowerCase()}`, displayName },
+  };
+}
+
+function publicProfile(
+  displayName: string,
+  relationship: { self?: boolean; following?: boolean; blocked?: boolean } = {}
+) {
+  return {
+    schemaVersion: 1 as const,
+    displayName,
+    relationship: {
+      self: relationship.self ?? false,
+      following: relationship.following ?? false,
+      blocked: relationship.blocked ?? false,
+    },
+  };
+}
+
 function deferredDirectory() {
   let resolve!: (value: OnlineGameDirectoryResponse) => void;
   const promise = new Promise<OnlineGameDirectoryResponse>((innerResolve) => {
     resolve = innerResolve;
   });
   return { promise, resolve };
+}
+
+function deferredValue<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
 }
 
 function deferredSeekDirectory() {
@@ -256,6 +292,238 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign Out Everywhere" }));
 
     await waitFor(() => expect(onSignOutAllAccountSessions).toHaveBeenCalledTimes(1));
+  });
+
+  it("lets signed-in players find, follow, and manage follow privacy", async () => {
+    const account = accountFixture("Liam");
+    const visibleProfile = publicProfile("Samir");
+    const followedProfile = publicProfile("Samir", { following: true });
+    const blockedProfile = publicProfile("Samir", { blocked: true });
+    let currentFollowing = false;
+    let currentBlocked = false;
+    const loadAccountFollowing = vi.fn().mockImplementation(() => Promise.resolve({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      following: currentFollowing && !currentBlocked ? [followedProfile] : [],
+    }));
+    const loadAccountPrivacy = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      privacy: {
+        schemaVersion: 1,
+        followPolicy: "everyone",
+        presencePolicy: "followed",
+        challengePolicy: "followed",
+        updatedAt: null,
+      },
+    });
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: visibleProfile,
+    });
+    const onFollowAccount = vi.fn().mockImplementation(() => {
+      currentFollowing = true;
+      currentBlocked = false;
+      return Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: followedProfile,
+      });
+    });
+    const onUnfollowAccount = vi.fn().mockImplementation(() => {
+      currentFollowing = false;
+      return Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: visibleProfile,
+      });
+    });
+    const onBlockAccount = vi.fn().mockImplementation(() => {
+      currentFollowing = false;
+      currentBlocked = true;
+      return Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: blockedProfile,
+      });
+    });
+    const onUnblockAccount = vi.fn().mockImplementation(() => {
+      currentBlocked = false;
+      return Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: visibleProfile,
+      });
+    });
+    const onUpdateAccountPrivacy = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      privacy: {
+        schemaVersion: 1,
+        followPolicy: "nobody",
+        presencePolicy: "followed",
+        challengePolicy: "followed",
+        updatedAt: "2026-06-04T12:00:00.000Z",
+      },
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountFollowing={loadAccountFollowing}
+        loadAccountPrivacy={loadAccountPrivacy}
+        loadAccountProfile={loadAccountProfile}
+        onFollowAccount={onFollowAccount}
+        onUnfollowAccount={onUnfollowAccount}
+        onBlockAccount={onBlockAccount}
+        onUnblockAccount={onUnblockAccount}
+        onUpdateAccountPrivacy={onUpdateAccountPrivacy}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    expect(await within(people).findByText("No followed players yet.")).toBeInTheDocument();
+    expect(loadAccountFollowing).toHaveBeenCalledTimes(1);
+    expect(loadAccountPrivacy).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Samir" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    expect(await within(people).findByRole("article", { name: "Profile Samir" })).toBeInTheDocument();
+    expect(loadAccountProfile).toHaveBeenCalledWith("Samir");
+    fireEvent.click(within(people).getByRole("button", { name: "Follow Samir" }));
+
+    await waitFor(() => expect(onFollowAccount).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByRole("button", { name: "Unfollow Samir" })).toBeInTheDocument();
+    expect(within(people).getByRole("article", { name: "Profile Samir" })).toHaveTextContent("Following");
+    expect(await within(people).findByRole("button", { name: "Unfollow Samir from following list" })).toBeInTheDocument();
+
+    fireEvent.click(within(people).getByRole("button", { name: "Block Samir" }));
+
+    await waitFor(() => expect(onBlockAccount).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByRole("button", { name: "Unblock Samir" })).toBeInTheDocument();
+    expect(within(people).getByRole("article", { name: "Profile Samir" })).toHaveTextContent("Blocked");
+    expect(within(people).getByRole("article", { name: "Profile Samir" })).not.toHaveTextContent("Following");
+    expect(await within(people).findByText("No followed players yet.")).toBeInTheDocument();
+
+    fireEvent.click(within(people).getByRole("button", { name: "Unblock Samir" }));
+
+    await waitFor(() => expect(onUnblockAccount).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByRole("button", { name: "Follow Samir" })).toBeInTheDocument();
+    expect(within(people).getByRole("article", { name: "Profile Samir" })).toHaveTextContent("Not followed");
+
+    fireEvent.change(within(people).getByRole("combobox", { name: "Who can newly follow me" }), {
+      target: { value: "nobody" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Save Privacy" }));
+
+    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ followPolicy: "nobody" }));
+    expect(await within(people).findByText("New follow permission: Nobody. Existing follows are not removed.")).toBeInTheDocument();
+  });
+
+  it("ignores stale social lookup responses after the account changes", async () => {
+    const pendingLookup = deferredValue<{
+      protocolVersion: typeof ONLINE_PROTOCOL_VERSION;
+      profile: ReturnType<typeof publicProfile>;
+    }>();
+    const loadAccountProfile = vi.fn().mockReturnValue(pendingLookup.promise);
+    const socialProps = {
+      loadAccountFollowing: vi.fn().mockResolvedValue({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        following: [],
+      }),
+      loadAccountPrivacy: vi.fn().mockResolvedValue({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        privacy: {
+          schemaVersion: 1,
+          followPolicy: "everyone",
+          presencePolicy: "followed",
+          challengePolicy: "followed",
+          updatedAt: null,
+        },
+      }),
+      loadAccountProfile,
+      onFollowAccount: vi.fn(),
+      onUnfollowAccount: vi.fn(),
+      onBlockAccount: vi.fn(),
+      onUnblockAccount: vi.fn(),
+      onUpdateAccountPrivacy: vi.fn(),
+    };
+    const { rerender } = render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialProps}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Samir" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    rerender(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Nora")}
+        accountStatus="ready"
+        {...socialProps}
+      />
+    );
+
+    await act(async () => {
+      pendingLookup.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: publicProfile("Samir"),
+      });
+    });
+
+    await waitFor(() => expect(loadAccountProfile).toHaveBeenCalledWith("Samir"));
+    expect(screen.queryByRole("article", { name: "Profile Samir" })).not.toBeInTheDocument();
+  });
+
+  it("shows a visible error when follow privacy cannot load", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        loadAccountFollowing={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          following: [],
+        })}
+        loadAccountPrivacy={vi.fn().mockRejectedValue(new Error("privacy unavailable"))}
+        loadAccountProfile={vi.fn()}
+        onFollowAccount={vi.fn()}
+        onUnfollowAccount={vi.fn()}
+        onBlockAccount={vi.fn()}
+        onUnblockAccount={vi.fn()}
+        onUpdateAccountPrivacy={vi.fn()}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    expect(await within(people).findByText("Could not load follow privacy.")).toBeInTheDocument();
+    expect(within(people).getByRole("combobox", { name: "Who can newly follow me" })).toBeDisabled();
   });
 
   it("confirms account deletion and explains retained game history", async () => {

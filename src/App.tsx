@@ -39,13 +39,18 @@ import {
   createOpenSeek,
   deleteOnlineAccount,
   declineOnlineChallenge,
+  blockOnlineAccount,
   fetchOpenSeek,
   fetchOnlineAccountGames,
+  fetchOnlineAccountFollowing,
   fetchOnlineAccountMe,
+  fetchOnlineAccountPrivacy,
+  fetchOnlineAccountProfile,
   fetchOnlineAccountSessions,
   fetchOnlineGameSummaries,
   fetchOnlineChallenge,
   fetchOnlineSpectatorSnapshot,
+  followOnlineAccount,
   formatOnlinePendingConnectionMessage,
   forgetOnlineAccountSession,
   forgetOnlineChallengeParams,
@@ -74,6 +79,9 @@ import {
   resolveOnlineJoinParams,
   resolveStoredOnlineJoinParams,
   startQuickMatch,
+  unblockOnlineAccount,
+  unfollowOnlineAccount,
+  updateOnlineAccountPrivacy,
   updateOnlineGameVisibility,
   OnlineChallengeParams,
   OnlineChallengeResponse,
@@ -84,6 +92,7 @@ import {
   OnlineSpectatorParams,
   StoredOnlineAccountSession,
   FetchOnlineAccountGamesOptions,
+  OnlineAccountPrivacyPatch,
 } from './online/client';
 import type { OnlineAccount } from './online/accounts';
 import type { OnlineGameSummary } from './online/readModel';
@@ -1177,6 +1186,62 @@ function App() {
     return fetchOnlineAccountGames({ token: onlineAccountSession.token }, options);
   }, [onlineAccountSession?.token]);
 
+  const handleLoadOnlineAccountProfile = useCallback((displayName: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineAccountProfile({ token: onlineAccountSession.token }, displayName);
+  }, [onlineAccountSession?.token]);
+
+  const handleLoadOnlineAccountFollowing = useCallback(() => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineAccountFollowing({ token: onlineAccountSession.token });
+  }, [onlineAccountSession?.token]);
+
+  const handleFollowOnlineAccount = useCallback((displayName: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return followOnlineAccount({ token: onlineAccountSession.token }, displayName);
+  }, [onlineAccountSession?.token]);
+
+  const handleUnfollowOnlineAccount = useCallback((displayName: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return unfollowOnlineAccount({ token: onlineAccountSession.token }, displayName);
+  }, [onlineAccountSession?.token]);
+
+  const handleBlockOnlineAccount = useCallback((displayName: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return blockOnlineAccount({ token: onlineAccountSession.token }, displayName);
+  }, [onlineAccountSession?.token]);
+
+  const handleUnblockOnlineAccount = useCallback((displayName: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return unblockOnlineAccount({ token: onlineAccountSession.token }, displayName);
+  }, [onlineAccountSession?.token]);
+
+  const handleLoadOnlineAccountPrivacy = useCallback(() => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineAccountPrivacy({ token: onlineAccountSession.token });
+  }, [onlineAccountSession?.token]);
+
+  const handleUpdateOnlineAccountPrivacy = useCallback((patch: OnlineAccountPrivacyPatch) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return updateOnlineAccountPrivacy({ token: onlineAccountSession.token }, patch);
+  }, [onlineAccountSession?.token]);
+
   const handleLoadOnlineAccountSessions = useCallback(() => {
     if (!onlineAccountSession) {
       throw new Error("No online account session is available.");
@@ -2257,6 +2322,14 @@ function App() {
           onSignOutAllAccountSessions={onlineAccountSession ? handleSignOutAllOnlineAccountSessions : undefined}
           onDeleteAccount={onlineAccountSession ? handleDeleteOnlineAccount : undefined}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
+          loadAccountProfile={onlineAccountSession ? handleLoadOnlineAccountProfile : undefined}
+          loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
+          onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}
+          onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
+          onBlockAccount={onlineAccountSession ? handleBlockOnlineAccount : undefined}
+          onUnblockAccount={onlineAccountSession ? handleUnblockOnlineAccount : undefined}
+          loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}
+          onUpdateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}
         />
       )}
 

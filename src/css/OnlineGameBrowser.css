@@ -128,6 +128,164 @@
   min-width: 0;
 }
 
+.online-browser-social-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(158, 208, 194, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.online-browser-social-header {
+  border-bottom-color: rgba(158, 208, 194, 0.14);
+}
+
+.online-browser-social-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.7fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.online-browser-social-search,
+.online-browser-follow-policy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+.online-browser-social-search label,
+.online-browser-follow-policy label {
+  display: grid;
+  gap: 6px;
+  color: #d9d0b8;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.online-browser-social-search input,
+.online-browser-follow-policy select {
+  min-height: 42px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 9px 12px;
+  font: inherit;
+  min-width: 0;
+}
+
+.online-browser-field-hint {
+  grid-column: 1 / -1;
+  margin-top: -4px;
+  color: #bdb39f;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.online-browser-field-hint.error {
+  color: #ffb7a8;
+}
+
+.online-browser-follow-policy .online-browser-button {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.online-browser-social-message {
+  margin: 0;
+  color: #9ed0c2;
+  font-weight: 800;
+}
+
+.online-browser-social-message.error {
+  color: #ffb7a8;
+}
+
+.online-browser-profile-card,
+.online-browser-following-list {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(15, 18, 18, 0.34);
+  padding: 12px;
+}
+
+.online-browser-profile-card,
+.online-browser-following-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.online-browser-profile-main,
+.online-browser-following-row > div:first-child {
+  min-width: 0;
+}
+
+.online-browser-profile-main strong,
+.online-browser-following-row strong {
+  display: block;
+  color: #f7f1d6;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-social-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.online-browser-social-badges span,
+.online-browser-following-list-heading span,
+.online-browser-following-row span {
+  border-radius: 999px;
+  background: rgba(158, 208, 194, 0.12);
+  color: #c7dfd7;
+  padding: 3px 8px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.online-browser-social-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.online-browser-following-list {
+  display: grid;
+  gap: 10px;
+}
+
+.online-browser-following-list-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.online-browser-following-list p {
+  margin: 0;
+  color: #d9d0b8;
+}
+
+.online-browser-following-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.online-browser-following-row {
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
 .online-browser-toolbar {
   display: grid;
   grid-template-columns: minmax(180px, max-content) minmax(0, 1fr) minmax(220px, 0.45fr);
@@ -158,6 +316,8 @@
 .online-browser-page button:focus-visible,
 .online-browser-search input:focus-visible,
 .online-browser-account-form input:focus-visible,
+.online-browser-social-search input:focus-visible,
+.online-browser-follow-policy select:focus-visible,
 .online-browser-select select:focus-visible,
 .online-seek-owner-panel:focus-visible,
 .online-browser-closed-listing:focus-visible {
@@ -721,6 +881,11 @@
   .online-seek-owner-panel,
   .online-browser-closed-listing,
   .online-browser-quick-match-panel,
+  .online-browser-social-grid,
+  .online-browser-social-search,
+  .online-browser-follow-policy,
+  .online-browser-profile-card,
+  .online-browser-following-row,
   .online-browser-section-header,
   .online-browser-live-overview,
   .online-browser-watch-grid {
@@ -731,8 +896,21 @@
     justify-content: stretch;
   }
 
+  .online-browser-social-actions {
+    justify-content: stretch;
+  }
+
+  .online-browser-follow-policy .online-browser-button {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .online-browser-account-actions .online-browser-button {
     flex: 1 1 160px;
+  }
+
+  .online-browser-social-actions .online-browser-button {
+    flex: 1 1 140px;
   }
 
   .online-public-game-row {
@@ -798,6 +976,7 @@
   .online-browser-tabs,
   .online-browser-quick-match-actions,
   .online-browser-section-actions,
+  .online-browser-social-actions,
   .online-game-actions {
     display: grid;
     grid-template-columns: 1fr;

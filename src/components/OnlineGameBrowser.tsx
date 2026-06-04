@@ -9,10 +9,16 @@ import {
   type FetchOnlineAccountGamesOptions,
   type FetchOpenSeekDirectoryOptions,
   type FetchOnlineGameSummariesOptions,
+  type OnlineAccountFollowingResponse,
+  type OnlineAccountPrivacyPatch,
+  type OnlineAccountPrivacyResponse,
+  type OnlineAccountProfileResponse,
+  type OnlineAccountPublicProfile,
   type OnlineAccountSessionsResponse,
   type OnlineAccountSessionSummary,
   type OpenSeekResponse,
 } from "../online/client";
+import type { OnlineAccountFollowPolicy } from "../online/social";
 import type { OnlineAccount } from "../online/accounts";
 import type {
   OnlineGameDirectoryResponse,
@@ -110,6 +116,14 @@ interface OnlineGameBrowserProps {
   onSignOutAllAccountSessions?: () => void | Promise<void>;
   onDeleteAccount?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
+  loadAccountProfile?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  loadAccountFollowing?: () => Promise<OnlineAccountFollowingResponse>;
+  onFollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  onUnfollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  onBlockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  onUnblockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  loadAccountPrivacy?: () => Promise<OnlineAccountPrivacyResponse>;
+  onUpdateAccountPrivacy?: (patch: OnlineAccountPrivacyPatch) => Promise<OnlineAccountPrivacyResponse>;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
   activeTab?: OnlineBrowserTab;
@@ -214,6 +228,17 @@ function formatCount(count: number, singular: string, plural = `${singular}s`): 
 function formatSpectatorCount(count: number | undefined): string | null {
   if (!Number.isSafeInteger(count) || (count ?? 0) <= 0) return null;
   return `${count} watching`;
+}
+
+function formatFollowPolicy(policy: OnlineAccountFollowPolicy): string {
+  return policy === "everyone" ? "Everyone" : "Nobody";
+}
+
+function compareProfilesByDisplayName(
+  left: OnlineAccountPublicProfile,
+  right: OnlineAccountPublicProfile
+): number {
+  return left.displayName.localeCompare(right.displayName);
 }
 
 function formatClockTime(ms: number): string {
@@ -456,6 +481,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onSignOutAllAccountSessions,
   onDeleteAccount,
   loadAccountGames,
+  loadAccountProfile,
+  loadAccountFollowing,
+  onFollowAccount,
+  onUnfollowAccount,
+  onBlockAccount,
+  onUnblockAccount,
+  loadAccountPrivacy,
+  onUpdateAccountPrivacy,
   backLabel = "Back to game",
   initialTab = "lobby",
   activeTab,
@@ -492,10 +525,24 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountGames, setAccountGames] = React.useState<OnlineGameSummary[]>([]);
   const [accountGamesStatus, setAccountGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [socialLookupName, setSocialLookupName] = React.useState("");
+  const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
+  const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [socialMessage, setSocialMessage] = React.useState("");
+  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "refresh" | "privacy" | undefined>();
+  const [followingProfiles, setFollowingProfiles] = React.useState<OnlineAccountPublicProfile[]>([]);
+  const [followingStatus, setFollowingStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [followPolicy, setFollowPolicy] = React.useState<OnlineAccountFollowPolicy>("everyone");
+  const [followPolicyDraft, setFollowPolicyDraft] = React.useState<OnlineAccountFollowPolicy>("everyone");
+  const [privacyStatus, setPrivacyStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
   const accountGamesRequestIdRef = React.useRef(0);
   const accountSessionsRequestIdRef = React.useRef(0);
+  const accountFollowingRequestIdRef = React.useRef(0);
+  const accountPrivacyRequestIdRef = React.useRef(0);
+  const socialLookupRequestIdRef = React.useRef(0);
+  const socialMutationRequestIdRef = React.useRef(0);
   const gameLoadInFlightRef = React.useRef(false);
   const seekLoadInFlightRef = React.useRef(false);
   const ownedSeekRefreshInFlightRef = React.useRef(false);
@@ -505,12 +552,25 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
   const deleteAccountConfirmButtonRef = React.useRef<HTMLButtonElement>(null);
+  const socialProfileCardRef = React.useRef<HTMLElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
   const closedOwnedSeekPanelRef = React.useRef<HTMLElement>(null);
   const [recentClearMessage, setRecentClearMessage] = React.useState("");
   const deleteAccountConfirmPanelId = React.useId();
   const deleteAccountConfirmHeadingId = React.useId();
   const deleteAccountConfirmDescriptionId = React.useId();
+  const followPolicyHintId = React.useId();
+  const canUseAccountSocial = Boolean(
+    account &&
+    loadAccountProfile &&
+    loadAccountFollowing &&
+    onFollowAccount &&
+    onUnfollowAccount &&
+    onBlockAccount &&
+    onUnblockAccount &&
+    loadAccountPrivacy &&
+    onUpdateAccountPrivacy
+  );
 
   React.useEffect(() => {
     if (activeTab === undefined) {
@@ -628,6 +688,67 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         setAccountSessionsStatus("error");
       });
   }, [account?.accountId, loadAccountSessions]);
+
+  const refreshFollowingProfiles = React.useCallback(async (options: { quiet?: boolean } = {}) => {
+    if (!account || !loadAccountFollowing) return;
+    const requestId = ++accountFollowingRequestIdRef.current;
+    if (!options.quiet) {
+      setFollowingStatus("loading");
+      setSocialAction("refresh");
+    }
+    try {
+      const response = await loadAccountFollowing();
+      if (requestId !== accountFollowingRequestIdRef.current) return;
+      setFollowingProfiles([...response.following].sort(compareProfilesByDisplayName));
+      setFollowingStatus("ready");
+    } catch (error) {
+      if (requestId !== accountFollowingRequestIdRef.current) return;
+      console.error("[OnlineGameBrowser] Failed to load followed accounts", error);
+      setFollowingProfiles([]);
+      setFollowingStatus("error");
+    } finally {
+      if (requestId === accountFollowingRequestIdRef.current && !options.quiet) {
+        setSocialAction(undefined);
+      }
+    }
+  }, [account?.accountId, loadAccountFollowing]);
+
+  const refreshAccountPrivacy = React.useCallback(async () => {
+    if (!account || !loadAccountPrivacy) return;
+    const requestId = ++accountPrivacyRequestIdRef.current;
+    setPrivacyStatus("loading");
+    try {
+      const response = await loadAccountPrivacy();
+      if (requestId !== accountPrivacyRequestIdRef.current) return;
+      setFollowPolicy(response.privacy.followPolicy);
+      setFollowPolicyDraft(response.privacy.followPolicy);
+      setPrivacyStatus("ready");
+    } catch (error) {
+      if (requestId !== accountPrivacyRequestIdRef.current) return;
+      console.error("[OnlineGameBrowser] Failed to load account privacy", error);
+      setPrivacyStatus("error");
+    }
+  }, [account?.accountId, loadAccountPrivacy]);
+
+  React.useEffect(() => {
+    accountFollowingRequestIdRef.current += 1;
+    accountPrivacyRequestIdRef.current += 1;
+    socialLookupRequestIdRef.current += 1;
+    socialMutationRequestIdRef.current += 1;
+    setSocialLookupName("");
+    setSocialProfile(null);
+    setSocialLookupStatus("idle");
+    setSocialMessage("");
+    setSocialAction(undefined);
+    setFollowingProfiles([]);
+    setFollowingStatus(canUseAccountSocial ? "loading" : "idle");
+    setFollowPolicy("everyone");
+    setFollowPolicyDraft("everyone");
+    setPrivacyStatus(canUseAccountSocial ? "loading" : "idle");
+    if (!canUseAccountSocial) return;
+    void refreshFollowingProfiles({ quiet: true });
+    void refreshAccountPrivacy();
+  }, [account?.accountId, canUseAccountSocial, refreshAccountPrivacy, refreshFollowingProfiles]);
 
   React.useEffect(() => {
     if (accountStatus !== "error") return;
@@ -1556,6 +1677,132 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   };
 
+  const handleSocialLookupSubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const displayName = socialLookupName.trim();
+    if (!displayName || !loadAccountProfile) return;
+    const requestId = ++socialLookupRequestIdRef.current;
+    const accountId = account?.accountId;
+    setSocialLookupStatus("loading");
+    setSocialMessage("");
+    try {
+      const response = await loadAccountProfile(displayName);
+      if (requestId !== socialLookupRequestIdRef.current || accountId !== account?.accountId) return;
+      setSocialProfile(response.profile);
+      setSocialLookupStatus("ready");
+      setSocialMessage(`Found ${response.profile.displayName}.`);
+    } catch (error) {
+      if (requestId !== socialLookupRequestIdRef.current || accountId !== account?.accountId) return;
+      console.error("[OnlineGameBrowser] Failed to load account profile", error);
+      setSocialProfile(null);
+      setSocialLookupStatus("error");
+      setSocialMessage("No visible account found with that exact name.");
+    }
+  }, [account?.accountId, loadAccountProfile, socialLookupName]);
+
+  const mergeSocialProfile = React.useCallback((profile: OnlineAccountPublicProfile) => {
+    setSocialProfile((current) =>
+      current?.displayName.toLowerCase() === profile.displayName.toLowerCase()
+        ? profile
+        : current
+    );
+    setFollowingProfiles((current) => {
+      const withoutProfile = current.filter(
+        (candidate) => candidate.displayName.toLowerCase() !== profile.displayName.toLowerCase()
+      );
+      if (profile.relationship.following && !profile.relationship.blocked && !profile.relationship.self) {
+        return [...withoutProfile, profile].sort(compareProfilesByDisplayName);
+      }
+      return withoutProfile.sort(compareProfilesByDisplayName);
+    });
+  }, []);
+
+  const runSocialProfileAction = React.useCallback(async (
+    action: "follow" | "unfollow" | "block" | "unblock",
+    displayName: string
+  ) => {
+    const handlers = {
+      follow: onFollowAccount,
+      unfollow: onUnfollowAccount,
+      block: onBlockAccount,
+      unblock: onUnblockAccount,
+    };
+    const handler = handlers[action];
+    if (!handler) return;
+    const requestId = ++socialMutationRequestIdRef.current;
+    const accountId = account?.accountId;
+    setSocialAction(action);
+    setSocialMessage("");
+    try {
+      const response = await handler(displayName);
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      mergeSocialProfile(response.profile);
+      setSocialLookupStatus("ready");
+      setSocialMessage(
+        action === "follow"
+          ? `Following ${response.profile.displayName}.`
+          : action === "unfollow"
+            ? `Unfollowed ${response.profile.displayName}.`
+            : action === "block"
+              ? `Blocked ${response.profile.displayName}.`
+              : `Unblocked ${response.profile.displayName}.`
+      );
+      void refreshFollowingProfiles({ quiet: true });
+    } catch (error) {
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      console.error(`[OnlineGameBrowser] Failed to ${action} account`, error);
+      setSocialMessage(
+        action === "follow"
+          ? "Could not follow that account."
+          : action === "unfollow"
+            ? "Could not unfollow that account."
+            : action === "block"
+              ? "Could not block that account."
+              : "Could not unblock that account."
+      );
+    } finally {
+      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
+        setSocialAction(undefined);
+      }
+    }
+  }, [
+    account?.accountId,
+    mergeSocialProfile,
+    onBlockAccount,
+    onFollowAccount,
+    onUnblockAccount,
+    onUnfollowAccount,
+    refreshFollowingProfiles,
+  ]);
+
+  const handleFollowPolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onUpdateAccountPrivacy) return;
+    const requestId = ++socialMutationRequestIdRef.current;
+    const accountId = account?.accountId;
+    setSocialAction("privacy");
+    setSocialMessage("");
+    try {
+      const response = await onUpdateAccountPrivacy({ followPolicy: followPolicyDraft });
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      setFollowPolicy(response.privacy.followPolicy);
+      setFollowPolicyDraft(response.privacy.followPolicy);
+      setPrivacyStatus("ready");
+      setSocialMessage(
+        `New follow permission: ${formatFollowPolicy(response.privacy.followPolicy)}. Existing follows are not removed.`
+      );
+    } catch (error) {
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      console.error("[OnlineGameBrowser] Failed to update follow privacy", error);
+      setPrivacyStatus("error");
+      setSocialMessage("Could not save follow privacy.");
+    } finally {
+      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
+        setSocialAction(undefined);
+      }
+    }
+  }, [account?.accountId, followPolicyDraft, onUpdateAccountPrivacy]);
+
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     ...(onTutorial ? [{ id: "learn" as const, label: "Tutorial", onClick: onTutorial }] : []),
@@ -1597,6 +1844,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? "error"
       : "",
   ].filter(Boolean).join(" ");
+  const socialLookupDisplayName = socialLookupName.trim();
+  const socialBusy = socialLookupStatus === "loading" || socialAction !== undefined;
+  const canSubmitSocialLookup = socialLookupDisplayName.length >= 2 && !socialBusy;
+  const socialMessageClassName = [
+    "online-browser-social-message",
+    socialLookupStatus === "error" || socialMessage.startsWith("Could not") || socialMessage.startsWith("No visible")
+      ? "error"
+      : "",
+  ].filter(Boolean).join(" ");
+  const canSaveFollowPolicy =
+    canUseAccountSocial &&
+    privacyStatus === "ready" &&
+    socialAction !== "privacy" &&
+    followPolicyDraft !== followPolicy;
+  const privacyControlDisabled = privacyStatus !== "ready" || socialAction === "privacy";
 
   return (
     <div className="online-browser-page">
@@ -1730,6 +1992,209 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               Cancel
             </button>
           </div>
+        </section>
+      )}
+
+      {account && canUseAccountSocial && (
+        <section className="online-browser-social-panel" aria-label="People">
+          <div className="online-browser-section-header online-browser-social-header">
+            <div>
+              <span className="online-browser-section-kicker">People</span>
+              <h2>People</h2>
+              <p>Find exact account names, follow players you trust, and block accounts you do not want to interact with.</p>
+            </div>
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => void refreshFollowingProfiles()}
+              disabled={followingStatus === "loading" || socialAction === "refresh"}
+            >
+              {followingStatus === "loading" || socialAction === "refresh" ? "Refreshing" : "Refresh Following"}
+            </button>
+          </div>
+
+          <div className="online-browser-social-grid">
+            <form className="online-browser-social-search" onSubmit={handleSocialLookupSubmit}>
+              <label>
+                <span>Exact account name</span>
+                <input
+                  type="text"
+                  value={socialLookupName}
+                  onChange={(event) => setSocialLookupName(event.currentTarget.value)}
+                  minLength={2}
+                  maxLength={32}
+                  autoComplete="off"
+                />
+              </label>
+              <button
+                type="submit"
+                className="online-browser-button primary"
+                disabled={!canSubmitSocialLookup}
+              >
+                {socialLookupStatus === "loading" ? "Finding" : "Find Account"}
+              </button>
+            </form>
+
+            <form className="online-browser-follow-policy" onSubmit={handleFollowPolicySubmit}>
+              <label>
+                <span>Who can newly follow me</span>
+                <select
+                  value={followPolicyDraft}
+                  onChange={(event) => setFollowPolicyDraft(event.currentTarget.value as OnlineAccountFollowPolicy)}
+                  disabled={privacyControlDisabled}
+                  aria-describedby={followPolicyHintId}
+                >
+                  <option value="everyone">Everyone can follow</option>
+                  <option value="nobody">Nobody new</option>
+                </select>
+              </label>
+              <span
+                id={followPolicyHintId}
+                className={`online-browser-field-hint ${privacyStatus === "error" ? "error" : ""}`}
+              >
+                {privacyStatus === "error"
+                  ? "Could not load follow privacy."
+                  : "Existing follows are not removed."}
+              </span>
+              <button
+                type="submit"
+                className="online-browser-button subtle"
+                disabled={!canSaveFollowPolicy}
+              >
+                {socialAction === "privacy" ? "Saving" : "Save Privacy"}
+              </button>
+            </form>
+          </div>
+
+          <p className={socialMessageClassName} role="status" aria-live="polite" aria-atomic="true">
+            {socialMessage}
+          </p>
+
+          {socialProfile && (
+            <article
+              ref={socialProfileCardRef}
+              className="online-browser-profile-card"
+              aria-label={`Profile ${socialProfile.displayName}`}
+              tabIndex={-1}
+            >
+              <div className="online-browser-profile-main">
+                <strong>{socialProfile.displayName}</strong>
+                <div className="online-browser-social-badges">
+                  {socialProfile.relationship.self && <span>Self</span>}
+                  {socialProfile.relationship.following && <span>Following</span>}
+                  {socialProfile.relationship.blocked && <span>Blocked</span>}
+                  {!socialProfile.relationship.self &&
+                    !socialProfile.relationship.following &&
+                    !socialProfile.relationship.blocked && <span>Not followed</span>}
+                </div>
+              </div>
+              {!socialProfile.relationship.self && (
+                <div className="online-browser-social-actions">
+                  {socialProfile.relationship.blocked ? (
+                    <button
+                      type="button"
+                      className="online-browser-button subtle"
+                      onClick={() => void runSocialProfileAction("unblock", socialProfile.displayName)}
+                      disabled={socialAction !== undefined}
+                      aria-label={`Unblock ${socialProfile.displayName}`}
+                    >
+                      {socialAction === "unblock" ? "Unblocking" : "Unblock"}
+                    </button>
+                  ) : (
+                    <>
+                      {socialProfile.relationship.following ? (
+                        <button
+                          type="button"
+                          className="online-browser-button subtle"
+                          onClick={() => void runSocialProfileAction("unfollow", socialProfile.displayName)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Unfollow ${socialProfile.displayName}`}
+                        >
+                          {socialAction === "unfollow" ? "Unfollowing" : "Unfollow"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="online-browser-button primary"
+                          onClick={() => void runSocialProfileAction("follow", socialProfile.displayName)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Follow ${socialProfile.displayName}`}
+                        >
+                          {socialAction === "follow" ? "Following" : "Follow"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="online-browser-button subtle online-browser-button-danger"
+                        onClick={() => void runSocialProfileAction("block", socialProfile.displayName)}
+                        disabled={socialAction !== undefined}
+                        aria-label={`Block ${socialProfile.displayName}`}
+                      >
+                        {socialAction === "block" ? "Blocking" : "Block"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </article>
+          )}
+
+          <section className="online-browser-following-list" aria-label="Followed players">
+            <div className="online-browser-following-list-heading">
+              <strong>Following</strong>
+              <span>
+                {followingStatus === "loading"
+                  ? "Loading"
+                  : followingStatus === "error"
+                    ? "Unavailable"
+                    : formatCount(followingProfiles.length, "player")}
+              </span>
+            </div>
+            {followingStatus === "error" ? (
+              <p>Could not load followed players.</p>
+            ) : followingStatus === "loading" && followingProfiles.length === 0 ? (
+              <p>Loading followed players...</p>
+            ) : followingProfiles.length === 0 ? (
+              <p>No followed players yet.</p>
+            ) : (
+              <div className="online-browser-following-rows">
+                {followingProfiles.map((profile) => (
+                  <article key={profile.displayName} className="online-browser-following-row">
+                    <div>
+                      <strong>{profile.displayName}</strong>
+                      <span>{profile.relationship.following ? "Following" : "Not followed"}</span>
+                    </div>
+                    <div className="online-browser-social-actions">
+                      <button
+                        type="button"
+                        className="online-browser-button subtle"
+                        onClick={() => {
+                          setSocialLookupName(profile.displayName);
+                          setSocialProfile(profile);
+                          setSocialLookupStatus("ready");
+                          setSocialMessage(`Selected ${profile.displayName}.`);
+                          window.setTimeout(() => socialProfileCardRef.current?.focus(), 0);
+                        }}
+                        disabled={socialAction !== undefined}
+                        aria-label={`Select ${profile.displayName}`}
+                      >
+                        Select
+                      </button>
+                      <button
+                        type="button"
+                        className="online-browser-button subtle"
+                        onClick={() => void runSocialProfileAction("unfollow", profile.displayName)}
+                        disabled={socialAction !== undefined}
+                        aria-label={`Unfollow ${profile.displayName} from following list`}
+                      >
+                        Unfollow
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         </section>
       )}
 
