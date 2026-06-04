@@ -138,6 +138,7 @@ interface OnlineGameBrowserProps {
   onBlockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onUnblockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onChallengeAccount?: (displayName: string) => void | Promise<void>;
+  onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
   loadAccountPrivacy?: () => Promise<OnlineAccountPrivacyResponse>;
   onUpdateAccountPrivacy?: (patch: OnlineAccountPrivacyPatch) => Promise<OnlineAccountPrivacyResponse>;
   backLabel?: string;
@@ -801,6 +802,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onBlockAccount,
   onUnblockAccount,
   onChallengeAccount,
+  onCopyChallengeAccountInvite,
   loadAccountPrivacy,
   onUpdateAccountPrivacy,
   backLabel = "Back to game",
@@ -850,7 +852,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [socialMessage, setSocialMessage] = React.useState("");
-  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "refresh" | "privacy" | undefined>();
+  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "copy-invite" | "refresh" | "privacy" | undefined>();
   const [followingProfiles, setFollowingProfiles] = React.useState<OnlineAccountPublicProfile[]>([]);
   const [followingStatus, setFollowingStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [followingPresenceFilter, setFollowingPresenceFilter] = React.useState<OnlineFollowingPresenceFilter>("all");
@@ -2651,6 +2653,27 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, onChallengeAccount]);
 
+  const runSocialCopyChallengeInviteAction = React.useCallback(async (displayName: string) => {
+    if (!onCopyChallengeAccountInvite) return;
+    const requestId = ++socialMutationRequestIdRef.current;
+    const accountId = account?.accountId;
+    setSocialAction("copy-invite");
+    setSocialMessage("");
+    try {
+      await onCopyChallengeAccountInvite(displayName);
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      setSocialMessage(`Challenge invite copied for ${displayName}.`);
+    } catch (error) {
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      console.error("[OnlineGameBrowser] Failed to copy account challenge invite", error);
+      setSocialMessage(`Could not copy a challenge invite for ${displayName}.`);
+    } finally {
+      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
+        setSocialAction(undefined);
+      }
+    }
+  }, [account?.accountId, onCopyChallengeAccountInvite]);
+
   const selectSocialProfile = React.useCallback((profile: OnlineAccountPublicProfile, message = `Selected ${profile.displayName}.`) => {
     setSocialLookupName(profile.displayName);
     setSocialProfile(profile);
@@ -2845,6 +2868,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const privacyControlDisabled = privacyStatus !== "ready" || socialAction === "privacy";
   const socialProfileKey = socialProfile ? normalizeDisplayNameKey(socialProfile.displayName) : null;
   const socialProfileLiveGame = socialProfileKey ? liveGameByRegisteredDisplayName.get(socialProfileKey) ?? null : null;
+  const socialProfilePendingChallenge = socialProfileKey
+    ? accountChallengeByOpponentDisplayName.get(socialProfileKey)
+    : undefined;
   const socialProfileLiveGameWhite = socialProfileLiveGame
     ? participantName(socialProfileLiveGame.participants, "w")
     : "";
@@ -3207,6 +3233,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Challenge
                           </button>
                         )}
+                        {!pendingChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle"
+                            onClick={() => void runSocialCopyChallengeInviteAction(profile.displayName)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Copy challenge invite for ${profile.displayName} from online now`}
+                          >
+                            Copy Invite
+                          </button>
+                        )}
                         {canInteractWithProfile && (
                           <button
                             type="button"
@@ -3386,6 +3423,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 <div className="online-browser-social-badges">
                   <span className={presenceBadgeClassName(socialProfile)}>{formatPresenceLabel(socialProfile)}</span>
                   <span>{formatRelationshipLabel(socialProfile)}</span>
+                  {socialProfilePendingChallenge && (
+                    <span>{socialProfilePendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
+                  )}
                 </div>
               </div>
               {!socialProfile.relationship.self && (
@@ -3413,7 +3453,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           Watch
                         </button>
                       )}
-                      {onChallengeAccount && (
+                      {!socialProfilePendingChallenge && onChallengeAccount && (
                         <button
                           type="button"
                           className="online-browser-button neutral"
@@ -3422,6 +3462,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           aria-label={`Challenge ${socialProfile.displayName}`}
                         >
                           {socialAction === "challenge" ? "Challenging" : "Challenge"}
+                        </button>
+                      )}
+                      {!socialProfilePendingChallenge && onCopyChallengeAccountInvite && (
+                        <button
+                          type="button"
+                          className="online-browser-button subtle"
+                          onClick={() => void runSocialCopyChallengeInviteAction(socialProfile.displayName)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Copy challenge invite for ${socialProfile.displayName}`}
+                        >
+                          {socialAction === "copy-invite" ? "Copying" : "Copy Invite"}
                         </button>
                       )}
                       <button
@@ -3645,6 +3696,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             aria-label={`Challenge ${profile.displayName}`}
                           >
                             Challenge
+                          </button>
+                        )}
+                        {!pendingChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle"
+                            onClick={() => void runSocialCopyChallengeInviteAction(profile.displayName)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Copy challenge invite for ${profile.displayName}`}
+                          >
+                            {socialAction === "copy-invite" ? "Copying" : "Copy Invite"}
                           </button>
                         )}
                         {canInteractWithProfile && (

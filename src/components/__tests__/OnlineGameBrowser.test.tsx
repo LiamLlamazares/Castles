@@ -546,8 +546,9 @@ describe("OnlineGameBrowser", () => {
     expect(await within(people).findByText("New challenge permission: Everyone. Existing challenge links are not removed.")).toBeInTheDocument();
   });
 
-  it("lets signed-in players challenge visible and followed accounts", async () => {
+  it("lets signed-in players challenge and copy invites for visible and followed accounts", async () => {
     const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+    const onCopyChallengeAccountInvite = vi.fn().mockResolvedValue(undefined);
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       profile: publicProfile("Ada"),
@@ -565,6 +566,7 @@ describe("OnlineGameBrowser", () => {
         {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
         loadAccountProfile={loadAccountProfile}
         onChallengeAccount={onChallengeAccount}
+        onCopyChallengeAccountInvite={onCopyChallengeAccountInvite}
       />
     );
 
@@ -574,6 +576,9 @@ describe("OnlineGameBrowser", () => {
     expect(followingRow).not.toBeNull();
     fireEvent.click(within(followingRow as HTMLElement).getByRole("button", { name: "Challenge Samir" }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+    fireEvent.click(within(followingRow as HTMLElement).getByRole("button", { name: "Copy challenge invite for Samir" }));
+    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByText("Challenge invite copied for Samir.")).toBeInTheDocument();
 
     fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
       target: { value: "Ada" },
@@ -583,6 +588,9 @@ describe("OnlineGameBrowser", () => {
     const profileCard = await within(people).findByRole("article", { name: "Profile Ada" });
     fireEvent.click(within(profileCard).getByRole("button", { name: "Challenge Ada" }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada"));
+    fireEvent.click(within(profileCard).getByRole("button", { name: "Copy challenge invite for Ada" }));
+    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Ada"));
+    expect(await within(people).findByText("Challenge invite copied for Ada.")).toBeInTheDocument();
   });
 
   it("lets signed-in players watch public live games from profile cards", async () => {
@@ -676,6 +684,7 @@ describe("OnlineGameBrowser", () => {
   it("shows an online-now rail for followed players with quick actions", async () => {
     const onSpectate = vi.fn();
     const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+    const onCopyChallengeAccountInvite = vi.fn().mockResolvedValue(undefined);
     const followedLiveGame = summary({
       gameId: "game_friend_rail_live",
       participants: [
@@ -704,6 +713,7 @@ describe("OnlineGameBrowser", () => {
           publicProfile("Kai", { following: true }, { visibility: "visible", status: "away" }),
         ])}
         onChallengeAccount={onChallengeAccount}
+        onCopyChallengeAccountInvite={onCopyChallengeAccountInvite}
       />
     );
 
@@ -725,6 +735,11 @@ describe("OnlineGameBrowser", () => {
 
     fireEvent.click(within(samirCard as HTMLElement).getByRole("button", { name: "Challenge Samir from online now" }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+
+    fireEvent.click(within(samirCard as HTMLElement).getByRole("button", {
+      name: "Copy challenge invite for Samir from online now",
+    }));
+    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Samir"));
 
     fireEvent.click(within(samirCard as HTMLElement).getByRole("button", { name: "Select Samir from online now" }));
     expect(await within(people).findByRole("article", { name: "Profile Samir" })).toHaveTextContent("Mutual friend");
@@ -1706,6 +1721,30 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
     expect(await within(people).findByText("Could not create a challenge for Samir.")).toBeInTheDocument();
+  });
+
+  it("shows a copy-invite error when the direct invite handler rejects", async () => {
+    const onCopyChallengeAccountInvite = vi.fn().mockRejectedValue(new Error("clipboard unavailable"));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        onCopyChallengeAccountInvite={onCopyChallengeAccountInvite}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.click(await within(people).findByRole("button", { name: "Copy challenge invite for Samir" }));
+
+    await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByText("Could not copy a challenge invite for Samir.")).toBeInTheDocument();
   });
 
   it("ignores stale social lookup responses after the account changes", async () => {

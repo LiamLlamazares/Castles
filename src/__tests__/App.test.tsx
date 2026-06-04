@@ -320,6 +320,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onSignOutAccount,
     onSignOutAllAccountSessions,
     onDeleteAccount,
+    onCopyChallengeAccountInvite,
     recentOnlineGames = [],
     onClearRecentOnlineGames,
     backLabel = "Back to game",
@@ -360,6 +361,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onSignOutAccount?: () => void;
     onSignOutAllAccountSessions?: () => void | Promise<void>;
     onDeleteAccount?: () => void | Promise<void>;
+    onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
     recentOnlineGames?: { gameId: string; status: string }[];
     onClearRecentOnlineGames?: () => void;
     backLabel?: string;
@@ -398,6 +400,16 @@ vi.mock("../components/OnlineGameBrowser", () => ({
           }}
         >
           Mock Delete Account
+        </button>
+      )}
+      {account && onCopyChallengeAccountInvite && (
+        <button
+          type="button"
+          onClick={() => {
+            void Promise.resolve(onCopyChallengeAccountInvite("Samir")).catch(() => undefined);
+          }}
+        >
+          Mock Copy Account Challenge Invite
         </button>
       )}
       {onClearRecentOnlineGames && (
@@ -1258,6 +1270,7 @@ describe("App game setup lifecycle", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "Mock Load Rich Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mock Open Analysis" }));
     expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
 
@@ -3002,6 +3015,94 @@ describe("App game setup lifecycle", () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(challengedUrl));
     expect(within(linkRegion).getByRole("status")).toHaveTextContent("Challenge link copied.");
+  });
+
+  it("copies a targeted account challenge invite from the online people surface", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
+    };
+    const challengedUrl =
+      "https://castles.example/?onlineChallenge=challenge_samir&challengeRole=challenged#challengeToken=samir-secret";
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/challenges") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          challengedDisplayName?: string;
+        };
+        expect(body.challengedDisplayName).toBe("Samir");
+        expect(init?.headers).toEqual({
+          "content-type": "application/json",
+          authorization: "Bearer account-token",
+        });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              challengeId: "challenge_samir",
+              challenger: {
+                url: "https://castles.example/?onlineChallenge=challenge_samir&challengeRole=challenger#challengeToken=liam-secret",
+              },
+              challenged: {
+                url: challengedUrl,
+              },
+              summary: {
+                schemaVersion: 1,
+                challengeId: "challenge_samir",
+                challengerIdentity: account.identity,
+                challengedIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+                challengerSeat: "w",
+                visibility: "unlisted",
+                setup: { board: { config: { nSquares: 8 }, castles: [] }, pieces: [], sanctuaries: [] },
+                createdAt: "2026-06-01T12:00:00.000Z",
+                updatedAt: "2026-06-01T12:00:00.000Z",
+                expiresAt: "2026-06-02T12:00:00.000Z",
+                status: "pending",
+                lastEventId: "challenge_samir_evt_created",
+              },
+            }),
+            { status: 201, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start Rich Local Game" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Copy Account Challenge Invite" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(challengedUrl));
+    expect(await screen.findByRole("region", { name: "Challenge link" })).toHaveTextContent(challengedUrl);
+    expect(screen.getByRole("status", { name: "Challenge link status" })).toHaveTextContent(
+      "Challenge invite copied for Samir."
+    );
   });
 
   it("uses shared navigation on challenge screens", async () => {

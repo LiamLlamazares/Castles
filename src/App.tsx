@@ -133,6 +133,10 @@ type OnlineAccountUiStatus =
   | "ready"
   | "error";
 
+interface CreatedChallengeFromSetup {
+  challengedUrl: string;
+}
+
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
 const FIRST_RUN_INTRO_STORAGE_KEY = "castles_first_run_intro_seen";
@@ -1320,7 +1324,7 @@ function App() {
   const createChallengeFromSetup = async (
     setup: OnlineGameSetupDTO,
     options: { challengedDisplayName?: string } = {}
-  ): Promise<boolean> => {
+  ): Promise<CreatedChallengeFromSetup | null> => {
     try {
       cancelPendingReplay();
       clearAnalysisReturn();
@@ -1367,7 +1371,7 @@ function App() {
       setOnlineChallengeStatus("idle");
       setOnlineChallengeError(null);
       setView('challenge');
-      return true;
+      return { challengedUrl: created.challenged.url };
     } catch (error) {
       console.error("Failed to create online challenge", error);
       alert(
@@ -1375,7 +1379,7 @@ function App() {
           ? `Could not create a challenge for ${options.challengedDisplayName}. They may not accept challenges from this account.`
           : "Could not create an online challenge. Make sure the Node server is running."
       );
-      return false;
+      return null;
     }
   };
 
@@ -1417,6 +1421,23 @@ function App() {
     if (!created) {
       throw new Error("Targeted online challenge was not created.");
     }
+  };
+
+  const handleCopyChallengeOnlineAccountInvite = async (displayName: string) => {
+    if (!onlineAccountAuth) {
+      alert("Sign in before challenging an account.");
+      throw new Error("Online account sign-in is required before challenging an account.");
+    }
+    if (!onlineLobbySetup) {
+      alert("Choose a Play setup before challenging an account.");
+      throw new Error("A Play setup is required before challenging an account.");
+    }
+    const created = await createChallengeFromSetup(onlineLobbySetup, { challengedDisplayName: displayName });
+    if (!created) {
+      throw new Error("Targeted online challenge invite was not created.");
+    }
+    await copyOnlineInviteUrl(created.challengedUrl);
+    setOnlineChallengeShareMessage(`Challenge invite copied for ${displayName}.`);
   };
 
   const createOpenSeekFromSetup = async (setup: OnlineGameSetupDTO) => {
@@ -2415,6 +2436,7 @@ function App() {
           onBlockAccount={onlineAccountSession ? handleBlockOnlineAccount : undefined}
           onUnblockAccount={onlineAccountSession ? handleUnblockOnlineAccount : undefined}
           onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
+          onCopyChallengeAccountInvite={onlineAccountSession ? handleCopyChallengeOnlineAccountInvite : undefined}
           loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}
           onUpdateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}
         />
