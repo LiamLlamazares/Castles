@@ -788,6 +788,102 @@ describe("OnlineGameBrowser", () => {
     }
   });
 
+  it("stores private notes for followed players locally and restores them", async () => {
+    const storageKey = "castles_online_following_notes_v1:account_notetaker";
+    const account = accountFixture("NoteTaker");
+    const props = {
+      initialTab: "lobby" as const,
+      loadGames: vi.fn().mockResolvedValue(directory([])),
+      loadOpenSeeks: vi.fn().mockResolvedValue(seekDirectory([])),
+      onBack: vi.fn(),
+      onSpectate: vi.fn(),
+      onReplay: vi.fn(),
+      account,
+      accountStatus: "ready" as const,
+      ...socialPropsWithFollowing([publicProfile("Samir", { following: true })]),
+    };
+
+    window.localStorage.removeItem(storageKey);
+    try {
+      const { unmount } = render(<OnlineGameBrowser {...props} />);
+      const following = await screen.findByRole("region", { name: "Followed players" });
+      const samirRow = (await within(following).findByText("Samir")).closest("article");
+      expect(samirRow).not.toBeNull();
+
+      fireEvent.click(within(samirRow as HTMLElement).getByRole("button", { name: "Add private note for Samir" }));
+      fireEvent.change(within(samirRow as HTMLElement).getByRole("textbox", { name: "Private note for Samir" }), {
+        target: { value: "Reliable weekend opponent" },
+      });
+      fireEvent.click(within(samirRow as HTMLElement).getByRole("button", { name: "Save Note" }));
+
+      await waitFor(() => expect(samirRow as HTMLElement).toHaveTextContent("Reliable weekend opponent"));
+      expect(JSON.parse(window.localStorage.getItem(storageKey) ?? "{}")).toEqual({
+        samir: "Reliable weekend opponent",
+      });
+
+      unmount();
+      render(<OnlineGameBrowser {...props} />);
+      const restoredFollowing = await screen.findByRole("region", { name: "Followed players" });
+      const restoredSamirRow = (await within(restoredFollowing).findByText("Samir")).closest("article");
+      expect(restoredSamirRow).not.toBeNull();
+      expect(restoredSamirRow as HTMLElement).toHaveTextContent("Reliable weekend opponent");
+      expect(within(restoredSamirRow as HTMLElement).getByRole("button", { name: "Edit private note for Samir" })).toBeInTheDocument();
+    } finally {
+      window.localStorage.removeItem(storageKey);
+    }
+  });
+
+  it("removes private notes when a followed player is unfollowed", async () => {
+    const storageKey = "castles_online_following_notes_v1:account_notetaker";
+    const account = accountFixture("NoteTaker");
+    let currentFollowing = true;
+    const followedProfile = publicProfile("Samir", { following: true });
+    const socialProps = socialPropsWithFollowing([followedProfile]);
+    const loadAccountFollowing = vi.fn().mockImplementation(() => Promise.resolve({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      following: currentFollowing ? [followedProfile] : [],
+    }));
+    const onUnfollowAccount = vi.fn().mockImplementation(() => {
+      currentFollowing = false;
+      return Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: publicProfile("Samir"),
+      });
+    });
+
+    window.localStorage.setItem(storageKey, JSON.stringify({ samir: "Prep sharp openings" }));
+    try {
+      render(
+        <OnlineGameBrowser
+          initialTab="lobby"
+          loadGames={vi.fn().mockResolvedValue(directory([]))}
+          loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+          onBack={vi.fn()}
+          onSpectate={vi.fn()}
+          onReplay={vi.fn()}
+          account={account}
+          accountStatus="ready"
+          {...socialProps}
+          loadAccountFollowing={loadAccountFollowing}
+          onUnfollowAccount={onUnfollowAccount}
+        />
+      );
+
+      const following = await screen.findByRole("region", { name: "Followed players" });
+      const samirRow = (await within(following).findByText("Samir")).closest("article");
+      expect(samirRow).not.toBeNull();
+      expect(samirRow as HTMLElement).toHaveTextContent("Prep sharp openings");
+
+      fireEvent.click(within(samirRow as HTMLElement).getByRole("button", { name: "Unfollow Samir from following list" }));
+
+      await waitFor(() => expect(onUnfollowAccount).toHaveBeenCalledWith("Samir"));
+      expect(await within(following).findByText("No followed players yet.")).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem(storageKey) ?? "{}")).toEqual({});
+    } finally {
+      window.localStorage.removeItem(storageKey);
+    }
+  });
+
   it("labels mutual friends and accounts that follow the signed-in player", async () => {
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,

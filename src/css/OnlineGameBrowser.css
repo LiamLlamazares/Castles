@@ -440,6 +440,68 @@
   color: #d9d0b8;
 }
 
+.online-browser-private-note {
+  display: grid;
+  gap: 4px;
+  max-width: 640px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(215, 183, 101, 0.58);
+  border-radius: 4px;
+  background: rgba(70, 51, 20, 0.25);
+  color: #efe3bd;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-private-note span {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #d8f0e7;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.online-browser-private-note-editor {
+  display: grid;
+  gap: 8px;
+  max-width: 640px;
+  margin-top: 8px;
+}
+
+.online-browser-private-note-editor label {
+  display: grid;
+  gap: 6px;
+}
+
+.online-browser-private-note-editor label > span {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #f4ebce;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.online-browser-private-note-editor textarea {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111;
+  font: inherit;
+}
+
+.online-browser-private-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .online-browser-following-rows {
   display: grid;
   gap: 8px;
@@ -1222,6 +1284,7 @@
   .online-browser-tabs,
   .online-browser-quick-match-actions,
   .online-browser-section-actions,
+  .online-browser-private-note-actions,
   .online-browser-social-actions,
   .online-browser-online-now-actions,
   .online-game-actions {

@@ -77,6 +77,7 @@ type OnlineAccountUiStatus =
   | "error";
 type QuickMatchStatus = "idle" | "pending" | "matched" | "waiting" | "error";
 type QuickMatchOutcome = "matched" | "waiting" | void;
+type FollowingNoteMap = Record<string, string>;
 
 interface QuickMatchSetupSummary {
   boardRadius: number;
@@ -199,9 +200,20 @@ function normalizeDisplayNameKey(displayName: string): string {
 
 const PINNED_FOLLOWING_STORAGE_KEY_PREFIX = "castles_online_pinned_following_v1:";
 const PINNED_FOLLOWING_LIMIT = 64;
+const FOLLOWING_NOTES_STORAGE_KEY_PREFIX = "castles_online_following_notes_v1:";
+const FOLLOWING_NOTES_LIMIT = 128;
+const FOLLOWING_NOTE_MAX_LENGTH = 180;
 
 function pinnedFollowingStorageKey(accountId: string): string {
   return `${PINNED_FOLLOWING_STORAGE_KEY_PREFIX}${accountId}`;
+}
+
+function followingNotesStorageKey(accountId: string): string {
+  return `${FOLLOWING_NOTES_STORAGE_KEY_PREFIX}${accountId}`;
+}
+
+function normalizeFollowingNote(note: string): string {
+  return note.replace(/\s+/g, " ").trim().slice(0, FOLLOWING_NOTE_MAX_LENGTH);
 }
 
 function readPinnedFollowingDisplayNames(accountId: string): Set<string> {
@@ -232,6 +244,43 @@ function writePinnedFollowingDisplayNames(accountId: string, pinned: ReadonlySet
     );
   } catch {
     // Pinning is a local convenience; storage failures should not block play.
+  }
+}
+
+function readFollowingNotes(accountId: string): FollowingNoteMap {
+  try {
+    const raw = window.localStorage.getItem(followingNotesStorageKey(accountId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const notes: FollowingNoteMap = {};
+    for (const [candidateKey, candidateNote] of Object.entries(parsed)) {
+      if (typeof candidateKey !== "string" || typeof candidateNote !== "string") continue;
+      const key = normalizeDisplayNameKey(candidateKey);
+      const note = normalizeFollowingNote(candidateNote);
+      if (!key || !note) continue;
+      notes[key] = note;
+      if (Object.keys(notes).length >= FOLLOWING_NOTES_LIMIT) break;
+    }
+    return notes;
+  } catch {
+    return {};
+  }
+}
+
+function writeFollowingNotes(accountId: string, notes: FollowingNoteMap): void {
+  try {
+    const trimmedNotes: FollowingNoteMap = {};
+    for (const [candidateKey, candidateNote] of Object.entries(notes)) {
+      const key = normalizeDisplayNameKey(candidateKey);
+      const note = normalizeFollowingNote(candidateNote);
+      if (!key || !note) continue;
+      trimmedNotes[key] = note;
+      if (Object.keys(trimmedNotes).length >= FOLLOWING_NOTES_LIMIT) break;
+    }
+    window.localStorage.setItem(followingNotesStorageKey(accountId), JSON.stringify(trimmedNotes));
+  } catch {
+    // Notes are local convenience data; storage failures should not block play.
   }
 }
 
@@ -808,6 +857,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [pinnedFollowingDisplayNames, setPinnedFollowingDisplayNames] = React.useState<Set<string>>(() =>
     account ? readPinnedFollowingDisplayNames(account.accountId) : new Set()
   );
+  const [followingNotes, setFollowingNotes] = React.useState<FollowingNoteMap>(() =>
+    account ? readFollowingNotes(account.accountId) : {}
+  );
+  const [editingFollowingNoteKey, setEditingFollowingNoteKey] = React.useState<string | null>(null);
+  const [followingNoteDraft, setFollowingNoteDraft] = React.useState("");
   const [followPolicy, setFollowPolicy] = React.useState<OnlineAccountFollowPolicy>("everyone");
   const [followPolicyDraft, setFollowPolicyDraft] = React.useState<OnlineAccountFollowPolicy>("everyone");
   const [presencePolicy, setPresencePolicy] = React.useState<OnlineAccountPresencePolicy>("followed");
@@ -906,9 +960,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   React.useEffect(() => {
     if (!account) {
       setPinnedFollowingDisplayNames(new Set());
+      setFollowingNotes({});
+      setEditingFollowingNoteKey(null);
+      setFollowingNoteDraft("");
       return;
     }
     setPinnedFollowingDisplayNames(readPinnedFollowingDisplayNames(account.accountId));
+    setFollowingNotes(readFollowingNotes(account.accountId));
+    setEditingFollowingNoteKey(null);
+    setFollowingNoteDraft("");
   }, [account?.accountId]);
 
   const handleClearRecentOnlineGames = React.useCallback(() => {
@@ -2390,6 +2450,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     });
   }, [account?.accountId]);
 
+  const removeFollowingNote = React.useCallback((displayName: string) => {
+    const accountId = account?.accountId;
+    const key = normalizeDisplayNameKey(displayName);
+    if (!accountId || !key) return;
+    setFollowingNotes((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      writeFollowingNotes(accountId, next);
+      return next;
+    });
+    setEditingFollowingNoteKey((current) => (current === key ? null : current));
+    setFollowingNoteDraft((currentDraft) => (editingFollowingNoteKey === key ? "" : currentDraft));
+  }, [account?.accountId, editingFollowingNoteKey]);
+
   const togglePinnedFollowingProfile = React.useCallback((displayName: string) => {
     const accountId = account?.accountId;
     const key = normalizeDisplayNameKey(displayName);
@@ -2404,6 +2479,58 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       writePinnedFollowingDisplayNames(accountId, next);
       return next;
     });
+  }, [account?.accountId]);
+
+  const openFollowingNoteEditor = React.useCallback((displayName: string) => {
+    const key = normalizeDisplayNameKey(displayName);
+    if (!key) return;
+    setEditingFollowingNoteKey(key);
+    setFollowingNoteDraft(followingNotes[key] ?? "");
+  }, [followingNotes]);
+
+  const cancelFollowingNoteEditor = React.useCallback(() => {
+    setEditingFollowingNoteKey(null);
+    setFollowingNoteDraft("");
+  }, []);
+
+  const saveFollowingNote = React.useCallback((
+    event: React.FormEvent<HTMLFormElement>,
+    displayName: string
+  ) => {
+    event.preventDefault();
+    const accountId = account?.accountId;
+    const key = normalizeDisplayNameKey(displayName);
+    if (!accountId || !key) return;
+    const note = normalizeFollowingNote(followingNoteDraft);
+    setFollowingNotes((current) => {
+      const next = { ...current };
+      if (note) {
+        next[key] = note;
+      } else {
+        delete next[key];
+      }
+      writeFollowingNotes(accountId, next);
+      return next;
+    });
+    setEditingFollowingNoteKey(null);
+    setFollowingNoteDraft("");
+    setSocialMessage(note ? `Private note saved for ${displayName}.` : `Private note cleared for ${displayName}.`);
+  }, [account?.accountId, followingNoteDraft]);
+
+  const clearFollowingNote = React.useCallback((displayName: string) => {
+    const accountId = account?.accountId;
+    const key = normalizeDisplayNameKey(displayName);
+    if (!accountId || !key) return;
+    setFollowingNotes((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      writeFollowingNotes(accountId, next);
+      return next;
+    });
+    setEditingFollowingNoteKey(null);
+    setFollowingNoteDraft("");
+    setSocialMessage(`Private note cleared for ${displayName}.`);
   }, [account?.accountId]);
 
   const mergeSocialProfile = React.useCallback((profile: OnlineAccountPublicProfile) => {
@@ -2445,6 +2572,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       mergeSocialProfile(response.profile);
       if (action === "unfollow" || action === "block" || !response.profile.relationship.following) {
         removePinnedFollowingProfile(response.profile.displayName);
+        removeFollowingNote(response.profile.displayName);
       }
       setSocialLookupStatus("ready");
       setSocialMessage(
@@ -2478,6 +2606,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     account?.accountId,
     mergeSocialProfile,
     removePinnedFollowingProfile,
+    removeFollowingNote,
     onBlockAccount,
     onFollowAccount,
     onUnblockAccount,
@@ -3384,6 +3513,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     pendingChallengeAction === undefined;
                   const canInteractWithProfile = !profile.relationship.blocked && !profile.relationship.self;
                   const pinned = isProfilePinned(profile, pinnedFollowingDisplayNames);
+                  const privateNote = followingNotes[profileKey] ?? "";
+                  const isEditingPrivateNote = editingFollowingNoteKey === profileKey;
                   const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
                   const liveGameBlack = liveGame ? participantName(liveGame.participants, "b") : "";
                   return (
@@ -3398,7 +3529,52 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
                           )}
                           <span>{formatRelationshipLabel(profile)}</span>
+                          {privateNote && <span>Private note</span>}
                         </div>
+                        {privateNote && !isEditingPrivateNote && (
+                          <p className="online-browser-private-note">
+                            <span>Private note</span>
+                            {privateNote}
+                          </p>
+                        )}
+                        {isEditingPrivateNote && (
+                          <form
+                            className="online-browser-private-note-editor"
+                            onSubmit={(event) => saveFollowingNote(event, profile.displayName)}
+                          >
+                            <label>
+                              <span>Private note for {profile.displayName}</span>
+                              <textarea
+                                value={followingNoteDraft}
+                                onChange={(event) => setFollowingNoteDraft(event.currentTarget.value)}
+                                maxLength={FOLLOWING_NOTE_MAX_LENGTH}
+                                rows={2}
+                              />
+                            </label>
+                            <div className="online-browser-private-note-actions">
+                              <button type="submit" className="online-browser-button primary">
+                                Save Note
+                              </button>
+                              <button
+                                type="button"
+                                className="online-browser-button subtle"
+                                onClick={cancelFollowingNoteEditor}
+                              >
+                                Cancel
+                              </button>
+                              {privateNote && (
+                                <button
+                                  type="button"
+                                  className="online-browser-button subtle online-browser-button-danger"
+                                  onClick={() => clearFollowingNote(profile.displayName)}
+                                  aria-label={`Clear private note for ${profile.displayName}`}
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                          </form>
+                        )}
                       </div>
                       <div className="online-browser-social-actions">
                         {liveGame && canInteractWithProfile && (
@@ -3466,6 +3642,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             History
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="online-browser-button subtle"
+                          onClick={() => openFollowingNoteEditor(profile.displayName)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`${privateNote ? "Edit" : "Add"} private note for ${profile.displayName}`}
+                        >
+                          {privateNote ? "Edit Note" : "Note"}
+                        </button>
                         <button
                           type="button"
                           className="online-browser-button subtle"
