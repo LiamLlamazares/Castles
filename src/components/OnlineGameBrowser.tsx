@@ -838,6 +838,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
+  const gameSearchInputRef = React.useRef<HTMLInputElement>(null);
   const deleteAccountConfirmButtonRef = React.useRef<HTMLButtonElement>(null);
   const socialProfileCardRef = React.useRef<HTMLElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
@@ -2503,6 +2504,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     window.setTimeout(() => socialProfileCardRef.current?.focus(), 0);
   }, []);
 
+  const showVisiblePlayerHistory = React.useCallback((displayName: string) => {
+    const trimmedDisplayName = displayName.trim();
+    if (!trimmedDisplayName) return;
+    setQuery(trimmedDisplayName);
+    setSort("newest");
+    setTimeFilter("all");
+    setResultFilter("all");
+    setFriendFilter("all");
+    setCopyMessage("");
+    setRecentClearMessage("");
+    setSocialMessage(`Showing visible games with ${trimmedDisplayName}.`);
+    setBrowserTab("archive");
+    window.setTimeout(() => gameSearchInputRef.current?.focus(), 0);
+  }, [setBrowserTab]);
+
   const handleFollowPolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!onUpdateAccountPrivacy) return;
@@ -3002,6 +3018,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Challenge
                           </button>
                         )}
+                        {canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle"
+                            onClick={() => showVisiblePlayerHistory(profile.displayName)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Show ${profile.displayName} game history from online now`}
+                          >
+                            History
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="online-browser-button subtle"
@@ -3203,6 +3230,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           {socialAction === "challenge" ? "Challenging" : "Challenge"}
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="online-browser-button subtle"
+                        onClick={() => showVisiblePlayerHistory(socialProfile.displayName)}
+                        disabled={socialAction !== undefined}
+                        aria-label={`Show ${socialProfile.displayName} game history from profile`}
+                      >
+                        History
+                      </button>
                       {socialProfile.relationship.following ? (
                         <button
                           type="button"
@@ -3368,6 +3404,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             aria-label={`Challenge ${profile.displayName}`}
                           >
                             Challenge
+                          </button>
+                        )}
+                        {canInteractWithProfile && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle"
+                            onClick={() => showVisiblePlayerHistory(profile.displayName)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Show ${profile.displayName} game history from following list`}
+                          >
+                            History
                           </button>
                         )}
                         <button
@@ -3575,6 +3622,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <input
             type="search"
             aria-label={gameSearchAriaLabel}
+            ref={gameSearchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             maxLength={tab === "lobby" ? undefined : ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH}

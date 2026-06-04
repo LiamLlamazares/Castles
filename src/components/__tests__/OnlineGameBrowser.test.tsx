@@ -1952,6 +1952,93 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(profileCard).toHaveFocus());
   });
 
+  it("opens visible player history from the following list in the archive", async () => {
+    const account = accountFixture("Liam");
+    const accountArchiveSamir = summary({
+      gameId: "game_account_history_samir",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "unlisted",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Samir").identity },
+      ],
+    });
+    const accountArchiveBen = summary({
+      gameId: "game_account_history_ben",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "unlisted",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Ben").identity },
+      ],
+    });
+    const publicArchiveSamir = summary({
+      gameId: "game_public_history_samir",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "public",
+      hasTimeControl: false,
+      participants: [
+        registeredParticipant("w", "Samir"),
+        registeredParticipant("b", "Ada"),
+      ],
+    });
+    const publicArchiveBen = summary({
+      gameId: "game_public_history_ben",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "public",
+      hasTimeControl: false,
+      participants: [
+        registeredParticipant("w", "Ben"),
+        registeredParticipant("b", "Ada"),
+      ],
+    });
+    const loadAccountGames = vi.fn().mockResolvedValue(directory([accountArchiveSamir, accountArchiveBen]));
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([publicArchiveSamir, publicArchiveBen]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" }),
+        ])}
+        loadAccountGames={loadAccountGames}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    fireEvent.click(within(following).getByRole("button", {
+      name: "Show Samir game history from following list",
+    }));
+
+    const search = await screen.findByRole("searchbox", { name: "Search online archive" });
+    await waitFor(() => expect(search).toHaveValue("Samir"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true")
+    );
+    await waitFor(() => expect(loadAccountGames).toHaveBeenCalledWith({ state: "all", limit: 50 }));
+
+    const accountGames = await screen.findByRole("region", { name: "Your account games" });
+    expect(within(accountGames).getByText("game_account_history_samir")).toBeInTheDocument();
+    expect(within(accountGames).queryByText("game_account_history_ben")).not.toBeInTheDocument();
+
+    const publicArchive = screen.getByRole("region", { name: "Public archive games" });
+    expect(within(publicArchive).getByText("game_public_history_samir")).toBeInTheDocument();
+    expect(within(publicArchive).queryByText("game_public_history_ben")).not.toBeInTheDocument();
+    expect(screen.getByText("Showing visible games with Samir.")).toBeInTheDocument();
+  });
+
   it("keeps game row player names plain without signed-in social lookup", async () => {
     const liveGame = summary({
       gameId: "game_profile_plain",
