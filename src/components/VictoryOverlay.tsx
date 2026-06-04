@@ -8,6 +8,8 @@ interface VictoryOverlayProps {
   onSetup: () => void;
   onAnalyze: () => void;
   onEnableAnalysis?: () => void;
+  onRematch?: () => void;
+  rematchLabel?: string;
   canRestart?: boolean;
 }
 
@@ -18,6 +20,8 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({
   onSetup,
   onAnalyze,
   onEnableAnalysis,
+  onRematch,
+  rematchLabel = "Rematch",
   canRestart = true
 }) => {
   if (!victoryMessage) return null;
@@ -26,12 +30,17 @@ const VictoryOverlay: React.FC<VictoryOverlayProps> = ({
     <div className="victory-overlay">
       <div className={`victory-banner ${winner}`}>
         <h1>{victoryMessage}</h1>
-        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
           {canRestart && (
             <button onClick={onRestart} style={{ padding: '10px 20px', fontSize: '1.2rem' }}>
                 Reset Board
             </button>
           )}
+            {onRematch && (
+              <button onClick={onRematch} style={{ padding: '10px 20px', fontSize: '1.2rem' }}>
+                {rematchLabel}
+              </button>
+            )}
             <button onClick={onSetup} style={{ padding: '10px 20px', fontSize: '1.2rem' }}>
                 Configure New Game
             </button>

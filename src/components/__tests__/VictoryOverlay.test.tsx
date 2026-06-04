@@ -24,4 +24,25 @@ describe("VictoryOverlay", () => {
     expect(onSetup).toHaveBeenCalledOnce();
     expect(onRestart).not.toHaveBeenCalled();
   });
+
+  it("shows a rematch action when a rematch target is available", () => {
+    const onRematch = vi.fn();
+
+    render(
+      <VictoryOverlay
+        victoryMessage="White wins by resignation"
+        winner="w"
+        onRestart={vi.fn()}
+        onSetup={vi.fn()}
+        onAnalyze={vi.fn()}
+        canRestart={false}
+        rematchLabel="Rematch Samir"
+        onRematch={onRematch}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rematch Samir" }));
+
+    expect(onRematch).toHaveBeenCalledOnce();
+  });
 });

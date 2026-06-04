@@ -77,6 +77,8 @@ interface GameBoardProps {
   onResign?: () => void;
   onSetup?: () => void;
   onRestart?: () => void;
+  onRematch?: () => void;
+  rematchLabel?: string;
   onLoadGame?: (data: {
     board: Board,
     pieces: Piece[],
@@ -147,6 +149,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onResign = () => {},
   onSetup = () => {},
   onRestart = () => {},
+  onRematch,
+  rematchLabel,
   onLoadGame,
   onEditPosition,
   onTutorial,
@@ -920,6 +924,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
         onDismissOverlay={() => setOverlayDismissed(true)}
         onRestart={onRestart}
         onSetup={onSetup}
+        onRematch={onRematch}
+        rematchLabel={rematchLabel}
         onEnableAnalysis={handleEnterAnalysis}
         canRestart={!onlineSession}
         showQuickStart={showQuickStart}

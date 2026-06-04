@@ -15,6 +15,8 @@ interface GameOverlaysProps {
   onDismissOverlay: () => void;
   onRestart: () => void;
   onSetup: () => void;
+  onRematch?: () => void;
+  rematchLabel?: string;
   onEnableAnalysis: () => void;
   canRestart?: boolean;
   showQuickStart: boolean;
@@ -34,6 +36,8 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
   onDismissOverlay,
   onRestart,
   onSetup,
+  onRematch,
+  rematchLabel,
   onEnableAnalysis,
   canRestart = true,
   showQuickStart,
@@ -57,6 +61,8 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
             winner={winner}
             onRestart={onRestart}
             onSetup={onSetup}
+            onRematch={onRematch}
+            rematchLabel={rematchLabel}
             onAnalyze={onDismissOverlay}
             onEnableAnalysis={onEnableAnalysis}
             canRestart={canRestart}

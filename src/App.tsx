@@ -140,6 +140,12 @@ interface CreatedChallengeFromSetup {
   challengedUrl: string;
 }
 
+interface OnlineRematchTarget {
+  gameId: string;
+  displayName: string;
+  setup: OnlineGameSetupDTO;
+}
+
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
 const FIRST_RUN_INTRO_STORAGE_KEY = "castles_first_run_intro_seen";
@@ -212,6 +218,21 @@ interface EditorConfig {
   board?: Board;
   pieces?: Piece[];
   sanctuaries?: Sanctuary[];
+}
+
+function resolveRegisteredRematchOpponent(
+  summary: OnlineGameSummary,
+  account: OnlineAccount
+): string | null {
+  if (summary.status !== "complete") return null;
+  const accountParticipant = summary.participants.find((participant) =>
+    participant.identity.kind === "registered" &&
+    participant.identity.id === account.identity.id
+  );
+  if (!accountParticipant) return null;
+  const opponent = summary.participants.find((participant) => participant.seat !== accountParticipant.seat);
+  if (opponent?.identity.kind !== "registered" || !opponent.identity.displayName) return null;
+  return opponent.identity.displayName;
 }
 
 interface SaveGameDialogState {
@@ -392,6 +413,7 @@ function App() {
     resolveOnlineAccountSession() ? "checking" : "signed-out"
   );
   const [onlineAccountError, setOnlineAccountError] = useState<string | null>(null);
+  const [onlineRematchTarget, setOnlineRematchTarget] = useState<OnlineRematchTarget | null>(null);
   const [rejoiningAccountGameId, setRejoiningAccountGameId] = useState<string | null>(null);
   const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
   const replayRequestIdRef = useRef(0);
@@ -627,6 +649,41 @@ function App() {
       })
     );
   }, [onlineJoin, onlineSnapshot?.gameId, onlineSnapshot?.result, onlineSnapshotVisibility, onlineSpectator]);
+
+  useEffect(() => {
+    const accountToken = onlineAccountSession?.token;
+    if (!onlineJoin || !onlineSnapshot?.result || !onlineAccount || !accountToken) {
+      setOnlineRematchTarget(null);
+      return;
+    }
+
+    const gameId = onlineSnapshot.gameId;
+    const setup = onlineSnapshot.setup;
+    let cancelled = false;
+    fetchOnlineAccountGames({ token: accountToken }, { state: "all" })
+      .then((directory) => {
+        if (cancelled) return;
+        const summary = directory.games.find((game) => game.gameId === gameId);
+        const displayName = summary ? resolveRegisteredRematchOpponent(summary, onlineAccount) : null;
+        setOnlineRematchTarget(displayName ? { gameId, displayName, setup } : null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("Failed to resolve online rematch opponent", error);
+        setOnlineRematchTarget(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    onlineAccount,
+    onlineAccountSession?.token,
+    onlineJoin,
+    onlineSnapshot?.gameId,
+    onlineSnapshot?.result,
+    onlineSnapshot?.setup,
+  ]);
 
   useEffect(() => {
     if (!onlineChallenge) return;
@@ -1448,6 +1505,17 @@ function App() {
     }
     await copyOnlineInviteUrl(created.challengedUrl);
     setOnlineChallengeShareMessage(`Challenge invite copied for ${displayName}.`);
+  };
+
+  const handleCreateOnlineRematch = async () => {
+    if (!onlineRematchTarget) return;
+    const target = onlineRematchTarget;
+    const created = await createChallengeFromSetup(target.setup, { challengedDisplayName: target.displayName });
+    if (!created) {
+      throw new Error("Rematch challenge was not created.");
+    }
+    setOnlineRematchTarget(null);
+    setOnlineChallengeShareMessage(`Rematch challenge created for ${target.displayName}.`);
   };
 
   const createOpenSeekFromSetup = async (
@@ -2351,6 +2419,8 @@ function App() {
               onResign={() => {}} // Controlled internally or via prop if we want to bubble up
               onSetup={handleNewGameClick}
               onRestart={handleRestartGame}
+              onRematch={onlineRematchTarget ? handleCreateOnlineRematch : undefined}
+              rematchLabel={onlineRematchTarget ? `Rematch ${onlineRematchTarget.displayName}` : undefined}
               onLoadGame={handleLoadGame}
               onEditPosition={handleEditPosition}
               onTutorial={handleTutorialClick}

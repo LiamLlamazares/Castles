@@ -72,6 +72,8 @@ vi.mock("../components/Game", () => ({
     onOpenOnlineBrowser: () => void;
     onReturnFromAnalysis?: () => void;
     analysisReturnLabel?: string;
+    rematchLabel?: string;
+    onRematch?: () => void | Promise<void>;
     onSaveGameToLibrary?: (pgn: string, status: "ongoing" | "complete" | "analysis") => Promise<unknown> | unknown;
     onLoadGame: (data: {
       board: unknown;
@@ -144,6 +146,16 @@ vi.mock("../components/Game", () => ({
       {props.onReturnFromAnalysis && (
         <button type="button" onClick={props.onReturnFromAnalysis}>
           {props.analysisReturnLabel ?? "Return to Game"}
+        </button>
+      )}
+      {props.onRematch && (
+        <button
+          type="button"
+          onClick={() => {
+            void Promise.resolve(props.onRematch?.()).catch(() => undefined);
+          }}
+        >
+          {props.rematchLabel ?? "Rematch"}
         </button>
       )}
       {props.onSaveGameToLibrary && (
@@ -2314,6 +2326,141 @@ describe("App game setup lifecycle", () => {
     await waitFor(() => {
       expect(screen.getByText("Online session: player")).toBeInTheDocument();
       expect(screen.getByText("Online visibility: private")).toBeInTheDocument();
+    });
+  });
+
+  it("offers a rematch from a completed signed-in online game using account history opponent identity", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_rematch_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-04T12:00:00.000Z",
+      updatedAt: "2026-06-04T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_rematch_liam", displayName: "Liam" },
+    };
+    const samirIdentity = { kind: "registered" as const, id: "account_rematch_samir", displayName: "Samir" };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    window.history.replaceState({}, "", "/?onlineGame=game_account_rematch&seat=w&token=white-token");
+
+    const completedAccountGame = {
+      schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+      gameId: "game_account_rematch",
+      rulesetVersion: "castles-beta-v1",
+      createdAt: "2026-06-04T12:00:00.000Z",
+      updatedAt: "2026-06-04T12:10:00.000Z",
+      endedAt: "2026-06-04T12:10:00.000Z",
+      version: 5,
+      status: "complete",
+      visibility: "private",
+      archiveState: "archived",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: samirIdentity },
+      ],
+      livePreview: {
+        sideToMove: "b",
+        turnPhase: "Movement",
+        moveCount: 5,
+        lastMove: { notation: "Pass", turnNumber: 5, color: "w", phase: "Movement" },
+        boardPreview: { radius: 6, pieces: [], castles: [] },
+      },
+      result: { winner: "w", reason: "resignation" },
+      lastEventId: "game_account_rematch_evt_terminal",
+    };
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/games") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: 1, games: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/games?state=all") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: 1, games: [completedAccountGame] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/challenges") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          challengedDisplayName?: string;
+          setup?: { board?: { config?: { nSquares?: number } } };
+        };
+        expect(body.challengedDisplayName).toBe("Samir");
+        expect(body.setup?.board?.config?.nSquares).toBe(6);
+        expect(init?.headers).toEqual({
+          "content-type": "application/json",
+          authorization: "Bearer account-token",
+        });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              challengeId: "challenge_rematch_samir",
+              challenger: {
+                url: "https://castles.example/?onlineChallenge=challenge_rematch_samir&challengeRole=challenger#challengeToken=liam-secret",
+              },
+              challenged: {
+                url: "https://castles.example/?onlineChallenge=challenge_rematch_samir&challengeRole=challenged#challengeToken=samir-secret",
+              },
+              summary: {
+                schemaVersion: 1,
+                challengeId: "challenge_rematch_samir",
+                challengerIdentity: account.identity,
+                challengedIdentity: samirIdentity,
+                challengerSeat: "w",
+                visibility: "unlisted",
+                setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+                createdAt: "2026-06-04T12:10:00.000Z",
+                updatedAt: "2026-06-04T12:10:00.000Z",
+                expiresAt: "2026-06-05T12:10:00.000Z",
+                status: "pending",
+                lastEventId: "challenge_rematch_samir_evt_created",
+              },
+            }),
+            { status: 201, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const playerCallback = onlineHookMocks.useOnlineGameConnection.mock.calls.at(-1)?.[1];
+    act(() => {
+      playerCallback({
+        ...spectatorSnapshot("game_account_rematch"),
+        result: { winner: "w", reason: "resignation" },
+      });
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Rematch Samir" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/challenges",
+        expect.objectContaining({ method: "POST" })
+      );
     });
   });
 
