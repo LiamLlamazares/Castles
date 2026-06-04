@@ -53,6 +53,7 @@ type OnlineBrowserSort = "newest" | "moves" | "watchers";
 type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
 type OnlineFriendFilter = "all" | "followed";
 type OnlineFollowingPresenceFilter = "all" | "online";
+type OnlineAccountChallengeFilter = NonNullable<FetchOnlineAccountChallengesOptions["state"]>;
 type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
 type OpenSeekClockFilter = "all" | "timed" | "casual";
 type OpenSeekVpFilter = "all" | "enabled" | "disabled";
@@ -707,6 +708,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountChallenges, setAccountChallenges] = React.useState<OnlineAccountChallengeListItem[]>([]);
   const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallengeActionById, setAccountChallengeActionById] = React.useState<Record<string, "accept" | "decline" | "cancel" | undefined>>({});
+  const [accountChallengeFilter, setAccountChallengeFilter] = React.useState<OnlineAccountChallengeFilter>("pending");
   const [socialLookupName, setSocialLookupName] = React.useState("");
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -854,10 +856,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setAccountChallengesStatus("loading");
     }
     try {
-      const response = await loadAccountChallenges({ state: "pending" });
+      const response = await loadAccountChallenges({ state: accountChallengeFilter });
       if (requestId !== accountChallengesRequestIdRef.current) return;
       setAccountChallenges(
         response.challenges.filter((item) =>
+          item.summary.status !== "pending" ||
           !completedAccountChallengeIdsRef.current.has(item.summary.challengeId)
         )
       );
@@ -877,7 +880,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         accountChallengeLoadInFlightRef.current = false;
       }
     }
-  }, [account?.accountId, loadAccountChallenges]);
+  }, [account?.accountId, accountChallengeFilter, loadAccountChallenges]);
 
   const runAccountChallengeAction = React.useCallback(async (
     item: OnlineAccountChallengeListItem,
@@ -905,7 +908,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               ? { role: response.role, summary: response.summary }
               : candidate
           )
-          .filter((candidate) => candidate.summary.status === "pending")
+          .filter((candidate) =>
+            accountChallengeFilter === "all" || candidate.summary.status === "pending"
+          )
       );
       setAccountChallengesStatus("ready");
       setSocialMessage(
@@ -931,7 +936,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         return next;
       });
     }
-  }, [onAcceptAccountChallenge, onCancelAccountChallenge, onDeclineAccountChallenge]);
+  }, [accountChallengeFilter, onAcceptAccountChallenge, onCancelAccountChallenge, onDeclineAccountChallenge]);
+
+  const handleAccountChallengeFilterChange = React.useCallback((nextFilter: OnlineAccountChallengeFilter) => {
+    if (nextFilter === accountChallengeFilter) return;
+    accountChallengesRequestIdRef.current += 1;
+    accountChallengeLoadInFlightRef.current = false;
+    setAccountChallenges([]);
+    setAccountChallengesStatus(canUseAccountChallenges ? "loading" : "idle");
+    setAccountChallengeFilter(nextFilter);
+  }, [accountChallengeFilter, canUseAccountChallenges]);
 
   const handleSignOutAllAccountSessions = React.useCallback(async () => {
     if (!onSignOutAllAccountSessions) return;
@@ -1087,6 +1101,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     completedAccountChallengeIdsRef.current.clear();
     setAccountChallenges([]);
     setAccountChallengeActionById({});
+    setAccountChallengeFilter("pending");
     setAccountChallengesStatus("idle");
   }, [account?.accountId, canUseAccountChallenges]);
 
@@ -2685,16 +2700,40 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           {canUseAccountChallenges && (
             <section className="online-browser-following-list online-browser-account-challenges" aria-label="Account challenges">
               <div className="online-browser-following-list-heading">
-                <strong>Challenges</strong>
-                <span>
-                  {accountChallengesStatus === "loading"
-                    ? "Loading"
-                    : accountChallengesStatus === "error"
-                      ? "Unavailable"
-                      : accountChallengesStatus === "ready"
-                        ? formatCount(accountChallenges.length, "challenge")
-                        : "Not checked"}
-                </span>
+                <div className="online-browser-following-list-title">
+                  <strong>Challenges</strong>
+                  <span>
+                    {accountChallengesStatus === "loading"
+                      ? "Loading"
+                      : accountChallengesStatus === "error"
+                        ? "Unavailable"
+                        : accountChallengesStatus === "ready"
+                          ? accountChallengeFilter === "pending"
+                            ? formatCount(accountChallenges.length, "pending challenge")
+                            : formatCount(accountChallenges.length, "challenge")
+                          : "Not checked"}
+                  </span>
+                </div>
+                <div className="online-browser-following-filter" role="group" aria-label="Account challenge inbox filter">
+                  <button
+                    type="button"
+                    aria-label="Show pending account challenges"
+                    aria-pressed={accountChallengeFilter === "pending"}
+                    className={accountChallengeFilter === "pending" ? "active" : ""}
+                    onClick={() => handleAccountChallengeFilterChange("pending")}
+                  >
+                    Pending
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Show all account challenges"
+                    aria-pressed={accountChallengeFilter === "all"}
+                    className={accountChallengeFilter === "all" ? "active" : ""}
+                    onClick={() => handleAccountChallengeFilterChange("all")}
+                  >
+                    All
+                  </button>
+                </div>
               </div>
               <div className="online-browser-account-challenge-actions">
                 <button
@@ -2703,7 +2742,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   onClick={() => void refreshAccountChallenges()}
                   disabled={accountChallengesStatus === "loading"}
                 >
-                  {accountChallengesStatus === "loading" ? "Refreshing" : "Refresh Challenges"}
+                  {accountChallengesStatus === "loading" ? "Refreshing" : "Refresh Inbox"}
                 </button>
               </div>
               {accountChallengesStatus === "error" ? (
@@ -2713,7 +2752,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               ) : accountChallengesStatus === "idle" ? (
                 <p>Refresh challenges to check targeted invites.</p>
               ) : accountChallenges.length === 0 ? (
-                <p>No pending account challenges.</p>
+                <p>
+                  {accountChallengeFilter === "pending"
+                    ? "No pending account challenges."
+                    : "No account challenges yet."}
+                </p>
               ) : (
                 <div className="online-browser-following-rows">
                   {accountChallenges.map((item) => {
@@ -2736,7 +2779,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             <span>{challengeId}</span>
                           </div>
                           <div className="online-browser-social-actions">
-                            {item.role === "challenged" && onAcceptAccountChallenge && (
+                            {item.summary.status === "pending" && item.role === "challenged" && onAcceptAccountChallenge && (
                               <button
                                 type="button"
                                 className="online-browser-button primary"
@@ -2747,7 +2790,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 {pendingAction === "accept" ? "Accepting" : "Accept"}
                               </button>
                             )}
-                            {item.role === "challenged" && onDeclineAccountChallenge && (
+                            {item.summary.status === "pending" && item.role === "challenged" && onDeclineAccountChallenge && (
                               <button
                                 type="button"
                                 className="online-browser-button subtle"
@@ -2758,7 +2801,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 {pendingAction === "decline" ? "Declining" : "Decline"}
                               </button>
                             )}
-                            {item.role === "challenger" && onCancelAccountChallenge && (
+                            {item.summary.status === "pending" && item.role === "challenger" && onCancelAccountChallenge && (
                               <button
                                 type="button"
                                 className="online-browser-button subtle online-browser-button-danger"

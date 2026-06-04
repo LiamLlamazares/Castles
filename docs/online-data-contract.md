@@ -171,7 +171,7 @@ When an account bearer is present on safe creation paths, the server uses the re
 
 ## Account Social Contract
 
-Social v1 is an account-authenticated foundation for exact profile lookup, one-way follows, blocks, privacy settings, privacy-filtered coarse presence, and account-to-account challenge targeting. The visible UI exposes exact lookup, follow/unfollow, block/unblock, following-list refresh, presence-aware following rows with All/Online filtering, mutual/follows-you labels, friend challenge/watch shortcuts, a small account challenge status surface, and follow/presence/challenge privacy controls. It does not yet add friend-only lobby listings, challenge inboxes, private messages, public profile text, ratings, leaderboards, reports, or moderation queues.
+Social v1 is an account-authenticated foundation for exact profile lookup, one-way follows, blocks, privacy settings, privacy-filtered coarse presence, and account-to-account challenge targeting. The visible UI exposes exact lookup, follow/unfollow, block/unblock, following-list refresh, presence-aware following rows with All/Online filtering, mutual/follows-you labels, friend challenge/watch shortcuts, a Pending/All account challenge inbox with terminal status history, and follow/presence/challenge privacy controls. It does not yet add friend-only lobby listings, rematch requests, broader notifications, private messages, public profile text, ratings, leaderboards, reports, or moderation queues.
 
 Every social route requires `Authorization: Bearer <account-session-token>`. The server resolves the viewer account from that bearer; clients cannot provide viewer account ids in request bodies. Profile and follow-list responses expose display names, privacy-filtered coarse presence, and relationship booleans only. Relationship booleans currently include `self`, `following`, `followedBy`, and `blocked`. They must not expose raw account ids, account identities, session ids, bearer tokens, token hashes, game seat tokens, challenge tokens, open-seek creator tokens, or internal database keys.
 
@@ -185,6 +185,8 @@ Social routes:
 - `DELETE /api/online/account/blocks/:displayName`: removes the viewer's block edge and returns the current target profile when visible.
 - `GET /api/online/account/privacy`: returns privacy settings. Missing persisted settings use defaults.
 - `PATCH /api/online/account/privacy`: accepts only `followPolicy`, `presencePolicy`, and `challengePolicy` fields.
+
+Account challenge lists support `state=pending` and `state=all`. Pending lists are the default actionable inbox view; All lists include accepted, declined, cancelled, and expired terminal summaries for status history. Terminal challenge rows are display-only in the visible UI and must not expose accept, decline, or cancel actions.
 
 Privacy v1 defaults are `followPolicy: "everyone"`, `presencePolicy: "followed"`, and `challengePolicy: "followed"`. `followed` means accounts the user has chosen to follow/trust, not arbitrary accounts that follow the user. The visible UI exposes all three privacy settings. Follow creation, profile/follow-list presence visibility, and account challenge target resolution use these policies server-side. Future friend-only lobby or archive visibility must preserve this directionality and must not treat incoming followers as trusted friends.
 
