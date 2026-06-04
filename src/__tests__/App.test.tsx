@@ -333,6 +333,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onSignOutAccount,
     onSignOutAllAccountSessions,
     onDeleteAccount,
+    onChallengeAccount,
     onCopyChallengeAccountInvite,
     recentOnlineGames = [],
     onClearRecentOnlineGames,
@@ -375,6 +376,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onSignOutAccount?: () => void;
     onSignOutAllAccountSessions?: () => void | Promise<void>;
     onDeleteAccount?: () => void | Promise<void>;
+    onChallengeAccount?: (displayName: string, options?: { intent?: "challenge" | "rematch"; sourceGameId?: string }) => void | Promise<void>;
     onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
     recentOnlineGames?: { gameId: string; status: string }[];
     onClearRecentOnlineGames?: () => void;
@@ -424,6 +426,18 @@ vi.mock("../components/OnlineGameBrowser", () => ({
           }}
         >
           Mock Copy Account Challenge Invite
+        </button>
+      )}
+      {account && onChallengeAccount && (
+        <button
+          type="button"
+          onClick={() => {
+            void Promise.resolve(
+              onChallengeAccount("Samir", { intent: "rematch", sourceGameId: "game_archive_private" })
+            ).catch(() => undefined);
+          }}
+        >
+          Mock Account Archive Rematch
         </button>
       )}
       {onClearRecentOnlineGames && (
@@ -2461,6 +2475,105 @@ describe("App game setup lifecycle", () => {
         "/api/online/challenges",
         expect.objectContaining({ method: "POST" })
       );
+    });
+  });
+
+  it("creates account archive rematches from the source game setup snapshot", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_archive_rematch_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-04T12:00:00.000Z",
+      updatedAt: "2026-06-04T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_archive_rematch_liam", displayName: "Liam" },
+    };
+    const sourceSnapshot = {
+      ...spectatorSnapshot("game_archive_private"),
+      setup: {
+        board: { config: { nSquares: 5 }, castles: [] },
+        pieces: [],
+        sanctuaries: [],
+        timeControl: { initial: 11, increment: 3 },
+      },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const postedBodies: Array<{ challengedDisplayName?: string; setup?: { board?: { config?: { nSquares?: number } } } }> = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/games/game_archive_private/snapshot") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, role: "account", snapshot: sourceSnapshot }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/challenges") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          challengedDisplayName?: string;
+          setup?: { board?: { config?: { nSquares?: number } } };
+        };
+        postedBodies.push(body);
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              challengeId: "challenge_archive_rematch_samir",
+              challenger: {
+                url: "https://castles.example/?onlineChallenge=challenge_archive_rematch_samir&challengeRole=challenger#challengeToken=liam-secret",
+              },
+              challenged: {
+                url: "https://castles.example/?onlineChallenge=challenge_archive_rematch_samir&challengeRole=challenged#challengeToken=samir-secret",
+              },
+              summary: {
+                schemaVersion: 1,
+                challengeId: "challenge_archive_rematch_samir",
+                challengerIdentity: account.identity,
+                challengedIdentity: { kind: "registered", id: "account_archive_rematch_samir", displayName: "Samir" },
+                challengerSeat: "w",
+                visibility: "unlisted",
+                setup: sourceSnapshot.setup,
+                createdAt: "2026-06-04T12:10:00.000Z",
+                updatedAt: "2026-06-04T12:10:00.000Z",
+                expiresAt: "2026-06-05T12:10:00.000Z",
+                status: "pending",
+                lastEventId: "challenge_archive_rematch_samir_evt_created",
+              },
+            }),
+            { status: 201, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    startRichLocalGameFromSetup();
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Account Archive Rematch" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/account/games/game_archive_private/snapshot",
+        { headers: { authorization: "Bearer account-token" } }
+      );
+      expect(postedBodies[0]).toMatchObject({
+        challengedDisplayName: "Samir",
+        setup: { board: { config: { nSquares: 5 } } },
+      });
     });
   });
 

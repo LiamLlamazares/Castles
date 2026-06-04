@@ -46,6 +46,7 @@ import {
   fetchOpenSeek,
   fetchOpenSeekDirectory,
   fetchOnlineAccountChallenges,
+  fetchOnlineAccountGameSnapshot,
   fetchOnlineAccountGames,
   fetchOnlineAccountFollowing,
   fetchOnlineAccountMe,
@@ -214,6 +215,11 @@ type AnalysisReturnState =
       label: string;
       tab: OnlineBrowserInitialTab;
     };
+
+interface AccountChallengeOptions {
+  intent?: "challenge" | "rematch";
+  sourceGameId?: string;
+}
 
 interface EditorConfig {
   board?: Board;
@@ -1480,18 +1486,35 @@ function App() {
     );
   };
 
-  const handleChallengeOnlineAccount = async (displayName: string) => {
+  const handleChallengeOnlineAccount = async (
+    displayName: string,
+    options: AccountChallengeOptions = {}
+  ) => {
     if (!onlineAccountAuth) {
       alert("Sign in before challenging an account.");
       throw new Error("Online account sign-in is required before challenging an account.");
     }
-    if (!onlineLobbySetup) {
+    let setup = onlineLobbySetup;
+    if (options.sourceGameId) {
+      try {
+        const snapshot = await fetchOnlineAccountGameSnapshot(onlineAccountAuth, options.sourceGameId);
+        setup = snapshot.setup;
+      } catch (error) {
+        console.error("Failed to load source game setup for account rematch", error);
+        alert("Could not load that game setup for a rematch.");
+        throw error;
+      }
+    }
+    if (!setup) {
       alert("Choose a Play setup before challenging an account.");
       throw new Error("A Play setup is required before challenging an account.");
     }
-    const created = await createChallengeFromSetup(onlineLobbySetup, { challengedDisplayName: displayName });
+    const created = await createChallengeFromSetup(setup, { challengedDisplayName: displayName });
     if (!created) {
       throw new Error("Targeted online challenge was not created.");
+    }
+    if (options.intent === "rematch") {
+      setOnlineChallengeShareMessage(`Rematch challenge created for ${displayName}.`);
     }
   };
 

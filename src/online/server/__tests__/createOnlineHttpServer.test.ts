@@ -1397,6 +1397,86 @@ describe("createOnlineHttpServer", () => {
     expect(missingAuthResponse.status).toBe(401);
   });
 
+  it("serves account-authorized snapshots for private participant games only", async () => {
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    let samirIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    let accountSnapshotGameId: string | null = null;
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      loadGameSummary: (gameId) => {
+        if (gameId !== accountSnapshotGameId || !liamIdentity || !samirIdentity) return null;
+        return {
+          ...summaryForGame(gameId, "private"),
+          participants: [
+            { seat: "w", role: "white", identity: liamIdentity },
+            { seat: "b", role: "black", identity: samirIdentity },
+          ],
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+    liamIdentity = liam.account.identity;
+    samirIdentity = samir.account.identity;
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "private",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const created = await createResponse.json();
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}/accept`,
+      { method: "POST", headers: bearer(fragmentChallengeToken(created.challenged.url)) }
+    );
+    const accepted = await acceptResponse.json();
+    accountSnapshotGameId = accepted.gameInvite.gameId;
+
+    const participantResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${accepted.gameInvite.gameId}/snapshot`,
+      { headers: bearer(liam.session.token) }
+    );
+    const participantText = await participantResponse.text();
+    const participantBody = participantResponse.ok ? JSON.parse(participantText) : participantText;
+    const unrelatedResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${accepted.gameInvite.gameId}/snapshot`,
+      { headers: bearer(dani.session.token) }
+    );
+    const spectatorResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${accepted.gameInvite.gameId}/spectator`
+    );
+
+    expect(createResponse.status).toBe(201);
+    expect(acceptResponse.status).toBe(200);
+    expect(participantResponse.status).toBe(200);
+    expect(participantBody).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "account",
+      snapshot: {
+        gameId: accepted.gameInvite.gameId,
+        setup: { board: { config: { nSquares: setup.board.config.nSquares } } },
+      },
+    });
+    expect(JSON.stringify(participantBody)).not.toContain(accepted.gameInvite.token);
+    expect(unrelatedResponse.status).toBe(404);
+    expect(spectatorResponse.status).toBe(404);
+  });
+
   it("mints a fresh player token when a registered participant rejoins an active account game", async () => {
     const gameId = "game_account_rejoin_route";
     const record = {

@@ -3390,6 +3390,83 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   });
 
+  app.get("/api/online/account/games/:gameId/snapshot", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+
+    const gameId = validateOnlineGameId(req.params.gameId, "account.snapshot.gameId");
+    if (!gameId.ok) {
+      res.status(400).json({ error: gameId.error });
+      return;
+    }
+
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.snapshot", gameId: gameId.value, status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
+    await enqueueGameAction(gameId.value, async () => {
+      const lookup = await loadValidatedSummaryForGame(gameId.value);
+      if (!lookup.ok) {
+        log({ event: "online.account.snapshot", gameId: gameId.value, status: "failed", reason: lookup.reason });
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "Online game summary could not be loaded." },
+        });
+        return;
+      }
+      if (!lookup.summary) {
+        log({ event: "online.account.snapshot", gameId: gameId.value, status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No account game was found." },
+        });
+        return;
+      }
+
+      const seat = seatForGameIdentity(lookup.summary, auth.account.identity);
+      if (!seat) {
+        log({ event: "online.account.snapshot", gameId: gameId.value, status: "rejected", reason: "not_participant" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No account game was found." },
+        });
+        return;
+      }
+
+      const room = service.getRoom(gameId.value);
+      if (!room) {
+        log({ event: "online.account.snapshot", gameId: gameId.value, status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No account game was found." },
+        });
+        return;
+      }
+
+      const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
+      if (!timeout.ok) {
+        log({ event: "online.account.snapshot", gameId: gameId.value, status: "rejected", reason: timeout.error.code });
+        res
+          .status(httpStatusForOnlineError(timeout.error))
+          .json(responseBodyWithOptionalSnapshot(timeout.error, timeout.snapshot));
+        return;
+      }
+      if (timeout.timeout) {
+        broadcastSnapshot(gameId.value);
+      }
+
+      log({ event: "online.account.snapshot", gameId: gameId.value, role: "player", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: "account",
+        snapshot: (service.getRoom(gameId.value) ?? room).getSnapshot(),
+      });
+    });
+  });
+
   app.post("/api/online/account/games/:gameId/rejoin", async (req, res) => {
     if (!accountReadLimiter.take(getClientKey(req))) {
       res.status(429).json({

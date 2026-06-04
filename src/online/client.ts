@@ -1882,6 +1882,25 @@ export async function fetchOnlineAccountGames(
   return validation.value;
 }
 
+export async function fetchOnlineAccountGameSnapshot(
+  account: OnlineAccountSessionParams,
+  gameId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameSnapshotDTO> {
+  const response = await fetchImpl(
+    `/api/online/account/games/${encodeURIComponent(gameId)}/snapshot`,
+    {
+      headers: accountAuthorizationHeader(account),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch online account game snapshot (${response.status})`);
+  }
+
+  return validateSnapshotResponse(await response.json(), "Online account game snapshot");
+}
+
 export async function rejoinOnlineAccountGame(
   account: OnlineAccountSessionParams,
   gameId: string,
