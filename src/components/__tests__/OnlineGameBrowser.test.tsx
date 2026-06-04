@@ -135,11 +135,16 @@ function accountFixture(displayName = "Liam") {
 
 function publicProfile(
   displayName: string,
-  relationship: { self?: boolean; following?: boolean; blocked?: boolean } = {}
+  relationship: { self?: boolean; following?: boolean; blocked?: boolean } = {},
+  presence: { visibility?: "visible" | "hidden"; status?: "online" | "recent" | "away" | "offline" | null } = {}
 ) {
   return {
     schemaVersion: 1 as const,
     displayName,
+    presence: {
+      visibility: presence.visibility ?? "hidden",
+      status: presence.status ?? null,
+    },
     relationship: {
       self: relationship.self ?? false,
       following: relationship.following ?? false,
@@ -415,7 +420,7 @@ describe("OnlineGameBrowser", () => {
       privacy: {
         schemaVersion: 1,
         followPolicy: patch.followPolicy ?? "nobody",
-        presencePolicy: "followed",
+        presencePolicy: patch.presencePolicy ?? "followed",
         challengePolicy: patch.challengePolicy ?? "followed",
         updatedAt: "2026-06-04T12:00:00.000Z",
       },
@@ -482,6 +487,14 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ followPolicy: "nobody" }));
     expect(await within(people).findByText("New follow permission: Nobody. Existing follows are not removed.")).toBeInTheDocument();
+
+    fireEvent.change(within(people).getByRole("combobox", { name: "Who can see me online" }), {
+      target: { value: "everyone" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Save Status" }));
+
+    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ presencePolicy: "everyone" }));
+    expect(await within(people).findByText("New online status visibility: Everyone. Exact session activity stays private.")).toBeInTheDocument();
 
     fireEvent.change(within(people).getByRole("combobox", { name: "Who can challenge me" }), {
       target: { value: "everyone" },
@@ -655,9 +668,10 @@ describe("OnlineGameBrowser", () => {
 
     const people = await screen.findByRole("region", { name: "People" });
     await waitFor(() =>
-      expect(within(people).getAllByText("Could not load social privacy.")).toHaveLength(2)
+      expect(within(people).getAllByText("Could not load social privacy.")).toHaveLength(3)
     );
     expect(within(people).getByRole("combobox", { name: "Who can newly follow me" })).toBeDisabled();
+    expect(within(people).getByRole("combobox", { name: "Who can see me online" })).toBeDisabled();
     expect(within(people).getByRole("combobox", { name: "Who can challenge me" })).toBeDisabled();
   });
 

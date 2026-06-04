@@ -705,6 +705,7 @@ describe("createOnlineHttpServer", () => {
       profile: {
         schemaVersion: 1,
         displayName: "Samir",
+        presence: { visibility: "hidden", status: null },
         relationship: { self: false, following: false, blocked: false },
       },
     });

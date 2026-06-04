@@ -691,7 +691,7 @@ function validateOnlineAccountPublicProfile(
     throw new Error(`${label} was malformed.`);
   }
   const record = value as Record<string, unknown>;
-  const allowedProfileKeys = new Set(["schemaVersion", "displayName", "relationship"]);
+  const allowedProfileKeys = new Set(["schemaVersion", "displayName", "presence", "relationship"]);
   for (const key of Object.keys(record)) {
     if (!allowedProfileKeys.has(key)) {
       throw new Error(`${label} was malformed: profile contains unsupported data.`);
@@ -705,6 +705,35 @@ function validateOnlineAccountPublicProfile(
   }
   if (stringContainsDurableSecret(record.displayName)) {
     throw new Error(`${label} was malformed: displayName must not contain secrets.`);
+  }
+  const presence = record.presence;
+  if (!presence || typeof presence !== "object" || Array.isArray(presence)) {
+    throw new Error(`${label} was malformed: presence is invalid.`);
+  }
+  const presenceRecord = presence as Record<string, unknown>;
+  const allowedPresenceKeys = new Set(["visibility", "status"]);
+  for (const key of Object.keys(presenceRecord)) {
+    if (!allowedPresenceKeys.has(key)) {
+      throw new Error(`${label} was malformed: presence contains unsupported data.`);
+    }
+  }
+  if (presenceRecord.visibility !== "visible" && presenceRecord.visibility !== "hidden") {
+    throw new Error(`${label} was malformed: presence visibility is invalid.`);
+  }
+  if (
+    presenceRecord.status !== null &&
+    presenceRecord.status !== "online" &&
+    presenceRecord.status !== "recent" &&
+    presenceRecord.status !== "away" &&
+    presenceRecord.status !== "offline"
+  ) {
+    throw new Error(`${label} was malformed: presence status is invalid.`);
+  }
+  if (presenceRecord.visibility === "hidden" && presenceRecord.status !== null) {
+    throw new Error(`${label} was malformed: hidden presence must not include status.`);
+  }
+  if (presenceRecord.visibility === "visible" && presenceRecord.status === null) {
+    throw new Error(`${label} was malformed: visible presence must include status.`);
   }
   const relationship = record.relationship;
   if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
@@ -727,6 +756,10 @@ function validateOnlineAccountPublicProfile(
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: record.displayName,
+    presence: {
+      visibility: presenceRecord.visibility,
+      status: presenceRecord.status,
+    },
     relationship: {
       self: relationshipRecord.self,
       following: relationshipRecord.following,

@@ -946,7 +946,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const resolveAccountBearer = async (
     req: Request
   ): Promise<
-    | { ok: true; account: OnlineAccount; sessionId: string }
+    | { ok: true; account: OnlineAccount; sessionId: string; usedAt: string }
     | { ok: false; status: number; error: OnlineReject; reason: string }
   > => {
     const token = getBearerToken(req.headers.authorization);
@@ -969,7 +969,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           reason: "bad_account_token",
         };
       }
-      return { ok: true, account: resolved.account, sessionId: resolved.sessionId };
+      return { ok: true, account: resolved.account, sessionId: resolved.sessionId, usedAt };
     } catch (error) {
       console.error("Failed to resolve account session", error);
       return {
@@ -2307,7 +2307,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const profile = await accountStore.getProfileForDisplayName(auth.account.accountId, displayName);
+      const profile = await accountStore.getProfileForDisplayName(auth.account.accountId, displayName, auth.usedAt);
       if (!profile) {
         log({ event: "online.account.profile.lookup", status: "rejected", reason: "not_found" });
         res.status(404).json({
@@ -2343,7 +2343,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const following = await accountStore.listFollowingProfiles(auth.account.accountId);
+      const following = await accountStore.listFollowingProfiles(auth.account.accountId, auth.usedAt);
       log({ event: "online.account.follows.list", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -2379,7 +2379,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const createdAt = auth.usedAt;
       const result = await accountStore.followAccount(auth.account.accountId, displayName, createdAt);
       if (result.status !== "ok" || !result.profile) {
         const failure = socialActionError(result, "follow");
@@ -2422,7 +2422,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const result = await accountStore.unfollowAccount(auth.account.accountId, displayName);
+      const result = await accountStore.unfollowAccount(auth.account.accountId, displayName, auth.usedAt);
       if (result.status !== "ok" || !result.profile) {
         const failure = socialActionError(result, "unfollow");
         log({ event: "online.account.unfollow", status: "rejected", reason: result.status });
@@ -2464,7 +2464,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const createdAt = auth.usedAt;
       const result = await accountStore.blockAccount(auth.account.accountId, displayName, createdAt);
       if (result.status !== "ok" || !result.profile) {
         const failure = socialActionError(result, "block");
@@ -2507,7 +2507,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const result = await accountStore.unblockAccount(auth.account.accountId, displayName);
+      const result = await accountStore.unblockAccount(auth.account.accountId, displayName, auth.usedAt);
       if (result.status !== "ok" || !result.profile) {
         const failure = socialActionError(result, "unblock");
         log({ event: "online.account.unblock", status: "rejected", reason: result.status });
@@ -2576,7 +2576,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const updatedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const updatedAt = auth.usedAt;
       const privacy = await accountStore.updatePrivacySettings(auth.account.accountId, patch.value, updatedAt);
       if (!privacy) {
         log({ event: "online.account.privacy.update", status: "rejected", reason: "not_found" });

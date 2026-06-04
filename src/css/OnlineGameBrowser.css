@@ -144,7 +144,7 @@
 
 .online-browser-social-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.7fr);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
   align-items: end;
 }
@@ -248,6 +248,32 @@
   padding: 3px 8px;
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.online-browser-social-badges span.presence-online,
+.online-browser-following-row span.presence-online {
+  background: rgba(116, 199, 151, 0.22);
+  color: #c4f1d5;
+}
+
+.online-browser-social-badges span.presence-recent,
+.online-browser-following-row span.presence-recent {
+  background: rgba(215, 183, 101, 0.2);
+  color: #f6df9c;
+}
+
+.online-browser-social-badges span.presence-away,
+.online-browser-following-row span.presence-away {
+  background: rgba(155, 211, 255, 0.15);
+  color: #c6e8ff;
+}
+
+.online-browser-social-badges span.presence-offline,
+.online-browser-following-row span.presence-offline,
+.online-browser-social-badges span.presence-hidden,
+.online-browser-following-row span.presence-hidden {
+  background: rgba(255, 255, 255, 0.08);
+  color: #bdb39f;
 }
 
 .online-browser-social-actions {

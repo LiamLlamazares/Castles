@@ -177,6 +177,16 @@ class FakeAccountQueryable {
       return { rows: [] };
     }
 
+    if (normalizedText.startsWith("SELECT max(last_used_at) AS last_seen_at FROM online_account_sessions")) {
+      const [accountId] = values as string[];
+      const lastSeenAt = Array.from(this.sessionsByTokenHash.values())
+        .filter((session) => session.account_id === accountId)
+        .map((session) => session.last_used_at)
+        .sort()
+        .at(-1) ?? null;
+      return { rows: [{ last_seen_at: lastSeenAt }] };
+    }
+
     if (normalizedText.startsWith("SELECT session_id, created_at, last_used_at FROM online_account_sessions")) {
       const [accountId] = values as string[];
       const rows = Array.from(this.sessionsByTokenHash.values())
@@ -595,6 +605,7 @@ describe("PostgresOnlineAccountStore", () => {
       status: "ok",
       profile: {
         displayName: "Samir",
+        presence: { visibility: "hidden", status: null },
         relationship: { self: false, following: true, blocked: false },
       },
     });
@@ -611,9 +622,10 @@ describe("PostgresOnlineAccountStore", () => {
       },
     });
 
-    await expect(store.listFollowingProfiles("account_liam")).resolves.toEqual([
+    await expect(store.listFollowingProfiles("account_liam", "2026-06-03T12:04:00.000Z")).resolves.toEqual([
       expect.objectContaining({
         displayName: "Samir",
+        presence: { visibility: "visible", status: "online" },
         relationship: { self: false, following: true, blocked: false },
       }),
     ]);

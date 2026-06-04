@@ -5,6 +5,13 @@ export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
 export type OnlineAccountFollowPolicy = "everyone" | "nobody";
 export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountChallengePolicy = "followed" | "everyone" | "nobody";
+export type OnlineAccountPresenceVisibility = "visible" | "hidden";
+export type OnlineAccountPresenceStatus = "online" | "recent" | "away" | "offline";
+
+export interface OnlineAccountPresence {
+  visibility: OnlineAccountPresenceVisibility;
+  status: OnlineAccountPresenceStatus | null;
+}
 
 export interface OnlineAccountPrivacySettings {
   schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
@@ -23,6 +30,7 @@ export interface OnlineAccountPrivacyPatch {
 export interface OnlineAccountPublicProfile {
   schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
   displayName: string;
+  presence: OnlineAccountPresence;
   relationship: {
     self: boolean;
     following: boolean;
@@ -126,4 +134,3 @@ export function parseOnlineAccountPrivacyPatch(value: unknown): ValidationResult
 
   return { ok: true, value: patch };
 }
-

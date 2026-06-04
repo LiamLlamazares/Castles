@@ -769,6 +769,7 @@ describe("online client helpers", () => {
     const profile = {
       schemaVersion: 1,
       displayName: "Samir",
+      presence: { visibility: "visible", status: "online" },
       relationship: { self: false, following: false, blocked: false },
     };
     const followedProfile = {
@@ -778,6 +779,7 @@ describe("online client helpers", () => {
     const blockedProfile = {
       schemaVersion: 1,
       displayName: "Liam",
+      presence: { visibility: "hidden", status: null },
       relationship: { self: false, following: false, blocked: true },
     };
     const privacy = {
@@ -911,6 +913,7 @@ describe("online client helpers", () => {
               schemaVersion: 1,
               accountId: "account_samir",
               displayName: "Samir",
+              presence: { visibility: "hidden", status: null },
               relationship: { self: false, following: false, blocked: false },
             },
           }),
@@ -929,6 +932,7 @@ describe("online client helpers", () => {
             profile: {
               schemaVersion: 1,
               displayName: "Bearer abc.def.ghi",
+              presence: { visibility: "hidden", status: null },
               relationship: { self: false, following: false, blocked: false },
             },
           }),

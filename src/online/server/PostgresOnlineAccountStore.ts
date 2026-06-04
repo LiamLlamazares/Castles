@@ -10,6 +10,7 @@ import {
   defaultOnlineAccountPrivacySettings,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
+  type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -263,7 +264,8 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
 
   async getProfileForDisplayName(
     viewerAccountId: string,
-    displayName: string
+    displayName: string,
+    viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountPublicProfile | null> {
     await this.ensureSchema();
     const target = await this.loadAccountByDisplayName(displayName);
@@ -271,10 +273,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     if (target.accountId !== viewerAccountId && await this.hasBlock(target.accountId, viewerAccountId)) {
       return null;
     }
-    return this.createProfile(viewerAccountId, target);
+    return this.createProfile(viewerAccountId, target, this.queryable, viewedAt);
   }
 
-  async listFollowingProfiles(accountId: string): Promise<OnlineAccountPublicProfile[]> {
+  async listFollowingProfiles(accountId: string, viewedAt = new Date().toISOString()): Promise<OnlineAccountPublicProfile[]> {
     await this.ensureSchema();
     const result = await this.queryable.query(
       `
@@ -296,7 +298,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       `,
       [accountId]
     );
-    return Promise.all(result.rows.map((row) => this.createProfile(accountId, accountFromRow(row))));
+    return Promise.all(result.rows.map((row) => this.createProfile(accountId, accountFromRow(row), this.queryable, viewedAt)));
   }
 
   async followAccount(
@@ -316,7 +318,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       if (await this.hasFollow(followerAccountId, target.accountId, queryable)) {
         return {
           status: "ok",
-          profile: await this.createProfile(followerAccountId, target, queryable),
+          profile: await this.createProfile(followerAccountId, target, queryable, createdAt),
         };
       }
       const privacy = await this.getPrivacySettingsForAccount(target.accountId, queryable);
@@ -335,14 +337,15 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       );
       return {
         status: "ok",
-        profile: await this.createProfile(followerAccountId, target, queryable),
+        profile: await this.createProfile(followerAccountId, target, queryable, createdAt),
       };
     });
   }
 
   async unfollowAccount(
     followerAccountId: string,
-    targetDisplayName: string
+    targetDisplayName: string,
+    viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
     await this.ensureSchema();
     const target = await this.loadAccountByDisplayName(targetDisplayName);
@@ -359,7 +362,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       }
       return {
         status: "ok",
-        profile: await this.createProfile(followerAccountId, target, queryable),
+        profile: await this.createProfile(followerAccountId, target, queryable, viewedAt),
       };
     });
   }
@@ -400,14 +403,15 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       }
       return {
         status: "ok",
-        profile: await this.createProfile(blockerAccountId, target, queryable),
+        profile: await this.createProfile(blockerAccountId, target, queryable, createdAt),
       };
     });
   }
 
   async unblockAccount(
     blockerAccountId: string,
-    targetDisplayName: string
+    targetDisplayName: string,
+    viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
     await this.ensureSchema();
     const target = await this.loadAccountByDisplayName(targetDisplayName);
@@ -424,7 +428,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       }
       return {
         status: "ok",
-        profile: await this.createProfile(blockerAccountId, target, queryable),
+        profile: await this.createProfile(blockerAccountId, target, queryable, viewedAt),
       };
     });
   }
@@ -701,17 +705,66 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
   private async createProfile(
     viewerAccountId: string,
     target: OnlineAccount,
-    queryable: PostgresQueryable = this.queryable
+    queryable: PostgresQueryable = this.queryable,
+    viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountPublicProfile> {
     return {
       schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
       displayName: target.displayName,
+      presence: await this.createPresence(viewerAccountId, target, queryable, viewedAt),
       relationship: {
         self: viewerAccountId === target.accountId,
         following: await this.hasFollow(viewerAccountId, target.accountId, queryable),
         blocked: await this.hasBlock(viewerAccountId, target.accountId, queryable),
       },
     };
+  }
+
+  private async createPresence(
+    viewerAccountId: string,
+    target: OnlineAccount,
+    queryable: PostgresQueryable,
+    viewedAt: string
+  ): Promise<OnlineAccountPublicProfile["presence"]> {
+    const isSelf = viewerAccountId === target.accountId;
+    const blockedEitherWay =
+      await this.hasBlock(viewerAccountId, target.accountId, queryable) ||
+      await this.hasBlock(target.accountId, viewerAccountId, queryable);
+    const privacy = await this.getPrivacySettingsForAccount(target.accountId, queryable);
+    const canView =
+      !blockedEitherWay &&
+      (isSelf ||
+        privacy.presencePolicy === "everyone" ||
+        (privacy.presencePolicy === "followed" &&
+          await this.hasFollow(target.accountId, viewerAccountId, queryable)));
+    if (!canView) {
+      return { visibility: "hidden", status: null };
+    }
+    const result = await queryable.query(
+      `
+        SELECT max(last_used_at) AS last_seen_at
+        FROM online_account_sessions
+        WHERE account_id = $1
+      `,
+      [target.accountId]
+    );
+    const lastSeenAt = result.rows[0]?.last_seen_at;
+    return {
+      visibility: "visible",
+      status: this.presenceStatusFromLatestSession(lastSeenAt == null ? null : timestampToIso(lastSeenAt), viewedAt),
+    };
+  }
+
+  private presenceStatusFromLatestSession(lastSeenAt: string | null, viewedAt: string): OnlineAccountPresenceStatus {
+    if (!lastSeenAt) return "offline";
+    const lastSeenTime = Date.parse(lastSeenAt);
+    const viewedTime = Date.parse(viewedAt);
+    if (Number.isNaN(lastSeenTime) || Number.isNaN(viewedTime)) return "offline";
+    const elapsedMs = Math.max(0, viewedTime - lastSeenTime);
+    if (elapsedMs <= 5 * 60 * 1_000) return "online";
+    if (elapsedMs <= 60 * 60 * 1_000) return "recent";
+    if (elapsedMs <= 7 * 24 * 60 * 60 * 1_000) return "away";
+    return "offline";
   }
 
   private async withTransaction<T>(operation: (queryable: PostgresQueryable) => Promise<T>): Promise<T> {

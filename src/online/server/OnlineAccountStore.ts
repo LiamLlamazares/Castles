@@ -8,6 +8,7 @@ import {
   defaultOnlineAccountPrivacySettings,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
+  type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -49,12 +50,12 @@ export interface OnlineAccountStore {
   listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
   revokeSessionsForAccount(accountId: string): Promise<number>;
   deleteAccount(accountId: string): Promise<boolean>;
-  getProfileForDisplayName(viewerAccountId: string, displayName: string): Promise<OnlineAccountPublicProfile | null>;
-  listFollowingProfiles(accountId: string): Promise<OnlineAccountPublicProfile[]>;
+  getProfileForDisplayName(viewerAccountId: string, displayName: string, viewedAt?: string): Promise<OnlineAccountPublicProfile | null>;
+  listFollowingProfiles(accountId: string, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
   followAccount(followerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
-  unfollowAccount(followerAccountId: string, targetDisplayName: string): Promise<OnlineAccountSocialActionResult>;
+  unfollowAccount(followerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
   blockAccount(blockerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
-  unblockAccount(blockerAccountId: string, targetDisplayName: string): Promise<OnlineAccountSocialActionResult>;
+  unblockAccount(blockerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
   resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
   updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
@@ -206,24 +207,25 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
 
   async getProfileForDisplayName(
     viewerAccountId: string,
-    displayName: string
+    displayName: string,
+    viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountPublicProfile | null> {
     const target = this.getAccountByDisplayName(displayName);
     if (!target) return null;
     if (target.accountId !== viewerAccountId && this.hasBlock(target.accountId, viewerAccountId)) {
       return null;
     }
-    return this.createProfile(viewerAccountId, target);
+    return this.createProfile(viewerAccountId, target, viewedAt);
   }
 
-  async listFollowingProfiles(accountId: string): Promise<OnlineAccountPublicProfile[]> {
+  async listFollowingProfiles(accountId: string, viewedAt = new Date().toISOString()): Promise<OnlineAccountPublicProfile[]> {
     const followedAccountIds = Array.from(this.following.get(accountId) ?? []);
-    return followedAccountIds
+    const profiles = await Promise.all(followedAccountIds
       .map((targetAccountId) => this.accounts.get(targetAccountId))
       .filter((account): account is OnlineAccount => !!account)
       .filter((account) => !this.hasBlock(account.accountId, accountId) && !this.hasBlock(accountId, account.accountId))
-      .map((account) => this.createProfile(accountId, account))
-      .sort((left, right) => left.displayName.localeCompare(right.displayName));
+      .map((account) => this.createProfile(accountId, account, viewedAt)));
+    return profiles.sort((left, right) => left.displayName.localeCompare(right.displayName));
   }
 
   async followAccount(
@@ -240,7 +242,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     if (this.hasFollow(followerAccountId, target.accountId)) {
       return {
         status: "ok",
-        profile: this.createProfile(followerAccountId, target),
+        profile: await this.createProfile(followerAccountId, target, _createdAt),
       };
     }
     const privacy = await this.getPrivacySettings(target.accountId);
@@ -248,20 +250,21 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     this.getOrCreateSet(this.following, followerAccountId).add(target.accountId);
     return {
       status: "ok",
-      profile: this.createProfile(followerAccountId, target),
+      profile: await this.createProfile(followerAccountId, target, _createdAt),
     };
   }
 
   async unfollowAccount(
     followerAccountId: string,
-    targetDisplayName: string
+    targetDisplayName: string,
+    viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
     const target = this.getAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
     if (target.accountId === followerAccountId) return { status: "self" };
     this.following.get(followerAccountId)?.delete(target.accountId);
     if (this.hasBlock(target.accountId, followerAccountId)) return { status: "blocked" };
-    return { status: "ok", profile: this.createProfile(followerAccountId, target) };
+    return { status: "ok", profile: await this.createProfile(followerAccountId, target, viewedAt) };
   }
 
   async blockAccount(
@@ -278,20 +281,21 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     if (this.hasBlock(target.accountId, blockerAccountId)) return { status: "blocked" };
     return {
       status: "ok",
-      profile: this.createProfile(blockerAccountId, target),
+      profile: await this.createProfile(blockerAccountId, target, _createdAt),
     };
   }
 
   async unblockAccount(
     blockerAccountId: string,
-    targetDisplayName: string
+    targetDisplayName: string,
+    viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountSocialActionResult> {
     const target = this.getAccountByDisplayName(targetDisplayName);
     if (!target) return { status: "not_found" };
     if (target.accountId === blockerAccountId) return { status: "self" };
     this.blocks.get(blockerAccountId)?.delete(target.accountId);
     if (this.hasBlock(target.accountId, blockerAccountId)) return { status: "blocked" };
-    return { status: "ok", profile: this.createProfile(blockerAccountId, target) };
+    return { status: "ok", profile: await this.createProfile(blockerAccountId, target, viewedAt) };
   }
 
   async resolveChallengeTarget(
@@ -343,16 +347,67 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     return accountId ? this.accounts.get(accountId) ?? null : null;
   }
 
-  private createProfile(viewerAccountId: string, target: OnlineAccount): OnlineAccountPublicProfile {
+  private async createProfile(
+    viewerAccountId: string,
+    target: OnlineAccount,
+    viewedAt = new Date().toISOString()
+  ): Promise<OnlineAccountPublicProfile> {
     return {
       schemaVersion: 1,
       displayName: target.displayName,
+      presence: await this.createPresence(viewerAccountId, target, viewedAt),
       relationship: {
         self: target.accountId === viewerAccountId,
         following: this.hasFollow(viewerAccountId, target.accountId),
         blocked: this.hasBlock(viewerAccountId, target.accountId),
       },
     };
+  }
+
+  private async createPresence(
+    viewerAccountId: string,
+    target: OnlineAccount,
+    viewedAt: string
+  ): Promise<OnlineAccountPublicProfile["presence"]> {
+    const isSelf = viewerAccountId === target.accountId;
+    const blockedEitherWay =
+      this.hasBlock(viewerAccountId, target.accountId) || this.hasBlock(target.accountId, viewerAccountId);
+    const privacy = await this.getPrivacySettings(target.accountId);
+    const canView =
+      !blockedEitherWay &&
+      (isSelf ||
+        privacy.presencePolicy === "everyone" ||
+        (privacy.presencePolicy === "followed" && this.hasFollow(target.accountId, viewerAccountId)));
+    if (!canView) {
+      return { visibility: "hidden", status: null };
+    }
+    return {
+      visibility: "visible",
+      status: this.presenceStatusFromLatestSession(this.latestSessionUseForAccount(target.accountId), viewedAt),
+    };
+  }
+
+  private presenceStatusFromLatestSession(lastSeenAt: string | null, viewedAt: string): OnlineAccountPresenceStatus {
+    if (!lastSeenAt) return "offline";
+    const lastSeenTime = Date.parse(lastSeenAt);
+    const viewedTime = Date.parse(viewedAt);
+    if (Number.isNaN(lastSeenTime) || Number.isNaN(viewedTime)) return "offline";
+    const elapsedMs = Math.max(0, viewedTime - lastSeenTime);
+    if (elapsedMs <= 5 * 60 * 1_000) return "online";
+    if (elapsedMs <= 60 * 60 * 1_000) return "recent";
+    if (elapsedMs <= 7 * 24 * 60 * 60 * 1_000) return "away";
+    return "offline";
+  }
+
+  private latestSessionUseForAccount(accountId: string): string | null {
+    let latest: string | null = null;
+    for (const session of this.sessionsById.values()) {
+      if (session.accountId !== accountId) continue;
+      if (latest === null || session.lastUsedAt > latest) {
+        latest = session.lastUsedAt;
+      }
+    }
+    return latest;
   }
 
   private hasFollow(followerAccountId: string, followedAccountId: string): boolean {
