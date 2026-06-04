@@ -3468,6 +3468,77 @@ describe("createOnlineHttpServer", () => {
     expect(unauthenticatedResponse.status).toBe(401);
   });
 
+  it("hides account challenges from both participants after either side blocks the other", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const created = await createResponse.json();
+
+    const beforeBlockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges`, {
+      headers: bearer(samir.session.token),
+    });
+    const beforeBlock = await beforeBlockResponse.json();
+    const blockResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const challengedDirectoryResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges`, {
+      headers: bearer(samir.session.token),
+    });
+    const challengedDirectory = await challengedDirectoryResponse.json();
+    const challengerDirectoryResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges`, {
+      headers: bearer(liam.session.token),
+    });
+    const challengerDirectory = await challengerDirectoryResponse.json();
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${created.challengeId}/accept`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+    const declineResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${created.challengeId}/decline`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+    const cancelResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${created.challengeId}/cancel`,
+      { method: "POST", headers: bearer(liam.session.token) }
+    );
+
+    expect(createResponse.status).toBe(201);
+    expect(beforeBlockResponse.status).toBe(200);
+    expect(beforeBlock.challenges).toHaveLength(1);
+    expect(blockResponse.status).toBe(200);
+    expect(challengedDirectoryResponse.status).toBe(200);
+    expect(challengedDirectory.challenges).toEqual([]);
+    expect(challengerDirectoryResponse.status).toBe(200);
+    expect(challengerDirectory.challenges).toEqual([]);
+    expect(acceptResponse.status).toBe(404);
+    expect(declineResponse.status).toBe(404);
+    expect(cancelResponse.status).toBe(404);
+  });
+
   it("lets accounts accept, decline, and cancel their own challenges without challenge tokens", async () => {
     let now = Date.parse("2026-06-01T12:00:00.000Z");
     const { server } = createOnlineHttpServer({

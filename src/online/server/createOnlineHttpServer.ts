@@ -1473,8 +1473,30 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return (await loadChallengeSummaries()).find((summary) => summary.challengeId === challengeId) ?? null;
   };
 
+  const accountChallengeOpponentIdentity = (
+    summary: OnlineChallengeSummary,
+    identity: OnlineIdentity
+  ): OnlineIdentity | null => {
+    if (isSameOnlineIdentity(summary.challengerIdentity, identity)) return summary.challengedIdentity;
+    if (isSameOnlineIdentity(summary.challengedIdentity, identity)) return summary.challengerIdentity;
+    return null;
+  };
+
+  const canAccountAccessChallengeSummary = async (
+    account: OnlineAccount,
+    summary: OnlineChallengeSummary
+  ): Promise<boolean> => {
+    const opponent = accountChallengeOpponentIdentity(summary, account.identity);
+    if (!opponent) return false;
+    if (opponent.kind !== "registered") return true;
+    if (!opponent.displayName) return false;
+    const profile = await accountStore.getProfileForDisplayName(account.accountId, opponent.displayName);
+    return profile !== null && profile.relationship.blocked !== true;
+  };
+
   const getAuthorizedAccountChallenge = async (
     rawChallengeId: string,
+    account: OnlineAccount,
     identity: AuthenticatedOnlineIdentity
   ): Promise<
     | { ok: true; credential: ResolvedOnlineChallengeCredential; summary: OnlineChallengeSummary }
@@ -1492,6 +1514,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!role) {
       return { ok: false, status: 404, error: challengeNotFoundError(), reason: "not_participant" };
     }
+    if (!await canAccountAccessChallengeSummary(account, summary)) {
+      return { ok: false, status: 404, error: challengeNotFoundError(), reason: "blocked" };
+    }
     return {
       ok: true,
       summary,
@@ -1504,7 +1529,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   };
 
   const listAccountChallengeDirectory = async (
-    identity: OnlineIdentity,
+    account: OnlineAccount,
     state: OnlineAccountChallengeDirectoryState
   ) => {
     const now = new Date(options.now?.() ?? Date.now()).toISOString();
@@ -1513,11 +1538,17 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     );
     const challenges = summaries
       .map((summary) => {
-        const role = onlineAccountChallengeRoleForIdentity(summary, identity);
+        const role = onlineAccountChallengeRoleForIdentity(summary, account.identity);
         return role ? { role, summary } : null;
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
-      .filter((item) => state === "all" || item.summary.status === "pending")
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    const visibleChallenges: typeof challenges = [];
+    for (const item of challenges) {
+      if (state !== "all" && item.summary.status !== "pending") continue;
+      if (!await canAccountAccessChallengeSummary(account, item.summary)) continue;
+      visibleChallenges.push(item);
+    }
+    visibleChallenges
       .sort((left, right) => {
         if (left.summary.updatedAt !== right.summary.updatedAt) {
           return right.summary.updatedAt.localeCompare(left.summary.updatedAt);
@@ -1526,7 +1557,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       });
     const response = {
       schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
-      challenges,
+      challenges: visibleChallenges,
     };
     const validation = validateOnlineAccountChallengeDirectoryResponse(response);
     if (!validation.ok) throw new Error(validation.error.message);
@@ -2874,7 +2905,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const directory = await listAccountChallengeDirectory(auth.account.identity, parsed.state);
+      const directory = await listAccountChallengeDirectory(auth.account, parsed.state);
       log({ event: "online.account.challenges.list", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -2903,7 +2934,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.identity);
+      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.account, auth.identity);
       if (!accountChallenge.ok) {
         log({ event: "online.account.challenge.accept", status: "rejected", reason: accountChallenge.reason });
         res.status(accountChallenge.status).json({ error: accountChallenge.error });
@@ -2972,7 +3003,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.identity);
+      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.account, auth.identity);
       if (!accountChallenge.ok) {
         log({ event: "online.account.challenge.decline", status: "rejected", reason: accountChallenge.reason });
         res.status(accountChallenge.status).json({ error: accountChallenge.error });
@@ -3037,7 +3068,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.identity);
+      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.account, auth.identity);
       if (!accountChallenge.ok) {
         log({ event: "online.account.challenge.cancel", status: "rejected", reason: accountChallenge.reason });
         res.status(accountChallenge.status).json({ error: accountChallenge.error });
