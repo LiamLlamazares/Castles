@@ -2563,7 +2563,7 @@ describe("OnlineGameBrowser", () => {
     });
   });
 
-  it("lets signed-in players follow and challenge registered opponents from account game rows", async () => {
+  it("lets signed-in players follow and rematch registered opponents from completed account game rows", async () => {
     const account = accountFixture("Liam");
     const followedProfile = publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" });
     let currentFollowing = false;
@@ -2645,7 +2645,7 @@ describe("OnlineGameBrowser", () => {
       name: "Follow Samir from game_account_archive_samir",
     })).toBeInTheDocument();
     expect(within(accountReplayRow as HTMLElement).getByRole("button", {
-      name: "Challenge Samir from game_account_archive_samir",
+      name: "Rematch Samir from game_account_archive_samir",
     })).toBeInTheDocument();
 
     const publicReplayRow = (await screen.findByText("game_public_archive_samir_only")).closest("article");
@@ -2654,7 +2654,7 @@ describe("OnlineGameBrowser", () => {
       name: "Follow Samir from game_public_archive_samir_only",
     })).not.toBeInTheDocument();
     expect(within(publicReplayRow as HTMLElement).queryByRole("button", {
-      name: "Challenge Samir from game_public_archive_samir_only",
+      name: "Rematch Samir from game_public_archive_samir_only",
     })).not.toBeInTheDocument();
 
     fireEvent.click(within(accountReplayRow as HTMLElement).getByRole("button", {
@@ -2666,9 +2666,10 @@ describe("OnlineGameBrowser", () => {
     })).not.toBeInTheDocument());
 
     fireEvent.click(within(accountReplayRow as HTMLElement).getByRole("button", {
-      name: "Challenge Samir from game_account_archive_samir",
+      name: "Rematch Samir from game_account_archive_samir",
     }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+    expect(await screen.findByText("Rematch challenge created for Samir.")).toBeInTheDocument();
   });
 
   it("does not show device replay fallback while signed-in account archive is still loading", async () => {

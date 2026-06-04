@@ -1896,11 +1896,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const renderGameRowSocialActions = (
     game: OnlineGameSummary,
-    options: { allowChallenge?: boolean } = {}
+    options: { allowChallenge?: boolean; challengeIntent?: "challenge" | "rematch" } = {}
   ) => {
     if (!canUseAccountSocial) return null;
     const opponentProfileNames = accountOpponentProfileNames(game, account);
     if (opponentProfileNames.length === 0) return null;
+    const challengeIntent = options.challengeIntent ?? "challenge";
+    const challengeLabel = challengeIntent === "rematch" ? "Rematch" : "Challenge";
     return opponentProfileNames.map((profileName) => {
       const profileKey = normalizeDisplayNameKey(profileName);
       const isFollowed = followedDisplayNames.has(profileKey);
@@ -1922,11 +1924,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <button
               type="button"
               className="online-browser-button neutral"
-              onClick={() => void runSocialChallengeAction(profileName)}
+              onClick={() => void runSocialChallengeAction(profileName, challengeIntent)}
               disabled={socialAction !== undefined}
-              aria-label={`Challenge ${profileName} from ${game.gameId}`}
+              aria-label={`${challengeLabel} ${profileName} from ${game.gameId}`}
             >
-              Challenge
+              {challengeLabel}
             </button>
           )}
         </React.Fragment>
@@ -2100,7 +2102,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               Copy Link
             </button>
           )}
-          {options.showOpponentSocialActions && renderGameRowSocialActions(game, { allowChallenge: isArchivedGame })}
+          {options.showOpponentSocialActions && renderGameRowSocialActions(game, {
+            allowChallenge: isArchivedGame,
+            challengeIntent: isArchivedGame ? "rematch" : "challenge",
+          })}
         </div>
       </article>
     );
@@ -2614,7 +2619,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     refreshFollowingProfiles,
   ]);
 
-  const runSocialChallengeAction = React.useCallback(async (displayName: string) => {
+  const runSocialChallengeAction = React.useCallback(async (
+    displayName: string,
+    intent: "challenge" | "rematch" = "challenge"
+  ) => {
     if (!onChallengeAccount) return;
     const requestId = ++socialMutationRequestIdRef.current;
     const accountId = account?.accountId;
@@ -2623,11 +2631,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     try {
       await onChallengeAccount(displayName);
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      setSocialMessage(`Challenge created for ${displayName}.`);
+      setSocialMessage(
+        intent === "rematch"
+          ? `Rematch challenge created for ${displayName}.`
+          : `Challenge created for ${displayName}.`
+      );
     } catch (error) {
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error("[OnlineGameBrowser] Failed to challenge account", error);
-      setSocialMessage(`Could not create a challenge for ${displayName}.`);
+      setSocialMessage(
+        intent === "rematch"
+          ? `Could not create a rematch challenge for ${displayName}.`
+          : `Could not create a challenge for ${displayName}.`
+      );
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
         setSocialAction(undefined);
