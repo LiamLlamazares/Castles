@@ -656,6 +656,56 @@ describe("OnlineGameBrowser", () => {
     expect(loadGames).toHaveBeenCalledWith({ state: "active", limit: 50, cursor: undefined });
   });
 
+  it("can load another lobby listing page while filtering by followed players", async () => {
+    const socialProps = socialPropsWithFollowing([publicProfile("Samir", { following: true })]);
+    const loadOpenSeeks = vi
+      .fn()
+      .mockResolvedValueOnce(seekDirectory([
+        openSeek({
+          seekId: "seek_page_one_other",
+          creatorIdentity: { kind: "registered", id: "account_ben", displayName: "Ben" },
+        }),
+      ], "seek_cursor_2"))
+      .mockResolvedValueOnce(seekDirectory([
+        openSeek({
+          seekId: "seek_page_two_followed",
+          creatorIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+        }),
+      ]));
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={loadOpenSeeks}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialProps}
+      />
+    );
+
+    expect(await screen.findByText("seek_page_one_other")).toBeInTheDocument();
+    const filter = screen.getByRole("combobox", { name: "Followed players filter" });
+    await waitFor(() => expect(filter).toBeEnabled());
+    fireEvent.change(filter, { target: { value: "followed" } });
+
+    expect(await screen.findByText("No loaded lobby listings include followed players.")).toBeInTheDocument();
+    expect(screen.getByText("Load more listings to search another page, or follow players from People.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load more listings" }));
+
+    await waitFor(() => expect(loadOpenSeeks).toHaveBeenLastCalledWith({
+      state: "open",
+      limit: 50,
+      cursor: "seek_cursor_2",
+    }));
+    expect(await screen.findByText("seek_page_two_followed")).toBeInTheDocument();
+    expect(screen.queryByText("seek_page_one_other")).not.toBeInTheDocument();
+  });
+
   it("filters loaded Watch games by followed registered participants", async () => {
     const socialProps = socialPropsWithFollowing([publicProfile("Samir", { following: true })]);
     const loadGames = vi.fn().mockResolvedValue(directory([
@@ -706,7 +756,66 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(screen.queryByText("game_watch_registered_other")).not.toBeInTheDocument());
     expect(screen.getByText("game_watch_followed")).toBeInTheDocument();
     expect(screen.queryByText("game_watch_session_other")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Watch live games overview" })).toHaveTextContent("1 public live game");
     expect(loadGames).toHaveBeenCalledWith({ state: "active", limit: 50 });
+  });
+
+  it("lets players escape the followed-player filter after following refresh fails", async () => {
+    const loadAccountFollowing = vi
+      .fn()
+      .mockResolvedValueOnce({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        following: [publicProfile("Samir", { following: true })],
+      })
+      .mockRejectedValueOnce(new Error("following unavailable"));
+    const socialProps = {
+      ...socialPropsWithFollowing([publicProfile("Samir", { following: true })]),
+      loadAccountFollowing,
+    };
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([
+          summary({
+            gameId: "game_following_failure_followed",
+            participants: [
+              registeredParticipant("w", "Samir"),
+              registeredParticipant("b", "Ada"),
+            ],
+          }),
+          summary({
+            gameId: "game_following_failure_other",
+            participants: [
+              registeredParticipant("w", "Ben"),
+              registeredParticipant("b", "Ada"),
+            ],
+          }),
+        ]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialProps}
+      />
+    );
+
+    expect(await screen.findByText("game_following_failure_other")).toBeInTheDocument();
+    const filter = screen.getByRole("combobox", { name: "Followed players filter" });
+    await waitFor(() => expect(filter).toBeEnabled());
+    fireEvent.change(filter, { target: { value: "followed" } });
+    await waitFor(() => expect(screen.queryByText("game_following_failure_other")).not.toBeInTheDocument());
+
+    fireEvent.click(within(screen.getByRole("region", { name: "People" })).getByRole("button", { name: "Refresh Following" }));
+
+    expect(await screen.findByText("Following list unavailable. Use Refresh Following to retry, or switch back to All players.")).toBeInTheDocument();
+    expect(filter).toBeEnabled();
+    fireEvent.change(filter, { target: { value: "all" } });
+
+    expect(await screen.findByText("game_following_failure_followed")).toBeInTheDocument();
+    expect(screen.getByText("game_following_failure_other")).toBeInTheDocument();
   });
 
   it("filters public and account archive rows by followed registered participants", async () => {

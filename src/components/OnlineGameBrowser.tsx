@@ -167,6 +167,17 @@ function seekHasFollowedCreator(summary: OpenSeekSummary, followedDisplayNames: 
   return displayName ? followedDisplayNames.has(normalizeDisplayNameKey(displayName)) : false;
 }
 
+function mergeOpenSeekSummaries(current: OpenSeekSummary[], next: OpenSeekSummary[]): OpenSeekSummary[] {
+  const merged = new Map<string, OpenSeekSummary>();
+  for (const seek of current) {
+    merged.set(seek.seekId, seek);
+  }
+  for (const seek of next) {
+    merged.set(seek.seekId, seek);
+  }
+  return [...merged.values()].sort(compareOpenSeekNewest);
+}
+
 function formatUpdatedAt(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -544,6 +555,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [ownedSeekAction, setOwnedSeekAction] = React.useState<"refresh" | "join" | undefined>();
   const [lastSeekCheckedAt, setLastSeekCheckedAt] = React.useState("");
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
+  const [isSeekLoadingMore, setIsSeekLoadingMore] = React.useState(false);
+  const [seekNextCursor, setSeekNextCursor] = React.useState<string | undefined>();
   const [accountDisplayName, setAccountDisplayName] = React.useState("");
   const [accountActionMessage, setAccountActionMessage] = React.useState("");
   const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
@@ -983,10 +996,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, []);
 
   const loadOpenSeekPage = React.useCallback(async function runOpenSeekLoad(
-    options: { background?: boolean } = {}
+    options: { background?: boolean; mode?: "replace" | "append"; cursor?: string } = {}
   ) {
     const background = options.background === true;
+    const mode = options.mode ?? "replace";
     if (seekLoadInFlightRef.current) {
+      if (mode === "append") return;
       if (!background) {
         queuedSeekLoadRef.current = "foreground";
       } else if (!queuedSeekLoadRef.current) {
@@ -998,15 +1013,26 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setIsSeekLoadInFlight(true);
     const requestId = seekRequestIdRef.current + 1;
     seekRequestIdRef.current = requestId;
-    if (!background) {
+    if (mode === "append") {
+      setIsSeekLoadingMore(true);
+    } else if (!background) {
       setSeekStatus("loading");
       setSeekActionMessage("");
       setQuickMatchStatus("idle");
     }
     try {
-      const response = await loadOpenSeeks(seekDirectoryOptionsRef.current);
+      const response = await loadOpenSeeks({
+        ...seekDirectoryOptionsRef.current,
+        ...(options.cursor ? { cursor: options.cursor } : {}),
+      });
       if (seekRequestIdRef.current !== requestId) return;
-      setOpenSeeks((current) => mergePendingOpenSeeks(response.seeks, current));
+      setOpenSeeks((current) => {
+        const nextSeeks = mode === "append"
+          ? mergeOpenSeekSummaries(current, response.seeks)
+          : response.seeks;
+        return mergePendingOpenSeeks(nextSeeks, current);
+      });
+      setSeekNextCursor(response.nextCursor);
       setLastSeekCheckedAt(formatLastChecked(new Date()));
       setSeekStatus("ready");
       setSeekActionMessage((current) => current === AUTO_REFRESH_PAUSED_MESSAGE ? "" : current);
@@ -1016,9 +1042,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (isRateLimitError(error)) {
         seekAutoRefreshPausedUntilRef.current = Date.now() + LOBBY_RATE_LIMIT_BACKOFF_MS;
       }
-      if (!background) {
+      if (mode === "replace" && !background) {
         setOpenSeeks([]);
+        setSeekNextCursor(undefined);
         setSeekStatus("error");
+      } else if (mode === "append") {
+        setSeekActionMessage("Could not load more lobby listings.");
       } else if (isRateLimitError(error)) {
         setSeekActionMessage(AUTO_REFRESH_PAUSED_MESSAGE);
       }
@@ -1031,6 +1060,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       } else {
         setIsSeekLoadInFlight(false);
       }
+      if (requestId === seekRequestIdRef.current) {
+        setIsSeekLoadingMore(false);
+      }
     }
   }, [loadOpenSeeks, mergePendingOpenSeeks]);
 
@@ -1038,6 +1070,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (tab !== "lobby") return;
     void loadOpenSeekPage({ background: false });
   }, [loadOpenSeekPage, seekDirectoryOptions, tab]);
+
+  const loadMoreOpenSeeks = React.useCallback(() => {
+    if (!seekNextCursor) return;
+    void loadOpenSeekPage({ mode: "append", cursor: seekNextCursor });
+  }, [loadOpenSeekPage, seekNextCursor]);
 
   React.useEffect(() => {
     if (tab !== "lobby") return;
@@ -2330,10 +2367,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     aria-label="Followed players filter"
                     value={friendFilter}
                     onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
-                    disabled={followingStatus !== "ready"}
                   >
                     <option value="all">All players</option>
-                    <option value="followed">Followed players only</option>
+                    <option value="followed" disabled={followingStatus !== "ready"}>
+                      Followed players only
+                    </option>
                   </select>
                 </label>
               )}
@@ -2383,10 +2421,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     aria-label="Followed players filter"
                     value={friendFilter}
                     onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
-                    disabled={followingStatus !== "ready"}
                   >
                     <option value="all">All players</option>
-                    <option value="followed">Followed players only</option>
+                    <option value="followed" disabled={followingStatus !== "ready"}>
+                      Followed players only
+                    </option>
                   </select>
                 </label>
               )}
@@ -2428,7 +2467,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       {canUseAccountSocial && friendFilter === "followed" && (
         <div className={`online-browser-filter-note ${friendFilterUnavailable ? "error" : ""}`}>
           {friendFilterUnavailable
-            ? "Following list unavailable. Refresh People to use this filter."
+            ? "Following list unavailable. Use Refresh Following to retry, or switch back to All players."
             : followedFilterDescription}
         </div>
       )}
@@ -2442,6 +2481,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               : copyMessage || seekActionMessage || quickMatchMessage || createSeekMessage || terminalOwnedSeekMessage || (
                 <>
                   {visibleOpenSeeks.length} lobby listings shown
+                  {seekNextCursor ? <span aria-hidden="true">; more listings available</span> : null}
                   {lastSeekCheckedAt ? <span aria-hidden="true">; last checked {lastSeekCheckedAt}</span> : null}
                 </>
               )
@@ -2641,7 +2681,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   </h2>
                   <p>
                     {friendFilterActive
-                      ? "Refresh listings or follow players from People."
+                      ? seekNextCursor
+                        ? "Load more listings to search another page, or follow players from People."
+                        : "Refresh listings or follow players from People."
                       : hasActiveSeekFilters
                       ? "Try a different creator side, clock, scoring, or search setting."
                       : hasCurrentSetupActions
@@ -2700,6 +2742,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     </article>
                   );
                 })
+              )}
+              {seekNextCursor && seekStatus === "ready" && (
+                <button
+                  type="button"
+                  className="online-browser-button neutral online-browser-load-more"
+                  onClick={loadMoreOpenSeeks}
+                  disabled={isSeekLoadInFlight}
+                >
+                  {isSeekLoadingMore ? "Loading..." : "Load more listings"}
+                </button>
               )}
             </section>
             <section className="online-browser-live-section" aria-label="Current public games">
@@ -2788,7 +2840,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 {status === "loading" ? "Refreshing..." : "Refresh live games"}
               </button>
             </div>
-            {renderLiveOverview(publicActiveGames.length, watchFeaturedGame, "Watch live games overview", watchFeaturedReason)}
+            {renderLiveOverview(
+              friendFilterActive ? visibleGames.length : publicActiveGames.length,
+              watchFeaturedGame,
+              "Watch live games overview",
+              watchFeaturedReason
+            )}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty online-browser-empty-compact">
                 <h2>{friendFilterActive ? "No loaded public games include followed players." : hasActiveFilters ? "No public games match these filters." : emptyTitle}</h2>
