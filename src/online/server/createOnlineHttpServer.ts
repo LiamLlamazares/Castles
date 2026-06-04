@@ -141,6 +141,7 @@ import {
 } from "../secretSafety";
 import {
   normalizeOnlineAccountDisplayName,
+  normalizeOnlineAccountDisplayNameKey,
   type OnlineAccount,
 } from "../accounts";
 import {
@@ -1494,6 +1495,74 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return profile !== null && profile.relationship.blocked !== true;
   };
 
+  const registeredIdentityMatchesDisplayNameKey = (
+    identity: OnlineIdentity,
+    displayNameKey: string
+  ): boolean => {
+    return identity.kind === "registered" &&
+      typeof identity.displayName === "string" &&
+      normalizeOnlineAccountDisplayNameKey(identity.displayName) === displayNameKey;
+  };
+
+  const terminatePendingAccountChallengesForBlock = async (
+    blockerIdentity: AuthenticatedOnlineIdentity,
+    blockedDisplayName: string,
+    terminatedAt: string
+  ): Promise<number> => {
+    const blockedDisplayNameKey = normalizeOnlineAccountDisplayNameKey(blockedDisplayName);
+    const summaries = await Promise.all(
+      (await loadChallengeSummaries()).map((summary) => expireChallengeIfNeeded(summary, terminatedAt))
+    );
+    let terminatedCount = 0;
+
+    for (const summary of summaries) {
+      if (summary.status !== "pending") continue;
+      const blockerIsChallenged =
+        isSameOnlineIdentity(summary.challengedIdentity, blockerIdentity) &&
+        registeredIdentityMatchesDisplayNameKey(summary.challengerIdentity, blockedDisplayNameKey);
+      const blockerIsChallenger =
+        isSameOnlineIdentity(summary.challengerIdentity, blockerIdentity) &&
+        registeredIdentityMatchesDisplayNameKey(summary.challengedIdentity, blockedDisplayNameKey);
+
+      try {
+        if (blockerIsChallenged && canIdentityDeclineChallenge(summary, blockerIdentity, terminatedAt)) {
+          await appendChallengeLifecycleEvent(
+            createChallengeDeclinedEvent(
+              {
+                type: "challenge_declined",
+                challengeId: summary.challengeId,
+                declinedBy: blockerIdentity,
+                declinedAt: terminatedAt,
+              },
+              { createdAt: terminatedAt }
+            )
+          );
+          terminatedCount += 1;
+          continue;
+        }
+        if (blockerIsChallenger && canIdentityCancelChallenge(summary, blockerIdentity, terminatedAt)) {
+          await appendChallengeLifecycleEvent(
+            createChallengeCancelledEvent(
+              {
+                type: "challenge_cancelled",
+                challengeId: summary.challengeId,
+                cancelledBy: blockerIdentity,
+                cancelledAt: terminatedAt,
+              },
+              { createdAt: terminatedAt }
+            )
+          );
+          terminatedCount += 1;
+        }
+      } catch (error) {
+        if (challengeTerminalError(error)) continue;
+        throw error;
+      }
+    }
+
+    return terminatedCount;
+  };
+
   const getAuthorizedAccountChallenge = async (
     rawChallengeId: string,
     account: OnlineAccount,
@@ -2758,6 +2827,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         log({ event: "online.account.block", status: "rejected", reason: result.status });
         res.status(failure.status).json({ error: failure.error });
         return;
+      }
+      try {
+        await terminatePendingAccountChallengesForBlock(auth.identity, result.profile.displayName, createdAt);
+      } catch (error) {
+        console.error("Failed to terminate blocked account challenges", error);
+        log({ event: "online.account.block.challenge_cleanup", status: "failed", reason: "persistence_failed" });
       }
       log({ event: "online.account.block", status: "accepted" });
       res.json({

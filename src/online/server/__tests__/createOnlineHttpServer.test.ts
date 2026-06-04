@@ -3539,6 +3539,62 @@ describe("createOnlineHttpServer", () => {
     expect(cancelResponse.status).toBe(404);
   });
 
+  it.each([
+    ["challenged blocks challenger", "Samir", "Liam", "challenged", "declined", "declinedBy"],
+    ["challenger blocks challenged", "Liam", "Samir", "challenger", "cancelled", "cancelledBy"],
+  ] as const)(
+    "auto-terminates pending account challenges when the %s",
+    async (_label, blockerName, blockedName, viewRole, expectedStatus, actorField) => {
+      const { server } = createOnlineHttpServer({
+        publicBaseUrl: "https://castles.example/play",
+        now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      });
+      servers.push(server);
+      const port = await listen(server);
+      const setup = createSetup();
+      const liam = await createAccountViaApi(port, "Liam");
+      const samir = await createAccountViaApi(port, "Samir");
+      const blocker = blockerName === "Liam" ? liam : samir;
+      const blocked = blockedName === "Liam" ? liam : samir;
+
+      await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+        method: "PUT",
+        headers: bearer(samir.session.token),
+      });
+
+      const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName: "Samir",
+        }),
+      });
+      const created = await createResponse.json();
+      const viewToken = fragmentChallengeToken(
+        viewRole === "challenger" ? created.challenger.url : created.challenged.url
+      );
+
+      const blockResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/account/blocks/${blocked.account.displayName}`,
+        { method: "PUT", headers: bearer(blocker.session.token) }
+      );
+      const viewResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}`,
+        { headers: bearer(viewToken) }
+      );
+      const viewed = await viewResponse.json();
+
+      expect(createResponse.status).toBe(201);
+      expect(blockResponse.status).toBe(200);
+      expect(viewResponse.status).toBe(200);
+      expect(viewed.summary.status).toBe(expectedStatus);
+      expect(viewed.summary[actorField]).toEqual(blocker.account.identity);
+    }
+  );
+
   it("lets accounts accept, decline, and cancel their own challenges without challenge tokens", async () => {
     let now = Date.parse("2026-06-01T12:00:00.000Z");
     const { server } = createOnlineHttpServer({
