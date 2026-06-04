@@ -3057,6 +3057,114 @@ describe("createOnlineHttpServer", () => {
     expect(unauthenticatedResponse.status).toBe(401);
   });
 
+  it("lets accounts accept, decline, and cancel their own challenges without challenge tokens", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createChallenge = async () => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName: "Samir",
+        }),
+      });
+      const body = await response.json();
+      expect(response.status).toBe(201);
+      return body;
+    };
+
+    const acceptedChallenge = await createChallenge();
+    const wrongSideAcceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${acceptedChallenge.challengeId}/accept`,
+      { method: "POST", headers: bearer(liam.session.token) }
+    );
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${acceptedChallenge.challengeId}/accept`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+    const accepted = await acceptResponse.json();
+    const joinResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${accepted.gameInvite.gameId}`,
+      { headers: bearer(accepted.gameInvite.token) }
+    );
+    const join = await joinResponse.json();
+
+    const declinedChallenge = await createChallenge();
+    const declineResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${declinedChallenge.challengeId}/decline`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+    const declined = await declineResponse.json();
+
+    const cancelledChallenge = await createChallenge();
+    const wrongSideCancelResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${cancelledChallenge.challengeId}/cancel`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+    const cancelResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${cancelledChallenge.challengeId}/cancel`,
+      { method: "POST", headers: bearer(liam.session.token) }
+    );
+    const cancelled = await cancelResponse.json();
+
+    expect(wrongSideAcceptResponse.status).toBe(404);
+    expect(acceptResponse.status).toBe(200);
+    expect(accepted).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "challenged",
+      summary: {
+        challengeId: acceptedChallenge.challengeId,
+        status: "accepted",
+        acceptedBy: samir.account.identity,
+      },
+      gameInvite: {
+        seat: "b",
+      },
+    });
+    expect(accepted.gameInvite.token).toBeTruthy();
+    expect(accepted.gameInvite.url).not.toContain("token=");
+    expect(accepted.gameInvite.token).not.toBe(fragmentChallengeToken(acceptedChallenge.challenged.url));
+    expect(joinResponse.status).toBe(200);
+    expect(join.color).toBe("b");
+
+    expect(declineResponse.status).toBe(200);
+    expect(declined).toMatchObject({
+      role: "challenged",
+      summary: {
+        challengeId: declinedChallenge.challengeId,
+        status: "declined",
+        declinedBy: samir.account.identity,
+      },
+    });
+
+    expect(wrongSideCancelResponse.status).toBe(404);
+    expect(cancelResponse.status).toBe(200);
+    expect(cancelled).toMatchObject({
+      role: "challenger",
+      summary: {
+        challengeId: cancelledChallenge.challengeId,
+        status: "cancelled",
+        cancelledBy: liam.account.identity,
+      },
+    });
+  });
+
   it("allows targeted account challenges from anyone when target challenge privacy is everyone", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
   buildSpectatorUrl,
+  acceptOnlineAccountChallenge,
   blockOnlineAccount,
+  cancelOnlineAccountChallenge,
   createOnlineAccount,
   createOnlineGame,
   acceptOnlineChallenge,
@@ -14,6 +16,7 @@ import {
   createOpenSeek,
   deleteOnlineAccount,
   declineOnlineChallenge,
+  declineOnlineAccountChallenge,
   fetchOnlineAccountChallenges,
   fetchOnlineChallenge,
   fetchOnlineAccountFollowing,
@@ -815,6 +818,114 @@ describe("online client helpers", () => {
       ],
     });
     expect(fetchImpl).toHaveBeenCalledWith("/api/online/account/challenges?state=all", {
+      headers: { authorization: "Bearer account-token" },
+    });
+  });
+
+  it("accepts, declines, and cancels account challenges with bearer auth", async () => {
+    const pendingSummary = {
+      schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      challengeId: "challenge_samir_liam",
+      challengerIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+      challengedIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+      challengerSeat: "w",
+      setup: { board: { config: { nSquares: 7 }, castles: [] }, pieces: [], sanctuaries: [] },
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:01:00.000Z",
+      expiresAt: "2026-06-03T12:11:00.000Z",
+      status: "pending",
+      visibility: "unlisted",
+      lastEventId: "challenge_samir_liam_evt",
+    };
+    const acceptedSummary = {
+      ...pendingSummary,
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-03T12:02:00.000Z",
+      acceptedBy: pendingSummary.challengedIdentity,
+      gameId: "game_account_accept",
+      whiteIdentity: pendingSummary.challengerIdentity,
+      blackIdentity: pendingSummary.challengedIdentity,
+      lastEventId: "challenge_samir_liam_accept_evt",
+    };
+    const declinedSummary = {
+      ...pendingSummary,
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      status: "declined",
+      declinedAt: "2026-06-03T12:02:00.000Z",
+      declinedBy: pendingSummary.challengedIdentity,
+      lastEventId: "challenge_samir_liam_decline_evt",
+    };
+    const cancelledSummary = {
+      ...pendingSummary,
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      status: "cancelled",
+      cancelledAt: "2026-06-03T12:02:00.000Z",
+      cancelledBy: pendingSummary.challengerIdentity,
+      lastEventId: "challenge_samir_liam_cancel_evt",
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "challenged",
+          summary: acceptedSummary,
+          gameInvite: {
+            gameId: "game_account_accept",
+            seat: "b",
+            token: "fresh-seat-token",
+            url: "https://castles.example/?onlineGame=game_account_accept&seat=b",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "challenged",
+          summary: declinedSummary,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "challenger",
+          summary: cancelledSummary,
+        }),
+      });
+
+    await expect(
+      acceptOnlineAccountChallenge({ token: "account-token" }, "challenge_samir_liam", fetchImpl as any)
+    ).resolves.toMatchObject({
+      role: "challenged",
+      summary: { status: "accepted", gameId: "game_account_accept" },
+      gameInvite: { seat: "b", token: "fresh-seat-token" },
+    });
+    await expect(
+      declineOnlineAccountChallenge({ token: "account-token" }, "challenge_samir_liam", fetchImpl as any)
+    ).resolves.toMatchObject({
+      role: "challenged",
+      summary: { status: "declined" },
+    });
+    await expect(
+      cancelOnlineAccountChallenge({ token: "account-token" }, "challenge_samir_liam", fetchImpl as any)
+    ).resolves.toMatchObject({
+      role: "challenger",
+      summary: { status: "cancelled" },
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/api/online/account/challenges/challenge_samir_liam/accept", {
+      method: "POST",
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/account/challenges/challenge_samir_liam/decline", {
+      method: "POST",
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "/api/online/account/challenges/challenge_samir_liam/cancel", {
+      method: "POST",
       headers: { authorization: "Bearer account-token" },
     });
   });

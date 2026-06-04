@@ -30,8 +30,10 @@ import {
 import {
   buildSpectatorUrl,
   acceptOnlineChallenge,
+  acceptOnlineAccountChallenge,
   acceptOpenSeek,
   cancelOnlineChallenge,
+  cancelOnlineAccountChallenge,
   cancelOpenSeek,
   copyOnlineInviteUrl,
   createOnlineAccount,
@@ -39,6 +41,7 @@ import {
   createOpenSeek,
   deleteOnlineAccount,
   declineOnlineChallenge,
+  declineOnlineAccountChallenge,
   blockOnlineAccount,
   fetchOpenSeek,
   fetchOnlineAccountChallenges,
@@ -1193,6 +1196,34 @@ function App() {
       throw new Error("No online account session is available.");
     }
     return fetchOnlineAccountChallenges({ token: onlineAccountSession.token }, options);
+  }, [onlineAccountSession?.token]);
+
+  const handleAcceptOnlineAccountChallenge = useCallback(async (challengeId: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    const response = await acceptOnlineAccountChallenge(
+      { token: onlineAccountSession.token },
+      challengeId
+    );
+    if (response.gameInvite) {
+      enterOnlineGameFromInvite(response.gameInvite);
+    }
+    return response;
+  }, [enterOnlineGameFromInvite, onlineAccountSession?.token]);
+
+  const handleDeclineOnlineAccountChallenge = useCallback((challengeId: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return declineOnlineAccountChallenge({ token: onlineAccountSession.token }, challengeId);
+  }, [onlineAccountSession?.token]);
+
+  const handleCancelOnlineAccountChallenge = useCallback((challengeId: string) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return cancelOnlineAccountChallenge({ token: onlineAccountSession.token }, challengeId);
   }, [onlineAccountSession?.token]);
 
   const handleLoadOnlineAccountProfile = useCallback((displayName: string) => {
@@ -2374,6 +2405,9 @@ function App() {
           onDeleteAccount={onlineAccountSession ? handleDeleteOnlineAccount : undefined}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
           loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
+          onAcceptAccountChallenge={onlineAccountSession ? handleAcceptOnlineAccountChallenge : undefined}
+          onDeclineAccountChallenge={onlineAccountSession ? handleDeclineOnlineAccountChallenge : undefined}
+          onCancelAccountChallenge={onlineAccountSession ? handleCancelOnlineAccountChallenge : undefined}
           loadAccountProfile={onlineAccountSession ? handleLoadOnlineAccountProfile : undefined}
           loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
           onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}

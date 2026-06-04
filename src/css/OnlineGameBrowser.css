@@ -301,6 +301,13 @@
   justify-content: flex-start;
 }
 
+.online-browser-account-challenge-side {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  min-width: 0;
+}
+
 .online-browser-account-challenge-meta {
   justify-content: flex-end;
   max-width: 260px;
@@ -955,6 +962,10 @@
   .online-browser-account-challenge-meta {
     justify-content: flex-start;
     max-width: none;
+  }
+
+  .online-browser-account-challenge-side {
+    justify-items: stretch;
   }
 
   .online-browser-follow-policy .online-browser-button {

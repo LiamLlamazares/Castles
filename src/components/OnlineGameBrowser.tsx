@@ -10,6 +10,7 @@ import {
   type FetchOnlineAccountChallengesOptions,
   type OnlineAccountChallengeDirectoryResponse,
   type OnlineAccountChallengeListItem,
+  type OnlineChallengeResponse,
   type FetchOpenSeekDirectoryOptions,
   type FetchOnlineGameSummariesOptions,
   type OnlineAccountFollowingResponse,
@@ -122,6 +123,9 @@ interface OnlineGameBrowserProps {
   onDeleteAccount?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   loadAccountChallenges?: (options?: FetchOnlineAccountChallengesOptions) => Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>;
+  onAcceptAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
+  onDeclineAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
+  onCancelAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
   loadAccountProfile?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   loadAccountFollowing?: () => Promise<OnlineAccountFollowingResponse>;
   onFollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
@@ -609,6 +613,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onDeleteAccount,
   loadAccountGames,
   loadAccountChallenges,
+  onAcceptAccountChallenge,
+  onDeclineAccountChallenge,
+  onCancelAccountChallenge,
   loadAccountProfile,
   loadAccountFollowing,
   onFollowAccount,
@@ -659,6 +666,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountGamesStatus, setAccountGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallenges, setAccountChallenges] = React.useState<OnlineAccountChallengeListItem[]>([]);
   const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [accountChallengeActionById, setAccountChallengeActionById] = React.useState<Record<string, "accept" | "decline" | "cancel" | undefined>>({});
   const [socialLookupName, setSocialLookupName] = React.useState("");
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -801,6 +809,57 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, loadAccountChallenges]);
 
+  const runAccountChallengeAction = React.useCallback(async (
+    item: OnlineAccountChallengeListItem,
+    action: "accept" | "decline" | "cancel"
+  ) => {
+    const challengeId = item.summary.challengeId;
+    const handler =
+      action === "accept"
+        ? onAcceptAccountChallenge
+        : action === "decline"
+          ? onDeclineAccountChallenge
+          : onCancelAccountChallenge;
+    if (!handler) return;
+    setSocialMessage("");
+    setAccountChallengeActionById((current) => ({ ...current, [challengeId]: action }));
+    try {
+      const response = await handler(challengeId);
+      setAccountChallenges((current) =>
+        current
+          .map((candidate) =>
+            candidate.summary.challengeId === challengeId
+              ? { role: response.role, summary: response.summary }
+              : candidate
+          )
+          .filter((candidate) => candidate.summary.status === "pending")
+      );
+      setAccountChallengesStatus("ready");
+      setSocialMessage(
+        action === "accept"
+          ? "Challenge accepted."
+          : action === "decline"
+            ? "Challenge declined."
+            : "Challenge cancelled."
+      );
+    } catch (error) {
+      console.error("[OnlineGameBrowser] Failed to update account challenge", error);
+      setSocialMessage(
+        action === "accept"
+          ? "Could not accept that challenge."
+          : action === "decline"
+            ? "Could not decline that challenge."
+            : "Could not cancel that challenge."
+      );
+    } finally {
+      setAccountChallengeActionById((current) => {
+        const next = { ...current };
+        delete next[challengeId];
+        return next;
+      });
+    }
+  }, [onAcceptAccountChallenge, onCancelAccountChallenge, onDeclineAccountChallenge]);
+
   const handleSignOutAllAccountSessions = React.useCallback(async () => {
     if (!onSignOutAllAccountSessions) return;
     setAccountActionMessage("");
@@ -920,6 +979,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   React.useEffect(() => {
     accountChallengesRequestIdRef.current += 1;
     setAccountChallenges([]);
+    setAccountChallengeActionById({});
     setAccountChallengesStatus("idle");
   }, [account?.accountId, canUseAccountChallenges]);
 
@@ -2500,22 +2560,64 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 <p>No pending account challenges.</p>
               ) : (
                 <div className="online-browser-following-rows">
-                  {accountChallenges.map((item) => (
-                    <article key={item.summary.challengeId} className="online-browser-following-row">
-                      <div>
-                        <strong>{challengeOpponentName(item)}</strong>
-                        <div className="online-browser-social-badges">
-                          <span>{formatAccountChallengeRole(item.role)}</span>
-                          <span>{formatAccountChallengeStatus(item)}</span>
-                          <span>{formatChallengeSeatChoice(item)}</span>
+                  {accountChallenges.map((item) => {
+                    const challengeId = item.summary.challengeId;
+                    const pendingAction = accountChallengeActionById[challengeId];
+                    const canActOnChallenge = item.summary.status === "pending" && !pendingAction;
+                    return (
+                      <article key={challengeId} className="online-browser-following-row">
+                        <div>
+                          <strong>{challengeOpponentName(item)}</strong>
+                          <div className="online-browser-social-badges">
+                            <span>{formatAccountChallengeRole(item.role)}</span>
+                            <span>{formatAccountChallengeStatus(item)}</span>
+                            <span>{formatChallengeSeatChoice(item)}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="online-browser-social-badges online-browser-account-challenge-meta">
-                        <span>{formatUpdatedAt(item.summary.updatedAt)}</span>
-                        <span>{item.summary.challengeId}</span>
-                      </div>
-                    </article>
-                  ))}
+                        <div className="online-browser-account-challenge-side">
+                          <div className="online-browser-social-badges online-browser-account-challenge-meta">
+                            <span>{formatUpdatedAt(item.summary.updatedAt)}</span>
+                            <span>{challengeId}</span>
+                          </div>
+                          <div className="online-browser-social-actions">
+                            {item.role === "challenged" && onAcceptAccountChallenge && (
+                              <button
+                                type="button"
+                                className="online-browser-button primary"
+                                onClick={() => void runAccountChallengeAction(item, "accept")}
+                                disabled={!canActOnChallenge}
+                                aria-label={`Accept challenge from ${challengeOpponentName(item)}`}
+                              >
+                                {pendingAction === "accept" ? "Accepting" : "Accept"}
+                              </button>
+                            )}
+                            {item.role === "challenged" && onDeclineAccountChallenge && (
+                              <button
+                                type="button"
+                                className="online-browser-button subtle"
+                                onClick={() => void runAccountChallengeAction(item, "decline")}
+                                disabled={!canActOnChallenge}
+                                aria-label={`Decline challenge from ${challengeOpponentName(item)}`}
+                              >
+                                {pendingAction === "decline" ? "Declining" : "Decline"}
+                              </button>
+                            )}
+                            {item.role === "challenger" && onCancelAccountChallenge && (
+                              <button
+                                type="button"
+                                className="online-browser-button subtle online-browser-button-danger"
+                                onClick={() => void runAccountChallengeAction(item, "cancel")}
+                                disabled={!canActOnChallenge}
+                                aria-label={`Cancel challenge to ${challengeOpponentName(item)}`}
+                              >
+                                {pendingAction === "cancel" ? "Cancelling" : "Cancel"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </section>

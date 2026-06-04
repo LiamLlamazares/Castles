@@ -26,6 +26,7 @@ import {
   projectOnlineChallengeSummaries,
   validateOnlineChallengeSummary,
   validateOnlineAccountChallengeDirectoryResponse,
+  type AuthenticatedOnlineIdentity,
   type OnlineAccountChallengeDirectoryState,
   type OnlineChallengeEvent,
   type OnlineChallengeSummary,
@@ -973,7 +974,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const resolveAccountBearer = async (
     req: Request
   ): Promise<
-    | { ok: true; account: OnlineAccount; sessionId: string; usedAt: string }
+    | { ok: true; account: OnlineAccount; identity: AuthenticatedOnlineIdentity; sessionId: string; usedAt: string }
     | { ok: false; status: number; error: OnlineReject; reason: string }
   > => {
     const token = getBearerToken(req.headers.authorization);
@@ -996,7 +997,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           reason: "bad_account_token",
         };
       }
-      return { ok: true, account: resolved.account, sessionId: resolved.sessionId, usedAt };
+      return {
+        ok: true,
+        account: resolved.account,
+        identity: resolved.account.identity as AuthenticatedOnlineIdentity,
+        sessionId: resolved.sessionId,
+        usedAt,
+      };
     } catch (error) {
       console.error("Failed to resolve account session", error);
       return {
@@ -1377,6 +1384,36 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return (await loadChallengeSummaries()).find((summary) => summary.challengeId === challengeId) ?? null;
   };
 
+  const getAuthorizedAccountChallenge = async (
+    rawChallengeId: string,
+    identity: AuthenticatedOnlineIdentity
+  ): Promise<
+    | { ok: true; credential: ResolvedOnlineChallengeCredential; summary: OnlineChallengeSummary }
+    | { ok: false; status: number; error: OnlineReject; reason: string }
+  > => {
+    const challengeId = validateOnlineGameId(rawChallengeId, "account.challenge.challengeId");
+    if (!challengeId.ok) {
+      return { ok: false, status: 400, error: challengeId.error, reason: challengeId.error.code };
+    }
+    const summary = await loadChallengeSummary(challengeId.value);
+    if (!summary) {
+      return { ok: false, status: 404, error: challengeNotFoundError(), reason: "summary_missing" };
+    }
+    const role = onlineAccountChallengeRoleForIdentity(summary, identity);
+    if (!role) {
+      return { ok: false, status: 404, error: challengeNotFoundError(), reason: "not_participant" };
+    }
+    return {
+      ok: true,
+      summary,
+      credential: {
+        challengeId: summary.challengeId,
+        role,
+        identity,
+      },
+    };
+  };
+
   const listAccountChallengeDirectory = async (
     identity: OnlineIdentity,
     state: OnlineAccountChallengeDirectoryState
@@ -1535,6 +1572,31 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     };
   };
 
+  const createFreshGameSeatInvite = async (
+    gameId: string,
+    seat: "w" | "b"
+  ) => {
+    const token = service.createSeatToken(seat);
+    const credential = service.credentialForToken(token);
+    if (options.appendGameSeatCredential && !isOnlineTokenCredentialHash(credential)) {
+      throw new Error("Fresh account game credential was not persistable.");
+    }
+    const record = options.appendGameSeatCredential
+      ? await options.appendGameSeatCredential(gameId, seat, credential)
+      : service.addSeatCredential(gameId, seat, credential);
+    if (!record) {
+      throw new Error(`Online game ${gameId} was not found while adding account challenge credential.`);
+    }
+    service.replaceRoom(record);
+    disconnectStalePlayerSockets(gameId);
+    return {
+      gameId,
+      seat,
+      token,
+      url: buildTokenlessOnlineGameUrl(options.publicBaseUrl, gameId, seat),
+    };
+  };
+
   const createInitialClockRecord = (setup: OnlineGameSetupDTO, gameId: string) => {
     const room = OnlineGameRoom.create({
       setup,
@@ -1626,6 +1688,46 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     options.acceptChallengeAndCreateGame
       ? options.acceptChallengeAndCreateGame(input)
       : createMemoryChallengeAcceptedGame(input);
+
+  const acceptPendingChallengeAndCreateGame = async (
+    summary: OnlineChallengeSummary,
+    acceptedBy: ResolvedOnlineChallengeCredential
+  ): Promise<OnlineChallengeAcceptResult> => {
+    const challengerSeat =
+      summary.challengerSeat === "random"
+        ? randomBytes(1)[0] % 2 === 0
+          ? "w"
+          : "b"
+        : summary.challengerSeat;
+    const whiteIdentity = challengerSeat === "w" ? summary.challengerIdentity : summary.challengedIdentity;
+    const blackIdentity = challengerSeat === "w" ? summary.challengedIdentity : summary.challengerIdentity;
+    let gameId = `game_${randomBytes(9).toString("base64url")}`;
+    while (service.getRoom(gameId)) {
+      gameId = `game_${randomBytes(9).toString("base64url")}`;
+    }
+    const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+    const clock = createInitialClockRecord(summary.setup, gameId);
+    const gameCreatedEvent = createOnlineGameCreatedEvent(
+      {
+        type: "game_created",
+        gameId,
+        setup: summary.setup,
+        clock,
+        initialVisibility: summary.visibility,
+        whiteIdentity,
+        blackIdentity,
+      },
+      { createdAt: acceptedAt }
+    );
+    return acceptChallengeAndCreateGame({
+      challengeId: summary.challengeId,
+      acceptedBy,
+      acceptedAt,
+      gameCreatedEvent,
+      whiteIdentity,
+      blackIdentity,
+    });
+  };
 
   const loadOpenSeekSummaries = async (): Promise<OpenSeekSummary[]> => {
     const summaries = options.loadOpenSeekSummaries
@@ -2690,6 +2792,205 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   });
 
+  app.post("/api/online/account/challenges/:challengeId/accept", async (req, res) => {
+    if (!challengeActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.challenge.accept", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    try {
+      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.identity);
+      if (!accountChallenge.ok) {
+        log({ event: "online.account.challenge.accept", status: "rejected", reason: accountChallenge.reason });
+        res.status(accountChallenge.status).json({ error: accountChallenge.error });
+        return;
+      }
+      const summary = await expireChallengeIfNeeded(accountChallenge.summary);
+      if (summary.status !== "pending") {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      if (accountChallenge.credential.role !== "challenged") {
+        res.status(404).json({ error: challengeNotFoundError() });
+        return;
+      }
+      if (!canIdentityAcceptChallenge(summary, auth.identity, new Date(options.now?.() ?? Date.now()).toISOString())) {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+
+      const result = await acceptPendingChallengeAndCreateGame(summary, accountChallenge.credential);
+      service.replaceRoom(result.gameRecord);
+      const gameId = result.challengeSummary.gameId;
+      if (!gameId) {
+        throw new Error(`Accepted account challenge ${summary.challengeId} did not create a game.`);
+      }
+      const gameInvite = await createFreshGameSeatInvite(gameId, result.gameSeats.challenged);
+      log({ event: "online.account.challenge.accept", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: accountChallenge.credential.role,
+        summary: result.challengeSummary,
+        gameInvite,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const terminal = /terminal|pending|expiry|expired/i.test(message);
+      console.error("Failed to accept account challenge", error);
+      log({
+        event: "online.account.challenge.accept",
+        status: terminal ? "rejected" : "failed",
+        reason: terminal ? "game_over" : "persistence_failed",
+      });
+      res.status(terminal ? 409 : 503).json({
+        error: terminal
+          ? { code: "game_over", message: "This challenge is no longer pending." }
+          : { code: "persistence_failed", message: "The online challenge could not be accepted." },
+      });
+    }
+  });
+
+  app.post("/api/online/account/challenges/:challengeId/decline", async (req, res) => {
+    if (!challengeActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.challenge.decline", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    try {
+      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.identity);
+      if (!accountChallenge.ok) {
+        log({ event: "online.account.challenge.decline", status: "rejected", reason: accountChallenge.reason });
+        res.status(accountChallenge.status).json({ error: accountChallenge.error });
+        return;
+      }
+      const declinedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const summary = await expireChallengeIfNeeded(accountChallenge.summary, declinedAt);
+      if (summary.status !== "pending") {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      if (accountChallenge.credential.role !== "challenged") {
+        res.status(404).json({ error: challengeNotFoundError() });
+        return;
+      }
+      if (!canIdentityDeclineChallenge(summary, auth.identity, declinedAt)) {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      const declinedSummary = await appendChallengeLifecycleEvent(
+        createChallengeDeclinedEvent(
+          {
+            type: "challenge_declined",
+            challengeId: summary.challengeId,
+            declinedBy: auth.identity,
+            declinedAt,
+          },
+          { createdAt: declinedAt }
+        )
+      );
+      log({ event: "online.account.challenge.decline", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: accountChallenge.credential.role,
+        summary: declinedSummary,
+      });
+    } catch (error) {
+      console.error("Failed to decline account challenge", error);
+      res.status(challengeTerminalError(error) ? 409 : 503).json({
+        error: challengeTerminalError(error)
+          ? { code: "game_over", message: "This challenge is no longer pending." }
+          : { code: "persistence_failed", message: "The online challenge could not be declined." },
+      });
+    }
+  });
+
+  app.post("/api/online/account/challenges/:challengeId/cancel", async (req, res) => {
+    if (!challengeActionLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.challenge.cancel", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    try {
+      const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.identity);
+      if (!accountChallenge.ok) {
+        log({ event: "online.account.challenge.cancel", status: "rejected", reason: accountChallenge.reason });
+        res.status(accountChallenge.status).json({ error: accountChallenge.error });
+        return;
+      }
+      const cancelledAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const summary = await expireChallengeIfNeeded(accountChallenge.summary, cancelledAt);
+      if (summary.status !== "pending") {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      if (accountChallenge.credential.role !== "challenger") {
+        res.status(404).json({ error: challengeNotFoundError() });
+        return;
+      }
+      if (!canIdentityCancelChallenge(summary, auth.identity, cancelledAt)) {
+        res.status(409).json({
+          error: { code: "game_over", message: "This challenge is no longer pending." },
+        });
+        return;
+      }
+      const cancelledSummary = await appendChallengeLifecycleEvent(
+        createChallengeCancelledEvent(
+          {
+            type: "challenge_cancelled",
+            challengeId: summary.challengeId,
+            cancelledBy: auth.identity,
+            cancelledAt,
+          },
+          { createdAt: cancelledAt }
+        )
+      );
+      log({ event: "online.account.challenge.cancel", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: accountChallenge.credential.role,
+        summary: cancelledSummary,
+      });
+    } catch (error) {
+      console.error("Failed to cancel account challenge", error);
+      res.status(challengeTerminalError(error) ? 409 : 503).json({
+        error: challengeTerminalError(error)
+          ? { code: "game_over", message: "This challenge is no longer pending." }
+          : { code: "persistence_failed", message: "The online challenge could not be cancelled." },
+      });
+    }
+  });
+
   app.get("/api/online/account/sessions", async (req, res) => {
     if (!accountReadLimiter.take(getClientKey(req))) {
       res.status(429).json({
@@ -3621,40 +3922,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const challengerSeat =
-        summary.challengerSeat === "random"
-          ? randomBytes(1)[0] % 2 === 0
-            ? "w"
-            : "b"
-          : summary.challengerSeat;
-      const whiteIdentity = challengerSeat === "w" ? summary.challengerIdentity : summary.challengedIdentity;
-      const blackIdentity = challengerSeat === "w" ? summary.challengedIdentity : summary.challengerIdentity;
-      let gameId = `game_${randomBytes(9).toString("base64url")}`;
-      while (service.getRoom(gameId)) {
-        gameId = `game_${randomBytes(9).toString("base64url")}`;
-      }
-      const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
-      const clock = createInitialClockRecord(summary.setup, gameId);
-      const gameCreatedEvent = createOnlineGameCreatedEvent(
-        {
-          type: "game_created",
-          gameId,
-          setup: summary.setup,
-          clock,
-          initialVisibility: summary.visibility,
-          whiteIdentity,
-          blackIdentity,
-        },
-        { createdAt: acceptedAt }
-      );
-      const result = await acceptChallengeAndCreateGame({
-        challengeId: summary.challengeId,
-        acceptedBy: auth.credential,
-        acceptedAt,
-        gameCreatedEvent,
-        whiteIdentity,
-        blackIdentity,
-      });
+      const result = await acceptPendingChallengeAndCreateGame(summary, auth.credential);
       service.replaceRoom(result.gameRecord);
       const gameInvite = gameInviteForChallenge(result.challengeSummary, auth.credential, auth.token);
       res.json({

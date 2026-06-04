@@ -978,6 +978,50 @@ export async function fetchOnlineAccountChallenges(
   };
 }
 
+export async function acceptOnlineAccountChallenge(
+  account: OnlineAccountSessionParams,
+  challengeId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineChallengeResponse> {
+  return postOnlineAccountChallengeAction(account, challengeId, "accept", fetchImpl);
+}
+
+export async function declineOnlineAccountChallenge(
+  account: OnlineAccountSessionParams,
+  challengeId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineChallengeResponse> {
+  return postOnlineAccountChallengeAction(account, challengeId, "decline", fetchImpl);
+}
+
+export async function cancelOnlineAccountChallenge(
+  account: OnlineAccountSessionParams,
+  challengeId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineChallengeResponse> {
+  return postOnlineAccountChallengeAction(account, challengeId, "cancel", fetchImpl);
+}
+
+async function postOnlineAccountChallengeAction(
+  account: OnlineAccountSessionParams,
+  challengeId: string,
+  action: "accept" | "decline" | "cancel",
+  fetchImpl: typeof fetch
+): Promise<OnlineChallengeResponse> {
+  const response = await fetchImpl(
+    `/api/online/account/challenges/${encodeURIComponent(challengeId)}/${action}`,
+    {
+      method: "POST",
+      headers: accountAuthorizationHeader(account),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Could not ${action} online account challenge (${response.status})`);
+  }
+
+  return validateOnlineChallengeResponse(await response.json(), `Online account challenge ${action}`);
+}
+
 export async function createOnlineAccount(
   displayName: string,
   fetchImpl: typeof fetch = fetch
