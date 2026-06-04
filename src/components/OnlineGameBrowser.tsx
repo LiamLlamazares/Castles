@@ -7,6 +7,9 @@ import {
   fetchOnlineGameDirectory,
   formatOnlineGameResult,
   type FetchOnlineAccountGamesOptions,
+  type FetchOnlineAccountChallengesOptions,
+  type OnlineAccountChallengeDirectoryResponse,
+  type OnlineAccountChallengeListItem,
   type FetchOpenSeekDirectoryOptions,
   type FetchOnlineGameSummariesOptions,
   type OnlineAccountFollowingResponse,
@@ -34,6 +37,7 @@ import {
   normalizeOnlineGameDirectorySearchQuery,
   onlineGameSummaryDirectorySearchText,
 } from "../online/readModel";
+import type { OnlineIdentity } from "../online/identity";
 import type { OnlineJoinParams } from "../online/client";
 import type {
   OpenSeekDirectoryResponse,
@@ -117,6 +121,7 @@ interface OnlineGameBrowserProps {
   onSignOutAllAccountSessions?: () => void | Promise<void>;
   onDeleteAccount?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
+  loadAccountChallenges?: (options?: FetchOnlineAccountChallengesOptions) => Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>;
   loadAccountProfile?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   loadAccountFollowing?: () => Promise<OnlineAccountFollowingResponse>;
   onFollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
@@ -144,9 +149,7 @@ function participantName(
   return seat === "w" ? "White" : "Black";
 }
 
-function identityDisplayName(
-  identity: OnlineGameSummaryParticipant["identity"] | OpenSeekSummary["creatorIdentity"]
-): string | null {
+function identityDisplayName(identity: OnlineIdentity): string | null {
   return identity.kind === "registered" && identity.displayName ? identity.displayName : null;
 }
 
@@ -260,6 +263,43 @@ function formatPublicLiveCount(count: number): string {
 
 function formatCount(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatAccountChallengeRole(role: OnlineAccountChallengeListItem["role"]): string {
+  return role === "challenged" ? "Incoming" : "Outgoing";
+}
+
+function challengeOpponentName(item: OnlineAccountChallengeListItem): string {
+  const identity =
+    item.role === "challenged"
+      ? item.summary.challengerIdentity
+      : item.summary.challengedIdentity;
+  return identityDisplayName(identity) ?? (item.role === "challenged" ? "Challenger" : "Opponent");
+}
+
+function formatChallengeSeatChoice(item: OnlineAccountChallengeListItem): string {
+  const seat = item.summary.challengerSeat;
+  if (seat === "random") return "Random side";
+  const challengerSide = seat === "w" ? "White" : "Black";
+  if (item.role === "challenger") return `You chose ${challengerSide}`;
+  return `They chose ${challengerSide}`;
+}
+
+function formatAccountChallengeStatus(item: OnlineAccountChallengeListItem): string {
+  switch (item.summary.status) {
+    case "pending":
+      return item.role === "challenged" ? "Awaiting your response" : "Awaiting response";
+    case "accepted":
+      return "Accepted";
+    case "declined":
+      return "Declined";
+    case "cancelled":
+      return "Cancelled";
+    case "expired":
+      return "Expired";
+    default:
+      return item.summary.status;
+  }
 }
 
 function formatSpectatorCount(count: number | undefined): string | null {
@@ -568,6 +608,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onSignOutAllAccountSessions,
   onDeleteAccount,
   loadAccountGames,
+  loadAccountChallenges,
   loadAccountProfile,
   loadAccountFollowing,
   onFollowAccount,
@@ -616,6 +657,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountGames, setAccountGames] = React.useState<OnlineGameSummary[]>([]);
   const [accountGamesStatus, setAccountGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [accountChallenges, setAccountChallenges] = React.useState<OnlineAccountChallengeListItem[]>([]);
+  const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [socialLookupName, setSocialLookupName] = React.useState("");
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -633,6 +676,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
   const accountGamesRequestIdRef = React.useRef(0);
+  const accountChallengesRequestIdRef = React.useRef(0);
   const accountSessionsRequestIdRef = React.useRef(0);
   const accountFollowingRequestIdRef = React.useRef(0);
   const accountPrivacyRequestIdRef = React.useRef(0);
@@ -668,6 +712,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     loadAccountPrivacy &&
     onUpdateAccountPrivacy
   );
+  const canUseAccountChallenges = Boolean(account && loadAccountChallenges);
 
   React.useEffect(() => {
     if (activeTab === undefined) {
@@ -738,6 +783,23 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setAccountSessionsStatus("error");
     }
   }, [account?.accountId, loadAccountSessions]);
+
+  const refreshAccountChallenges = React.useCallback(async () => {
+    if (!account || !loadAccountChallenges) return;
+    const requestId = ++accountChallengesRequestIdRef.current;
+    setAccountChallengesStatus("loading");
+    try {
+      const response = await loadAccountChallenges({ state: "pending" });
+      if (requestId !== accountChallengesRequestIdRef.current) return;
+      setAccountChallenges(response.challenges);
+      setAccountChallengesStatus("ready");
+    } catch (error) {
+      if (requestId !== accountChallengesRequestIdRef.current) return;
+      console.error("[OnlineGameBrowser] Failed to load account challenges", error);
+      setAccountChallenges([]);
+      setAccountChallengesStatus("error");
+    }
+  }, [account?.accountId, loadAccountChallenges]);
 
   const handleSignOutAllAccountSessions = React.useCallback(async () => {
     if (!onSignOutAllAccountSessions) return;
@@ -854,6 +916,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     void refreshFollowingProfiles({ quiet: true });
     void refreshAccountPrivacy();
   }, [account?.accountId, canUseAccountSocial, refreshAccountPrivacy, refreshFollowingProfiles]);
+
+  React.useEffect(() => {
+    accountChallengesRequestIdRef.current += 1;
+    setAccountChallenges([]);
+    setAccountChallengesStatus("idle");
+  }, [account?.accountId, canUseAccountChallenges]);
 
   React.useEffect(() => {
     if (accountStatus !== "error") return;
@@ -2397,6 +2465,61 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <p className={socialMessageClassName} role="status" aria-live="polite" aria-atomic="true">
             {socialMessage}
           </p>
+
+          {canUseAccountChallenges && (
+            <section className="online-browser-following-list online-browser-account-challenges" aria-label="Account challenges">
+              <div className="online-browser-following-list-heading">
+                <strong>Challenges</strong>
+                <span>
+                  {accountChallengesStatus === "loading"
+                    ? "Loading"
+                    : accountChallengesStatus === "error"
+                      ? "Unavailable"
+                      : accountChallengesStatus === "ready"
+                        ? formatCount(accountChallenges.length, "challenge")
+                        : "Not checked"}
+                </span>
+              </div>
+              <div className="online-browser-account-challenge-actions">
+                <button
+                  type="button"
+                  className="online-browser-button subtle"
+                  onClick={() => void refreshAccountChallenges()}
+                  disabled={accountChallengesStatus === "loading"}
+                >
+                  {accountChallengesStatus === "loading" ? "Refreshing" : "Refresh Challenges"}
+                </button>
+              </div>
+              {accountChallengesStatus === "error" ? (
+                <p>Could not load account challenges.</p>
+              ) : accountChallengesStatus === "loading" && accountChallenges.length === 0 ? (
+                <p>Loading account challenges...</p>
+              ) : accountChallengesStatus === "idle" ? (
+                <p>Refresh challenges to check targeted invites.</p>
+              ) : accountChallenges.length === 0 ? (
+                <p>No pending account challenges.</p>
+              ) : (
+                <div className="online-browser-following-rows">
+                  {accountChallenges.map((item) => (
+                    <article key={item.summary.challengeId} className="online-browser-following-row">
+                      <div>
+                        <strong>{challengeOpponentName(item)}</strong>
+                        <div className="online-browser-social-badges">
+                          <span>{formatAccountChallengeRole(item.role)}</span>
+                          <span>{formatAccountChallengeStatus(item)}</span>
+                          <span>{formatChallengeSeatChoice(item)}</span>
+                        </div>
+                      </div>
+                      <div className="online-browser-social-badges online-browser-account-challenge-meta">
+                        <span>{formatUpdatedAt(item.summary.updatedAt)}</span>
+                        <span>{item.summary.challengeId}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           {socialProfile && (
             <article

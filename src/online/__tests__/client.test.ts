@@ -14,6 +14,7 @@ import {
   createOpenSeek,
   deleteOnlineAccount,
   declineOnlineChallenge,
+  fetchOnlineAccountChallenges,
   fetchOnlineChallenge,
   fetchOnlineAccountFollowing,
   fetchOnlineAccountGames,
@@ -70,6 +71,10 @@ import {
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
+import {
+  ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+  ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+} from "../challenges";
 import { PieceType } from "../../Constants";
 import type { OnlineConnectionStatus } from "../types";
 
@@ -763,6 +768,55 @@ describe("online client helpers", () => {
       "/api/online/account/session",
       { method: "DELETE", headers: { authorization: "Bearer account-token" } }
     );
+  });
+
+  it("fetches account challenges with bearer auth", async () => {
+    const challengeSummary = {
+      schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      challengeId: "challenge_samir_liam",
+      challengerIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+      challengedIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+      challengerSeat: "random",
+      setup: { board: { config: { nSquares: 7 }, castles: [] }, pieces: [], sanctuaries: [] },
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:01:00.000Z",
+      expiresAt: "2026-06-03T12:11:00.000Z",
+      status: "pending",
+      visibility: "unlisted",
+      lastEventId: "challenge_samir_liam_evt",
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+        challenges: [
+          {
+            role: "challenged",
+            summary: challengeSummary,
+          },
+        ],
+      }),
+    });
+
+    await expect(
+      fetchOnlineAccountChallenges(
+        { token: "account-token" },
+        { state: "all" },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      challenges: [
+        {
+          role: "challenged",
+          summary: { challengeId: "challenge_samir_liam", status: "pending" },
+        },
+      ],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/account/challenges?state=all", {
+      headers: { authorization: "Bearer account-token" },
+    });
   });
 
   it("loads profiles, follows accounts, blocks accounts, and updates privacy with bearer auth", async () => {

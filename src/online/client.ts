@@ -1,6 +1,10 @@
 import type { CreatedOnlineGame } from "./OnlineGameService";
 import {
+  validateOnlineAccountChallengeDirectoryResponse,
   validateOnlineChallengeSummary,
+  type OnlineAccountChallengeDirectoryResponse,
+  type OnlineAccountChallengeDirectoryState,
+  type OnlineAccountChallengeListItem,
   type OnlineChallengeSummary,
 } from "./challenges";
 import { validateOnlineGameSnapshot } from "./protocol";
@@ -142,6 +146,8 @@ export type {
   OnlineAccountPrivacyResponse,
   OnlineAccountProfileResponse,
   OnlineAccountPublicProfile,
+  OnlineAccountChallengeDirectoryResponse,
+  OnlineAccountChallengeListItem,
 };
 
 export interface CreatedOnlineChallenge {
@@ -936,6 +942,39 @@ export async function updateOnlineAccountPrivacy(
   return {
     protocolVersion: ONLINE_PROTOCOL_VERSION,
     privacy: validateOnlineAccountPrivacySettings(record.privacy, "Online account privacy update.privacy"),
+  };
+}
+
+export interface FetchOnlineAccountChallengesOptions {
+  state?: OnlineAccountChallengeDirectoryState;
+}
+
+function buildOnlineAccountChallengesPath(options: FetchOnlineAccountChallengesOptions = {}): string {
+  const params = new URLSearchParams();
+  if (options.state) params.set("state", options.state);
+  const query = params.toString();
+  return query ? `/api/online/account/challenges?${query}` : "/api/online/account/challenges";
+}
+
+export async function fetchOnlineAccountChallenges(
+  account: OnlineAccountSessionParams,
+  options: FetchOnlineAccountChallengesOptions = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: typeof ONLINE_PROTOCOL_VERSION }> {
+  const response = await fetchImpl(buildOnlineAccountChallengesPath(options), {
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load online account challenges (${response.status})`);
+  }
+  const record = validateVersionedObject(await response.json(), "Online account challenges");
+  const validation = validateOnlineAccountChallengeDirectoryResponse(record);
+  if (!validation.ok) {
+    throw new Error(`Online account challenges response was malformed: ${validation.error.message}`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    ...validation.value,
   };
 }
 

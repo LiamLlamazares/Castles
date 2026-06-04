@@ -2969,6 +2969,94 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("lists account challenge directories by authenticated account identity", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "random",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const created = await createResponse.json();
+
+    const loadChallenges = async (token: string, state = "pending") => {
+      const response = await fetch(
+        `http://127.0.0.1:${port}/api/online/account/challenges?state=${state}`,
+        { headers: bearer(token) }
+      );
+      return { response, body: await response.json() };
+    };
+
+    const challengerDirectory = await loadChallenges(liam.session.token);
+    const challengedDirectory = await loadChallenges(samir.session.token);
+    const unrelatedDirectory = await loadChallenges(dani.session.token);
+    const allDirectory = await loadChallenges(samir.session.token, "all");
+    const invalidQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges?token=secret`,
+      { headers: bearer(liam.session.token) }
+    );
+    const unauthenticatedResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges`
+    );
+
+    expect(createResponse.status).toBe(201);
+    expect(challengerDirectory.response.status).toBe(200);
+    expect(challengerDirectory.body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      challenges: [
+        {
+          role: "challenger",
+          summary: {
+            challengeId: created.challengeId,
+            status: "pending",
+            challengedIdentity: samir.account.identity,
+          },
+        },
+      ],
+    });
+    expect(challengedDirectory.response.status).toBe(200);
+    expect(challengedDirectory.body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      challenges: [
+        {
+          role: "challenged",
+          summary: {
+            challengeId: created.challengeId,
+            status: "pending",
+            challengerIdentity: liam.account.identity,
+          },
+        },
+      ],
+    });
+    expect(allDirectory.response.status).toBe(200);
+    expect(allDirectory.body.challenges).toHaveLength(1);
+    expect(unrelatedDirectory.response.status).toBe(200);
+    expect(unrelatedDirectory.body.challenges).toEqual([]);
+    expect(JSON.stringify(challengedDirectory.body)).not.toContain("challengeToken");
+    expect(JSON.stringify(challengedDirectory.body)).not.toContain(fragmentChallengeToken(created.challenged.url));
+    expect(invalidQueryResponse.status).toBe(400);
+    expect(unauthenticatedResponse.status).toBe(401);
+  });
+
   it("allows targeted account challenges from anyone when target challenge privacy is everyone", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

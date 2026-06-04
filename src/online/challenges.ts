@@ -11,10 +11,13 @@ import type { OnlineGameSetupDTO } from "./types";
 
 export const ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION = 1;
 export const ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION = 1;
+export const ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION = 1;
 
 export type OnlineChallengeStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
 export type OnlineChallengeVisibility = "private" | "unlisted";
 export type OnlineChallengeSeat = "w" | "b" | "random";
+export type OnlineAccountChallengeDirectoryState = "pending" | "all";
+export type OnlineAccountChallengeRole = "challenger" | "challenged";
 
 declare const authenticatedOnlineIdentityBrand: unique symbol;
 export type AuthenticatedOnlineIdentity = OnlineIdentity & {
@@ -92,9 +95,23 @@ export interface OnlineChallengeSummary {
   expiredBy?: "system";
 }
 
+export interface OnlineAccountChallengeListItem {
+  role: OnlineAccountChallengeRole;
+  summary: OnlineChallengeSummary;
+}
+
+export interface OnlineAccountChallengeDirectoryResponse {
+  schemaVersion: typeof ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION;
+  challenges: OnlineAccountChallengeListItem[];
+}
+
 const MAX_ID_LENGTH = 128;
 const CHALLENGE_VISIBILITIES = new Set<OnlineChallengeVisibility>(["private", "unlisted"]);
 const CHALLENGE_SEATS = new Set<OnlineChallengeSeat>(["w", "b", "random"]);
+export const ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_STATES = new Set<OnlineAccountChallengeDirectoryState>([
+  "pending",
+  "all",
+]);
 const CHALLENGE_STATUSES = new Set<OnlineChallengeStatus>([
   "pending",
   "accepted",
@@ -788,6 +805,62 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
       ...summaryBase,
       expiredAt: expiredAt.value,
       expiredBy: "system",
+    },
+  };
+}
+
+export function onlineAccountChallengeRoleForIdentity(
+  summary: OnlineChallengeSummary,
+  identity: OnlineIdentity
+): OnlineAccountChallengeRole | null {
+  if (isSameOnlineIdentity(summary.challengerIdentity, identity)) return "challenger";
+  if (isSameOnlineIdentity(summary.challengedIdentity, identity)) return "challenged";
+  return null;
+}
+
+export function validateOnlineAccountChallengeDirectoryResponse(
+  value: unknown
+): ValidationResult<OnlineAccountChallengeDirectoryResponse> {
+  if (!isRecord(value)) return bad("accountChallengeDirectory must be an object.");
+  if (containsDurableSecret(value)) {
+    return bad("accountChallengeDirectory must not contain token, credential, session, auth, cookie, or invite fields.");
+  }
+  if (value.schemaVersion !== ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION) {
+    return bad(
+      `accountChallengeDirectory.schemaVersion must be ${ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION}.`
+    );
+  }
+  if (!Array.isArray(value.challenges)) {
+    return bad("accountChallengeDirectory.challenges must be an array.");
+  }
+  const challenges: OnlineAccountChallengeListItem[] = [];
+  for (let index = 0; index < value.challenges.length; index++) {
+    const rawItem = value.challenges[index];
+    if (!isRecord(rawItem)) {
+      return bad(`accountChallengeDirectory.challenges[${index}] must be an object.`);
+    }
+    if (rawItem.role !== "challenger" && rawItem.role !== "challenged") {
+      return bad(`accountChallengeDirectory.challenges[${index}].role is invalid.`);
+    }
+    const summary = validateOnlineChallengeSummary(rawItem.summary);
+    if (!summary.ok) return summary;
+    const actualRole = onlineAccountChallengeRoleForIdentity(
+      summary.value,
+      rawItem.role === "challenger" ? summary.value.challengerIdentity : summary.value.challengedIdentity
+    );
+    if (actualRole !== rawItem.role) {
+      return bad(`accountChallengeDirectory.challenges[${index}].role does not match summary.`);
+    }
+    challenges.push({
+      role: rawItem.role,
+      summary: summary.value,
+    });
+  }
+  return {
+    ok: true,
+    value: {
+      schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+      challenges,
     },
   };
 }

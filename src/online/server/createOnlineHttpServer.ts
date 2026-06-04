@@ -10,6 +10,8 @@ import {
   type OnlineGameRoomRecord,
 } from "../OnlineGameRoom";
 import {
+  ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_STATES,
   canSystemExpireChallenge,
   canIdentityAcceptChallenge,
   canIdentityCancelChallenge,
@@ -20,8 +22,11 @@ import {
   createChallengeDeclinedEvent,
   createChallengeExpiredEvent,
   isSameOnlineIdentity,
+  onlineAccountChallengeRoleForIdentity,
   projectOnlineChallengeSummaries,
   validateOnlineChallengeSummary,
+  validateOnlineAccountChallengeDirectoryResponse,
+  type OnlineAccountChallengeDirectoryState,
   type OnlineChallengeEvent,
   type OnlineChallengeSummary,
 } from "../challenges";
@@ -441,6 +446,28 @@ function parsePersonalDirectoryOptions(
       cursor,
     },
   };
+}
+
+function parseAccountChallengeDirectoryOptions(
+  originalUrl: string
+): { ok: true; state: OnlineAccountChallengeDirectoryState } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Account challenge query is invalid." };
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "state") {
+      return { ok: false, message: "Account challenge query is invalid." };
+    }
+  }
+  if (url.searchParams.getAll("state").length > 1) {
+    return { ok: false, message: "Account challenge query is invalid." };
+  }
+  const state = getSingleSearchParam(url.searchParams, "state") ?? "pending";
+  if (!ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_STATES.has(state as OnlineAccountChallengeDirectoryState)) {
+    return { ok: false, message: "Account challenge state is invalid." };
+  }
+  return { ok: true, state: state as OnlineAccountChallengeDirectoryState };
 }
 
 function parseOpenSeekDirectoryOptions(
@@ -1348,6 +1375,36 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
   const loadChallengeSummary = async (challengeId: string): Promise<OnlineChallengeSummary | null> => {
     return (await loadChallengeSummaries()).find((summary) => summary.challengeId === challengeId) ?? null;
+  };
+
+  const listAccountChallengeDirectory = async (
+    identity: OnlineIdentity,
+    state: OnlineAccountChallengeDirectoryState
+  ) => {
+    const now = new Date(options.now?.() ?? Date.now()).toISOString();
+    const summaries = await Promise.all(
+      (await loadChallengeSummaries()).map((summary) => expireChallengeIfNeeded(summary, now))
+    );
+    const challenges = summaries
+      .map((summary) => {
+        const role = onlineAccountChallengeRoleForIdentity(summary, identity);
+        return role ? { role, summary } : null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .filter((item) => state === "all" || item.summary.status === "pending")
+      .sort((left, right) => {
+        if (left.summary.updatedAt !== right.summary.updatedAt) {
+          return right.summary.updatedAt.localeCompare(left.summary.updatedAt);
+        }
+        return left.summary.challengeId.localeCompare(right.summary.challengeId);
+      });
+    const response = {
+      schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+      challenges,
+    };
+    const validation = validateOnlineAccountChallengeDirectoryResponse(response);
+    if (!validation.ok) throw new Error(validation.error.message);
+    return validation.value;
   };
 
   const appendChallengeCreated = async (
@@ -2595,6 +2652,40 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.account.privacy.update", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account privacy settings could not be updated." },
+      });
+    }
+  });
+
+  app.get("/api/online/account/challenges", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.challenges.list", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const parsed = parseAccountChallengeDirectoryOptions(req.originalUrl);
+    if (!parsed.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: parsed.message } });
+      return;
+    }
+    try {
+      const directory = await listAccountChallengeDirectory(auth.account.identity, parsed.state);
+      log({ event: "online.account.challenges.list", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        ...directory,
+      });
+    } catch (error) {
+      console.error("Failed to list account challenges", error);
+      log({ event: "online.account.challenges.list", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account challenges could not be loaded." },
       });
     }
   });

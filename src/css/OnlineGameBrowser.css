@@ -296,6 +296,16 @@
   align-items: center;
 }
 
+.online-browser-account-challenge-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.online-browser-account-challenge-meta {
+  justify-content: flex-end;
+  max-width: 260px;
+}
+
 .online-browser-following-list p {
   margin: 0;
   color: #d9d0b8;
@@ -936,6 +946,15 @@
 
   .online-browser-social-actions {
     justify-content: stretch;
+  }
+
+  .online-browser-account-challenge-actions {
+    display: grid;
+  }
+
+  .online-browser-account-challenge-meta {
+    justify-content: flex-start;
+    max-width: none;
   }
 
   .online-browser-follow-policy .online-browser-button {

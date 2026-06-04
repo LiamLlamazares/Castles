@@ -14,6 +14,12 @@ import {
   type OpenSeekDirectoryResponse,
   type OpenSeekSummary,
 } from "../../online/seeks";
+import {
+  ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+  ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+  type OnlineAccountChallengeDirectoryResponse,
+  type OnlineChallengeSummary,
+} from "../../online/challenges";
 import { PieceType } from "../../Constants";
 import { ONLINE_RULESET_VERSION } from "../../online/events";
 import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
@@ -87,6 +93,17 @@ function directory(
   };
 }
 
+function createChallengeSetup() {
+  return {
+    board: { config: { nSquares: 7 }, castles: [] },
+    pieces: [],
+    sanctuaries: [],
+    timeControl: { initial: 20, increment: 20 },
+    gameRules: { vpModeEnabled: true },
+    initialPoolTypes: [],
+  };
+}
+
 function openSeek(overrides: Partial<OpenSeekSummary> = {}): OpenSeekSummary {
   const seekId = overrides.seekId ?? "seek_public_open";
   return {
@@ -94,14 +111,7 @@ function openSeek(overrides: Partial<OpenSeekSummary> = {}): OpenSeekSummary {
     seekId,
     creatorIdentity: { kind: "session", id: `${seekId}_creator` },
     creatorSeat: "random",
-    setup: {
-      board: { config: { nSquares: 7 }, castles: [] },
-      pieces: [],
-      sanctuaries: [],
-      timeControl: { initial: 20, increment: 20 },
-      gameRules: { vpModeEnabled: true },
-      initialPoolTypes: [],
-    },
+    setup: createChallengeSetup(),
     createdAt: "2026-06-01T12:00:00.000Z",
     updatedAt: "2026-06-01T12:00:00.000Z",
     expiresAt: "2026-06-01T12:10:00.000Z",
@@ -119,6 +129,36 @@ function seekDirectory(
     schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
     seeks,
     nextCursor,
+  };
+}
+
+function accountChallengeSummary(
+  overrides: Partial<OnlineChallengeSummary> = {}
+): OnlineChallengeSummary {
+  const challengeId = overrides.challengeId ?? "challenge_samir_liam";
+  return {
+    schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+    challengeId,
+    challengerIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+    challengedIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+    challengerSeat: "random",
+    setup: createChallengeSetup(),
+    createdAt: "2026-06-03T12:00:00.000Z",
+    updatedAt: "2026-06-03T12:01:00.000Z",
+    expiresAt: "2026-06-03T12:11:00.000Z",
+    status: "pending",
+    visibility: "unlisted",
+    lastEventId: `${challengeId}_evt`,
+    ...overrides,
+  };
+}
+
+function accountChallengeDirectory(
+  challenges: OnlineAccountChallengeDirectoryResponse["challenges"]
+): OnlineAccountChallengeDirectoryResponse {
+  return {
+    schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+    challenges,
   };
 }
 
@@ -542,6 +582,46 @@ describe("OnlineGameBrowser", () => {
     const profileCard = await within(people).findByRole("article", { name: "Profile Ada" });
     fireEvent.click(within(profileCard).getByRole("button", { name: "Challenge Ada" }));
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada"));
+  });
+
+  it("lets signed-in players manually refresh account challenges", async () => {
+    const account = accountFixture("Liam");
+    const loadAccountChallenges = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      ...accountChallengeDirectory([
+        {
+          role: "challenged",
+          summary: accountChallengeSummary({ challengedIdentity: account.identity }),
+        },
+      ]),
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        loadAccountChallenges={loadAccountChallenges}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    expect(await within(challenges).findByText("Refresh challenges to check targeted invites.")).toBeInTheDocument();
+    expect(loadAccountChallenges).not.toHaveBeenCalled();
+
+    fireEvent.click(within(challenges).getByRole("button", { name: "Refresh Challenges" }));
+
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "pending" }));
+    expect(await within(challenges).findByText("Samir")).toBeInTheDocument();
+    expect(within(challenges).getByText("Incoming")).toBeInTheDocument();
+    expect(within(challenges).getByText("Awaiting your response")).toBeInTheDocument();
+    expect(within(challenges).getByText("Random side")).toBeInTheDocument();
   });
 
   it("shows a challenge error when the challenge handler rejects", async () => {
