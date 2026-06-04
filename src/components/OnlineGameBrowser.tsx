@@ -61,6 +61,13 @@ interface OnlineAccountChallengeActionOptions {
   intent?: OnlineAccountChallengeIntent;
   sourceGameId?: string;
 }
+interface AccountHeadToHeadSummary {
+  opponentDisplayName: string;
+  games: OnlineGameSummary[];
+  accountWins: number;
+  opponentWins: number;
+  latestGame: OnlineGameSummary;
+}
 type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
 type OpenSeekClockFilter = "all" | "timed" | "casual";
 type OpenSeekVpFilter = "all" | "enabled" | "disabled";
@@ -196,6 +203,28 @@ function accountOpponentProfileNames(
     opponents.push(displayName);
   }
   return opponents;
+}
+
+function accountCompletedGameForOpponent(
+  summary: OnlineGameSummary,
+  account: OnlineAccount,
+  opponentKey: string
+): { accountSeat: "w" | "b"; opponentDisplayName: string } | null {
+  if (summary.status !== "complete" || summary.archiveState !== "archived" || !summary.result) {
+    return null;
+  }
+  const accountParticipant = summary.participants.find((participant) =>
+    isSameOnlineIdentity(participant.identity, account.identity)
+  );
+  if (!accountParticipant || (accountParticipant.seat !== "w" && accountParticipant.seat !== "b")) {
+    return null;
+  }
+  const opponent = summary.participants.find((participant) => participant.seat !== accountParticipant.seat);
+  const opponentDisplayName = opponent ? identityDisplayName(opponent.identity) : null;
+  if (!opponentDisplayName || normalizeDisplayNameKey(opponentDisplayName) !== opponentKey) {
+    return null;
+  }
+  return { accountSeat: accountParticipant.seat, opponentDisplayName };
 }
 
 function identityDisplayName(identity: OnlineIdentity): string | null {
@@ -370,6 +399,13 @@ function recentOnlineGameSearchText(record: RecentOnlineGameRecord): string {
 function compareNewest(left: OnlineGameSummary, right: OnlineGameSummary): number {
   if (left.updatedAt !== right.updatedAt) return right.updatedAt.localeCompare(left.updatedAt);
   return left.gameId.localeCompare(right.gameId);
+}
+
+function compareLatestCompletedGame(left: OnlineGameSummary, right: OnlineGameSummary): number {
+  const leftCompletedAt = left.endedAt ?? left.updatedAt;
+  const rightCompletedAt = right.endedAt ?? right.updatedAt;
+  if (leftCompletedAt !== rightCompletedAt) return rightCompletedAt.localeCompare(leftCompletedAt);
+  return compareNewest(left, right);
 }
 
 function spectatorCountValue(summary: OnlineGameSummary): number {
@@ -1802,6 +1838,30 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .slice(0, 12);
   }, [accountGames, followedDisplayNames, friendFilterActive, publicGames, query, resultFilter, sort, tab, timeFilter]);
 
+  const accountHeadToHeadSummary = React.useMemo<AccountHeadToHeadSummary | null>(() => {
+    if (tab !== "archive" || !account || accountGamesStatus !== "ready") return null;
+    const opponentKey = normalizeDisplayNameKey(query);
+    if (!opponentKey) return null;
+    const games: OnlineGameSummary[] = [];
+    let opponentDisplayName = query.trim();
+    let accountWins = 0;
+    let opponentWins = 0;
+    for (const game of accountGames) {
+      const match = accountCompletedGameForOpponent(game, account, opponentKey);
+      if (!match) continue;
+      opponentDisplayName = match.opponentDisplayName;
+      games.push(game);
+      if (game.result?.winner === match.accountSeat) {
+        accountWins += 1;
+      } else {
+        opponentWins += 1;
+      }
+    }
+    if (games.length === 0) return null;
+    const [latestGame] = [...games].sort(compareLatestCompletedGame);
+    return { opponentDisplayName, games, accountWins, opponentWins, latestGame };
+  }, [account, accountGames, accountGamesStatus, query, tab]);
+
   const visibleOpenSeeks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return openSeeks
@@ -2283,6 +2343,33 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <strong>Public only</strong>
         </div>
       </div>
+    );
+  };
+
+  const renderAccountHeadToHeadSummary = (summary: AccountHeadToHeadSummary) => {
+    const accountDisplayName = account?.displayName ?? "You";
+    return (
+      <section
+        className="online-browser-live-overview online-browser-head-to-head-summary"
+        aria-label={`Head-to-head with ${summary.opponentDisplayName}`}
+      >
+        <div className="online-browser-live-stat">
+          <span>Head-to-head</span>
+          <strong>{formatCount(summary.games.length, "game")}</strong>
+        </div>
+        <div className="online-browser-live-stat">
+          <span>{accountDisplayName}</span>
+          <strong>{accountDisplayName} {summary.accountWins}</strong>
+        </div>
+        <div className="online-browser-live-stat">
+          <span>{summary.opponentDisplayName}</span>
+          <strong>{summary.opponentDisplayName} {summary.opponentWins}</strong>
+        </div>
+        <div className="online-browser-live-stat online-browser-live-stat-wide">
+          <span>Last game</span>
+          <strong>Last game {summary.latestGame.gameId}</strong>
+        </div>
+      </section>
     );
   };
 
@@ -4455,6 +4542,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 <p>
                   Active and completed private, unlisted, and public games played as {account.displayName} appear here. Active games can return to play only when this browser session still has the saved player token.
                 </p>
+                {accountHeadToHeadSummary && renderAccountHeadToHeadSummary(accountHeadToHeadSummary)}
                 {accountGamesStatus === "error" ? (
                   <div className="online-browser-empty online-browser-empty-compact">
                     <h2>Account games are unavailable.</h2>

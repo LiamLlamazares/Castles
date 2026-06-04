@@ -2215,6 +2215,80 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByText("Showing visible games with Samir.")).toBeInTheDocument();
   });
 
+  it("summarizes head-to-head account history after opening a followed player history", async () => {
+    const account = accountFixture("Liam");
+    const liamWin = summary({
+      gameId: "game_h2h_liam_win",
+      updatedAt: "2026-06-01T12:06:00.000Z",
+      endedAt: "2026-06-01T12:04:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "private",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Samir").identity },
+      ],
+      result: { winner: "w", reason: "resignation" },
+    });
+    const samirWin = summary({
+      gameId: "game_h2h_samir_win",
+      updatedAt: "2026-06-01T12:05:00.000Z",
+      endedAt: "2026-06-01T12:05:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "unlisted",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: registeredParticipant("w", "Samir").identity },
+        { seat: "b", role: "black", identity: account.identity },
+      ],
+      result: { winner: "w", reason: "timeout" },
+    });
+    const otherOpponent = summary({
+      gameId: "game_h2h_other",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "private",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Ben").identity },
+      ],
+      result: { winner: "w", reason: "resignation" },
+    });
+    const loadAccountGames = vi.fn().mockResolvedValue(directory([liamWin, samirWin, otherOpponent]));
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" }),
+        ])}
+        loadAccountGames={loadAccountGames}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    fireEvent.click(within(following).getByRole("button", {
+      name: "Show Samir game history from following list",
+    }));
+
+    const summaryCard = await screen.findByRole("region", { name: "Head-to-head with Samir" });
+    expect(summaryCard).toHaveTextContent("2 games");
+    expect(summaryCard).toHaveTextContent("Liam 1");
+    expect(summaryCard).toHaveTextContent("Samir 1");
+    expect(summaryCard).toHaveTextContent("Last game game_h2h_samir_win");
+    expect(summaryCard).not.toHaveTextContent("game_h2h_other");
+  });
+
   it("keeps game row player names plain without signed-in social lookup", async () => {
     const liveGame = summary({
       gameId: "game_profile_plain",
