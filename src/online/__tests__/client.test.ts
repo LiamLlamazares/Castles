@@ -71,6 +71,7 @@ import {
   unfollowOnlineAccount,
   unblockOnlineAccount,
   updateOnlineAccountPrivacy,
+  OnlineRequestError,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../readModel";
@@ -1691,6 +1692,40 @@ describe("online client helpers", () => {
       setup,
       sessionId: expect.any(String),
     });
+  });
+
+  it("preserves structured online challenge creation reject messages", async () => {
+    const setup = snapshot().setup;
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({
+        error: {
+          code: "rate_limited",
+          message: "That account already has a pending challenge from you.",
+        },
+      }),
+    });
+
+    await expect(
+      createOnlineChallenge(
+        setup,
+        { challengerSeat: "w", visibility: "unlisted", challengedDisplayName: "Samir", account: { token: "account-token" } },
+        fetchImpl as any
+      )
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 429,
+      code: "rate_limited",
+      message: "That account already has a pending challenge from you.",
+    });
+    await expect(
+      createOnlineChallenge(
+        setup,
+        { challengerSeat: "w", visibility: "unlisted", challengedDisplayName: "Samir", account: { token: "account-token" } },
+        fetchImpl as any
+      )
+    ).rejects.toBeInstanceOf(OnlineRequestError);
   });
 
   it("rejects malformed quick match responses and token-bearing invite URLs", async () => {

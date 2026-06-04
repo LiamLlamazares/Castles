@@ -88,6 +88,7 @@ import {
   unfollowOnlineAccount,
   updateOnlineAccountPrivacy,
   updateOnlineGameVisibility,
+  OnlineRequestError,
   OnlineChallengeParams,
   OnlineChallengeResponse,
   OnlineChallengeGameInvite,
@@ -1441,11 +1442,15 @@ function App() {
       return { challengedUrl: created.challenged.url };
     } catch (error) {
       console.error("Failed to create online challenge", error);
+      const serverMessage = error instanceof OnlineRequestError ? error.message : null;
       alert(
         options.challengedDisplayName
-          ? `Could not create a challenge for ${options.challengedDisplayName}. They may not accept challenges from this account.`
+          ? serverMessage ?? `Could not create a challenge for ${options.challengedDisplayName}. They may not accept challenges from this account.`
           : "Could not create an online challenge. Make sure the Node server is running."
       );
+      if (options.challengedDisplayName && error instanceof OnlineRequestError) {
+        throw error;
+      }
       return null;
     }
   };

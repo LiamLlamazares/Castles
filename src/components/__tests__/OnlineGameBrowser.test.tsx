@@ -23,6 +23,7 @@ import {
 import { PieceType } from "../../Constants";
 import { ONLINE_RULESET_VERSION } from "../../online/events";
 import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
+import { OnlineRequestError } from "../../online/client";
 
 function summary(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
   const gameId = overrides.gameId ?? "game_public_active";
@@ -1721,6 +1722,38 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
     expect(await within(people).findByText("Could not create a challenge for Samir.")).toBeInTheDocument();
+  });
+
+  it("shows trusted server challenge errors when account challenge creation is throttled", async () => {
+    const onChallengeAccount = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        429,
+        "rate_limited",
+        "That account already has a pending challenge from you."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.click(await within(people).findByRole("button", { name: "Challenge Samir" }));
+
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+    expect(
+      await within(people).findByText("That account already has a pending challenge from you.")
+    ).toBeInTheDocument();
   });
 
   it("shows a copy-invite error when the direct invite handler rejects", async () => {

@@ -55,8 +55,38 @@ import {
   OnlineGameResultDTO,
   OnlineGameSetupDTO,
   OnlineGameSnapshotDTO,
+  type OnlineRejectCode,
 } from "./types";
 import type { OnlinePlayerSettableGameVisibility } from "./visibility";
+
+export class OnlineRequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: OnlineRejectCode,
+    message: string
+  ) {
+    super(message);
+    this.name = "OnlineRequestError";
+  }
+}
+
+const ONLINE_REJECT_CODES = new Set<OnlineRejectCode>([
+  "unauthorized",
+  "stale_action",
+  "wrong_player",
+  "illegal_action",
+  "duplicate_action",
+  "game_over",
+  "not_found",
+  "bad_request",
+  "bad_json",
+  "not_joined",
+  "unknown_message",
+  "not_allowed",
+  "rate_limited",
+  "persistence_failed",
+]);
+const MAX_ONLINE_ERROR_MESSAGE_LENGTH = 240;
 
 export interface OnlineJoinParams {
   gameId: string;
@@ -690,6 +720,34 @@ function validateVersionedObject(body: unknown, label: string): Record<string, u
   return body as Record<string, unknown>;
 }
 
+async function createOnlineRequestError(response: Response, fallbackMessage: string): Promise<Error> {
+  try {
+    const body = await response.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return new Error(fallbackMessage);
+    }
+    const error = (body as { error?: unknown }).error;
+    if (!error || typeof error !== "object" || Array.isArray(error)) {
+      return new Error(fallbackMessage);
+    }
+    const code = (error as { code?: unknown }).code;
+    const message = (error as { message?: unknown }).message;
+    if (
+      typeof code === "string" &&
+      ONLINE_REJECT_CODES.has(code as OnlineRejectCode) &&
+      typeof message === "string" &&
+      message.length > 0 &&
+      message.length <= MAX_ONLINE_ERROR_MESSAGE_LENGTH &&
+      !stringContainsDurableSecret(message)
+    ) {
+      return new OnlineRequestError(response.status, code as OnlineRejectCode, message);
+    }
+  } catch {
+    // Keep the caller's route-specific fallback for non-JSON error responses.
+  }
+  return new Error(fallbackMessage);
+}
+
 function validateOnlineAccountPublicProfile(
   value: unknown,
   label: string
@@ -1278,7 +1336,10 @@ export async function createOnlineChallenge(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not create online challenge (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not create online challenge (${response.status})`
+    );
   }
 
   const body = await response.json();

@@ -6,6 +6,7 @@ import {
   fetchOpenSeekDirectory,
   fetchOnlineGameDirectory,
   formatOnlineGameResult,
+  OnlineRequestError,
   type FetchOnlineAccountGamesOptions,
   type FetchOnlineAccountChallengesOptions,
   type OnlineAccountChallengeDirectoryResponse,
@@ -501,6 +502,10 @@ function formatRelationshipLabel(profile: OnlineAccountPublicProfile): string {
 
 function isProfileOnline(profile: OnlineAccountPublicProfile): boolean {
   return profile.presence.visibility === "visible" && profile.presence.status === "online";
+}
+
+function onlineRequestErrorMessage(error: unknown): string | null {
+  return error instanceof OnlineRequestError ? error.message : null;
 }
 
 function presenceBadgeClassName(profile: OnlineAccountPublicProfile): string {
@@ -2647,11 +2652,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     } catch (error) {
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error("[OnlineGameBrowser] Failed to challenge account", error);
-      setSocialMessage(
+      const serverMessage = onlineRequestErrorMessage(error);
+      setSocialMessage(serverMessage ?? (
         intent === "rematch"
           ? `Could not create a rematch challenge for ${displayName}.`
           : `Could not create a challenge for ${displayName}.`
-      );
+      ));
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
         setSocialAction(undefined);
@@ -2672,7 +2678,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     } catch (error) {
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error("[OnlineGameBrowser] Failed to copy account challenge invite", error);
-      setSocialMessage(`Could not copy a challenge invite for ${displayName}.`);
+      setSocialMessage(onlineRequestErrorMessage(error) ?? `Could not copy a challenge invite for ${displayName}.`);
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
         setSocialAction(undefined);
