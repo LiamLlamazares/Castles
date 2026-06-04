@@ -585,6 +585,48 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada"));
   });
 
+  it("lets signed-in players watch public live games from profile cards", async () => {
+    const onSpectate = vi.fn();
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Ada", {}, { visibility: "visible", status: "online" }),
+    });
+    const liveGame = summary({
+      gameId: "game_profile_watch",
+      participants: [
+        registeredParticipant("w", "Ada"),
+        registeredParticipant("b", "Ben"),
+      ],
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([liveGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={onSpectate}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountProfile={loadAccountProfile}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Ada" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    const profileCard = await within(people).findByRole("article", { name: "Profile Ada" });
+    fireEvent.click(within(profileCard).getByRole("button", {
+      name: "Watch Ada's live game from profile Ada vs Ben, game_profile_watch",
+    }));
+
+    expect(onSpectate).toHaveBeenCalledWith("game_profile_watch");
+  });
+
   it("lets signed-in players watch followed players who are in public live games", async () => {
     const onSpectate = vi.fn();
     const followedLiveGame = summary({

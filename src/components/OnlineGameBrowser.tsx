@@ -1494,6 +1494,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
     return liveGames;
   }, [followedDisplayNames, publicActiveGames]);
+  const liveGameByRegisteredDisplayName = React.useMemo(() => {
+    const liveGames = new Map<string, OnlineGameSummary>();
+    for (const game of publicActiveGames) {
+      for (const participant of game.participants) {
+        const displayName = identityDisplayName(participant.identity);
+        if (!displayName) continue;
+        const key = normalizeDisplayNameKey(displayName);
+        if (liveGames.has(key)) continue;
+        liveGames.set(key, game);
+      }
+    }
+    return liveGames;
+  }, [publicActiveGames]);
 
   const visibleGames = React.useMemo(() => {
     const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
@@ -2479,6 +2492,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     socialAction !== "privacy" &&
     challengePolicyDraft !== challengePolicy;
   const privacyControlDisabled = privacyStatus !== "ready" || socialAction === "privacy";
+  const socialProfileKey = socialProfile ? normalizeDisplayNameKey(socialProfile.displayName) : null;
+  const socialProfileLiveGame = socialProfileKey ? liveGameByRegisteredDisplayName.get(socialProfileKey) ?? null : null;
+  const socialProfileLiveGameWhite = socialProfileLiveGame
+    ? participantName(socialProfileLiveGame.participants, "w")
+    : "";
+  const socialProfileLiveGameBlack = socialProfileLiveGame
+    ? participantName(socialProfileLiveGame.participants, "b")
+    : "";
 
   return (
     <div className="online-browser-page">
@@ -2977,6 +2998,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     </button>
                   ) : (
                     <>
+                      {socialProfileLiveGame && (
+                        <button
+                          type="button"
+                          className="online-browser-button primary"
+                          onClick={() => onSpectate(socialProfileLiveGame.gameId)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Watch ${socialProfile.displayName}'s live game from profile ${socialProfileLiveGameWhite} vs ${socialProfileLiveGameBlack}, ${socialProfileLiveGame.gameId}`}
+                        >
+                          Watch
+                        </button>
+                      )}
                       {onChallengeAccount && (
                         <button
                           type="button"
