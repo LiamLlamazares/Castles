@@ -48,6 +48,7 @@ import {
   fetchOnlineAccountChallenges,
   fetchOnlineAccountGameSnapshot,
   fetchOnlineAccountGames,
+  fetchOnlineAccountHeadToHeadGames,
   fetchOnlineAccountFollowing,
   fetchOnlineAccountMe,
   fetchOnlineAccountPrivacy,
@@ -1260,6 +1261,16 @@ function App() {
       throw new Error("No online account session is available.");
     }
     return fetchOnlineAccountGames({ token: onlineAccountSession.token }, options);
+  }, [onlineAccountSession?.token]);
+
+  const handleLoadOnlineAccountHeadToHeadGames = useCallback((
+    displayName: string,
+    options?: Omit<FetchOnlineAccountGamesOptions, "state">
+  ) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineAccountHeadToHeadGames({ token: onlineAccountSession.token }, displayName, options);
   }, [onlineAccountSession?.token]);
 
   const handleLoadOnlineAccountChallenges = useCallback((options?: FetchOnlineAccountChallengesOptions) => {
@@ -2537,6 +2548,7 @@ function App() {
           onSignOutAllAccountSessions={onlineAccountSession ? handleSignOutAllOnlineAccountSessions : undefined}
           onDeleteAccount={onlineAccountSession ? handleDeleteOnlineAccount : undefined}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
+          loadAccountHeadToHeadGames={onlineAccountSession ? handleLoadOnlineAccountHeadToHeadGames : undefined}
           loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
           onAcceptAccountChallenge={onlineAccountSession ? handleAcceptOnlineAccountChallenge : undefined}
           onDeclineAccountChallenge={onlineAccountSession ? handleDeclineOnlineAccountChallenge : undefined}

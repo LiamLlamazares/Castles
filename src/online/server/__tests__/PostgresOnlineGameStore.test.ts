@@ -330,7 +330,7 @@ class FakePostgresClient {
         const identityId = identityFilter?.participants?.[0]?.identity?.id;
         rows = rows.filter((row) => {
           const payload = row.payload as {
-            participants?: Array<{ identity?: { kind?: string; id?: string } }>;
+            participants?: Array<{ seat?: string; identity?: { kind?: string; id?: string; displayName?: string } }>;
           };
           return payload.participants?.some(
             (participant) =>
@@ -338,6 +338,29 @@ class FakePostgresClient {
               participant.identity?.id === identityId
           );
         });
+        if (/jsonb_array_elements/i.test(text)) {
+          const accountIdentity = values?.[1] as { kind?: string; id?: string } | undefined;
+          const opponentDisplayNameKey = values?.[2] as string | undefined;
+          rows = rows.filter((row) => {
+            const payload = row.payload as {
+              participants?: Array<{ seat?: string; identity?: { kind?: string; id?: string; displayName?: string } }>;
+            };
+            const accountParticipant = payload.participants?.find(
+              (participant) =>
+                participant.identity?.kind === accountIdentity?.kind &&
+                participant.identity?.id === accountIdentity?.id
+            );
+            return (
+              !!accountParticipant &&
+              payload.participants?.some(
+                (participant) =>
+                  participant.seat !== accountParticipant.seat &&
+                  participant.identity?.kind === "registered" &&
+                  participant.identity.displayName?.trim().toLowerCase() === opponentDisplayNameKey
+              )
+            );
+          });
+        }
         if (/status\s*=\s*'active'/i.test(text)) {
           rows = rows.filter((row) => (row.payload as { status?: string }).status === "active");
         }
@@ -345,8 +368,9 @@ class FakePostgresClient {
           rows = rows.filter((row) => (row.payload as { archiveState?: string }).archiveState === "archived");
         }
         if (/updated_at\s*</i.test(text)) {
-          const cursorUpdatedAt = values?.[1] as string;
-          const cursorGameId = values?.[2] as string;
+          const cursorStartIndex = /jsonb_array_elements/i.test(text) ? 3 : 1;
+          const cursorUpdatedAt = values?.[cursorStartIndex] as string;
+          const cursorGameId = values?.[cursorStartIndex + 1] as string;
           rows = rows.filter((row) => {
             const payload = row.payload as { updatedAt?: string; gameId?: string };
             return (
@@ -2447,6 +2471,82 @@ describe("PostgresOnlineGameStore", () => {
       "game_older_archived_me",
     ]);
     expect(secondPage.nextCursor).toBeUndefined();
+  });
+
+  it("filters personal game summaries by registered opponent before pagination", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const identity = { kind: "registered", id: "user_me", displayName: "Me" } as const;
+    const samir = { kind: "registered", id: "user_samir", displayName: "Samir" } as const;
+    const ben = { kind: "registered", id: "user_ben", displayName: "Ben" } as const;
+    client.summaryRows = [
+      {
+        payload: createSummary("game_newer_ben", {
+          status: "complete",
+          archiveState: "archived",
+          endedAt: "2026-05-31T12:00:05.000Z",
+          updatedAt: "2026-05-31T12:00:05.000Z",
+          result: { winner: "w", reason: "resignation" },
+          participants: [
+            { seat: "w", role: "white", identity },
+            { seat: "b", role: "black", identity: ben },
+          ],
+        }),
+      },
+      {
+        payload: createSummary("game_middle_samir", {
+          status: "complete",
+          archiveState: "archived",
+          endedAt: "2026-05-31T12:00:04.000Z",
+          updatedAt: "2026-05-31T12:00:04.000Z",
+          result: { winner: "w", reason: "resignation" },
+          participants: [
+            { seat: "w", role: "white", identity },
+            { seat: "b", role: "black", identity: samir },
+          ],
+        }),
+      },
+      {
+        payload: createSummary("game_older_samir", {
+          status: "complete",
+          archiveState: "archived",
+          endedAt: "2026-05-31T12:00:03.000Z",
+          updatedAt: "2026-05-31T12:00:03.000Z",
+          result: { winner: "b", reason: "timeout" },
+          participants: [
+            { seat: "w", role: "white", identity: samir },
+            { seat: "b", role: "black", identity },
+          ],
+        }),
+      },
+    ];
+
+    const firstPage = await store.listPersonalGameSummaries({
+      identity,
+      state: "archived",
+      opponentDisplayNameKey: "samir",
+      limit: 1,
+    });
+
+    expect(firstPage.games.map((summary) => summary.gameId)).toEqual(["game_middle_samir"]);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const secondPage = await store.listPersonalGameSummaries({
+      identity,
+      state: "archived",
+      opponentDisplayNameKey: "samir",
+      limit: 10,
+      cursor: firstPage.nextCursor,
+    });
+
+    expect(secondPage.games.map((summary) => summary.gameId)).toEqual(["game_older_samir"]);
+    expect(
+      client.queries.some(
+        (query) =>
+          /jsonb_array_elements/i.test(query.text) &&
+          /displayName/i.test(query.text)
+      )
+    ).toBe(true);
   });
 
   it("loads a single materialized game summary without replaying events", async () => {

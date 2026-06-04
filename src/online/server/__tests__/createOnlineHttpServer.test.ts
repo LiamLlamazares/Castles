@@ -1397,6 +1397,94 @@ describe("createOnlineHttpServer", () => {
     expect(missingAuthResponse.status).toBe(401);
   });
 
+  it("lists account head-to-head history for a registered opponent before pagination", async () => {
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    let samirIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    let benIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const completeGame = (
+      gameId: string,
+      participants: OnlineGameSummary["participants"],
+      updatedAt: string
+    ): OnlineGameSummary => ({
+      ...summaryForGame(gameId, "private"),
+      updatedAt,
+      endedAt: updatedAt,
+      status: "complete",
+      archiveState: "archived",
+      result: { winner: "w", reason: "resignation" },
+      participants,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      loadGameSummaries: () => {
+        if (!liamIdentity || !samirIdentity || !benIdentity) return [];
+        return [
+          completeGame(
+            "game_liam_ben_newer",
+            [
+              { seat: "w", role: "white", identity: liamIdentity },
+              { seat: "b", role: "black", identity: benIdentity },
+            ],
+            "2026-06-01T12:05:00.000Z"
+          ),
+          completeGame(
+            "game_liam_samir_middle",
+            [
+              { seat: "w", role: "white", identity: liamIdentity },
+              { seat: "b", role: "black", identity: samirIdentity },
+            ],
+            "2026-06-01T12:04:00.000Z"
+          ),
+          completeGame(
+            "game_samir_liam_older",
+            [
+              { seat: "w", role: "white", identity: samirIdentity },
+              { seat: "b", role: "black", identity: liamIdentity },
+            ],
+            "2026-06-01T12:03:00.000Z"
+          ),
+        ];
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const ben = await createAccountViaApi(port, "Ben");
+    liamIdentity = liam.account.identity;
+    samirIdentity = samir.account.identity;
+    benIdentity = ben.account.identity;
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/head-to-head/Samir?limit=1`,
+      { headers: bearer(liam.session.token) }
+    );
+    const page = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(page.games.map((summary: OnlineGameSummary) => summary.gameId)).toEqual([
+      "game_liam_samir_middle",
+    ]);
+    expect(page.nextCursor).toEqual(expect.any(String));
+
+    const secondResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/head-to-head/Samir?cursor=${encodeURIComponent(page.nextCursor)}`,
+      { headers: bearer(liam.session.token) }
+    );
+    const secondPage = await secondResponse.json();
+
+    expect(secondResponse.status).toBe(200);
+    expect(secondPage.games.map((summary: OnlineGameSummary) => summary.gameId)).toEqual([
+      "game_samir_liam_older",
+    ]);
+
+    const missingAuthResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/head-to-head/Samir`
+    );
+    expect(missingAuthResponse.status).toBe(401);
+  });
+
   it("serves account-authorized snapshots for private participant games only", async () => {
     let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
     let samirIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;

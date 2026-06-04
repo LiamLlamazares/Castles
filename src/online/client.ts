@@ -1882,6 +1882,40 @@ export async function fetchOnlineAccountGames(
   return validation.value;
 }
 
+function buildOnlineAccountHeadToHeadGamesPath(
+  displayName: string,
+  options: Omit<FetchOnlineAccountGamesOptions, "state"> = {}
+): string {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
+  const query = params.toString();
+  const path = `/api/online/account/games/head-to-head/${encodeURIComponent(displayName)}`;
+  return query ? `${path}?${query}` : path;
+}
+
+export async function fetchOnlineAccountHeadToHeadGames(
+  account: OnlineAccountSessionParams,
+  displayName: string,
+  options: Omit<FetchOnlineAccountGamesOptions, "state"> = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineGameDirectoryResponse> {
+  const response = await fetchImpl(buildOnlineAccountHeadToHeadGamesPath(displayName, options), {
+    headers: accountAuthorizationHeader(account),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch online account head-to-head games (${response.status})`);
+  }
+
+  const body = await response.json();
+  const validation = validateOnlineGameDirectoryResponse(body);
+  if (!validation.ok) {
+    throw new Error(`Online account head-to-head history response was malformed: ${validation.error.message}`);
+  }
+  return validation.value;
+}
+
 export async function fetchOnlineAccountGameSnapshot(
   account: OnlineAccountSessionParams,
   gameId: string,

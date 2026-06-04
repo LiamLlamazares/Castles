@@ -2257,7 +2257,8 @@ describe("OnlineGameBrowser", () => {
       ],
       result: { winner: "w", reason: "resignation" },
     });
-    const loadAccountGames = vi.fn().mockResolvedValue(directory([liamWin, samirWin, otherOpponent]));
+    const loadAccountGames = vi.fn().mockResolvedValue(directory([otherOpponent]));
+    const loadAccountHeadToHeadGames = vi.fn().mockResolvedValue(directory([liamWin, samirWin]));
 
     render(
       <OnlineGameBrowser
@@ -2273,6 +2274,7 @@ describe("OnlineGameBrowser", () => {
           publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" }),
         ])}
         loadAccountGames={loadAccountGames}
+        loadAccountHeadToHeadGames={loadAccountHeadToHeadGames}
       />
     );
 
@@ -2282,11 +2284,17 @@ describe("OnlineGameBrowser", () => {
     }));
 
     const summaryCard = await screen.findByRole("region", { name: "Head-to-head with Samir" });
+    expect(loadAccountHeadToHeadGames).toHaveBeenCalledWith("Samir", { limit: 100 });
     expect(summaryCard).toHaveTextContent("2 games");
     expect(summaryCard).toHaveTextContent("Liam 1");
     expect(summaryCard).toHaveTextContent("Samir 1");
     expect(summaryCard).toHaveTextContent("Last game game_h2h_samir_win");
     expect(summaryCard).not.toHaveTextContent("game_h2h_other");
+
+    const pairGames = screen.getByRole("region", { name: "Head-to-head games with Samir" });
+    expect(within(pairGames).getByText("game_h2h_samir_win")).toBeInTheDocument();
+    expect(within(pairGames).getByText("game_h2h_liam_win")).toBeInTheDocument();
+    expect(within(pairGames).queryByText("game_h2h_other")).not.toBeInTheDocument();
   });
 
   it("keeps game row player names plain without signed-in social lookup", async () => {

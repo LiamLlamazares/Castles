@@ -18,6 +18,7 @@ import {
   declineOnlineChallenge,
   declineOnlineAccountChallenge,
   fetchOnlineAccountChallenges,
+  fetchOnlineAccountHeadToHeadGames,
   fetchOnlineChallenge,
   fetchOnlineAccountFollowing,
   fetchOnlineAccountGames,
@@ -694,6 +695,27 @@ describe("online client helpers", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
+          schemaVersion: 1,
+          games: [
+            publicSummary({
+              gameId: "game_liam_samir",
+              visibility: "private",
+              updatedAt: "2026-06-01T12:03:00.000Z",
+              status: "complete",
+              archiveState: "archived",
+              endedAt: "2026-06-01T12:03:00.000Z",
+              participants: [
+                { seat: "w", role: "white", identity: account.identity },
+                { seat: "b", role: "black", identity: { kind: "registered", id: "account_samir", displayName: "Samir" } },
+              ],
+              result: { winner: "w", reason: "resignation" },
+            }),
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
           protocolVersion: ONLINE_PROTOCOL_VERSION,
           gameInvite: {
             gameId: "game_account_rejoin",
@@ -726,6 +748,16 @@ describe("online client helpers", () => {
       )
     ).resolves.toMatchObject({
       games: [{ visibility: "private" }],
+    });
+    await expect(
+      fetchOnlineAccountHeadToHeadGames(
+        { token: "account-token" },
+        "Samir",
+        { limit: 10, cursor: "cursor_456" },
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      games: [{ gameId: "game_liam_samir" }],
     });
     await expect(
       rejoinOnlineAccountGame(
@@ -764,11 +796,16 @@ describe("online client helpers", () => {
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       4,
+      "/api/online/account/games/head-to-head/Samir?limit=10&cursor=cursor_456",
+      { headers: { authorization: "Bearer account-token" } }
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      5,
       "/api/online/account/games/game_account_rejoin/rejoin",
       { method: "POST", headers: { authorization: "Bearer account-token" } }
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
-      5,
+      6,
       "/api/online/account/session",
       { method: "DELETE", headers: { authorization: "Bearer account-token" } }
     );

@@ -52,6 +52,7 @@ import {
   ONLINE_GAME_DIRECTORY_STATES,
   normalizeOnlineGameDirectorySearchQuery,
   onlineGameSummaryMatchesDirectoryFilters,
+  onlineGameSummaryMatchesPersonalDirectoryFilters,
   type OnlineGameDirectoryClockFilter,
   type OnlineGameDirectoryListOptions,
   type OnlinePersonalGameDirectoryListOptions,
@@ -452,6 +453,60 @@ function parsePersonalDirectoryOptions(
   };
 }
 
+function parseAccountHeadToHeadDirectoryOptions(
+  originalUrl: string,
+  identity: OnlineIdentity,
+  opponentDisplayNameKey: string
+):
+  | { ok: true; options: OnlinePersonalGameDirectoryListOptions }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Head-to-head history query is invalid." };
+  }
+
+  for (const name of ["limit", "cursor"]) {
+    if (url.searchParams.getAll(name).length > 1) {
+      return { ok: false, message: "Head-to-head history query is invalid." };
+    }
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "limit" && name !== "cursor") {
+      return { ok: false, message: "Head-to-head history query is invalid." };
+    }
+  }
+
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > ONLINE_GAME_DIRECTORY_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Head-to-head history limit is invalid." };
+  }
+
+  const cursor = getSingleSearchParam(url.searchParams, "cursor") ?? undefined;
+  if (cursor) {
+    const decoded = decodeOnlineGameDirectoryCursor(cursor);
+    if (!decoded.ok) {
+      return { ok: false, message: "Head-to-head history cursor is invalid." };
+    }
+  }
+
+  return {
+    ok: true,
+    options: {
+      identity,
+      state: "archived",
+      limit,
+      cursor,
+      opponentDisplayNameKey,
+    },
+  };
+}
+
 function parseAccountChallengeDirectoryOptions(
   originalUrl: string
 ): { ok: true; state: OnlineAccountChallengeDirectoryState } | { ok: false; message: string } {
@@ -584,23 +639,13 @@ function paginateDirectorySummaries(
   };
 }
 
-function personalGameSummaryMatchesDirectoryFilters(
-  summary: OnlineGameSummary,
-  options: OnlinePersonalGameDirectoryListOptions
-): boolean {
-  if (options.state !== "all" && summary.archiveState !== options.state) return false;
-  return summary.participants.some((participant) =>
-    isSameOnlineIdentity(participant.identity, options.identity)
-  );
-}
-
 function paginatePersonalDirectorySummaries(
   summaries: OnlineGameSummary[],
   options: OnlinePersonalGameDirectoryListOptions
 ): OnlineGameDirectoryResponse {
   const filtered = applyDirectoryCursor(
     summaries
-      .filter((summary) => personalGameSummaryMatchesDirectoryFilters(summary, options))
+      .filter((summary) => onlineGameSummaryMatchesPersonalDirectoryFilters(summary, options))
       .sort(compareDirectorySummaries),
     options.cursor
   );
@@ -1437,7 +1482,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
       if (
         validation.value.games.some(
-          (summary) => !personalGameSummaryMatchesDirectoryFilters(summary, directoryOptions)
+          (summary) => !onlineGameSummaryMatchesPersonalDirectoryFilters(summary, directoryOptions)
         )
       ) {
         throw new Error("Personal history returned a game for a different identity.");
@@ -3386,6 +3431,46 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       console.error("Failed to load account game history", error);
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account game history could not be loaded." },
+      });
+    }
+  });
+
+  app.get("/api/online/account/games/head-to-head/:displayName", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Profile display name is invalid." },
+      });
+      return;
+    }
+    const parsed = parseAccountHeadToHeadDirectoryOptions(
+      req.originalUrl,
+      auth.account.identity,
+      normalizeOnlineAccountDisplayNameKey(displayName)
+    );
+    if (!parsed.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: parsed.message },
+      });
+      return;
+    }
+    try {
+      res.json(await listPersonalGameDirectory(parsed.options));
+    } catch (error) {
+      console.error("Failed to load account head-to-head history", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Head-to-head history could not be loaded." },
       });
     }
   });

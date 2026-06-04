@@ -19,9 +19,11 @@ import {
 } from "./accessPolicy";
 import { stringContainsDurableSecret } from "./secretSafety";
 import {
+  isSameOnlineIdentity,
   validateOnlineIdentity,
   type OnlineIdentity,
 } from "./identity";
+import { normalizeOnlineAccountDisplayNameKey } from "./accounts";
 import { PieceType, type Color, type MoveRecord, type TurnPhase } from "../Constants";
 import type { CastleDTO, OnlineClockStateDTO, PieceDTO } from "./types";
 
@@ -142,6 +144,7 @@ export interface OnlinePersonalGameDirectoryListOptions {
   state: OnlineGameDirectoryState;
   limit: number;
   cursor?: string;
+  opponentDisplayNameKey?: string;
 }
 
 export interface OnlineGameDirectoryResponse {
@@ -352,6 +355,33 @@ export function onlineGameSummaryMatchesDirectoryFilters(
     return false;
   }
   return true;
+}
+
+export function onlineGameSummaryMatchesPersonalDirectoryFilters(
+  summary: OnlineGameSummary,
+  options: OnlinePersonalGameDirectoryListOptions
+): boolean {
+  if (options.state === "active" && summary.status !== "active") return false;
+  if (
+    options.state === "archived" &&
+    (summary.status !== "complete" || summary.archiveState !== "archived")
+  ) {
+    return false;
+  }
+  const accountParticipant = summary.participants.find((participant) =>
+    isSameOnlineIdentity(participant.identity, options.identity)
+  );
+  if (!accountParticipant) return false;
+  if (!options.opponentDisplayNameKey) return true;
+  return summary.participants.some((participant) => {
+    if (participant.seat === accountParticipant.seat) return false;
+    const identity = participant.identity;
+    return (
+      identity.kind === "registered" &&
+      typeof identity.displayName === "string" &&
+      normalizeOnlineAccountDisplayNameKey(identity.displayName) === options.opponentDisplayNameKey
+    );
+  });
 }
 
 export function normalizeOnlineGameDirectorySearchQuery(value: string): string | null {

@@ -141,6 +141,10 @@ interface OnlineGameBrowserProps {
   onSignOutAllAccountSessions?: () => void | Promise<void>;
   onDeleteAccount?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
+  loadAccountHeadToHeadGames?: (
+    displayName: string,
+    options?: Omit<FetchOnlineAccountGamesOptions, "state">
+  ) => Promise<OnlineGameDirectoryResponse>;
   loadAccountChallenges?: (options?: FetchOnlineAccountChallengesOptions) => Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>;
   onAcceptAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
   onDeclineAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
@@ -838,6 +842,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onSignOutAllAccountSessions,
   onDeleteAccount,
   loadAccountGames,
+  loadAccountHeadToHeadGames,
   loadAccountChallenges,
   onAcceptAccountChallenge,
   onDeclineAccountChallenge,
@@ -891,6 +896,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountGames, setAccountGames] = React.useState<OnlineGameSummary[]>([]);
   const [accountGamesStatus, setAccountGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [headToHeadDisplayName, setHeadToHeadDisplayName] = React.useState("");
+  const [headToHeadGames, setHeadToHeadGames] = React.useState<OnlineGameSummary[]>([]);
+  const [headToHeadGamesStatus, setHeadToHeadGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallenges, setAccountChallenges] = React.useState<OnlineAccountChallengeListItem[]>([]);
   const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallengeActionById, setAccountChallengeActionById] = React.useState<Record<string, "accept" | "decline" | "cancel" | undefined>>({});
@@ -921,6 +929,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
   const accountGamesRequestIdRef = React.useRef(0);
+  const headToHeadGamesRequestIdRef = React.useRef(0);
   const accountChallengesRequestIdRef = React.useRef(0);
   const accountSessionsRequestIdRef = React.useRef(0);
   const accountFollowingRequestIdRef = React.useRef(0);
@@ -1808,6 +1817,37 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     };
   }, [account?.accountId, loadAccountGames, tab]);
 
+  const activeHeadToHeadDisplayName = React.useMemo(() => {
+    const displayName = headToHeadDisplayName.trim();
+    if (!displayName) return "";
+    return normalizeDisplayNameKey(displayName) === normalizeDisplayNameKey(query) ? displayName : "";
+  }, [headToHeadDisplayName, query]);
+
+  React.useEffect(() => {
+    if (tab !== "archive" || !account || !loadAccountHeadToHeadGames || !activeHeadToHeadDisplayName) {
+      setHeadToHeadGames([]);
+      setHeadToHeadGamesStatus("idle");
+      return;
+    }
+
+    const requestId = ++headToHeadGamesRequestIdRef.current;
+    setHeadToHeadGamesStatus("loading");
+    loadAccountHeadToHeadGames(activeHeadToHeadDisplayName, { limit: 100 })
+      .then((response) => {
+        if (requestId !== headToHeadGamesRequestIdRef.current) return;
+        setHeadToHeadGames(response.games);
+        setHeadToHeadGamesStatus("ready");
+      })
+      .catch(() => {
+        if (requestId !== headToHeadGamesRequestIdRef.current) return;
+        setHeadToHeadGamesStatus("error");
+      });
+
+    return () => {
+      headToHeadGamesRequestIdRef.current += 1;
+    };
+  }, [account?.accountId, activeHeadToHeadDisplayName, loadAccountHeadToHeadGames, tab]);
+
   const accountActiveGames = React.useMemo(() => {
     if (tab !== "archive") return [];
     const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
@@ -1839,14 +1879,23 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [accountGames, followedDisplayNames, friendFilterActive, publicGames, query, resultFilter, sort, tab, timeFilter]);
 
   const accountHeadToHeadSummary = React.useMemo<AccountHeadToHeadSummary | null>(() => {
-    if (tab !== "archive" || !account || accountGamesStatus !== "ready") return null;
+    const hasDedicatedHeadToHeadGames =
+      !!activeHeadToHeadDisplayName && headToHeadGamesStatus === "ready";
+    if (
+      tab !== "archive" ||
+      !account ||
+      (!hasDedicatedHeadToHeadGames && accountGamesStatus !== "ready")
+    ) {
+      return null;
+    }
     const opponentKey = normalizeDisplayNameKey(query);
     if (!opponentKey) return null;
+    const sourceGames = hasDedicatedHeadToHeadGames ? headToHeadGames : accountGames;
     const games: OnlineGameSummary[] = [];
     let opponentDisplayName = query.trim();
     let accountWins = 0;
     let opponentWins = 0;
-    for (const game of accountGames) {
+    for (const game of sourceGames) {
       const match = accountCompletedGameForOpponent(game, account, opponentKey);
       if (!match) continue;
       opponentDisplayName = match.opponentDisplayName;
@@ -1860,7 +1909,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (games.length === 0) return null;
     const [latestGame] = [...games].sort(compareLatestCompletedGame);
     return { opponentDisplayName, games, accountWins, opponentWins, latestGame };
-  }, [account, accountGames, accountGamesStatus, query, tab]);
+  }, [
+    account,
+    accountGames,
+    accountGamesStatus,
+    activeHeadToHeadDisplayName,
+    headToHeadGames,
+    headToHeadGamesStatus,
+    query,
+    tab,
+  ]);
 
   const visibleOpenSeeks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -2804,6 +2862,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setTimeFilter("all");
     setResultFilter("all");
     setFriendFilter("all");
+    setHeadToHeadDisplayName(trimmedDisplayName);
     setCopyMessage("");
     setRecentClearMessage("");
     setSocialMessage(`Showing visible games with ${trimmedDisplayName}.`);
@@ -4543,7 +4602,27 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   Active and completed private, unlisted, and public games played as {account.displayName} appear here. Active games can return to play only when this browser session still has the saved player token.
                 </p>
                 {accountHeadToHeadSummary && renderAccountHeadToHeadSummary(accountHeadToHeadSummary)}
-                {accountGamesStatus === "error" ? (
+                {accountHeadToHeadSummary && (
+                  <section
+                    className="online-browser-account-subsection"
+                    aria-label={`Head-to-head games with ${accountHeadToHeadSummary.opponentDisplayName}`}
+                  >
+                    <div className="online-browser-side-list-header">
+                      <div className="online-browser-side-list-heading">
+                        <span className="online-browser-section-kicker">Pair history</span>
+                        <strong>Head-to-head games</strong>
+                      </div>
+                      <span>{formatCount(accountHeadToHeadSummary.games.length, "game")}</span>
+                    </div>
+                    {[...accountHeadToHeadSummary.games]
+                      .sort(compareLatestCompletedGame)
+                      .slice(0, 5)
+                      .map((game) =>
+                        renderPublicGameRow(game, { context: "archive", showOpponentSocialActions: true })
+                      )}
+                  </section>
+                )}
+                {accountGamesStatus === "error" && !accountHeadToHeadSummary ? (
                   <div className="online-browser-empty online-browser-empty-compact">
                     <h2>Account games are unavailable.</h2>
                     <p>Refresh your account archive to try again.</p>

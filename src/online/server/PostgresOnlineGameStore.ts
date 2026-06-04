@@ -32,6 +32,7 @@ import {
   OnlineGameSummary,
   decodeOnlineGameDirectoryCursor,
   encodeOnlineGameDirectoryCursor,
+  onlineGameSummaryMatchesPersonalDirectoryFilters,
   projectOnlineGameSummaries,
   stripOnlineGameSummaryResponseOnlyFields,
   validateOnlineIdentity,
@@ -293,6 +294,28 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     };
     const where: string[] = ["payload @> $1::jsonb"];
     const values: unknown[] = [identityFilter];
+    if (options.opponentDisplayNameKey) {
+      const accountIdentityParam = values.length + 1;
+      const opponentDisplayNameParam = values.length + 2;
+      values.push(
+        {
+          kind: identity.value.kind,
+          id: identity.value.id,
+        },
+        options.opponentDisplayNameKey
+      );
+      where.push(
+        `EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(payload->'participants') AS account_participant
+          CROSS JOIN jsonb_array_elements(payload->'participants') AS opponent_participant
+          WHERE account_participant->'identity' @> $${accountIdentityParam}::jsonb
+            AND opponent_participant->>'seat' <> account_participant->>'seat'
+            AND opponent_participant->'identity'->>'kind' = 'registered'
+            AND lower(opponent_participant->'identity'->>'displayName') = $${opponentDisplayNameParam}
+        )`
+      );
+    }
     if (options.state === "active") {
       where.push("status = 'active'");
     } else if (options.state === "archived") {
@@ -333,6 +356,9 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       }
       return validation.value;
     });
+    if (summaries.some((summary) => !onlineGameSummaryMatchesPersonalDirectoryFilters(summary, options))) {
+      throw new Error("Personal online game summary query returned an unauthorized row.");
+    }
     const games = summaries.slice(0, options.limit);
     const nextCursor =
       summaries.length > options.limit && games.length > 0
