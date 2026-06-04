@@ -20,7 +20,9 @@ import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
 import {
   createChallengeAcceptedEvent,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+  projectOnlineChallengeSummaries,
   type AuthenticatedOnlineIdentity,
+  type OnlineChallengeEvent,
   type OnlineChallengeVisibility,
   type OnlineChallengeSummary,
 } from "../../challenges";
@@ -3192,6 +3194,192 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("rate limits repeat targeted account challenges while one is pending", async () => {
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(dani.session.token),
+    });
+
+    const createTargetedChallenge = async (challengedDisplayName: string) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName,
+        }),
+      });
+      return {
+        response,
+        body: await response.json(),
+      };
+    };
+
+    const first = await createTargetedChallenge("Samir");
+    const repeat = await createTargetedChallenge("Samir");
+    now += 61_000;
+    const stillPending = await createTargetedChallenge("Samir");
+    const otherTarget = await createTargetedChallenge("Dani");
+
+    expect(first.response.status).toBe(201);
+    expect(repeat.response.status).toBe(429);
+    expect(repeat.body).toMatchObject({
+      error: { code: "rate_limited" },
+    });
+    expect(repeat.body.error.message).toContain("already has a pending challenge");
+    expect(stillPending.response.status).toBe(429);
+    expect(otherTarget.response.status).toBe(201);
+  });
+
+  it("serializes concurrent targeted account challenge pair checks", async () => {
+    const challengeEvents: OnlineChallengeEvent[] = [];
+    let appendCount = 0;
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      loadChallengeSummaries: () => projectOnlineChallengeSummaries(challengeEvents),
+      appendChallengeCreated: async (event) => {
+        appendCount += 1;
+        if (appendCount === 1) {
+          await delay(25);
+        }
+        challengeEvents.push(event);
+        const summary = projectOnlineChallengeSummaries(challengeEvents).find(
+          (candidate) => candidate.challengeId === event.challengeId
+        );
+        if (!summary) throw new Error("Missing projected challenge summary.");
+        return summary;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createTargetedChallenge = async () => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName: "Samir",
+        }),
+      });
+      return {
+        response,
+        body: await response.json(),
+      };
+    };
+
+    const results = await Promise.all([
+      createTargetedChallenge(),
+      createTargetedChallenge(),
+    ]);
+    const statuses = results.map((result) => result.response.status).sort();
+
+    expect(statuses).toEqual([201, 429]);
+    expect(appendCount).toBe(1);
+    expect(challengeEvents).toHaveLength(1);
+    expect(results.find((result) => result.response.status === 429)?.body).toMatchObject({
+      error: { code: "rate_limited" },
+    });
+  });
+
+  it.each(["declined", "cancelled", "expired"] as const)(
+    "rate limits repeat targeted account challenges shortly after one is %s",
+    async (terminalStatus) => {
+      let now = Date.parse("2026-06-01T12:00:00.000Z");
+      const { server } = createOnlineHttpServer({
+        publicBaseUrl: "https://castles.example/play",
+        now: () => now,
+      });
+      servers.push(server);
+      const port = await listen(server);
+      const setup = createSetup();
+      const liam = await createAccountViaApi(port, "Liam");
+      const samir = await createAccountViaApi(port, "Samir");
+
+      await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+        method: "PUT",
+        headers: bearer(samir.session.token),
+      });
+
+      const createTargetedChallenge = async () => {
+        const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+          body: JSON.stringify({
+            setup,
+            challengerSeat: "w",
+            visibility: "unlisted",
+            challengedDisplayName: "Samir",
+            expiresInMs: terminalStatus === "expired" ? 300_000 : undefined,
+          }),
+        });
+        return {
+          response,
+          body: await response.json(),
+        };
+      };
+
+      const created = await createTargetedChallenge();
+      expect(created.response.status).toBe(201);
+
+      if (terminalStatus === "declined") {
+        const declineResponse = await fetch(
+          `http://127.0.0.1:${port}/api/online/account/challenges/${created.body.challengeId}/decline`,
+          { method: "POST", headers: bearer(samir.session.token) }
+        );
+        expect(declineResponse.status).toBe(200);
+      } else if (terminalStatus === "cancelled") {
+        const cancelResponse = await fetch(
+          `http://127.0.0.1:${port}/api/online/account/challenges/${created.body.challengeId}/cancel`,
+          { method: "POST", headers: bearer(liam.session.token) }
+        );
+        expect(cancelResponse.status).toBe(200);
+      } else {
+        now += 301_000;
+      }
+
+      const tooSoon = await createTargetedChallenge();
+      now += 61_000;
+      const afterCooldown = await createTargetedChallenge();
+
+      expect(tooSoon.response.status).toBe(429);
+      expect(tooSoon.body).toMatchObject({
+        error: { code: "rate_limited" },
+      });
+      expect(tooSoon.body.error.message).toContain("Please wait before challenging that account again");
+      expect(afterCooldown.response.status).toBe(201);
+    }
+  );
+
   it("lists account challenge directories by authenticated account identity", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
@@ -3281,9 +3469,10 @@ describe("createOnlineHttpServer", () => {
   });
 
   it("lets accounts accept, decline, and cancel their own challenges without challenge tokens", async () => {
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
-      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      now: () => now,
     });
     servers.push(server);
     const port = await listen(server);
@@ -3335,6 +3524,7 @@ describe("createOnlineHttpServer", () => {
     );
     const declined = await declineResponse.json();
 
+    now += 61_000;
     const cancelledChallenge = await createChallenge();
     const wrongSideCancelResponse = await fetch(
       `http://127.0.0.1:${port}/api/online/account/challenges/${cancelledChallenge.challengeId}/cancel`,

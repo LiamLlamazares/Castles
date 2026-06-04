@@ -173,6 +173,7 @@ const DEFAULT_HEALTH_READINESS_TIMEOUT_MS = 1_500;
 const DEFAULT_CHALLENGE_EXPIRES_IN_MS = 24 * 60 * 60 * 1000;
 const MIN_CHALLENGE_EXPIRES_IN_MS = 5 * 60 * 1000;
 const MAX_CHALLENGE_EXPIRES_IN_MS = 7 * 24 * 60 * 60 * 1000;
+const ACCOUNT_CHALLENGE_PAIR_COOLDOWN_MS = 60_000;
 const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 
 type PublicSessionIdentity = { kind: "session"; id: string };
@@ -968,6 +969,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const publicDirectoryLimiter = new FixedWindowRateLimiter(240, 10_000);
   const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
+  const accountChallengePairQueues = new Map<string, Promise<void>>();
   const memoryChallengeEvents: OnlineChallengeEvent[] = [];
   const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
   const memoryOpenSeekEvents: OpenSeekEvent[] = [];
@@ -1169,6 +1171,38 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       release();
       if (quickMatchSessionQueues.get(sessionId) === queued) {
         quickMatchSessionQueues.delete(sessionId);
+      }
+    }
+  };
+
+  const accountChallengePairQueueKey = (
+    challengerIdentity: OnlineIdentity,
+    challengedIdentity: OnlineIdentity
+  ): string => {
+    return [
+      publicPlayerIdentityQueueKey(challengerIdentity),
+      publicPlayerIdentityQueueKey(challengedIdentity),
+    ].join("\u0000");
+  };
+
+  const runAccountChallengePairTask = async <T>(
+    pairKey: string,
+    task: () => Promise<T>
+  ): Promise<T> => {
+    const previous = accountChallengePairQueues.get(pairKey) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.catch(() => undefined).then(() => gate);
+    accountChallengePairQueues.set(pairKey, queued);
+    await previous.catch(() => undefined);
+    try {
+      return await task();
+    } finally {
+      release();
+      if (accountChallengePairQueues.get(pairKey) === queued) {
+        accountChallengePairQueues.delete(pairKey);
       }
     }
   };
@@ -3410,6 +3444,43 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
+  const accountChallengePairRestriction = async (
+    challengerIdentity: OnlineIdentity,
+    challengedIdentity: OnlineIdentity,
+    checkedAt: string
+  ): Promise<"pending" | "cooldown" | null> => {
+    const summaries = await Promise.all(
+      (await loadChallengeSummaries()).map((summary) => expireChallengeIfNeeded(summary, checkedAt))
+    );
+    let latestRestrictedTerminalAt = 0;
+    for (const summary of summaries) {
+      if (
+        !isSameOnlineIdentity(summary.challengerIdentity, challengerIdentity) ||
+        !isSameOnlineIdentity(summary.challengedIdentity, challengedIdentity)
+      ) {
+        continue;
+      }
+      if (summary.status === "pending") {
+        return "pending";
+      }
+      if (summary.status === "declined" || summary.status === "cancelled" || summary.status === "expired") {
+        const updatedAt = Date.parse(summary.updatedAt);
+        if (Number.isFinite(updatedAt)) {
+          latestRestrictedTerminalAt = Math.max(latestRestrictedTerminalAt, updatedAt);
+        }
+      }
+    }
+    const checkedAtMs = Date.parse(checkedAt);
+    if (
+      Number.isFinite(checkedAtMs) &&
+      latestRestrictedTerminalAt > 0 &&
+      checkedAtMs - latestRestrictedTerminalAt < ACCOUNT_CHALLENGE_PAIR_COOLDOWN_MS
+    ) {
+      return "cooldown";
+    }
+    return null;
+  };
+
   app.get("/api/online/seeks", async (req, res) => {
     if (!publicDirectoryLimiter.take(getClientKey(req))) {
       res.status(429).json({
@@ -3905,35 +3976,63 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       resolvedChallengedIdentity ?? { kind: "session" as const, id: `${challengeId}_challenged` };
 
     try {
-      const event = createChallengeCreatedEvent(
-        {
-          type: "challenge_created",
-          challengeId,
+      const createChallenge = async (): Promise<{ status: number; body: unknown }> => {
+        const pairRestriction = challengedDisplayName
+          ? await accountChallengePairRestriction(challengerIdentity, challengedIdentity, createdAt)
+          : null;
+        if (pairRestriction) {
+          return {
+            status: 429,
+            body: {
+              error: {
+                code: "rate_limited",
+                message: pairRestriction === "pending"
+                  ? "That account already has a pending challenge from you."
+                  : "Please wait before challenging that account again.",
+              },
+            },
+          };
+        }
+        const event = createChallengeCreatedEvent(
+          {
+            type: "challenge_created",
+            challengeId,
+            challengerIdentity,
+            challengedIdentity,
+            challengerSeat,
+            visibility,
+            setup: normalizedSetup,
+            expiresAt,
+          },
+          { createdAt }
+        );
+        const summary = await appendChallengeCreated(event, {
+          challengerCredential: hashOnlineToken(challengerToken),
+          challengedCredential: hashOnlineToken(challengedToken),
           challengerIdentity,
           challengedIdentity,
-          challengerSeat,
-          visibility,
-          setup: normalizedSetup,
-          expiresAt,
-        },
-        { createdAt }
-      );
-      const summary = await appendChallengeCreated(event, {
-        challengerCredential: hashOnlineToken(challengerToken),
-        challengedCredential: hashOnlineToken(challengedToken),
-        challengerIdentity,
-        challengedIdentity,
-      });
-      res.status(201).json({
-        challengeId,
-        summary,
-        challenger: {
-          url: buildChallengeUrl(options.publicBaseUrl, challengeId, "challenger", challengerToken),
-        },
-        challenged: {
-          url: buildChallengeUrl(options.publicBaseUrl, challengeId, "challenged", challengedToken),
-        },
-      });
+        });
+        return {
+          status: 201,
+          body: {
+            challengeId,
+            summary,
+            challenger: {
+              url: buildChallengeUrl(options.publicBaseUrl, challengeId, "challenger", challengerToken),
+            },
+            challenged: {
+              url: buildChallengeUrl(options.publicBaseUrl, challengeId, "challenged", challengedToken),
+            },
+          },
+        };
+      };
+      const response = challengedDisplayName
+        ? await runAccountChallengePairTask(
+            accountChallengePairQueueKey(challengerIdentity, challengedIdentity),
+            createChallenge
+          )
+        : await createChallenge();
+      res.status(response.status).json(response.body);
     } catch (error) {
       console.error("Failed to create online challenge", error);
       res.status(503).json({
