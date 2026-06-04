@@ -630,6 +630,126 @@ describe("OnlineGameBrowser", () => {
     expect(onSpectate).toHaveBeenCalledWith("game_friend_live");
   });
 
+  it("surfaces incoming account challenge actions in followed-player rows", async () => {
+    const account = accountFixture("Liam");
+    const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
+    const acceptedSummary = {
+      ...pendingSummary,
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      status: "accepted" as const,
+      acceptedAt: "2026-06-03T12:02:00.000Z",
+      acceptedBy: account.identity,
+      gameId: "game_friend_accept",
+      whiteIdentity: pendingSummary.challengerIdentity,
+      blackIdentity: account.identity,
+      lastEventId: "challenge_samir_liam_friend_accept_evt",
+    };
+    const loadAccountChallenges = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      ...accountChallengeDirectory([
+        {
+          role: "challenged",
+          summary: pendingSummary,
+        },
+      ]),
+    });
+    const onAcceptAccountChallenge = vi.fn().mockResolvedValue({
+      role: "challenged",
+      summary: acceptedSummary,
+      gameInvite: {
+        gameId: "game_friend_accept",
+        seat: "b",
+        token: "friend-accept-token",
+        url: "https://castles.example/?onlineGame=game_friend_accept&seat=b",
+      },
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        loadAccountChallenges={loadAccountChallenges}
+        onAcceptAccountChallenge={onAcceptAccountChallenge}
+        onDeclineAccountChallenge={vi.fn()}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    const samirName = await within(following).findByText("Samir");
+    const samirRow = samirName.closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(samirRow as HTMLElement).toHaveTextContent("Incoming challenge");
+    expect(within(samirRow as HTMLElement).queryByRole("button", { name: "Challenge Samir" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(samirRow as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" }));
+
+    await waitFor(() => expect(onAcceptAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
+    expect(await screen.findByText("Challenge accepted.")).toBeInTheDocument();
+  });
+
+  it("surfaces outgoing account challenge cancellation in followed-player rows", async () => {
+    const account = accountFixture("Liam");
+    const pendingSummary = accountChallengeSummary({
+      challengeId: "challenge_liam_samir",
+      challengerIdentity: account.identity,
+      challengedIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+    });
+    const cancelledSummary = {
+      ...pendingSummary,
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      status: "cancelled" as const,
+      cancelledAt: "2026-06-03T12:02:00.000Z",
+      cancelledBy: account.identity,
+      lastEventId: "challenge_liam_samir_cancelled_evt",
+    };
+    const loadAccountChallenges = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      ...accountChallengeDirectory([
+        {
+          role: "challenger",
+          summary: pendingSummary,
+        },
+      ]),
+    });
+    const onCancelAccountChallenge = vi.fn().mockResolvedValue({
+      role: "challenger",
+      summary: cancelledSummary,
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        loadAccountChallenges={loadAccountChallenges}
+        onCancelAccountChallenge={onCancelAccountChallenge}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    const samirName = await within(following).findByText("Samir");
+    const samirRow = samirName.closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(samirRow as HTMLElement).toHaveTextContent("Challenge sent");
+    expect(within(samirRow as HTMLElement).queryByRole("button", { name: "Challenge Samir" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(samirRow as HTMLElement).getByRole("button", { name: "Cancel challenge to Samir" }));
+
+    await waitFor(() => expect(onCancelAccountChallenge).toHaveBeenCalledWith("challenge_liam_samir"));
+    expect(await screen.findByText("Challenge cancelled.")).toBeInTheDocument();
+  });
+
   it("orders followed players by visible online status before display name", async () => {
     render(
       <OnlineGameBrowser

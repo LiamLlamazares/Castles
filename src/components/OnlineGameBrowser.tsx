@@ -1420,6 +1420,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (!friendFilterActive) return publicActiveGames;
     return publicActiveGames.filter((game) => gameHasFollowedParticipant(game, followedDisplayNames));
   }, [followedDisplayNames, friendFilterActive, publicActiveGames]);
+  const accountChallengeByOpponentDisplayName = React.useMemo(() => {
+    const challenges = new Map<string, OnlineAccountChallengeListItem>();
+    for (const item of accountChallenges) {
+      if (item.summary.status !== "pending") continue;
+      const key = normalizeDisplayNameKey(challengeOpponentName(item));
+      const existing = challenges.get(key);
+      if (!existing || (existing.role !== "challenged" && item.role === "challenged")) {
+        challenges.set(key, item);
+      }
+    }
+    return challenges;
+  }, [accountChallenges]);
   const liveGameByFollowedDisplayName = React.useMemo(() => {
     const liveGames = new Map<string, OnlineGameSummary>();
     for (const game of publicActiveGames) {
@@ -2847,7 +2859,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             ) : (
               <div className="online-browser-following-rows">
                 {followingProfiles.map((profile) => {
-                  const liveGame = liveGameByFollowedDisplayName.get(normalizeDisplayNameKey(profile.displayName));
+                  const profileKey = normalizeDisplayNameKey(profile.displayName);
+                  const liveGame = liveGameByFollowedDisplayName.get(profileKey);
+                  const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+                  const pendingChallengeId = pendingChallenge?.summary.challengeId;
+                  const pendingChallengeAction = pendingChallengeId
+                    ? accountChallengeActionById[pendingChallengeId]
+                    : undefined;
+                  const canActOnPendingChallenge =
+                    !!pendingChallenge &&
+                    pendingChallenge.summary.status === "pending" &&
+                    pendingChallengeAction === undefined;
                   const canInteractWithProfile = !profile.relationship.blocked && !profile.relationship.self;
                   const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
                   const liveGameBlack = liveGame ? participantName(liveGame.participants, "b") : "";
@@ -2858,6 +2880,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         <div className="online-browser-social-badges">
                           <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
                           {liveGame && <span>Playing now</span>}
+                          {pendingChallenge && (
+                            <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
+                          )}
                           <span>{profile.relationship.following ? "Following" : "Not followed"}</span>
                         </div>
                       </div>
@@ -2872,7 +2897,40 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Watch
                           </button>
                         )}
-                        {onChallengeAccount && canInteractWithProfile && (
+                        {pendingChallenge?.role === "challenged" && onAcceptAccountChallenge && (
+                          <button
+                            type="button"
+                            className="online-browser-button primary"
+                            onClick={() => void runAccountChallengeAction(pendingChallenge, "accept")}
+                            disabled={!canActOnPendingChallenge}
+                            aria-label={`Accept challenge from ${profile.displayName}`}
+                          >
+                            {pendingChallengeAction === "accept" ? "Accepting" : "Accept"}
+                          </button>
+                        )}
+                        {pendingChallenge?.role === "challenged" && onDeclineAccountChallenge && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle"
+                            onClick={() => void runAccountChallengeAction(pendingChallenge, "decline")}
+                            disabled={!canActOnPendingChallenge}
+                            aria-label={`Decline challenge from ${profile.displayName}`}
+                          >
+                            {pendingChallengeAction === "decline" ? "Declining" : "Decline"}
+                          </button>
+                        )}
+                        {pendingChallenge?.role === "challenger" && onCancelAccountChallenge && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle online-browser-button-danger"
+                            onClick={() => void runAccountChallengeAction(pendingChallenge, "cancel")}
+                            disabled={!canActOnPendingChallenge}
+                            aria-label={`Cancel challenge to ${profile.displayName}`}
+                          >
+                            {pendingChallengeAction === "cancel" ? "Cancelling" : "Cancel"}
+                          </button>
+                        )}
+                        {!pendingChallenge && onChallengeAccount && canInteractWithProfile && (
                           <button
                             type="button"
                             className="online-browser-button neutral"
