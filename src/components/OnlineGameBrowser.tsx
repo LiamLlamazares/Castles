@@ -174,6 +174,51 @@ function normalizeDisplayNameKey(displayName: string): string {
   return displayName.trim().toLowerCase();
 }
 
+const PINNED_FOLLOWING_STORAGE_KEY_PREFIX = "castles_online_pinned_following_v1:";
+const PINNED_FOLLOWING_LIMIT = 64;
+
+function pinnedFollowingStorageKey(accountId: string): string {
+  return `${PINNED_FOLLOWING_STORAGE_KEY_PREFIX}${accountId}`;
+}
+
+function readPinnedFollowingDisplayNames(accountId: string): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(pinnedFollowingStorageKey(accountId));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    const pinned = new Set<string>();
+    for (const candidate of parsed) {
+      if (typeof candidate !== "string") continue;
+      const key = normalizeDisplayNameKey(candidate);
+      if (!key) continue;
+      pinned.add(key);
+      if (pinned.size >= PINNED_FOLLOWING_LIMIT) break;
+    }
+    return pinned;
+  } catch {
+    return new Set();
+  }
+}
+
+function writePinnedFollowingDisplayNames(accountId: string, pinned: ReadonlySet<string>): void {
+  try {
+    window.localStorage.setItem(
+      pinnedFollowingStorageKey(accountId),
+      JSON.stringify([...pinned].slice(0, PINNED_FOLLOWING_LIMIT))
+    );
+  } catch {
+    // Pinning is a local convenience; storage failures should not block play.
+  }
+}
+
+function isProfilePinned(
+  profile: OnlineAccountPublicProfile,
+  pinnedDisplayNames: ReadonlySet<string>
+): boolean {
+  return pinnedDisplayNames.has(normalizeDisplayNameKey(profile.displayName));
+}
+
 function gameHasFollowedParticipant(summary: OnlineGameSummary, followedDisplayNames: ReadonlySet<string>): boolean {
   if (followedDisplayNames.size === 0) return false;
   return summary.participants.some((participant) => {
@@ -420,6 +465,17 @@ function compareProfilesByPresence(
 ): number {
   const rankDelta = profilePresenceRank(left) - profilePresenceRank(right);
   return rankDelta !== 0 ? rankDelta : compareProfilesByDisplayName(left, right);
+}
+
+function compareProfilesByPinnedPresence(
+  pinnedDisplayNames: ReadonlySet<string>,
+  left: OnlineAccountPublicProfile,
+  right: OnlineAccountPublicProfile
+): number {
+  const leftPinned = isProfilePinned(left, pinnedDisplayNames);
+  const rightPinned = isProfilePinned(right, pinnedDisplayNames);
+  if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+  return compareProfilesByPresence(left, right);
 }
 
 function formatClockTime(ms: number): string {
@@ -726,6 +782,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [followingProfiles, setFollowingProfiles] = React.useState<OnlineAccountPublicProfile[]>([]);
   const [followingStatus, setFollowingStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [followingPresenceFilter, setFollowingPresenceFilter] = React.useState<OnlineFollowingPresenceFilter>("all");
+  const [pinnedFollowingDisplayNames, setPinnedFollowingDisplayNames] = React.useState<Set<string>>(() =>
+    account ? readPinnedFollowingDisplayNames(account.accountId) : new Set()
+  );
   const [followPolicy, setFollowPolicy] = React.useState<OnlineAccountFollowPolicy>("everyone");
   const [followPolicyDraft, setFollowPolicyDraft] = React.useState<OnlineAccountFollowPolicy>("everyone");
   const [presencePolicy, setPresencePolicy] = React.useState<OnlineAccountPresencePolicy>("followed");
@@ -818,6 +877,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     closedOwnedSeekResponse
       ? "Your previous lobby listing is closed and no longer public."
       : "";
+
+  React.useEffect(() => {
+    if (!account) {
+      setPinnedFollowingDisplayNames(new Set());
+      return;
+    }
+    setPinnedFollowingDisplayNames(readPinnedFollowingDisplayNames(account.accountId));
+  }, [account?.accountId]);
 
   const handleClearRecentOnlineGames = React.useCallback(() => {
     setRecentClearMessage("Recent device replay list cleared.");
@@ -1454,15 +1521,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     () => new Set(followingProfiles.map((profile) => normalizeDisplayNameKey(profile.displayName))),
     [followingProfiles]
   );
+  const sortedFollowingProfiles = React.useMemo(
+    () => [...followingProfiles].sort((left, right) =>
+      compareProfilesByPinnedPresence(pinnedFollowingDisplayNames, left, right)
+    ),
+    [followingProfiles, pinnedFollowingDisplayNames]
+  );
   const onlineFollowingProfiles = React.useMemo(
-    () => followingProfiles.filter(isProfileOnline),
-    [followingProfiles]
+    () => sortedFollowingProfiles.filter(isProfileOnline),
+    [sortedFollowingProfiles]
   );
   const onlineNowRailProfiles = React.useMemo(
     () => onlineFollowingProfiles.slice(0, 6),
     [onlineFollowingProfiles]
   );
-  const visibleFollowingProfiles = followingPresenceFilter === "online" ? onlineFollowingProfiles : followingProfiles;
+  const visibleFollowingProfiles = followingPresenceFilter === "online" ? onlineFollowingProfiles : sortedFollowingProfiles;
   const friendFilterActive = canUseAccountSocial && friendFilter === "followed";
   const friendFilterUnavailable = friendFilterActive && followingStatus !== "ready";
   const filteredPublicActiveGames = React.useMemo(() => {
@@ -2227,6 +2300,35 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     await handleSocialLookupByName(displayName);
   }, [handleSocialLookupByName, socialLookupName]);
 
+  const removePinnedFollowingProfile = React.useCallback((displayName: string) => {
+    const accountId = account?.accountId;
+    const key = normalizeDisplayNameKey(displayName);
+    if (!accountId || !key) return;
+    setPinnedFollowingDisplayNames((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      writePinnedFollowingDisplayNames(accountId, next);
+      return next;
+    });
+  }, [account?.accountId]);
+
+  const togglePinnedFollowingProfile = React.useCallback((displayName: string) => {
+    const accountId = account?.accountId;
+    const key = normalizeDisplayNameKey(displayName);
+    if (!accountId || !key) return;
+    setPinnedFollowingDisplayNames((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      writePinnedFollowingDisplayNames(accountId, next);
+      return next;
+    });
+  }, [account?.accountId]);
+
   const mergeSocialProfile = React.useCallback((profile: OnlineAccountPublicProfile) => {
     setSocialProfile((current) =>
       current?.displayName.toLowerCase() === profile.displayName.toLowerCase()
@@ -2264,6 +2366,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       const response = await handler(displayName);
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       mergeSocialProfile(response.profile);
+      if (action === "unfollow" || action === "block" || !response.profile.relationship.following) {
+        removePinnedFollowingProfile(response.profile.displayName);
+      }
       setSocialLookupStatus("ready");
       setSocialMessage(
         action === "follow"
@@ -2295,6 +2400,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [
     account?.accountId,
     mergeSocialProfile,
+    removePinnedFollowingProfile,
     onBlockAccount,
     onFollowAccount,
     onUnblockAccount,
@@ -2792,6 +2898,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   const liveGame = liveGameByFollowedDisplayName.get(profileKey);
                   const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
                   const canInteractWithProfile = !profile.relationship.blocked && !profile.relationship.self;
+                  const pinned = isProfilePinned(profile, pinnedFollowingDisplayNames);
                   const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
                   const liveGameBlack = liveGame ? participantName(liveGame.participants, "b") : "";
                   return (
@@ -2800,6 +2907,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         <strong>{profile.displayName}</strong>
                         <div className="online-browser-social-badges">
                           <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
+                          {pinned && <span className="online-browser-pinned-badge">Pinned</span>}
                           {liveGame && <span>Playing now</span>}
                           {pendingChallenge && (
                             <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
@@ -2828,6 +2936,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Challenge
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="online-browser-button subtle"
+                          onClick={() => togglePinnedFollowingProfile(profile.displayName)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`${pinned ? "Unpin" : "Pin"} ${profile.displayName} from online now`}
+                        >
+                          {pinned ? "Unpin" : "Pin"}
+                        </button>
                         <button
                           type="button"
                           className="online-browser-button subtle"
@@ -3115,6 +3232,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     pendingChallenge.summary.status === "pending" &&
                     pendingChallengeAction === undefined;
                   const canInteractWithProfile = !profile.relationship.blocked && !profile.relationship.self;
+                  const pinned = isProfilePinned(profile, pinnedFollowingDisplayNames);
                   const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
                   const liveGameBlack = liveGame ? participantName(liveGame.participants, "b") : "";
                   return (
@@ -3123,6 +3241,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         <strong>{profile.displayName}</strong>
                         <div className="online-browser-social-badges">
                           <span className={presenceBadgeClassName(profile)}>{formatPresenceLabel(profile)}</span>
+                          {pinned && <span className="online-browser-pinned-badge">Pinned</span>}
                           {liveGame && <span>Playing now</span>}
                           {pendingChallenge && (
                             <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
@@ -3185,6 +3304,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Challenge
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="online-browser-button subtle"
+                          onClick={() => togglePinnedFollowingProfile(profile.displayName)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`${pinned ? "Unpin" : "Pin"} ${profile.displayName} from following list`}
+                        >
+                          {pinned ? "Unpin" : "Pin"}
+                        </button>
                         <button
                           type="button"
                           className="online-browser-button subtle"

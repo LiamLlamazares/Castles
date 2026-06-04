@@ -321,6 +321,12 @@
   color: #c6e8ff;
 }
 
+.online-browser-social-badges span.online-browser-pinned-badge,
+.online-browser-following-row span.online-browser-pinned-badge {
+  background: rgba(255, 199, 68, 0.22);
+  color: #ffe19a;
+}
+
 .online-browser-social-badges span.presence-offline,
 .online-browser-following-row span.presence-offline,
 .online-browser-social-badges span.presence-hidden,

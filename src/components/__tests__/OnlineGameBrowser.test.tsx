@@ -731,6 +731,63 @@ describe("OnlineGameBrowser", () => {
     expect(await within(people).findByText("Selected Samir from online now.")).toBeInTheDocument();
   });
 
+  it("pins followed players above unpinned players in the online-now rail", async () => {
+    const storageKey = "castles_online_pinned_following_v1:account_pinner";
+    const account = accountFixture("Pinner");
+    const following = [
+      publicProfile("Zed", { following: true }, { visibility: "visible", status: "online" }),
+      publicProfile("Mira", { following: true }, { visibility: "visible", status: "online" }),
+      publicProfile("Omar", { following: true }, { visibility: "visible", status: "online" }),
+      publicProfile("Ada", { following: true }, { visibility: "visible", status: "online" }),
+      publicProfile("Ben", { following: true }, { visibility: "visible", status: "online" }),
+      publicProfile("Yara", { following: true }, { visibility: "visible", status: "online" }),
+      publicProfile("Samir", { following: true, followedBy: true }, { visibility: "visible", status: "online" }),
+    ];
+
+    window.localStorage.removeItem(storageKey);
+    try {
+      const props = {
+        initialTab: "lobby" as const,
+        loadGames: vi.fn().mockResolvedValue(directory([])),
+        loadOpenSeeks: vi.fn().mockResolvedValue(seekDirectory([])),
+        onBack: vi.fn(),
+        onSpectate: vi.fn(),
+        onReplay: vi.fn(),
+        account,
+        accountStatus: "ready" as const,
+        ...socialPropsWithFollowing(following),
+      };
+      const { unmount } = render(<OnlineGameBrowser {...props} />);
+
+      const people = await screen.findByRole("region", { name: "People" });
+      const onlineNow = await within(people).findByRole("region", { name: "Online followed players now" });
+      expect(onlineNow).toHaveTextContent("+1 more online");
+      expect(within(onlineNow).queryByText("Zed")).not.toBeInTheDocument();
+
+      const followedPlayers = await within(people).findByRole("region", { name: "Followed players" });
+      const zedRow = within(followedPlayers).getByText("Zed").closest("article");
+      expect(zedRow).not.toBeNull();
+      fireEvent.click(within(zedRow as HTMLElement).getByRole("button", { name: "Pin Zed from following list" }));
+
+      await waitFor(() => expect(within(onlineNow).getByText("Zed")).toBeInTheDocument());
+      expect(within(onlineNow).queryByText("Yara")).not.toBeInTheDocument();
+      const pinnedZedCard = within(onlineNow).getByText("Zed").closest("article");
+      expect(pinnedZedCard).not.toBeNull();
+      expect(pinnedZedCard as HTMLElement).toHaveTextContent("Pinned");
+      expect(within(zedRow as HTMLElement).getByRole("button", { name: "Unpin Zed from following list" })).toBeInTheDocument();
+
+      unmount();
+      render(<OnlineGameBrowser {...props} />);
+
+      const restoredPeople = await screen.findByRole("region", { name: "People" });
+      const restoredOnlineNow = await within(restoredPeople).findByRole("region", { name: "Online followed players now" });
+      await waitFor(() => expect(restoredOnlineNow).toHaveTextContent("Zed"));
+      expect(restoredOnlineNow).toHaveTextContent("Pinned");
+    } finally {
+      window.localStorage.removeItem(storageKey);
+    }
+  });
+
   it("labels mutual friends and accounts that follow the signed-in player", async () => {
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
