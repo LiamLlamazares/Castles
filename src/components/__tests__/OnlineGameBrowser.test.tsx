@@ -1757,6 +1757,69 @@ describe("OnlineGameBrowser", () => {
     expect(loadGames).toHaveBeenCalledWith({ state: "active", limit: 50 });
   });
 
+  it("opens registered player profiles from public game rows", async () => {
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Samir", { followedBy: true }, { visibility: "visible", status: "online" }),
+    });
+    const liveGame = summary({
+      gameId: "game_profile_live",
+      participants: [
+        registeredParticipant("w", "Samir"),
+        registeredParticipant("b", "Ada"),
+      ],
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([liveGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountProfile={loadAccountProfile}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open Samir profile from game_profile_live" }));
+
+    await waitFor(() => expect(loadAccountProfile).toHaveBeenCalledWith("Samir"));
+    const people = screen.getByRole("region", { name: "People" });
+    expect(within(people).getByRole("textbox", { name: "Exact account name" })).toHaveValue("Samir");
+    const profileCard = await within(people).findByRole("article", { name: "Profile Samir" });
+    expect(profileCard).toHaveTextContent("Follows you");
+    await waitFor(() => expect(profileCard).toHaveFocus());
+  });
+
+  it("keeps game row player names plain without signed-in social lookup", async () => {
+    const liveGame = summary({
+      gameId: "game_profile_plain",
+      participants: [
+        registeredParticipant("w", "Samir"),
+        registeredParticipant("b", "Ada"),
+      ],
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([liveGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: "Most active live game Samir vs Ada game_profile_plain" });
+    expect(within(row).queryByRole("button", { name: "Open Samir profile from game_profile_plain" })).not.toBeInTheDocument();
+    expect(row).toHaveTextContent("Samir vs Ada");
+  });
+
   it("lets players escape the followed-player filter after following refresh fails", async () => {
     const loadAccountFollowing = vi
       .fn()

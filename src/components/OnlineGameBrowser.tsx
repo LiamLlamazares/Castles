@@ -157,6 +157,15 @@ function participantName(
   return seat === "w" ? "White" : "Black";
 }
 
+function participantProfileName(
+  participants: OnlineGameSummaryParticipant[],
+  seat: "w" | "b"
+): string | null {
+  const participant = participants.find((candidate) => candidate.seat === seat);
+  if (!participant) return null;
+  return identityDisplayName(participant.identity);
+}
+
 function identityDisplayName(identity: OnlineIdentity): string | null {
   return identity.kind === "registered" && identity.displayName ? identity.displayName : null;
 }
@@ -1683,6 +1692,24 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const followedFilterDescription =
     "Shows loaded listings, public games, and account games involving accounts you follow. It does not change game visibility.";
 
+  const renderGameParticipantLabel = (
+    game: OnlineGameSummary,
+    displayName: string,
+    profileName: string | null
+  ) => {
+    if (!canUseAccountSocial || !profileName) return displayName;
+    return (
+      <button
+        type="button"
+        className="online-game-player-link"
+        onClick={() => void handleSocialLookupByName(profileName, { focus: true })}
+        aria-label={`Open ${profileName} profile from ${game.gameId}`}
+      >
+        {displayName}
+      </button>
+    );
+  };
+
   const renderPublicGameRow = (
     game: OnlineGameSummary,
     options: {
@@ -1694,6 +1721,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   ) => {
     const white = participantName(game.participants, "w");
     const black = participantName(game.participants, "b");
+    const whiteProfileName = participantProfileName(game.participants, "w");
+    const blackProfileName = participantProfileName(game.participants, "b");
     const resultLabel = game.result ? formatOnlineGameResult(game.result) : null;
     const context = options.context ?? tab;
     const isArchivedGame = context === "archive" && game.status === "complete" && game.archiveState === "archived";
@@ -1775,7 +1804,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         <div className="online-game-row-main">
           <div className="online-game-players">
             {options.featured && <span className="online-game-kicker">{featuredKicker}</span>}
-            <strong>{white} vs {black}</strong>
+            <strong className="online-game-player-line">
+              {renderGameParticipantLabel(game, white, whiteProfileName)}
+              <span aria-hidden="true"> vs </span>
+              {renderGameParticipantLabel(game, black, blackProfileName)}
+            </strong>
             <span>{game.gameId}</span>
           </div>
           <div className="online-game-meta">
@@ -1879,6 +1912,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const renderAccountActiveGameRow = (game: OnlineGameSummary) => {
     const white = participantName(game.participants, "w");
     const black = participantName(game.participants, "b");
+    const whiteProfileName = participantProfileName(game.participants, "w");
+    const blackProfileName = participantProfileName(game.participants, "b");
     const accountSeat = account
       ? game.participants.find((participant) =>
           isSameOnlineIdentity(participant.identity, account.identity)
@@ -1897,7 +1932,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         <div className="online-game-row-main">
           <div className="online-game-players">
             <span className="online-game-kicker">Active account game</span>
-            <strong>{white} vs {black}</strong>
+            <strong className="online-game-player-line">
+              {renderGameParticipantLabel(game, white, whiteProfileName)}
+              <span aria-hidden="true"> vs </span>
+              {renderGameParticipantLabel(game, black, blackProfileName)}
+            </strong>
             <span>{game.gameId}</span>
           </div>
           <div className="online-game-meta">
@@ -2134,10 +2173,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   };
 
-  const handleSocialLookupByName = React.useCallback(async (displayName: string, options: { quiet?: boolean } = {}) => {
+  const handleSocialLookupByName = React.useCallback(async (displayName: string, options: { quiet?: boolean; focus?: boolean } = {}) => {
     if (!displayName || !loadAccountProfile) return;
     const requestId = ++socialLookupRequestIdRef.current;
     const accountId = account?.accountId;
+    setSocialLookupName(displayName);
     if (!options.quiet) {
       setSocialLookupStatus("loading");
       setSocialMessage("");
@@ -2149,6 +2189,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setSocialLookupStatus("ready");
       if (!options.quiet) {
         setSocialMessage(`Found ${response.profile.displayName}.`);
+      }
+      if (options.focus) {
+        window.setTimeout(() => socialProfileCardRef.current?.focus(), 0);
       }
     } catch (error) {
       if (requestId !== socialLookupRequestIdRef.current || accountId !== account?.accountId) return;

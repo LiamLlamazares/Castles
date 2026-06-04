@@ -584,11 +584,49 @@
   font-size: 1.08rem;
 }
 
+.online-game-player-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+}
+
+.online-game-player-link {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #f7f1d6;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.online-game-player-link:hover {
+  color: #d8ffe7;
+}
+
+.online-game-player-link:focus-visible {
+  outline: 2px solid #8bd1ff;
+  outline-offset: 2px;
+}
+
 .online-game-players span {
   display: block;
   margin-top: 4px;
   color: #aeb7b2;
   font-size: 0.82rem;
+}
+
+.online-game-player-line > span {
+  display: inline;
+  margin-top: 0;
+  color: inherit;
+  font-size: inherit;
 }
 
 .online-game-meta {
