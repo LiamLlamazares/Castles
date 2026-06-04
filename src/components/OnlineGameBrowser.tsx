@@ -841,6 +841,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const gameSearchInputRef = React.useRef<HTMLInputElement>(null);
   const deleteAccountConfirmButtonRef = React.useRef<HTMLButtonElement>(null);
   const socialProfileCardRef = React.useRef<HTMLElement>(null);
+  const accountChallengesSectionRef = React.useRef<HTMLElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
   const closedOwnedSeekPanelRef = React.useRef<HTMLElement>(null);
   const [recentClearMessage, setRecentClearMessage] = React.useState("");
@@ -1578,6 +1579,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
     return challenges;
   }, [accountChallenges]);
+  const pendingIncomingChallengeCount = React.useMemo(
+    () => accountChallenges.filter((item) => item.summary.status === "pending" && item.role === "challenged").length,
+    [accountChallenges]
+  );
+  const pendingOutgoingChallengeCount = React.useMemo(
+    () => accountChallenges.filter((item) => item.summary.status === "pending" && item.role === "challenger").length,
+    [accountChallenges]
+  );
+  const hasPendingChallengeNotice = pendingIncomingChallengeCount > 0 || pendingOutgoingChallengeCount > 0;
   const liveGameByFollowedDisplayName = React.useMemo(() => {
     const liveGames = new Map<string, OnlineGameSummary>();
     for (const game of publicActiveGames) {
@@ -2519,6 +2529,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     window.setTimeout(() => gameSearchInputRef.current?.focus(), 0);
   }, [setBrowserTab]);
 
+  const focusAccountChallenges = React.useCallback(() => {
+    setSocialMessage("");
+    if (accountChallengeFilter !== "pending") {
+      handleAccountChallengeFilterChange("pending");
+    }
+    window.setTimeout(() => accountChallengesSectionRef.current?.focus(), 0);
+  }, [accountChallengeFilter, handleAccountChallengeFilterChange]);
+
   const handleFollowPolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!onUpdateAccountPrivacy) return;
@@ -2688,6 +2706,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const socialProfileLiveGameBlack = socialProfileLiveGame
     ? participantName(socialProfileLiveGame.participants, "b")
     : "";
+  const pendingChallengeNoticeTitle =
+    pendingIncomingChallengeCount > 0
+      ? `${formatCount(pendingIncomingChallengeCount, "incoming challenge")} awaiting your response`
+      : `${formatCount(pendingOutgoingChallengeCount, "sent challenge")} awaiting response`;
 
   return (
     <div className="online-browser-page">
@@ -2961,6 +2983,28 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             {socialMessage}
           </p>
 
+          {canUseAccountChallenges && hasPendingChallengeNotice && (
+            <section className="online-browser-challenge-notice" aria-label="Pending challenge notice">
+              <div>
+                <span className="online-browser-section-kicker">Challenges</span>
+                <strong>{pendingChallengeNoticeTitle}</strong>
+                <div className="online-browser-social-badges">
+                  {pendingIncomingChallengeCount > 0 && <span>Incoming</span>}
+                  {pendingOutgoingChallengeCount > 0 && (
+                    <span>{formatCount(pendingOutgoingChallengeCount, "sent challenge")}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="online-browser-button primary"
+                onClick={focusAccountChallenges}
+              >
+                View Challenges
+              </button>
+            </section>
+          )}
+
           {followingStatus === "ready" && onlineNowRailProfiles.length > 0 && (
             <section className="online-browser-online-now" aria-label="Online followed players now">
               <div className="online-browser-online-now-heading">
@@ -3056,7 +3100,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           )}
 
           {canUseAccountChallenges && (
-            <section className="online-browser-following-list online-browser-account-challenges" aria-label="Account challenges">
+            <section
+              ref={accountChallengesSectionRef}
+              className="online-browser-following-list online-browser-account-challenges"
+              aria-label="Account challenges"
+              tabIndex={-1}
+            >
               <div className="online-browser-following-list-heading">
                 <div className="online-browser-following-list-title">
                   <strong>Challenges</strong>

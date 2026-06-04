@@ -204,6 +204,28 @@
   color: #ffb7a8;
 }
 
+.online-browser-challenge-notice {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(215, 183, 101, 0.34);
+  border-radius: 6px;
+  background: rgba(70, 51, 20, 0.32);
+}
+
+.online-browser-challenge-notice > div {
+  min-width: 0;
+}
+
+.online-browser-challenge-notice strong {
+  display: block;
+  color: #fff4c8;
+  overflow-wrap: anywhere;
+}
+
 .online-browser-profile-card,
 .online-browser-following-list {
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1219,5 +1241,10 @@
 
   .online-browser-clear-recent {
     width: 100%;
+  }
+
+  .online-browser-challenge-notice {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }

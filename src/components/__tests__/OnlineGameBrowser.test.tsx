@@ -1134,6 +1134,10 @@ describe("OnlineGameBrowser", () => {
     const people = await screen.findByRole("region", { name: "People" });
     const challenges = await within(people).findByRole("region", { name: "Account challenges" });
     await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "pending" }));
+    const notice = within(people).getByRole("region", { name: "Pending challenge notice" });
+    expect(notice).toHaveTextContent("1 incoming challenge awaiting your response");
+    fireEvent.click(within(notice).getByRole("button", { name: "View Challenges" }));
+    await waitFor(() => expect(challenges).toHaveFocus());
     expect(await within(challenges).findByText("Samir")).toBeInTheDocument();
     expect(within(challenges).getByText("Incoming")).toBeInTheDocument();
     expect(within(challenges).getByText("Awaiting your response")).toBeInTheDocument();
@@ -1374,6 +1378,9 @@ describe("OnlineGameBrowser", () => {
 
     const people = await screen.findByRole("region", { name: "People" });
     const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    expect(within(people).getByRole("region", { name: "Pending challenge notice" })).toHaveTextContent(
+      "1 incoming challenge awaiting your response"
+    );
     fireEvent.click(within(challenges).getByRole("button", { name: "Refresh Inbox" }));
     const row = await within(challenges).findByText("Samir");
     const article = row.closest("article");
@@ -1384,6 +1391,7 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onAcceptAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
     expect(await within(challenges).findByText("No pending account challenges.")).toBeInTheDocument();
     expect(await within(people).findByText("Challenge accepted.")).toBeInTheDocument();
+    expect(within(people).queryByRole("region", { name: "Pending challenge notice" })).not.toBeInTheDocument();
   });
 
   it("keeps accepted challenge status visible after acting from the all inbox", async () => {
