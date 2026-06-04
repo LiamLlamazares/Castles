@@ -390,6 +390,18 @@
   color: #d9d0b8;
 }
 
+.online-browser-filter-note {
+  margin-top: -6px;
+  margin-bottom: 10px;
+  color: #c8bfa8;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.online-browser-filter-note.error {
+  color: #ffb7a8;
+}
+
 .online-browser-list {
   display: grid;
   gap: 10px;

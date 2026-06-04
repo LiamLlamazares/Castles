@@ -46,6 +46,7 @@ import "../css/OnlineGameBrowser.css";
 type OnlineBrowserTab = "lobby" | "watch" | "archive";
 type OnlineBrowserSort = "newest" | "moves" | "watchers";
 type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
+type OnlineFriendFilter = "all" | "followed";
 type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
 type OpenSeekClockFilter = "all" | "timed" | "casual";
 type OpenSeekVpFilter = "all" | "enabled" | "disabled";
@@ -140,6 +141,30 @@ function participantName(
     return participant.identity.displayName;
   }
   return seat === "w" ? "White" : "Black";
+}
+
+function identityDisplayName(
+  identity: OnlineGameSummaryParticipant["identity"] | OpenSeekSummary["creatorIdentity"]
+): string | null {
+  return identity.kind === "registered" && identity.displayName ? identity.displayName : null;
+}
+
+function normalizeDisplayNameKey(displayName: string): string {
+  return displayName.trim().toLowerCase();
+}
+
+function gameHasFollowedParticipant(summary: OnlineGameSummary, followedDisplayNames: ReadonlySet<string>): boolean {
+  if (followedDisplayNames.size === 0) return false;
+  return summary.participants.some((participant) => {
+    const displayName = identityDisplayName(participant.identity);
+    return displayName ? followedDisplayNames.has(normalizeDisplayNameKey(displayName)) : false;
+  });
+}
+
+function seekHasFollowedCreator(summary: OpenSeekSummary, followedDisplayNames: ReadonlySet<string>): boolean {
+  if (followedDisplayNames.size === 0) return false;
+  const displayName = identityDisplayName(summary.creatorIdentity);
+  return displayName ? followedDisplayNames.has(normalizeDisplayNameKey(displayName)) : false;
 }
 
 function formatUpdatedAt(value: string): string {
@@ -502,6 +527,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [debouncedGameQuery, setDebouncedGameQuery] = React.useState("");
   const [sort, setSort] = React.useState<OnlineBrowserSort>("newest");
   const [timeFilter, setTimeFilter] = React.useState<OnlineBrowserTimeFilter>("all");
+  const [friendFilter, setFriendFilter] = React.useState<OnlineFriendFilter>("all");
   const [seekSideFilter, setSeekSideFilter] = React.useState<OpenSeekSideFilter>("all");
   const [seekClockFilter, setSeekClockFilter] = React.useState<OpenSeekClockFilter>("all");
   const [seekVpFilter, setSeekVpFilter] = React.useState<OpenSeekVpFilter>("all");
@@ -754,6 +780,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (accountStatus !== "error") return;
     setAccountActionMessage("");
   }, [accountStatus]);
+
+  React.useEffect(() => {
+    if (canUseAccountSocial) return;
+    setFriendFilter("all");
+  }, [canUseAccountSocial]);
+
+  React.useEffect(() => {
+    setFriendFilter("all");
+  }, [account?.accountId]);
 
   React.useEffect(() => {
     if (!isDeleteAccountConfirmOpen) return;
@@ -1032,6 +1067,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => game.status === "active")
       .sort(compareMostMoves);
   }, [publicGames]);
+  const followedDisplayNames = React.useMemo(
+    () => new Set(followingProfiles.map((profile) => normalizeDisplayNameKey(profile.displayName))),
+    [followingProfiles]
+  );
+  const friendFilterActive = canUseAccountSocial && friendFilter === "followed";
+  const friendFilterUnavailable = friendFilterActive && followingStatus !== "ready";
+  const filteredPublicActiveGames = React.useMemo(() => {
+    if (!friendFilterActive) return publicActiveGames;
+    return publicActiveGames.filter((game) => gameHasFollowedParticipant(game, followedDisplayNames));
+  }, [followedDisplayNames, friendFilterActive, publicActiveGames]);
 
   const visibleGames = React.useMemo(() => {
     const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
@@ -1044,6 +1089,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (timeFilter === "timed" && !game.hasTimeControl) return false;
       if (timeFilter === "casual" && game.hasTimeControl) return false;
       if (tab === "archive" && !matchesResultFilter(game, resultFilter)) return false;
+      if (friendFilterActive && !gameHasFollowedParticipant(game, followedDisplayNames)) return false;
       return !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery);
     });
     return filtered.sort(
@@ -1053,11 +1099,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           ? compareMostMoves
           : compareNewest
     );
-  }, [publicGames, query, resultFilter, sort, tab, timeFilter]);
+  }, [followedDisplayNames, friendFilterActive, publicGames, query, resultFilter, sort, tab, timeFilter]);
 
   const lobbyLiveGames = React.useMemo(() => {
-    return publicActiveGames.slice(0, 5);
-  }, [publicActiveGames]);
+    return filteredPublicActiveGames.slice(0, 5);
+  }, [filteredPublicActiveGames]);
 
   const watchFeaturedGame = React.useMemo(() => {
     if (tab !== "watch" || visibleGames.length === 0) return null;
@@ -1078,6 +1124,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (tab !== "archive") return [];
     if (account && accountGamesStatus !== "ready") return [];
     if (timeFilter !== "all" || resultFilter !== "all") return [];
+    if (friendFilterActive) return [];
     const excludedGameIds = new Set([
       ...publicGames.map((game) => game.gameId),
       ...accountGames.map((game) => game.gameId),
@@ -1088,7 +1135,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => !excludedGameIds.has(game.gameId))
       .filter((game) => !normalizedQuery || recentOnlineGameSearchText(game).includes(normalizedQuery))
       .slice(0, 6);
-  }, [account, accountGames, accountGamesStatus, publicGames, query, recentOnlineGames, resultFilter, tab, timeFilter]);
+  }, [account, accountGames, accountGamesStatus, friendFilterActive, publicGames, query, recentOnlineGames, resultFilter, tab, timeFilter]);
 
   React.useEffect(() => {
     if (tab !== "archive" || !account || !loadAccountGames) {
@@ -1123,10 +1170,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => timeFilter !== "timed" || game.hasTimeControl)
       .filter((game) => timeFilter !== "casual" || !game.hasTimeControl)
       .filter(() => resultFilter === "all")
+      .filter((game) => !friendFilterActive || gameHasFollowedParticipant(game, followedDisplayNames))
       .filter((game) => !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery))
       .sort(compareNewest)
       .slice(0, 8);
-  }, [accountGames, query, resultFilter, tab, timeFilter]);
+  }, [accountGames, followedDisplayNames, friendFilterActive, query, resultFilter, tab, timeFilter]);
 
   const accountArchivedGames = React.useMemo(() => {
     if (tab !== "archive") return [];
@@ -1138,18 +1186,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => timeFilter !== "timed" || game.hasTimeControl)
       .filter((game) => timeFilter !== "casual" || !game.hasTimeControl)
       .filter((game) => matchesResultFilter(game, resultFilter))
+      .filter((game) => !friendFilterActive || gameHasFollowedParticipant(game, followedDisplayNames))
       .filter((game) => !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery))
       .sort(sort === "moves" ? compareMostMoves : compareNewest)
       .slice(0, 12);
-  }, [accountGames, publicGames, query, resultFilter, sort, tab, timeFilter]);
+  }, [accountGames, followedDisplayNames, friendFilterActive, publicGames, query, resultFilter, sort, tab, timeFilter]);
 
   const visibleOpenSeeks = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return openSeeks
       .filter((seek) => seek.status === "open")
+      .filter((seek) => !friendFilterActive || seekHasFollowedCreator(seek, followedDisplayNames))
       .filter((seek) => !normalizedQuery || seekSearchText(seek).includes(normalizedQuery))
       .sort(compareOpenSeekNewest);
-  }, [openSeeks, query]);
+  }, [followedDisplayNames, friendFilterActive, openSeeks, query]);
 
   const emptyTitle =
     tab === "watch" ? "No public games in progress." : "No public completed games yet.";
@@ -1157,9 +1207,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     query.trim() !== "" ||
     seekSideFilter !== "all" ||
     seekClockFilter !== "all" ||
-    seekVpFilter !== "all";
+    seekVpFilter !== "all" ||
+    friendFilterActive;
   const hasActiveFilters =
-    query.trim() !== "" || timeFilter !== "all" || (tab === "archive" && resultFilter !== "all");
+    query.trim() !== "" || timeFilter !== "all" || friendFilterActive || (tab === "archive" && resultFilter !== "all");
   const gameSearchAriaLabel =
     tab === "lobby"
       ? "Search lobby listings"
@@ -1225,6 +1276,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             ? "Could not start quick match."
             : "";
   const createSeekMessage = createSeekPending ? "Creating lobby listing from current setup..." : "";
+  const followedFilterDescription =
+    "Shows loaded listings, public games, and account games involving accounts you follow. It does not change game visibility.";
 
   const renderPublicGameRow = (
     game: OnlineGameSummary,
@@ -2270,6 +2323,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   <option value="disabled">Castle control</option>
                 </select>
               </label>
+              {canUseAccountSocial && (
+                <label className="online-browser-select">
+                  <span>People</span>
+                  <select
+                    aria-label="Followed players filter"
+                    value={friendFilter}
+                    onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
+                    disabled={followingStatus !== "ready"}
+                  >
+                    <option value="all">All players</option>
+                    <option value="followed">Followed players only</option>
+                  </select>
+                </label>
+              )}
               <button
                 type="button"
                 className="online-browser-button neutral"
@@ -2309,6 +2376,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   <option value="casual">Casual</option>
                 </select>
               </label>
+              {canUseAccountSocial && (
+                <label className="online-browser-select">
+                  <span>People</span>
+                  <select
+                    aria-label="Followed players filter"
+                    value={friendFilter}
+                    onChange={(event) => setFriendFilter(event.currentTarget.value as OnlineFriendFilter)}
+                    disabled={followingStatus !== "ready"}
+                  >
+                    <option value="all">All players</option>
+                    <option value="followed">Followed players only</option>
+                  </select>
+                </label>
+              )}
               {tab === "archive" && (
                 <label className="online-browser-select">
                   <span>Result</span>
@@ -2343,6 +2424,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           />
         </label>
       </section>
+
+      {canUseAccountSocial && friendFilter === "followed" && (
+        <div className={`online-browser-filter-note ${friendFilterUnavailable ? "error" : ""}`}>
+          {friendFilterUnavailable
+            ? "Following list unavailable. Refresh People to use this filter."
+            : followedFilterDescription}
+        </div>
+      )}
 
       <div className="online-browser-status-line" role="status" aria-live="polite">
         {tab === "lobby"
@@ -2543,9 +2632,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               </div>
               {visibleOpenSeeks.length === 0 && seekStatus === "ready" ? (
                 <div className="online-browser-empty">
-                  <h2>{hasActiveSeekFilters ? "No lobby listings match these filters." : "No lobby listings yet."}</h2>
+                  <h2>
+                    {friendFilterActive
+                      ? "No loaded lobby listings include followed players."
+                      : hasActiveSeekFilters
+                        ? "No lobby listings match these filters."
+                        : "No lobby listings yet."}
+                  </h2>
                   <p>
-                    {hasActiveSeekFilters
+                    {friendFilterActive
+                      ? "Refresh listings or follow players from People."
+                      : hasActiveSeekFilters
                       ? "Try a different creator side, clock, scoring, or search setting."
                       : hasCurrentSetupActions
                         ? "Use Quick Match or Create Lobby Listing above, or change setup from Play."
@@ -2615,7 +2712,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       ? "Loading public games..."
                       : status === "error"
                         ? "Could not load live games."
-                        : copyMessage || `${publicActiveGames.length} public games in progress`}
+                        : copyMessage || `${filteredPublicActiveGames.length} public games in progress`}
                   </p>
                 </div>
                 <div className="online-browser-section-actions">
@@ -2638,7 +2735,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   </button>
                 </div>
               </div>
-              {renderLiveOverview(publicActiveGames.length, lobbyLiveGames[0] ?? null, "Lobby live games overview")}
+              {renderLiveOverview(filteredPublicActiveGames.length, lobbyLiveGames[0] ?? null, "Lobby live games overview")}
               {status === "error" ? (
                 <div className="online-browser-empty online-browser-empty-compact">
                   <h2>Live games are unavailable.</h2>
@@ -2646,8 +2743,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </div>
               ) : lobbyLiveGames.length === 0 && status === "ready" ? (
                 <div className="online-browser-empty online-browser-empty-compact">
-                  <h2>No public games in progress.</h2>
-                  <p>Accepted lobby games appear here automatically.</p>
+                  <h2>{friendFilterActive ? "No loaded public games include followed players." : "No public games in progress."}</h2>
+                  <p>
+                    {friendFilterActive
+                      ? "Refresh live games or follow players from People."
+                      : "Accepted lobby games appear here automatically."}
+                  </p>
                 </div>
               ) : (
                 <div className="online-browser-live-list">
@@ -2690,9 +2791,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             {renderLiveOverview(publicActiveGames.length, watchFeaturedGame, "Watch live games overview", watchFeaturedReason)}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty online-browser-empty-compact">
-                <h2>{hasActiveFilters ? "No public games match these filters." : emptyTitle}</h2>
+                <h2>{friendFilterActive ? "No loaded public games include followed players." : hasActiveFilters ? "No public games match these filters." : emptyTitle}</h2>
                 <p>
-                  {hasActiveFilters
+                  {friendFilterActive
+                    ? "Refresh live games, load more when available, or follow players from People."
+                    : hasActiveFilters
                     ? "Try a different search or clock setting."
                     : "Accepted public lobby games appear here automatically. Private and unlisted games stay off this page."}
                 </p>
@@ -2788,9 +2891,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   </div>
                 ) : accountActiveGames.length === 0 && accountArchivedGames.length === 0 && accountGamesStatus === "ready" ? (
                   <div className="online-browser-empty online-browser-empty-compact">
-                    <h2>{hasActiveFilters && accountGames.length > 0 ? "No account games match these filters." : "No account games yet."}</h2>
+                    <h2>
+                      {friendFilterActive
+                        ? "No loaded account games include followed players."
+                        : hasActiveFilters && accountGames.length > 0
+                          ? "No account games match these filters."
+                          : "No account games yet."}
+                    </h2>
                     <p>
-                      {hasActiveFilters && accountGames.length > 0
+                      {friendFilterActive
+                        ? "Refresh your account archive or follow players from People."
+                        : hasActiveFilters && accountGames.length > 0
                         ? "Try a different search, clock, or result setting."
                         : "Active games and finished replays will appear here after you play while signed in."}
                     </p>
@@ -2860,9 +2971,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               </div>
               {visibleGames.length === 0 && status === "ready" ? (
                 <section className="online-browser-empty">
-                  <h2>{hasActiveFilters ? "No public replays match these filters." : emptyTitle}</h2>
+                  <h2>{friendFilterActive ? "No loaded public replays include followed players." : hasActiveFilters ? "No public replays match these filters." : emptyTitle}</h2>
                   <p>
-                    {hasActiveFilters
+                    {friendFilterActive
+                      ? "Refresh the public archive, load more when available, or follow players from People."
+                      : hasActiveFilters
                       ? "Try a different search, clock, or result setting. Account and public replays use full server details; device-only replays appear only when their local game id can match."
                       : "Private and unlisted games stay out of the public archive. Shared spectator links still work for people who already have them."}
                   </p>
