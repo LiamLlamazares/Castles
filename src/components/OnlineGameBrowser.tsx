@@ -104,6 +104,7 @@ const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
 const ACCOUNT_CHALLENGE_AUTO_REFRESH_MS = 1_000;
 const FOLLOWING_AUTO_REFRESH_MS = 30_000;
 const GAME_SEARCH_DEBOUNCE_MS = 300;
+const HEAD_TO_HEAD_HISTORY_PAGE_LIMIT = 5;
 const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
 
 interface OnlineGameBrowserProps {
@@ -899,6 +900,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [headToHeadDisplayName, setHeadToHeadDisplayName] = React.useState("");
   const [headToHeadGames, setHeadToHeadGames] = React.useState<OnlineGameSummary[]>([]);
   const [headToHeadGamesStatus, setHeadToHeadGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [headToHeadNextCursor, setHeadToHeadNextCursor] = React.useState<string | undefined>();
+  const [isHeadToHeadLoadingMore, setIsHeadToHeadLoadingMore] = React.useState(false);
+  const [headToHeadMessage, setHeadToHeadMessage] = React.useState("");
   const [accountChallenges, setAccountChallenges] = React.useState<OnlineAccountChallengeListItem[]>([]);
   const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallengeActionById, setAccountChallengeActionById] = React.useState<Record<string, "accept" | "decline" | "cancel" | undefined>>({});
@@ -1823,30 +1827,76 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return normalizeDisplayNameKey(displayName) === normalizeDisplayNameKey(query) ? displayName : "";
   }, [headToHeadDisplayName, query]);
 
+  const loadHeadToHeadPage = React.useCallback(async (mode: "replace" | "append", cursor?: string) => {
+    if (!account || !loadAccountHeadToHeadGames || !activeHeadToHeadDisplayName) return;
+    const requestId = ++headToHeadGamesRequestIdRef.current;
+    if (mode === "replace") {
+      setHeadToHeadGamesStatus("loading");
+      setHeadToHeadNextCursor(undefined);
+    } else {
+      setIsHeadToHeadLoadingMore(true);
+    }
+    setHeadToHeadMessage("");
+    try {
+      const response = await loadAccountHeadToHeadGames(activeHeadToHeadDisplayName, {
+        limit: HEAD_TO_HEAD_HISTORY_PAGE_LIMIT,
+        cursor,
+      });
+      if (requestId !== headToHeadGamesRequestIdRef.current) return;
+      setHeadToHeadGames((current) => {
+        if (mode === "replace") return response.games;
+        const seen = new Set(current.map((game) => game.gameId));
+        return [
+          ...current,
+          ...response.games.filter((game) => {
+            if (seen.has(game.gameId)) return false;
+            seen.add(game.gameId);
+            return true;
+          }),
+        ];
+      });
+      setHeadToHeadNextCursor(response.nextCursor);
+      setHeadToHeadGamesStatus("ready");
+    } catch (error) {
+      if (requestId !== headToHeadGamesRequestIdRef.current) return;
+      console.error("[OnlineGameBrowser] Failed to load head-to-head games", error);
+      if (mode === "replace") {
+        setHeadToHeadGames([]);
+        setHeadToHeadNextCursor(undefined);
+        setHeadToHeadGamesStatus("error");
+        setHeadToHeadMessage("Could not load head-to-head games.");
+      } else {
+        setHeadToHeadMessage("Could not load more head-to-head games.");
+      }
+    } finally {
+      if (requestId === headToHeadGamesRequestIdRef.current) {
+        setIsHeadToHeadLoadingMore(false);
+      }
+    }
+  }, [account, activeHeadToHeadDisplayName, loadAccountHeadToHeadGames]);
+
   React.useEffect(() => {
     if (tab !== "archive" || !account || !loadAccountHeadToHeadGames || !activeHeadToHeadDisplayName) {
+      headToHeadGamesRequestIdRef.current += 1;
       setHeadToHeadGames([]);
+      setHeadToHeadNextCursor(undefined);
       setHeadToHeadGamesStatus("idle");
+      setHeadToHeadMessage("");
+      setIsHeadToHeadLoadingMore(false);
       return;
     }
 
-    const requestId = ++headToHeadGamesRequestIdRef.current;
-    setHeadToHeadGamesStatus("loading");
-    loadAccountHeadToHeadGames(activeHeadToHeadDisplayName, { limit: 100 })
-      .then((response) => {
-        if (requestId !== headToHeadGamesRequestIdRef.current) return;
-        setHeadToHeadGames(response.games);
-        setHeadToHeadGamesStatus("ready");
-      })
-      .catch(() => {
-        if (requestId !== headToHeadGamesRequestIdRef.current) return;
-        setHeadToHeadGamesStatus("error");
-      });
+    void loadHeadToHeadPage("replace");
 
     return () => {
       headToHeadGamesRequestIdRef.current += 1;
     };
-  }, [account?.accountId, activeHeadToHeadDisplayName, loadAccountHeadToHeadGames, tab]);
+  }, [account, activeHeadToHeadDisplayName, loadAccountHeadToHeadGames, loadHeadToHeadPage, tab]);
+
+  const loadMoreHeadToHeadGames = React.useCallback(() => {
+    if (!headToHeadNextCursor || isHeadToHeadLoadingMore) return;
+    void loadHeadToHeadPage("append", headToHeadNextCursor);
+  }, [headToHeadNextCursor, isHeadToHeadLoadingMore, loadHeadToHeadPage]);
 
   const accountActiveGames = React.useMemo(() => {
     if (tab !== "archive") return [];
@@ -4616,10 +4666,29 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     </div>
                     {[...accountHeadToHeadSummary.games]
                       .sort(compareLatestCompletedGame)
-                      .slice(0, 5)
                       .map((game) =>
                         renderPublicGameRow(game, { context: "archive", showOpponentSocialActions: true })
                       )}
+                    {headToHeadMessage && (
+                      <p
+                        className={`online-browser-filter-note${headToHeadGamesStatus === "error" || headToHeadMessage.includes("Could not") ? " error" : ""}`}
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {headToHeadMessage}
+                      </p>
+                    )}
+                    {headToHeadNextCursor && (
+                      <button
+                        type="button"
+                        className="online-browser-button neutral online-browser-load-more"
+                        onClick={loadMoreHeadToHeadGames}
+                        disabled={isHeadToHeadLoadingMore}
+                        aria-label={`Load more head-to-head games with ${accountHeadToHeadSummary.opponentDisplayName}`}
+                      >
+                        {isHeadToHeadLoadingMore ? "Loading..." : "Load more head-to-head games"}
+                      </button>
+                    )}
                   </section>
                 )}
                 {accountGamesStatus === "error" && !accountHeadToHeadSummary ? (

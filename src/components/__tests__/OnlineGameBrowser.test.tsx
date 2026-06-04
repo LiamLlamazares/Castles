@@ -2245,6 +2245,20 @@ describe("OnlineGameBrowser", () => {
       ],
       result: { winner: "w", reason: "timeout" },
     });
+    const laterLiamWin = summary({
+      gameId: "game_h2h_later_liam_win",
+      updatedAt: "2026-06-01T12:06:00.000Z",
+      endedAt: "2026-06-01T12:06:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "private",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Samir").identity },
+      ],
+      result: { winner: "w", reason: "resignation" },
+    });
     const otherOpponent = summary({
       gameId: "game_h2h_other",
       status: "complete",
@@ -2258,7 +2272,9 @@ describe("OnlineGameBrowser", () => {
       result: { winner: "w", reason: "resignation" },
     });
     const loadAccountGames = vi.fn().mockResolvedValue(directory([otherOpponent]));
-    const loadAccountHeadToHeadGames = vi.fn().mockResolvedValue(directory([liamWin, samirWin]));
+    const loadAccountHeadToHeadGames = vi.fn()
+      .mockResolvedValueOnce(directory([liamWin, samirWin], "pair_cursor_2"))
+      .mockResolvedValueOnce(directory([laterLiamWin]));
 
     render(
       <OnlineGameBrowser
@@ -2284,7 +2300,7 @@ describe("OnlineGameBrowser", () => {
     }));
 
     const summaryCard = await screen.findByRole("region", { name: "Head-to-head with Samir" });
-    expect(loadAccountHeadToHeadGames).toHaveBeenCalledWith("Samir", { limit: 100 });
+    expect(loadAccountHeadToHeadGames).toHaveBeenCalledWith("Samir", { limit: 5 });
     expect(summaryCard).toHaveTextContent("2 games");
     expect(summaryCard).toHaveTextContent("Liam 1");
     expect(summaryCard).toHaveTextContent("Samir 1");
@@ -2295,6 +2311,18 @@ describe("OnlineGameBrowser", () => {
     expect(within(pairGames).getByText("game_h2h_samir_win")).toBeInTheDocument();
     expect(within(pairGames).getByText("game_h2h_liam_win")).toBeInTheDocument();
     expect(within(pairGames).queryByText("game_h2h_other")).not.toBeInTheDocument();
+
+    fireEvent.click(within(pairGames).getByRole("button", { name: "Load more head-to-head games with Samir" }));
+
+    await waitFor(() =>
+      expect(loadAccountHeadToHeadGames).toHaveBeenLastCalledWith("Samir", {
+        limit: 5,
+        cursor: "pair_cursor_2",
+      })
+    );
+    expect(await within(pairGames).findByText("game_h2h_later_liam_win")).toBeInTheDocument();
+    expect(summaryCard).toHaveTextContent("3 games");
+    expect(summaryCard).toHaveTextContent("Liam 2");
   });
 
   it("keeps game row player names plain without signed-in social lookup", async () => {
