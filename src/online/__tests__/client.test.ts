@@ -1545,6 +1545,70 @@ describe("online client helpers", () => {
     });
   });
 
+  it("preserves trusted current account session revoke rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({
+        error: {
+          code: "persistence_failed",
+          message: "Account session could not be revoked.",
+        },
+      }),
+    });
+
+    await expect(
+      revokeOnlineAccountSession({ token: "account-token" }, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 503,
+      code: "persistence_failed",
+      message: "Account session could not be revoked.",
+    });
+  });
+
+  it("preserves trusted all-session revoke rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({
+        error: {
+          code: "persistence_failed",
+          message: "Account sessions could not be revoked.",
+        },
+      }),
+    });
+
+    await expect(
+      revokeAllOnlineAccountSessions({ token: "account-token" }, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 503,
+      code: "persistence_failed",
+      message: "Account sessions could not be revoked.",
+    });
+  });
+
+  it("preserves trusted account deletion rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({
+        error: {
+          code: "persistence_failed",
+          message: "Account could not be deleted.",
+        },
+      }),
+    });
+
+    await expect(deleteOnlineAccount({ token: "account-token" }, fetchImpl as any)).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 503,
+      code: "persistence_failed",
+      message: "Account could not be deleted.",
+    });
+  });
+
   it("loads and revokes all online account sessions", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce({

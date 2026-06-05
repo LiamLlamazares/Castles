@@ -1425,8 +1425,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       await onSignOutAllAccountSessions();
       setAccountSessions([]);
       setAccountSessionsStatus("idle");
-    } catch {
-      setAccountActionMessage("Could not sign out everywhere.");
+    } catch (error) {
+      setAccountActionMessage(onlineRequestErrorMessage(error) ?? "Could not sign out everywhere.");
     }
   }, [onSignOutAllAccountSessions]);
 
@@ -1441,8 +1441,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setIsDeleteAccountConfirmOpen(false);
       setAccountSessions([]);
       setAccountSessionsStatus("idle");
-    } catch {
-      setAccountActionMessage("Could not delete account.");
+    } catch (error) {
+      setAccountActionMessage(onlineRequestErrorMessage(error) ?? "Could not delete account.");
       void refreshAccountSessions();
     }
   }, [onDeleteAccount, refreshAccountSessions]);

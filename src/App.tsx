@@ -1216,7 +1216,11 @@ function App() {
       }
       setOnlineAccount(session.account ?? onlineAccount);
       setOnlineAccountStatus("error");
-      setOnlineAccountError("Could not sign out. Check your connection and try again.");
+      setOnlineAccountError(
+        error instanceof OnlineRequestError
+          ? error.message
+          : "Could not sign out. Check your connection and try again."
+      );
     }
   }, [onlineAccount, onlineAccountSession]);
 
@@ -1254,7 +1258,11 @@ function App() {
       }
       setOnlineAccount(session.account ?? onlineAccount);
       setOnlineAccountStatus("error");
-      setOnlineAccountError("Could not sign out everywhere. Check your connection and try again.");
+      setOnlineAccountError(
+        error instanceof OnlineRequestError
+          ? error.message
+          : "Could not sign out everywhere. Check your connection and try again."
+      );
       throw error;
     }
   }, [onlineAccount, onlineAccountSession]);
@@ -1293,7 +1301,11 @@ function App() {
       }
       setOnlineAccount(session.account ?? onlineAccount);
       setOnlineAccountStatus("error");
-      setOnlineAccountError("Could not delete account. Check your connection and try again.");
+      setOnlineAccountError(
+        error instanceof OnlineRequestError
+          ? error.message
+          : "Could not delete account. Check your connection and try again."
+      );
       throw error;
     }
   }, [onlineAccount, onlineAccountSession]);

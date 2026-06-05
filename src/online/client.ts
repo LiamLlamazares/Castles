@@ -1452,7 +1452,10 @@ export async function revokeOnlineAccountSession(
     headers: accountAuthorizationHeader(account),
   });
   if (!response.ok) {
-    throw new Error(`Could not revoke online account session (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not revoke online account session (${response.status})`
+    );
   }
   const body = await response.json();
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -1546,7 +1549,10 @@ export async function revokeAllOnlineAccountSessions(
     headers: accountAuthorizationHeader(account),
   });
   if (!response.ok) {
-    throw new Error(`Could not revoke online account sessions (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not revoke online account sessions (${response.status})`
+    );
   }
   const body = await response.json();
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -1576,7 +1582,10 @@ export async function deleteOnlineAccount(
     headers: accountAuthorizationHeader(account),
   });
   if (!response.ok) {
-    throw new Error(`Could not delete online account (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not delete online account (${response.status})`
+    );
   }
   const body = await response.json();
   if (!body || typeof body !== "object" || Array.isArray(body)) {
