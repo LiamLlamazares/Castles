@@ -622,21 +622,30 @@ function parseRatingLeaderboardOptions(
 function parseModerationReportQueueOptions(
   originalUrl: string
 ):
-  | { ok: true; status: OnlineAccountReportStatus; reason?: OnlineAccountReportReason; limit: number }
+  | {
+      ok: true;
+      status: OnlineAccountReportStatus;
+      reason?: OnlineAccountReportReason;
+      reporterDisplayName?: string;
+      targetDisplayName?: string;
+      limit: number;
+    }
   | { ok: false; message: string } {
   const url = new URL(originalUrl, "http://localhost");
   if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
     return { ok: false, message: "Moderation report query is invalid." };
   }
   for (const name of url.searchParams.keys()) {
-    if (name !== "status" && name !== "limit" && name !== "reason") {
+    if (name !== "status" && name !== "limit" && name !== "reason" && name !== "reporter" && name !== "target") {
       return { ok: false, message: "Moderation report query is invalid." };
     }
   }
   if (
     url.searchParams.getAll("status").length > 1 ||
     url.searchParams.getAll("limit").length > 1 ||
-    url.searchParams.getAll("reason").length > 1
+    url.searchParams.getAll("reason").length > 1 ||
+    url.searchParams.getAll("reporter").length > 1 ||
+    url.searchParams.getAll("target").length > 1
   ) {
     return { ok: false, message: "Moderation report query is invalid." };
   }
@@ -647,6 +656,16 @@ function parseModerationReportQueueOptions(
   const reason = getSingleSearchParam(url.searchParams, "reason") ?? undefined;
   if (reason && !ONLINE_ACCOUNT_REPORT_REASONS.has(reason as OnlineAccountReportReason)) {
     return { ok: false, message: "Moderation report reason is invalid." };
+  }
+  const rawReporter = getSingleSearchParam(url.searchParams, "reporter") ?? undefined;
+  const reporter = rawReporter ? normalizeOnlineAccountDisplayName(rawReporter) : undefined;
+  if (reporter && !reporter.ok) {
+    return { ok: false, message: "Moderation report reporter is invalid." };
+  }
+  const rawTarget = getSingleSearchParam(url.searchParams, "target") ?? undefined;
+  const target = rawTarget ? normalizeOnlineAccountDisplayName(rawTarget) : undefined;
+  if (target && !target.ok) {
+    return { ok: false, message: "Moderation report target is invalid." };
   }
   const rawLimit = getSingleSearchParam(url.searchParams, "limit");
   const limit = rawLimit === null ? MODERATION_REPORT_DEFAULT_LIMIT : Number(rawLimit);
@@ -662,6 +681,8 @@ function parseModerationReportQueueOptions(
     ok: true,
     status: rawStatus as OnlineAccountReportStatus,
     reason: reason as OnlineAccountReportReason | undefined,
+    reporterDisplayName: reporter?.value,
+    targetDisplayName: target?.value,
     limit,
   };
 }
@@ -3564,6 +3585,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       const reports = await accountStore.listAccountReports({
         status: parsed.status,
         reason: parsed.reason,
+        reporterDisplayName: parsed.reporterDisplayName,
+        targetDisplayName: parsed.targetDisplayName,
         limit: parsed.limit,
       });
       const body: OnlineAccountModerationReportQueueResponse = {

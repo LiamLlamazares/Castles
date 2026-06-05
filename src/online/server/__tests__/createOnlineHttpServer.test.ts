@@ -481,11 +481,18 @@ class FakePostgresAccountQueryable {
     if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE status")) {
       const [status] = values as [string];
       const hasReasonFilter = normalizedText.includes("AND reason =");
-      const reason = hasReasonFilter ? (values[1] as string) : undefined;
-      const limit = values[hasReasonFilter ? 2 : 1] as number;
+      const hasReporterFilter = normalizedText.includes("LOWER(reporter_display_name)");
+      const hasTargetFilter = normalizedText.includes("LOWER(target_display_name)");
+      let index = 1;
+      const reason = hasReasonFilter ? (values[index++] as string) : undefined;
+      const reporterDisplayName = hasReporterFilter ? String(values[index++]).toLowerCase() : undefined;
+      const targetDisplayName = hasTargetFilter ? String(values[index++]).toLowerCase() : undefined;
+      const limit = values[index] as number;
       const rows = this.reports
         .filter((report) => report.status === status)
         .filter((report) => !reason || report.reason === reason)
+        .filter((report) => !reporterDisplayName || String(report.reporter_display_name).toLowerCase() === reporterDisplayName)
+        .filter((report) => !targetDisplayName || String(report.target_display_name).toLowerCase() === targetDisplayName)
         .sort((left, right) => {
           if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
           return String(right.report_id).localeCompare(String(left.report_id));
@@ -1449,6 +1456,15 @@ describe("createOnlineHttpServer", () => {
         headers: bearer(adminToken),
       }
     );
+    const badTargetResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?target=x`, {
+      headers: bearer(adminToken),
+    });
+    const duplicateReporterResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports?reporter=Liam&reporter=Samir`,
+      {
+        headers: bearer(adminToken),
+      }
+    );
     const queueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?limit=1`, {
       headers: bearer(adminToken),
     });
@@ -1467,6 +1483,8 @@ describe("createOnlineHttpServer", () => {
     expect(highLimitResponse.status).toBe(400);
     expect(badReasonResponse.status).toBe(400);
     expect(duplicateReasonResponse.status).toBe(400);
+    expect(badTargetResponse.status).toBe(400);
+    expect(duplicateReporterResponse.status).toBe(400);
     expect(queueResponse.status).toBe(200);
     expect(spamQueueResponse.status).toBe(200);
     expect(queueResponse.headers.get("cache-control")).toBe("no-store");
@@ -1501,6 +1519,33 @@ describe("createOnlineHttpServer", () => {
       reason: "spam",
     });
     expect(JSON.stringify(spamQueue)).not.toContain("Samir");
+
+    now = Date.parse("2026-06-01T12:05:00.000Z");
+    const thirdReportResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Ben`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+      body: JSON.stringify({ reason: "cheating", details: "Suspicious timeout pattern." }),
+    });
+    const targetQueueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?target=ben`, {
+      headers: bearer(adminToken),
+    });
+    const reporterQueueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?reporter=samir`, {
+      headers: bearer(adminToken),
+    });
+    const targetQueue = await targetQueueResponse.json();
+    const reporterQueue = await reporterQueueResponse.json();
+
+    expect(thirdReportResponse.status).toBe(201);
+    expect(targetQueueResponse.status).toBe(200);
+    expect(reporterQueueResponse.status).toBe(200);
+    expect(targetQueue.reports.map((report: any) => report.reporterDisplayName)).toEqual(["Samir", "Liam"]);
+    expect(targetQueue.reports.every((report: any) => report.targetDisplayName === "Ben")).toBe(true);
+    expect(reporterQueue.reports).toHaveLength(1);
+    expect(reporterQueue.reports[0]).toMatchObject({
+      reporterDisplayName: "Samir",
+      targetDisplayName: "Ben",
+      reason: "cheating",
+    });
   });
 
   it("updates admin report status with an audit entry and sanitized lifecycle fields", async () => {

@@ -714,11 +714,28 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
 
   async listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]> {
     await this.ensureSchema();
+    const reporterDisplayName = options.reporterDisplayName
+      ? normalizeOnlineAccountDisplayName(options.reporterDisplayName)
+      : undefined;
+    const targetDisplayName = options.targetDisplayName
+      ? normalizeOnlineAccountDisplayName(options.targetDisplayName)
+      : undefined;
+    if ((reporterDisplayName && !reporterDisplayName.ok) || (targetDisplayName && !targetDisplayName.ok)) {
+      return [];
+    }
     const where = ["status = $1"];
     const values: unknown[] = [options.status];
     if (options.reason) {
       values.push(options.reason);
       where.push(`reason = $${values.length}`);
+    }
+    if (reporterDisplayName) {
+      values.push(reporterDisplayName.value);
+      where.push(`LOWER(reporter_display_name) = LOWER($${values.length})`);
+    }
+    if (targetDisplayName) {
+      values.push(targetDisplayName.value);
+      where.push(`LOWER(target_display_name) = LOWER($${values.length})`);
     }
     values.push(options.limit);
     const result = await this.queryable.query(

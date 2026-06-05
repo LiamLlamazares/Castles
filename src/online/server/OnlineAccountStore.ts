@@ -97,6 +97,8 @@ export type OnlineAccountReportSubmissionResult =
 export interface ListOnlineAccountReportsOptions {
   status: OnlineAccountReportStatus;
   reason?: OnlineAccountReportReason;
+  reporterDisplayName?: string;
+  targetDisplayName?: string;
   limit: number;
 }
 
@@ -563,9 +565,17 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   }
 
   async listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]> {
+    const reporterKey = options.reporterDisplayName
+      ? normalizeOnlineAccountDisplayNameKey(options.reporterDisplayName)
+      : undefined;
+    const targetKey = options.targetDisplayName
+      ? normalizeOnlineAccountDisplayNameKey(options.targetDisplayName)
+      : undefined;
     return this.reports
       .filter((report) => report.status === options.status)
       .filter((report) => !options.reason || report.reason === options.reason)
+      .filter((report) => !reporterKey || normalizeOnlineAccountDisplayNameKey(report.reporterDisplayName) === reporterKey)
+      .filter((report) => !targetKey || normalizeOnlineAccountDisplayNameKey(report.targetDisplayName) === targetKey)
       .sort((left, right) => {
         const createdOrder = right.createdAt.localeCompare(left.createdAt);
         return createdOrder !== 0 ? createdOrder : right.reportId.localeCompare(left.reportId);

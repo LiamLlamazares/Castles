@@ -439,11 +439,18 @@ class FakeAccountQueryable {
     if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE status")) {
       const [status] = values as [string];
       const hasReasonFilter = normalizedText.includes("AND reason =");
-      const reason = hasReasonFilter ? (values[1] as string) : undefined;
-      const limit = values[hasReasonFilter ? 2 : 1] as number;
+      const hasReporterFilter = normalizedText.includes("LOWER(reporter_display_name)");
+      const hasTargetFilter = normalizedText.includes("LOWER(target_display_name)");
+      let index = 1;
+      const reason = hasReasonFilter ? (values[index++] as string) : undefined;
+      const reporterDisplayName = hasReporterFilter ? String(values[index++]).toLowerCase() : undefined;
+      const targetDisplayName = hasTargetFilter ? String(values[index++]).toLowerCase() : undefined;
+      const limit = values[index] as number;
       const rows = this.reports
         .filter((report) => report.status === status)
         .filter((report) => !reason || report.reason === reason)
+        .filter((report) => !reporterDisplayName || String(report.reporter_display_name).toLowerCase() === reporterDisplayName)
+        .filter((report) => !targetDisplayName || String(report.target_display_name).toLowerCase() === targetDisplayName)
         .sort((left, right) => {
           if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
           return String(right.report_id).localeCompare(String(left.report_id));
@@ -1297,6 +1304,27 @@ describe("PostgresOnlineAccountStore", () => {
     expect(JSON.stringify(queue)).not.toContain("account_");
     expect(JSON.stringify(queue)).not.toContain("token-");
 
+    const thirdReport = await store.submitAccountReport({
+      reportId: "report_samir_ben",
+      reporterAccountId: "account_samir",
+      targetDisplayName: "Ben",
+      reason: "cheating",
+      details: "Suspicious repeated timeout pattern.",
+      createdAt: "2026-06-03T12:04:30.000Z",
+    });
+    expect(thirdReport.status).toBe("ok");
+    await expect(store.listAccountReports({ status: "open", reporterDisplayName: "samir", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_samir_ben", reporterDisplayName: "Samir" },
+    ]);
+    await expect(store.listAccountReports({ status: "open", targetDisplayName: "ben", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_samir_ben", targetDisplayName: "Ben" },
+      { reportId: "report_liam_ben", targetDisplayName: "Ben" },
+    ]);
+    await expect(store.listAccountReports({ status: "open", targetDisplayName: "  Ben  ", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_samir_ben", targetDisplayName: "Ben" },
+      { reportId: "report_liam_ben", targetDisplayName: "Ben" },
+    ]);
+
     await expect(
       store.updateAccountReportStatus({
         reportId: "missing_report",
@@ -1351,6 +1379,7 @@ describe("PostgresOnlineAccountStore", () => {
       },
     });
     await expect(store.listAccountReports({ status: "open", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_samir_ben" },
       { reportId: "report_liam_ben" },
     ]);
     await expect(store.listAccountReports({ status: "resolved", limit: 10 })).resolves.toMatchObject([
