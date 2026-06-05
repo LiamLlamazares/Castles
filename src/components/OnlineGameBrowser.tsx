@@ -5396,7 +5396,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   </button>
                 </div>
                 <p>
-                  Active and completed private, unlisted, and public games played as {account.displayName} appear here. Active games can return to play only when this browser session still has the saved player token.
+                  Active and completed private, unlisted, and public games played as {account.displayName} appear here. Active games can return from this browser session or rejoin through your account when available.
                 </p>
                 {accountHeadToHeadSummary && renderAccountHeadToHeadSummary(accountHeadToHeadSummary)}
                 {accountHeadToHeadSummary && (

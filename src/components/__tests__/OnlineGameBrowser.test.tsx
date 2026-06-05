@@ -3526,6 +3526,11 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
+    const accountGames = await screen.findByRole("region", { name: "Your account games" });
+    expect(accountGames).toHaveTextContent(
+      "Active games can return from this browser session or rejoin through your account when available."
+    );
+    expect(accountGames).not.toHaveTextContent("Active games can return to play only when this browser session");
     const activeGames = await screen.findByRole("region", { name: "Active account games" });
     fireEvent.click(
       within(activeGames).getByRole("button", {
