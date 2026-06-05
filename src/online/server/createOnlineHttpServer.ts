@@ -628,6 +628,10 @@ function parseModerationReportQueueOptions(
       reason?: OnlineAccountReportReason;
       reporterDisplayName?: string;
       targetDisplayName?: string;
+      cursor?: {
+        createdAt: string;
+        reportId: string;
+      };
       limit: number;
     }
   | { ok: false; message: string } {
@@ -636,7 +640,14 @@ function parseModerationReportQueueOptions(
     return { ok: false, message: "Moderation report query is invalid." };
   }
   for (const name of url.searchParams.keys()) {
-    if (name !== "status" && name !== "limit" && name !== "reason" && name !== "reporter" && name !== "target") {
+    if (
+      name !== "status" &&
+      name !== "limit" &&
+      name !== "reason" &&
+      name !== "reporter" &&
+      name !== "target" &&
+      name !== "cursor"
+    ) {
       return { ok: false, message: "Moderation report query is invalid." };
     }
   }
@@ -645,7 +656,8 @@ function parseModerationReportQueueOptions(
     url.searchParams.getAll("limit").length > 1 ||
     url.searchParams.getAll("reason").length > 1 ||
     url.searchParams.getAll("reporter").length > 1 ||
-    url.searchParams.getAll("target").length > 1
+    url.searchParams.getAll("target").length > 1 ||
+    url.searchParams.getAll("cursor").length > 1
   ) {
     return { ok: false, message: "Moderation report query is invalid." };
   }
@@ -667,6 +679,11 @@ function parseModerationReportQueueOptions(
   if (target && !target.ok) {
     return { ok: false, message: "Moderation report target is invalid." };
   }
+  const rawCursor = getSingleSearchParam(url.searchParams, "cursor") ?? undefined;
+  const cursor = rawCursor ? decodeModerationReportQueueCursor(rawCursor) : undefined;
+  if (cursor && !cursor.ok) {
+    return { ok: false, message: "Moderation report cursor is invalid." };
+  }
   const rawLimit = getSingleSearchParam(url.searchParams, "limit");
   const limit = rawLimit === null ? MODERATION_REPORT_DEFAULT_LIMIT : Number(rawLimit);
   if (
@@ -683,6 +700,7 @@ function parseModerationReportQueueOptions(
     reason: reason as OnlineAccountReportReason | undefined,
     reporterDisplayName: reporter?.value,
     targetDisplayName: target?.value,
+    cursor: cursor?.value,
     limit,
   };
 }
@@ -1112,6 +1130,40 @@ function normalizeModerationReportId(value: unknown): string | null {
   if (typeof value !== "string" || !/^report_[A-Za-z0-9_-]{6,128}$/.test(value)) return null;
   if (stringContainsDurableSecret(value)) return null;
   return value;
+}
+
+function encodeModerationReportQueueCursor(report: { createdAt: string; reportId: string }): string {
+  return Buffer.from(
+    JSON.stringify({
+      createdAt: report.createdAt,
+      reportId: report.reportId,
+    }),
+    "utf8"
+  ).toString("base64url");
+}
+
+function decodeModerationReportQueueCursor(
+  cursor: string
+): { ok: true; value: { createdAt: string; reportId: string } } | { ok: false } {
+  try {
+    if (!/^[A-Za-z0-9_-]{8,512}$/.test(cursor)) return { ok: false };
+    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { ok: false };
+    const createdAt = (parsed as { createdAt?: unknown }).createdAt;
+    const reportId = normalizeModerationReportId((parsed as { reportId?: unknown }).reportId);
+    const createdAtTime = typeof createdAt === "string" ? Date.parse(createdAt) : NaN;
+    if (
+      typeof createdAt !== "string" ||
+      Number.isNaN(createdAtTime) ||
+      new Date(createdAtTime).toISOString() !== createdAt ||
+      !reportId
+    ) {
+      return { ok: false };
+    }
+    return { ok: true, value: { createdAt, reportId } };
+  } catch {
+    return { ok: false };
+  }
 }
 
 function normalizeOnlineSetupForCreation(setup: OnlineGameSetupDTO): OnlineGameSetupDTO {
@@ -3587,12 +3639,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         reason: parsed.reason,
         reporterDisplayName: parsed.reporterDisplayName,
         targetDisplayName: parsed.targetDisplayName,
-        limit: parsed.limit,
+        cursor: parsed.cursor,
+        limit: parsed.limit + 1,
       });
+      const pageReports = reports.slice(0, parsed.limit);
+      const nextCursor =
+        reports.length > parsed.limit && pageReports.length > 0
+          ? encodeModerationReportQueueCursor(pageReports[pageReports.length - 1])
+          : undefined;
       const body: OnlineAccountModerationReportQueueResponse = {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
-        reports,
+        reports: pageReports,
+        ...(nextCursor ? { nextCursor } : {}),
       };
       log({ event: "online.admin.reports", status: "accepted" });
       res.json(body);

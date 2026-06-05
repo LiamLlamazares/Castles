@@ -120,6 +120,7 @@ export interface OnlineAccountModerationReportQueueResponse {
   protocolVersion: number;
   schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
   reports: OnlineAccountModerationReport[];
+  nextCursor?: string;
 }
 
 export interface OnlineAccountModerationReportStatusResponse {

@@ -441,16 +441,25 @@ class FakeAccountQueryable {
       const hasReasonFilter = normalizedText.includes("AND reason =");
       const hasReporterFilter = normalizedText.includes("LOWER(reporter_display_name)");
       const hasTargetFilter = normalizedText.includes("LOWER(target_display_name)");
+      const hasCursorFilter = normalizedText.includes("created_at <");
       let index = 1;
       const reason = hasReasonFilter ? (values[index++] as string) : undefined;
       const reporterDisplayName = hasReporterFilter ? String(values[index++]).toLowerCase() : undefined;
       const targetDisplayName = hasTargetFilter ? String(values[index++]).toLowerCase() : undefined;
+      const cursorCreatedAt = hasCursorFilter ? String(values[index++]) : undefined;
+      const cursorReportId = hasCursorFilter ? String(values[index++]) : undefined;
       const limit = values[index] as number;
       const rows = this.reports
         .filter((report) => report.status === status)
         .filter((report) => !reason || report.reason === reason)
         .filter((report) => !reporterDisplayName || String(report.reporter_display_name).toLowerCase() === reporterDisplayName)
         .filter((report) => !targetDisplayName || String(report.target_display_name).toLowerCase() === targetDisplayName)
+        .filter(
+          (report) =>
+            !cursorCreatedAt ||
+            String(report.created_at) < cursorCreatedAt ||
+            (String(report.created_at) === cursorCreatedAt && String(report.report_id) < String(cursorReportId))
+        )
         .sort((left, right) => {
           if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
           return String(right.report_id).localeCompare(String(left.report_id));
@@ -1323,6 +1332,19 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.listAccountReports({ status: "open", targetDisplayName: "  Ben  ", limit: 10 })).resolves.toMatchObject([
       { reportId: "report_samir_ben", targetDisplayName: "Ben" },
       { reportId: "report_liam_ben", targetDisplayName: "Ben" },
+    ]);
+    await expect(
+      store.listAccountReports({
+        status: "open",
+        cursor: {
+          createdAt: "2026-06-03T12:04:30.000Z",
+          reportId: "report_samir_ben",
+        },
+        limit: 10,
+      })
+    ).resolves.toMatchObject([
+      { reportId: "report_liam_ben" },
+      { reportId: "report_liam_samir" },
     ]);
 
     await expect(

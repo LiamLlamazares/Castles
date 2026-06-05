@@ -737,6 +737,12 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       values.push(targetDisplayName.value);
       where.push(`LOWER(target_display_name) = LOWER($${values.length})`);
     }
+    if (options.cursor) {
+      values.push(options.cursor.createdAt, options.cursor.reportId);
+      where.push(
+        `(created_at < $${values.length - 1} OR (created_at = $${values.length - 1} AND report_id < $${values.length}))`
+      );
+    }
     values.push(options.limit);
     const result = await this.queryable.query(
       `

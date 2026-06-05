@@ -483,16 +483,25 @@ class FakePostgresAccountQueryable {
       const hasReasonFilter = normalizedText.includes("AND reason =");
       const hasReporterFilter = normalizedText.includes("LOWER(reporter_display_name)");
       const hasTargetFilter = normalizedText.includes("LOWER(target_display_name)");
+      const hasCursorFilter = normalizedText.includes("created_at <");
       let index = 1;
       const reason = hasReasonFilter ? (values[index++] as string) : undefined;
       const reporterDisplayName = hasReporterFilter ? String(values[index++]).toLowerCase() : undefined;
       const targetDisplayName = hasTargetFilter ? String(values[index++]).toLowerCase() : undefined;
+      const cursorCreatedAt = hasCursorFilter ? String(values[index++]) : undefined;
+      const cursorReportId = hasCursorFilter ? String(values[index++]) : undefined;
       const limit = values[index] as number;
       const rows = this.reports
         .filter((report) => report.status === status)
         .filter((report) => !reason || report.reason === reason)
         .filter((report) => !reporterDisplayName || String(report.reporter_display_name).toLowerCase() === reporterDisplayName)
         .filter((report) => !targetDisplayName || String(report.target_display_name).toLowerCase() === targetDisplayName)
+        .filter(
+          (report) =>
+            !cursorCreatedAt ||
+            String(report.created_at) < cursorCreatedAt ||
+            (String(report.created_at) === cursorCreatedAt && String(report.report_id) < String(cursorReportId))
+        )
         .sort((left, right) => {
           if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
           return String(right.report_id).localeCompare(String(left.report_id));
@@ -1492,6 +1501,7 @@ describe("createOnlineHttpServer", () => {
     expect(queue).toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       schemaVersion: 2,
+      nextCursor: expect.any(String),
       reports: [
         {
           schemaVersion: 2,
@@ -1529,17 +1539,49 @@ describe("createOnlineHttpServer", () => {
     const targetQueueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?target=ben`, {
       headers: bearer(adminToken),
     });
+    const targetFirstPageResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?target=ben&limit=1`, {
+      headers: bearer(adminToken),
+    });
     const reporterQueueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?reporter=samir`, {
       headers: bearer(adminToken),
     });
+    const badCursorResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?cursor=not-a-cursor`, {
+      headers: bearer(adminToken),
+    });
+    const badDecodedCursorResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports?cursor=${encodeURIComponent(
+        base64UrlJson({ createdAt: "2026-06-01", reportId: "report_noncanonical" })
+      )}`,
+      {
+        headers: bearer(adminToken),
+      }
+    );
     const targetQueue = await targetQueueResponse.json();
+    const targetFirstPage = await targetFirstPageResponse.json();
+    const targetSecondPageResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports?target=ben&cursor=${encodeURIComponent(
+        targetFirstPage.nextCursor
+      )}`,
+      {
+        headers: bearer(adminToken),
+      }
+    );
+    const targetSecondPage = await targetSecondPageResponse.json();
     const reporterQueue = await reporterQueueResponse.json();
 
     expect(thirdReportResponse.status).toBe(201);
     expect(targetQueueResponse.status).toBe(200);
+    expect(targetFirstPageResponse.status).toBe(200);
+    expect(targetSecondPageResponse.status).toBe(200);
     expect(reporterQueueResponse.status).toBe(200);
+    expect(badCursorResponse.status).toBe(400);
+    expect(badDecodedCursorResponse.status).toBe(400);
     expect(targetQueue.reports.map((report: any) => report.reporterDisplayName)).toEqual(["Samir", "Liam"]);
     expect(targetQueue.reports.every((report: any) => report.targetDisplayName === "Ben")).toBe(true);
+    expect(targetFirstPage.reports).toEqual([targetQueue.reports[0]]);
+    expect(targetFirstPage.nextCursor).toEqual(expect.any(String));
+    expect(targetSecondPage.reports).toEqual([targetQueue.reports[1]]);
+    expect(targetSecondPage.nextCursor).toBeUndefined();
     expect(reporterQueue.reports).toHaveLength(1);
     expect(reporterQueue.reports[0]).toMatchObject({
       reporterDisplayName: "Samir",

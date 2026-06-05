@@ -99,6 +99,10 @@ export interface ListOnlineAccountReportsOptions {
   reason?: OnlineAccountReportReason;
   reporterDisplayName?: string;
   targetDisplayName?: string;
+  cursor?: {
+    createdAt: string;
+    reportId: string;
+  };
   limit: number;
 }
 
@@ -576,6 +580,12 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       .filter((report) => !options.reason || report.reason === options.reason)
       .filter((report) => !reporterKey || normalizeOnlineAccountDisplayNameKey(report.reporterDisplayName) === reporterKey)
       .filter((report) => !targetKey || normalizeOnlineAccountDisplayNameKey(report.targetDisplayName) === targetKey)
+      .filter(
+        (report) =>
+          !options.cursor ||
+          report.createdAt < options.cursor.createdAt ||
+          (report.createdAt === options.cursor.createdAt && report.reportId < options.cursor.reportId)
+      )
       .sort((left, right) => {
         const createdOrder = right.createdAt.localeCompare(left.createdAt);
         return createdOrder !== 0 ? createdOrder : right.reportId.localeCompare(left.reportId);
