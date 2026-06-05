@@ -258,6 +258,15 @@ function socialPropsWithFollowing(following: ReturnType<typeof publicProfile>[] 
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       profile: publicProfile("Samir"),
     }),
+    onReportAccount: vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      report: {
+        schemaVersion: 1,
+        targetDisplayName: "Samir",
+        reason: "abuse",
+        createdAt: "2026-06-05T12:00:00.000Z",
+      },
+    }),
     onUpdateAccountPrivacy: vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       privacy: {
@@ -1141,6 +1150,58 @@ describe("OnlineGameBrowser", () => {
     } finally {
       window.localStorage.removeItem(storageKey);
     }
+  });
+
+  it("submits account reports from followed-player rows", async () => {
+    const onReportAccount = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      report: {
+        schemaVersion: 1,
+        targetDisplayName: "Samir",
+        reason: "cheating",
+        createdAt: "2026-06-05T12:00:00.000Z",
+      },
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Reporter")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        onReportAccount={onReportAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const following = await within(people).findByRole("region", { name: "Followed players" });
+    const samirRow = (await within(following).findByText("Samir")).closest("article");
+    expect(samirRow).not.toBeNull();
+
+    fireEvent.click(within(samirRow as HTMLElement).getByRole("button", { name: "Report Samir from following list" }));
+
+    const reportForm = within(people).getByRole("form", { name: "Report Samir" });
+    fireEvent.change(within(reportForm).getByRole("combobox", { name: "Reason" }), {
+      target: { value: "cheating" },
+    });
+    fireEvent.change(within(reportForm).getByRole("textbox", { name: "Details" }), {
+      target: { value: "Repeated impossible moves" },
+    });
+    fireEvent.click(within(reportForm).getByRole("button", { name: "Submit Report" }));
+
+    await waitFor(() =>
+      expect(onReportAccount).toHaveBeenCalledWith("Samir", {
+        reason: "cheating",
+        details: "Repeated impossible moves",
+      })
+    );
+    expect(await within(people).findByText("Report submitted for Samir.")).toBeInTheDocument();
+    expect(within(people).queryByRole("form", { name: "Report Samir" })).not.toBeInTheDocument();
   });
 
   it("labels mutual friends and accounts that follow the signed-in player", async () => {

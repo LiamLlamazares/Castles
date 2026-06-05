@@ -75,6 +75,7 @@ import {
   rememberOnlineJoinParams,
   rememberOnlineOpponentInviteUrl,
   rememberOpenSeekCreatorParams,
+  reportOnlineAccount,
   rejoinOnlineAccountGame,
   revokeAllOnlineAccountSessions,
   revokeOnlineAccountSession,
@@ -106,6 +107,7 @@ import {
   FetchOnlineAccountGamesOptions,
   FetchOpenSeekDirectoryOptions,
   OnlineAccountPrivacyPatch,
+  OnlineAccountReportInput,
 } from './online/client';
 import type { OnlineAccount } from './online/accounts';
 import type { OnlineGameSummary } from './online/readModel';
@@ -1400,6 +1402,13 @@ function App() {
     return unblockOnlineAccount({ token: onlineAccountSession.token }, displayName);
   }, [onlineAccountSession?.token]);
 
+  const handleReportOnlineAccount = useCallback((displayName: string, input: OnlineAccountReportInput) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return reportOnlineAccount({ token: onlineAccountSession.token }, displayName, input);
+  }, [onlineAccountSession?.token]);
+
   const handleLoadOnlineAccountPrivacy = useCallback(() => {
     if (!onlineAccountSession) {
       throw new Error("No online account session is available.");
@@ -2609,6 +2618,7 @@ function App() {
           onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
           onBlockAccount={onlineAccountSession ? handleBlockOnlineAccount : undefined}
           onUnblockAccount={onlineAccountSession ? handleUnblockOnlineAccount : undefined}
+          onReportAccount={onlineAccountSession ? handleReportOnlineAccount : undefined}
           onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
           onCopyChallengeAccountInvite={onlineAccountSession ? handleCopyChallengeOnlineAccountInvite : undefined}
           loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}

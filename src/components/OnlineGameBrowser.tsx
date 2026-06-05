@@ -19,13 +19,17 @@ import {
   type OnlineAccountPrivacyResponse,
   type OnlineAccountProfileResponse,
   type OnlineAccountPublicProfile,
+  type OnlineAccountReportInput,
+  type OnlineAccountReportResponse,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardResponse,
   type OnlineAccountSessionsResponse,
   type OnlineAccountSessionSummary,
   type OpenSeekResponse,
 } from "../online/client";
-import type {
+import {
+  ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH,
+  type OnlineAccountReportReason,
   OnlineAccountChallengePolicy,
   OnlineAccountFollowPolicy,
   OnlineAccountPresencePolicy,
@@ -116,6 +120,13 @@ const FOLLOWING_AUTO_REFRESH_MS = 30_000;
 const GAME_SEARCH_DEBOUNCE_MS = 300;
 const HEAD_TO_HEAD_HISTORY_PAGE_LIMIT = 5;
 const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
+const ACCOUNT_REPORT_REASON_OPTIONS: Array<{ value: OnlineAccountReportReason; label: string }> = [
+  { value: "abuse", label: "Abuse" },
+  { value: "cheating", label: "Cheating" },
+  { value: "spam", label: "Spam" },
+  { value: "impersonation", label: "Impersonation" },
+  { value: "other", label: "Other" },
+];
 
 interface OnlineGameBrowserProps {
   loadGames?: (options?: FetchOnlineGameSummariesOptions) => Promise<OnlineGameDirectoryResponse>;
@@ -169,6 +180,7 @@ interface OnlineGameBrowserProps {
   onUnfollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onBlockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onUnblockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  onReportAccount?: (displayName: string, input: OnlineAccountReportInput) => Promise<OnlineAccountReportResponse>;
   onChallengeAccount?: (displayName: string, options?: OnlineAccountChallengeActionOptions) => void | Promise<void>;
   onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
   loadAccountPrivacy?: () => Promise<OnlineAccountPrivacyResponse>;
@@ -896,6 +908,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onUnfollowAccount,
   onBlockAccount,
   onUnblockAccount,
+  onReportAccount,
   onChallengeAccount,
   onCopyChallengeAccountInvite,
   loadAccountPrivacy,
@@ -958,7 +971,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [socialMessage, setSocialMessage] = React.useState("");
-  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "copy-invite" | "refresh" | "privacy" | undefined>();
+  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "copy-invite" | "refresh" | "privacy" | "report" | undefined>();
+  const [reportTargetDisplayName, setReportTargetDisplayName] = React.useState("");
+  const [reportReason, setReportReason] = React.useState<OnlineAccountReportReason>("abuse");
+  const [reportDetails, setReportDetails] = React.useState("");
   const [followingProfiles, setFollowingProfiles] = React.useState<OnlineAccountPublicProfile[]>([]);
   const [followingStatus, setFollowingStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [ratingLeaderboardEntries, setRatingLeaderboardEntries] = React.useState<OnlineRatingLeaderboardEntry[]>([]);
@@ -1401,6 +1417,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setSocialLookupStatus("idle");
     setSocialMessage("");
     setSocialAction(undefined);
+    setReportTargetDisplayName("");
+    setReportReason("abuse");
+    setReportDetails("");
     setFollowingProfiles([]);
     setFollowingStatus(canUseAccountSocial ? "loading" : "idle");
     setFollowPolicy("everyone");
@@ -2966,6 +2985,63 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     refreshFollowingProfiles,
   ]);
 
+  const openSocialReport = React.useCallback((
+    displayName: string,
+    profile?: OnlineAccountPublicProfile
+  ) => {
+    if (!onReportAccount) return;
+    setReportTargetDisplayName(displayName);
+    setReportReason("abuse");
+    setReportDetails("");
+    setSocialMessage("");
+    if (profile) {
+      setSocialLookupName(profile.displayName);
+      setSocialProfile(profile);
+      setSocialLookupStatus("ready");
+    }
+  }, [onReportAccount]);
+
+  const cancelSocialReport = React.useCallback(() => {
+    setReportTargetDisplayName("");
+    setReportReason("abuse");
+    setReportDetails("");
+  }, []);
+
+  const submitSocialReport = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onReportAccount || !reportTargetDisplayName) return;
+    const requestId = ++socialMutationRequestIdRef.current;
+    const accountId = account?.accountId;
+    const targetDisplayName = reportTargetDisplayName;
+    setSocialAction("report");
+    setSocialMessage("");
+    try {
+      const response = await onReportAccount(targetDisplayName, {
+        reason: reportReason,
+        details: reportDetails,
+      });
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      setSocialMessage(`Report submitted for ${response.report.targetDisplayName}.`);
+      setReportTargetDisplayName("");
+      setReportReason("abuse");
+      setReportDetails("");
+    } catch (error) {
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      console.error("[OnlineGameBrowser] Failed to report account", error);
+      setSocialMessage(onlineRequestErrorMessage(error) ?? `Could not submit a report for ${targetDisplayName}.`);
+    } finally {
+      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
+        setSocialAction(undefined);
+      }
+    }
+  }, [
+    account?.accountId,
+    onReportAccount,
+    reportDetails,
+    reportReason,
+    reportTargetDisplayName,
+  ]);
+
   const runSocialChallengeAction = React.useCallback(async (
     displayName: string,
     options: OnlineAccountChallengeActionOptions = {}
@@ -3199,6 +3275,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const socialLookupDisplayName = socialLookupName.trim();
   const socialBusy = socialLookupStatus === "loading" || socialAction !== undefined;
   const canSubmitSocialLookup = socialLookupDisplayName.length >= 2 && !socialBusy;
+  const canSubmitSocialReport = Boolean(onReportAccount && reportTargetDisplayName && !socialBusy);
+  const reportDetailsRemaining = ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH - reportDetails.length;
   const socialMessageClassName = [
     "online-browser-social-message",
     socialLookupStatus === "error" || socialMessage.startsWith("Could not") || socialMessage.startsWith("No visible")
@@ -3547,6 +3625,63 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <p className={socialMessageClassName} role="status" aria-live="polite" aria-atomic="true">
             {socialMessage}
           </p>
+
+          {reportTargetDisplayName && onReportAccount && (
+            <form
+              className="online-browser-report-panel"
+              aria-label={`Report ${reportTargetDisplayName}`}
+              onSubmit={submitSocialReport}
+            >
+              <div className="online-browser-following-list-title">
+                <strong>Report {reportTargetDisplayName}</strong>
+                <span>{reportReason}</span>
+              </div>
+              <div className="online-browser-report-fields">
+                <label>
+                  <span>Reason</span>
+                  <select
+                    value={reportReason}
+                    onChange={(event) => setReportReason(event.currentTarget.value as OnlineAccountReportReason)}
+                    disabled={socialAction !== undefined}
+                  >
+                    {ACCOUNT_REPORT_REASON_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Details</span>
+                  <textarea
+                    value={reportDetails}
+                    onChange={(event) => setReportDetails(event.currentTarget.value)}
+                    maxLength={ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH}
+                    rows={3}
+                    disabled={socialAction !== undefined}
+                  />
+                </label>
+              </div>
+              <div className="online-browser-report-actions">
+                <span>{reportDetailsRemaining} left</span>
+                <button
+                  type="submit"
+                  className="online-browser-button primary"
+                  disabled={!canSubmitSocialReport}
+                >
+                  {socialAction === "report" ? "Submitting" : "Submit Report"}
+                </button>
+                <button
+                  type="button"
+                  className="online-browser-button subtle"
+                  onClick={cancelSocialReport}
+                  disabled={socialAction !== undefined}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
 
           {canUseAccountChallenges && hasPendingChallengeNotice && (
             <section className="online-browser-challenge-notice" aria-label="Pending challenge notice">
@@ -3908,15 +4043,28 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               {!socialProfile.relationship.self && (
                 <div className="online-browser-social-actions">
                   {socialProfile.relationship.blocked ? (
-                    <button
-                      type="button"
-                      className="online-browser-button subtle"
-                      onClick={() => void runSocialProfileAction("unblock", socialProfile.displayName)}
-                      disabled={socialAction !== undefined}
-                      aria-label={`Unblock ${socialProfile.displayName}`}
-                    >
-                      {socialAction === "unblock" ? "Unblocking" : "Unblock"}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="online-browser-button subtle"
+                        onClick={() => void runSocialProfileAction("unblock", socialProfile.displayName)}
+                        disabled={socialAction !== undefined}
+                        aria-label={`Unblock ${socialProfile.displayName}`}
+                      >
+                        {socialAction === "unblock" ? "Unblocking" : "Unblock"}
+                      </button>
+                      {onReportAccount && (
+                        <button
+                          type="button"
+                          className="online-browser-button subtle online-browser-button-danger"
+                          onClick={() => openSocialReport(socialProfile.displayName, socialProfile)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Report ${socialProfile.displayName}`}
+                        >
+                          Report
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <>
                       {socialProfileLiveGame && (
@@ -3991,6 +4139,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       >
                         {socialAction === "block" ? "Blocking" : "Block"}
                       </button>
+                      {onReportAccount && (
+                        <button
+                          type="button"
+                          className="online-browser-button subtle online-browser-button-danger"
+                          onClick={() => openSocialReport(socialProfile.displayName, socialProfile)}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Report ${socialProfile.displayName}`}
+                        >
+                          Report
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -4229,6 +4388,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         >
                           Select
                         </button>
+                        {onReportAccount && (
+                          <button
+                            type="button"
+                            className="online-browser-button subtle online-browser-button-danger"
+                            onClick={() => openSocialReport(profile.displayName, profile)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Report ${profile.displayName} from following list`}
+                          >
+                            Report
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="online-browser-button subtle"

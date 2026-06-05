@@ -190,6 +190,8 @@ export type {
   OnlineAccountProfileResponse,
   OnlineAccountPublicProfile,
   OnlineAccountPublicRating,
+  OnlineAccountReportInput,
+  OnlineAccountReportResponse,
   OnlineRatingLeaderboardEntry,
   OnlineRatingLeaderboardResponse,
   OnlineAccountChallengeDirectoryResponse,

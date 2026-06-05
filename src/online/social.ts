@@ -136,7 +136,7 @@ const REPORT_REASONS = new Set<OnlineAccountReportReason>([
   "impersonation",
   "other",
 ]);
-const MAX_REPORT_DETAILS_LENGTH = 1_000;
+export const ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH = 1_000;
 
 function bad(message: string): ValidationResult<never> {
   return {
@@ -216,7 +216,7 @@ export function parseOnlineAccountReportInput(value: unknown): ValidationResult<
     return bad("Report details are invalid.");
   }
   const normalizedDetails = details.replace(/\s+/g, " ").trim();
-  if (normalizedDetails.length > MAX_REPORT_DETAILS_LENGTH) {
+  if (normalizedDetails.length > ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH) {
     return bad("Report details are too long.");
   }
 

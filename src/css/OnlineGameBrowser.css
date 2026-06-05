@@ -210,6 +210,64 @@
   color: #ffb7a8;
 }
 
+.online-browser-report-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(218, 111, 101, 0.36);
+  border-radius: 6px;
+  background: rgba(64, 25, 28, 0.3);
+}
+
+.online-browser-report-fields {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.35fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.online-browser-report-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.online-browser-report-fields label > span {
+  color: #f4ebce;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.online-browser-report-fields select,
+.online-browser-report-fields textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111;
+  font: inherit;
+}
+
+.online-browser-report-fields textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.online-browser-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+
+.online-browser-report-actions span {
+  margin-right: auto;
+  color: #e1d7bd;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .online-browser-challenge-notice {
   display: flex;
   justify-content: space-between;
@@ -1181,6 +1239,7 @@
   .online-browser-social-grid,
   .online-browser-social-search,
   .online-browser-follow-policy,
+  .online-browser-report-fields,
   .online-browser-profile-card,
   .online-browser-following-row,
   .online-browser-section-header,
