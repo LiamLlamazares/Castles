@@ -511,6 +511,17 @@ function formatChallengeSeatChoice(item: OnlineAccountChallengeListItem): string
   return `They chose ${challengerSide}`;
 }
 
+function formatChallengeSetupSummary(item: OnlineAccountChallengeListItem): string[] {
+  const setup = item.summary.setup;
+  const clock = setup.timeControl ? `Timed ${setup.timeControl.initial}+${setup.timeControl.increment}` : "Casual";
+  return [
+    `Board Radius ${setup.board.config.nSquares}`,
+    `Clock ${clock}`,
+    `Scoring ${setup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control"}`,
+    `Rating ${formatRatingModeLabel(setup.ratingMode)}`,
+  ];
+}
+
 function formatAccountChallengeStatus(item: OnlineAccountChallengeListItem): string {
   switch (item.summary.status) {
     case "pending":
@@ -4178,6 +4189,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             <span>{formatAccountChallengeRole(item.role)}</span>
                             <span>{formatAccountChallengeStatus(item)}</span>
                             <span>{formatChallengeSeatChoice(item)}</span>
+                            {formatChallengeSetupSummary(item).map((detail) => (
+                              <span key={detail}>{detail}</span>
+                            ))}
                             {expiry?.isSoon && <span className="online-browser-expiring-badge">Expires soon</span>}
                           </div>
                         </div>

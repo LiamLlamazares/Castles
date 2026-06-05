@@ -1901,6 +1901,10 @@ describe("OnlineGameBrowser", () => {
     const row = await within(challenges).findByText("Samir");
     const article = row.closest("article");
     expect(article).not.toBeNull();
+    expect(article as HTMLElement).toHaveTextContent("Board Radius 7");
+    expect(article as HTMLElement).toHaveTextContent("Clock Timed 20+20");
+    expect(article as HTMLElement).toHaveTextContent("Scoring Victory points");
+    expect(article as HTMLElement).toHaveTextContent("Rating Casual");
 
     const acceptButton = within(article as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" });
     expect(acceptButton).toHaveTextContent("Accept & Join");
