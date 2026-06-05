@@ -2066,7 +2066,10 @@ export async function startQuickMatch(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not start quick match (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not start quick match (${response.status})`
+    );
   }
 
   return validateQuickMatchResponse(await response.json(), "Quick match");

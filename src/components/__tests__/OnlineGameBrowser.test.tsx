@@ -4968,6 +4968,40 @@ describe("OnlineGameBrowser", () => {
     expect(quickMatch).toHaveFocus();
   });
 
+  it("surfaces trusted server errors when quick match fails", async () => {
+    const onQuickMatch = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        409,
+        "game_over",
+        "This session already has an active open seek."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn()}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onCreateSeek={vi.fn()}
+        onQuickMatch={onQuickMatch}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    const quickMatch = screen.getByRole("button", {
+      name: "Quick Match: try open lobby listings or list yours",
+    });
+    quickMatch.focus();
+    fireEvent.click(quickMatch);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("This session already has an active open seek.");
+    expect(screen.queryByText("Could not start quick match.")).not.toBeInTheDocument();
+    expect(quickMatch).toHaveFocus();
+  });
+
   it("disables quick match while an owned seek is restoring, open, or accepted", async () => {
     const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([]));
     const { rerender } = render(

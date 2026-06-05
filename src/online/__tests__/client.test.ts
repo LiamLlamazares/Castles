@@ -2084,6 +2084,32 @@ describe("online client helpers", () => {
     ).rejects.toBeInstanceOf(OnlineRequestError);
   });
 
+  it("preserves trusted quick match rejection messages as request errors", async () => {
+    const setup = snapshot().setup;
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        error: {
+          code: "game_over",
+          message: "This session already has an active open seek.",
+        },
+      }),
+    });
+
+    await expect(
+      startQuickMatch(setup, { sessionId: "anon_match" }, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 409,
+      code: "game_over",
+      message: "This session already has an active open seek.",
+    });
+    await expect(
+      startQuickMatch(setup, { sessionId: "anon_match" }, fetchImpl as any)
+    ).rejects.toBeInstanceOf(OnlineRequestError);
+  });
+
   it("rejects malformed quick match responses and token-bearing invite URLs", async () => {
     const setup = snapshot().setup;
     const summary = {

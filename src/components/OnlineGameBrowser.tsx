@@ -2931,6 +2931,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       console.error("[OnlineGameBrowser] Failed to start quick match", error);
       shouldRestoreFocus = true;
       setQuickMatchStatus("error");
+      setSeekActionMessage(onlineRequestErrorMessage(error) ?? "");
     } finally {
       if (shouldRestoreFocus) {
         window.setTimeout(() => quickMatchButtonRef.current?.focus(), 0);
