@@ -2701,7 +2701,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const storedJoin =
       accountSeat && resolveAccountGameJoin ? resolveAccountGameJoin(game, accountSeat) : null;
     const canReturn = !!storedJoin && !!onReturnToAccountGame;
-    const canRejoin = !storedJoin && !!onRejoinAccountGame;
+    const canRejoin = !!accountSeat && !storedJoin && !!onRejoinAccountGame;
     const isRejoining = rejoiningAccountGameId === game.gameId;
     const canSpectate = canSpectateOnlineGameSummary(game);
     const seatLabel = accountSeat === "w" ? "White" : accountSeat === "b" ? "Black" : "unknown";

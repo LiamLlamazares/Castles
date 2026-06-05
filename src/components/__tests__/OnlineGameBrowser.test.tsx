@@ -3542,6 +3542,51 @@ describe("OnlineGameBrowser", () => {
     expect(within(activeGames).queryByText("Open from original browser session or invite link")).not.toBeInTheDocument();
   });
 
+  it("does not offer account rejoin when the account seat is missing from an active game row", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_active_missing_seat",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_active_missing_seat", displayName: "Liam" },
+    };
+    const activeAccount = summary({
+      gameId: "game_active_account_missing_seat",
+      status: "active",
+      archiveState: "active",
+      visibility: "private",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "anonymous", id: "anon_w_missing_seat" } },
+        { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_b_missing_seat" } },
+      ],
+    });
+    const onRejoinAccountGame = vi.fn();
+
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountGames={vi.fn().mockResolvedValue(directory([activeAccount]))}
+        resolveAccountGameJoin={vi.fn().mockReturnValue(null)}
+        onRejoinAccountGame={onRejoinAccountGame}
+      />
+    );
+
+    const activeGames = await screen.findByRole("region", { name: "Active account games" });
+    expect(within(activeGames).queryByRole("button", {
+      name: "Rejoin account game White vs Black, game_active_account_missing_seat",
+    })).not.toBeInTheDocument();
+    expect(activeGames).toHaveTextContent("Open from original browser session or invite link");
+    expect(onRejoinAccountGame).not.toHaveBeenCalled();
+  });
+
   it("reports account archive errors without falling back to possibly duplicated device rows", async () => {
     const account = {
       schemaVersion: 1 as const,

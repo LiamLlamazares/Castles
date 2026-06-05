@@ -733,11 +733,11 @@ Tests/review/deploy gates:
 
 Goal: let signed-in users see active account games and return to the local player seat when this browser session still has the saved game seat token, without treating account sessions as game seat tokens.
 
-Status: implemented locally on 2026-06-03, with active-game turn ownership and account-rejoin recovery copy added on 2026-06-05. The account section now loads `GET /api/online/account/games?state=all`, separates active account games from completed account replays, shows the signed-in account's seat and whether it is their turn, and shows `Return to Game` only when session storage has the matching per-seat player token. Active account games without a local session token can offer account rejoin when the signed-in account is a participant, fall back to `Spectate` when the game visibility allows it, or clearly require the original browser session/invite link when neither recovery path is available. This improves local recovery after losing the URL while keeping account bearer tokens separate from move authorization.
+Status: implemented locally on 2026-06-03, with active-game turn ownership and account-rejoin recovery copy added on 2026-06-05. The account section now loads `GET /api/online/account/games?state=all`, separates active account games from completed account replays, shows the signed-in account's seat and whether it is their turn, and shows `Return to Game` only when session storage has the matching per-seat player token. Active account games without a local session token can offer account rejoin only when the summary identifies the signed-in account's participant seat, fall back to `Spectate` when the game visibility allows it, or clearly require the original browser session/invite link when neither recovery path is available. This improves local recovery after losing the URL while keeping account bearer tokens separate from move authorization.
 
 Tests/review/deploy gates:
 
-- Tests: client storage helper tests, Online browser active account return/spectate/private fallback, turn-ownership-copy, and account-rejoin-copy tests, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit.
+- Tests: client storage helper tests, Online browser active account return/spectate/private fallback, turn-ownership-copy, account-rejoin-copy, and missing-account-seat fallback tests, full suite, client build, server build, local PostgreSQL browser smoke, and UI audit.
 - Review: account/session review focused on preserving the boundary between account sessions, player seat tokens, spectator access, and private-game visibility.
 - Deploy: deploy only after active and completed account game lists still load from PostgreSQL-backed account history.
 
