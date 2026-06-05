@@ -160,6 +160,7 @@ import {
   parseOnlineAccountModerationReportStatusPatch,
   parseOnlineAccountReportInput,
   parseOnlineAccountPrivacyPatch,
+  type OnlineAccountModerationAuditListResponse,
   type OnlineAccountModerationReportQueueResponse,
   type OnlineAccountModerationReportStatusResponse,
   type OnlineAccountReportStatus,
@@ -646,6 +647,34 @@ function parseModerationReportQueueOptions(
     return { ok: false, message: "Moderation report limit is invalid." };
   }
   return { ok: true, status: rawStatus as OnlineAccountReportStatus, limit };
+}
+
+function parseModerationReportAuditOptions(
+  originalUrl: string
+): { ok: true; limit: number } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Moderation report audit query is invalid." };
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "limit") {
+      return { ok: false, message: "Moderation report audit query is invalid." };
+    }
+  }
+  if (url.searchParams.getAll("limit").length > 1) {
+    return { ok: false, message: "Moderation report audit query is invalid." };
+  }
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? MODERATION_REPORT_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > MODERATION_REPORT_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Moderation report audit limit is invalid." };
+  }
+  return { ok: true, limit };
 }
 
 function parseOpenSeekDirectoryOptions(
@@ -3614,6 +3643,66 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.admin.report.update", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account report could not be updated." },
+      });
+    }
+  });
+
+  app.get("/api/online/admin/reports/:reportId/audits", async (req, res) => {
+    setOnlineNoStoreHeaders(res);
+    const authorized = resolveAdminBearer(req);
+    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    if (!authorized) {
+      log({
+        event: "online.admin.report.audits",
+        status: "rejected",
+        reason: rateLimitAllowed ? "not_found" : "rate_limited_not_found",
+      });
+      res.status(404).json({ error: adminNotFoundError() });
+      return;
+    }
+    if (!rateLimitAllowed) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many admin requests were sent too quickly." },
+      });
+      return;
+    }
+    const reportId = normalizeModerationReportId(req.params.reportId);
+    if (!reportId) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Moderation report id is invalid." },
+      });
+      return;
+    }
+    const parsed = parseModerationReportAuditOptions(req.originalUrl);
+    if (!parsed.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: parsed.message } });
+      return;
+    }
+    try {
+      const result = await accountStore.listAccountReportAudits({
+        reportId,
+        limit: parsed.limit,
+      });
+      if (result.status === "not_found") {
+        log({ event: "online.admin.report.audits", status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No online account report was found." },
+        });
+        return;
+      }
+      const body: OnlineAccountModerationAuditListResponse = {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+        reportId: result.reportId,
+        audits: result.audits,
+      };
+      log({ event: "online.admin.report.audits", status: "accepted" });
+      res.json(body);
+    } catch (error) {
+      console.error("Failed to load account report audits", error);
+      log({ event: "online.admin.report.audits", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account report audits could not be loaded." },
       });
     }
   });

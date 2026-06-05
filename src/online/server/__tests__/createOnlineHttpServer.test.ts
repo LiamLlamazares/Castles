@@ -508,6 +508,12 @@ class FakePostgresAccountQueryable {
       return { rows: report ? [{ ...report }] : [] };
     }
 
+    if (normalizedText.startsWith("SELECT report_id FROM online_account_reports WHERE report_id")) {
+      const [reportId] = values as string[];
+      const report = this.reports.find((candidate) => candidate.report_id === reportId);
+      return { rows: report ? [{ report_id: report.report_id }] : [] };
+    }
+
     if (normalizedText.startsWith("UPDATE online_account_reports SET status")) {
       const [reportId, status, moderatorNote, reviewedAt, updatedAt] = values as [string, string, string, string | null, string];
       const report = this.reports.find((candidate) => candidate.report_id === reportId);
@@ -541,6 +547,19 @@ class FakePostgresAccountQueryable {
         created_at: createdAt,
       });
       return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("SELECT audit_id, report_id, action, actor, previous_status, next_status, note, created_at FROM online_account_report_audit WHERE report_id")) {
+      const [reportId, limit] = values as [string, number];
+      const rows = this.reportAudits
+        .filter((audit) => audit.report_id === reportId)
+        .sort((left, right) => {
+          if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
+          return String(right.audit_id).localeCompare(String(left.audit_id));
+        })
+        .slice(0, limit)
+        .map((audit) => ({ ...audit }));
+      return { rows };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
@@ -1574,6 +1593,129 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(update)).not.toContain(samir.account.accountId);
     expect(JSON.stringify(update)).not.toContain(liam.session.token);
     expect(JSON.stringify(update)).not.toContain("account_");
+  });
+
+  it("lists admin report audit history with sanitized bounded entries", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = createPostgresAccountStore(queryable);
+    const adminToken = "admin-token-with-enough-length";
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      adminBearerToken: adminToken,
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    now = Date.parse("2026-06-01T12:03:00.000Z");
+    await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "cheating", details: "Suspicious repeated engine-like moves." }),
+    });
+    const reportId = queryable.reports[0].report_id;
+
+    const missingAuthResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}/audits`
+    );
+    const invalidQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}/audits?token=secret`,
+      { headers: bearer(adminToken) }
+    );
+    const badLimitResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}/audits?limit=0`,
+      { headers: bearer(adminToken) }
+    );
+    const missingReportResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/report_missing000000/audits`,
+      { headers: bearer(adminToken) }
+    );
+    const emptyHistoryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}/audits`,
+      { headers: bearer(adminToken) }
+    );
+    const emptyHistory = await emptyHistoryResponse.json();
+
+    now = Date.parse("2026-06-01T12:05:00.000Z");
+    const resolvedResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "resolved", note: "Reviewed challenge evidence." }),
+    });
+    now = Date.parse("2026-06-01T12:06:00.000Z");
+    const reopenedResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "open", note: "Reopened for appeal." }),
+    });
+    const historyResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}/audits`,
+      { headers: bearer(adminToken) }
+    );
+    const limitedHistoryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}/audits?limit=1`,
+      { headers: bearer(adminToken) }
+    );
+    const history = await historyResponse.json();
+    const limitedHistory = await limitedHistoryResponse.json();
+
+    expect(missingAuthResponse.status).toBe(404);
+    expect(missingAuthResponse.headers.get("cache-control")).toBe("no-store");
+    expect(missingAuthResponse.headers.get("vary")).toContain("Authorization");
+    expect(invalidQueryResponse.status).toBe(400);
+    expect(badLimitResponse.status).toBe(400);
+    expect(missingReportResponse.status).toBe(404);
+    expect(emptyHistoryResponse.status).toBe(200);
+    expect(emptyHistory).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 2,
+      reportId,
+      audits: [],
+    });
+    expect(resolvedResponse.status).toBe(200);
+    expect(reopenedResponse.status).toBe(200);
+    expect(historyResponse.status).toBe(200);
+    expect(historyResponse.headers.get("cache-control")).toBe("no-store");
+    expect(historyResponse.headers.get("vary")).toContain("Authorization");
+    expect(history).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 2,
+      reportId,
+      audits: [
+        {
+          schemaVersion: 2,
+          auditId: expect.any(String),
+          reportId,
+          action: "status_changed",
+          actor: "admin",
+          previousStatus: "resolved",
+          nextStatus: "open",
+          note: "Reopened for appeal.",
+          createdAt: "2026-06-01T12:06:00.000Z",
+        },
+        {
+          schemaVersion: 2,
+          auditId: expect.any(String),
+          reportId,
+          action: "status_changed",
+          actor: "admin",
+          previousStatus: "open",
+          nextStatus: "resolved",
+          note: "Reviewed challenge evidence.",
+          createdAt: "2026-06-01T12:05:00.000Z",
+        },
+      ],
+    });
+    expect(limitedHistoryResponse.status).toBe(200);
+    expect(limitedHistory.audits).toEqual([history.audits[0]]);
+    expect(JSON.stringify(history)).not.toContain(liam.account.accountId);
+    expect(JSON.stringify(history)).not.toContain(samir.account.accountId);
+    expect(JSON.stringify(history)).not.toContain(liam.session.token);
+    expect(JSON.stringify(history)).not.toContain("account_");
   });
 
   it("keeps wrong admin bearer attempts hidden while consuming the admin rate limit", async () => {

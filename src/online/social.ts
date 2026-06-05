@@ -129,6 +129,13 @@ export interface OnlineAccountModerationReportStatusResponse {
   audit: OnlineAccountModerationAuditEntry;
 }
 
+export interface OnlineAccountModerationAuditListResponse {
+  protocolVersion: number;
+  schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
+  reportId: string;
+  audits: OnlineAccountModerationAuditEntry[];
+}
+
 export interface OnlineAccountModerationReportStatusPatch {
   status: OnlineAccountReportStatus;
   note: string;

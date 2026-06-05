@@ -30,10 +30,12 @@ import {
   DuplicateOnlineAccountDisplayNameError,
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
+  type ListOnlineAccountReportAuditsOptions,
   type ListOnlineAccountReportsOptions,
   type OnlineAccountSessionListItem,
   type OnlineAccountExternalLoginProvider,
   type OnlineAccountChallengeTargetResult,
+  type OnlineAccountReportAuditListResult,
   type OnlineAccountReportStatusUpdateResult,
   type OnlineAccountStore,
   type OnlineAccountReportSubmissionResult,
@@ -831,6 +833,45 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     });
   }
 
+  async listAccountReportAudits(
+    options: ListOnlineAccountReportAuditsOptions
+  ): Promise<OnlineAccountReportAuditListResult> {
+    await this.ensureSchema();
+    const reportResult = await this.queryable.query(
+      `
+        SELECT report_id
+        FROM online_account_reports
+        WHERE report_id = $1
+      `,
+      [options.reportId]
+    );
+    if (reportResult.rows.length === 0) return { status: "not_found" };
+
+    const auditResult = await this.queryable.query(
+      `
+        SELECT
+          audit_id,
+          report_id,
+          action,
+          actor,
+          previous_status,
+          next_status,
+          note,
+          created_at
+        FROM online_account_report_audit
+        WHERE report_id = $1
+        ORDER BY created_at DESC, audit_id DESC
+        LIMIT $2
+      `,
+      [options.reportId, options.limit]
+    );
+    return {
+      status: "ok",
+      reportId: options.reportId,
+      audits: auditResult.rows.map((row) => this.moderationAuditFromRow(row)),
+    };
+  }
+
   async resolveChallengeTarget(
     challengerAccountId: string,
     targetDisplayName: string
@@ -1265,6 +1306,20 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       createdAt: timestampToIso(row.created_at),
       updatedAt: timestampToIso(row.updated_at),
       reviewedAt: row.reviewed_at == null ? null : timestampToIso(row.reviewed_at),
+    };
+  }
+
+  private moderationAuditFromRow(row: Record<string, unknown>): OnlineAccountModerationAuditEntry {
+    return {
+      schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+      auditId: String(row.audit_id),
+      reportId: String(row.report_id),
+      action: "status_changed",
+      actor: "admin",
+      previousStatus: row.previous_status as OnlineAccountModerationReport["status"],
+      nextStatus: row.next_status as OnlineAccountModerationReport["status"],
+      note: String(row.note ?? ""),
+      createdAt: timestampToIso(row.created_at),
     };
   }
 

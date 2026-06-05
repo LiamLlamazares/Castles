@@ -466,6 +466,12 @@ class FakeAccountQueryable {
       return { rows: report ? [{ ...report }] : [] };
     }
 
+    if (normalizedText.startsWith("SELECT report_id FROM online_account_reports WHERE report_id")) {
+      const [reportId] = values as string[];
+      const report = this.reports.find((candidate) => candidate.report_id === reportId);
+      return { rows: report ? [{ report_id: report.report_id }] : [] };
+    }
+
     if (normalizedText.startsWith("UPDATE online_account_reports SET status")) {
       const [reportId, status, moderatorNote, reviewedAt, updatedAt] = values as [string, string, string, string | null, string];
       const report = this.reports.find((candidate) => candidate.report_id === reportId);
@@ -499,6 +505,19 @@ class FakeAccountQueryable {
         created_at: createdAt,
       });
       return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("SELECT audit_id, report_id, action, actor, previous_status, next_status, note, created_at FROM online_account_report_audit WHERE report_id")) {
+      const [reportId, limit] = values as [string, number];
+      const rows = this.reportAudits
+        .filter((audit) => audit.report_id === reportId)
+        .sort((left, right) => {
+          if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
+          return String(right.audit_id).localeCompare(String(left.audit_id));
+        })
+        .slice(0, limit)
+        .map((audit) => ({ ...audit }));
+      return { rows };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_blocks")) {
@@ -1241,6 +1260,31 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.listAccountReports({ status: "resolved", limit: 10 })).resolves.toMatchObject([
       { reportId: "report_liam_samir", status: "resolved", moderatorNote: "Reviewed challenge evidence." },
     ]);
+    await expect(store.listAccountReportAudits({ reportId: "missing_report", limit: 10 })).resolves.toEqual({
+      status: "not_found",
+    });
+    await expect(store.listAccountReportAudits({ reportId: "report_liam_ben", limit: 10 })).resolves.toEqual({
+      status: "ok",
+      reportId: "report_liam_ben",
+      audits: [],
+    });
+    await expect(store.listAccountReportAudits({ reportId: "report_liam_samir", limit: 1 })).resolves.toEqual({
+      status: "ok",
+      reportId: "report_liam_samir",
+      audits: [
+        {
+          schemaVersion: 2,
+          auditId: "report_audit_resolved",
+          reportId: "report_liam_samir",
+          action: "status_changed",
+          actor: "admin",
+          previousStatus: "open",
+          nextStatus: "resolved",
+          note: "Reviewed challenge evidence.",
+          createdAt: "2026-06-03T12:05:00.000Z",
+        },
+      ],
+    });
     expect(queryable.reportAudits).toEqual([
       expect.objectContaining({
         audit_id: "report_audit_resolved",

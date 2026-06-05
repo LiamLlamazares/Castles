@@ -106,6 +106,11 @@ export interface UpdateOnlineAccountReportStatusInput {
   updatedAt: string;
 }
 
+export interface ListOnlineAccountReportAuditsOptions {
+  reportId: string;
+  limit: number;
+}
+
 export type OnlineAccountReportStatusUpdateResult =
   | {
       status: "ok";
@@ -114,6 +119,16 @@ export type OnlineAccountReportStatusUpdateResult =
     }
   | {
       status: "not_found" | "unchanged";
+    };
+
+export type OnlineAccountReportAuditListResult =
+  | {
+      status: "ok";
+      reportId: string;
+      audits: OnlineAccountModerationAuditEntry[];
+    }
+  | {
+      status: "not_found";
     };
 
 interface MemoryOnlineAccountReportRecord {
@@ -151,6 +166,7 @@ export interface OnlineAccountStore {
   submitAccountReport(input: SubmitOnlineAccountReportStoreInput): Promise<OnlineAccountReportSubmissionResult>;
   listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]>;
   updateAccountReportStatus(input: UpdateOnlineAccountReportStatusInput): Promise<OnlineAccountReportStatusUpdateResult>;
+  listAccountReportAudits(options: ListOnlineAccountReportAuditsOptions): Promise<OnlineAccountReportAuditListResult>;
   resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
   updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
@@ -582,6 +598,27 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       status: "ok",
       report: this.moderationReportFromRecord(report),
       audit,
+    };
+  }
+
+  async listAccountReportAudits(
+    options: ListOnlineAccountReportAuditsOptions
+  ): Promise<OnlineAccountReportAuditListResult> {
+    if (!this.reports.some((report) => report.reportId === options.reportId)) {
+      return { status: "not_found" };
+    }
+    const audits = this.reportAudits
+      .filter((audit) => audit.reportId === options.reportId)
+      .sort((left, right) => {
+        const createdOrder = right.createdAt.localeCompare(left.createdAt);
+        return createdOrder !== 0 ? createdOrder : right.auditId.localeCompare(left.auditId);
+      })
+      .slice(0, options.limit)
+      .map((audit) => ({ ...audit }));
+    return {
+      status: "ok",
+      reportId: options.reportId,
+      audits,
     };
   }
 
