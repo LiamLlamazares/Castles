@@ -1458,6 +1458,26 @@ function App() {
     }
   }, [enterOnlineGameFromJoin, onlineAccountSession?.token]);
 
+  const handleRejoinAccountChallengeGame = useCallback(async (gameId: string, visibility: OnlineGameVisibility) => {
+    if (!onlineAccountSession) {
+      alert("Sign in to join this account challenge game.");
+      return;
+    }
+    setRejoiningAccountGameId(gameId);
+    try {
+      const response = await rejoinOnlineAccountGame(
+        { token: onlineAccountSession.token },
+        gameId
+      );
+      enterOnlineGameFromJoin(response.gameInvite, response.gameInvite.url, visibility);
+    } catch (error) {
+      console.error("Failed to join accepted account challenge game", error);
+      alert("Could not join this accepted challenge game. Try refreshing the challenge inbox.");
+    } finally {
+      setRejoiningAccountGameId(null);
+    }
+  }, [enterOnlineGameFromJoin, onlineAccountSession?.token]);
+
   const createChallengeFromSetup = async (
     setup: OnlineGameSetupDTO,
     options: { challengedDisplayName?: string } = {}
@@ -2591,6 +2611,7 @@ function App() {
           resolveAccountGameJoin={resolveAccountGameJoin}
           onReturnToAccountGame={handleReturnToAccountGame}
           onRejoinAccountGame={handleRejoinAccountGame}
+          onRejoinAccountChallengeGame={handleRejoinAccountChallengeGame}
           rejoiningAccountGameId={rejoiningAccountGameId}
           recentOnlineGames={recentOnlineGames}
           onClearRecentOnlineGames={handleClearRecentOnlineGames}

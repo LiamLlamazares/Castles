@@ -151,6 +151,7 @@ interface OnlineGameBrowserProps {
   resolveAccountGameJoin?: (game: OnlineGameSummary, seat: "w" | "b") => OnlineJoinParams | null;
   onReturnToAccountGame?: (join: OnlineJoinParams, visibility: OnlineGameVisibility) => void;
   onRejoinAccountGame?: (game: OnlineGameSummary) => void;
+  onRejoinAccountChallengeGame?: (gameId: string, visibility: OnlineGameVisibility) => void;
   rejoiningAccountGameId?: string | null;
   recentOnlineGames?: RecentOnlineGameRecord[];
   onClearRecentOnlineGames?: () => void;
@@ -960,6 +961,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   resolveAccountGameJoin,
   onReturnToAccountGame,
   onRejoinAccountGame,
+  onRejoinAccountChallengeGame,
   rejoiningAccountGameId = null,
   recentOnlineGames = [],
   onClearRecentOnlineGames,
@@ -4185,6 +4187,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     const pendingAction = accountChallengeActionById[challengeId];
                     const expiry = formatPendingAccountChallengeExpiry(item);
                     const canActOnChallenge = item.summary.status === "pending" && !pendingAction;
+                    const acceptedChallengeGameId =
+                      item.summary.status === "accepted" ? item.summary.gameId : undefined;
                     return (
                       <article key={challengeId} className="online-browser-following-row">
                         <div>
@@ -4238,6 +4242,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 aria-label={`Cancel challenge to ${challengeOpponentName(item)}`}
                               >
                                 {pendingAction === "cancel" ? "Cancelling" : "Cancel"}
+                              </button>
+                            )}
+                            {acceptedChallengeGameId && onRejoinAccountChallengeGame && (
+                              <button
+                                type="button"
+                                className="online-browser-button primary"
+                                onClick={() => onRejoinAccountChallengeGame(acceptedChallengeGameId, item.summary.visibility)}
+                                disabled={rejoiningAccountGameId === acceptedChallengeGameId}
+                                aria-label={`Join accepted challenge game ${acceptedChallengeGameId} against ${challengeOpponentName(item)}`}
+                              >
+                                {rejoiningAccountGameId === acceptedChallengeGameId ? "Joining..." : "Join Game"}
                               </button>
                             )}
                           </div>
