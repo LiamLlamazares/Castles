@@ -20,6 +20,7 @@
   flex: 1 1 auto;
   min-width: 0;
   flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .app-shell-nav-actions {
@@ -94,9 +95,16 @@
 }
 
 .app-shell-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #f4d287;
   color: #201812;
   flex: 0 0 auto;
+}
+
+.app-shell-back-label {
+  min-width: 0;
 }
 
 .app-shell-destination.active,
@@ -219,6 +227,10 @@
     color: #201812;
     font-size: 0.9rem;
     font-weight: 900;
+  }
+
+  .app-shell-back-label {
+    display: none;
   }
 
   .app-shell-brand-name {

@@ -116,16 +116,22 @@ describe("Tutorial mobile layout CSS", () => {
   it("keeps the shared app shell from overlapping mobile page controls", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(resolve(testDir, "../../css/AppShellNav.css"), "utf8");
+    const accountCss = readFileSync(resolve(testDir, "../../css/OnlineAccountControls.css"), "utf8");
 
     const mobileBlock = css.match(/@media \(max-width: 760px\)\s*\{[\s\S]+}$/)?.[0] ?? "";
     expect(mobileBlock).not.toContain("position: sticky");
     expect(mobileBlock).not.toContain("calc(-1 * var(--app-shell-mobile-padding");
     expect(css).toContain(".app-shell-nav-primary");
+    expect(css).toMatch(/\.app-shell-nav-primary\s*\{[^}]*overflow:\s*hidden;/s);
     expect(css).toContain("flex-wrap: nowrap;");
     expect(css).toContain("overflow-x: auto;");
     expect(css).toContain(".app-shell-destination-label");
+    expect(css).toContain(".app-shell-back-label");
+    expect(css).toMatch(/@media \(max-width: 520px\)\s*\{[\s\S]*\.app-shell-back-label\s*\{[^}]*display:\s*none;/s);
     expect(css).toContain(".setup-sidebar .app-shell-destination");
     expect(css).toContain("font-family: \"Inter\", system-ui");
+    expect(accountCss).toMatch(/@media \(max-width: 520px\)\s*\{[\s\S]*\.online-browser-account-chip\s*\{[^}]*width:\s*36px;[^}]*max-width:\s*36px;/s);
+    expect(accountCss).toMatch(/@media \(max-width: 520px\)\s*\{[\s\S]*\.online-browser-account-chip \.online-account-chip-name\s*\{[^}]*display:\s*none;/s);
   });
 
   it("uses modern app-page typography for Library and online browser pages", () => {

@@ -54,8 +54,14 @@ const AppShellNav: React.FC<AppShellNavProps> = ({
             <span className="app-shell-brand-name">Castles</span>
           </div>
           {onBack && backLabel && (
-            <button type="button" className="app-shell-back-button" onClick={onBack} title={backLabel}>
-              {backLabel}
+            <button
+              type="button"
+              className="app-shell-back-button"
+              onClick={onBack}
+              aria-label={backLabel}
+              title={backLabel}
+            >
+              <span className="app-shell-back-label" aria-hidden="true">{backLabel}</span>
             </button>
           )}
           <div className="app-shell-destinations" aria-label="App destinations">
