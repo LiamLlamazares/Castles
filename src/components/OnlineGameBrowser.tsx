@@ -539,6 +539,12 @@ function updateAccountChallengeShortcutItem(
   return [...next.values()];
 }
 
+function pruneAccountChallengeShortcutItemsAfterLoadError(
+  current: OnlineAccountChallengeListItem[]
+): OnlineAccountChallengeListItem[] {
+  return current.filter((item) => item.summary.status === "accepted" && Boolean(item.summary.gameId));
+}
+
 function formatChallengeSeatChoice(
   item: OnlineAccountChallengeListItem,
   account?: OnlineAccount | null
@@ -1327,6 +1333,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (!background) {
         console.error("[OnlineGameBrowser] Failed to load account challenges", error);
         setAccountChallenges([]);
+        setAccountChallengeShortcutItems(pruneAccountChallengeShortcutItemsAfterLoadError);
         setAccountChallengesStatus("error");
       }
     } finally {

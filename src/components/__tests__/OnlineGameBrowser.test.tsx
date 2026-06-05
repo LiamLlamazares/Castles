@@ -1972,6 +1972,111 @@ describe("OnlineGameBrowser", () => {
     expect(onChallengeAccount).not.toHaveBeenCalled();
   });
 
+  it("drops stale pending following-row challenge actions after a foreground inbox refresh fails", async () => {
+    const account = accountFixture("Liam");
+    const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
+    const loadAccountChallenges = vi
+      .fn()
+      .mockResolvedValueOnce({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        ...accountChallengeDirectory([{ role: "challenged" as const, summary: pendingSummary }]),
+      })
+      .mockRejectedValueOnce(new Error("network unavailable"));
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        loadAccountChallenges={loadAccountChallenges}
+        onAcceptAccountChallenge={vi.fn()}
+        onDeclineAccountChallenge={vi.fn()}
+        onChallengeAccount={vi.fn()}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    const following = await within(people).findByRole("region", { name: "Followed players" });
+    const samirRow = (await within(following).findByText("Samir")).closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(samirRow as HTMLElement).toHaveTextContent("Incoming challenge");
+    expect(within(samirRow as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" })).toBeInTheDocument();
+
+    fireEvent.click(within(challenges).getByRole("button", { name: "Refresh Inbox" }));
+
+    expect(await within(challenges).findByText("Could not load account challenges.")).toBeInTheDocument();
+    expect(samirRow as HTMLElement).not.toHaveTextContent("Incoming challenge");
+    expect(within(samirRow as HTMLElement).queryByRole("button", { name: "Accept challenge from Samir" })).not.toBeInTheDocument();
+    expect(within(samirRow as HTMLElement).getByRole("button", { name: "Challenge Samir" })).toBeInTheDocument();
+  });
+
+  it("keeps accepted following-row game recovery after a foreground inbox refresh fails", async () => {
+    const account = accountFixture("Liam");
+    const acceptedSummary = accountChallengeSummary({
+      challengeId: "challenge_ada_liam",
+      challengerIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+      challengedIdentity: account.identity,
+      visibility: "unlisted",
+      updatedAt: "2026-06-03T12:03:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-03T12:03:00.000Z",
+      acceptedBy: account.identity,
+      gameId: "game_ada_liam",
+      whiteIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+      blackIdentity: account.identity,
+      lastEventId: "challenge_ada_liam_accepted_evt",
+    });
+    const loadAccountChallenges = vi
+      .fn()
+      .mockResolvedValueOnce({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        ...accountChallengeDirectory([{ role: "challenged" as const, summary: acceptedSummary }]),
+      })
+      .mockRejectedValueOnce(new Error("network unavailable"));
+    const onRejoinAccountChallengeGame = vi.fn();
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Ada", { following: true })])}
+        loadAccountChallenges={loadAccountChallenges}
+        onChallengeAccount={vi.fn()}
+        onRejoinAccountChallengeGame={onRejoinAccountChallengeGame}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    const following = await within(people).findByRole("region", { name: "Followed players" });
+    const adaRow = (await within(following).findByText("Ada")).closest("article");
+    expect(adaRow).not.toBeNull();
+    expect(within(adaRow as HTMLElement).getByText("Game ready")).toBeInTheDocument();
+
+    fireEvent.click(within(challenges).getByRole("button", { name: "Refresh Inbox" }));
+
+    expect(await within(challenges).findByText("Could not load account challenges.")).toBeInTheDocument();
+    const joinButton = within(adaRow as HTMLElement).getByRole("button", {
+      name: "Join accepted challenge game game_ada_liam against Ada",
+    });
+    expect(joinButton).toHaveTextContent("Join Game");
+    expect(within(adaRow as HTMLElement).queryByRole("button", { name: "Challenge Ada" })).not.toBeInTheDocument();
+
+    fireEvent.click(joinButton);
+    expect(onRejoinAccountChallengeGame).toHaveBeenCalledWith("game_ada_liam", "unlisted");
+  });
+
   it("ignores a stale all-inbox response after switching to pending challenges", async () => {
     const account = accountFixture("Liam");
     const staleAllLoad = deferredValue<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>();
