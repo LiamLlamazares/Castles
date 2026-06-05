@@ -2704,7 +2704,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const canRejoin = !!accountSeat && !storedJoin && !!onRejoinAccountGame;
     const isRejoining = rejoiningAccountGameId === game.gameId;
     const canSpectate = canSpectateOnlineGameSummary(game);
-    const seatLabel = accountSeat === "w" ? "White" : accountSeat === "b" ? "Black" : "unknown";
+    const accountSeatLabel = accountSeat === "w" ? "Your seat White" : accountSeat === "b" ? "Your seat Black" : "Account seat unavailable";
     const sideToMoveLabel = game.livePreview.sideToMove === "w" ? "White" : "Black";
     const accountTurnLabel =
       accountSeat && game.livePreview.sideToMove === accountSeat ? "Your turn" : `Waiting for ${sideToMoveLabel}`;
@@ -2723,7 +2723,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </div>
           <div className="online-game-meta">
             <span className="online-game-pill active">Live</span>
-            <span>Your seat {seatLabel}</span>
+            <span>{accountSeatLabel}</span>
             <span>{formatMoveCount(game.livePreview.moveCount)}</span>
             <span>{formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}</span>
             <span>{accountTurnLabel}</span>

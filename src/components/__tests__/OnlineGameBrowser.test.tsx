@@ -3583,6 +3583,8 @@ describe("OnlineGameBrowser", () => {
     expect(within(activeGames).queryByRole("button", {
       name: "Rejoin account game White vs Black, game_active_account_missing_seat",
     })).not.toBeInTheDocument();
+    expect(activeGames).toHaveTextContent("Account seat unavailable");
+    expect(activeGames).not.toHaveTextContent("Your seat unknown");
     expect(activeGames).toHaveTextContent("Open from original browser session or invite link");
     expect(onRejoinAccountGame).not.toHaveBeenCalled();
   });
