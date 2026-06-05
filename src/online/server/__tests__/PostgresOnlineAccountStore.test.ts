@@ -569,6 +569,10 @@ class FakeAccountQueryable {
           this.sessionsByTokenHash.delete(tokenHash);
         }
       }
+      for (const report of this.reports) {
+        if (report.reporter_account_id === accountId) report.reporter_account_id = null;
+        if (report.target_account_id === accountId) report.target_account_id = null;
+      }
       return { rows: [{ account_id: accountId }] };
     }
 
@@ -882,6 +886,91 @@ describe("PostgresOnlineAccountStore", () => {
         createdAt: "2026-06-03T12:11:00.000Z",
       })
     ).rejects.toBeInstanceOf(DuplicateOnlineAccountDisplayNameError);
+  });
+
+  it("deletes social state while retaining moderation snapshots and rating rows", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-liam"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+    await store.createAccount({
+      accountId: "account_samir",
+      sessionId: "account_session_samir",
+      displayName: "Samir",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-samir"),
+      createdAt: "2026-06-03T12:01:00.000Z",
+    });
+    queryable.privacySettings.set("account_liam", {
+      account_id: "account_liam",
+      follow_policy: "nobody",
+      presence_policy: "nobody",
+      challenge_policy: "nobody",
+      updated_at: "2026-06-03T12:02:00.000Z",
+    });
+    queryable.follows.add(socialKey("account_liam", "account_samir"));
+    queryable.follows.add(socialKey("account_samir", "account_liam"));
+    queryable.blocks.add(socialKey("account_liam", "account_samir"));
+    queryable.ratingRows.set("account_liam", {
+      ...createDefaultOnlineRating("2026-06-03T12:03:00.000Z"),
+      rating: 1610,
+      deviation: 90,
+      games: 4,
+    });
+
+    await store.submitAccountReport({
+      reportId: "report_liam_samir",
+      reporterAccountId: "account_liam",
+      targetDisplayName: "Samir",
+      reason: "abuse",
+      details: "Hostile challenge notes.",
+      createdAt: "2026-06-03T12:04:00.000Z",
+    });
+
+    await expect(store.deleteAccount("account_liam")).resolves.toBe(true);
+
+    expect(queryable.privacySettings.has("account_liam")).toBe(false);
+    expect(queryable.follows).toEqual(new Set());
+    expect(queryable.blocks).toEqual(new Set());
+    expect(queryable.ratingRows.get("account_liam")).toMatchObject({
+      rating: 1610,
+      games: 4,
+    });
+    expect(queryable.reports).toEqual([
+      expect.objectContaining({
+        report_id: "report_liam_samir",
+        reporter_account_id: null,
+        reporter_display_name: "Liam",
+        target_account_id: "account_samir",
+        target_display_name: "Samir",
+        details: "Hostile challenge notes.",
+      }),
+    ]);
+    await expect(store.listAccountReports({ status: "open", limit: 10 })).resolves.toEqual([
+      expect.objectContaining({
+        reportId: "report_liam_samir",
+        reporterDisplayName: "Liam",
+        targetDisplayName: "Samir",
+        details: "Hostile challenge notes.",
+      }),
+    ]);
+
+    await expect(store.deleteAccount("account_samir")).resolves.toBe(true);
+    expect(queryable.reports).toEqual([
+      expect.objectContaining({
+        reporter_account_id: null,
+        reporter_display_name: "Liam",
+        target_account_id: null,
+        target_display_name: "Samir",
+      }),
+    ]);
   });
 
   it("rejects duplicate display names case-insensitively", async () => {
