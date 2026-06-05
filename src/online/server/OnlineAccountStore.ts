@@ -6,11 +6,14 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   defaultOnlineAccountPrivacySettings,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
+  type OnlineAccountReportInput,
+  type OnlineAccountReportSummary,
   type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -70,6 +73,33 @@ export type OnlineAccountChallengeTargetResult =
       status: "not_found" | "self" | "blocked" | "not_allowed";
     };
 
+export interface SubmitOnlineAccountReportStoreInput extends OnlineAccountReportInput {
+  reportId: string;
+  reporterAccountId: string;
+  targetDisplayName: string;
+  createdAt: string;
+}
+
+export type OnlineAccountReportSubmissionResult =
+  | {
+      status: "ok";
+      report: OnlineAccountReportSummary;
+    }
+  | {
+      status: "not_found" | "self";
+    };
+
+interface MemoryOnlineAccountReportRecord {
+  reportId: string;
+  reporterAccountId: string;
+  reporterDisplayName: string;
+  targetAccountId: string;
+  targetDisplayName: string;
+  reason: OnlineAccountReportSummary["reason"];
+  details: string;
+  createdAt: string;
+}
+
 export interface OnlineAccountStore {
   createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession>;
   createSessionWithPassword(input: CreateOnlineAccountPasswordSessionInput): Promise<ResolvedOnlineAccountSession | null>;
@@ -87,6 +117,7 @@ export interface OnlineAccountStore {
   unfollowAccount(followerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
   blockAccount(blockerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
   unblockAccount(blockerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
+  submitAccountReport(input: SubmitOnlineAccountReportStoreInput): Promise<OnlineAccountReportSubmissionResult>;
   resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
   updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
@@ -138,6 +169,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   private readonly following = new Map<string, Set<string>>();
   private readonly blocks = new Map<string, Set<string>>();
   private readonly privacySettings = new Map<string, OnlineAccountPrivacySettings>();
+  private readonly reports: MemoryOnlineAccountReportRecord[] = [];
 
   async createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession> {
     const displayName = normalizeOnlineAccountDisplayName(input.displayName);
@@ -443,6 +475,35 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     this.blocks.get(blockerAccountId)?.delete(target.accountId);
     if (this.hasBlock(target.accountId, blockerAccountId)) return { status: "blocked" };
     return { status: "ok", profile: await this.createProfile(blockerAccountId, target, viewedAt) };
+  }
+
+  async submitAccountReport(
+    input: SubmitOnlineAccountReportStoreInput
+  ): Promise<OnlineAccountReportSubmissionResult> {
+    const reporter = this.accounts.get(input.reporterAccountId);
+    const target = this.getAccountByDisplayName(input.targetDisplayName);
+    if (!reporter || !target) return { status: "not_found" };
+    if (target.accountId === reporter.accountId) return { status: "self" };
+    if (this.hasBlock(target.accountId, reporter.accountId)) return { status: "not_found" };
+    this.reports.push({
+      reportId: input.reportId,
+      reporterAccountId: reporter.accountId,
+      reporterDisplayName: reporter.displayName,
+      targetAccountId: target.accountId,
+      targetDisplayName: target.displayName,
+      reason: input.reason,
+      details: input.details,
+      createdAt: input.createdAt,
+    });
+    return {
+      status: "ok",
+      report: {
+        schemaVersion: ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
+        targetDisplayName: target.displayName,
+        reason: input.reason,
+        createdAt: input.createdAt,
+      },
+    };
   }
 
   async resolveChallengeTarget(

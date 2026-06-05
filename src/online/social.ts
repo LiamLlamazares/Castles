@@ -7,8 +7,10 @@ import {
 
 export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
 export const ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION = 1;
+export const ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION = 1;
 
 export type OnlineRatingLeaderboardScope = "global" | "following";
+export type OnlineAccountReportReason = "abuse" | "cheating" | "spam" | "impersonation" | "other";
 export type OnlineAccountFollowPolicy = "everyone" | "nobody";
 export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountChallengePolicy = "followed" | "everyone" | "nobody";
@@ -69,6 +71,23 @@ export interface OnlineRatingLeaderboardResponse {
   entries: OnlineRatingLeaderboardEntry[];
 }
 
+export interface OnlineAccountReportInput {
+  reason: OnlineAccountReportReason;
+  details: string;
+}
+
+export interface OnlineAccountReportSummary {
+  schemaVersion: typeof ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION;
+  targetDisplayName: string;
+  reason: OnlineAccountReportReason;
+  createdAt: string;
+}
+
+export interface OnlineAccountReportResponse {
+  protocolVersion: number;
+  report: OnlineAccountReportSummary;
+}
+
 export function createOnlineAccountPublicRating(rating: OnlineRating): OnlineAccountPublicRating {
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
@@ -110,6 +129,14 @@ export interface OnlineAccountSocialActionResult {
 const FOLLOW_POLICIES = new Set<OnlineAccountFollowPolicy>(["everyone", "nobody"]);
 const PRESENCE_POLICIES = new Set<OnlineAccountPresencePolicy>(["followed", "everyone", "nobody"]);
 const CHALLENGE_POLICIES = new Set<OnlineAccountChallengePolicy>(["followed", "everyone", "nobody"]);
+const REPORT_REASONS = new Set<OnlineAccountReportReason>([
+  "abuse",
+  "cheating",
+  "spam",
+  "impersonation",
+  "other",
+]);
+const MAX_REPORT_DETAILS_LENGTH = 1_000;
 
 function bad(message: string): ValidationResult<never> {
   return {
@@ -175,4 +202,35 @@ export function parseOnlineAccountPrivacyPatch(value: unknown): ValidationResult
   }
 
   return { ok: true, value: patch };
+}
+
+export function parseOnlineAccountReportInput(value: unknown): ValidationResult<OnlineAccountReportInput> {
+  if (!isRecord(value)) return bad("Account report must be an object.");
+
+  if (typeof value.reason !== "string" || !REPORT_REASONS.has(value.reason as OnlineAccountReportReason)) {
+    return bad("Report reason is invalid.");
+  }
+
+  const details = value.details === undefined ? "" : value.details;
+  if (typeof details !== "string") {
+    return bad("Report details are invalid.");
+  }
+  const normalizedDetails = details.replace(/\s+/g, " ").trim();
+  if (normalizedDetails.length > MAX_REPORT_DETAILS_LENGTH) {
+    return bad("Report details are too long.");
+  }
+
+  for (const key of Object.keys(value)) {
+    if (key !== "reason" && key !== "details") {
+      return bad("Account report contains an unsupported field.");
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      reason: value.reason as OnlineAccountReportReason,
+      details: normalizedDetails,
+    },
+  };
 }

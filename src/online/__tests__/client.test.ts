@@ -46,6 +46,7 @@ import {
   rememberOnlineAccountSession,
   rememberOnlineOpponentInviteUrl,
   rememberOnlineJoinParams,
+  reportOnlineAccount,
   rejoinOnlineAccountGame,
   revokeAllOnlineAccountSessions,
   removeOnlineChallengeTokenFromUrl,
@@ -1098,6 +1099,12 @@ describe("online client helpers", () => {
       presencePolicy: "nobody",
       updatedAt: "2026-06-04T00:00:00.000Z",
     };
+    const report = {
+      schemaVersion: 1,
+      targetDisplayName: "Samir",
+      reason: "abuse",
+      createdAt: "2026-06-04T00:00:00.000Z",
+    };
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce({
         ok: true,
@@ -1122,6 +1129,10 @@ describe("online client helpers", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile: { ...blockedProfile, relationship: { self: false, following: false, blocked: false } } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, report }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -1155,6 +1166,17 @@ describe("online client helpers", () => {
     await expect(unblockOnlineAccount({ token: "account-token" }, "Liam", fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       profile: { ...blockedProfile, relationship: { self: false, following: false, followedBy: false, blocked: false } },
+    });
+    await expect(
+      reportOnlineAccount(
+        { token: "account-token" },
+        "Samir",
+        { reason: "abuse", details: "Suspicious repeated account challenge spam." },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      report,
     });
     await expect(fetchOnlineAccountPrivacy({ token: "account-token" }, fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -1193,14 +1215,39 @@ describe("online client helpers", () => {
       method: "DELETE",
       headers: { authorization: "Bearer account-token" },
     });
-    expect(fetchImpl).toHaveBeenNthCalledWith(7, "/api/online/account/privacy", {
-      headers: { authorization: "Bearer account-token" },
+    expect(fetchImpl).toHaveBeenNthCalledWith(7, "/api/online/account/reports/Samir", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer account-token" },
+      body: JSON.stringify({ reason: "abuse", details: "Suspicious repeated account challenge spam." }),
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(8, "/api/online/account/privacy", {
+      headers: { authorization: "Bearer account-token" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(9, "/api/online/account/privacy", {
       method: "PATCH",
       headers: { "content-type": "application/json", authorization: "Bearer account-token" },
       body: JSON.stringify({ followPolicy: "nobody", presencePolicy: "nobody" }),
     });
+  });
+
+  it("rejects malformed online account report responses", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        report: {
+          schemaVersion: 1,
+          targetDisplayName: "Samir",
+          reason: "abuse",
+          createdAt: "2026-06-04T00:00:00.000Z",
+          accountId: "account_samir",
+        },
+      }),
+    });
+
+    await expect(
+      reportOnlineAccount({ token: "account-token" }, "Samir", { reason: "abuse", details: "" }, fetchImpl as any)
+    ).rejects.toThrow("Online account report response was malformed");
   });
 
   it("loads public rating leaderboards without accepting account ids or engine internals", async () => {

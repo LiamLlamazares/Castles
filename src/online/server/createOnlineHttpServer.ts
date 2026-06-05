@@ -141,6 +141,7 @@ import {
   type OnlinePlayerSettableGameVisibility,
 } from "../visibility";
 import {
+  containsDurableSecret,
   isSecretLikeKey,
   stringContainsDurableSecret,
 } from "../secretSafety";
@@ -153,6 +154,7 @@ import {
 } from "../accounts";
 import {
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+  parseOnlineAccountReportInput,
   parseOnlineAccountPrivacyPatch,
   type OnlineRatingLeaderboardScope,
   type OnlineAccountSocialActionResult,
@@ -162,6 +164,7 @@ import {
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
   MemoryOnlineAccountStore,
+  type OnlineAccountReportSubmissionResult,
   type OnlineAccountStore,
 } from "./OnlineAccountStore";
 import { hashOnlineAccountPassword } from "./onlinePasswordCredentials";
@@ -900,6 +903,10 @@ function defaultAccountSessionIdFactory(): string {
   return `account_session_${randomBytes(9).toString("base64url")}`;
 }
 
+function defaultAccountReportIdFactory(): string {
+  return `report_${randomBytes(9).toString("base64url")}`;
+}
+
 function defaultAccountSessionTokenFactory(): string {
   return randomBytes(ACCOUNT_SESSION_TOKEN_BYTES).toString("base64url");
 }
@@ -1299,6 +1306,33 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return {
           status: 500,
           error: { code: "persistence_failed", message: "Social action result was invalid." },
+        };
+    }
+  };
+
+  const accountReportError = (
+    result: OnlineAccountReportSubmissionResult,
+  ): { status: number; error: OnlineReject } => {
+    switch (result.status) {
+      case "not_found":
+        return {
+          status: 404,
+          error: { code: "not_found", message: "No online account was found for that report." },
+        };
+      case "self":
+        return {
+          status: 400,
+          error: { code: "bad_request", message: "You cannot report your own account." },
+        };
+      case "ok":
+        return {
+          status: 500,
+          error: { code: "persistence_failed", message: "Report submission result was incomplete." },
+        };
+      default:
+        return {
+          status: 500,
+          error: { code: "persistence_failed", message: "Report submission result was invalid." },
         };
     }
   };
@@ -3319,6 +3353,66 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.account.unblock", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account could not be unblocked." },
+      });
+    }
+  });
+
+  app.post("/api/online/account/reports/:displayName", async (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.report", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Report target display name is invalid." },
+      });
+      return;
+    }
+    const reportInput = parseOnlineAccountReportInput(req.body);
+    if (!reportInput.ok) {
+      res.status(400).json({ error: reportInput.error });
+      return;
+    }
+    if (containsDurableSecret(req.body)) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Report details must not contain account or invite secrets." },
+      });
+      return;
+    }
+    try {
+      const result = await accountStore.submitAccountReport({
+        reportId: defaultAccountReportIdFactory(),
+        reporterAccountId: auth.account.accountId,
+        targetDisplayName: displayName,
+        reason: reportInput.value.reason,
+        details: reportInput.value.details,
+        createdAt: auth.usedAt,
+      });
+      if (result.status !== "ok") {
+        const failure = accountReportError(result);
+        log({ event: "online.account.report", status: "rejected", reason: result.status });
+        res.status(failure.status).json({ error: failure.error });
+        return;
+      }
+      log({ event: "online.account.report", status: "accepted" });
+      res.status(201).json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        report: result.report,
+      });
+    } catch (error) {
+      console.error("Failed to submit account report", error);
+      log({ event: "online.account.report", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account report could not be submitted." },
       });
     }
   });

@@ -7,6 +7,7 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   createOnlineAccountPublicRating,
   defaultOnlineAccountPrivacySettings,
@@ -14,6 +15,7 @@ import {
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
+  type OnlineAccountReportSummary,
   type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -29,7 +31,9 @@ import {
   type OnlineAccountExternalLoginProvider,
   type OnlineAccountChallengeTargetResult,
   type OnlineAccountStore,
+  type OnlineAccountReportSubmissionResult,
   type ResolvedOnlineAccountSession,
+  type SubmitOnlineAccountReportStoreInput,
 } from "./OnlineAccountStore";
 import { hashOnlineToken, isOnlineTokenCredentialHash } from "./onlineTokenCredentials";
 import {
@@ -655,6 +659,51 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     });
   }
 
+  async submitAccountReport(
+    input: SubmitOnlineAccountReportStoreInput
+  ): Promise<OnlineAccountReportSubmissionResult> {
+    await this.ensureSchema();
+    return this.withTransaction(async (queryable) => {
+      const reporter = await this.loadAccountById(input.reporterAccountId, queryable);
+      const target = await this.loadAccountByDisplayName(input.targetDisplayName, queryable);
+      if (!reporter || !target) return { status: "not_found" };
+      if (target.accountId === reporter.accountId) return { status: "self" };
+      if (await this.hasBlock(target.accountId, reporter.accountId, queryable)) {
+        return { status: "not_found" };
+      }
+      await queryable.query(
+        `
+          INSERT INTO online_account_reports (
+            report_id,
+            reporter_account_id,
+            reporter_display_name,
+            target_account_id,
+            target_display_name,
+            reason,
+            details,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+        `,
+        [
+          input.reportId,
+          reporter.accountId,
+          reporter.displayName,
+          target.accountId,
+          target.displayName,
+          input.reason,
+          input.details,
+          input.createdAt,
+        ]
+      );
+      return {
+        status: "ok",
+        report: this.accountReportSummary(target.displayName, input.reason, input.createdAt),
+      };
+    });
+  }
+
   async resolveChallengeTarget(
     challengerAccountId: string,
     targetDisplayName: string
@@ -877,12 +926,37 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         updated_at TIMESTAMPTZ
       )
     `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_reports (
+        report_id TEXT PRIMARY KEY,
+        reporter_account_id TEXT REFERENCES online_accounts(account_id) ON DELETE SET NULL,
+        reporter_display_name TEXT NOT NULL,
+        target_account_id TEXT REFERENCES online_accounts(account_id) ON DELETE SET NULL,
+        target_display_name TEXT NOT NULL,
+        reason TEXT NOT NULL CHECK (reason IN ('abuse', 'cheating', 'spam', 'impersonation', 'other')),
+        details TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open')),
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_account_reports_target_idx
+        ON online_account_reports (target_account_id, created_at DESC)
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_account_reports_reporter_idx
+        ON online_account_reports (reporter_account_id, created_at DESC)
+    `);
   }
 
-  private async loadAccountByDisplayName(displayName: string): Promise<OnlineAccount | null> {
+  private async loadAccountByDisplayName(
+    displayName: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<OnlineAccount | null> {
     const normalized = normalizeOnlineAccountDisplayName(displayName);
     if (!normalized.ok) return null;
-    const result = await this.queryable.query(
+    const result = await queryable.query(
       `
         SELECT account_id, display_name, created_at, updated_at
         FROM online_accounts
@@ -981,8 +1055,11 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     }
   }
 
-  private async loadAccountById(accountId: string): Promise<OnlineAccount | null> {
-    const result = await this.queryable.query(
+  private async loadAccountById(
+    accountId: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<OnlineAccount | null> {
+    const result = await queryable.query(
       `
         SELECT account_id, display_name, created_at, updated_at
         FROM online_accounts
@@ -1003,6 +1080,19 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         rating: createOnlineAccountPublicRating(rating),
       };
     });
+  }
+
+  private accountReportSummary(
+    targetDisplayName: string,
+    reason: OnlineAccountReportSummary["reason"],
+    createdAt: string
+  ): OnlineAccountReportSummary {
+    return {
+      schemaVersion: ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
+      targetDisplayName,
+      reason,
+      createdAt,
+    };
   }
 
   private async hasFollow(

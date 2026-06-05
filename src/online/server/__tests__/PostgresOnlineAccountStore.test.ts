@@ -21,6 +21,7 @@ class FakeAccountQueryable {
   readonly follows = new Set<string>();
   readonly blocks = new Set<string>();
   readonly ratingRows = new Map<string, OnlineRating>();
+  readonly reports: any[] = [];
   readonly advisoryLocks: string[] = [];
   private transactionSnapshot?: {
     accounts: Map<string, any>;
@@ -32,6 +33,7 @@ class FakeAccountQueryable {
     follows: Set<string>;
     blocks: Set<string>;
     ratingRows: Map<string, OnlineRating>;
+    reports: any[];
   };
 
   release(): void {}
@@ -55,6 +57,7 @@ class FakeAccountQueryable {
         follows: new Set(this.follows),
         blocks: new Set(this.blocks),
         ratingRows: new Map(Array.from(this.ratingRows.entries()).map(([key, value]) => [key, { ...value }])),
+        reports: this.reports.map((report) => ({ ...report })),
       };
       return { rows: [] };
     }
@@ -73,6 +76,7 @@ class FakeAccountQueryable {
         this.follows.clear();
         this.blocks.clear();
         this.ratingRows.clear();
+        this.reports.splice(0);
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
@@ -82,6 +86,7 @@ class FakeAccountQueryable {
         for (const key of this.transactionSnapshot.follows) this.follows.add(key);
         for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
         for (const [key, value] of this.transactionSnapshot.ratingRows) this.ratingRows.set(key, value);
+        this.reports.push(...this.transactionSnapshot.reports.map((report) => ({ ...report })));
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -395,6 +400,31 @@ class FakeAccountQueryable {
     if (normalizedText.startsWith("INSERT INTO online_account_blocks")) {
       const [blockerAccountId, blockedAccountId] = values as string[];
       this.blocks.add(socialKey(blockerAccountId, blockedAccountId));
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_reports")) {
+      const [
+        reportId,
+        reporterAccountId,
+        reporterDisplayName,
+        targetAccountId,
+        targetDisplayName,
+        reason,
+        details,
+        createdAt,
+      ] = values as string[];
+      this.reports.push({
+        report_id: reportId,
+        reporter_account_id: reporterAccountId,
+        reporter_display_name: reporterDisplayName,
+        target_account_id: targetAccountId,
+        target_display_name: targetDisplayName,
+        reason,
+        details,
+        created_at: createdAt,
+        updated_at: createdAt,
+      });
       return { rows: [] };
     }
 
@@ -985,6 +1015,99 @@ describe("PostgresOnlineAccountStore", () => {
       relationship: { self: false, following: false, followedBy: false, blocked: false },
     });
     expect(queryable.advisoryLocks).toContain("account_liam|account_samir");
+  });
+
+  it("submits account reports without exposing account ids", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-liam"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+    await store.createAccount({
+      accountId: "account_samir",
+      sessionId: "account_session_samir",
+      displayName: "Samir",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-samir"),
+      createdAt: "2026-06-03T12:01:00.000Z",
+    });
+    await store.createAccount({
+      accountId: "account_ben",
+      sessionId: "account_session_ben",
+      displayName: "Ben",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-ben"),
+      createdAt: "2026-06-03T12:02:00.000Z",
+    });
+
+    await expect(
+      store.submitAccountReport({
+        reportId: "report_liam_samir",
+        reporterAccountId: "account_liam",
+        targetDisplayName: "samir",
+        reason: "abuse",
+        details: "Repeated hostile chat in challenge notes.",
+        createdAt: "2026-06-03T12:03:00.000Z",
+      })
+    ).resolves.toEqual({
+      status: "ok",
+      report: {
+        schemaVersion: 1,
+        targetDisplayName: "Samir",
+        reason: "abuse",
+        createdAt: "2026-06-03T12:03:00.000Z",
+      },
+    });
+    expect(queryable.reports).toEqual([
+      expect.objectContaining({
+        report_id: "report_liam_samir",
+        reporter_account_id: "account_liam",
+        reporter_display_name: "Liam",
+        target_account_id: "account_samir",
+        target_display_name: "Samir",
+        reason: "abuse",
+        details: "Repeated hostile chat in challenge notes.",
+      }),
+    ]);
+    const secondReport = await store.submitAccountReport({
+      reportId: "report_liam_ben",
+      reporterAccountId: "account_liam",
+      targetDisplayName: "Ben",
+      reason: "spam",
+      details: "",
+      createdAt: "2026-06-03T12:04:00.000Z",
+    });
+    expect(secondReport.status).toBe("ok");
+    expect(JSON.stringify(secondReport)).not.toContain("account_");
+
+    await expect(
+      store.submitAccountReport({
+        reportId: "report_self",
+        reporterAccountId: "account_liam",
+        targetDisplayName: "Liam",
+        reason: "other",
+        details: "",
+        createdAt: "2026-06-03T12:05:00.000Z",
+      })
+    ).resolves.toEqual({ status: "self" });
+
+    await store.blockAccount("account_samir", "Liam", "2026-06-03T12:06:00.000Z");
+    await expect(
+      store.submitAccountReport({
+        reportId: "report_hidden",
+        reporterAccountId: "account_liam",
+        targetDisplayName: "Samir",
+        reason: "cheating",
+        details: "",
+        createdAt: "2026-06-03T12:07:00.000Z",
+      })
+    ).resolves.toEqual({ status: "not_found" });
   });
 
   it("lists a sanitized public rating leaderboard without deleted accounts or engine internals", async () => {

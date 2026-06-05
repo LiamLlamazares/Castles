@@ -23,6 +23,7 @@ import {
   type OnlineAccountDeleteResponse,
 } from "./accounts";
 import {
+  ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   type OnlineAccountFollowingResponse,
@@ -32,6 +33,9 @@ import {
   type OnlineAccountProfileResponse,
   type OnlineAccountPublicProfile,
   type OnlineAccountPublicRating,
+  type OnlineAccountReportInput,
+  type OnlineAccountReportReason,
+  type OnlineAccountReportResponse,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardResponse,
   type OnlineRatingLeaderboardScope,
@@ -949,6 +953,61 @@ function validateProfileResponse(body: unknown, label: string): OnlineAccountPro
   };
 }
 
+function validateOnlineAccountReportReason(value: unknown, label: string): OnlineAccountReportReason {
+  if (
+    value !== "abuse" &&
+    value !== "cheating" &&
+    value !== "spam" &&
+    value !== "impersonation" &&
+    value !== "other"
+  ) {
+    throw new Error(`${label} was malformed: reason is invalid.`);
+  }
+  return value;
+}
+
+function validateOnlineAccountReportResponse(body: unknown, label: string): OnlineAccountReportResponse {
+  const record = validateVersionedObject(body, label);
+  const allowedResponseKeys = new Set(["protocolVersion", "report"]);
+  for (const key of Object.keys(record)) {
+    if (!allowedResponseKeys.has(key)) {
+      throw new Error(`${label} response was malformed: response contains unsupported data.`);
+    }
+  }
+  const report = record.report;
+  if (!report || typeof report !== "object" || Array.isArray(report)) {
+    throw new Error(`${label} response was malformed: report is invalid.`);
+  }
+  const reportRecord = report as Record<string, unknown>;
+  const allowedReportKeys = new Set(["schemaVersion", "targetDisplayName", "reason", "createdAt"]);
+  for (const key of Object.keys(reportRecord)) {
+    if (!allowedReportKeys.has(key)) {
+      throw new Error(`${label} response was malformed: report contains unsupported data.`);
+    }
+  }
+  if (reportRecord.schemaVersion !== ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION) {
+    throw new Error(`${label} response was malformed: report schemaVersion is invalid.`);
+  }
+  if (typeof reportRecord.targetDisplayName !== "string" || reportRecord.targetDisplayName.length === 0) {
+    throw new Error(`${label} response was malformed: targetDisplayName is invalid.`);
+  }
+  if (stringContainsDurableSecret(reportRecord.targetDisplayName)) {
+    throw new Error(`${label} response was malformed: targetDisplayName must not contain secrets.`);
+  }
+  if (typeof reportRecord.createdAt !== "string" || Number.isNaN(Date.parse(reportRecord.createdAt))) {
+    throw new Error(`${label} response was malformed: createdAt is invalid.`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    report: {
+      schemaVersion: ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
+      targetDisplayName: reportRecord.targetDisplayName,
+      reason: validateOnlineAccountReportReason(reportRecord.reason, `${label}.report`),
+      createdAt: reportRecord.createdAt,
+    },
+  };
+}
+
 export async function fetchOnlineAccountProfile(
   account: OnlineAccountSessionParams,
   displayName: string,
@@ -1111,6 +1170,23 @@ export function unblockOnlineAccount(
   fetchImpl: typeof fetch = fetch
 ): Promise<OnlineAccountProfileResponse> {
   return putOrDeleteOnlineAccountRelationship(account, "blocks", displayName, "DELETE", "unblock", fetchImpl);
+}
+
+export async function reportOnlineAccount(
+  account: OnlineAccountSessionParams,
+  displayName: string,
+  input: OnlineAccountReportInput,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountReportResponse> {
+  const response = await fetchImpl(`/api/online/account/reports/${encodeURIComponent(displayName)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not report online account (${response.status})`);
+  }
+  return validateOnlineAccountReportResponse(await response.json(), "Online account report");
 }
 
 export async function fetchOnlineAccountPrivacy(

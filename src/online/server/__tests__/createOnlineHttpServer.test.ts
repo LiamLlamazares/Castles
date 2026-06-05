@@ -210,6 +210,7 @@ class FakePostgresAccountQueryable {
   readonly ratingRows = new Map<string, any>();
   readonly follows = new Set<string>();
   readonly blocks = new Set<string>();
+  readonly reports: any[] = [];
   private transactionSnapshot?: {
     accounts: Map<string, any>;
     accountsByDisplayName: Map<string, string>;
@@ -218,6 +219,7 @@ class FakePostgresAccountQueryable {
     ratingRows: Map<string, any>;
     follows: Set<string>;
     blocks: Set<string>;
+    reports: any[];
   };
 
   release(): void {}
@@ -235,6 +237,7 @@ class FakePostgresAccountQueryable {
         ratingRows: new Map(Array.from(this.ratingRows.entries()).map(([key, value]) => [key, { ...value }])),
         follows: new Set(this.follows),
         blocks: new Set(this.blocks),
+        reports: this.reports.map((report) => ({ ...report })),
       };
       return { rows: [] };
     }
@@ -251,6 +254,7 @@ class FakePostgresAccountQueryable {
         this.ratingRows.clear();
         this.follows.clear();
         this.blocks.clear();
+        this.reports.splice(0);
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
@@ -258,6 +262,7 @@ class FakePostgresAccountQueryable {
         for (const [key, value] of this.transactionSnapshot.ratingRows) this.ratingRows.set(key, value);
         for (const key of this.transactionSnapshot.follows) this.follows.add(key);
         for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
+        this.reports.push(...this.transactionSnapshot.reports.map((report) => ({ ...report })));
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -420,6 +425,49 @@ class FakePostgresAccountQueryable {
       const accountId = this.accountsByDisplayName.get(displayNameNormalized);
       const account = accountId ? this.accounts.get(accountId) : undefined;
       return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE display_name_normalized")) {
+      const [displayNameNormalized] = values as string[];
+      const accountId = this.accountsByDisplayName.get(displayNameNormalized);
+      const account = accountId ? this.accounts.get(accountId) : undefined;
+      return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE account_id")) {
+      const [accountId] = values as string[];
+      const account = this.accounts.get(accountId);
+      return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT 1 FROM online_account_blocks")) {
+      const [blockerAccountId, blockedAccountId] = values as string[];
+      return { rows: this.blocks.has(`${blockerAccountId}|${blockedAccountId}`) ? [{ "?column?": 1 }] : [] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_reports")) {
+      const [
+        reportId,
+        reporterAccountId,
+        reporterDisplayName,
+        targetAccountId,
+        targetDisplayName,
+        reason,
+        details,
+        createdAt,
+      ] = values as string[];
+      this.reports.push({
+        report_id: reportId,
+        reporter_account_id: reporterAccountId,
+        reporter_display_name: reporterDisplayName,
+        target_account_id: targetAccountId,
+        target_display_name: targetDisplayName,
+        reason,
+        details,
+        created_at: createdAt,
+        updated_at: createdAt,
+      });
+      return { rows: [] };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
@@ -1147,6 +1195,85 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("volatility");
     expect(JSON.stringify(body)).not.toContain("Ben");
     expect(JSON.stringify(body)).not.toContain("Cleo");
+  });
+
+  it("accepts sanitized account reports and preserves moderation-only fields", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = createPostgresAccountStore(queryable);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    const unauthenticatedResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "abuse", details: "Hostile challenge message." }),
+    });
+    const invalidReasonResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "griefing", details: "" }),
+    });
+    const secretDetailsResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "abuse", details: "They pasted token=secret" }),
+    });
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "abuse", details: "  Hostile   challenge message.  " }),
+    });
+    const body = await response.json();
+    const selfResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Liam`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "other", details: "" }),
+    });
+
+    queryable.blocks.add(`${samir.account.accountId}|${liam.account.accountId}`);
+    const blockedByTargetResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "cheating", details: "" }),
+    });
+
+    expect(unauthenticatedResponse.status).toBe(401);
+    expect(invalidReasonResponse.status).toBe(400);
+    expect(secretDetailsResponse.status).toBe(400);
+    expect(response.status).toBe(201);
+    expect(body).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      report: {
+        schemaVersion: 1,
+        targetDisplayName: "Samir",
+        reason: "abuse",
+        createdAt: "2026-06-01T12:00:00.000Z",
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("account_");
+    expect(JSON.stringify(body)).not.toContain("Hostile");
+    expect(JSON.stringify(body)).not.toContain(liam.session.token);
+    expect(queryable.reports).toEqual([
+      expect.objectContaining({
+        reporter_account_id: liam.account.accountId,
+        reporter_display_name: "Liam",
+        target_account_id: samir.account.accountId,
+        target_display_name: "Samir",
+        reason: "abuse",
+        details: "Hostile challenge message.",
+      }),
+    ]);
+    expect(selfResponse.status).toBe(400);
+    expect(blockedByTargetResponse.status).toBe(404);
+    expect(queryable.reports).toHaveLength(1);
   });
 
   it("supports exact profile lookup, follows, privacy, and blocks without exposing account ids", async () => {
