@@ -2879,6 +2879,10 @@ describe("OnlineGameBrowser", () => {
 
     expect(deleteButton).toHaveAttribute("aria-expanded", "true");
     expect(within(confirmation).getByText("Remove Liam")).toBeInTheDocument();
+    expect(confirmation).toHaveTextContent("removes ordinary social account state");
+    expect(confirmation).toHaveTextContent("public games may still show this display name in public archives");
+    expect(confirmation).toHaveTextContent("private and unlisted games stay hidden");
+    expect(confirmation).toHaveTextContent("display name stays reserved");
     expect(within(confirmation).getByText(/This cannot be undone/)).toBeInTheDocument();
     expect(within(confirmation).getByRole("button", { name: "Confirm Delete" })).toHaveFocus();
 

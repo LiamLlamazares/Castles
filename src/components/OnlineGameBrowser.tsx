@@ -3613,7 +3613,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <span className="online-browser-section-kicker">Delete account</span>
             <strong id={deleteAccountConfirmHeadingId}>Remove {account.displayName}</strong>
             <p id={deleteAccountConfirmDescriptionId}>
-              This deletes the sign-in account and signs it out everywhere. Active and completed game records stay in game history and may still show this display name. The display name stays reserved. This cannot be undone.
+              This deletes the sign-in account, signs it out everywhere, and removes ordinary social account state. Game history is retained under its existing visibility: public games may still show this display name in public archives, private and unlisted games stay hidden except to still-authorized credentials or registered participants, and the display name stays reserved. This cannot be undone.
             </p>
           </div>
           <div className="online-browser-account-actions">
