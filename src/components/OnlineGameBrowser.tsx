@@ -4408,6 +4408,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   const isEditingPrivateNote = editingFollowingNoteKey === profileKey;
                   const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
                   const liveGameBlack = liveGame ? participantName(liveGame.participants, "b") : "";
+                  const latestHeadToHeadRematchGame =
+                    accountHeadToHeadSummary &&
+                    normalizeDisplayNameKey(accountHeadToHeadSummary.opponentDisplayName) === profileKey
+                      ? accountHeadToHeadSummary.latestGame
+                      : null;
                   return (
                     <article key={profile.displayName} className="online-browser-following-row">
                       <div>
@@ -4525,6 +4530,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             aria-label={`Challenge ${profile.displayName}`}
                           >
                             Challenge
+                          </button>
+                        )}
+                        {!pendingChallenge && onChallengeAccount && canInteractWithProfile && latestHeadToHeadRematchGame && (
+                          <button
+                            type="button"
+                            className="online-browser-button neutral"
+                            onClick={() => void runSocialChallengeAction(profile.displayName, {
+                              intent: "rematch",
+                              sourceGameId: latestHeadToHeadRematchGame.gameId,
+                            })}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Rematch ${profile.displayName} from latest head-to-head game ${latestHeadToHeadRematchGame.gameId}`}
+                          >
+                            Rematch
                           </button>
                         )}
                         {!pendingChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (

@@ -2694,6 +2694,80 @@ describe("OnlineGameBrowser", () => {
     expect(summaryCard).toHaveTextContent("Liam 2");
   });
 
+  it("offers a following-row rematch from loaded head-to-head account history", async () => {
+    const account = accountFixture("Liam");
+    const latestHeadToHead = summary({
+      gameId: "game_h2h_latest_rematch",
+      updatedAt: "2026-06-01T12:08:00.000Z",
+      endedAt: "2026-06-01T12:08:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "private",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Samir").identity },
+      ],
+      result: { winner: "w", reason: "resignation" },
+    });
+    const olderHeadToHead = summary({
+      gameId: "game_h2h_older_rematch",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      endedAt: "2026-06-01T12:04:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "private",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: registeredParticipant("w", "Samir").identity },
+        { seat: "b", role: "black", identity: account.identity },
+      ],
+      result: { winner: "w", reason: "timeout" },
+    });
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" }),
+        ])}
+        loadAccountGames={vi.fn().mockResolvedValue(directory([]))}
+        loadAccountHeadToHeadGames={vi.fn().mockResolvedValue(directory([olderHeadToHead, latestHeadToHead]))}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const following = await screen.findByRole("region", { name: "Followed players" });
+    const samirRow = (await within(following).findByText("Samir")).closest("article");
+    expect(samirRow).not.toBeNull();
+    expect(within(samirRow as HTMLElement).queryByRole("button", {
+      name: "Rematch Samir from latest head-to-head game game_h2h_latest_rematch",
+    })).not.toBeInTheDocument();
+
+    fireEvent.click(within(samirRow as HTMLElement).getByRole("button", {
+      name: "Show Samir game history from following list",
+    }));
+
+    await screen.findByRole("region", { name: "Head-to-head with Samir" });
+    fireEvent.click(await within(samirRow as HTMLElement).findByRole("button", {
+      name: "Rematch Samir from latest head-to-head game game_h2h_latest_rematch",
+    }));
+
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir", {
+      intent: "rematch",
+      sourceGameId: "game_h2h_latest_rematch",
+    }));
+    expect(await screen.findByText("Rematch challenge created for Samir.")).toBeInTheDocument();
+  });
+
   it("keeps game row player names plain without signed-in social lookup", async () => {
     const liveGame = summary({
       gameId: "game_profile_plain",
