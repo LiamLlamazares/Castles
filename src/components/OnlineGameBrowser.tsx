@@ -504,6 +504,41 @@ function challengeOpponentName(item: OnlineAccountChallengeListItem): string {
   return identityDisplayName(identity) ?? (item.role === "challenged" ? "Challenger" : "Opponent");
 }
 
+function isAccountChallengeShortcutItem(item: OnlineAccountChallengeListItem): boolean {
+  return item.summary.status === "pending" || (item.summary.status === "accepted" && Boolean(item.summary.gameId));
+}
+
+function mergeAccountChallengeShortcutItems(
+  current: OnlineAccountChallengeListItem[],
+  incoming: OnlineAccountChallengeListItem[]
+): OnlineAccountChallengeListItem[] {
+  const next = new Map<string, OnlineAccountChallengeListItem>();
+  for (const item of current) {
+    if (item.summary.status === "accepted" && item.summary.gameId) {
+      next.set(item.summary.challengeId, item);
+    }
+  }
+  for (const item of incoming) {
+    if (isAccountChallengeShortcutItem(item)) {
+      next.set(item.summary.challengeId, item);
+    }
+  }
+  return [...next.values()];
+}
+
+function updateAccountChallengeShortcutItem(
+  current: OnlineAccountChallengeListItem[],
+  item: OnlineAccountChallengeListItem
+): OnlineAccountChallengeListItem[] {
+  const next = new Map(current.map((candidate) => [candidate.summary.challengeId, candidate]));
+  if (isAccountChallengeShortcutItem(item)) {
+    next.set(item.summary.challengeId, item);
+  } else {
+    next.delete(item.summary.challengeId);
+  }
+  return [...next.values()];
+}
+
 function formatChallengeSeatChoice(
   item: OnlineAccountChallengeListItem,
   account?: OnlineAccount | null
@@ -1056,6 +1091,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [isHeadToHeadLoadingMore, setIsHeadToHeadLoadingMore] = React.useState(false);
   const [headToHeadMessage, setHeadToHeadMessage] = React.useState("");
   const [accountChallenges, setAccountChallenges] = React.useState<OnlineAccountChallengeListItem[]>([]);
+  const [accountChallengeShortcutItems, setAccountChallengeShortcutItems] = React.useState<OnlineAccountChallengeListItem[]>([]);
   const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallengeActionById, setAccountChallengeActionById] = React.useState<Record<string, "accept" | "decline" | "cancel" | undefined>>({});
   const [accountChallengeFilter, setAccountChallengeFilter] = React.useState<OnlineAccountChallengeFilter>("all");
@@ -1272,11 +1308,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     try {
       const response = await loadAccountChallenges({ state: accountChallengeFilter });
       if (requestId !== accountChallengesRequestIdRef.current) return;
-      setAccountChallenges(
-        response.challenges.filter((item) =>
-          item.summary.status !== "pending" ||
-          !completedAccountChallengeIdsRef.current.has(item.summary.challengeId)
-        )
+      const filteredChallenges = response.challenges.filter((item) =>
+        item.summary.status !== "pending" ||
+        !completedAccountChallengeIdsRef.current.has(item.summary.challengeId)
+      );
+      setAccountChallenges(filteredChallenges);
+      setAccountChallengeShortcutItems((current) =>
+        accountChallengeFilter === "all"
+          ? filteredChallenges.filter(isAccountChallengeShortcutItem)
+          : mergeAccountChallengeShortcutItems(current, filteredChallenges)
       );
       setAccountChallengesStatus("ready");
     } catch (error) {
@@ -1325,6 +1365,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           .filter((candidate) =>
             accountChallengeFilter === "all" || candidate.summary.status === "pending"
           )
+      );
+      setAccountChallengeShortcutItems((current) =>
+        updateAccountChallengeShortcutItem(current, { role: response.role, summary: response.summary })
       );
       setAccountChallengesStatus("ready");
       setSocialMessage(
@@ -1567,6 +1610,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     accountChallengeAutoRefreshPausedUntilRef.current = 0;
     completedAccountChallengeIdsRef.current.clear();
     setAccountChallenges([]);
+    setAccountChallengeShortcutItems([]);
     setAccountChallengeActionById({});
     setAccountChallengeFilter("all");
     setAccountChallengesStatus("idle");
@@ -1943,7 +1987,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       return 3;
     };
     const challenges = new Map<string, OnlineAccountChallengeListItem>();
-    for (const item of accountChallenges) {
+    for (const item of accountChallengeShortcutItems) {
       const itemPriority = challengeRowPriority(item);
       if (itemPriority > 2) continue;
       const key = normalizeDisplayNameKey(challengeOpponentName(item));
@@ -1953,7 +1997,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       }
     }
     return challenges;
-  }, [accountChallenges]);
+  }, [accountChallengeShortcutItems]);
   const pendingIncomingChallengeCount = React.useMemo(
     () => accountChallenges.filter((item) => item.summary.status === "pending" && item.role === "challenged").length,
     [accountChallenges]
