@@ -504,7 +504,18 @@ function challengeOpponentName(item: OnlineAccountChallengeListItem): string {
   return identityDisplayName(identity) ?? (item.role === "challenged" ? "Challenger" : "Opponent");
 }
 
-function formatChallengeSeatChoice(item: OnlineAccountChallengeListItem): string {
+function formatChallengeSeatChoice(
+  item: OnlineAccountChallengeListItem,
+  account?: OnlineAccount | null
+): string {
+  if (item.summary.status === "accepted" && account) {
+    if (item.summary.whiteIdentity && isSameOnlineIdentity(item.summary.whiteIdentity, account.identity)) {
+      return "Your side White";
+    }
+    if (item.summary.blackIdentity && isSameOnlineIdentity(item.summary.blackIdentity, account.identity)) {
+      return "Your side Black";
+    }
+  }
   const seat = item.summary.challengerSeat;
   if (seat === "random") return "Random side";
   const challengerSide = seat === "w" ? "White" : "Black";
@@ -4196,7 +4207,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           <div className="online-browser-social-badges">
                             <span>{formatAccountChallengeRole(item.role)}</span>
                             <span>{formatAccountChallengeStatus(item)}</span>
-                            <span>{formatChallengeSeatChoice(item)}</span>
+                            <span>{formatChallengeSeatChoice(item, account)}</span>
                             {formatChallengeSetupSummary(item).map((detail) => (
                               <span key={detail}>{detail}</span>
                             ))}
