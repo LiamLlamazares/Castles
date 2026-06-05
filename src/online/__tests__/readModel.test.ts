@@ -249,6 +249,7 @@ describe("online read model", () => {
   it("searches public directory summaries by visible text without raw identity ids", () => {
     const visibleSummary = validSummary({
       gameId: "game_visible_search",
+      ratingMode: "rated",
       participants: [
         { seat: "w", role: "white", identity: { kind: "registered", id: "private_user_w", displayName: "Ada" } },
         { seat: "b", role: "black", identity: { kind: "session", id: "session_secret_b" } },
@@ -271,9 +272,32 @@ describe("online read model", () => {
     expect(searchText).toContain("ada");
     expect(searchText).toContain("black");
     expect(searchText).toContain("black to move");
+    expect(searchText).toContain("rated game");
     expect(searchText).toContain("g13g12");
     expect(searchText).not.toContain("private_user_w");
     expect(searchText).not.toContain("session_secret_b");
+  });
+
+  it("projects, validates, and searches public rating mode summary labels", () => {
+    const ratedEvent: Extract<OnlineGameEvent, { type: "game_created" }> = {
+      ...createEvent("game_rated_summary"),
+      setup: { ...createSetup(), ratingMode: "rated" },
+    };
+    const [ratedSummary] = projectOnlineGameSummaries([ratedEvent]);
+    const legacySummary = validSummary({ ratingMode: undefined });
+
+    expect(ratedSummary.ratingMode).toBe("rated");
+    expect(validateOnlineGameSummary(ratedSummary)).toMatchObject({
+      ok: true,
+      value: { ratingMode: "rated" },
+    });
+    expect(validateOnlineGameSummary(legacySummary)).toMatchObject({
+      ok: true,
+      value: { ratingMode: undefined },
+    });
+    expect(validateOnlineGameSummary({ ...legacySummary, ratingMode: "ranked" }).ok).toBe(false);
+    expect(onlineGameSummaryDirectorySearchText(ratedSummary)).toContain("rated game");
+    expect(onlineGameSummaryDirectorySearchText(legacySummary)).toContain("casual game");
   });
 
   it("searches timeout results by displayed on-time label", () => {

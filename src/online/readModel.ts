@@ -8,7 +8,7 @@ import {
   ONLINE_GAME_VISIBILITIES,
   type OnlineGameVisibility,
 } from "./visibility";
-import type { OnlineGameResultDTO } from "./types";
+import type { OnlineGameResultDTO, OnlineRatingMode } from "./types";
 import type { ValidationResult } from "./validation";
 import {
   canAccessOnlineGameSummary,
@@ -118,6 +118,7 @@ export interface OnlineGameSummary {
   visibility: OnlineGameVisibility;
   archiveState: OnlineArchiveState;
   hasTimeControl: boolean;
+  ratingMode?: OnlineRatingMode;
   participants: OnlineGameSummaryParticipant[];
   livePreview: OnlineGameSummaryLivePreview;
   result?: OnlineGameResultDTO;
@@ -162,6 +163,7 @@ interface SummaryMetadata {
   version: number;
   visibility: OnlineGameVisibility;
   hasTimeControl: boolean;
+  ratingMode?: OnlineRatingMode;
   whiteIdentity?: OnlineIdentity;
   blackIdentity?: OnlineIdentity;
   lastEventId: string;
@@ -423,11 +425,14 @@ function participantSearchTerms(participant: OnlineGameSummaryParticipant): stri
 }
 
 export function onlineGameSummaryDirectorySearchText(summary: OnlineGameSummary): string {
+  const ratingMode = summary.ratingMode ?? "casual";
   return [
     summary.gameId,
     summary.status,
     summary.archiveState,
     summary.hasTimeControl ? "timed clock timed" : "casual no clock",
+    ratingMode,
+    ratingMode === "rated" ? "rated game" : "casual game",
     summary.livePreview.sideToMove === "w" ? "white to move" : "black to move",
     summary.livePreview.turnPhase,
     summary.livePreview.lastMove?.notation ?? "",
@@ -790,6 +795,7 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
         version: 0,
         visibility: event.initialVisibility ?? "unlisted",
         hasTimeControl: !!event.setup.timeControl,
+        ratingMode: event.setup.ratingMode ?? "casual",
         whiteIdentity: event.whiteIdentity,
         blackIdentity: event.blackIdentity,
         lastEventId: event.eventId,
@@ -842,6 +848,7 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
       visibility: metadata.visibility,
       archiveState: result ? "archived" : "active",
       hasTimeControl: metadata.hasTimeControl,
+      ratingMode: metadata.ratingMode,
       participants: [
         participantForGameSeat(record.gameId, "w", metadata.whiteIdentity),
         participantForGameSeat(record.gameId, "b", metadata.blackIdentity),
@@ -888,6 +895,13 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
   }
   if (typeof value.hasTimeControl !== "boolean") {
     return bad("summary.hasTimeControl must be a boolean.");
+  }
+  let ratingMode: OnlineRatingMode | undefined;
+  if (value.ratingMode !== undefined) {
+    if (value.ratingMode !== "casual" && value.ratingMode !== "rated") {
+      return bad("summary.ratingMode must be either casual or rated.");
+    }
+    ratingMode = value.ratingMode;
   }
   if (!Array.isArray(value.participants) || value.participants.length !== 2) {
     return bad("summary.participants must contain both seats.");
@@ -1003,6 +1017,7 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
       visibility: value.visibility as OnlineGameVisibility,
       archiveState: value.archiveState as OnlineArchiveState,
       hasTimeControl: value.hasTimeControl,
+      ratingMode,
       participants: normalizedParticipants,
       livePreview: {
         sideToMove: value.livePreview.sideToMove,

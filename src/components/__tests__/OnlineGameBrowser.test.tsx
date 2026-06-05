@@ -3535,6 +3535,39 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("article", { name: /Lobby listing seek_castle_control/i })).toBeInTheDocument();
   });
 
+  it("renders and searches rated labels in lobby listings and current-game rows", async () => {
+    const ratedSeek = openSeek({
+      seekId: "seek_rated_listing",
+      setup: { ...createChallengeSetup(), ratingMode: "rated" },
+    });
+    const ratedGame = summary({
+      gameId: "game_lobby_rated",
+      ratingMode: "rated",
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([ratedGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([ratedSeek]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+      />
+    );
+
+    const listing = await screen.findByRole("article", { name: /Lobby listing seek_rated_listing/i });
+    expect(listing).toHaveTextContent("Rating Rated");
+    const currentGames = await screen.findByRole("region", { name: "Current public games" });
+    expect(within(currentGames).getByRole("article", { name: /game_lobby_rated/i })).toHaveTextContent("Rating Rated");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search lobby listings" }), {
+      target: { value: "rated game" },
+    });
+
+    expect(screen.getByRole("article", { name: /Lobby listing seek_rated_listing/i })).toBeInTheDocument();
+  });
+
   it("explains fixed creator-side listings from the acceptor's point of view", async () => {
     render(
       <OnlineGameBrowser
@@ -5145,6 +5178,7 @@ describe("OnlineGameBrowser", () => {
             archiveState: "archived",
             endedAt: "2026-06-01T12:05:00.000Z",
             updatedAt: "2026-06-01T12:05:00.000Z",
+            ratingMode: "rated",
             result: { winner: "w", reason: "resignation" },
           }),
         ]))}
@@ -5163,6 +5197,7 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent("Final position Black, Attack");
     expect(row).toHaveTextContent("Last move G13G12");
     expect(row).toHaveTextContent("Timed 20+20");
+    expect(row).toHaveTextContent("Rating Rated");
     expect(row).toHaveTextContent(/Ended /);
     expect(row).toHaveTextContent(/Started /);
     expect(row).toHaveTextContent("White wins by resignation");

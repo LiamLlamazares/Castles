@@ -728,6 +728,7 @@ function seekSearchText(summary: OpenSeekSummary): string {
   const sideDetail = formatSeekSideDetail(summary, false);
   const clock = formatSeekClock(summary);
   const scoring = formatSeekScoringLabel(summary);
+  const rating = formatSeekRatingLabel(summary);
   return [
     summary.seekId,
     summary.creatorSeat,
@@ -738,6 +739,8 @@ function seekSearchText(summary: OpenSeekSummary): string {
     clock,
     summary.setup.timeControl ? `${summary.setup.timeControl.initial}+${summary.setup.timeControl.increment}` : "casual",
     scoring,
+    rating,
+    `${rating} game`,
   ].join(" ").toLowerCase();
 }
 
@@ -748,6 +751,14 @@ function formatSeekClock(summary: OpenSeekSummary): string {
 
 function formatSeekScoringLabel(summary: OpenSeekSummary): string {
   return summary.setup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control";
+}
+
+function formatRatingModeLabel(ratingMode: "casual" | "rated" | undefined): string {
+  return ratingMode === "rated" ? "Rated" : "Casual";
+}
+
+function formatSeekRatingLabel(summary: OpenSeekSummary): string {
+  return formatRatingModeLabel(summary.setup.ratingMode);
 }
 
 function formatSeekExpiresAt(value: string): string {
@@ -2311,6 +2322,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             )}
             {spectatorCountLabel && <span>{spectatorCountLabel}</span>}
             <span>{!isArchivedGame && game.hasTimeControl ? formatClockSnapshot(game) : formatTimeControl(game)}</span>
+            <span>Rating {formatRatingModeLabel(game.ratingMode)}</span>
             {isArchivedGame && game.endedAt ? (
               <>
                 <span>Ended {formatUpdatedAt(game.endedAt)}</span>
@@ -2422,6 +2434,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <span>{formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}</span>
             {game.livePreview.lastMove && <span>Last {game.livePreview.lastMove.notation}</span>}
             <span>{game.hasTimeControl ? formatClockSnapshot(game) : formatTimeControl(game)}</span>
+            <span>Rating {formatRatingModeLabel(game.ratingMode)}</span>
             {!storedJoin && <span>Player token not in this browser session</span>}
           </div>
         </div>
@@ -4473,6 +4486,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <span>{formatOwnedSeekSideDetail(visibleOwnedSeekResponse)}</span>
                     <span>{formatSeekClock(visibleOwnedSeekResponse.summary)}</span>
                     <span>{formatSeekScoringLabel(visibleOwnedSeekResponse.summary)}</span>
+                    <span>Rating {formatSeekRatingLabel(visibleOwnedSeekResponse.summary)}</span>
                     <span>Expires {formatSeekExpiresAt(visibleOwnedSeekResponse.summary.expiresAt)}</span>
                   </div>
                 </div>
@@ -4591,6 +4605,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           <span>Board Radius {radius}</span>
                           <span>Clock {formatSeekClock(seek)}</span>
                           <span>Scoring {formatSeekScoringLabel(seek)}</span>
+                          <span>Rating {formatSeekRatingLabel(seek)}</span>
                           <span>Expires {formatSeekExpiresAt(seek.expiresAt)}</span>
                         </div>
                       </div>

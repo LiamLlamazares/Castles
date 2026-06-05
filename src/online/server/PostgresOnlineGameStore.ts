@@ -235,6 +235,8 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         OR LOWER(COALESCE(payload->'livePreview'->>'turnPhase', '')) LIKE $${searchParam} ESCAPE '\\'
         OR LOWER(COALESCE(payload->'livePreview'->'lastMove'->>'notation', '')) LIKE $${searchParam} ESCAPE '\\'
         OR LOWER(CASE WHEN (payload->>'hasTimeControl')::boolean THEN 'timed clock timed' ELSE 'casual no clock' END) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->>'ratingMode', 'casual')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(CASE COALESCE(payload->>'ratingMode', 'casual') WHEN 'rated' THEN 'rated game' ELSE 'casual game' END) LIKE $${searchParam} ESCAPE '\\'
         OR LOWER(COALESCE(payload->'participants'->0->>'role', '')) LIKE $${searchParam} ESCAPE '\\'
         OR LOWER(COALESCE(payload->'participants'->1->>'role', '')) LIKE $${searchParam} ESCAPE '\\'
         OR LOWER(COALESCE(payload->'participants'->0->'identity'->>'displayName', '')) LIKE $${searchParam} ESCAPE '\\'
