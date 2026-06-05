@@ -8,11 +8,11 @@ import {
 export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
 export const ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION = 1;
 export const ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION = 1;
-export const ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION = 1;
+export const ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION = 2;
 
 export type OnlineRatingLeaderboardScope = "global" | "following";
 export type OnlineAccountReportReason = "abuse" | "cheating" | "spam" | "impersonation" | "other";
-export type OnlineAccountReportStatus = "open";
+export type OnlineAccountReportStatus = "open" | "resolved" | "dismissed";
 export type OnlineAccountFollowPolicy = "everyone" | "nobody";
 export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountChallengePolicy = "followed" | "everyone" | "nobody";
@@ -98,14 +98,40 @@ export interface OnlineAccountModerationReport {
   reason: OnlineAccountReportReason;
   details: string;
   status: OnlineAccountReportStatus;
+  moderatorNote: string;
   createdAt: string;
   updatedAt: string;
+  reviewedAt: string | null;
+}
+
+export interface OnlineAccountModerationAuditEntry {
+  schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
+  auditId: string;
+  reportId: string;
+  action: "status_changed";
+  actor: "admin";
+  previousStatus: OnlineAccountReportStatus;
+  nextStatus: OnlineAccountReportStatus;
+  note: string;
+  createdAt: string;
 }
 
 export interface OnlineAccountModerationReportQueueResponse {
   protocolVersion: number;
   schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
   reports: OnlineAccountModerationReport[];
+}
+
+export interface OnlineAccountModerationReportStatusResponse {
+  protocolVersion: number;
+  schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
+  report: OnlineAccountModerationReport;
+  audit: OnlineAccountModerationAuditEntry;
+}
+
+export interface OnlineAccountModerationReportStatusPatch {
+  status: OnlineAccountReportStatus;
+  note: string;
 }
 
 export function createOnlineAccountPublicRating(rating: OnlineRating): OnlineAccountPublicRating {
@@ -156,7 +182,13 @@ const REPORT_REASONS = new Set<OnlineAccountReportReason>([
   "impersonation",
   "other",
 ]);
+export const ONLINE_ACCOUNT_REPORT_STATUSES = new Set<OnlineAccountReportStatus>([
+  "open",
+  "resolved",
+  "dismissed",
+]);
 export const ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH = 1_000;
+export const ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH = 1_000;
 
 function bad(message: string): ValidationResult<never> {
   return {
@@ -251,6 +283,39 @@ export function parseOnlineAccountReportInput(value: unknown): ValidationResult<
     value: {
       reason: value.reason as OnlineAccountReportReason,
       details: normalizedDetails,
+    },
+  };
+}
+
+export function parseOnlineAccountModerationReportStatusPatch(
+  value: unknown
+): ValidationResult<OnlineAccountModerationReportStatusPatch> {
+  if (!isRecord(value)) return bad("Moderation report status update must be an object.");
+
+  if (typeof value.status !== "string" || !ONLINE_ACCOUNT_REPORT_STATUSES.has(value.status as OnlineAccountReportStatus)) {
+    return bad("Moderation report status is invalid.");
+  }
+
+  const note = value.note === undefined ? "" : value.note;
+  if (typeof note !== "string") {
+    return bad("Moderation report note is invalid.");
+  }
+  const normalizedNote = note.replace(/\s+/g, " ").trim();
+  if (normalizedNote.length > ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH) {
+    return bad("Moderation report note is too long.");
+  }
+
+  for (const key of Object.keys(value)) {
+    if (key !== "status" && key !== "note") {
+      return bad("Moderation report status update contains an unsupported field.");
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      status: value.status as OnlineAccountReportStatus,
+      note: normalizedNote,
     },
   };
 }

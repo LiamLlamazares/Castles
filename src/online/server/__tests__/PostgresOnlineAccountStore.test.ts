@@ -22,6 +22,7 @@ class FakeAccountQueryable {
   readonly blocks = new Set<string>();
   readonly ratingRows = new Map<string, OnlineRating>();
   readonly reports: any[] = [];
+  readonly reportAudits: any[] = [];
   readonly advisoryLocks: string[] = [];
   private transactionSnapshot?: {
     accounts: Map<string, any>;
@@ -34,6 +35,7 @@ class FakeAccountQueryable {
     blocks: Set<string>;
     ratingRows: Map<string, OnlineRating>;
     reports: any[];
+    reportAudits: any[];
   };
 
   release(): void {}
@@ -58,6 +60,7 @@ class FakeAccountQueryable {
         blocks: new Set(this.blocks),
         ratingRows: new Map(Array.from(this.ratingRows.entries()).map(([key, value]) => [key, { ...value }])),
         reports: this.reports.map((report) => ({ ...report })),
+        reportAudits: this.reportAudits.map((audit) => ({ ...audit })),
       };
       return { rows: [] };
     }
@@ -77,6 +80,7 @@ class FakeAccountQueryable {
         this.blocks.clear();
         this.ratingRows.clear();
         this.reports.splice(0);
+        this.reportAudits.splice(0);
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
@@ -87,6 +91,7 @@ class FakeAccountQueryable {
         for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
         for (const [key, value] of this.transactionSnapshot.ratingRows) this.ratingRows.set(key, value);
         this.reports.push(...this.transactionSnapshot.reports.map((report) => ({ ...report })));
+        this.reportAudits.push(...this.transactionSnapshot.reportAudits.map((audit) => ({ ...audit })));
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -423,13 +428,15 @@ class FakeAccountQueryable {
         reason,
         details,
         status: "open",
+        moderator_note: "",
         created_at: createdAt,
         updated_at: createdAt,
+        reviewed_at: null,
       });
       return { rows: [] };
     }
 
-    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, status, created_at, updated_at FROM online_account_reports")) {
+    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE status")) {
       const [status, limit] = values as [string, number];
       const rows = this.reports
         .filter((report) => report.status === status)
@@ -444,11 +451,54 @@ class FakeAccountQueryable {
           target_display_name: report.target_display_name,
           reason: report.reason,
           details: report.details,
+          moderator_note: report.moderator_note,
           status: report.status,
           created_at: report.created_at,
           updated_at: report.updated_at,
+          reviewed_at: report.reviewed_at,
         }));
       return { rows };
+    }
+
+    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE report_id")) {
+      const [reportId] = values as string[];
+      const report = this.reports.find((candidate) => candidate.report_id === reportId);
+      return { rows: report ? [{ ...report }] : [] };
+    }
+
+    if (normalizedText.startsWith("UPDATE online_account_reports SET status")) {
+      const [reportId, status, moderatorNote, reviewedAt, updatedAt] = values as [string, string, string, string | null, string];
+      const report = this.reports.find((candidate) => candidate.report_id === reportId);
+      if (!report) return { rows: [] };
+      report.status = status;
+      report.moderator_note = moderatorNote;
+      report.reviewed_at = reviewedAt;
+      report.updated_at = updatedAt;
+      return { rows: [{ ...report }] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_report_audit")) {
+      const [
+        auditId,
+        reportId,
+        action,
+        actor,
+        previousStatus,
+        nextStatus,
+        note,
+        createdAt,
+      ] = values as string[];
+      this.reportAudits.push({
+        audit_id: auditId,
+        report_id: reportId,
+        action,
+        actor,
+        previous_status: previousStatus,
+        next_status: nextStatus,
+        note,
+        created_at: createdAt,
+      });
+      return { rows: [] };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_blocks")) {
@@ -1111,15 +1161,17 @@ describe("PostgresOnlineAccountStore", () => {
     expect(JSON.stringify(secondReport)).not.toContain("account_");
     await expect(store.listAccountReports({ status: "open", limit: 1 })).resolves.toEqual([
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         reportId: "report_liam_ben",
         reporterDisplayName: "Liam",
         targetDisplayName: "Ben",
         reason: "spam",
         details: "",
         status: "open",
+        moderatorNote: "",
         createdAt: "2026-06-03T12:04:00.000Z",
         updatedAt: "2026-06-03T12:04:00.000Z",
+        reviewedAt: null,
       },
     ]);
     await expect(store.listAccountReports({ status: "open", limit: 10 })).resolves.toMatchObject([
@@ -1129,6 +1181,75 @@ describe("PostgresOnlineAccountStore", () => {
     const queue = await store.listAccountReports({ status: "open", limit: 10 });
     expect(JSON.stringify(queue)).not.toContain("account_");
     expect(JSON.stringify(queue)).not.toContain("token-");
+
+    await expect(
+      store.updateAccountReportStatus({
+        reportId: "missing_report",
+        auditId: "report_audit_missing",
+        status: "resolved",
+        note: "",
+        updatedAt: "2026-06-03T12:05:00.000Z",
+      })
+    ).resolves.toEqual({ status: "not_found" });
+    await expect(
+      store.updateAccountReportStatus({
+        reportId: "report_liam_samir",
+        auditId: "report_audit_same",
+        status: "open",
+        note: "",
+        updatedAt: "2026-06-03T12:05:00.000Z",
+      })
+    ).resolves.toEqual({ status: "unchanged" });
+    await expect(
+      store.updateAccountReportStatus({
+        reportId: "report_liam_samir",
+        auditId: "report_audit_resolved",
+        status: "resolved",
+        note: "Reviewed challenge evidence.",
+        updatedAt: "2026-06-03T12:05:00.000Z",
+      })
+    ).resolves.toEqual({
+      status: "ok",
+      report: {
+        schemaVersion: 2,
+        reportId: "report_liam_samir",
+        reporterDisplayName: "Liam",
+        targetDisplayName: "Samir",
+        reason: "abuse",
+        details: "Repeated hostile chat in challenge notes.",
+        status: "resolved",
+        moderatorNote: "Reviewed challenge evidence.",
+        createdAt: "2026-06-03T12:03:00.000Z",
+        updatedAt: "2026-06-03T12:05:00.000Z",
+        reviewedAt: "2026-06-03T12:05:00.000Z",
+      },
+      audit: {
+        schemaVersion: 2,
+        auditId: "report_audit_resolved",
+        reportId: "report_liam_samir",
+        action: "status_changed",
+        actor: "admin",
+        previousStatus: "open",
+        nextStatus: "resolved",
+        note: "Reviewed challenge evidence.",
+        createdAt: "2026-06-03T12:05:00.000Z",
+      },
+    });
+    await expect(store.listAccountReports({ status: "open", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_liam_ben" },
+    ]);
+    await expect(store.listAccountReports({ status: "resolved", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_liam_samir", status: "resolved", moderatorNote: "Reviewed challenge evidence." },
+    ]);
+    expect(queryable.reportAudits).toEqual([
+      expect.objectContaining({
+        audit_id: "report_audit_resolved",
+        report_id: "report_liam_samir",
+        previous_status: "open",
+        next_status: "resolved",
+        note: "Reviewed challenge evidence.",
+      }),
+    ]);
 
     await expect(
       store.submitAccountReport({

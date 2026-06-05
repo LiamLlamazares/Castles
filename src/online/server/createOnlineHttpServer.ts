@@ -155,10 +155,13 @@ import {
 } from "../accounts";
 import {
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_REPORT_STATUSES,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+  parseOnlineAccountModerationReportStatusPatch,
   parseOnlineAccountReportInput,
   parseOnlineAccountPrivacyPatch,
   type OnlineAccountModerationReportQueueResponse,
+  type OnlineAccountModerationReportStatusResponse,
   type OnlineAccountReportStatus,
   type OnlineRatingLeaderboardScope,
   type OnlineAccountSocialActionResult,
@@ -629,7 +632,7 @@ function parseModerationReportQueueOptions(
     return { ok: false, message: "Moderation report query is invalid." };
   }
   const rawStatus = getSingleSearchParam(url.searchParams, "status") ?? "open";
-  if (rawStatus !== "open") {
+  if (!ONLINE_ACCOUNT_REPORT_STATUSES.has(rawStatus as OnlineAccountReportStatus)) {
     return { ok: false, message: "Moderation report status is invalid." };
   }
   const rawLimit = getSingleSearchParam(url.searchParams, "limit");
@@ -642,7 +645,7 @@ function parseModerationReportQueueOptions(
   ) {
     return { ok: false, message: "Moderation report limit is invalid." };
   }
-  return { ok: true, status: rawStatus, limit };
+  return { ok: true, status: rawStatus as OnlineAccountReportStatus, limit };
 }
 
 function parseOpenSeekDirectoryOptions(
@@ -953,6 +956,10 @@ function defaultAccountReportIdFactory(): string {
   return `report_${randomBytes(9).toString("base64url")}`;
 }
 
+function defaultAccountReportAuditIdFactory(): string {
+  return `report_audit_${randomBytes(9).toString("base64url")}`;
+}
+
 function defaultAccountSessionTokenFactory(): string {
   return randomBytes(ACCOUNT_SESSION_TOKEN_BYTES).toString("base64url");
 }
@@ -1032,6 +1039,12 @@ function normalizeOpenSeekVisibility(value: unknown): OpenSeekVisibility | null 
 function normalizeDirectGameCreatorSeat(value: unknown): "w" | "b" | null {
   if (value === undefined) return "w";
   return value === "w" || value === "b" ? value : null;
+}
+
+function normalizeModerationReportId(value: unknown): string | null {
+  if (typeof value !== "string" || !/^report_[A-Za-z0-9_-]{6,128}$/.test(value)) return null;
+  if (stringContainsDurableSecret(value)) return null;
+  return value;
 }
 
 function normalizeOnlineSetupForCreation(setup: OnlineGameSetupDTO): OnlineGameSetupDTO {
@@ -3518,6 +3531,89 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.admin.reports", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account reports could not be loaded." },
+      });
+    }
+  });
+
+  app.patch("/api/online/admin/reports/:reportId", async (req, res) => {
+    setOnlineNoStoreHeaders(res);
+    const authorized = resolveAdminBearer(req);
+    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    if (!authorized) {
+      log({
+        event: "online.admin.report.update",
+        status: "rejected",
+        reason: rateLimitAllowed ? "not_found" : "rate_limited_not_found",
+      });
+      res.status(404).json({ error: adminNotFoundError() });
+      return;
+    }
+    if (!rateLimitAllowed) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many admin requests were sent too quickly." },
+      });
+      return;
+    }
+    const reportId = normalizeModerationReportId(req.params.reportId);
+    if (!reportId) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Moderation report id is invalid." },
+      });
+      return;
+    }
+    const patch = parseOnlineAccountModerationReportStatusPatch(req.body);
+    if (!patch.ok) {
+      res.status(400).json({ error: patch.error });
+      return;
+    }
+    if (containsDurableSecret(req.body)) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Moderation report notes must not contain account or invite secrets." },
+      });
+      return;
+    }
+    try {
+      const updatedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+      const result = await accountStore.updateAccountReportStatus({
+        reportId,
+        auditId: defaultAccountReportAuditIdFactory(),
+        status: patch.value.status,
+        note: patch.value.note,
+        updatedAt,
+      });
+      if (result.status === "not_found") {
+        log({ event: "online.admin.report.update", status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No online account report was found." },
+        });
+        return;
+      }
+      if (result.status === "unchanged") {
+        log({ event: "online.admin.report.update", status: "rejected", reason: "unchanged" });
+        res.status(409).json({
+          error: { code: "not_allowed", message: "Moderation report already has that status." },
+        });
+        return;
+      }
+      if (result.status !== "ok") {
+        res.status(500).json({
+          error: { code: "persistence_failed", message: "Account report status result was invalid." },
+        });
+        return;
+      }
+      const body: OnlineAccountModerationReportStatusResponse = {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+        report: result.report,
+        audit: result.audit,
+      };
+      log({ event: "online.admin.report.update", status: "accepted" });
+      res.json(body);
+    } catch (error) {
+      console.error("Failed to update account report", error);
+      log({ event: "online.admin.report.update", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account report could not be updated." },
       });
     }
   });

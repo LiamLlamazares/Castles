@@ -211,6 +211,7 @@ class FakePostgresAccountQueryable {
   readonly follows = new Set<string>();
   readonly blocks = new Set<string>();
   readonly reports: any[] = [];
+  readonly reportAudits: any[] = [];
   private transactionSnapshot?: {
     accounts: Map<string, any>;
     accountsByDisplayName: Map<string, string>;
@@ -220,6 +221,7 @@ class FakePostgresAccountQueryable {
     follows: Set<string>;
     blocks: Set<string>;
     reports: any[];
+    reportAudits: any[];
   };
 
   release(): void {}
@@ -238,6 +240,7 @@ class FakePostgresAccountQueryable {
         follows: new Set(this.follows),
         blocks: new Set(this.blocks),
         reports: this.reports.map((report) => ({ ...report })),
+        reportAudits: this.reportAudits.map((audit) => ({ ...audit })),
       };
       return { rows: [] };
     }
@@ -255,6 +258,7 @@ class FakePostgresAccountQueryable {
         this.follows.clear();
         this.blocks.clear();
         this.reports.splice(0);
+        this.reportAudits.splice(0);
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
@@ -263,6 +267,7 @@ class FakePostgresAccountQueryable {
         for (const key of this.transactionSnapshot.follows) this.follows.add(key);
         for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
         this.reports.push(...this.transactionSnapshot.reports.map((report) => ({ ...report })));
+        this.reportAudits.push(...this.transactionSnapshot.reportAudits.map((audit) => ({ ...audit })));
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -465,13 +470,15 @@ class FakePostgresAccountQueryable {
         reason,
         details,
         status: "open",
+        moderator_note: "",
         created_at: createdAt,
         updated_at: createdAt,
+        reviewed_at: null,
       });
       return { rows: [] };
     }
 
-    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, status, created_at, updated_at FROM online_account_reports")) {
+    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE status")) {
       const [status, limit] = values as [string, number];
       const rows = this.reports
         .filter((report) => report.status === status)
@@ -486,11 +493,54 @@ class FakePostgresAccountQueryable {
           target_display_name: report.target_display_name,
           reason: report.reason,
           details: report.details,
+          moderator_note: report.moderator_note,
           status: report.status,
           created_at: report.created_at,
           updated_at: report.updated_at,
+          reviewed_at: report.reviewed_at,
         }));
       return { rows };
+    }
+
+    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE report_id")) {
+      const [reportId] = values as string[];
+      const report = this.reports.find((candidate) => candidate.report_id === reportId);
+      return { rows: report ? [{ ...report }] : [] };
+    }
+
+    if (normalizedText.startsWith("UPDATE online_account_reports SET status")) {
+      const [reportId, status, moderatorNote, reviewedAt, updatedAt] = values as [string, string, string, string | null, string];
+      const report = this.reports.find((candidate) => candidate.report_id === reportId);
+      if (!report) return { rows: [] };
+      report.status = status;
+      report.moderator_note = moderatorNote;
+      report.reviewed_at = reviewedAt;
+      report.updated_at = updatedAt;
+      return { rows: [{ ...report }] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_report_audit")) {
+      const [
+        auditId,
+        reportId,
+        action,
+        actor,
+        previousStatus,
+        nextStatus,
+        note,
+        createdAt,
+      ] = values as string[];
+      this.reportAudits.push({
+        audit_id: auditId,
+        report_id: reportId,
+        action,
+        actor,
+        previous_status: previousStatus,
+        next_status: nextStatus,
+        note,
+        created_at: createdAt,
+      });
+      return { rows: [] };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
@@ -1384,18 +1434,20 @@ describe("createOnlineHttpServer", () => {
     expect(queueResponse.headers.get("vary")).toContain("Authorization");
     expect(queue).toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
-      schemaVersion: 1,
+      schemaVersion: 2,
       reports: [
         {
-          schemaVersion: 1,
+          schemaVersion: 2,
           reportId: expect.any(String),
           reporterDisplayName: "Liam",
           targetDisplayName: "Ben",
           reason: "spam",
           details: "Open seek invite spam.",
           status: "open",
+          moderatorNote: "",
           createdAt: "2026-06-01T12:04:00.000Z",
           updatedAt: "2026-06-01T12:04:00.000Z",
+          reviewedAt: null,
         },
       ],
     });
@@ -1404,6 +1456,124 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(queue)).not.toContain(ben.account.accountId);
     expect(JSON.stringify(queue)).not.toContain(liam.session.token);
     expect(JSON.stringify(queue)).not.toContain("account_");
+  });
+
+  it("updates admin report status with an audit entry and sanitized lifecycle fields", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = createPostgresAccountStore(queryable);
+    const adminToken = "admin-token-with-enough-length";
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      adminBearerToken: adminToken,
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    now = Date.parse("2026-06-01T12:03:00.000Z");
+    await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "abuse", details: "Hostile challenge message." }),
+    });
+    const reportId = queryable.reports[0].report_id;
+
+    const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "resolved" }),
+    });
+    const badStatusResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "closed" }),
+    });
+    const unsupportedFieldResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "resolved", accountId: liam.account.accountId }),
+    });
+    const secretNoteResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "resolved", note: "Contains token=secret" }),
+    });
+
+    now = Date.parse("2026-06-01T12:05:00.000Z");
+    const updateResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "resolved", note: "  Reviewed   challenge evidence. " }),
+    });
+    const update = await updateResponse.json();
+    const unchangedResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "resolved" }),
+    });
+    const openQueueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?status=open`, {
+      headers: bearer(adminToken),
+    });
+    const resolvedQueueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?status=resolved`, {
+      headers: bearer(adminToken),
+    });
+    const openQueue = await openQueueResponse.json();
+    const resolvedQueue = await resolvedQueueResponse.json();
+
+    expect(missingAuthResponse.status).toBe(404);
+    expect(badStatusResponse.status).toBe(400);
+    expect(unsupportedFieldResponse.status).toBe(400);
+    expect(secretNoteResponse.status).toBe(400);
+    expect(updateResponse.status).toBe(200);
+    expect(unchangedResponse.status).toBe(409);
+    expect(update).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 2,
+      report: {
+        schemaVersion: 2,
+        reportId,
+        reporterDisplayName: "Liam",
+        targetDisplayName: "Samir",
+        reason: "abuse",
+        details: "Hostile challenge message.",
+        status: "resolved",
+        moderatorNote: "Reviewed challenge evidence.",
+        createdAt: "2026-06-01T12:03:00.000Z",
+        updatedAt: "2026-06-01T12:05:00.000Z",
+        reviewedAt: "2026-06-01T12:05:00.000Z",
+      },
+      audit: {
+        schemaVersion: 2,
+        auditId: expect.any(String),
+        reportId,
+        action: "status_changed",
+        actor: "admin",
+        previousStatus: "open",
+        nextStatus: "resolved",
+        note: "Reviewed challenge evidence.",
+        createdAt: "2026-06-01T12:05:00.000Z",
+      },
+    });
+    expect(openQueue.reports).toEqual([]);
+    expect(resolvedQueue.reports).toEqual([update.report]);
+    expect(queryable.reportAudits).toEqual([
+      expect.objectContaining({
+        report_id: reportId,
+        action: "status_changed",
+        actor: "admin",
+        previous_status: "open",
+        next_status: "resolved",
+        note: "Reviewed challenge evidence.",
+      }),
+    ]);
+    expect(JSON.stringify(update)).not.toContain(liam.account.accountId);
+    expect(JSON.stringify(update)).not.toContain(samir.account.accountId);
+    expect(JSON.stringify(update)).not.toContain(liam.session.token);
+    expect(JSON.stringify(update)).not.toContain("account_");
   });
 
   it("keeps wrong admin bearer attempts hidden while consuming the admin rate limit", async () => {

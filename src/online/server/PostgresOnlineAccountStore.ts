@@ -12,6 +12,7 @@ import {
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   createOnlineAccountPublicRating,
   defaultOnlineAccountPrivacySettings,
+  type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationReport,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
@@ -33,10 +34,12 @@ import {
   type OnlineAccountSessionListItem,
   type OnlineAccountExternalLoginProvider,
   type OnlineAccountChallengeTargetResult,
+  type OnlineAccountReportStatusUpdateResult,
   type OnlineAccountStore,
   type OnlineAccountReportSubmissionResult,
   type ResolvedOnlineAccountSession,
   type SubmitOnlineAccountReportStoreInput,
+  type UpdateOnlineAccountReportStatusInput,
 } from "./OnlineAccountStore";
 import { hashOnlineToken, isOnlineTokenCredentialHash } from "./onlineTokenCredentials";
 import {
@@ -717,9 +720,11 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
           target_display_name,
           reason,
           details,
+          moderator_note,
           status,
           created_at,
-          updated_at
+          updated_at,
+          reviewed_at
         FROM online_account_reports
         WHERE status = $1
         ORDER BY created_at DESC, report_id DESC
@@ -728,6 +733,102 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       [options.status, options.limit]
     );
     return result.rows.map((row) => this.moderationReportFromRow(row));
+  }
+
+  async updateAccountReportStatus(
+    input: UpdateOnlineAccountReportStatusInput
+  ): Promise<OnlineAccountReportStatusUpdateResult> {
+    await this.ensureSchema();
+    return this.withTransaction(async (queryable) => {
+      const currentResult = await queryable.query(
+        `
+          SELECT
+            report_id,
+            reporter_display_name,
+            target_display_name,
+            reason,
+            details,
+            moderator_note,
+            status,
+            created_at,
+            updated_at,
+            reviewed_at
+          FROM online_account_reports
+          WHERE report_id = $1
+          FOR UPDATE
+        `,
+        [input.reportId]
+      );
+      if (currentResult.rows.length === 0) return { status: "not_found" };
+      const current = currentResult.rows[0];
+      const previousStatus = String(current.status) as OnlineAccountModerationReport["status"];
+      if (previousStatus === input.status) return { status: "unchanged" };
+      const reviewedAt = input.status === "open" ? null : input.updatedAt;
+      const updatedResult = await queryable.query(
+        `
+          UPDATE online_account_reports
+          SET
+            status = $2,
+            moderator_note = $3,
+            reviewed_at = $4,
+            updated_at = $5
+          WHERE report_id = $1
+          RETURNING
+            report_id,
+            reporter_display_name,
+            target_display_name,
+            reason,
+            details,
+            moderator_note,
+            status,
+            created_at,
+            updated_at,
+            reviewed_at
+        `,
+        [input.reportId, input.status, input.note, reviewedAt, input.updatedAt]
+      );
+      const audit: OnlineAccountModerationAuditEntry = {
+        schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+        auditId: input.auditId,
+        reportId: input.reportId,
+        action: "status_changed",
+        actor: "admin",
+        previousStatus,
+        nextStatus: input.status,
+        note: input.note,
+        createdAt: input.updatedAt,
+      };
+      await queryable.query(
+        `
+          INSERT INTO online_account_report_audit (
+            audit_id,
+            report_id,
+            action,
+            actor,
+            previous_status,
+            next_status,
+            note,
+            created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `,
+        [
+          audit.auditId,
+          audit.reportId,
+          audit.action,
+          audit.actor,
+          audit.previousStatus,
+          audit.nextStatus,
+          audit.note,
+          audit.createdAt,
+        ]
+      );
+      return {
+        status: "ok",
+        report: this.moderationReportFromRow(updatedResult.rows[0]),
+        audit,
+      };
+    });
   }
 
   async resolveChallengeTarget(
@@ -961,10 +1062,33 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         target_display_name TEXT NOT NULL,
         reason TEXT NOT NULL CHECK (reason IN ('abuse', 'cheating', 'spam', 'impersonation', 'other')),
         details TEXT NOT NULL DEFAULT '',
-        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open')),
+        status TEXT NOT NULL DEFAULT 'open',
+        moderator_note TEXT NOT NULL DEFAULT '',
         created_at TIMESTAMPTZ NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL
+        updated_at TIMESTAMPTZ NOT NULL,
+        reviewed_at TIMESTAMPTZ
       )
+    `);
+    await this.queryable.query(`
+      ALTER TABLE online_account_reports
+        ADD COLUMN IF NOT EXISTS moderator_note TEXT NOT NULL DEFAULT ''
+    `);
+    await this.queryable.query(`
+      ALTER TABLE online_account_reports
+        ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ
+    `);
+    await this.queryable.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE online_account_reports
+          DROP CONSTRAINT IF EXISTS online_account_reports_status_check;
+        ALTER TABLE online_account_reports
+          ADD CONSTRAINT online_account_reports_status_check
+          CHECK (status IN ('open', 'resolved', 'dismissed'));
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END
+      $$;
     `);
     await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_account_reports_target_idx
@@ -977,6 +1101,22 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     await this.queryable.query(`
       CREATE INDEX IF NOT EXISTS online_account_reports_status_created_idx
         ON online_account_reports (status, created_at DESC, report_id DESC)
+    `);
+    await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_report_audit (
+        audit_id TEXT PRIMARY KEY,
+        report_id TEXT NOT NULL REFERENCES online_account_reports(report_id) ON DELETE CASCADE,
+        action TEXT NOT NULL CHECK (action IN ('status_changed')),
+        actor TEXT NOT NULL CHECK (actor IN ('admin')),
+        previous_status TEXT NOT NULL CHECK (previous_status IN ('open', 'resolved', 'dismissed')),
+        next_status TEXT NOT NULL CHECK (next_status IN ('open', 'resolved', 'dismissed')),
+        note TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_account_report_audit_report_idx
+        ON online_account_report_audit (report_id, created_at DESC, audit_id DESC)
     `);
   }
 
@@ -1121,8 +1261,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       reason: row.reason as OnlineAccountModerationReport["reason"],
       details: String(row.details ?? ""),
       status: row.status as OnlineAccountModerationReport["status"],
+      moderatorNote: String(row.moderator_note ?? ""),
       createdAt: timestampToIso(row.created_at),
       updatedAt: timestampToIso(row.updated_at),
+      reviewedAt: row.reviewed_at == null ? null : timestampToIso(row.reviewed_at),
     };
   }
 

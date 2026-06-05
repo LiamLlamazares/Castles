@@ -9,6 +9,7 @@ import {
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   defaultOnlineAccountPrivacySettings,
+  type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationReport,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
@@ -97,6 +98,24 @@ export interface ListOnlineAccountReportsOptions {
   limit: number;
 }
 
+export interface UpdateOnlineAccountReportStatusInput {
+  reportId: string;
+  auditId: string;
+  status: OnlineAccountReportStatus;
+  note: string;
+  updatedAt: string;
+}
+
+export type OnlineAccountReportStatusUpdateResult =
+  | {
+      status: "ok";
+      report: OnlineAccountModerationReport;
+      audit: OnlineAccountModerationAuditEntry;
+    }
+  | {
+      status: "not_found" | "unchanged";
+    };
+
 interface MemoryOnlineAccountReportRecord {
   reportId: string;
   reporterAccountId: string;
@@ -106,8 +125,10 @@ interface MemoryOnlineAccountReportRecord {
   reason: OnlineAccountReportSummary["reason"];
   details: string;
   status: OnlineAccountReportStatus;
+  moderatorNote: string;
   createdAt: string;
   updatedAt: string;
+  reviewedAt: string | null;
 }
 
 export interface OnlineAccountStore {
@@ -129,6 +150,7 @@ export interface OnlineAccountStore {
   unblockAccount(blockerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
   submitAccountReport(input: SubmitOnlineAccountReportStoreInput): Promise<OnlineAccountReportSubmissionResult>;
   listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]>;
+  updateAccountReportStatus(input: UpdateOnlineAccountReportStatusInput): Promise<OnlineAccountReportStatusUpdateResult>;
   resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
   updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
@@ -181,6 +203,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   private readonly blocks = new Map<string, Set<string>>();
   private readonly privacySettings = new Map<string, OnlineAccountPrivacySettings>();
   private readonly reports: MemoryOnlineAccountReportRecord[] = [];
+  private readonly reportAudits: OnlineAccountModerationAuditEntry[] = [];
 
   async createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession> {
     const displayName = normalizeOnlineAccountDisplayName(input.displayName);
@@ -505,8 +528,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       reason: input.reason,
       details: input.details,
       status: "open",
+      moderatorNote: "",
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
+      reviewedAt: null,
     });
     return {
       status: "ok",
@@ -528,6 +553,36 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       })
       .slice(0, options.limit)
       .map((report) => this.moderationReportFromRecord(report));
+  }
+
+  async updateAccountReportStatus(
+    input: UpdateOnlineAccountReportStatusInput
+  ): Promise<OnlineAccountReportStatusUpdateResult> {
+    const report = this.reports.find((candidate) => candidate.reportId === input.reportId);
+    if (!report) return { status: "not_found" };
+    if (report.status === input.status) return { status: "unchanged" };
+    const previousStatus = report.status;
+    report.status = input.status;
+    report.moderatorNote = input.note;
+    report.updatedAt = input.updatedAt;
+    report.reviewedAt = input.status === "open" ? null : input.updatedAt;
+    const audit: OnlineAccountModerationAuditEntry = {
+      schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+      auditId: input.auditId,
+      reportId: report.reportId,
+      action: "status_changed",
+      actor: "admin",
+      previousStatus,
+      nextStatus: input.status,
+      note: input.note,
+      createdAt: input.updatedAt,
+    };
+    this.reportAudits.push(audit);
+    return {
+      status: "ok",
+      report: this.moderationReportFromRecord(report),
+      audit,
+    };
   }
 
   async resolveChallengeTarget(
@@ -652,8 +707,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       reason: report.reason,
       details: report.details,
       status: report.status,
+      moderatorNote: report.moderatorNote,
       createdAt: report.createdAt,
       updatedAt: report.updatedAt,
+      reviewedAt: report.reviewedAt,
     };
   }
 
