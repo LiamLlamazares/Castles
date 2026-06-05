@@ -1162,6 +1162,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
   const gameSearchInputRef = React.useRef<HTMLInputElement>(null);
   const deleteAccountConfirmButtonRef = React.useRef<HTMLButtonElement>(null);
+  const accountPanelRef = React.useRef<HTMLElement>(null);
+  const accountDisplayNameInputRef = React.useRef<HTMLInputElement>(null);
+  const accountPasswordInputRef = React.useRef<HTMLInputElement>(null);
   const socialProfileCardRef = React.useRef<HTMLElement>(null);
   const accountChallengesSectionRef = React.useRef<HTMLElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
@@ -1291,6 +1294,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       );
     }
   }, [accountDisplayName, accountPassword, onSignInAccount]);
+
+  const focusAccountForm = React.useCallback((mode: "create" | "sign-in") => {
+    accountPanelRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    window.setTimeout(() => {
+      if (mode === "sign-in" && accountDisplayName.trim()) {
+        accountPasswordInputRef.current?.focus();
+        return;
+      }
+      accountDisplayNameInputRef.current?.focus();
+    }, 0);
+  }, [accountDisplayName]);
 
   const refreshAccountSessions = React.useCallback(async () => {
     if (!account || !loadAccountSessions) return;
@@ -3627,6 +3641,74 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     pendingIncomingChallengeCount > 0
       ? `${formatCount(pendingIncomingChallengeCount, "incoming challenge")} awaiting your response`
       : `${formatCount(pendingOutgoingChallengeCount, "sent challenge")} awaiting response`;
+  const accountNavSlot = (
+    <div
+      className={`online-browser-account-topbar ${account ? "signed-in" : "signed-out"}`}
+      role="group"
+      aria-label="Account"
+    >
+      <span className="online-browser-account-topbar-label">Account</span>
+      {account ? (
+        <>
+          <span className="online-browser-account-topbar-name" title={account.displayName}>{account.displayName}</span>
+          <button
+            type="button"
+            className="online-browser-account-topbar-button"
+            onClick={onSignOutAccount}
+            disabled={!onSignOutAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
+            title="Sign out"
+          >
+            <span className="online-browser-account-action-label">
+              {accountStatus === "signing-out" ? "Signing out" : "Sign out"}
+            </span>
+            <span className="online-browser-account-action-short" aria-hidden="true">Out</span>
+          </button>
+        </>
+      ) : (
+        <>
+          {googleOAuthProvider?.startUrl ? (
+            <a
+              className="online-browser-account-topbar-button online-browser-account-topbar-oauth"
+              href={googleOAuthProvider.startUrl}
+              aria-label="Continue with Google"
+              title="Continue with Google"
+            >
+              <span className="online-browser-account-action-label">Google</span>
+              <span className="online-browser-account-action-short" aria-hidden="true">G</span>
+            </a>
+          ) : accountOAuthStatus === "loading" ? (
+            <span className="online-browser-account-topbar-status" title="Checking Google sign-in">
+              Checking Google
+            </span>
+          ) : accountOAuthStatus === "ready" && accountOAuthProviders.some((provider) => provider.provider === "google") ? (
+            <span className="online-browser-account-topbar-status" title="Google OAuth is not configured on this server">
+              Google unavailable
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="online-browser-account-topbar-button primary"
+            onClick={() => focusAccountForm("create")}
+            aria-label="Create account"
+            title="Create account"
+          >
+            <span className="online-browser-account-action-label">Create</span>
+            <span className="online-browser-account-action-short" aria-hidden="true">+</span>
+          </button>
+          <button
+            type="button"
+            className="online-browser-account-topbar-button"
+            onClick={() => focusAccountForm("sign-in")}
+            aria-label="Sign in with password"
+            title="Sign in with password"
+          >
+            <span className="online-browser-account-action-label">Sign in</span>
+            <span className="online-browser-account-action-short" aria-hidden="true">In</span>
+          </button>
+        </>
+      )}
+    </div>
+  );
 
   return (
     <div className="online-browser-page">
@@ -3639,9 +3721,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         backLabel={backLabel}
         onBack={onBack}
         destinations={navDestinations}
+        endSlot={accountNavSlot}
       />
 
-      <section className="online-browser-account-panel" aria-label="Online account">
+      <section className="online-browser-account-panel" aria-label="Online account" ref={accountPanelRef}>
         <div className="online-browser-account-copy">
           <span className="online-browser-section-kicker">Account</span>
           {account ? (
@@ -3706,17 +3789,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </div>
         ) : (
           <form className="online-browser-account-form" onSubmit={handleCreateAccountSubmit}>
-            {googleOAuthProvider?.startUrl && (
-              <a
-                className="online-browser-button subtle online-browser-oauth-button"
-                href={googleOAuthProvider.startUrl}
-              >
-                Continue with Google
-              </a>
-            )}
             <label>
               <span>Display name</span>
               <input
+                ref={accountDisplayNameInputRef}
                 type="text"
                 value={accountDisplayName}
                 onChange={(event) => setAccountDisplayName(event.currentTarget.value)}
@@ -3728,6 +3804,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <label>
               <span>Password</span>
               <input
+                ref={accountPasswordInputRef}
                 type="password"
                 value={accountPassword}
                 onChange={(event) => setAccountPassword(event.currentTarget.value)}

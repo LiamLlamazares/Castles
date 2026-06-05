@@ -1,34 +1,77 @@
 .app-shell-header {
   display: grid;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 8px;
+  margin-bottom: 12px;
   color: inherit;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app-shell-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
 .app-shell-nav-primary {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.app-shell-nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.app-shell-brand {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  color: #f7f1d6;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.app-shell-brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 210, 135, 0.58);
+  background: rgba(244, 210, 135, 0.16);
+  color: #f4d287;
+  font-size: 0.88rem;
+}
+
+.app-shell-brand-name {
+  font-size: 1.02rem;
 }
 
 .app-shell-destinations {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .app-shell-back-button,
 .app-shell-destination {
-  min-height: 36px;
-  padding: 8px 12px;
+  min-height: 34px;
+  padding: 7px 10px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
@@ -40,6 +83,14 @@
   line-height: 1.1;
   letter-spacing: 0;
   white-space: nowrap;
+}
+
+.app-shell-destination {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
 }
 
 .app-shell-back-button {
@@ -58,6 +109,26 @@
 .app-shell-destination:disabled {
   cursor: default;
   opacity: 1;
+}
+
+.app-shell-destination-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.app-shell-destination-icon img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.18));
+}
+
+.app-shell-destination-label {
+  min-width: 0;
 }
 
 .app-shell-back-button:hover:not(:disabled),
@@ -84,7 +155,7 @@
 
 .app-shell-title-block h1 {
   margin: 4px 0 0;
-  font-size: clamp(1.42rem, 2.2vw, 2.1rem);
+  font-size: clamp(1.18rem, 1.7vw, 1.56rem);
   line-height: 1.05;
   letter-spacing: 0;
 }
@@ -98,14 +169,16 @@
 
 @media (max-width: 760px) {
   .app-shell-header {
-    gap: 8px;
-    margin-bottom: 14px;
+    gap: 7px;
+    margin-bottom: 10px;
   }
 
   .app-shell-nav-primary {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .app-shell-nav {
+    gap: 7px;
   }
 
   .app-shell-back-button,
@@ -116,20 +189,65 @@
   }
 
   .app-shell-destinations {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr));
-  }
-
-  .app-shell-destination {
-    white-space: normal;
-    overflow-wrap: anywhere;
+    gap: 5px;
   }
 
   .app-shell-title-block h1 {
-    font-size: 1.35rem;
+    font-size: 1.18rem;
   }
 
   .app-shell-title-block p {
-    font-size: 0.9rem;
+    font-size: 0.86rem;
   }
+}
+
+@media (max-width: 520px) {
+  .app-shell-brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .app-shell-destination {
+    width: 36px;
+    padding-inline: 7px;
+  }
+
+  .app-shell-destination-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+.setup-sidebar .app-shell-brand-name,
+.tutorial-sidebar .app-shell-brand-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.setup-sidebar .app-shell-destination,
+.tutorial-sidebar .app-shell-destination {
+  width: 36px;
+  padding-inline: 7px;
+}
+
+.setup-sidebar .app-shell-destination-label,
+.tutorial-sidebar .app-shell-destination-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

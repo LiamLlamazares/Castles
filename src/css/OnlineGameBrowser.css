@@ -15,6 +15,86 @@
   color: #f7f1d6;
 }
 
+.online-browser-account-topbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.online-browser-account-topbar-label {
+  color: #9ed0c2;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.online-browser-account-topbar-name {
+  max-width: 150px;
+  overflow: hidden;
+  color: #f7f1d6;
+  font-size: 0.84rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+}
+
+.online-browser-account-topbar-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f1d6;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.online-browser-account-topbar-button.primary,
+.online-browser-account-topbar-oauth {
+  border-color: rgba(112, 214, 161, 0.88);
+  background: #70d6a1;
+  color: #102018;
+}
+
+.online-browser-account-topbar-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.online-browser-account-topbar-button.primary:hover:not(:disabled),
+.online-browser-account-topbar-oauth:hover {
+  background: #83e2b1;
+}
+
+.online-browser-account-topbar-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.online-browser-account-action-short {
+  display: none;
+}
+
+.online-browser-account-topbar-status {
+  max-width: 150px;
+  overflow: hidden;
+  color: #bdb39f;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+
 .online-browser-visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -33,10 +113,10 @@
   gap: 14px;
   align-items: center;
   margin-bottom: 14px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid rgba(158, 208, 194, 0.16);
   border-radius: 6px;
-  background: rgba(158, 208, 194, 0.045);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .online-browser-account-delete-panel {
@@ -105,8 +185,8 @@
 
 .online-browser-account-form {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(160px, 1fr)) auto auto;
+  gap: 8px;
   align-items: end;
   min-width: 0;
 }
@@ -120,10 +200,10 @@
 }
 
 .online-browser-account-form input {
-  min-height: 42px;
+  min-height: 38px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 9px 12px;
+  padding: 8px 10px;
   font: inherit;
   min-width: 0;
 }
@@ -1477,6 +1557,35 @@
 }
 
 @media (max-width: 520px) {
+  .online-browser-account-topbar {
+    gap: 5px;
+  }
+
+  .online-browser-account-topbar-label,
+  .online-browser-account-action-label,
+  .online-browser-account-topbar-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .online-browser-account-action-short {
+    display: inline;
+  }
+
+  .online-browser-account-topbar-button {
+    width: 34px;
+    min-height: 34px;
+    padding-inline: 7px;
+  }
+
+  .online-browser-account-topbar-name {
+    max-width: 70px;
+  }
+
   .online-browser-tabs,
   .online-browser-quick-match-actions,
   .online-browser-section-actions,

@@ -848,6 +848,12 @@ Friend-action reliability update on 2026-06-05: follow/unfollow and follow/prese
 
 Deploy freshness diagnostic update on 2026-06-05: production `https://castles.ls314.xyz` reported health commit `c33b4c3263c103bd19dde2771817d4429d71339d`, which was 34 commits behind the then-current pushed branch head `a5d0d9b05ab10c691156292393c96ff2d216ca1d`. The app host `castles.ls314.xyz` and admin alias `contabo.ls314.xyz` are reachable on SSH port 22, while root `ls314.xyz` points elsewhere and can create a false SSH timeout in freshness checks. The remaining live gap is the deploy/restart path, not the push target.
 
+Deploy freshness follow-up on 2026-06-05: `https://castles.ls314.xyz` was updated to commit `5be52ee5d279eed98001a7b3b7e236f6c6c768f6` and passed production freshness, API smoke, and browser smoke with PostgreSQL health. The exact 40-character SHA is required for these checks; short SHAs intentionally fail the commit equality gate.
+
+Navigation update on 2026-06-05: the shared Play/Tutorial/Online/Library shell now uses a compact Castles top-strip with destination icons and hover/title text. Full-width pages keep text labels, while constrained setup/tutorial sidebars and narrow mobile widths use icon-only destination buttons so the board is not pushed down or crowded.
+
+Online account entry update on 2026-06-05: the Online page now promotes account actions into the shared top strip. Signed-out users see Google OAuth when the server reports an enabled provider, plus Create and Sign in shortcuts that focus the password account form; if the deployed server reports the Google provider but `enabled: false`, the bar shows Google unavailable instead of silently hiding the OAuth feature. The large account panel was reduced to a detail form rather than the only account entry point. Screenshot QA artifacts are in `artifacts/nav-screenshots/desktop-online-google-enabled-topbar.png`, `artifacts/nav-screenshots/mobile-online-google-enabled-topbar.png`, `artifacts/nav-screenshots/desktop-online-google-disabled-topbar.png`, and `artifacts/nav-screenshots/mobile-game-board-account-topbar-check.png`. The 2026-06-05 production providers endpoint returned `{ provider: "google", enabled: false }`, so live Google OAuth still needs server credential/configuration before the Google button can appear on production.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.

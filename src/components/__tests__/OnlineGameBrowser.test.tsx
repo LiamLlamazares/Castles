@@ -462,7 +462,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByText("Could not sign in with that display name and password.")).not.toBeInTheDocument();
   });
 
-  it("shows Google sign-in when the provider is enabled", async () => {
+  it("promotes account sign-in actions in the Online navigation when Google is enabled", async () => {
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -484,8 +484,16 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    const link = await screen.findByRole("link", { name: "Continue with Google" });
+    const nav = screen.getByRole("navigation", { name: "Online navigation" });
+    const accountBar = await within(nav).findByRole("group", { name: "Account" });
+    const link = within(accountBar).getByRole("link", { name: "Continue with Google" });
     expect(link).toHaveAttribute("href", "/api/online/account/oauth/google/start");
+    expect(within(accountBar).getByRole("button", { name: "Create account" })).toBeInTheDocument();
+    expect(within(accountBar).getByRole("button", { name: "Sign in with password" })).toBeInTheDocument();
+
+    fireEvent.click(within(accountBar).getByRole("button", { name: "Create account" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Display name")).toHaveFocus());
   });
 
   it("hides Google sign-in when the provider is disabled", async () => {

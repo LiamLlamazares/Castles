@@ -121,7 +121,10 @@ describe("Tutorial mobile layout CSS", () => {
     expect(mobileBlock).not.toContain("position: sticky");
     expect(mobileBlock).not.toContain("calc(-1 * var(--app-shell-mobile-padding");
     expect(css).toContain(".app-shell-nav-primary");
-    expect(css).toContain("grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr));");
+    expect(css).toContain("flex-wrap: nowrap;");
+    expect(css).toContain("overflow-x: auto;");
+    expect(css).toContain(".app-shell-destination-label");
+    expect(css).toContain(".setup-sidebar .app-shell-destination");
     expect(css).toContain("font-family: \"Inter\", system-ui");
   });
 
