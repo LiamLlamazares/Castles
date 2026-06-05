@@ -1719,13 +1719,14 @@ describe("online client helpers", () => {
           creatorSeat: "w",
           clock: "timed",
           vp: "enabled",
+          rating: "rated",
         },
         fetchImpl as any
       )
     ).resolves.toMatchObject({ seeks: [] });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      "/api/online/seeks?state=open&limit=10&cursor=opaque-cursor&creatorSeat=w&clock=timed&vp=enabled"
+      "/api/online/seeks?state=open&limit=10&cursor=opaque-cursor&creatorSeat=w&clock=timed&vp=enabled&rating=rated"
     );
   });
 
@@ -2188,6 +2189,7 @@ describe("online client helpers", () => {
           limit: 25,
           cursor: "cursor_abc",
           clock: "timed",
+          rating: "rated",
           result: "timeout",
           query: "  Ada timeout  ",
         },
@@ -2196,7 +2198,7 @@ describe("online client helpers", () => {
     ).resolves.toEqual([summary]);
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      "/api/online/games?state=active&limit=25&cursor=cursor_abc&clock=timed&result=timeout&q=Ada+timeout"
+      "/api/online/games?state=active&limit=25&cursor=cursor_abc&clock=timed&rating=rated&result=timeout&q=Ada+timeout"
     );
     expect(JSON.stringify(fetchImpl.mock.calls)).not.toContain("authorization");
   });

@@ -55,6 +55,7 @@ import "../css/OnlineGameBrowser.css";
 type OnlineBrowserTab = "lobby" | "watch" | "archive";
 type OnlineBrowserSort = "newest" | "moves" | "watchers";
 type OnlineBrowserTimeFilter = "all" | "timed" | "casual";
+type OnlineBrowserRatingFilter = "all" | "casual" | "rated";
 type OnlineFriendFilter = "all" | "followed";
 type OnlineFollowingPresenceFilter = "all" | "online";
 type OnlineAccountChallengeFilter = NonNullable<FetchOnlineAccountChallengesOptions["state"]>;
@@ -723,6 +724,10 @@ function matchesResultFilter(summary: OnlineGameSummary, resultFilter: OnlineBro
   return summary.result.reason === resultFilter;
 }
 
+function matchesRatingFilter(summary: OnlineGameSummary, ratingFilter: OnlineBrowserRatingFilter): boolean {
+  return ratingFilter === "all" || (summary.ratingMode ?? "casual") === ratingFilter;
+}
+
 function seekSearchText(summary: OpenSeekSummary): string {
   const sideLabel = formatSeekSideLabel(summary.creatorSeat);
   const sideDetail = formatSeekSideDetail(summary, false);
@@ -759,6 +764,10 @@ function formatRatingModeLabel(ratingMode: "casual" | "rated" | undefined): stri
 
 function formatSeekRatingLabel(summary: OpenSeekSummary): string {
   return formatRatingModeLabel(summary.setup.ratingMode);
+}
+
+function matchesSeekRatingFilter(summary: OpenSeekSummary, ratingFilter: OnlineBrowserRatingFilter): boolean {
+  return ratingFilter === "all" || (summary.setup.ratingMode ?? "casual") === ratingFilter;
 }
 
 function formatSeekExpiresAt(value: string): string {
@@ -897,10 +906,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [debouncedGameQuery, setDebouncedGameQuery] = React.useState("");
   const [sort, setSort] = React.useState<OnlineBrowserSort>("newest");
   const [timeFilter, setTimeFilter] = React.useState<OnlineBrowserTimeFilter>("all");
+  const [ratingFilter, setRatingFilter] = React.useState<OnlineBrowserRatingFilter>("all");
   const [friendFilter, setFriendFilter] = React.useState<OnlineFriendFilter>("all");
   const [seekSideFilter, setSeekSideFilter] = React.useState<OpenSeekSideFilter>("all");
   const [seekClockFilter, setSeekClockFilter] = React.useState<OpenSeekClockFilter>("all");
   const [seekVpFilter, setSeekVpFilter] = React.useState<OpenSeekVpFilter>("all");
+  const [seekRatingFilter, setSeekRatingFilter] = React.useState<OnlineBrowserRatingFilter>("all");
   const [resultFilter, setResultFilter] = React.useState<OnlineBrowserResultFilter>("all");
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [isLoadingMore, setIsLoadingMore] = React.useState(false);
@@ -1492,9 +1503,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     state: directoryState,
     limit: 50,
     ...(timeFilter !== "all" ? { clock: timeFilter } : {}),
+    ...(ratingFilter !== "all" && tab !== "lobby" ? { rating: ratingFilter } : {}),
     ...(tab === "archive" && resultFilter !== "all" ? { result: resultFilter } : {}),
     ...(debouncedGameQuery !== "" && tab !== "lobby" ? { query: debouncedGameQuery } : {}),
-  }), [debouncedGameQuery, directoryState, resultFilter, tab, timeFilter]);
+  }), [debouncedGameQuery, directoryState, ratingFilter, resultFilter, tab, timeFilter]);
 
   const loadPage = React.useCallback(async (
     mode: "replace" | "append",
@@ -1599,7 +1611,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     ...(seekSideFilter !== "all" ? { creatorSeat: seekSideFilter } : {}),
     ...(seekClockFilter !== "all" ? { clock: seekClockFilter } : {}),
     ...(seekVpFilter !== "all" ? { vp: seekVpFilter } : {}),
-  }), [seekClockFilter, seekSideFilter, seekVpFilter]);
+    ...(seekRatingFilter !== "all" ? { rating: seekRatingFilter } : {}),
+  }), [seekClockFilter, seekRatingFilter, seekSideFilter, seekVpFilter]);
   const seekDirectoryOptionsRef = React.useRef(seekDirectoryOptions);
 
   React.useEffect(() => {
@@ -1817,6 +1830,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (!tabMatches) return false;
       if (timeFilter === "timed" && !game.hasTimeControl) return false;
       if (timeFilter === "casual" && game.hasTimeControl) return false;
+      if (!matchesRatingFilter(game, ratingFilter)) return false;
       if (tab === "archive" && !matchesResultFilter(game, resultFilter)) return false;
       if (friendFilterActive && !gameHasFollowedParticipant(game, followedDisplayNames)) return false;
       return !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery);
@@ -1828,7 +1842,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           ? compareMostMoves
           : compareNewest
     );
-  }, [followedDisplayNames, friendFilterActive, publicGames, query, resultFilter, sort, tab, timeFilter]);
+  }, [followedDisplayNames, friendFilterActive, publicGames, query, ratingFilter, resultFilter, sort, tab, timeFilter]);
 
   const lobbyLiveGames = React.useMemo(() => {
     return filteredPublicActiveGames.slice(0, 5);
@@ -1852,7 +1866,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const recentArchivedGames = React.useMemo(() => {
     if (tab !== "archive") return [];
     if (account && accountGamesStatus !== "ready") return [];
-    if (timeFilter !== "all" || resultFilter !== "all") return [];
+    if (timeFilter !== "all" || ratingFilter !== "all" || resultFilter !== "all") return [];
     if (friendFilterActive) return [];
     const excludedGameIds = new Set([
       ...publicGames.map((game) => game.gameId),
@@ -1864,7 +1878,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => !excludedGameIds.has(game.gameId))
       .filter((game) => !normalizedQuery || recentOnlineGameSearchText(game).includes(normalizedQuery))
       .slice(0, 6);
-  }, [account, accountGames, accountGamesStatus, friendFilterActive, publicGames, query, recentOnlineGames, resultFilter, tab, timeFilter]);
+  }, [account, accountGames, accountGamesStatus, friendFilterActive, publicGames, query, ratingFilter, recentOnlineGames, resultFilter, tab, timeFilter]);
 
   React.useEffect(() => {
     if (tab !== "archive" || !account || !loadAccountGames) {
@@ -1975,12 +1989,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => game.status === "active" && game.archiveState === "active")
       .filter((game) => timeFilter !== "timed" || game.hasTimeControl)
       .filter((game) => timeFilter !== "casual" || !game.hasTimeControl)
+      .filter((game) => matchesRatingFilter(game, ratingFilter))
       .filter(() => resultFilter === "all")
       .filter((game) => !friendFilterActive || gameHasFollowedParticipant(game, followedDisplayNames))
       .filter((game) => !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery))
       .sort(compareNewest)
       .slice(0, 8);
-  }, [accountGames, followedDisplayNames, friendFilterActive, query, resultFilter, tab, timeFilter]);
+  }, [accountGames, followedDisplayNames, friendFilterActive, query, ratingFilter, resultFilter, tab, timeFilter]);
 
   const accountArchivedGames = React.useMemo(() => {
     if (tab !== "archive") return [];
@@ -1991,12 +2006,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .filter((game) => !publicGameIds.has(game.gameId))
       .filter((game) => timeFilter !== "timed" || game.hasTimeControl)
       .filter((game) => timeFilter !== "casual" || !game.hasTimeControl)
+      .filter((game) => matchesRatingFilter(game, ratingFilter))
       .filter((game) => matchesResultFilter(game, resultFilter))
       .filter((game) => !friendFilterActive || gameHasFollowedParticipant(game, followedDisplayNames))
       .filter((game) => !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery))
       .sort(sort === "moves" ? compareMostMoves : compareNewest)
       .slice(0, 12);
-  }, [accountGames, followedDisplayNames, friendFilterActive, publicGames, query, resultFilter, sort, tab, timeFilter]);
+  }, [accountGames, followedDisplayNames, friendFilterActive, publicGames, query, ratingFilter, resultFilter, sort, tab, timeFilter]);
 
   const accountHeadToHeadSummary = React.useMemo<AccountHeadToHeadSummary | null>(() => {
     const hasDedicatedHeadToHeadGames =
@@ -2044,10 +2060,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const normalizedQuery = query.trim().toLowerCase();
     return openSeeks
       .filter((seek) => seek.status === "open")
+      .filter((seek) => matchesSeekRatingFilter(seek, seekRatingFilter))
       .filter((seek) => !friendFilterActive || seekHasFollowedCreator(seek, followedDisplayNames))
       .filter((seek) => !normalizedQuery || seekSearchText(seek).includes(normalizedQuery))
       .sort(compareOpenSeekNewest);
-  }, [followedDisplayNames, friendFilterActive, openSeeks, query]);
+  }, [followedDisplayNames, friendFilterActive, openSeeks, query, seekRatingFilter]);
 
   const emptyTitle =
     tab === "watch" ? "No public games in progress." : "No public completed games yet.";
@@ -2056,9 +2073,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     seekSideFilter !== "all" ||
     seekClockFilter !== "all" ||
     seekVpFilter !== "all" ||
+    seekRatingFilter !== "all" ||
     friendFilterActive;
   const hasActiveFilters =
-    query.trim() !== "" || timeFilter !== "all" || friendFilterActive || (tab === "archive" && resultFilter !== "all");
+    query.trim() !== "" ||
+    timeFilter !== "all" ||
+    ratingFilter !== "all" ||
+    friendFilterActive ||
+    (tab === "archive" && resultFilter !== "all");
   const gameSearchAriaLabel =
     tab === "lobby"
       ? "Search lobby listings"
@@ -4236,6 +4258,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   <option value="disabled">Castle control</option>
                 </select>
               </label>
+              <label className="online-browser-select">
+                <span>Rating</span>
+                <select
+                  aria-label="Lobby rating filter"
+                  value={seekRatingFilter}
+                  onChange={(event) => setSeekRatingFilter(event.currentTarget.value as OnlineBrowserRatingFilter)}
+                >
+                  <option value="all">All ratings</option>
+                  <option value="casual">Casual</option>
+                  <option value="rated">Rated</option>
+                </select>
+              </label>
               {canUseAccountSocial && (
                 <label className="online-browser-select">
                   <span>People</span>
@@ -4288,6 +4322,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   <option value="all">All clocks</option>
                   <option value="timed">Timed</option>
                   <option value="casual">Casual</option>
+                </select>
+              </label>
+              <label className="online-browser-select">
+                <span>Rating</span>
+                <select
+                  aria-label="Rating filter"
+                  value={ratingFilter}
+                  onChange={(event) => setRatingFilter(event.currentTarget.value as OnlineBrowserRatingFilter)}
+                >
+                  <option value="all">All ratings</option>
+                  <option value="casual">Casual</option>
+                  <option value="rated">Rated</option>
                 </select>
               </label>
               {canUseAccountSocial && (

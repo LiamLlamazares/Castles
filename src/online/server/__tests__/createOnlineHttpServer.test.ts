@@ -2327,6 +2327,7 @@ describe("createOnlineHttpServer", () => {
           ...createSetup(),
           timeControl: undefined,
           gameRules: { vpModeEnabled: false },
+          ratingMode: "casual",
         },
         updatedAt: "2026-06-01T12:03:00.000Z",
       }),
@@ -2335,6 +2336,7 @@ describe("createOnlineHttpServer", () => {
         setup: {
           ...createClockedSetup(),
           gameRules: { vpModeEnabled: true },
+          ratingMode: "rated",
         },
         updatedAt: "2026-06-01T12:02:00.000Z",
       }),
@@ -2343,6 +2345,7 @@ describe("createOnlineHttpServer", () => {
         setup: {
           ...createClockedSetup(),
           gameRules: { vpModeEnabled: true },
+          ratingMode: "rated",
         },
         updatedAt: "2026-06-01T12:02:00.000Z",
       }),
@@ -2355,7 +2358,7 @@ describe("createOnlineHttpServer", () => {
     const port = await listen(server);
 
     const filteredResponse = await fetch(
-      `http://127.0.0.1:${port}/api/online/seeks?state=open&creatorSeat=w&clock=timed&vp=enabled&limit=1`
+      `http://127.0.0.1:${port}/api/online/seeks?state=open&creatorSeat=w&clock=timed&vp=enabled&rating=rated&limit=1`
     );
     const filtered = await filteredResponse.json();
 
@@ -2364,7 +2367,7 @@ describe("createOnlineHttpServer", () => {
     expect(filtered.nextCursor).toEqual(expect.any(String));
 
     const secondFilteredResponse = await fetch(
-      `http://127.0.0.1:${port}/api/online/seeks?state=open&creatorSeat=w&clock=timed&vp=enabled&limit=1&cursor=${encodeURIComponent(filtered.nextCursor)}`
+      `http://127.0.0.1:${port}/api/online/seeks?state=open&creatorSeat=w&clock=timed&vp=enabled&rating=rated&limit=1&cursor=${encodeURIComponent(filtered.nextCursor)}`
     );
     const secondFiltered = await secondFilteredResponse.json();
 
@@ -2385,6 +2388,8 @@ describe("createOnlineHttpServer", () => {
     expect(invalidSide.status).toBe(400);
     const invalidVp = await fetch(`http://127.0.0.1:${port}/api/online/seeks?vp=yes`);
     expect(invalidVp.status).toBe(400);
+    const invalidRating = await fetch(`http://127.0.0.1:${port}/api/online/seeks?rating=ranked`);
+    expect(invalidRating.status).toBe(400);
     const duplicateFilter = await fetch(
       `http://127.0.0.1:${port}/api/online/seeks?creatorSeat=w&creatorSeat=b`
     );
@@ -2393,6 +2398,8 @@ describe("createOnlineHttpServer", () => {
     expect(duplicateClock.status).toBe(400);
     const duplicateVp = await fetch(`http://127.0.0.1:${port}/api/online/seeks?vp=enabled&vp=disabled`);
     expect(duplicateVp.status).toBe(400);
+    const duplicateRating = await fetch(`http://127.0.0.1:${port}/api/online/seeks?rating=casual&rating=rated`);
+    expect(duplicateRating.status).toBe(400);
     const secretFilter = await fetch(
       `http://127.0.0.1:${port}/api/online/seeks?creatorSeat=w&token=secret`
     );
@@ -2401,6 +2408,7 @@ describe("createOnlineHttpServer", () => {
       ["creatorSeat", "Bearer abc123"],
       ["clock", "Bearer abc123"],
       ["vp", "Bearer abc123"],
+      ["rating", "Bearer abc123"],
     ]) {
       const secretValueFilter = await fetch(
         `http://127.0.0.1:${port}/api/online/seeks?${param}=${encodeURIComponent(value)}`
@@ -4846,6 +4854,7 @@ describe("createOnlineHttpServer", () => {
       endedAt: "2026-05-31T12:04:00.000Z",
       status: "complete" as const,
       archiveState: "archived" as const,
+      ratingMode: "rated" as const,
       result: { winner: "w" as const, reason: "timeout" as const },
     };
     const baseCasualTimeout = summaryForGame("game_casual_timeout_middle", "public");
@@ -4856,6 +4865,7 @@ describe("createOnlineHttpServer", () => {
       status: "complete" as const,
       archiveState: "archived" as const,
       hasTimeControl: false,
+      ratingMode: "casual" as const,
       livePreview: withoutPreviewClock(baseCasualTimeout.livePreview),
       result: { winner: "b" as const, reason: "timeout" as const },
     };
@@ -4867,6 +4877,7 @@ describe("createOnlineHttpServer", () => {
       status: "complete" as const,
       archiveState: "archived" as const,
       hasTimeControl: false,
+      ratingMode: "casual" as const,
       livePreview: withoutPreviewClock(baseCasualResignation.livePreview),
       result: { winner: "w" as const, reason: "resignation" as const },
     };
@@ -4878,7 +4889,7 @@ describe("createOnlineHttpServer", () => {
     const port = await listen(server);
 
     const response = await fetch(
-      `http://127.0.0.1:${port}/api/online/games?state=archived&clock=casual&result=timeout&limit=1`
+      `http://127.0.0.1:${port}/api/online/games?state=archived&clock=casual&rating=casual&result=timeout&limit=1`
     );
     const body = await response.json();
 
@@ -4938,9 +4949,12 @@ describe("createOnlineHttpServer", () => {
       "cursor=not-valid-cursor",
       "clock=",
       "clock=bullet",
+      "rating=",
+      "rating=ranked",
       "result=",
       "result=draw",
       "clock=timed&clock=casual",
+      "rating=casual&rating=rated",
       "result=white&result=timeout",
       "q=",
       "q=Ada%0ABen",

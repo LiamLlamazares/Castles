@@ -59,6 +59,7 @@ import {
   OnlineGameResultDTO,
   OnlineGameSetupDTO,
   OnlineGameSnapshotDTO,
+  type OnlineRatingMode,
   type OnlineRejectCode,
 } from "./types";
 import type { OnlinePlayerSettableGameVisibility } from "./visibility";
@@ -1927,6 +1928,7 @@ export interface FetchOpenSeekDirectoryOptions {
   creatorSeat?: OpenSeekSeat;
   clock?: OpenSeekDirectoryClockFilter;
   vp?: OpenSeekDirectoryVpFilter;
+  rating?: OnlineRatingMode;
   account?: OnlineAccountSessionParams;
 }
 
@@ -1938,6 +1940,7 @@ function buildOpenSeekDirectoryPath(options: FetchOpenSeekDirectoryOptions = {})
   if (options.creatorSeat) params.set("creatorSeat", options.creatorSeat);
   if (options.clock) params.set("clock", options.clock);
   if (options.vp) params.set("vp", options.vp);
+  if (options.rating) params.set("rating", options.rating);
   const query = params.toString();
   return query ? `/api/online/seeks?${query}` : "/api/online/seeks";
 }
@@ -1969,6 +1972,7 @@ export interface FetchOnlineGameSummariesOptions {
   limit?: number;
   cursor?: string;
   clock?: OnlineGameDirectoryClockFilter;
+  rating?: OnlineRatingMode;
   result?: OnlineGameDirectoryResultFilter;
   query?: string;
 }
@@ -1979,6 +1983,7 @@ function buildOnlineDirectoryPath(options: FetchOnlineGameSummariesOptions = {})
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.clock) params.set("clock", options.clock);
+  if (options.rating) params.set("rating", options.rating);
   if (options.result) params.set("result", options.result);
   if (options.query?.trim()) params.set("q", options.query.trim());
   const query = params.toString();

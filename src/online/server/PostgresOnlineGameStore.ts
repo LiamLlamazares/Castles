@@ -191,6 +191,11 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       values.push({ hasTimeControl: false });
       where.push(`payload @> $${clockParam}::jsonb`);
     }
+    if (options.rating) {
+      const ratingParam = values.length + 1;
+      values.push(options.rating);
+      where.push(`COALESCE(payload->>'ratingMode', 'casual') = $${ratingParam}`);
+    }
     if (options.result) {
       const resultParam = values.length + 1;
       const resultFilter =
@@ -461,6 +466,12 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       where.push(`(payload->'setup'->'gameRules'->>'vpModeEnabled')::boolean IS TRUE`);
     } else if (options.vp === "disabled") {
       where.push(`(payload->'setup'->'gameRules'->>'vpModeEnabled')::boolean IS NOT TRUE`);
+    }
+
+    if (options.rating) {
+      const ratingParam = values.length + 1;
+      values.push(options.rating);
+      where.push(`COALESCE(payload->'setup'->>'ratingMode', 'casual') = $${ratingParam}`);
     }
 
     if (options.cursor) {

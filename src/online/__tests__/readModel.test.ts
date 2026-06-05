@@ -300,6 +300,49 @@ describe("online read model", () => {
     expect(onlineGameSummaryDirectorySearchText(legacySummary)).toContain("casual game");
   });
 
+  it("matches public directory summaries by rating mode with legacy casual default", () => {
+    const ratedSummary = validSummary({
+      gameId: "game_rated_filter",
+      visibility: "public",
+      ratingMode: "rated",
+    });
+    const casualSummary = validSummary({
+      gameId: "game_casual_filter",
+      visibility: "public",
+      ratingMode: "casual",
+    });
+    const legacySummary = validSummary({
+      gameId: "game_legacy_filter",
+      visibility: "public",
+      ratingMode: undefined,
+    });
+
+    expect(
+      onlineGameSummaryMatchesDirectoryFilters(ratedSummary, {
+        visibility: "public",
+        state: "active",
+        limit: 10,
+        rating: "rated",
+      })
+    ).toBe(true);
+    expect(
+      onlineGameSummaryMatchesDirectoryFilters(casualSummary, {
+        visibility: "public",
+        state: "active",
+        limit: 10,
+        rating: "rated",
+      })
+    ).toBe(false);
+    expect(
+      onlineGameSummaryMatchesDirectoryFilters(legacySummary, {
+        visibility: "public",
+        state: "active",
+        limit: 10,
+        rating: "casual",
+      })
+    ).toBe(true);
+  });
+
   it("searches timeout results by displayed on-time label", () => {
     const timeoutSummary = validSummary({
       status: "complete",

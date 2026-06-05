@@ -249,12 +249,13 @@ describe("open seek contract", () => {
     expect(canSystemExpireOpenSeek(summary, EXPIRES_AT)).toBe(true);
   });
 
-  it("matches open seek directory side clock and victory point filters", () => {
+  it("matches open seek directory side clock scoring and rating filters", () => {
     const timedVp = pendingSummary({
       creatorSeat: "w",
       setup: setupFixture({
         timeControl: { initial: 10, increment: 5 },
         gameRules: { vpModeEnabled: true },
+        ratingMode: "rated",
       }),
     });
     const casualCastleControl = pendingSummary({
@@ -279,6 +280,7 @@ describe("open seek contract", () => {
         creatorSeat: "w",
         clock: "timed",
         vp: "enabled",
+        rating: "rated",
       })
     ).toBe(true);
     expect(
@@ -290,8 +292,14 @@ describe("open seek contract", () => {
       openSeekMatchesDirectoryFilters(casualCastleControl, {
         clock: "casual",
         vp: "disabled",
+        rating: "casual",
       })
     ).toBe(true);
+    expect(
+      openSeekMatchesDirectoryFilters(casualCastleControl, {
+        rating: "rated",
+      })
+    ).toBe(false);
     expect(
       openSeekMatchesDirectoryFilters(casualCastleControl, {
         clock: "timed",

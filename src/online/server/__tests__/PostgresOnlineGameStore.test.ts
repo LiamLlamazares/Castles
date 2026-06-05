@@ -557,6 +557,13 @@ class FakePostgresClient {
             return true;
           });
         }
+        if (/coalesce\(payload->>'ratingMode',\s*'casual'\)\s*=\s*\$\d+/i.test(text)) {
+          const rating = values?.find((value) => value === "casual" || value === "rated");
+          rows = rows.filter((row) => {
+            const payload = row.payload as { ratingMode?: string };
+            return (payload.ratingMode ?? "casual") === rating;
+          });
+        }
         if (/lower\(game_id\)\s+like/i.test(text)) {
           const rawPattern = values?.find((value) => typeof value === "string" && value.startsWith("%"));
           const query = typeof rawPattern === "string" ? rawPattern.slice(1, -1).toLowerCase() : "";
@@ -626,6 +633,13 @@ class FakePostgresClient {
           const payload = row.payload as { setup?: { gameRules?: { vpModeEnabled?: boolean } } };
           const enabled = payload.setup?.gameRules?.vpModeEnabled === true;
           return /is\s+not\s+true/i.test(text) ? !enabled : enabled;
+        });
+      }
+      if (/coalesce\(payload->'setup'->>'ratingMode',\s*'casual'\)\s*=\s*\$\d+/i.test(text)) {
+        const rating = values?.find((value) => value === "casual" || value === "rated");
+        rows = rows.filter((row) => {
+          const payload = row.payload as { setup?: { ratingMode?: string } };
+          return (payload.setup?.ratingMode ?? "casual") === rating;
         });
       }
       if (/updated_at\s*</i.test(text)) {
@@ -1520,20 +1534,32 @@ describe("PostgresOnlineGameStore", () => {
       creatorSeat: "b",
       createdAt: "2026-06-01T12:03:00.000Z",
       expiresAt: "2999-01-01T12:10:00.000Z",
+      setup: { ...createGameCreatedEvent("game_unmatched").setup, ratingMode: "casual" },
+    });
+    const matchingShapeCasual = createOpenSeekCreated("seek_matching_shape_casual", {
+      creatorSeat: "w",
+      createdAt: "2026-06-01T12:03:00.000Z",
+      expiresAt: "2999-01-01T12:10:00.000Z",
+      setup: {
+        ...createGameCreatedEvent("game_matching_shape_casual").setup,
+        timeControl: undefined,
+        ratingMode: "casual",
+      },
     });
     const firstMatch = createOpenSeekCreated("seek_match_a", {
       creatorSeat: "w",
       createdAt: "2026-06-01T12:02:00.000Z",
       expiresAt: "2999-01-01T12:10:00.000Z",
-      setup: { ...createGameCreatedEvent("game_match_a").setup, timeControl: undefined },
+      setup: { ...createGameCreatedEvent("game_match_a").setup, timeControl: undefined, ratingMode: "rated" },
     });
     const secondMatch = createOpenSeekCreated("seek_match_b", {
       creatorSeat: "w",
       createdAt: "2026-06-01T12:02:00.000Z",
       expiresAt: "2999-01-01T12:10:00.000Z",
-      setup: { ...createGameCreatedEvent("game_match_b").setup, timeControl: undefined },
+      setup: { ...createGameCreatedEvent("game_match_b").setup, timeControl: undefined, ratingMode: "rated" },
     });
     await store.appendOpenSeekCreated(unmatchingNewer, createOpenSeekCredentials());
+    await store.appendOpenSeekCreated(matchingShapeCasual, createOpenSeekCredentials());
     await store.appendOpenSeekCreated(firstMatch, createOpenSeekCredentials());
     await store.appendOpenSeekCreated(secondMatch, createOpenSeekCredentials());
     client.queries.length = 0;
@@ -1544,6 +1570,7 @@ describe("PostgresOnlineGameStore", () => {
       creatorSeat: "w",
       clock: "casual",
       vp: "disabled",
+      rating: "rated",
     });
     const secondPage = await store.listOpenSeekSummaries({
       state: "open",
@@ -1551,6 +1578,7 @@ describe("PostgresOnlineGameStore", () => {
       creatorSeat: "w",
       clock: "casual",
       vp: "disabled",
+      rating: "rated",
       cursor: firstPage.nextCursor,
     });
 
@@ -1563,6 +1591,8 @@ describe("PostgresOnlineGameStore", () => {
     );
     expect(filteredQuery?.text).not.toMatch(/payload::text|like/i);
     expect(filteredQuery?.values).toEqual(expect.arrayContaining(["w"]));
+    expect(filteredQuery?.text).toMatch(/COALESCE\(payload->'setup'->>'ratingMode', 'casual'\)/);
+    expect(filteredQuery?.values).toEqual(expect.arrayContaining(["rated"]));
   });
 
   it("accepts open seeks atomically into online games", async () => {
@@ -2541,6 +2571,7 @@ describe("PostgresOnlineGameStore", () => {
       status: "complete",
       archiveState: "archived",
       hasTimeControl: true,
+      ratingMode: "rated",
       result: { winner: "w", reason: "timeout" },
     });
     const casualTimeout = createSummary("game_casual_timeout_middle", {
@@ -2549,6 +2580,7 @@ describe("PostgresOnlineGameStore", () => {
       status: "complete",
       archiveState: "archived",
       hasTimeControl: false,
+      ratingMode: "rated",
       result: { winner: "b", reason: "timeout" },
     });
     const casualResignation = createSummary("game_casual_resignation_old", {
@@ -2557,6 +2589,7 @@ describe("PostgresOnlineGameStore", () => {
       status: "complete",
       archiveState: "archived",
       hasTimeControl: false,
+      ratingMode: "casual",
       result: { winner: "w", reason: "resignation" },
     });
     client.summaryRows = [
@@ -2571,6 +2604,7 @@ describe("PostgresOnlineGameStore", () => {
       state: "archived",
       limit: 1,
       clock: "casual",
+      rating: "rated",
       result: "timeout",
     });
 
@@ -2579,7 +2613,9 @@ describe("PostgresOnlineGameStore", () => {
     const query = client.queries.find((candidate) => /from\s+online_game_summaries/i.test(candidate.text));
     expect(query?.text).not.toMatch(/has_time_control/i);
     expect(query?.text).toMatch(/payload\s*@>\s*\$\d+::jsonb/i);
+    expect(query?.text).toMatch(/COALESCE\(payload->>'ratingMode', 'casual'\)/);
     expect(query?.values).toContainEqual({ hasTimeControl: false });
+    expect(query?.values).toContain("rated");
     expect(query?.values).toContainEqual({ result: { reason: "timeout" } });
   });
 

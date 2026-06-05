@@ -1,6 +1,6 @@
 import { validateOnlineIdentity, type OnlineIdentity } from "./identity";
 import { containsDurableSecret, stringContainsDurableSecret } from "./secretSafety";
-import type { OnlineGameSetupDTO } from "./types";
+import type { OnlineGameSetupDTO, OnlineRatingMode } from "./types";
 import { validateOnlineGameSetup, type ValidationResult } from "./validation";
 
 export const ONLINE_SEEK_EVENT_SCHEMA_VERSION = 1;
@@ -15,6 +15,7 @@ export type OpenSeekVisibility = "public" | "followed";
 export type OpenSeekDirectoryState = "open";
 export type OpenSeekDirectoryClockFilter = "timed" | "casual";
 export type OpenSeekDirectoryVpFilter = "enabled" | "disabled";
+export type OpenSeekDirectoryRatingFilter = OnlineRatingMode;
 
 interface OpenSeekEventEnvelope {
   schemaVersion: typeof ONLINE_SEEK_EVENT_SCHEMA_VERSION;
@@ -89,6 +90,7 @@ export interface OpenSeekDirectoryListOptions {
   creatorSeat?: OpenSeekSeat;
   clock?: OpenSeekDirectoryClockFilter;
   vp?: OpenSeekDirectoryVpFilter;
+  rating?: OpenSeekDirectoryRatingFilter;
 }
 
 export interface OpenSeekDirectoryResponse {
@@ -109,6 +111,10 @@ export const OPEN_SEEK_DIRECTORY_CLOCK_FILTERS = new Set<OpenSeekDirectoryClockF
 export const OPEN_SEEK_DIRECTORY_VP_FILTERS = new Set<OpenSeekDirectoryVpFilter>([
   "enabled",
   "disabled",
+]);
+export const OPEN_SEEK_DIRECTORY_RATING_FILTERS = new Set<OpenSeekDirectoryRatingFilter>([
+  "casual",
+  "rated",
 ]);
 let nextSeekEventSequence = 0;
 
@@ -668,7 +674,7 @@ export function canListOpenSeekSummary(
 
 export function openSeekMatchesDirectoryFilters(
   summary: OpenSeekSummary,
-  options: Pick<OpenSeekDirectoryListOptions, "creatorSeat" | "clock" | "vp">
+  options: Pick<OpenSeekDirectoryListOptions, "creatorSeat" | "clock" | "vp" | "rating">
 ): boolean {
   if (options.creatorSeat && summary.creatorSeat !== options.creatorSeat) return false;
   if (options.clock === "timed" && !summary.setup.timeControl) return false;
@@ -676,6 +682,7 @@ export function openSeekMatchesDirectoryFilters(
   const vpEnabled = summary.setup.gameRules?.vpModeEnabled === true;
   if (options.vp === "enabled" && !vpEnabled) return false;
   if (options.vp === "disabled" && vpEnabled) return false;
+  if (options.rating && (summary.setup.ratingMode ?? "casual") !== options.rating) return false;
   return true;
 }
 

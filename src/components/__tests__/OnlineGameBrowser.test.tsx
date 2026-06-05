@@ -4233,6 +4233,9 @@ describe("OnlineGameBrowser", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Lobby scoring filter" }), {
       target: { value: "enabled" },
     });
+    fireEvent.change(screen.getByRole("combobox", { name: "Lobby rating filter" }), {
+      target: { value: "rated" },
+    });
 
     await waitFor(() => {
       expect(loadOpenSeeks).toHaveBeenLastCalledWith({
@@ -4241,6 +4244,7 @@ describe("OnlineGameBrowser", () => {
         creatorSeat: "w",
         clock: "timed",
         vp: "enabled",
+        rating: "rated",
       });
     });
     expect(await screen.findByText("No lobby listings match these filters.")).toBeInTheDocument();
@@ -4798,7 +4802,7 @@ describe("OnlineGameBrowser", () => {
     expect(loadGames).toHaveBeenLastCalledWith({ state: "archived", limit: 50 });
   });
 
-  it("requests public game clock and archive result filters from the server", async () => {
+  it("requests public game clock rating and archive result filters from the server", async () => {
     const loadGames = vi.fn().mockResolvedValue(directory([]));
     render(
       <OnlineGameBrowser
@@ -4825,6 +4829,20 @@ describe("OnlineGameBrowser", () => {
       });
     });
 
+    fireEvent.change(screen.getByRole("combobox", { name: "Rating filter" }), {
+      target: { value: "rated" },
+    });
+
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "archived",
+        limit: 50,
+        clock: "casual",
+        rating: "rated",
+        cursor: undefined,
+      });
+    });
+
     fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
       target: { value: "timeout" },
     });
@@ -4834,6 +4852,7 @@ describe("OnlineGameBrowser", () => {
         state: "archived",
         limit: 50,
         clock: "casual",
+        rating: "rated",
         result: "timeout",
         cursor: undefined,
       });
@@ -4847,6 +4866,7 @@ describe("OnlineGameBrowser", () => {
         state: "active",
         limit: 50,
         clock: "casual",
+        rating: "rated",
         cursor: undefined,
       });
     });

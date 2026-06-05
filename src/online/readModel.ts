@@ -38,6 +38,7 @@ export type OnlineArchiveState = "active" | "archived";
 export type OnlineGameSummaryStatus = "active" | "complete";
 export type OnlineGameDirectoryState = "active" | "archived" | "all";
 export type OnlineGameDirectoryClockFilter = "timed" | "casual";
+export type OnlineGameDirectoryRatingFilter = OnlineRatingMode;
 export type OnlineGameDirectoryResultFilter =
   | "white"
   | "black"
@@ -136,6 +137,7 @@ export interface OnlineGameDirectoryListOptions {
   limit: number;
   cursor?: string;
   clock?: OnlineGameDirectoryClockFilter;
+  rating?: OnlineGameDirectoryRatingFilter;
   result?: OnlineGameDirectoryResultFilter;
   query?: string;
 }
@@ -186,6 +188,10 @@ export const ONLINE_GAME_DIRECTORY_STATES = new Set<OnlineGameDirectoryState>([
 export const ONLINE_GAME_DIRECTORY_CLOCK_FILTERS = new Set<OnlineGameDirectoryClockFilter>([
   "timed",
   "casual",
+]);
+export const ONLINE_GAME_DIRECTORY_RATING_FILTERS = new Set<OnlineGameDirectoryRatingFilter>([
+  "casual",
+  "rated",
 ]);
 const RESULT_REASONS = new Set<OnlineGameResultDTO["reason"]>([
   "monarch_captured",
@@ -338,6 +344,7 @@ export function onlineGameSummaryMatchesDirectoryFilters(
   }
   if (options.clock === "timed" && !summary.hasTimeControl) return false;
   if (options.clock === "casual" && summary.hasTimeControl) return false;
+  if (options.rating && (summary.ratingMode ?? "casual") !== options.rating) return false;
   if (options.result) {
     if (!summary.result) return false;
     if (options.result === "white" && summary.result.winner !== "w") return false;

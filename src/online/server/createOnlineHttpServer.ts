@@ -46,6 +46,7 @@ import {
   ONLINE_GAME_DIRECTORY_DEFAULT_LIMIT,
   ONLINE_GAME_DIRECTORY_CLOCK_FILTERS,
   ONLINE_GAME_DIRECTORY_MAX_LIMIT,
+  ONLINE_GAME_DIRECTORY_RATING_FILTERS,
   ONLINE_GAME_DIRECTORY_RESULT_FILTERS,
   ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH,
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
@@ -55,6 +56,7 @@ import {
   onlineGameSummaryMatchesPersonalDirectoryFilters,
   type OnlineGameDirectoryClockFilter,
   type OnlineGameDirectoryListOptions,
+  type OnlineGameDirectoryRatingFilter,
   type OnlinePersonalGameDirectoryListOptions,
   type OnlineGameDirectoryResultFilter,
   type OnlineGameDirectoryResponse,
@@ -73,6 +75,7 @@ import {
   ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
   ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
   OPEN_SEEK_DIRECTORY_CLOCK_FILTERS,
+  OPEN_SEEK_DIRECTORY_RATING_FILTERS,
   OPEN_SEEK_DIRECTORY_STATES,
   OPEN_SEEK_DIRECTORY_VP_FILTERS,
   canIdentityAcceptOpenSeek,
@@ -92,6 +95,7 @@ import {
   validateOpenSeekSummary,
   type OpenSeekDirectoryClockFilter,
   type OpenSeekDirectoryListOptions,
+  type OpenSeekDirectoryRatingFilter,
   type OpenSeekDirectoryResponse,
   type OpenSeekEvent,
   type OpenSeekSeat,
@@ -326,7 +330,7 @@ function parsePublicDirectoryOptions(
     return { ok: false, message: "Public directory query is invalid." };
   }
 
-  for (const name of ["state", "limit", "cursor", "clock", "result", "q"]) {
+  for (const name of ["state", "limit", "cursor", "clock", "rating", "result", "q"]) {
     if (url.searchParams.getAll(name).length > 1) {
       return { ok: false, message: "Public directory query is invalid." };
     }
@@ -365,6 +369,15 @@ function parsePublicDirectoryOptions(
   }
   const clock = rawClock ?? undefined;
 
+  const rawRating = getSingleSearchParam(url.searchParams, "rating");
+  if (
+    rawRating !== null &&
+    !ONLINE_GAME_DIRECTORY_RATING_FILTERS.has(rawRating as OnlineGameDirectoryRatingFilter)
+  ) {
+    return { ok: false, message: "Public directory rating filter is invalid." };
+  }
+  const rating = rawRating ?? undefined;
+
   const rawResult = getSingleSearchParam(url.searchParams, "result");
   if (
     rawResult !== null &&
@@ -395,6 +408,7 @@ function parsePublicDirectoryOptions(
       limit,
       cursor,
       clock: clock as OnlineGameDirectoryClockFilter | undefined,
+      rating: rating as OnlineGameDirectoryListOptions["rating"],
       result: result as OnlineGameDirectoryResultFilter | undefined,
       query,
     },
@@ -570,7 +584,7 @@ function parseOpenSeekDirectoryOptions(
     return { ok: false, message: "Public seek query is invalid." };
   }
 
-  for (const name of ["state", "limit", "cursor", "creatorSeat", "clock", "vp"]) {
+  for (const name of ["state", "limit", "cursor", "creatorSeat", "clock", "vp", "rating"]) {
     if (url.searchParams.getAll(name).length > 1) {
       return { ok: false, message: "Public seek query is invalid." };
     }
@@ -615,6 +629,14 @@ function parseOpenSeekDirectoryOptions(
     return { ok: false, message: "Public seek victory points filter is invalid." };
   }
 
+  const rating = getSingleSearchParam(url.searchParams, "rating") ?? undefined;
+  if (
+    rating &&
+    !OPEN_SEEK_DIRECTORY_RATING_FILTERS.has(rating as OpenSeekDirectoryRatingFilter)
+  ) {
+    return { ok: false, message: "Public seek rating filter is invalid." };
+  }
+
   return {
     ok: true,
     options: {
@@ -624,6 +646,7 @@ function parseOpenSeekDirectoryOptions(
       creatorSeat: creatorSeat as OpenSeekSeat | undefined,
       clock: clock as OpenSeekDirectoryClockFilter | undefined,
       vp: vp as OpenSeekDirectoryVpFilter | undefined,
+      rating: rating as OpenSeekDirectoryListOptions["rating"],
     },
   };
 }
