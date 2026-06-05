@@ -1902,7 +1902,9 @@ describe("OnlineGameBrowser", () => {
     const article = row.closest("article");
     expect(article).not.toBeNull();
 
-    fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" }));
+    const acceptButton = within(article as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" });
+    expect(acceptButton).toHaveTextContent("Accept & Join");
+    fireEvent.click(acceptButton);
 
     await waitFor(() => expect(onAcceptAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
     expect(await within(challenges).findByText("No pending account challenges.")).toBeInTheDocument();

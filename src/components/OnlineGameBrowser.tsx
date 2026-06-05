@@ -4196,7 +4196,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 disabled={!canActOnChallenge}
                                 aria-label={`Accept challenge from ${challengeOpponentName(item)}`}
                               >
-                                {pendingAction === "accept" ? "Accepting" : "Accept"}
+                                {pendingAction === "accept" ? "Joining..." : "Accept & Join"}
                               </button>
                             )}
                             {item.summary.status === "pending" && item.role === "challenged" && onDeclineAccountChallenge && (
@@ -4535,7 +4535,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             disabled={!canActOnPendingChallenge}
                             aria-label={`Accept challenge from ${profile.displayName}`}
                           >
-                            {pendingChallengeAction === "accept" ? "Accepting" : "Accept"}
+                            {pendingChallengeAction === "accept" ? "Joining..." : "Accept & Join"}
                           </button>
                         )}
                         {pendingChallenge?.role === "challenged" && onDeclineAccountChallenge && (
