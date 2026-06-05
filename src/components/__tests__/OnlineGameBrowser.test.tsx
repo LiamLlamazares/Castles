@@ -755,6 +755,76 @@ describe("OnlineGameBrowser", () => {
     expect(await within(people).findByText("New challenge permission: Everyone. Existing challenge links are not removed.")).toBeInTheDocument();
   });
 
+  it("preserves trusted follow rejection messages", async () => {
+    const onFollowAccount = vi.fn().mockRejectedValue(
+      new OnlineRequestError(429, "rate_limited", "Follow changes are temporarily rate limited.")
+    );
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Samir"),
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountProfile={loadAccountProfile}
+        onFollowAccount={onFollowAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Samir" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    const profile = await within(people).findByRole("article", { name: "Profile Samir" });
+    fireEvent.click(within(profile).getByRole("button", { name: "Follow Samir" }));
+
+    await waitFor(() => expect(onFollowAccount).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByText("Follow changes are temporarily rate limited.")).toBeInTheDocument();
+    expect(within(people).queryByText("Could not follow that account.")).not.toBeInTheDocument();
+  });
+
+  it("preserves trusted privacy-save rejection messages", async () => {
+    const onUpdateAccountPrivacy = vi.fn().mockRejectedValue(
+      new OnlineRequestError(403, "not_allowed", "Privacy settings cannot be changed right now.")
+    );
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        onUpdateAccountPrivacy={onUpdateAccountPrivacy}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.change(await within(people).findByRole("combobox", { name: "Who can newly follow me" }), {
+      target: { value: "nobody" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Save Privacy" }));
+
+    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ followPolicy: "nobody" }));
+    expect(await within(people).findByText("Privacy settings cannot be changed right now.")).toBeInTheDocument();
+    expect(within(people).queryByText("Could not save follow privacy.")).not.toBeInTheDocument();
+  });
+
   it("lets signed-in players challenge and copy invites for visible and followed accounts", async () => {
     const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
     const onCopyChallengeAccountInvite = vi.fn().mockResolvedValue(undefined);

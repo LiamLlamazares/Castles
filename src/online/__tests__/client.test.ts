@@ -1274,6 +1274,47 @@ describe("online client helpers", () => {
     });
   });
 
+  it("preserves trusted social follow and privacy rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: async () => ({
+          error: {
+            code: "rate_limited",
+            message: "Follow changes are temporarily rate limited.",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({
+          error: {
+            code: "not_allowed",
+            message: "Privacy settings cannot be changed right now.",
+          },
+        }),
+      });
+
+    await expect(
+      followOnlineAccount({ token: "account-token" }, "Samir", fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 429,
+      code: "rate_limited",
+      message: "Follow changes are temporarily rate limited.",
+    });
+    await expect(
+      updateOnlineAccountPrivacy({ token: "account-token" }, { followPolicy: "nobody" }, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 403,
+      code: "not_allowed",
+      message: "Privacy settings cannot be changed right now.",
+    });
+  });
+
   it("rejects malformed online account report responses", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce({
       ok: true,

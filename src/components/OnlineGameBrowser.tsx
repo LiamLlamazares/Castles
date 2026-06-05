@@ -3261,13 +3261,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error(`[OnlineGameBrowser] Failed to ${action} account`, error);
       setSocialMessage(
-        action === "follow"
-          ? "Could not follow that account."
-          : action === "unfollow"
-            ? "Could not unfollow that account."
-            : action === "block"
-              ? "Could not block that account."
-              : "Could not unblock that account."
+        onlineRequestErrorMessage(error) ??
+          (action === "follow"
+            ? "Could not follow that account."
+            : action === "unfollow"
+              ? "Could not unfollow that account."
+              : action === "block"
+                ? "Could not block that account."
+                : "Could not unblock that account.")
       );
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
@@ -3454,7 +3455,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error("[OnlineGameBrowser] Failed to update follow privacy", error);
       setPrivacyStatus("error");
-      setSocialMessage("Could not save follow privacy.");
+      setSocialMessage(onlineRequestErrorMessage(error) ?? "Could not save follow privacy.");
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
         setSocialAction(undefined);
@@ -3486,7 +3487,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error("[OnlineGameBrowser] Failed to update presence privacy", error);
       setPrivacyStatus("error");
-      setSocialMessage("Could not save online status visibility.");
+      setSocialMessage(onlineRequestErrorMessage(error) ?? "Could not save online status visibility.");
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
         setSocialAction(undefined);
@@ -3521,7 +3522,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error("[OnlineGameBrowser] Failed to update challenge privacy", error);
       setPrivacyStatus("error");
-      setSocialMessage("Could not save challenge privacy.");
+      setSocialMessage(onlineRequestErrorMessage(error) ?? "Could not save challenge privacy.");
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
         setSocialAction(undefined);

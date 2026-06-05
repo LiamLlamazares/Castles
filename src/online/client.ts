@@ -1137,7 +1137,10 @@ async function putOrDeleteOnlineAccountRelationship(
     headers: accountAuthorizationHeader(account),
   });
   if (!response.ok) {
-    throw new Error(`Could not ${label} online account (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not ${label} online account (${response.status})`
+    );
   }
   return validateProfileResponse(await response.json(), `Online ${label}`);
 }
@@ -1219,7 +1222,10 @@ export async function updateOnlineAccountPrivacy(
     body: JSON.stringify(patch),
   });
   if (!response.ok) {
-    throw new Error(`Could not update online account privacy (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not update online account privacy (${response.status})`
+    );
   }
   const record = validateVersionedObject(await response.json(), "Online account privacy update");
   return {
