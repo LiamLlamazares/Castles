@@ -1216,21 +1216,49 @@ describe("online client helpers", () => {
         updatedAt: "2026-06-04T12:00:00.000Z",
       },
     };
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        protocolVersion: ONLINE_PROTOCOL_VERSION,
-        schemaVersion: 1,
-        entries: [entry],
-      }),
-    });
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 1,
+          scope: "global",
+          entries: [entry],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 1,
+          scope: "following",
+          entries: [entry],
+        }),
+      });
 
     await expect(fetchOnlineRatingLeaderboard({ limit: 5 }, fetchImpl as any)).resolves.toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       schemaVersion: 1,
+      scope: "global",
       entries: [entry],
     });
     expect(fetchImpl).toHaveBeenCalledWith("/api/online/ratings/leaderboard?limit=5");
+
+    await expect(
+      fetchOnlineRatingLeaderboard(
+        { limit: 3, scope: "following", account: { token: "account-token" } },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      scope: "following",
+      entries: [entry],
+    });
+    expect(fetchImpl).toHaveBeenLastCalledWith(
+      "/api/online/ratings/leaderboard?limit=3&scope=following",
+      { headers: { authorization: "Bearer account-token" } }
+    );
 
     await expect(
       fetchOnlineRatingLeaderboard(
@@ -1240,6 +1268,7 @@ describe("online client helpers", () => {
           json: async () => ({
             protocolVersion: ONLINE_PROTOCOL_VERSION,
             schemaVersion: 1,
+            scope: "global",
             entries: [
               {
                 ...entry,
@@ -1259,6 +1288,7 @@ describe("online client helpers", () => {
           json: async () => ({
             protocolVersion: ONLINE_PROTOCOL_VERSION,
             schemaVersion: 1,
+            scope: "global",
             entries: [
               {
                 ...entry,

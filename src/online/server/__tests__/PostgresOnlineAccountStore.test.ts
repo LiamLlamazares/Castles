@@ -124,6 +124,34 @@ class FakeAccountQueryable {
       return { rows };
     }
 
+    if (normalizedText.startsWith("WITH visible_accounts AS")) {
+      const [viewerAccountId, limit] = values as [string, number];
+      const visibleAccountIds = new Set([viewerAccountId]);
+      for (const key of this.follows) {
+        const [followerAccountId, followedAccountId] = splitSocialKey(key);
+        if (
+          followerAccountId === viewerAccountId &&
+          !this.blocks.has(socialKey(followedAccountId, viewerAccountId)) &&
+          !this.blocks.has(socialKey(viewerAccountId, followedAccountId))
+        ) {
+          visibleAccountIds.add(followedAccountId);
+        }
+      }
+      const rows = Array.from(visibleAccountIds)
+        .flatMap((accountId) => {
+          const account = this.accounts.get(accountId);
+          const rating = this.ratingRows.get(accountId);
+          return account && rating ? [{ display_name: account.display_name, payload: rating }] : [];
+        })
+        .sort((left, right) => {
+          if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
+          if (left.payload.games !== right.payload.games) return right.payload.games - left.payload.games;
+          return String(left.display_name).localeCompare(String(right.display_name));
+        })
+        .slice(0, limit);
+      return { rows };
+    }
+
     if (normalizedText.startsWith("INSERT INTO online_account_display_names")) {
       if (values.length === 0) {
         for (const account of this.accounts.values()) {
@@ -1044,5 +1072,91 @@ describe("PostgresOnlineAccountStore", () => {
     expect(JSON.stringify(leaderboard)).not.toContain("glicko2-beta-v1");
     expect(JSON.stringify(leaderboard)).not.toContain("deviation");
     expect(JSON.stringify(leaderboard)).not.toContain("volatility");
+  });
+
+  it("lists a sanitized following rating leaderboard for the viewer and visible followed accounts", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    for (const [accountId, displayName, createdAt] of [
+      ["account_liam", "Liam", "2026-06-03T12:00:00.000Z"],
+      ["account_ada", "Ada", "2026-06-03T12:01:00.000Z"],
+      ["account_ben", "Ben", "2026-06-03T12:02:00.000Z"],
+      ["account_cleo", "Cleo", "2026-06-03T12:03:00.000Z"],
+      ["account_dana", "Dana", "2026-06-03T12:04:00.000Z"],
+    ] as const) {
+      await store.createAccount({
+        accountId,
+        sessionId: `account_session_${accountId}`,
+        displayName,
+        passwordHash: TEST_PASSWORD_HASH,
+        tokenHash: hashOnlineToken(`token-${accountId}`),
+        createdAt,
+      });
+    }
+    await store.followAccount("account_liam", "Ada", "2026-06-03T12:05:00.000Z");
+    await store.followAccount("account_liam", "Ben", "2026-06-03T12:06:00.000Z");
+    await store.followAccount("account_liam", "Dana", "2026-06-03T12:07:00.000Z");
+    queryable.blocks.add(socialKey("account_ben", "account_liam"));
+    queryable.ratingRows.set("account_liam", {
+      ...createDefaultOnlineRating("2026-06-03T12:08:00.000Z"),
+      rating: 1550,
+      deviation: 90,
+      games: 10,
+    });
+    queryable.ratingRows.set("account_ada", {
+      ...createDefaultOnlineRating("2026-06-03T12:09:00.000Z"),
+      rating: 1620,
+      deviation: 80,
+      games: 5,
+    });
+    queryable.ratingRows.set("account_ben", {
+      ...createDefaultOnlineRating("2026-06-03T12:10:00.000Z"),
+      rating: 1800,
+      deviation: 80,
+      games: 20,
+    });
+    queryable.ratingRows.set("account_cleo", {
+      ...createDefaultOnlineRating("2026-06-03T12:11:00.000Z"),
+      rating: 1900,
+      deviation: 80,
+      games: 30,
+    });
+
+    const leaderboard = await store.listFollowingRatingLeaderboard("account_liam", 10);
+
+    expect(leaderboard).toEqual([
+      {
+        schemaVersion: 1,
+        displayName: "Ada",
+        rating: {
+          schemaVersion: 1,
+          rating: 1620,
+          display: "1620",
+          provisional: false,
+          games: 5,
+          updatedAt: "2026-06-03T12:09:00.000Z",
+        },
+      },
+      {
+        schemaVersion: 1,
+        displayName: "Liam",
+        rating: {
+          schemaVersion: 1,
+          rating: 1550,
+          display: "1550",
+          provisional: false,
+          games: 10,
+          updatedAt: "2026-06-03T12:08:00.000Z",
+        },
+      },
+    ]);
+    expect(JSON.stringify(leaderboard)).not.toContain("account_");
+    expect(JSON.stringify(leaderboard)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(leaderboard)).not.toContain("deviation");
+    expect(JSON.stringify(leaderboard)).not.toContain("volatility");
+    expect(JSON.stringify(leaderboard)).not.toContain("Ben");
+    expect(JSON.stringify(leaderboard)).not.toContain("Cleo");
+    expect(JSON.stringify(leaderboard)).not.toContain("Dana");
   });
 });

@@ -208,12 +208,16 @@ class FakePostgresAccountQueryable {
   readonly displayNameRegistry = new Map<string, string>();
   readonly sessionsByTokenHash = new Map<string, any>();
   readonly ratingRows = new Map<string, any>();
+  readonly follows = new Set<string>();
+  readonly blocks = new Set<string>();
   private transactionSnapshot?: {
     accounts: Map<string, any>;
     accountsByDisplayName: Map<string, string>;
     displayNameRegistry: Map<string, string>;
     sessionsByTokenHash: Map<string, any>;
     ratingRows: Map<string, any>;
+    follows: Set<string>;
+    blocks: Set<string>;
   };
 
   release(): void {}
@@ -229,6 +233,8 @@ class FakePostgresAccountQueryable {
           Array.from(this.sessionsByTokenHash.entries()).map(([key, value]) => [key, { ...value }])
         ),
         ratingRows: new Map(Array.from(this.ratingRows.entries()).map(([key, value]) => [key, { ...value }])),
+        follows: new Set(this.follows),
+        blocks: new Set(this.blocks),
       };
       return { rows: [] };
     }
@@ -243,11 +249,15 @@ class FakePostgresAccountQueryable {
         this.displayNameRegistry.clear();
         this.sessionsByTokenHash.clear();
         this.ratingRows.clear();
+        this.follows.clear();
+        this.blocks.clear();
         for (const [key, value] of this.transactionSnapshot.accounts) this.accounts.set(key, value);
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
         for (const [key, value] of this.transactionSnapshot.sessionsByTokenHash) this.sessionsByTokenHash.set(key, value);
         for (const [key, value] of this.transactionSnapshot.ratingRows) this.ratingRows.set(key, value);
+        for (const key of this.transactionSnapshot.follows) this.follows.add(key);
+        for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
         this.transactionSnapshot = undefined;
       }
       return { rows: [] };
@@ -276,6 +286,34 @@ class FakePostgresAccountQueryable {
         .flatMap(([accountId, rating]) => {
           const account = this.accounts.get(accountId);
           return account ? [{ display_name: account.display_name, payload: rating }] : [];
+        })
+        .sort((left, right) => {
+          if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
+          if (left.payload.games !== right.payload.games) return right.payload.games - left.payload.games;
+          return String(left.display_name).localeCompare(String(right.display_name));
+        })
+        .slice(0, limit);
+      return { rows };
+    }
+
+    if (normalizedText.startsWith("WITH visible_accounts AS")) {
+      const [viewerAccountId, limit] = values as [string, number];
+      const visibleAccountIds = new Set([viewerAccountId]);
+      for (const key of this.follows) {
+        const [followerAccountId, followedAccountId] = key.split("|");
+        if (
+          followerAccountId === viewerAccountId &&
+          !this.blocks.has(`${followedAccountId}|${viewerAccountId}`) &&
+          !this.blocks.has(`${viewerAccountId}|${followedAccountId}`)
+        ) {
+          visibleAccountIds.add(followedAccountId);
+        }
+      }
+      const rows = Array.from(visibleAccountIds)
+        .flatMap((accountId) => {
+          const account = this.accounts.get(accountId);
+          const rating = this.ratingRows.get(accountId);
+          return account && rating ? [{ display_name: account.display_name, payload: rating }] : [];
         })
         .sort((left, right) => {
           if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
@@ -964,6 +1002,12 @@ describe("createOnlineHttpServer", () => {
     const duplicateLimitResponse = await fetch(
       `http://127.0.0.1:${port}/api/online/ratings/leaderboard?limit=2&limit=3`
     );
+    const duplicateScopeResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?scope=global&scope=following`
+    );
+    const badScopeResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?scope=friends`
+    );
     const unknownParamResponse = await fetch(
       `http://127.0.0.1:${port}/api/online/ratings/leaderboard?sort=rating`
     );
@@ -972,10 +1016,13 @@ describe("createOnlineHttpServer", () => {
     expect(tokenQueryResponse.status).toBe(400);
     expect(badLimitResponse.status).toBe(400);
     expect(duplicateLimitResponse.status).toBe(400);
+    expect(duplicateScopeResponse.status).toBe(400);
+    expect(badScopeResponse.status).toBe(400);
     expect(unknownParamResponse.status).toBe(400);
     expect(body).toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       schemaVersion: 1,
+      scope: "global",
       entries: [
         {
           schemaVersion: 1,
@@ -1007,6 +1054,99 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("glicko2-beta-v1");
     expect(JSON.stringify(body)).not.toContain("deviation");
     expect(JSON.stringify(body)).not.toContain("volatility");
+  });
+
+  it("serves a following-scoped rating leaderboard for the authenticated account", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = createPostgresAccountStore(queryable);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const ada = await createAccountViaApi(port, "Ada");
+    const ben = await createAccountViaApi(port, "Ben");
+    const cleo = await createAccountViaApi(port, "Cleo");
+    queryable.follows.add(`${liam.account.accountId}|${ada.account.accountId}`);
+    queryable.follows.add(`${liam.account.accountId}|${ben.account.accountId}`);
+    queryable.blocks.add(`${ben.account.accountId}|${liam.account.accountId}`);
+    queryable.ratingRows.set(liam.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:03:00.000Z"),
+      rating: 1550,
+      deviation: 90,
+      games: 10,
+    });
+    queryable.ratingRows.set(ada.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:04:00.000Z"),
+      rating: 1620,
+      deviation: 80,
+      games: 5,
+    });
+    queryable.ratingRows.set(ben.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:05:00.000Z"),
+      rating: 1800,
+      deviation: 80,
+      games: 20,
+    });
+    queryable.ratingRows.set(cleo.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:06:00.000Z"),
+      rating: 1900,
+      deviation: 80,
+      games: 30,
+    });
+
+    const unauthenticatedResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?scope=following`
+    );
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?scope=following&limit=10`,
+      { headers: bearer(liam.session.token) }
+    );
+    const body = await response.json();
+
+    expect(unauthenticatedResponse.status).toBe(401);
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      scope: "following",
+      entries: [
+        {
+          schemaVersion: 1,
+          displayName: "Ada",
+          rating: {
+            schemaVersion: 1,
+            rating: 1620,
+            display: "1620",
+            provisional: false,
+            games: 5,
+            updatedAt: "2026-06-03T12:04:00.000Z",
+          },
+        },
+        {
+          schemaVersion: 1,
+          displayName: "Liam",
+          rating: {
+            schemaVersion: 1,
+            rating: 1550,
+            display: "1550",
+            provisional: false,
+            games: 10,
+            updatedAt: "2026-06-03T12:03:00.000Z",
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toContain("account_");
+    expect(JSON.stringify(body)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(body)).not.toContain("deviation");
+    expect(JSON.stringify(body)).not.toContain("volatility");
+    expect(JSON.stringify(body)).not.toContain("Ben");
+    expect(JSON.stringify(body)).not.toContain("Cleo");
   });
 
   it("supports exact profile lookup, follows, privacy, and blocks without exposing account ids", async () => {

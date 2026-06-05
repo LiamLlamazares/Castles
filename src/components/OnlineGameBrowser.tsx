@@ -25,7 +25,12 @@ import {
   type OnlineAccountSessionSummary,
   type OpenSeekResponse,
 } from "../online/client";
-import type { OnlineAccountChallengePolicy, OnlineAccountFollowPolicy, OnlineAccountPresencePolicy } from "../online/social";
+import type {
+  OnlineAccountChallengePolicy,
+  OnlineAccountFollowPolicy,
+  OnlineAccountPresencePolicy,
+  OnlineRatingLeaderboardScope,
+} from "../online/social";
 import type { OnlineAccount, OnlineAccountOAuthProvidersResponse } from "../online/accounts";
 import type {
   OnlineGameDirectoryResponse,
@@ -159,7 +164,7 @@ interface OnlineGameBrowserProps {
   onCancelAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
   loadAccountProfile?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   loadAccountFollowing?: () => Promise<OnlineAccountFollowingResponse>;
-  loadRatingLeaderboard?: (options?: { limit?: number }) => Promise<OnlineRatingLeaderboardResponse>;
+  loadRatingLeaderboard?: (options?: { limit?: number; scope?: OnlineRatingLeaderboardScope }) => Promise<OnlineRatingLeaderboardResponse>;
   onFollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onUnfollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   onBlockAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
@@ -958,6 +963,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [followingStatus, setFollowingStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [ratingLeaderboardEntries, setRatingLeaderboardEntries] = React.useState<OnlineRatingLeaderboardEntry[]>([]);
   const [ratingLeaderboardStatus, setRatingLeaderboardStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [ratingLeaderboardScope, setRatingLeaderboardScope] = React.useState<OnlineRatingLeaderboardScope>("global");
   const [followingPresenceFilter, setFollowingPresenceFilter] = React.useState<OnlineFollowingPresenceFilter>("all");
   const [pinnedFollowingDisplayNames, setPinnedFollowingDisplayNames] = React.useState<Set<string>>(() =>
     account ? readPinnedFollowingDisplayNames(account.accountId) : new Set()
@@ -1336,10 +1342,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const refreshRatingLeaderboard = React.useCallback(async () => {
     if (!account || !loadRatingLeaderboard) return;
     const requestId = ++ratingLeaderboardRequestIdRef.current;
+    const scope = ratingLeaderboardScope;
     setRatingLeaderboardStatus("loading");
     try {
-      const response = await loadRatingLeaderboard({ limit: 10 });
+      const response = await loadRatingLeaderboard({ limit: 10, scope });
       if (requestId !== ratingLeaderboardRequestIdRef.current) return;
+      if (response.scope !== scope) {
+        throw new Error("Rating leaderboard response scope did not match the request.");
+      }
       setRatingLeaderboardEntries(response.entries);
       setRatingLeaderboardStatus("ready");
     } catch (error) {
@@ -1348,7 +1358,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setRatingLeaderboardEntries([]);
       setRatingLeaderboardStatus("error");
     }
-  }, [account?.accountId, loadRatingLeaderboard]);
+  }, [account?.accountId, loadRatingLeaderboard, ratingLeaderboardScope]);
 
   const refreshAccountPrivacy = React.useCallback(async () => {
     if (!account || !loadAccountPrivacy) return;
@@ -1377,7 +1387,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setRatingLeaderboardStatus(account && loadRatingLeaderboard ? "loading" : "idle");
     if (!account || !loadRatingLeaderboard) return;
     void refreshRatingLeaderboard();
-  }, [account?.accountId, loadRatingLeaderboard, refreshRatingLeaderboard]);
+  }, [account?.accountId, loadRatingLeaderboard, ratingLeaderboardScope, refreshRatingLeaderboard]);
 
   React.useEffect(() => {
     accountFollowingRequestIdRef.current += 1;
@@ -3573,6 +3583,24 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         : formatCount(ratingLeaderboardEntries.length, "player")}
                   </span>
                 </div>
+                <div className="online-browser-following-filter" aria-label="Rating leaderboard scope">
+                  <button
+                    type="button"
+                    className={ratingLeaderboardScope === "global" ? "active" : ""}
+                    aria-pressed={ratingLeaderboardScope === "global"}
+                    onClick={() => setRatingLeaderboardScope("global")}
+                  >
+                    Global
+                  </button>
+                  <button
+                    type="button"
+                    className={ratingLeaderboardScope === "following" ? "active" : ""}
+                    aria-pressed={ratingLeaderboardScope === "following"}
+                    onClick={() => setRatingLeaderboardScope("following")}
+                  >
+                    Following
+                  </button>
+                </div>
                 <button
                   type="button"
                   className="online-browser-button subtle"
@@ -3587,7 +3615,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               ) : ratingLeaderboardStatus === "loading" && ratingLeaderboardEntries.length === 0 ? (
                 <p>Loading rating leaders...</p>
               ) : ratingLeaderboardEntries.length === 0 ? (
-                <p>No rated games yet.</p>
+                <p>{ratingLeaderboardScope === "following" ? "No followed players have rated games yet." : "No rated games yet."}</p>
               ) : (
                 <div className="online-browser-following-rows">
                   {ratingLeaderboardEntries.map((entry, index) => {

@@ -154,6 +154,7 @@ import {
 import {
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   parseOnlineAccountPrivacyPatch,
+  type OnlineRatingLeaderboardScope,
   type OnlineAccountSocialActionResult,
 } from "../social";
 import {
@@ -201,6 +202,7 @@ const ACCOUNT_CHALLENGE_PAIR_COOLDOWN_MS = 60_000;
 const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 const RATING_LEADERBOARD_DEFAULT_LIMIT = 10;
 const RATING_LEADERBOARD_MAX_LIMIT = 50;
+const RATING_LEADERBOARD_SCOPES = new Set<OnlineRatingLeaderboardScope>(["global", "following"]);
 
 type PublicSessionIdentity = { kind: "session"; id: string };
 type PublicPlayerIdentity = OnlineIdentity;
@@ -568,17 +570,20 @@ function parseAccountChallengeDirectoryOptions(
 
 function parseRatingLeaderboardOptions(
   originalUrl: string
-): { ok: true; limit: number } | { ok: false; message: string } {
+): { ok: true; limit: number; scope: OnlineRatingLeaderboardScope } | { ok: false; message: string } {
   const url = new URL(originalUrl, "http://localhost");
   if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
     return { ok: false, message: "Rating leaderboard query is invalid." };
   }
   for (const name of url.searchParams.keys()) {
-    if (name !== "limit") {
+    if (name !== "limit" && name !== "scope") {
       return { ok: false, message: "Rating leaderboard query is invalid." };
     }
   }
   if (url.searchParams.getAll("limit").length > 1) {
+    return { ok: false, message: "Rating leaderboard query is invalid." };
+  }
+  if (url.searchParams.getAll("scope").length > 1) {
     return { ok: false, message: "Rating leaderboard query is invalid." };
   }
   const rawLimit = getSingleSearchParam(url.searchParams, "limit");
@@ -591,7 +596,11 @@ function parseRatingLeaderboardOptions(
   ) {
     return { ok: false, message: "Rating leaderboard limit is invalid." };
   }
-  return { ok: true, limit };
+  const rawScope = getSingleSearchParam(url.searchParams, "scope") ?? "global";
+  if (!RATING_LEADERBOARD_SCOPES.has(rawScope as OnlineRatingLeaderboardScope)) {
+    return { ok: false, message: "Rating leaderboard scope is invalid." };
+  }
+  return { ok: true, limit, scope: rawScope as OnlineRatingLeaderboardScope };
 }
 
 function parseOpenSeekDirectoryOptions(
@@ -3038,11 +3047,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const entries = await accountStore.listRatingLeaderboard(parsed.limit);
+      let entries;
+      if (parsed.scope === "following") {
+        const auth = await resolveAccountBearer(req);
+        if (!auth.ok) {
+          log({ event: "online.rating.leaderboard", status: "rejected", reason: auth.reason });
+          res.status(auth.status).json({ error: auth.error });
+          return;
+        }
+        entries = await accountStore.listFollowingRatingLeaderboard(auth.account.accountId, parsed.limit);
+      } else {
+        entries = await accountStore.listRatingLeaderboard(parsed.limit);
+      }
       log({ event: "online.rating.leaderboard", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         schemaVersion: ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+        scope: parsed.scope,
         entries,
       });
     } catch (error) {

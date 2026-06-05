@@ -1361,6 +1361,17 @@ function App() {
     return fetchOnlineAccountFollowing({ token: onlineAccountSession.token });
   }, [onlineAccountSession?.token]);
 
+  const handleLoadOnlineRatingLeaderboard = useCallback((options: { limit?: number; scope?: "global" | "following" } = {}) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineRatingLeaderboard(
+      options.scope === "following"
+        ? { ...options, account: { token: onlineAccountSession.token } }
+        : options
+    );
+  }, [onlineAccountSession?.token]);
+
   const handleFollowOnlineAccount = useCallback((displayName: string) => {
     if (!onlineAccountSession) {
       throw new Error("No online account session is available.");
@@ -2593,7 +2604,7 @@ function App() {
           onCancelAccountChallenge={onlineAccountSession ? handleCancelOnlineAccountChallenge : undefined}
           loadAccountProfile={onlineAccountSession ? handleLoadOnlineAccountProfile : undefined}
           loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
-          loadRatingLeaderboard={onlineAccountSession ? fetchOnlineRatingLeaderboard : undefined}
+          loadRatingLeaderboard={onlineAccountSession ? handleLoadOnlineRatingLeaderboard : undefined}
           onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}
           onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
           onBlockAccount={onlineAccountSession ? handleBlockOnlineAccount : undefined}

@@ -34,6 +34,7 @@ import {
   type OnlineAccountPublicRating,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardResponse,
+  type OnlineRatingLeaderboardScope,
 } from "./social";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
@@ -1019,7 +1020,7 @@ function validateOnlineRatingLeaderboardResponse(
   label: string
 ): OnlineRatingLeaderboardResponse {
   const record = validateVersionedObject(body, label);
-  const allowedResponseKeys = new Set(["protocolVersion", "schemaVersion", "entries"]);
+  const allowedResponseKeys = new Set(["protocolVersion", "schemaVersion", "scope", "entries"]);
   for (const key of Object.keys(record)) {
     if (!allowedResponseKeys.has(key)) {
       throw new Error(`${label} response was malformed: response contains unsupported data.`);
@@ -1028,12 +1029,16 @@ function validateOnlineRatingLeaderboardResponse(
   if (record.schemaVersion !== ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION) {
     throw new Error(`${label} response was malformed: schemaVersion is invalid.`);
   }
+  if (record.scope !== "global" && record.scope !== "following") {
+    throw new Error(`${label} response was malformed: scope is invalid.`);
+  }
   if (!Array.isArray(record.entries)) {
     throw new Error(`${label} response was malformed: entries is invalid.`);
   }
   return {
     protocolVersion: ONLINE_PROTOCOL_VERSION,
     schemaVersion: ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+    scope: record.scope,
     entries: record.entries.map((entry, index) =>
       validateOnlineRatingLeaderboardEntry(entry, `${label}.entries[${index}]`)
     ),
@@ -1041,13 +1046,17 @@ function validateOnlineRatingLeaderboardResponse(
 }
 
 export async function fetchOnlineRatingLeaderboard(
-  options: { limit?: number } = {},
+  options: { limit?: number; scope?: OnlineRatingLeaderboardScope; account?: OnlineAccountSessionParams } = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<OnlineRatingLeaderboardResponse> {
   const params = new URLSearchParams();
   if (options.limit !== undefined) params.set("limit", String(options.limit));
+  if (options.scope !== undefined) params.set("scope", options.scope);
   const query = params.toString();
-  const response = await fetchImpl(query ? `/api/online/ratings/leaderboard?${query}` : "/api/online/ratings/leaderboard");
+  const path = query ? `/api/online/ratings/leaderboard?${query}` : "/api/online/ratings/leaderboard";
+  const response = options.scope === "following" && options.account
+    ? await fetchImpl(path, { headers: accountAuthorizationHeader(options.account) })
+    : await fetchImpl(path);
   if (!response.ok) {
     throw new Error(`Could not load online rating leaderboard (${response.status})`);
   }

@@ -732,6 +732,7 @@ describe("OnlineGameBrowser", () => {
     const loadRatingLeaderboard = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       schemaVersion: 1,
+      scope: "global",
       entries: [
         {
           schemaVersion: 1,
@@ -783,7 +784,57 @@ describe("OnlineGameBrowser", () => {
     expect(rows[1]).toHaveTextContent("Ben");
     expect(within(rows[1]).getByTitle("3 rated games")).toHaveTextContent("1590?");
     expect(people).not.toHaveTextContent("account_cleo");
-    expect(loadRatingLeaderboard).toHaveBeenCalledWith({ limit: 10 });
+    expect(loadRatingLeaderboard).toHaveBeenCalledWith({ limit: 10, scope: "global" });
+  });
+
+  it("switches rating leaders between global and followed-player scopes", async () => {
+    const loadRatingLeaderboard = vi.fn()
+      .mockResolvedValueOnce({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 1,
+        scope: "global",
+        entries: [
+          {
+            schemaVersion: 1,
+            displayName: "Cleo",
+            rating: publicRating({ rating: 1620, display: "1620", provisional: false, games: 8 }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 1,
+        scope: "following",
+        entries: [
+          {
+            schemaVersion: 1,
+            displayName: "Liam",
+            rating: publicRating({ rating: 1550, display: "1550", provisional: false, games: 10 }),
+          },
+        ],
+      });
+
+    render(
+      <OnlineGameBrowser
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        onReplay={vi.fn()}
+        onSpectate={vi.fn()}
+        onBack={vi.fn()}
+        account={accountFixture("Liam")}
+        {...socialPropsWithFollowing([])}
+        loadRatingLeaderboard={loadRatingLeaderboard}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const leaders = await within(people).findByRole("region", { name: "Rating leaders" });
+    expect(await within(leaders).findByText("Cleo")).toBeInTheDocument();
+
+    fireEvent.click(within(leaders).getByRole("button", { name: "Following" }));
+
+    await waitFor(() => expect(loadRatingLeaderboard).toHaveBeenLastCalledWith({ limit: 10, scope: "following" }));
+    expect(await within(leaders).findByText("Liam")).toBeInTheDocument();
+    expect(within(leaders).queryByText("Cleo")).not.toBeInTheDocument();
   });
 
   it("lets signed-in players watch public live games from profile cards", async () => {

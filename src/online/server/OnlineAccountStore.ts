@@ -80,6 +80,7 @@ export interface OnlineAccountStore {
   revokeSessionsForAccount(accountId: string): Promise<number>;
   deleteAccount(accountId: string): Promise<boolean>;
   listRatingLeaderboard(limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
+  listFollowingRatingLeaderboard(accountId: string, limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
   getProfileForDisplayName(viewerAccountId: string, displayName: string, viewedAt?: string): Promise<OnlineAccountPublicProfile | null>;
   listFollowingProfiles(accountId: string, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
   followAccount(followerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
@@ -344,6 +345,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   }
 
   async listRatingLeaderboard(_limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
+    return [];
+  }
+
+  async listFollowingRatingLeaderboard(_accountId: string, _limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
     return [];
   }
 

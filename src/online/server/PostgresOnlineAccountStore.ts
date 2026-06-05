@@ -443,14 +443,45 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       `,
       [boundedLimit]
     );
-    return result.rows.map((row) => {
-      const rating = validateOnlineRating(row.payload, `online account leaderboard rating ${row.display_name}`);
-      return {
-        schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
-        displayName: String(row.display_name),
-        rating: createOnlineAccountPublicRating(rating),
-      };
-    });
+    return this.ratingLeaderboardRows(result.rows);
+  }
+
+  async listFollowingRatingLeaderboard(accountId: string, limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
+    await this.ensureSchema();
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    const result = await this.queryable.query(
+      `
+        WITH visible_accounts AS (
+          SELECT $1::text AS account_id
+          UNION
+          SELECT f.followed_account_id AS account_id
+          FROM online_account_follows f
+          WHERE f.follower_account_id = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM online_account_blocks b
+              WHERE b.blocker_account_id = f.followed_account_id
+                AND b.blocked_account_id = $1
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM online_account_blocks b
+              WHERE b.blocker_account_id = $1
+                AND b.blocked_account_id = f.followed_account_id
+            )
+        )
+        SELECT a.display_name, r.payload
+        FROM visible_accounts v
+        INNER JOIN online_accounts a ON a.account_id = v.account_id
+        INNER JOIN online_account_ratings r ON r.account_id = v.account_id
+        ORDER BY
+          (r.payload->>'rating')::double precision DESC,
+          (r.payload->>'games')::integer DESC,
+          lower(a.display_name) ASC,
+          a.display_name ASC
+        LIMIT $2
+      `,
+      [accountId, boundedLimit]
+    );
+    return this.ratingLeaderboardRows(result.rows);
   }
 
   async getProfileForDisplayName(
@@ -961,6 +992,17 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       [accountId]
     );
     return result.rows.length > 0 ? accountFromRow(result.rows[0]) : null;
+  }
+
+  private ratingLeaderboardRows(rows: Array<{ display_name: unknown; payload: unknown }>): OnlineRatingLeaderboardEntry[] {
+    return rows.map((row) => {
+      const rating = validateOnlineRating(row.payload, `online account leaderboard rating ${row.display_name}`);
+      return {
+        schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+        displayName: String(row.display_name),
+        rating: createOnlineAccountPublicRating(rating),
+      };
+    });
   }
 
   private async hasFollow(

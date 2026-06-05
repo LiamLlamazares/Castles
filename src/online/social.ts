@@ -8,6 +8,7 @@ import {
 export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
 export const ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION = 1;
 
+export type OnlineRatingLeaderboardScope = "global" | "following";
 export type OnlineAccountFollowPolicy = "everyone" | "nobody";
 export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountChallengePolicy = "followed" | "everyone" | "nobody";
@@ -64,6 +65,7 @@ export interface OnlineRatingLeaderboardEntry {
 export interface OnlineRatingLeaderboardResponse {
   protocolVersion: number;
   schemaVersion: typeof ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION;
+  scope: OnlineRatingLeaderboardScope;
   entries: OnlineRatingLeaderboardEntry[];
 }
 
