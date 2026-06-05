@@ -1614,7 +1614,7 @@ describe("OnlineGameBrowser", () => {
 
     const people = await screen.findByRole("region", { name: "People" });
     const challenges = await within(people).findByRole("region", { name: "Account challenges" });
-    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "pending" }));
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "all" }));
     const notice = within(people).getByRole("region", { name: "Pending challenge notice" });
     expect(notice).toHaveTextContent("1 incoming challenge awaiting your response");
     fireEvent.click(within(notice).getByRole("button", { name: "View Challenges" }));
@@ -1666,7 +1666,7 @@ describe("OnlineGameBrowser", () => {
     expect(within(article as HTMLElement).getByText("2 min left")).toBeInTheDocument();
   });
 
-  it("loads terminal account challenge history from the all inbox filter", async () => {
+  it("loads terminal account challenge history from the default all inbox filter", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
     const acceptedSummary = accountChallengeSummary({
@@ -1713,10 +1713,6 @@ describe("OnlineGameBrowser", () => {
 
     const people = await screen.findByRole("region", { name: "People" });
     const challenges = await within(people).findByRole("region", { name: "Account challenges" });
-    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "pending" }));
-
-    fireEvent.click(within(challenges).getByRole("button", { name: "Show all account challenges" }));
-
     await waitFor(() => expect(loadAccountChallenges).toHaveBeenLastCalledWith({ state: "all" }));
     expect(await within(challenges).findByText("2 challenges")).toBeInTheDocument();
     expect(within(challenges).getByText("Ada")).toBeInTheDocument();
@@ -1775,6 +1771,67 @@ describe("OnlineGameBrowser", () => {
       name: "Join accepted challenge game game_ada_liam against Ada",
     });
     expect(joinButton).toHaveTextContent("Join Game");
+    fireEvent.click(joinButton);
+
+    expect(onRejoinAccountChallengeGame).toHaveBeenCalledWith("game_ada_liam", "unlisted");
+  });
+
+  it("loads all account challenges by default so accepted games are immediately recoverable", async () => {
+    const account = accountFixture("Liam");
+    const acceptedSummary = accountChallengeSummary({
+      challengeId: "challenge_ada_liam",
+      challengerIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+      challengedIdentity: account.identity,
+      visibility: "unlisted",
+      updatedAt: "2026-06-03T12:03:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-03T12:03:00.000Z",
+      acceptedBy: account.identity,
+      gameId: "game_ada_liam",
+      whiteIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+      blackIdentity: account.identity,
+      lastEventId: "challenge_ada_liam_accepted_evt",
+    });
+    const loadAccountChallenges = vi.fn().mockImplementation((options?: { state?: "pending" | "all" }) =>
+      Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        ...accountChallengeDirectory(
+          options?.state === "all" ? [{ role: "challenged" as const, summary: acceptedSummary }] : []
+        ),
+      })
+    );
+    const onRejoinAccountChallengeGame = vi.fn();
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountChallenges={loadAccountChallenges}
+        onRejoinAccountChallengeGame={onRejoinAccountChallengeGame}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "all" }));
+    expect(within(challenges).getByRole("button", { name: "Show all account challenges" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    const row = await within(challenges).findByText("Ada");
+    const article = row.closest("article");
+    expect(article).not.toBeNull();
+    expect(within(article as HTMLElement).getByText("Accepted")).toBeInTheDocument();
+    const joinButton = within(article as HTMLElement).getByRole("button", {
+      name: "Join accepted challenge game game_ada_liam against Ada",
+    });
     fireEvent.click(joinButton);
 
     expect(onRejoinAccountChallengeGame).toHaveBeenCalledWith("game_ada_liam", "unlisted");
@@ -1843,9 +1900,9 @@ describe("OnlineGameBrowser", () => {
     expect(onChallengeAccount).not.toHaveBeenCalled();
   });
 
-  it("ignores a stale pending inbox response after switching to all challenges", async () => {
+  it("ignores a stale all-inbox response after switching to pending challenges", async () => {
     const account = accountFixture("Liam");
-    const stalePendingLoad = deferredValue<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>();
+    const staleAllLoad = deferredValue<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>();
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
     const acceptedSummary = accountChallengeSummary({
       challengeId: "challenge_ada_liam",
@@ -1869,7 +1926,7 @@ describe("OnlineGameBrowser", () => {
       ...accountChallengeDirectory([{ role: "challenged" as const, summary: acceptedSummary }]),
     };
     const loadAccountChallenges = vi.fn().mockImplementation((options?: { state?: "pending" | "all" }) =>
-      options?.state === "all" ? Promise.resolve(allDirectory) : stalePendingLoad.promise
+      options?.state === "all" ? staleAllLoad.promise : Promise.resolve(pendingDirectory)
     );
     render(
       <OnlineGameBrowser
@@ -1888,22 +1945,21 @@ describe("OnlineGameBrowser", () => {
 
     const people = await screen.findByRole("region", { name: "People" });
     const challenges = await within(people).findByRole("region", { name: "Account challenges" });
-    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "pending" }));
-
-    fireEvent.click(within(challenges).getByRole("button", { name: "Show all account challenges" }));
-    await waitFor(() => expect(loadAccountChallenges).toHaveBeenLastCalledWith({ state: "all" }));
-    expect(await within(challenges).findByText("Ada")).toBeInTheDocument();
-    expect(within(challenges).getByText("Accepted")).toBeInTheDocument();
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenCalledWith({ state: "all" }));
+    fireEvent.click(within(challenges).getByRole("button", { name: "Show pending account challenges" }));
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenLastCalledWith({ state: "pending" }));
+    expect(await within(challenges).findByText("Samir")).toBeInTheDocument();
+    expect(within(challenges).getByText("Awaiting your response")).toBeInTheDocument();
 
     await act(async () => {
-      stalePendingLoad.resolve(pendingDirectory);
+      staleAllLoad.resolve(allDirectory);
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(within(challenges).getByText("Ada")).toBeInTheDocument();
-    expect(within(challenges).getByText("Accepted")).toBeInTheDocument();
-    expect(within(challenges).queryByText("Samir")).not.toBeInTheDocument();
+    expect(within(challenges).getByText("Samir")).toBeInTheDocument();
+    expect(within(challenges).getByText("Awaiting your response")).toBeInTheDocument();
+    expect(within(challenges).queryByText("Ada")).not.toBeInTheDocument();
   });
 
   it("auto-refreshes account challenges while visible", async () => {
@@ -1946,7 +2002,7 @@ describe("OnlineGameBrowser", () => {
     const people = screen.getByRole("region", { name: "People" });
     const challenges = within(people).getByRole("region", { name: "Account challenges" });
     expect(loadAccountChallenges).toHaveBeenCalledTimes(1);
-    expect(within(challenges).getByText("No pending account challenges.")).toBeInTheDocument();
+    expect(within(challenges).getByText("No account challenges yet.")).toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(1_000);
@@ -2026,7 +2082,8 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(acceptButton);
 
     await waitFor(() => expect(onAcceptAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
-    expect(await within(challenges).findByText("No pending account challenges.")).toBeInTheDocument();
+    expect(await within(challenges).findByText("Accepted")).toBeInTheDocument();
+    expect(within(challenges).getByText("Game game_account_accept")).toBeInTheDocument();
     expect(await within(people).findByText("Challenge accepted.")).toBeInTheDocument();
     expect(within(people).queryByRole("region", { name: "Pending challenge notice" })).not.toBeInTheDocument();
   });
@@ -2164,7 +2221,8 @@ describe("OnlineGameBrowser", () => {
 
     fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" }));
     await waitFor(() => expect(onAcceptAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
-    expect(await within(challenges).findByText("No pending account challenges.")).toBeInTheDocument();
+    expect(await within(challenges).findByText("Accepted")).toBeInTheDocument();
+    expect(within(challenges).getByText("Game game_account_accept")).toBeInTheDocument();
 
     await act(async () => {
       staleRefresh.resolve(pendingDirectory);
@@ -2173,7 +2231,7 @@ describe("OnlineGameBrowser", () => {
     });
 
     expect(within(challenges).queryByText("Samir")).not.toBeInTheDocument();
-    expect(within(challenges).getByText("No pending account challenges.")).toBeInTheDocument();
+    expect(within(challenges).getByText("No account challenges yet.")).toBeInTheDocument();
   });
 
   it("shows outgoing account challenge cancellation in the inbox", async () => {
@@ -2224,7 +2282,8 @@ describe("OnlineGameBrowser", () => {
     fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Cancel challenge to Samir" }));
 
     await waitFor(() => expect(onCancelAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
-    expect(await within(challenges).findByText("No pending account challenges.")).toBeInTheDocument();
+    expect(await within(challenges).findByText("Cancelled")).toBeInTheDocument();
+    expect(within(challenges).queryByRole("button", { name: "Cancel challenge to Samir" })).not.toBeInTheDocument();
     expect(await within(people).findByText("Challenge cancelled.")).toBeInTheDocument();
   });
 

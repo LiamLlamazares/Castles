@@ -1058,7 +1058,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountChallenges, setAccountChallenges] = React.useState<OnlineAccountChallengeListItem[]>([]);
   const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallengeActionById, setAccountChallengeActionById] = React.useState<Record<string, "accept" | "decline" | "cancel" | undefined>>({});
-  const [accountChallengeFilter, setAccountChallengeFilter] = React.useState<OnlineAccountChallengeFilter>("pending");
+  const [accountChallengeFilter, setAccountChallengeFilter] = React.useState<OnlineAccountChallengeFilter>("all");
   const [socialLookupName, setSocialLookupName] = React.useState("");
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -1568,7 +1568,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     completedAccountChallengeIdsRef.current.clear();
     setAccountChallenges([]);
     setAccountChallengeActionById({});
-    setAccountChallengeFilter("pending");
+    setAccountChallengeFilter("all");
     setAccountChallengesStatus("idle");
   }, [account?.accountId, canUseAccountChallenges]);
 
