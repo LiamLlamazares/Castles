@@ -182,7 +182,7 @@ export interface OnlineAccountSocialActionResult {
 const FOLLOW_POLICIES = new Set<OnlineAccountFollowPolicy>(["everyone", "nobody"]);
 const PRESENCE_POLICIES = new Set<OnlineAccountPresencePolicy>(["followed", "everyone", "nobody"]);
 const CHALLENGE_POLICIES = new Set<OnlineAccountChallengePolicy>(["followed", "everyone", "nobody"]);
-const REPORT_REASONS = new Set<OnlineAccountReportReason>([
+export const ONLINE_ACCOUNT_REPORT_REASONS = new Set<OnlineAccountReportReason>([
   "abuse",
   "cheating",
   "spam",
@@ -266,7 +266,7 @@ export function parseOnlineAccountPrivacyPatch(value: unknown): ValidationResult
 export function parseOnlineAccountReportInput(value: unknown): ValidationResult<OnlineAccountReportInput> {
   if (!isRecord(value)) return bad("Account report must be an object.");
 
-  if (typeof value.reason !== "string" || !REPORT_REASONS.has(value.reason as OnlineAccountReportReason)) {
+  if (typeof value.reason !== "string" || !ONLINE_ACCOUNT_REPORT_REASONS.has(value.reason as OnlineAccountReportReason)) {
     return bad("Report reason is invalid.");
   }
 

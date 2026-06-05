@@ -479,9 +479,13 @@ class FakePostgresAccountQueryable {
     }
 
     if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE status")) {
-      const [status, limit] = values as [string, number];
+      const [status] = values as [string];
+      const hasReasonFilter = normalizedText.includes("AND reason =");
+      const reason = hasReasonFilter ? (values[1] as string) : undefined;
+      const limit = values[hasReasonFilter ? 2 : 1] as number;
       const rows = this.reports
         .filter((report) => report.status === status)
+        .filter((report) => !reason || report.reason === reason)
         .sort((left, right) => {
           if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
           return String(right.report_id).localeCompare(String(left.report_id));
@@ -1436,10 +1440,23 @@ describe("createOnlineHttpServer", () => {
     const highLimitResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?limit=101`, {
       headers: bearer(adminToken),
     });
+    const badReasonResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?reason=grudge`, {
+      headers: bearer(adminToken),
+    });
+    const duplicateReasonResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports?reason=spam&reason=abuse`,
+      {
+        headers: bearer(adminToken),
+      }
+    );
     const queueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?limit=1`, {
       headers: bearer(adminToken),
     });
     const queue = await queueResponse.json();
+    const spamQueueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?reason=spam`, {
+      headers: bearer(adminToken),
+    });
+    const spamQueue = await spamQueueResponse.json();
 
     expect(firstReportResponse.status).toBe(201);
     expect(secondReportResponse.status).toBe(201);
@@ -1448,7 +1465,10 @@ describe("createOnlineHttpServer", () => {
     expect(badStatusResponse.status).toBe(400);
     expect(lowLimitResponse.status).toBe(400);
     expect(highLimitResponse.status).toBe(400);
+    expect(badReasonResponse.status).toBe(400);
+    expect(duplicateReasonResponse.status).toBe(400);
     expect(queueResponse.status).toBe(200);
+    expect(spamQueueResponse.status).toBe(200);
     expect(queueResponse.headers.get("cache-control")).toBe("no-store");
     expect(queueResponse.headers.get("vary")).toContain("Authorization");
     expect(queue).toEqual({
@@ -1475,6 +1495,12 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(queue)).not.toContain(ben.account.accountId);
     expect(JSON.stringify(queue)).not.toContain(liam.session.token);
     expect(JSON.stringify(queue)).not.toContain("account_");
+    expect(spamQueue.reports).toHaveLength(1);
+    expect(spamQueue.reports[0]).toMatchObject({
+      targetDisplayName: "Ben",
+      reason: "spam",
+    });
+    expect(JSON.stringify(spamQueue)).not.toContain("Samir");
   });
 
   it("updates admin report status with an audit entry and sanitized lifecycle fields", async () => {

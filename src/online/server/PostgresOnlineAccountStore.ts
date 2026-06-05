@@ -714,6 +714,13 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
 
   async listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]> {
     await this.ensureSchema();
+    const where = ["status = $1"];
+    const values: unknown[] = [options.status];
+    if (options.reason) {
+      values.push(options.reason);
+      where.push(`reason = $${values.length}`);
+    }
+    values.push(options.limit);
     const result = await this.queryable.query(
       `
         SELECT
@@ -728,11 +735,11 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
           updated_at,
           reviewed_at
         FROM online_account_reports
-        WHERE status = $1
+        WHERE ${where.join(" AND ")}
         ORDER BY created_at DESC, report_id DESC
-        LIMIT $2
+        LIMIT $${values.length}
       `,
-      [options.status, options.limit]
+      values
     );
     return result.rows.map((row) => this.moderationReportFromRow(row));
   }

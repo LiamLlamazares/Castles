@@ -15,6 +15,7 @@ import {
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
+  type OnlineAccountReportReason,
   type OnlineAccountReportInput,
   type OnlineAccountReportSummary,
   type OnlineAccountReportStatus,
@@ -95,6 +96,7 @@ export type OnlineAccountReportSubmissionResult =
 
 export interface ListOnlineAccountReportsOptions {
   status: OnlineAccountReportStatus;
+  reason?: OnlineAccountReportReason;
   limit: number;
 }
 
@@ -563,6 +565,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   async listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]> {
     return this.reports
       .filter((report) => report.status === options.status)
+      .filter((report) => !options.reason || report.reason === options.reason)
       .sort((left, right) => {
         const createdOrder = right.createdAt.localeCompare(left.createdAt);
         return createdOrder !== 0 ? createdOrder : right.reportId.localeCompare(left.reportId);

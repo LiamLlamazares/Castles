@@ -437,9 +437,13 @@ class FakeAccountQueryable {
     }
 
     if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, moderator_note, status, created_at, updated_at, reviewed_at FROM online_account_reports WHERE status")) {
-      const [status, limit] = values as [string, number];
+      const [status] = values as [string];
+      const hasReasonFilter = normalizedText.includes("AND reason =");
+      const reason = hasReasonFilter ? (values[1] as string) : undefined;
+      const limit = values[hasReasonFilter ? 2 : 1] as number;
       const rows = this.reports
         .filter((report) => report.status === status)
+        .filter((report) => !reason || report.reason === reason)
         .sort((left, right) => {
           if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
           return String(right.report_id).localeCompare(String(left.report_id));
@@ -1285,6 +1289,9 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.listAccountReports({ status: "open", limit: 10 })).resolves.toMatchObject([
       { reportId: "report_liam_ben" },
       { reportId: "report_liam_samir" },
+    ]);
+    await expect(store.listAccountReports({ status: "open", reason: "spam", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_liam_ben", reason: "spam" },
     ]);
     const queue = await store.listAccountReports({ status: "open", limit: 10 });
     expect(JSON.stringify(queue)).not.toContain("account_");
