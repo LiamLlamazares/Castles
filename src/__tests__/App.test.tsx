@@ -2519,6 +2519,73 @@ describe("App game setup lifecycle", () => {
     });
   });
 
+  it("surfaces trusted server errors when active account game rejoin fails", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_private_rejoin",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_private_rejoin", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/games/game_private_account_rejoin/rejoin") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "not_found",
+                message: "That account game can no longer be rejoined.",
+              },
+            }),
+            { status: 404, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/games") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: 1, games: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Rejoin Active Account Game" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/account/games/game_private_account_rejoin/rejoin",
+        { method: "POST", headers: { authorization: "Bearer account-token" } }
+      );
+      expect(alertSpy).toHaveBeenCalledWith("That account game can no longer be rejoined.");
+    });
+    expect(alertSpy).not.toHaveBeenCalledWith(
+      "Could not rejoin this account game. Try the original invite link if you still have it."
+    );
+    alertSpy.mockRestore();
+  });
+
   it("offers a rematch from a completed signed-in online game using account history opponent identity", async () => {
     const account = {
       schemaVersion: 1 as const,

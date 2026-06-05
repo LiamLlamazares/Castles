@@ -1078,6 +1078,28 @@ describe("online client helpers", () => {
     });
   });
 
+  it("preserves trusted account game rejoin rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({
+        error: {
+          code: "not_found",
+          message: "That account game can no longer be rejoined.",
+        },
+      }),
+    });
+
+    await expect(
+      rejoinOnlineAccountGame({ token: "account-token" }, "game_account_rejoin", fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 404,
+      code: "not_found",
+      message: "That account game can no longer be rejoined.",
+    });
+  });
+
   it("loads profiles, follows accounts, blocks accounts, and updates privacy with bearer auth", async () => {
     const rating = {
       schemaVersion: 1,

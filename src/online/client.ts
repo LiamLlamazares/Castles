@@ -2268,7 +2268,10 @@ export async function rejoinOnlineAccountGame(
   );
 
   if (!response.ok) {
-    throw new Error(`Could not rejoin online account game (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not rejoin online account game (${response.status})`
+    );
   }
 
   const body = await response.json();

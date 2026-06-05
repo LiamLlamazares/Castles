@@ -1452,7 +1452,11 @@ function App() {
       enterOnlineGameFromJoin(response.gameInvite, response.gameInvite.url, game.visibility);
     } catch (error) {
       console.error("Failed to rejoin account game", error);
-      alert("Could not rejoin this account game. Try the original invite link if you still have it.");
+      alert(
+        error instanceof OnlineRequestError
+          ? error.message
+          : "Could not rejoin this account game. Try the original invite link if you still have it."
+      );
     } finally {
       setRejoiningAccountGameId(null);
     }
@@ -1472,7 +1476,11 @@ function App() {
       enterOnlineGameFromJoin(response.gameInvite, response.gameInvite.url, visibility);
     } catch (error) {
       console.error("Failed to join accepted account challenge game", error);
-      alert("Could not join this accepted challenge game. Try refreshing the challenge inbox.");
+      alert(
+        error instanceof OnlineRequestError
+          ? error.message
+          : "Could not join this accepted challenge game. Try refreshing the challenge inbox."
+      );
     } finally {
       setRejoiningAccountGameId(null);
     }
