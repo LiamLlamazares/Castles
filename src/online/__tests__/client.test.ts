@@ -23,6 +23,7 @@ import {
   fetchOnlineAccountFollowing,
   fetchOnlineAccountGames,
   fetchOnlineAccountMe,
+  fetchOnlineAccountOAuthProviders,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
   fetchOnlineRatingLeaderboard,
@@ -900,6 +901,50 @@ describe("online client helpers", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/api/online/account/challenges?state=all", {
       headers: { authorization: "Bearer account-token" },
     });
+  });
+
+  it("loads Google OAuth provider availability", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        providers: [
+          {
+            provider: "google",
+            enabled: true,
+            startUrl: "/api/online/account/oauth/google/start",
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+
+    await expect(fetchOnlineAccountOAuthProviders(fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      providers: [
+        {
+          provider: "google",
+          enabled: true,
+          startUrl: "/api/online/account/oauth/google/start",
+        },
+      ],
+    });
+    expect(calls).toEqual([{ url: "/api/online/account/oauth/providers", init: undefined }]);
+  });
+
+  it("rejects malformed online account OAuth provider responses", async () => {
+    const fetchImpl = async () => new Response(JSON.stringify({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      providers: [{ provider: "google", enabled: true, startUrl: "https://evil.example" }],
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+    await expect(fetchOnlineAccountOAuthProviders(fetchImpl as any)).rejects.toThrow(/startUrl is invalid/);
   });
 
   it("accepts, declines, and cancels account challenges with bearer auth", async () => {

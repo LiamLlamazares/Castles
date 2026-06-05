@@ -40,7 +40,7 @@ Current constraints:
 - One writer process only; no cross-process coordination yet.
 - Private invite links are bearer secrets and require HTTPS.
 - Public spectator URLs expose games to anyone with the random game id.
-- Display-name/password accounts and account-backed personal history exist as a beta foundation. Ratings now have a beta Glicko-2 write path, public summaries, public leaders, and visible Casual/Rated setup controls. Moderation, anti-cheat, admin tooling, OAuth, email, and password reset are not implemented.
+- Display-name/password accounts, optional Google OAuth sign-in, and account-backed personal history exist as a beta foundation. Ratings now have a beta Glicko-2 write path, public summaries, public leaders, and visible Casual/Rated setup controls. Moderation, anti-cheat, admin tooling, email, and password reset are not implemented.
 
 ## Phase Gates
 

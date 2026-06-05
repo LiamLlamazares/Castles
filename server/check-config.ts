@@ -47,6 +47,14 @@ async function main() {
         port: config.port,
         bindHost: config.bindHost,
         publicBaseUrl: config.publicBaseUrl,
+        oauth: {
+          google: {
+            enabled: Boolean(config.googleOAuth),
+            redirectUri:
+              config.googleOAuth?.redirectUri ??
+              `${config.publicBaseUrl}/api/online/account/oauth/google/callback`,
+          },
+        },
         staticDir: config.staticDir,
         staticDirRequired: config.requireStaticDir,
         onlineStore: {

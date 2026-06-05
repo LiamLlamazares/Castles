@@ -47,4 +47,59 @@ describe("MemoryOnlineAccountStore", () => {
       sessionId: "account_session_second",
     });
   });
+
+  it("creates and reuses sessions for Google external logins without enabling password sign-in", async () => {
+    const store = new MemoryOnlineAccountStore();
+
+    const first = await store.createSessionWithExternalLogin({
+      provider: "google",
+      providerSubject: "google-subject-123",
+      accountId: "account_google",
+      sessionId: "account_session_google_first",
+      displayNameCandidates: ["Liam", "Google Player"],
+      tokenHash: hashOnlineToken("google-token-one"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    expect(first).toMatchObject({
+      sessionId: "account_session_google_first",
+      account: {
+        accountId: "account_google",
+        displayName: "Liam",
+      },
+    });
+
+    const second = await store.createSessionWithExternalLogin({
+      provider: "google",
+      providerSubject: "google-subject-123",
+      accountId: "account_unused",
+      sessionId: "account_session_google_second",
+      displayNameCandidates: ["Different Name"],
+      tokenHash: hashOnlineToken("google-token-two"),
+      createdAt: "2026-06-03T12:05:00.000Z",
+    });
+
+    expect(second).toMatchObject({
+      sessionId: "account_session_google_second",
+      account: {
+        accountId: "account_google",
+        displayName: "Liam",
+      },
+    });
+    await expect(
+      store.createSessionWithPassword({
+        sessionId: "account_session_password",
+        displayName: "Liam",
+        password: "correct-horse-battery-staple",
+        tokenHash: hashOnlineToken("password-token"),
+        createdAt: "2026-06-03T12:06:00.000Z",
+      })
+    ).resolves.toBeNull();
+    await expect(store.resolveSessionToken("google-token-one", "2026-06-03T12:07:00.000Z")).resolves.toMatchObject({
+      sessionId: "account_session_google_first",
+    });
+    await expect(store.resolveSessionToken("google-token-two", "2026-06-03T12:08:00.000Z")).resolves.toMatchObject({
+      sessionId: "account_session_google_second",
+    });
+  });
 });

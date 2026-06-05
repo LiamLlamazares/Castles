@@ -393,6 +393,52 @@ describe("OnlineGameBrowser", () => {
     expect(await screen.findByText("Signed in.")).toBeInTheDocument();
   });
 
+  it("shows Google sign-in when the provider is enabled", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        loadAccountOAuthProviders={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          providers: [
+            {
+              provider: "google",
+              enabled: true,
+              startUrl: "/api/online/account/oauth/google/start",
+            },
+          ],
+        })}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    const link = await screen.findByRole("link", { name: "Continue with Google" });
+    expect(link).toHaveAttribute("href", "/api/online/account/oauth/google/start");
+  });
+
+  it("hides Google sign-in when the provider is disabled", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        loadAccountOAuthProviders={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          providers: [{ provider: "google", enabled: false }],
+        })}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    expect(screen.queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();
+  });
+
   it("shows account session status and signs out everywhere", async () => {
     const account = {
       schemaVersion: 1 as const,

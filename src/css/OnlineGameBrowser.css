@@ -128,6 +128,12 @@
   min-width: 0;
 }
 
+.online-browser-oauth-button {
+  grid-column: 1 / -1;
+  text-align: center;
+  text-decoration: none;
+}
+
 .online-browser-social-panel {
   display: grid;
   gap: 12px;
@@ -544,6 +550,7 @@
 
 .online-browser-tabs button,
 .online-browser-button {
+  box-sizing: border-box;
   border: none;
   border-radius: 6px;
   padding: 10px 14px;

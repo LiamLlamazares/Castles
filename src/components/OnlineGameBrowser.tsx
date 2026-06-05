@@ -26,7 +26,7 @@ import {
   type OpenSeekResponse,
 } from "../online/client";
 import type { OnlineAccountChallengePolicy, OnlineAccountFollowPolicy, OnlineAccountPresencePolicy } from "../online/social";
-import type { OnlineAccount } from "../online/accounts";
+import type { OnlineAccount, OnlineAccountOAuthProvidersResponse } from "../online/accounts";
 import type {
   OnlineGameDirectoryResponse,
   OnlineGameSummaryBoardPreviewHex,
@@ -142,6 +142,7 @@ interface OnlineGameBrowserProps {
   accountError?: string | null;
   onCreateAccount?: (displayName: string, password: string) => void | Promise<void>;
   onSignInAccount?: (displayName: string, password: string) => void | Promise<void>;
+  loadAccountOAuthProviders?: () => Promise<OnlineAccountOAuthProvidersResponse>;
   onSignOutAccount?: () => void | Promise<void>;
   accountSessionId?: string | null;
   loadAccountSessions?: () => Promise<OnlineAccountSessionsResponse>;
@@ -871,6 +872,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   accountError = null,
   onCreateAccount,
   onSignInAccount,
+  loadAccountOAuthProviders,
   onSignOutAccount,
   accountSessionId = null,
   loadAccountSessions,
@@ -930,6 +932,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountDisplayName, setAccountDisplayName] = React.useState("");
   const [accountPassword, setAccountPassword] = React.useState("");
   const [accountActionMessage, setAccountActionMessage] = React.useState("");
+  const [accountOAuthProviders, setAccountOAuthProviders] = React.useState<OnlineAccountOAuthProvidersResponse["providers"]>([]);
+  const [accountOAuthStatus, setAccountOAuthStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
   const [accountSessions, setAccountSessions] = React.useState<OnlineAccountSessionSummary[]>([]);
   const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -1254,6 +1258,27 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       void refreshAccountSessions();
     }
   }, [onDeleteAccount, refreshAccountSessions]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setAccountOAuthProviders([]);
+    setAccountOAuthStatus(!account && loadAccountOAuthProviders ? "loading" : "idle");
+    if (account || !loadAccountOAuthProviders) return;
+    loadAccountOAuthProviders()
+      .then((response) => {
+        if (cancelled) return;
+        setAccountOAuthProviders(response.providers);
+        setAccountOAuthStatus("ready");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("[OnlineGameBrowser] Failed to load account sign-in providers", error);
+        setAccountOAuthStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.accountId, loadAccountOAuthProviders]);
 
   React.useEffect(() => {
     accountSessionsRequestIdRef.current += 1;
@@ -3160,6 +3185,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? "error"
       : "",
   ].filter(Boolean).join(" ");
+  const googleOAuthProvider = accountOAuthProviders.find((provider) => provider.provider === "google" && provider.enabled);
   const socialLookupDisplayName = socialLookupName.trim();
   const socialBusy = socialLookupStatus === "loading" || socialAction !== undefined;
   const canSubmitSocialLookup = socialLookupDisplayName.length >= 2 && !socialBusy;
@@ -3279,6 +3305,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           </div>
         ) : (
           <form className="online-browser-account-form" onSubmit={handleCreateAccountSubmit}>
+            {googleOAuthProvider?.startUrl && (
+              <a
+                className="online-browser-button subtle online-browser-oauth-button"
+                href={googleOAuthProvider.startUrl}
+              >
+                Continue with Google
+              </a>
+            )}
             <label>
               <span>Display name</span>
               <input

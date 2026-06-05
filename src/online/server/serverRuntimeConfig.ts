@@ -5,6 +5,11 @@ export interface ServerRuntimeConfig {
   port: number;
   bindHost: string;
   publicBaseUrl: string;
+  googleOAuth?: {
+    clientId: string;
+    clientSecret: string;
+    redirectUri?: string;
+  };
   staticDir: string;
   requireStaticDir: boolean;
   localShutdownEnabled: boolean;
@@ -98,6 +103,47 @@ function normalizePublicBaseUrl(env: NodeJS.ProcessEnv, port: number): string {
   return url.toString().replace(/\/$/, "");
 }
 
+function normalizeOptionalAbsoluteHttpsUrl(value: string | undefined, name: string): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${name} must be an absolute http or https URL.`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`${name} must use http or https.`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`${name} must not include credentials.`);
+  }
+  if (url.hash) {
+    throw new Error(`${name} must not include a URL fragment.`);
+  }
+  if (url.protocol === "http:" && !isLoopbackHost(url.hostname)) {
+    throw new Error(`${name} must use HTTPS for non-loopback hosts.`);
+  }
+  return url.toString();
+}
+
+function parseGoogleOAuthConfig(env: NodeJS.ProcessEnv): ServerRuntimeConfig["googleOAuth"] {
+  const clientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim();
+  const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+  if (!clientId && !clientSecret) return undefined;
+  if (!clientId || !clientSecret) {
+    throw new Error("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together.");
+  }
+  return {
+    clientId,
+    clientSecret,
+    redirectUri: normalizeOptionalAbsoluteHttpsUrl(
+      env.GOOGLE_OAUTH_REDIRECT_URI,
+      "GOOGLE_OAUTH_REDIRECT_URI"
+    ),
+  };
+}
+
 function requireProductionMetadata(env: NodeJS.ProcessEnv): void {
   if (env.NODE_ENV !== "production") return;
 
@@ -122,6 +168,7 @@ export function parseServerRuntimeConfig(
   const port = parsePort(env.PORT);
   const bindHost = parseBindHost(env.CASTLES_BIND_HOST);
   const publicBaseUrl = normalizePublicBaseUrl(env, port);
+  const googleOAuth = parseGoogleOAuthConfig(env);
   requireProductionMetadata(env);
   const staticDir = env.CASTLES_STATIC_DIR?.trim()
     ? env.CASTLES_STATIC_DIR.trim()
@@ -146,6 +193,7 @@ export function parseServerRuntimeConfig(
     port,
     bindHost,
     publicBaseUrl,
+    googleOAuth,
     staticDir: normalizePath(staticDir),
     requireStaticDir,
     localShutdownEnabled,

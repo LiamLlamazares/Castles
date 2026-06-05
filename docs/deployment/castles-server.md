@@ -91,6 +91,9 @@ CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://${app_domain}
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://<user>:<url-encoded-password>@<postgres-host>:5432/<database>
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=
 CASTLES_STATIC_DIR=${repo}/build
 CASTLES_REQUIRE_STATIC_DIR=1
 BUILD_ID=$(date -u +%Y%m%d-%H%M%S)
@@ -99,7 +102,7 @@ ENV
 sudo chmod 600 /etc/castles/castles.env
 ```
 
-For the current remote-database setup, the database host should be the provided PostgreSQL host, not `localhost`. URL-encode the username and password inside `DATABASE_URL`; do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL.
+For the current remote-database setup, the database host should be the provided PostgreSQL host, not `localhost`. URL-encode the username and password inside `DATABASE_URL`; do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL. Google OAuth is optional; leave the Google variables empty to disable it. If enabled, authorize `${PUBLIC_BASE_URL}/api/online/account/oauth/google/callback` in Google Cloud, or set `GOOGLE_OAUTH_REDIRECT_URI` to the exact authorized callback URL.
 
 5. Verify the remote database connection from the app server:
 
@@ -210,6 +213,9 @@ CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://<domain>
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://<user>:<password>@<postgres-host>:5432/<database>
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
 CASTLES_REQUIRE_STATIC_DIR=1
 BUILD_ID=<timestamp-or-release-id>

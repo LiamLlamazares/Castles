@@ -16,6 +16,7 @@ class FakeAccountQueryable {
   readonly accountsByDisplayName = new Map<string, string>();
   readonly displayNameRegistry = new Map<string, string>();
   readonly sessionsByTokenHash = new Map<string, any>();
+  readonly externalLogins = new Map<string, any>();
   readonly privacySettings = new Map<string, any>();
   readonly follows = new Set<string>();
   readonly blocks = new Set<string>();
@@ -26,6 +27,7 @@ class FakeAccountQueryable {
     accountsByDisplayName: Map<string, string>;
     displayNameRegistry: Map<string, string>;
     sessionsByTokenHash: Map<string, any>;
+    externalLogins: Map<string, any>;
     privacySettings: Map<string, any>;
     follows: Set<string>;
     blocks: Set<string>;
@@ -43,6 +45,9 @@ class FakeAccountQueryable {
         displayNameRegistry: new Map(this.displayNameRegistry),
         sessionsByTokenHash: new Map(
           Array.from(this.sessionsByTokenHash.entries()).map(([key, value]) => [key, { ...value }])
+        ),
+        externalLogins: new Map(
+          Array.from(this.externalLogins.entries()).map(([key, value]) => [key, { ...value }])
         ),
         privacySettings: new Map(
           Array.from(this.privacySettings.entries()).map(([key, value]) => [key, { ...value }])
@@ -63,6 +68,7 @@ class FakeAccountQueryable {
         this.accountsByDisplayName.clear();
         this.displayNameRegistry.clear();
         this.sessionsByTokenHash.clear();
+        this.externalLogins.clear();
         this.privacySettings.clear();
         this.follows.clear();
         this.blocks.clear();
@@ -71,6 +77,7 @@ class FakeAccountQueryable {
         for (const [key, value] of this.transactionSnapshot.accountsByDisplayName) this.accountsByDisplayName.set(key, value);
         for (const [key, value] of this.transactionSnapshot.displayNameRegistry) this.displayNameRegistry.set(key, value);
         for (const [key, value] of this.transactionSnapshot.sessionsByTokenHash) this.sessionsByTokenHash.set(key, value);
+        for (const [key, value] of this.transactionSnapshot.externalLogins) this.externalLogins.set(key, value);
         for (const [key, value] of this.transactionSnapshot.privacySettings) this.privacySettings.set(key, value);
         for (const key of this.transactionSnapshot.follows) this.follows.add(key);
         for (const key of this.transactionSnapshot.blocks) this.blocks.add(key);
@@ -128,17 +135,22 @@ class FakeAccountQueryable {
       }
       const [displayNameNormalized, displayName] = values as string[];
       if (this.displayNameRegistry.has(displayNameNormalized)) {
+        if (normalizedText.includes("ON CONFLICT")) {
+          return { rows: [] };
+        }
         const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
         error.code = "23505";
         error.constraint = "online_account_display_names_pkey";
         throw error;
       }
       this.displayNameRegistry.set(displayNameNormalized, displayName);
-      return { rows: [] };
+      return { rows: normalizedText.includes("RETURNING display_name") ? [{ display_name: displayName }] : [] };
     }
 
     if (normalizedText.startsWith("INSERT INTO online_accounts")) {
-      const [accountId, displayName, displayNameNormalized, passwordHash, createdAt] = values as string[];
+      const [accountId, displayName, displayNameNormalized] = values as string[];
+      const passwordHash = values.length === 5 ? values[3] as string : null;
+      const createdAt = values.length === 5 ? values[4] as string : values[3] as string;
       if (this.accounts.has(accountId) || this.accountsByDisplayName.has(displayNameNormalized)) {
         const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
         error.code = "23505";
@@ -158,6 +170,39 @@ class FakeAccountQueryable {
       this.accounts.set(accountId, row);
       this.accountsByDisplayName.set(displayNameNormalized, accountId);
       return { rows: [row] };
+    }
+
+    if (normalizedText.startsWith("SELECT a.account_id, a.display_name, a.created_at, a.updated_at FROM online_account_external_logins")) {
+      const [provider, providerSubject] = values as string[];
+      const login = this.externalLogins.get(externalLoginKey(provider, providerSubject));
+      const account = login ? this.accounts.get(login.account_id) : undefined;
+      return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("INSERT INTO online_account_external_logins")) {
+      const [provider, providerSubject, accountId, createdAt] = values as string[];
+      const key = externalLoginKey(provider, providerSubject);
+      if (this.externalLogins.has(key)) {
+        const error = new Error("duplicate key value") as Error & { code: string; constraint: string };
+        error.code = "23505";
+        error.constraint = "online_account_external_logins_pkey";
+        throw error;
+      }
+      this.externalLogins.set(key, {
+        provider,
+        provider_subject: providerSubject,
+        account_id: accountId,
+        created_at: createdAt,
+        last_used_at: createdAt,
+      });
+      return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("UPDATE online_account_external_logins")) {
+      const [provider, providerSubject, lastUsedAt] = values as string[];
+      const login = this.externalLogins.get(externalLoginKey(provider, providerSubject));
+      if (login) login.last_used_at = lastUsedAt;
+      return { rows: [] };
     }
 
     if (normalizedText.startsWith("INSERT INTO online_account_sessions")) {
@@ -357,6 +402,9 @@ class FakeAccountQueryable {
       if (!account) return { rows: [] };
       this.accounts.delete(accountId);
       this.accountsByDisplayName.delete(account.display_name_normalized);
+      for (const [key, login] of Array.from(this.externalLogins.entries())) {
+        if (login.account_id === accountId) this.externalLogins.delete(key);
+      }
       this.privacySettings.delete(accountId);
       for (const key of Array.from(this.follows)) {
         const [follower, followed] = splitSocialKey(key);
@@ -380,6 +428,10 @@ class FakeAccountQueryable {
 
 function socialKey(left: string, right: string): string {
   return `${left}\u0000${right}`;
+}
+
+function externalLoginKey(provider: string, providerSubject: string): string {
+  return `${provider}\u0000${providerSubject}`;
 }
 
 function splitSocialKey(key: string): [string, string] {
@@ -481,6 +533,94 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.resolveSessionToken("second-device-token", "2026-06-03T12:08:00.000Z")).resolves.toMatchObject({
       sessionId: "account_session_second",
     });
+  });
+
+  it("creates and reuses sessions for Google external logins without enabling password sign-in", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    const first = await store.createSessionWithExternalLogin({
+      provider: "google",
+      providerSubject: "google-subject-123",
+      accountId: "account_google",
+      sessionId: "account_session_google_first",
+      displayNameCandidates: ["Liam", "Google Player"],
+      tokenHash: hashOnlineToken("google-token-one"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    expect(first).toMatchObject({
+      sessionId: "account_session_google_first",
+      account: {
+        accountId: "account_google",
+        displayName: "Liam",
+      },
+    });
+    expect(queryable.externalLogins.get(externalLoginKey("google", "google-subject-123"))).toMatchObject({
+      account_id: "account_google",
+    });
+    expect(queryable.accounts.get("account_google").password_hash).toBeNull();
+
+    const second = await store.createSessionWithExternalLogin({
+      provider: "google",
+      providerSubject: "google-subject-123",
+      accountId: "account_unused",
+      sessionId: "account_session_google_second",
+      displayNameCandidates: ["Different Name"],
+      tokenHash: hashOnlineToken("google-token-two"),
+      createdAt: "2026-06-03T12:05:00.000Z",
+    });
+
+    expect(second).toMatchObject({
+      sessionId: "account_session_google_second",
+      account: {
+        accountId: "account_google",
+        displayName: "Liam",
+      },
+    });
+    await expect(
+      store.createSessionWithPassword({
+        sessionId: "account_session_password",
+        displayName: "liam",
+        password: "correct-horse-battery-staple",
+        tokenHash: hashOnlineToken("password-token"),
+        createdAt: "2026-06-03T12:06:00.000Z",
+      })
+    ).resolves.toBeNull();
+    await expect(store.resolveSessionToken("google-token-one", "2026-06-03T12:07:00.000Z")).resolves.toMatchObject({
+      sessionId: "account_session_google_first",
+    });
+    await expect(store.resolveSessionToken("google-token-two", "2026-06-03T12:08:00.000Z")).resolves.toMatchObject({
+      sessionId: "account_session_google_second",
+    });
+    expect(queryable.advisoryLocks).toContain("google|google-subject-123");
+  });
+
+  it("falls through taken Google display-name candidates", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-liam"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    const google = await store.createSessionWithExternalLogin({
+      provider: "google",
+      providerSubject: "google-subject-456",
+      accountId: "account_google",
+      sessionId: "account_session_google",
+      displayNameCandidates: ["liam", "Liam G123", "Google Player"],
+      tokenHash: hashOnlineToken("google-token"),
+      createdAt: "2026-06-03T12:05:00.000Z",
+    });
+
+    expect(google.account.displayName).toBe("Liam G123");
+    expect(queryable.displayNameRegistry.get("liam g123")).toBe("Liam G123");
   });
 
   it("revokes account sessions without deleting the account", async () => {

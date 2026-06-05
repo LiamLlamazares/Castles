@@ -37,6 +37,18 @@ export interface CreateOnlineAccountPasswordSessionInput {
   createdAt: string;
 }
 
+export type OnlineAccountExternalLoginProvider = "google";
+
+export interface CreateOnlineAccountExternalSessionInput {
+  provider: OnlineAccountExternalLoginProvider;
+  providerSubject: string;
+  accountId: string;
+  sessionId: string;
+  displayNameCandidates: string[];
+  tokenHash: string;
+  createdAt: string;
+}
+
 export interface ResolvedOnlineAccountSession {
   account: OnlineAccount;
   sessionId: string;
@@ -61,6 +73,7 @@ export type OnlineAccountChallengeTargetResult =
 export interface OnlineAccountStore {
   createAccount(input: CreateOnlineAccountStoreInput): Promise<ResolvedOnlineAccountSession>;
   createSessionWithPassword(input: CreateOnlineAccountPasswordSessionInput): Promise<ResolvedOnlineAccountSession | null>;
+  createSessionWithExternalLogin(input: CreateOnlineAccountExternalSessionInput): Promise<ResolvedOnlineAccountSession>;
   resolveSessionToken(token: string, usedAt: string): Promise<ResolvedOnlineAccountSession | null>;
   revokeSessionToken(token: string): Promise<boolean>;
   listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
@@ -106,12 +119,21 @@ interface MemorySessionRecord {
   lastUsedAt: string;
 }
 
+interface MemoryExternalLoginRecord {
+  provider: OnlineAccountExternalLoginProvider;
+  providerSubject: string;
+  accountId: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
 export class MemoryOnlineAccountStore implements OnlineAccountStore {
   private readonly accounts = new Map<string, OnlineAccount>();
   private readonly displayNameKeys = new Map<string, string>();
   private readonly passwordHashesByAccountId = new Map<string, string>();
   private readonly sessionsById = new Map<string, MemorySessionRecord>();
   private readonly sessionsByTokenHash = new Map<string, MemorySessionRecord>();
+  private readonly externalLoginsByKey = new Map<string, MemoryExternalLoginRecord>();
   private readonly following = new Map<string, Set<string>>();
   private readonly blocks = new Map<string, Set<string>>();
   private readonly privacySettings = new Map<string, OnlineAccountPrivacySettings>();
@@ -199,6 +221,60 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     };
   }
 
+  async createSessionWithExternalLogin(
+    input: CreateOnlineAccountExternalSessionInput
+  ): Promise<ResolvedOnlineAccountSession> {
+    this.validateExternalLoginInput(input);
+    const externalLoginKey = this.externalLoginKey(input.provider, input.providerSubject);
+    const existingLogin = this.externalLoginsByKey.get(externalLoginKey);
+    const existingAccount = existingLogin ? this.accounts.get(existingLogin.accountId) : null;
+    if (existingLogin && existingAccount) {
+      return this.createSessionForAccount(existingAccount, input.sessionId, input.tokenHash, input.createdAt, () => {
+        existingLogin.lastUsedAt = input.createdAt;
+      });
+    }
+
+    if (this.accounts.has(input.accountId)) {
+      throw new DuplicateOnlineAccountIdError(input.accountId);
+    }
+    const displayName = this.firstAvailableDisplayName(input.displayNameCandidates);
+    if (!displayName) {
+      throw new DuplicateOnlineAccountDisplayNameError(input.displayNameCandidates[0] ?? "Google account");
+    }
+    if (this.sessionsById.has(input.sessionId) || this.sessionsByTokenHash.has(input.tokenHash)) {
+      throw new DuplicateOnlineAccountSessionCredentialError();
+    }
+
+    const account = createOnlineAccountRecord({
+      accountId: input.accountId,
+      displayName,
+      createdAt: input.createdAt,
+    });
+    const session: MemorySessionRecord = {
+      sessionId: input.sessionId,
+      accountId: input.accountId,
+      tokenHash: input.tokenHash,
+      createdAt: input.createdAt,
+      lastUsedAt: input.createdAt,
+    };
+    this.accounts.set(account.accountId, account);
+    this.displayNameKeys.set(normalizeOnlineAccountDisplayNameKey(displayName), account.accountId);
+    this.sessionsById.set(input.sessionId, session);
+    this.sessionsByTokenHash.set(input.tokenHash, session);
+    this.externalLoginsByKey.set(externalLoginKey, {
+      provider: input.provider,
+      providerSubject: input.providerSubject,
+      accountId: input.accountId,
+      createdAt: input.createdAt,
+      lastUsedAt: input.createdAt,
+    });
+    return {
+      account,
+      sessionId: input.sessionId,
+      lastUsedAt: input.createdAt,
+    };
+  }
+
   async resolveSessionToken(token: string, usedAt: string): Promise<ResolvedOnlineAccountSession | null> {
     if (typeof token !== "string" || token.length === 0) return null;
     const tokenHash = hashOnlineToken(token);
@@ -256,6 +332,9 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     this.accounts.delete(accountId);
     await this.revokeSessionsForAccount(accountId);
     this.passwordHashesByAccountId.delete(accountId);
+    for (const [key, login] of Array.from(this.externalLoginsByKey.entries())) {
+      if (login.accountId === accountId) this.externalLoginsByKey.delete(key);
+    }
     this.privacySettings.delete(accountId);
     this.following.delete(accountId);
     this.blocks.delete(accountId);
@@ -408,6 +487,70 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     if (!normalized.ok) return null;
     const accountId = this.displayNameKeys.get(normalizeOnlineAccountDisplayNameKey(normalized.value));
     return accountId ? this.accounts.get(accountId) ?? null : null;
+  }
+
+  private validateExternalLoginInput(input: CreateOnlineAccountExternalSessionInput): void {
+    if (input.provider !== "google") {
+      throw new Error("External login provider is invalid.");
+    }
+    if (
+      typeof input.providerSubject !== "string" ||
+      input.providerSubject.length === 0 ||
+      input.providerSubject.length > 256 ||
+      /[\u0000-\u001f\u007f]/.test(input.providerSubject)
+    ) {
+      throw new Error("External login subject is invalid.");
+    }
+    if (!isOnlineTokenCredentialHash(input.tokenHash)) {
+      throw new Error("Account session token hash is invalid.");
+    }
+    if (!Array.isArray(input.displayNameCandidates) || input.displayNameCandidates.length === 0) {
+      throw new Error("External login display name candidates are required.");
+    }
+  }
+
+  private firstAvailableDisplayName(candidates: string[]): string | null {
+    for (const candidate of candidates) {
+      const displayName = normalizeOnlineAccountDisplayName(candidate);
+      if (!displayName.ok) continue;
+      const key = normalizeOnlineAccountDisplayNameKey(displayName.value);
+      if (!this.displayNameKeys.has(key)) return displayName.value;
+    }
+    return null;
+  }
+
+  private createSessionForAccount(
+    account: OnlineAccount,
+    sessionId: string,
+    tokenHash: string,
+    createdAt: string,
+    onCreated?: () => void
+  ): ResolvedOnlineAccountSession {
+    if (!isOnlineTokenCredentialHash(tokenHash)) {
+      throw new Error("Account session token hash is invalid.");
+    }
+    if (this.sessionsById.has(sessionId) || this.sessionsByTokenHash.has(tokenHash)) {
+      throw new DuplicateOnlineAccountSessionCredentialError();
+    }
+    const session: MemorySessionRecord = {
+      sessionId,
+      accountId: account.accountId,
+      tokenHash,
+      createdAt,
+      lastUsedAt: createdAt,
+    };
+    this.sessionsById.set(sessionId, session);
+    this.sessionsByTokenHash.set(tokenHash, session);
+    onCreated?.();
+    return {
+      account,
+      sessionId,
+      lastUsedAt: createdAt,
+    };
+  }
+
+  private externalLoginKey(provider: OnlineAccountExternalLoginProvider, providerSubject: string): string {
+    return `${provider}\u0000${providerSubject}`;
   }
 
   private async createProfile(

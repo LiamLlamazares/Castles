@@ -11,10 +11,12 @@ import { validateOnlineGameSnapshot } from "./protocol";
 import { ONLINE_PROTOCOL_VERSION, isSupportedOnlineProtocolVersion } from "./protocolVersion";
 import { stringContainsDurableSecret } from "./secretSafety";
 import {
+  ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
   validateOnlineAccount,
   type OnlineAccount,
   type OnlineAccountCreateResponse,
   type OnlineAccountMeResponse,
+  type OnlineAccountOAuthProvidersResponse,
   type OnlineAccountSessionSummary,
   type OnlineAccountSessionsResponse,
   type OnlineAccountSessionsRevokeResponse,
@@ -238,7 +240,7 @@ function openSeekCreatorStorageKey(seekId: string): string {
 
 const OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY = "castles_online_seek_creator:index";
 const ANONYMOUS_SESSION_STORAGE_KEY = "castles_online_anonymous_session_id";
-export const ONLINE_ACCOUNT_SESSION_STORAGE_KEY = "castles_online_account_session_v1";
+export { ONLINE_ACCOUNT_SESSION_STORAGE_KEY };
 
 function defaultAnonymousSessionIdFactory(): string {
   const randomId =
@@ -1250,6 +1252,56 @@ export async function signInOnlineAccount(
   }
 
   return validateOnlineAccountSessionResponse(await response.json(), "Online account sign-in");
+}
+
+function validateOnlineAccountOAuthProvidersResponse(body: unknown): OnlineAccountOAuthProvidersResponse {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Online account OAuth providers response was malformed.");
+  }
+  if (!isSupportedOnlineProtocolVersion((body as { protocolVersion?: unknown }).protocolVersion)) {
+    throw new Error(
+      `Online account OAuth providers response was malformed: protocol version must be ${ONLINE_PROTOCOL_VERSION}.`
+    );
+  }
+  const providers = (body as { providers?: unknown }).providers;
+  if (!Array.isArray(providers)) {
+    throw new Error("Online account OAuth providers response was malformed: providers is invalid.");
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    providers: providers.map((provider, index) => {
+      if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+        throw new Error(`Online account OAuth providers response.providers[${index}] was malformed.`);
+      }
+      const providerName = (provider as { provider?: unknown }).provider;
+      const enabled = (provider as { enabled?: unknown }).enabled;
+      const startUrl = (provider as { startUrl?: unknown }).startUrl;
+      if (providerName !== "google") {
+        throw new Error(`Online account OAuth providers response.providers[${index}].provider is invalid.`);
+      }
+      if (typeof enabled !== "boolean") {
+        throw new Error(`Online account OAuth providers response.providers[${index}].enabled is invalid.`);
+      }
+      if (startUrl !== undefined && (typeof startUrl !== "string" || !startUrl.startsWith("/api/online/account/oauth/"))) {
+        throw new Error(`Online account OAuth providers response.providers[${index}].startUrl is invalid.`);
+      }
+      return {
+        provider: providerName,
+        enabled,
+        ...(typeof startUrl === "string" ? { startUrl } : {}),
+      };
+    }),
+  };
+}
+
+export async function fetchOnlineAccountOAuthProviders(
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountOAuthProvidersResponse> {
+  const response = await fetchImpl("/api/online/account/oauth/providers");
+  if (!response.ok) {
+    throw new Error(`Could not load online account sign-in providers (${response.status})`);
+  }
+  return validateOnlineAccountOAuthProvidersResponse(await response.json());
 }
 
 function validateOnlineAccountSessionResponse(

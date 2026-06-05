@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign as signJwt } from "node:crypto";
 import { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
@@ -155,6 +156,35 @@ function fragmentChallengeToken(url: string): string {
 
 function bearer(token: string): HeadersInit {
   return { authorization: `Bearer ${token}` };
+}
+
+function base64UrlJson(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+const googleTestKeyPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const googleTestPublicJwk = googleTestKeyPair.publicKey.export({ format: "jwk" }) as Record<string, unknown>;
+
+function fakeGoogleIdToken(claims: Record<string, unknown>): string {
+  const signingInput = [
+    base64UrlJson({ alg: "RS256", kid: "google-test-key", typ: "JWT" }),
+    base64UrlJson(claims),
+  ].join(".");
+  const signature = signJwt("RSA-SHA256", Buffer.from(signingInput), googleTestKeyPair.privateKey).toString("base64url");
+  return `${signingInput}.${signature}`;
+}
+
+function fakeGoogleJwks(): Record<string, unknown> {
+  return {
+    keys: [
+      {
+        ...googleTestPublicJwk,
+        kid: "google-test-key",
+        use: "sig",
+        alg: "RS256",
+      },
+    ],
+  };
 }
 
 async function createAccountViaApi(
@@ -674,6 +704,216 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(secondDevice)).not.toContain("correct-horse-battery-staple");
     expect(firstMeResponse.status).toBe(200);
     expect(secondMeResponse.status).toBe(200);
+  });
+
+  it("reports Google OAuth provider availability without exposing provider secrets", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const disabledResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`);
+    const disabled = await disabledResponse.json();
+
+    expect(disabledResponse.status).toBe(200);
+    expect(disabled).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      providers: [{ provider: "google", enabled: false }],
+    });
+    expect(JSON.stringify(disabled)).not.toContain("secret");
+  });
+
+  it("starts and completes Google OAuth into an account session without putting account tokens in URLs", async () => {
+    const now = Date.parse("2026-06-01T12:00:00.000Z");
+    let tokenRequestBody = "";
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === "https://oauth.example/certs") {
+        return new Response(JSON.stringify(fakeGoogleJwks()), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      tokenRequestBody = String(init?.body ?? "");
+      return new Response(JSON.stringify({
+        id_token: fakeGoogleIdToken({
+          iss: "https://accounts.google.com",
+          aud: "google-client-id",
+          exp: Math.floor(now / 1000) + 300,
+          sub: "google-subject-123",
+          nonce: new URLSearchParams(lastAuthorizationRedirect.search).get("nonce"),
+          email: "liam@example.com",
+          email_verified: true,
+          name: "Liam Google",
+        }),
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    let lastAuthorizationRedirect = new URL("https://accounts.example/unused");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      now: () => now,
+      oauth: {
+        google: {
+          clientId: "google-client-id",
+          clientSecret: "google-client-secret",
+          authorizationEndpoint: "https://accounts.example/o/oauth2/v2/auth",
+          tokenEndpoint: "https://oauth.example/token",
+          jwksEndpoint: "https://oauth.example/certs",
+          stateSecret: "test-state-secret",
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+        },
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const providersResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`);
+    const providers = await providersResponse.json();
+    const startResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/oauth/google/start?returnTo=/`,
+      { redirect: "manual" }
+    );
+    const redirectLocation = startResponse.headers.get("location") ?? "";
+    lastAuthorizationRedirect = new URL(redirectLocation);
+    const stateCookie = startResponse.headers.get("set-cookie") ?? "";
+    const stateCookieValue = /castles_google_oauth_state=([^;]+)/.exec(stateCookie)?.[1] ?? "";
+    const callbackUrl = `http://127.0.0.1:${port}/api/online/account/oauth/google/callback?code=google-code&state=${encodeURIComponent(lastAuthorizationRedirect.searchParams.get("state") ?? "")}`;
+    const callbackResponse = await fetch(callbackUrl, {
+      headers: { cookie: `castles_google_oauth_state=${stateCookieValue}` },
+    });
+    const html = await callbackResponse.text();
+
+    expect(providersResponse.status).toBe(200);
+    expect(providers.providers).toEqual([
+      {
+        provider: "google",
+        enabled: true,
+        startUrl: "/api/online/account/oauth/google/start",
+      },
+    ]);
+    expect(startResponse.status).toBe(302);
+    expect(lastAuthorizationRedirect.origin).toBe("https://accounts.example");
+    expect(lastAuthorizationRedirect.searchParams.get("client_id")).toBe("google-client-id");
+    expect(lastAuthorizationRedirect.searchParams.get("response_type")).toBe("code");
+    expect(lastAuthorizationRedirect.searchParams.get("scope")).toBe("openid email profile");
+    expect(lastAuthorizationRedirect.searchParams.get("redirect_uri")).toBe(
+      "https://castles.example/api/online/account/oauth/google/callback"
+    );
+    expect(lastAuthorizationRedirect.searchParams.get("state")).toEqual(expect.any(String));
+    expect(lastAuthorizationRedirect.searchParams.get("nonce")).toEqual(expect.any(String));
+    expect(stateCookie).toContain("HttpOnly");
+    expect(stateCookie).toContain("SameSite=Lax");
+    expect(stateCookie).toContain("Secure");
+    expect(callbackResponse.status).toBe(200);
+    expect(callbackResponse.headers.get("cache-control")).toContain("no-store");
+    expect(tokenRequestBody).toContain("grant_type=authorization_code");
+    expect(tokenRequestBody).toContain("client_id=google-client-id");
+    expect(tokenRequestBody).toContain("client_secret=google-client-secret");
+    expect(tokenRequestBody).toContain("code=google-code");
+    expect(html).toContain("localStorage.setItem");
+    expect(html).toContain("castles_online_account_session_v1");
+    expect(html).toContain("Liam Google");
+    expect(html).toContain("location.replace(\"/\")");
+    expect(html).not.toContain("google-client-secret");
+    expect(callbackResponse.url).not.toContain("account_session_");
+    expect(callbackResponse.url).not.toContain("token");
+  });
+
+  it("rejects Google OAuth callbacks when the ID token signature is invalid", async () => {
+    const now = Date.parse("2026-06-01T12:00:00.000Z");
+    let lastAuthorizationRedirect = new URL("https://accounts.example/unused");
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === "https://oauth.example/certs") {
+        return new Response(JSON.stringify(fakeGoogleJwks()), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const validToken = fakeGoogleIdToken({
+        iss: "https://accounts.google.com",
+        aud: "google-client-id",
+        exp: Math.floor(now / 1000) + 300,
+        sub: "google-subject-123",
+        nonce: new URLSearchParams(lastAuthorizationRedirect.search).get("nonce"),
+        email: "liam@example.com",
+        email_verified: true,
+        name: "Liam Google",
+      });
+      return new Response(JSON.stringify({
+        id_token: `${validToken.split(".").slice(0, 2).join(".")}.bad-signature`,
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      now: () => now,
+      oauth: {
+        google: {
+          clientId: "google-client-id",
+          clientSecret: "google-client-secret",
+          authorizationEndpoint: "https://accounts.example/o/oauth2/v2/auth",
+          tokenEndpoint: "https://oauth.example/token",
+          jwksEndpoint: "https://oauth.example/certs",
+          stateSecret: "test-state-secret",
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+        },
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const startResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/oauth/google/start`,
+      { redirect: "manual" }
+    );
+    lastAuthorizationRedirect = new URL(startResponse.headers.get("location") ?? "");
+    const stateCookie = startResponse.headers.get("set-cookie") ?? "";
+    const stateCookieValue = /castles_google_oauth_state=([^;]+)/.exec(stateCookie)?.[1] ?? "";
+    const callbackResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/oauth/google/callback?code=google-code&state=${encodeURIComponent(lastAuthorizationRedirect.searchParams.get("state") ?? "")}`,
+      { headers: { cookie: `castles_google_oauth_state=${stateCookieValue}` } }
+    );
+    const body = await callbackResponse.text();
+
+    expect(callbackResponse.status).toBe(503);
+    expect(body).not.toContain("localStorage.setItem");
+    expect(body).not.toContain("castles_online_account_session_v1");
+  });
+
+  it("rejects Google OAuth callbacks without the matching state cookie", async () => {
+    const now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      now: () => now,
+      oauth: {
+        google: {
+          clientId: "google-client-id",
+          clientSecret: "google-client-secret",
+          authorizationEndpoint: "https://accounts.example/o/oauth2/v2/auth",
+          tokenEndpoint: "https://oauth.example/token",
+          stateSecret: "test-state-secret",
+          fetchImpl: vi.fn() as unknown as typeof fetch,
+        },
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const startResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/oauth/google/start`,
+      { redirect: "manual" }
+    );
+    const state = new URL(startResponse.headers.get("location") ?? "").searchParams.get("state") ?? "";
+    const callbackResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/oauth/google/callback?code=google-code&state=${encodeURIComponent(state)}`
+    );
+
+    expect(callbackResponse.status).toBe(401);
   });
 
   it("serves a public rating leaderboard without account ids or rating engine internals", async () => {

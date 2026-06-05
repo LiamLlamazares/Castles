@@ -20,11 +20,13 @@ import {
 import { validateOnlineRating } from "../ratings";
 import {
   CreateOnlineAccountStoreInput,
+  CreateOnlineAccountExternalSessionInput,
   CreateOnlineAccountPasswordSessionInput,
   DuplicateOnlineAccountDisplayNameError,
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
   type OnlineAccountSessionListItem,
+  type OnlineAccountExternalLoginProvider,
   type OnlineAccountChallengeTargetResult,
   type OnlineAccountStore,
   type ResolvedOnlineAccountSession,
@@ -246,6 +248,99 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     } catch (error) {
       if (isPostgresUniqueViolation(error)) {
         throw new DuplicateOnlineAccountSessionCredentialError();
+      }
+      throw error;
+    }
+  }
+
+  async createSessionWithExternalLogin(
+    input: CreateOnlineAccountExternalSessionInput
+  ): Promise<ResolvedOnlineAccountSession> {
+    await this.ensureSchema();
+    this.validateExternalLoginInput(input);
+    try {
+      return await this.withTransaction(async (queryable) => {
+        await queryable.query(
+          "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+          [input.provider, input.providerSubject]
+        );
+        const existing = await this.loadAccountByExternalLogin(
+          queryable,
+          input.provider,
+          input.providerSubject
+        );
+        if (existing) {
+          await this.insertSession(queryable, input.sessionId, existing.accountId, input.tokenHash, input.createdAt);
+          await queryable.query(
+            `
+              UPDATE online_account_external_logins
+              SET last_used_at = $3
+              WHERE provider = $1 AND provider_subject = $2
+            `,
+            [input.provider, input.providerSubject, input.createdAt]
+          );
+          return {
+            account: existing,
+            sessionId: input.sessionId,
+            lastUsedAt: input.createdAt,
+          };
+        }
+
+        const displayName = await this.reserveFirstAvailableDisplayName(
+          queryable,
+          input.displayNameCandidates,
+          input.createdAt
+        );
+        if (!displayName) {
+          throw new DuplicateOnlineAccountDisplayNameError(input.displayNameCandidates[0] ?? "Google account");
+        }
+
+        const displayNameKey = normalizeOnlineAccountDisplayNameKey(displayName);
+        const accountResult = await queryable.query(
+          `
+            INSERT INTO online_accounts (
+              account_id,
+              display_name,
+              display_name_normalized,
+              password_hash,
+              created_at,
+              updated_at
+            )
+            VALUES ($1, $2, $3, NULL, $4, $4)
+            RETURNING account_id, display_name, created_at, updated_at
+          `,
+          [input.accountId, displayName, displayNameKey, input.createdAt]
+        );
+        await queryable.query(
+          `
+            INSERT INTO online_account_external_logins (
+              provider,
+              provider_subject,
+              account_id,
+              created_at,
+              last_used_at
+            )
+            VALUES ($1, $2, $3, $4, $4)
+          `,
+          [input.provider, input.providerSubject, input.accountId, input.createdAt]
+        );
+        await this.insertSession(queryable, input.sessionId, input.accountId, input.tokenHash, input.createdAt);
+        return {
+          account: accountFromRow(accountResult.rows[0]),
+          sessionId: input.sessionId,
+          lastUsedAt: input.createdAt,
+        };
+      });
+    } catch (error) {
+      if (isPostgresUniqueViolation(error)) {
+        const constraint = String((error as { constraint?: unknown }).constraint ?? "");
+        if (constraint.includes("session") || constraint.includes("token_hash")) {
+          throw new DuplicateOnlineAccountSessionCredentialError();
+        }
+        if (constraint.includes("display_name")) {
+          throw new DuplicateOnlineAccountDisplayNameError(input.displayNameCandidates[0] ?? "Google account");
+        }
+        throw new DuplicateOnlineAccountIdError(input.accountId);
       }
       throw error;
     }
@@ -693,6 +788,23 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         ON online_account_sessions (token_hash)
     `);
     await this.queryable.query(`
+      CREATE TABLE IF NOT EXISTS online_account_external_logins (
+        provider TEXT NOT NULL,
+        provider_subject TEXT NOT NULL,
+        account_id TEXT NOT NULL REFERENCES online_accounts(account_id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL,
+        last_used_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (provider, provider_subject),
+        UNIQUE (account_id, provider),
+        CHECK (provider IN ('google')),
+        CHECK (provider_subject <> '')
+      )
+    `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_account_external_logins_account_idx
+        ON online_account_external_logins (account_id)
+    `);
+    await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_account_privacy_settings (
         account_id TEXT PRIMARY KEY REFERENCES online_accounts(account_id) ON DELETE CASCADE,
         follow_policy TEXT NOT NULL CHECK (follow_policy IN ('everyone', 'nobody')),
@@ -749,6 +861,93 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       [normalizeOnlineAccountDisplayNameKey(normalized.value)]
     );
     return result.rows.length > 0 ? accountFromRow(result.rows[0]) : null;
+  }
+
+  private async loadAccountByExternalLogin(
+    queryable: PostgresQueryable,
+    provider: OnlineAccountExternalLoginProvider,
+    providerSubject: string
+  ): Promise<OnlineAccount | null> {
+    const result = await queryable.query(
+      `
+        SELECT a.account_id, a.display_name, a.created_at, a.updated_at
+        FROM online_account_external_logins l
+        INNER JOIN online_accounts a ON a.account_id = l.account_id
+        WHERE l.provider = $1 AND l.provider_subject = $2
+        LIMIT 1
+      `,
+      [provider, providerSubject]
+    );
+    return result.rows.length > 0 ? accountFromRow(result.rows[0]) : null;
+  }
+
+  private async reserveFirstAvailableDisplayName(
+    queryable: PostgresQueryable,
+    candidates: string[],
+    reservedAt: string
+  ): Promise<string | null> {
+    for (const candidate of candidates) {
+      const displayName = normalizeOnlineAccountDisplayName(candidate);
+      if (!displayName.ok) continue;
+      const displayNameKey = normalizeOnlineAccountDisplayNameKey(displayName.value);
+      const result = await queryable.query(
+        `
+          INSERT INTO online_account_display_names (
+            display_name_normalized,
+            display_name,
+            reserved_at
+          )
+          VALUES ($1, $2, $3)
+          ON CONFLICT (display_name_normalized) DO NOTHING
+          RETURNING display_name
+        `,
+        [displayNameKey, displayName.value, reservedAt]
+      );
+      if (result.rows.length > 0) return displayName.value;
+    }
+    return null;
+  }
+
+  private async insertSession(
+    queryable: PostgresQueryable,
+    sessionId: string,
+    accountId: string,
+    tokenHash: string,
+    createdAt: string
+  ): Promise<void> {
+    await queryable.query(
+      `
+        INSERT INTO online_account_sessions (
+          session_id,
+          account_id,
+          token_hash,
+          created_at,
+          last_used_at
+        )
+        VALUES ($1, $2, $3, $4, $4)
+      `,
+      [sessionId, accountId, tokenHash, createdAt]
+    );
+  }
+
+  private validateExternalLoginInput(input: CreateOnlineAccountExternalSessionInput): void {
+    if (input.provider !== "google") {
+      throw new Error("External login provider is invalid.");
+    }
+    if (
+      typeof input.providerSubject !== "string" ||
+      input.providerSubject.length === 0 ||
+      input.providerSubject.length > 256 ||
+      /[\u0000-\u001f\u007f]/.test(input.providerSubject)
+    ) {
+      throw new Error("External login subject is invalid.");
+    }
+    if (!isOnlineTokenCredentialHash(input.tokenHash)) {
+      throw new Error("Account session token hash is invalid.");
+    }
+    if (!Array.isArray(input.displayNameCandidates) || input.displayNameCandidates.length === 0) {
+      throw new Error("External login display name candidates are required.");
+    }
   }
 
   private async loadAccountById(accountId: string): Promise<OnlineAccount | null> {

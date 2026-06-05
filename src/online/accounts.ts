@@ -8,6 +8,7 @@ export const ONLINE_ACCOUNT_DISPLAY_NAME_MIN_LENGTH = 2;
 export const ONLINE_ACCOUNT_DISPLAY_NAME_MAX_LENGTH = 32;
 export const ONLINE_ACCOUNT_PASSWORD_MIN_LENGTH = 8;
 export const ONLINE_ACCOUNT_PASSWORD_MAX_LENGTH = 128;
+export const ONLINE_ACCOUNT_SESSION_STORAGE_KEY = "castles_online_account_session_v1";
 
 export interface OnlineAccount {
   schemaVersion: typeof ONLINE_ACCOUNT_SCHEMA_VERSION;
@@ -56,6 +57,17 @@ export interface OnlineAccountSessionsRevokeResponse {
 export interface OnlineAccountDeleteResponse {
   protocolVersion: number;
   deleted: boolean;
+}
+
+export interface OnlineAccountOAuthProviderSummary {
+  provider: "google";
+  enabled: boolean;
+  startUrl?: string;
+}
+
+export interface OnlineAccountOAuthProvidersResponse {
+  protocolVersion: number;
+  providers: OnlineAccountOAuthProviderSummary[];
 }
 
 function bad(message: string): ValidationResult<never> {

@@ -149,6 +149,7 @@ import {
   normalizeOnlineAccountDisplayNameKey,
   normalizeOnlineAccountPassword,
   type OnlineAccount,
+  type OnlineAccountOAuthProviderSummary,
 } from "../accounts";
 import {
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
@@ -163,6 +164,20 @@ import {
   type OnlineAccountStore,
 } from "./OnlineAccountStore";
 import { hashOnlineAccountPassword } from "./onlinePasswordCredentials";
+import {
+  GOOGLE_OAUTH_STATE_COOKIE,
+  GOOGLE_OAUTH_STATE_MAX_AGE_SECONDS,
+  buildGoogleOAuthAuthorizationUrl,
+  decodeGoogleOAuthState,
+  encodeGoogleOAuthState,
+  exchangeGoogleOAuthCode,
+  googleDisplayNameCandidates,
+  isSafeOAuthReturnPath,
+  normalizeGoogleOAuthProviderConfig,
+  renderGoogleOAuthSessionHtml,
+  verifyGoogleIdToken,
+  type GoogleOAuthProviderConfig,
+} from "./googleOAuth";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -257,6 +272,9 @@ export interface CreateOnlineHttpServerOptions {
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
   loadGameSummary?: (gameId: string) => OnlineGameSummary | null | Promise<OnlineGameSummary | null>;
   accountStore?: OnlineAccountStore;
+  oauth?: {
+    google?: GoogleOAuthProviderConfig;
+  };
   onLog?: (event: OnlineServerLogEvent) => void;
   now?: () => number;
   health?: {
@@ -962,6 +980,47 @@ function normalizeOnlineSetupForCreation(setup: OnlineGameSetupDTO): OnlineGameS
   };
 }
 
+function parseCookieHeader(header: string | undefined): Map<string, string> {
+  const cookies = new Map<string, string>();
+  if (!header) return cookies;
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator === -1) continue;
+    const name = part.slice(0, separator).trim();
+    const value = part.slice(separator + 1).trim();
+    if (!name) continue;
+    try {
+      cookies.set(name, decodeURIComponent(value));
+    } catch {
+      cookies.set(name, value);
+    }
+  }
+  return cookies;
+}
+
+function setGoogleOAuthStateCookie(
+  res: Response,
+  nonce: string,
+  secure: boolean
+): void {
+  res.cookie(GOOGLE_OAUTH_STATE_COOKIE, nonce, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/api/online/account/oauth/google/callback",
+    maxAge: GOOGLE_OAUTH_STATE_MAX_AGE_SECONDS * 1000,
+  });
+}
+
+function clearGoogleOAuthStateCookie(res: Response, secure: boolean): void {
+  res.clearCookie(GOOGLE_OAUTH_STATE_COOKIE, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/api/online/account/oauth/google/callback",
+  });
+}
+
 function sortObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortObjectKeys);
@@ -1078,6 +1137,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const memoryOpenSeekEvents: OpenSeekEvent[] = [];
   const memoryOpenSeekCredentials = new Map<string, OpenSeekCredentials>();
   const quickMatchSessionQueues = new Map<string, Promise<void>>();
+  const googleOAuthStateSecret = randomBytes(32).toString("base64url");
+  const googleOAuthConfig = normalizeGoogleOAuthProviderConfig(
+    options.oauth?.google,
+    options.publicBaseUrl,
+    googleOAuthStateSecret
+  );
+  const googleOAuthCookieSecure = new URL(options.publicBaseUrl).protocol === "https:";
 
   const log = (event: OnlineServerLogEvent): void => {
     try {
@@ -2664,6 +2730,148 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.use("/api/online", (_req, res, next) => {
     setOnlineNoStoreHeaders(res);
     next();
+  });
+
+  app.get("/api/online/account/oauth/providers", (req, res) => {
+    if (!accountReadLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const providers: OnlineAccountOAuthProviderSummary[] = [
+      {
+        provider: "google",
+        enabled: Boolean(googleOAuthConfig),
+        ...(googleOAuthConfig ? { startUrl: "/api/online/account/oauth/google/start" } : {}),
+      },
+    ];
+    res.json({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      providers,
+    });
+  });
+
+  app.get("/api/online/account/oauth/google/start", (req, res) => {
+    if (!accountAuthLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
+      });
+      return;
+    }
+    if (!googleOAuthConfig) {
+      res.status(404).json({
+        error: { code: "not_found", message: "Google sign-in is not configured." },
+      });
+      return;
+    }
+    const requestedReturnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/";
+    const returnTo = isSafeOAuthReturnPath(requestedReturnTo) ? requestedReturnTo : "/";
+    const nonce = randomBytes(18).toString("base64url");
+    const nowSeconds = Math.floor((options.now?.() ?? Date.now()) / 1000);
+    const state = encodeGoogleOAuthState(
+      {
+        nonce,
+        returnTo,
+        exp: nowSeconds + GOOGLE_OAUTH_STATE_MAX_AGE_SECONDS,
+      },
+      googleOAuthConfig.stateSecret
+    );
+    setGoogleOAuthStateCookie(res, nonce, googleOAuthCookieSecure);
+    res.redirect(302, buildGoogleOAuthAuthorizationUrl(googleOAuthConfig, state, nonce));
+  });
+
+  app.get("/api/online/account/oauth/google/callback", async (req, res) => {
+    clearGoogleOAuthStateCookie(res, googleOAuthCookieSecure);
+    if (!accountAuthLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
+      });
+      return;
+    }
+    if (!googleOAuthConfig) {
+      res.status(404).json({
+        error: { code: "not_found", message: "Google sign-in is not configured." },
+      });
+      return;
+    }
+    if (typeof req.query.error === "string") {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Google sign-in was cancelled or rejected." },
+      });
+      return;
+    }
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    if (!code || code.length > 2048 || !state) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Google sign-in callback is invalid." },
+      });
+      return;
+    }
+    const decodedState = decodeGoogleOAuthState(
+      state,
+      googleOAuthConfig.stateSecret,
+      options.now?.() ?? Date.now()
+    );
+    if (!decodedState.ok) {
+      res.status(401).json({
+        error: { code: "unauthorized", message: "Google sign-in state is invalid." },
+      });
+      return;
+    }
+    const stateCookie = parseCookieHeader(req.headers.cookie).get(GOOGLE_OAUTH_STATE_COOKIE);
+    if (stateCookie !== decodedState.payload.nonce) {
+      res.status(401).json({
+        error: { code: "unauthorized", message: "Google sign-in state is invalid." },
+      });
+      return;
+    }
+
+    const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+    const token = defaultAccountSessionTokenFactory();
+    try {
+      const idToken = await exchangeGoogleOAuthCode(googleOAuthConfig, code);
+      const claims = await verifyGoogleIdToken(
+        googleOAuthConfig,
+        idToken,
+        decodedState.payload.nonce,
+        options.now?.() ?? Date.now()
+      );
+      const resolved = await accountStore.createSessionWithExternalLogin({
+        provider: "google",
+        providerSubject: claims.sub,
+        accountId: defaultAccountIdFactory(),
+        sessionId: defaultAccountSessionIdFactory(),
+        displayNameCandidates: googleDisplayNameCandidates(claims),
+        tokenHash: hashOnlineToken(token),
+        createdAt,
+      });
+      res
+        .status(200)
+        .type("html")
+        .send(renderGoogleOAuthSessionHtml({
+          account: resolved.account,
+          sessionId: resolved.sessionId,
+          token,
+          returnTo: decodedState.payload.returnTo,
+        }));
+      log({ event: "online.account.oauth.google", status: "accepted" });
+    } catch (error) {
+      if (error instanceof DuplicateOnlineAccountSessionCredentialError) {
+        res.status(409).json({
+          error: {
+            code: "bad_request",
+            message: "Account credential collision. Try again.",
+          },
+        });
+        return;
+      }
+      console.error("Failed to complete Google sign-in", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Google sign-in could not be completed." },
+      });
+    }
   });
 
   app.post("/api/online/accounts", async (req, res) => {

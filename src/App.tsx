@@ -51,6 +51,7 @@ import {
   fetchOnlineAccountHeadToHeadGames,
   fetchOnlineAccountFollowing,
   fetchOnlineAccountMe,
+  fetchOnlineAccountOAuthProviders,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
   fetchOnlineRatingLeaderboard,
@@ -2578,6 +2579,7 @@ function App() {
           accountError={onlineAccountError}
           onCreateAccount={handleCreateOnlineAccount}
           onSignInAccount={handleSignInOnlineAccount}
+          loadAccountOAuthProviders={fetchOnlineAccountOAuthProviders}
           onSignOutAccount={handleSignOutOnlineAccount}
           accountSessionId={onlineAccountSession?.sessionId ?? null}
           loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}

@@ -155,6 +155,11 @@ async function main() {
       listPersonalGameSummaries: (options) => store.listPersonalGameSummaries(options),
       loadGameSummary: (gameId) => store.loadGameSummary(gameId),
       accountStore,
+      oauth: config.googleOAuth
+        ? {
+            google: config.googleOAuth,
+          }
+        : undefined,
       onLog: (event) => {
         console.log(formatOnlineServerLogEvent(event));
       },
