@@ -2952,7 +2952,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       );
     } catch (error) {
       console.error("[OnlineGameBrowser] Failed to list current setup", error);
-      setSeekActionMessage("Could not list the current setup.");
+      setSeekActionMessage(onlineRequestErrorMessage(error) ?? "Could not list the current setup.");
     } finally {
       setCreateSeekPending(false);
     }

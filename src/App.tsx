@@ -1633,7 +1633,8 @@ function App() {
 
   const createOpenSeekFromSetup = async (
     setup: OnlineGameSetupDTO,
-    visibility: OpenSeekVisibility = "public"
+    visibility: OpenSeekVisibility = "public",
+    options: { rethrowTrustedError?: boolean; notifyOnError?: boolean } = {}
   ) => {
     try {
       cancelPendingReplay();
@@ -1672,7 +1673,13 @@ function App() {
       setView("online");
     } catch (error) {
       console.error("Failed to create open seek", error);
-      alert("Could not create an open lobby seek. Make sure the Node server is running.");
+      const serverMessage = error instanceof OnlineRequestError ? error.message : null;
+      if (options.notifyOnError !== false) {
+        alert(serverMessage ?? "Could not create an open lobby seek. Make sure the Node server is running.");
+      }
+      if (options.rethrowTrustedError && error instanceof OnlineRequestError) {
+        throw error;
+      }
     }
   };
 
@@ -1708,7 +1715,10 @@ function App() {
       alert("Choose a Play setup before listing a lobby game.");
       return;
     }
-    await createOpenSeekFromSetup(onlineLobbySetup, visibility);
+    await createOpenSeekFromSetup(onlineLobbySetup, visibility, {
+      notifyOnError: false,
+      rethrowTrustedError: true,
+    });
   };
 
   const handleAcceptOpenSeek = async (seekId: string) => {

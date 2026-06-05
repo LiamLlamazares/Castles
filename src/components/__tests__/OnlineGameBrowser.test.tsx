@@ -4721,6 +4721,34 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Listed for accounts you follow.");
   });
 
+  it("surfaces trusted server errors when listing the current setup fails", async () => {
+    const onCreateSeek = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        409,
+        "game_over",
+        "This session already has an active open seek."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onCreateSeek={onCreateSeek}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    fireEvent.click(screen.getByRole("button", { name: "Create public lobby listing from current Play setup" }));
+
+    await waitFor(() => expect(onCreateSeek).toHaveBeenCalledWith("public"));
+    expect(await screen.findByRole("status")).toHaveTextContent("This session already has an active open seek.");
+    expect(screen.queryByText("Could not list the current setup.")).not.toBeInTheDocument();
+  });
+
   it("keeps conflicting lobby actions disabled after a matched quick match result", async () => {
     render(
       <OnlineGameBrowser

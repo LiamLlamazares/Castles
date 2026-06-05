@@ -405,6 +405,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     backLabel?: string;
   }) => {
     const [quickMatchStatus, setQuickMatchStatus] = React.useState("");
+    const [createSeekStatus, setCreateSeekStatus] = React.useState("");
     return (
     <div>
       <div>Online Browser Ready</div>
@@ -468,6 +469,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
         </button>
       )}
       {quickMatchStatus && <div>Mock quick match status: {quickMatchStatus}</div>}
+      {createSeekStatus && <div>Mock create seek status: {createSeekStatus}</div>}
       <div>
         Quick match summary: {quickMatchSetupSummary
           ? `Radius ${quickMatchSetupSummary.boardRadius}; ${quickMatchSetupSummary.clock}; ${quickMatchSetupSummary.scoring}; ${quickMatchSetupSummary.rating}`
@@ -487,7 +489,18 @@ vi.mock("../components/OnlineGameBrowser", () => ({
         </>
       )}
       {onCreateSeek && (
-        <button type="button" onClick={() => onCreateSeek()}>
+        <button
+          type="button"
+          onClick={async () => {
+            setCreateSeekStatus("listing");
+            try {
+              await onCreateSeek();
+              setCreateSeekStatus("listed");
+            } catch (error) {
+              setCreateSeekStatus(error instanceof Error ? error.message : "error");
+            }
+          }}
+        >
           Browser Create Seek
         </button>
       )}
@@ -1379,6 +1392,38 @@ describe("App game setup lifecycle", () => {
     expect(JSON.stringify(body)).not.toContain("rated-setup-token");
   });
 
+  it("propagates trusted current-setup lobby listing failures back to the online browser", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "game_over",
+            message: "This session already has an active open seek.",
+          },
+        }),
+        { status: 409, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    startRatedRichLocalGameFromSetup();
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Browser Create Seek" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/online/seeks",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+    expect(await screen.findByText("Mock create seek status: This session already has an active open seek.")).toBeInTheDocument();
+    expect(screen.queryByText("Mock create seek status: listed")).not.toBeInTheDocument();
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
   it("does not offer matchmaking actions from analysis-loaded positions", () => {
     render(<App />);
 
@@ -1425,6 +1470,61 @@ describe("App game setup lifecycle", () => {
 
     expect(screen.getByText("Owned seek ids: seek_restore")).toBeInTheDocument();
     expect(screen.getByText("Owned seek status: open")).toBeInTheDocument();
+  });
+
+  it("recovers creator-owned accepted lobby games after a same-session reload", async () => {
+    const acceptedSummary = openSeekSummary({
+      seekId: "seek_restore_accepted",
+      status: "accepted",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      acceptedAt: "2026-06-01T12:04:00.000Z",
+      acceptedBy: { kind: "session", id: "acceptor-session" },
+      gameId: "game_restore_accepted",
+      whiteIdentity: { kind: "session", id: "creator-session" },
+      blackIdentity: { kind: "session", id: "acceptor-session" },
+      lastEventId: "seek_evt_restore_accepted",
+    });
+    rememberOpenSeekCreatorParams({ seekId: "seek_restore_accepted", token: "creator-token" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            role: "creator",
+            summary: acceptedSummary,
+            gameInvite: {
+              gameId: "game_restore_accepted",
+              seat: "w",
+              token: "creator-game-token",
+              url: "https://castles.example/?onlineGame=game_restore_accepted&seat=w",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/online/seeks/seek_restore_accepted",
+        { headers: { authorization: "Bearer creator-token" } }
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+
+    expect(screen.getByText("Owned seek ids: seek_restore_accepted")).toBeInTheDocument();
+    expect(screen.getByText("Owned seek status: accepted")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Join accepted seek" }));
+
+    expect(sessionStorage.getItem("castles_online_join:game_restore_accepted:w")).toBe("creator-game-token");
+    expect(window.location.search).toContain("onlineGame=game_restore_accepted");
+    expect(window.location.search).toContain("seat=w");
+    expect(window.location.search).not.toContain("token=");
+    expect(screen.getByRole("status")).toHaveTextContent("Connecting online game");
   });
 
   it("accepts open lobby seeks through the normal token-stripped game handoff", async () => {
