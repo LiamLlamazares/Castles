@@ -2328,6 +2328,48 @@ describe("OnlineGameBrowser", () => {
     expect(within(article as HTMLElement).queryByRole("button", { name: "Accept challenge from Samir" })).not.toBeInTheDocument();
   });
 
+  it("surfaces trusted server errors when accepting an account challenge fails", async () => {
+    const account = accountFixture("Liam");
+    const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
+    const onAcceptAccountChallenge = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        429,
+        "rate_limited",
+        "Too many online challenge requests were sent too quickly."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountChallenges={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          ...accountChallengeDirectory([{ role: "challenged", summary: pendingSummary }]),
+        })}
+        onAcceptAccountChallenge={onAcceptAccountChallenge}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    const row = await within(challenges).findByText("Samir");
+    const article = row.closest("article");
+    expect(article).not.toBeNull();
+
+    fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Accept challenge from Samir" }));
+
+    await waitFor(() => expect(onAcceptAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
+    expect(await within(people).findByText("Too many online challenge requests were sent too quickly.")).toBeInTheDocument();
+    expect(within(people).queryByText("Could not accept that challenge.")).not.toBeInTheDocument();
+  });
+
   it("does not restore stale pending challenge rows after an inbox action", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const account = accountFixture("Liam");

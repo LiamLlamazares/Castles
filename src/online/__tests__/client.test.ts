@@ -1056,6 +1056,28 @@ describe("online client helpers", () => {
     });
   });
 
+  it("preserves trusted account challenge action rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({
+        error: {
+          code: "rate_limited",
+          message: "Too many online challenge requests were sent too quickly.",
+        },
+      }),
+    });
+
+    await expect(
+      acceptOnlineAccountChallenge({ token: "account-token" }, "challenge_samir_liam", fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 429,
+      code: "rate_limited",
+      message: "Too many online challenge requests were sent too quickly.",
+    });
+  });
+
   it("loads profiles, follows accounts, blocks accounts, and updates privacy with bearer auth", async () => {
     const rating = {
       schemaVersion: 1,

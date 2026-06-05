@@ -1299,7 +1299,10 @@ async function postOnlineAccountChallengeAction(
     }
   );
   if (!response.ok) {
-    throw new Error(`Could not ${action} online account challenge (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not ${action} online account challenge (${response.status})`
+    );
   }
 
   return validateOnlineChallengeResponse(await response.json(), `Online account challenge ${action}`);

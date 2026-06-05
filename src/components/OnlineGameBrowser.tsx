@@ -1387,11 +1387,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     } catch (error) {
       console.error("[OnlineGameBrowser] Failed to update account challenge", error);
       setSocialMessage(
-        action === "accept"
-          ? "Could not accept that challenge."
-          : action === "decline"
-            ? "Could not decline that challenge."
-            : "Could not cancel that challenge."
+        onlineRequestErrorMessage(error) ??
+          (action === "accept"
+            ? "Could not accept that challenge."
+            : action === "decline"
+              ? "Could not decline that challenge."
+              : "Could not cancel that challenge.")
       );
     } finally {
       setAccountChallengeActionById((current) => {
