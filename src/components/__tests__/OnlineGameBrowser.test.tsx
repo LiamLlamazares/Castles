@@ -5432,6 +5432,8 @@ describe("OnlineGameBrowser", () => {
     expect(within(row).getByRole("img", {
       name: "Board preview: 2 White pieces 2 Black pieces 1 White-controlled castles 1 Black-controlled castles",
     })).toBeInTheDocument();
+    expect(row).toHaveTextContent("Pieces W2 B2");
+    expect(row).toHaveTextContent("Castles W1 B1");
 
     fireEvent.click(within(row).getByRole("button", { name: "Spectate Ada vs Ben, game_public_active" }));
 

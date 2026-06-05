@@ -787,6 +787,18 @@ function boardPreviewImageLabel(game: OnlineGameSummary): string {
   ].join(" ");
 }
 
+function boardPreviewSummary(game: OnlineGameSummary): { pieces: string; castles: string } {
+  const preview = game.livePreview.boardPreview;
+  const whitePieces = preview.pieces.filter((piece) => piece.color === "w").length;
+  const blackPieces = preview.pieces.length - whitePieces;
+  const whiteCastles = preview.castles.filter((castle) => castle.owner === "w").length;
+  const blackCastles = preview.castles.length - whiteCastles;
+  return {
+    pieces: `Pieces W${whitePieces} B${blackPieces}`,
+    castles: `Castles W${whiteCastles} B${blackCastles}`,
+  };
+}
+
 function matchesResultFilter(summary: OnlineGameSummary, resultFilter: OnlineBrowserResultFilter): boolean {
   if (resultFilter === "all") return true;
   if (!summary.result) return false;
@@ -2479,6 +2491,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const boardPreview = game.livePreview.boardPreview;
     const previewCells = boardPreviewCells(boardPreview.radius);
     const boardPreviewLabel = boardPreviewImageLabel(game);
+    const boardPreviewText = boardPreviewSummary(game);
     const rowAriaLabel = isArchivedGame
       ? `${white} vs ${black} replay ${game.gameId}, ${resultLabel ?? "completed game"}`
       : `${options.featured ? `${featuredKicker} ` : ""}${white} vs ${black} ${game.gameId}`;
@@ -2489,49 +2502,55 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         className={className}
         aria-label={rowAriaLabel}
       >
-        <div className="online-game-board-preview">
-          <svg viewBox="0 0 100 100" role="img" aria-label={boardPreviewLabel} focusable="false">
-            <g className="online-game-board-preview-cells">
-              {previewCells.map((hex) => {
-                const point = boardPreviewPoint(hex, boardPreview.radius);
-                return <circle key={`${hex.q},${hex.r},${hex.s}`} cx={point.x} cy={point.y} r="1.15" />;
-              })}
-            </g>
-            <g className="online-game-board-preview-castles">
-              {boardPreview.castles.map((castle) => {
-                const point = boardPreviewPoint(castle, boardPreview.radius);
-                return (
-                  <rect
-                    key={`${castle.q},${castle.r},${castle.s}`}
-                    className={`owner-${castle.owner}`}
-                    x={point.x - 2.2}
-                    y={point.y - 2.2}
-                    width="4.4"
-                    height="4.4"
-                    rx="0.8"
-                  />
-                );
-              })}
-            </g>
-            <g className="online-game-board-preview-pieces">
-              {boardPreview.pieces.map((piece) => {
-                const point = boardPreviewPoint(piece, boardPreview.radius);
-                return (
-                  <g
-                    key={`${piece.q},${piece.r},${piece.s},${piece.color},${piece.type}`}
-                    className={`piece-${piece.color}`}
-                  >
-                    <circle cx={point.x} cy={point.y} r={piece.type === PieceType.Monarch ? 3.5 : 2.8} />
-                    {piece.type === PieceType.Monarch && (
-                      <text x={point.x} y={point.y + 1.35} textAnchor="middle">
-                        {PIECE_PREVIEW_LABELS[piece.type]}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-            </g>
-          </svg>
+        <div className="online-game-board-preview-stack">
+          <div className="online-game-board-preview">
+            <svg viewBox="0 0 100 100" role="img" aria-label={boardPreviewLabel} focusable="false">
+              <g className="online-game-board-preview-cells">
+                {previewCells.map((hex) => {
+                  const point = boardPreviewPoint(hex, boardPreview.radius);
+                  return <circle key={`${hex.q},${hex.r},${hex.s}`} cx={point.x} cy={point.y} r="1.15" />;
+                })}
+              </g>
+              <g className="online-game-board-preview-castles">
+                {boardPreview.castles.map((castle) => {
+                  const point = boardPreviewPoint(castle, boardPreview.radius);
+                  return (
+                    <rect
+                      key={`${castle.q},${castle.r},${castle.s}`}
+                      className={`owner-${castle.owner}`}
+                      x={point.x - 2.2}
+                      y={point.y - 2.2}
+                      width="4.4"
+                      height="4.4"
+                      rx="0.8"
+                    />
+                  );
+                })}
+              </g>
+              <g className="online-game-board-preview-pieces">
+                {boardPreview.pieces.map((piece) => {
+                  const point = boardPreviewPoint(piece, boardPreview.radius);
+                  return (
+                    <g
+                      key={`${piece.q},${piece.r},${piece.s},${piece.color},${piece.type}`}
+                      className={`piece-${piece.color}`}
+                    >
+                      <circle cx={point.x} cy={point.y} r={piece.type === PieceType.Monarch ? 3.5 : 2.8} />
+                      {piece.type === PieceType.Monarch && (
+                        <text x={point.x} y={point.y + 1.35} textAnchor="middle">
+                          {PIECE_PREVIEW_LABELS[piece.type]}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+              </g>
+            </svg>
+          </div>
+          <div className="online-game-board-preview-summary" aria-hidden="true">
+            <span>{boardPreviewText.pieces}</span>
+            <span>{boardPreviewText.castles}</span>
+          </div>
         </div>
         <div className="online-game-row-main">
           <div className="online-game-players">

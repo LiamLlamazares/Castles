@@ -180,6 +180,7 @@ Phase 6T Public live-preview read model, 2026-06-02:
 Phase 6U Public board previews and first-run onboarding, 2026-06-02:
 
 - Public summaries now carry a token-free board-preview contract, and Watch/Lobby/Archive rows render compact board thumbnails with accessible White/Black piece and castle-control counts.
+- Compact board previews now also show visible White/Black piece and castle-control counts, so mobile rows are scannable without relying only on the tiny thumbnail or screen-reader label.
 - Board-preview validation is bounded to the current online setup limits so public rows cannot carry oversized board payloads.
 - First-time local visitors see a short welcome dialog with a direct `Start Learn` recommendation and a `Play Now` dismissal. The modal uses the shared dialog focus trap and stores dismissal in localStorage.
 - Direct online game, spectator, and challenge links suppress the first-run prompt until the user returns to ordinary local play, so shared links are not interrupted.
