@@ -1936,12 +1936,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return publicActiveGames.filter((game) => gameHasFollowedParticipant(game, followedDisplayNames));
   }, [followedDisplayNames, friendFilterActive, publicActiveGames]);
   const accountChallengeByOpponentDisplayName = React.useMemo(() => {
+    const challengeRowPriority = (item: OnlineAccountChallengeListItem): number => {
+      if (item.summary.status === "pending" && item.role === "challenged") return 0;
+      if (item.summary.status === "pending" && item.role === "challenger") return 1;
+      if (item.summary.status === "accepted" && item.summary.gameId) return 2;
+      return 3;
+    };
     const challenges = new Map<string, OnlineAccountChallengeListItem>();
     for (const item of accountChallenges) {
-      if (item.summary.status !== "pending") continue;
+      const itemPriority = challengeRowPriority(item);
+      if (itemPriority > 2) continue;
       const key = normalizeDisplayNameKey(challengeOpponentName(item));
       const existing = challenges.get(key);
-      if (!existing || (existing.role !== "challenged" && item.role === "challenged")) {
+      if (!existing || itemPriority < challengeRowPriority(existing)) {
         challenges.set(key, item);
       }
     }
@@ -3533,9 +3540,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const privacyControlDisabled = privacyStatus !== "ready" || socialAction === "privacy";
   const socialProfileKey = socialProfile ? normalizeDisplayNameKey(socialProfile.displayName) : null;
   const socialProfileLiveGame = socialProfileKey ? liveGameByRegisteredDisplayName.get(socialProfileKey) ?? null : null;
-  const socialProfilePendingChallenge = socialProfileKey
+  const socialProfileAccountChallenge = socialProfileKey
     ? accountChallengeByOpponentDisplayName.get(socialProfileKey)
     : undefined;
+  const socialProfilePendingChallenge =
+    socialProfileAccountChallenge?.summary.status === "pending" ? socialProfileAccountChallenge : undefined;
+  const socialProfileAcceptedChallenge =
+    socialProfileAccountChallenge?.summary.status === "accepted" ? socialProfileAccountChallenge : undefined;
+  const socialProfileAcceptedChallengeGameId = socialProfileAcceptedChallenge?.summary.gameId;
   const socialProfileLiveGameWhite = socialProfileLiveGame
     ? participantName(socialProfileLiveGame.participants, "w")
     : "";
@@ -4033,7 +4045,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 {onlineNowRailProfiles.map((profile) => {
                   const profileKey = normalizeDisplayNameKey(profile.displayName);
                   const liveGame = liveGameByFollowedDisplayName.get(profileKey);
-                  const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+                  const accountChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+                  const pendingChallenge = accountChallenge?.summary.status === "pending" ? accountChallenge : undefined;
+                  const acceptedChallenge = accountChallenge?.summary.status === "accepted" ? accountChallenge : undefined;
+                  const acceptedChallengeGameId = acceptedChallenge?.summary.gameId;
                   const canInteractWithProfile = !profile.relationship.blocked && !profile.relationship.self;
                   const pinned = isProfilePinned(profile, pinnedFollowingDisplayNames);
                   const liveGameWhite = liveGame ? participantName(liveGame.participants, "w") : "";
@@ -4054,6 +4069,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           {pendingChallenge && (
                             <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
                           )}
+                          {acceptedChallengeGameId && <span>Game ready</span>}
                         </div>
                       </div>
                       <div className="online-browser-online-now-actions">
@@ -4067,7 +4083,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Watch
                           </button>
                         )}
-                        {!pendingChallenge && onChallengeAccount && canInteractWithProfile && (
+                        {acceptedChallengeGameId && onRejoinAccountChallengeGame && (
+                          <button
+                            type="button"
+                            className="online-browser-button primary"
+                            onClick={() => onRejoinAccountChallengeGame(acceptedChallengeGameId, acceptedChallenge.summary.visibility)}
+                            disabled={rejoiningAccountGameId === acceptedChallengeGameId}
+                            aria-label={`Join accepted challenge game ${acceptedChallengeGameId} against ${profile.displayName} from online now`}
+                          >
+                            {rejoiningAccountGameId === acceptedChallengeGameId ? "Joining..." : "Join Game"}
+                          </button>
+                        )}
+                        {!accountChallenge && onChallengeAccount && canInteractWithProfile && (
                           <button
                             type="button"
                             className="online-browser-button neutral"
@@ -4078,7 +4105,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Challenge
                           </button>
                         )}
-                        {!pendingChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
+                        {!accountChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
                           <button
                             type="button"
                             className="online-browser-button subtle"
@@ -4296,6 +4323,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   {socialProfilePendingChallenge && (
                     <span>{socialProfilePendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
                   )}
+                  {socialProfileAcceptedChallengeGameId && <span>Game ready</span>}
                 </div>
               </div>
               {!socialProfile.relationship.self && (
@@ -4336,7 +4364,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           Watch
                         </button>
                       )}
-                      {!socialProfilePendingChallenge && onChallengeAccount && (
+                      {socialProfileAcceptedChallengeGameId && onRejoinAccountChallengeGame && (
+                        <button
+                          type="button"
+                          className="online-browser-button primary"
+                          onClick={() => onRejoinAccountChallengeGame(
+                            socialProfileAcceptedChallengeGameId,
+                            socialProfileAcceptedChallenge.summary.visibility
+                          )}
+                          disabled={rejoiningAccountGameId === socialProfileAcceptedChallengeGameId}
+                          aria-label={`Join accepted challenge game ${socialProfileAcceptedChallengeGameId} against ${socialProfile.displayName}`}
+                        >
+                          {rejoiningAccountGameId === socialProfileAcceptedChallengeGameId ? "Joining..." : "Join Game"}
+                        </button>
+                      )}
+                      {!socialProfileAccountChallenge && onChallengeAccount && (
                         <button
                           type="button"
                           className="online-browser-button neutral"
@@ -4347,7 +4389,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           {socialAction === "challenge" ? "Challenging" : "Challenge"}
                         </button>
                       )}
-                      {!socialProfilePendingChallenge && onChallengeAccount && socialProfileHeadToHeadRematchGame && (
+                      {!socialProfileAccountChallenge && onChallengeAccount && socialProfileHeadToHeadRematchGame && (
                         <button
                           type="button"
                           className="online-browser-button neutral"
@@ -4361,7 +4403,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           Rematch
                         </button>
                       )}
-                      {!socialProfilePendingChallenge && onCopyChallengeAccountInvite && (
+                      {!socialProfileAccountChallenge && onCopyChallengeAccountInvite && (
                         <button
                           type="button"
                           className="online-browser-button subtle"
@@ -4477,7 +4519,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 {visibleFollowingProfiles.map((profile) => {
                   const profileKey = normalizeDisplayNameKey(profile.displayName);
                   const liveGame = liveGameByFollowedDisplayName.get(profileKey);
-                  const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+                  const accountChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+                  const pendingChallenge = accountChallenge?.summary.status === "pending" ? accountChallenge : undefined;
+                  const acceptedChallenge = accountChallenge?.summary.status === "accepted" ? accountChallenge : undefined;
+                  const acceptedChallengeGameId = acceptedChallenge?.summary.gameId;
                   const pendingChallengeId = pendingChallenge?.summary.challengeId;
                   const pendingChallengeAction = pendingChallengeId
                     ? accountChallengeActionById[pendingChallengeId]
@@ -4513,6 +4558,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           {pendingChallenge && (
                             <span>{pendingChallenge.role === "challenged" ? "Incoming challenge" : "Challenge sent"}</span>
                           )}
+                          {acceptedChallengeGameId && <span>Game ready</span>}
                           <span>{formatRelationshipLabel(profile)}</span>
                           {privateNote && <span>Private note</span>}
                         </div>
@@ -4605,7 +4651,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             {pendingChallengeAction === "cancel" ? "Cancelling" : "Cancel"}
                           </button>
                         )}
-                        {!pendingChallenge && onChallengeAccount && canInteractWithProfile && (
+                        {acceptedChallengeGameId && onRejoinAccountChallengeGame && (
+                          <button
+                            type="button"
+                            className="online-browser-button primary"
+                            onClick={() => onRejoinAccountChallengeGame(acceptedChallengeGameId, acceptedChallenge.summary.visibility)}
+                            disabled={rejoiningAccountGameId === acceptedChallengeGameId}
+                            aria-label={`Join accepted challenge game ${acceptedChallengeGameId} against ${profile.displayName}`}
+                          >
+                            {rejoiningAccountGameId === acceptedChallengeGameId ? "Joining..." : "Join Game"}
+                          </button>
+                        )}
+                        {!accountChallenge && onChallengeAccount && canInteractWithProfile && (
                           <button
                             type="button"
                             className="online-browser-button neutral"
@@ -4616,7 +4673,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Challenge
                           </button>
                         )}
-                        {!pendingChallenge && onChallengeAccount && canInteractWithProfile && latestHeadToHeadRematchGame && (
+                        {!accountChallenge && onChallengeAccount && canInteractWithProfile && latestHeadToHeadRematchGame && (
                           <button
                             type="button"
                             className="online-browser-button neutral"
@@ -4630,7 +4687,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             Rematch
                           </button>
                         )}
-                        {!pendingChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
+                        {!accountChallenge && onCopyChallengeAccountInvite && canInteractWithProfile && (
                           <button
                             type="button"
                             className="online-browser-button subtle"
