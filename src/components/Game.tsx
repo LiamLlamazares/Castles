@@ -12,6 +12,7 @@ import { useAIOpponent, AIOpponentConfig } from "../hooks/useAIOpponent";
 import { usePersistence } from "../hooks/usePersistence";
 import { useTooltip } from "../hooks/useTooltip";
 import ControlPanel from "./ControlPanel";
+import type { PlayerIdentity } from "./ControlPanel";
 import HamburgerMenu from "./HamburgerMenu";
 import { BoardContainer } from "./Board/BoardContainer";
 import { GameHUD } from "./HUD/GameHUD";
@@ -26,7 +27,7 @@ import { startingLayout, startingBoard, allPieces } from "../ConstantImports";
 import { WinCondition } from "../Classes/Systems/WinCondition";
 import { Sanctuary } from "../Classes/Entities/Sanctuary";
 import { PhoenixRecord } from "../Classes/Core/GameState";
-import { PieceTheme } from "../Constants";
+import { Color, PieceTheme } from "../Constants";
 import type { OnlineClientSession } from "../online/types";
 import type {
   OnlineGameVisibility,
@@ -110,6 +111,8 @@ interface GameBoardProps {
   pieceTheme?: PieceTheme;
   opponentConfig?: AIOpponentConfig;
   onlineSession?: OnlineClientSession;
+  onlineAccountDisplayName?: string | null;
+  onOpenOnlineAccount?: () => void;
   initialVictoryPoints?: { w: number; b: number };
   showNavigationMenu?: boolean;
   showTooltipHint?: boolean;
@@ -165,6 +168,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   pieceTheme = "Castles",
   opponentConfig,
   onlineSession,
+  onlineAccountDisplayName,
+  onOpenOnlineAccount,
   showNavigationMenu = true,
   showTooltipHint: shouldShowTooltipHint = true,
   onTutorialEvent
@@ -867,6 +872,47 @@ const InnerGame: React.FC<GameBoardProps> = ({
   }, [castles, graveyard.length, isTutorialMode, moveHistory, onTutorialEvent, pieces.length, sanctuaries, turnPhase]);
 
   const [activeAbility, setActiveAbility] = React.useState<import('../Constants').AbilityType | null>(null);
+  const accountChipName = onlineAccountDisplayName?.trim() || "Guest";
+  const createHumanIdentity = React.useCallback((label: string, canOpenAccount: boolean): PlayerIdentity => ({
+    label,
+    kind: "human",
+    ...(canOpenAccount && onOpenOnlineAccount ? { onClick: onOpenOnlineAccount } : {}),
+  }), [onOpenOnlineAccount]);
+  const playerIdentities = React.useMemo<Record<Color, PlayerIdentity>>(() => {
+    const botIdentity: PlayerIdentity = { label: "Bot", kind: "bot" };
+
+    if (onlineSession?.role === "player") {
+      const playerColor = onlineSession.playerColor;
+      return {
+        w: playerColor === "w"
+          ? createHumanIdentity(accountChipName, true)
+          : createHumanIdentity("Opponent", false),
+        b: playerColor === "b"
+          ? createHumanIdentity(accountChipName, true)
+          : createHumanIdentity("Opponent", false),
+      };
+    }
+
+    if (onlineSession?.role === "spectator") {
+      return {
+        w: createHumanIdentity("White", false),
+        b: createHumanIdentity("Black", false),
+      };
+    }
+
+    if (opponentConfig?.type && opponentConfig.type !== "human") {
+      const aiColor = opponentConfig.aiColor;
+      return {
+        w: aiColor === "w" ? botIdentity : createHumanIdentity(accountChipName, true),
+        b: aiColor === "b" ? botIdentity : createHumanIdentity(accountChipName, true),
+      };
+    }
+
+    return {
+      w: createHumanIdentity(onlineAccountDisplayName?.trim() || "Guest 1", true),
+      b: createHumanIdentity("Guest 2", false),
+    };
+  }, [accountChipName, createHumanIdentity, onlineAccountDisplayName, onlineSession, opponentConfig]);
   const shellClasses = [
     "game-shell",
     isTutorialMode ? "tutorial-game-shell" : "",
@@ -981,6 +1027,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           isActionPending={isOnlineActionPaused}
           viewNodeId={viewNodeId}
           victoryPoints={victoryPoints}
+          playerIdentities={playerIdentities}
         />
       )}
 

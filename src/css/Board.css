@@ -465,6 +465,55 @@ body {
 
 /* Player section styling is handled by the base .player-section class */
 
+.player-clock-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.player-identity-badge {
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid rgba(31, 36, 35, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 248, 223, 0.82);
+  color: #1f2423;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.player-identity-badge.bot {
+  color: #34255e;
+  background: rgba(230, 222, 255, 0.86);
+}
+
+.player-identity-badge.interactive {
+  cursor: pointer;
+}
+
+.player-identity-badge.interactive:hover {
+  border-color: rgba(31, 36, 35, 0.28);
+  background: #fff7cf;
+}
+
+.player-identity-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Notation section takes remaining space */
 .notation-section {
   flex: 1;

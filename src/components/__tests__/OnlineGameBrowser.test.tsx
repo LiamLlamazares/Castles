@@ -348,7 +348,13 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("button", { name: "Online Archive" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("creates an online account from the Online page account panel", async () => {
+  async function openAccountDialog() {
+    await screen.findByText("No lobby listings yet.");
+    fireEvent.click(screen.getByRole("button", { name: "Open account sign in" }));
+    return screen.findByRole("dialog", { name: "Online account" });
+  }
+
+  it("creates an online account from the Online account dialog", async () => {
     const onCreateAccount = vi.fn().mockResolvedValue(undefined);
     render(
       <OnlineGameBrowser
@@ -362,7 +368,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    await screen.findByText("No lobby listings yet.");
+    const dialog = await openAccountDialog();
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Liam" },
     });
@@ -373,9 +379,10 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onCreateAccount).toHaveBeenCalledWith("Liam", "account-password"));
     expect(await screen.findByText("Online account created.")).toBeInTheDocument();
+    expect(dialog).toBeInTheDocument();
   });
 
-  it("surfaces trusted server errors when account creation fails", async () => {
+  it("surfaces trusted server errors when account creation fails in the account dialog", async () => {
     const onCreateAccount = vi.fn().mockRejectedValue(
       new OnlineRequestError(400, "bad_request", "That display name is already taken.")
     );
@@ -391,7 +398,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    await screen.findByText("No lobby listings yet.");
+    await openAccountDialog();
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Liam" },
     });
@@ -405,7 +412,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByText("Could not create that online account name.")).not.toBeInTheDocument();
   });
 
-  it("signs into an online account from the Online page account panel", async () => {
+  it("signs into an online account from the Online account dialog", async () => {
     const onSignInAccount = vi.fn().mockResolvedValue(undefined);
     render(
       <OnlineGameBrowser
@@ -419,7 +426,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    await screen.findByText("No lobby listings yet.");
+    await openAccountDialog();
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Liam" },
     });
@@ -432,7 +439,7 @@ describe("OnlineGameBrowser", () => {
     expect(await screen.findByText("Signed in.")).toBeInTheDocument();
   });
 
-  it("surfaces trusted server errors when account sign-in fails", async () => {
+  it("surfaces trusted server errors when account sign-in fails in the account dialog", async () => {
     const onSignInAccount = vi.fn().mockRejectedValue(
       new OnlineRequestError(401, "unauthorized", "That display name or password did not match.")
     );
@@ -448,7 +455,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    await screen.findByText("No lobby listings yet.");
+    await openAccountDialog();
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "Liam" },
     });
@@ -462,7 +469,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByText("Could not sign in with that display name and password.")).not.toBeInTheDocument();
   });
 
-  it("promotes account sign-in actions in the Online navigation when Google is enabled", async () => {
+  it("opens account sign-in from a single Online navigation identity chip when Google is enabled", async () => {
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -485,18 +492,24 @@ describe("OnlineGameBrowser", () => {
     );
 
     const nav = screen.getByRole("navigation", { name: "Online navigation" });
-    const accountBar = await within(nav).findByRole("group", { name: "Account" });
-    const link = within(accountBar).getByRole("link", { name: "Continue with Google" });
-    expect(link).toHaveAttribute("href", "/api/online/account/oauth/google/start");
-    expect(within(accountBar).getByRole("button", { name: "Create account" })).toBeInTheDocument();
-    expect(within(accountBar).getByRole("button", { name: "Sign in with password" })).toBeInTheDocument();
+    const accountButton = await within(nav).findByRole("button", { name: "Open account sign in" });
+    expect(accountButton).toHaveTextContent("Guest");
+    expect(within(nav).queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "Create account" })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "Sign in with password" })).not.toBeInTheDocument();
 
-    fireEvent.click(within(accountBar).getByRole("button", { name: "Create account" }));
+    fireEvent.click(accountButton);
+
+    const dialog = await screen.findByRole("dialog", { name: "Online account" });
+    const link = within(dialog).getByRole("link", { name: "Continue with Google" });
+    expect(link).toHaveAttribute("href", "/api/online/account/oauth/google/start");
+    expect(within(dialog).getByRole("button", { name: "Create Account" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Sign In" })).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByLabelText("Display name")).toHaveFocus());
   });
 
-  it("hides Google sign-in when the provider is disabled", async () => {
+  it("hides the default account form and shows disabled Google sign-in only in the account dialog", async () => {
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -514,7 +527,15 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     expect(screen.queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();
-    expect(screen.getByText("Google sign-in is not configured on this server.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Display name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Online account" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open account sign in" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Online account" });
+    expect(within(dialog).queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Google sign-in is not configured on this server.")).toBeInTheDocument();
   });
 
   it("shows account session status and signs out everywhere", async () => {

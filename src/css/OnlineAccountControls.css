@@ -1,0 +1,254 @@
+.online-account-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  max-width: 190px;
+  padding: 7px 11px;
+  border: 1px solid rgba(31, 36, 35, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 248, 223, 0.9);
+  color: #1f2423;
+  box-shadow: 0 8px 20px rgba(31, 36, 35, 0.12);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.online-account-chip:hover {
+  background: #fff7cf;
+  border-color: rgba(31, 36, 35, 0.3);
+}
+
+.online-account-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-identity-icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+}
+
+.player-identity-icon.human::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.player-identity-icon.human::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  bottom: 2px;
+  width: 12px;
+  height: 8px;
+  border-radius: 8px 8px 4px 4px;
+  background: currentColor;
+}
+
+.player-identity-icon.bot {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 5px;
+}
+
+.player-identity-icon.bot::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 4px;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 7px 0 0 currentColor;
+}
+
+.player-identity-icon.bot::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 7px;
+  width: 2px;
+  height: 5px;
+  background: currentColor;
+}
+
+.online-account-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.56);
+}
+
+.online-account-dialog {
+  box-sizing: border-box;
+  width: min(460px, 100%);
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(28, 30, 30, 0.98);
+  color: #f7f1d6;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.4);
+}
+
+.online-account-dialog-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.online-account-dialog-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: #9ed0c2;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.online-account-dialog h2 {
+  margin: 0;
+  color: #f7f1d6;
+  font-size: 1.32rem;
+  letter-spacing: 0;
+}
+
+.online-account-dialog-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f7f1d6;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.online-account-dialog-description,
+.online-account-dialog-signed-in p {
+  margin: 12px 0 0;
+  color: #d9d0b8;
+  line-height: 1.4;
+}
+
+.online-account-dialog-signed-in strong {
+  display: block;
+  margin-top: 6px;
+  color: #f7f1d6;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+
+.online-account-google-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  margin-top: 14px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: #f7f1d6;
+  color: #141414;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.online-account-dialog-oauth-message,
+.online-account-dialog-message {
+  margin: 12px 0 0;
+  color: #9ed0c2;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.online-account-dialog-oauth-message.error,
+.online-account-dialog-message.error {
+  color: #ffcf8a;
+}
+
+.online-account-dialog-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.online-account-dialog-form label {
+  display: grid;
+  gap: 6px;
+  color: #d9d0b8;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.online-account-dialog-form input {
+  min-height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+}
+
+.online-account-dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.online-account-dialog-actions.single {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 16px;
+}
+
+.online-account-dialog-button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.online-account-dialog-button.primary {
+  background: #70d6a1;
+  color: #102018;
+}
+
+.online-account-dialog-button.subtle {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f1d6;
+}
+
+.online-account-dialog-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}

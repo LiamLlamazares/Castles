@@ -1,5 +1,6 @@
 import React from "react";
 import AppShellNav, { AppShellDestination } from "./AppShellNav";
+import { OnlineAccountButton, OnlineAccountDialog } from "./OnlineAccountControls";
 import {
   buildSpectatorUrl,
   copyOnlineInviteUrl,
@@ -1084,11 +1085,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
   const [isSeekLoadingMore, setIsSeekLoadingMore] = React.useState(false);
   const [seekNextCursor, setSeekNextCursor] = React.useState<string | undefined>();
-  const [accountDisplayName, setAccountDisplayName] = React.useState("");
-  const [accountPassword, setAccountPassword] = React.useState("");
+  const [isAccountDialogOpen, setIsAccountDialogOpen] = React.useState(false);
   const [accountActionMessage, setAccountActionMessage] = React.useState("");
-  const [accountOAuthProviders, setAccountOAuthProviders] = React.useState<OnlineAccountOAuthProvidersResponse["providers"]>([]);
-  const [accountOAuthStatus, setAccountOAuthStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
   const [accountSessions, setAccountSessions] = React.useState<OnlineAccountSessionSummary[]>([]);
   const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -1162,9 +1160,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
   const gameSearchInputRef = React.useRef<HTMLInputElement>(null);
   const deleteAccountConfirmButtonRef = React.useRef<HTMLButtonElement>(null);
-  const accountPanelRef = React.useRef<HTMLElement>(null);
-  const accountDisplayNameInputRef = React.useRef<HTMLInputElement>(null);
-  const accountPasswordInputRef = React.useRef<HTMLInputElement>(null);
   const socialProfileCardRef = React.useRef<HTMLElement>(null);
   const accountChallengesSectionRef = React.useRef<HTMLElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
@@ -1263,48 +1258,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     onClearRecentOnlineGames?.();
     archiveTabButtonRef.current?.focus();
   }, [onClearRecentOnlineGames]);
-
-  const handleCreateAccountSubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const displayName = accountDisplayName.trim();
-    if (!displayName || accountPassword.length < 8 || !onCreateAccount) return;
-    setAccountActionMessage("");
-    try {
-      await onCreateAccount(displayName, accountPassword);
-      setAccountDisplayName("");
-      setAccountPassword("");
-      setAccountActionMessage("Online account created.");
-    } catch (error) {
-      setAccountActionMessage(onlineRequestErrorMessage(error) ?? "Could not create that online account name.");
-    }
-  }, [accountDisplayName, accountPassword, onCreateAccount]);
-
-  const handleSignInAccountClick = React.useCallback(async () => {
-    const displayName = accountDisplayName.trim();
-    if (!displayName || accountPassword.length < 8 || !onSignInAccount) return;
-    setAccountActionMessage("");
-    try {
-      await onSignInAccount(displayName, accountPassword);
-      setAccountDisplayName("");
-      setAccountPassword("");
-      setAccountActionMessage("Signed in.");
-    } catch (error) {
-      setAccountActionMessage(
-        onlineRequestErrorMessage(error) ?? "Could not sign in with that display name and password."
-      );
-    }
-  }, [accountDisplayName, accountPassword, onSignInAccount]);
-
-  const focusAccountForm = React.useCallback((mode: "create" | "sign-in") => {
-    accountPanelRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-    window.setTimeout(() => {
-      if (mode === "sign-in" && accountDisplayName.trim()) {
-        accountPasswordInputRef.current?.focus();
-        return;
-      }
-      accountDisplayNameInputRef.current?.focus();
-    }, 0);
-  }, [accountDisplayName]);
 
   const refreshAccountSessions = React.useCallback(async () => {
     if (!account || !loadAccountSessions) return;
@@ -1460,27 +1413,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       void refreshAccountSessions();
     }
   }, [onDeleteAccount, refreshAccountSessions]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setAccountOAuthProviders([]);
-    setAccountOAuthStatus(!account && loadAccountOAuthProviders ? "loading" : "idle");
-    if (account || !loadAccountOAuthProviders) return;
-    loadAccountOAuthProviders()
-      .then((response) => {
-        if (cancelled) return;
-        setAccountOAuthProviders(response.providers);
-        setAccountOAuthStatus("ready");
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.error("[OnlineGameBrowser] Failed to load account sign-in providers", error);
-        setAccountOAuthStatus("error");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account?.accountId, loadAccountOAuthProviders]);
 
   React.useEffect(() => {
     accountSessionsRequestIdRef.current += 1;
@@ -3587,18 +3519,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? "error"
       : "",
   ].filter(Boolean).join(" ");
-  const googleOAuthProviderSummary = accountOAuthProviders.find((provider) => provider.provider === "google");
-  const googleOAuthProvider = googleOAuthProviderSummary?.enabled ? googleOAuthProviderSummary : undefined;
-  const accountOAuthPanelMessage =
-    !account && accountOAuthStatus === "ready" && googleOAuthProviderSummary && !googleOAuthProvider
-      ? "Google sign-in is not configured on this server."
-      : !account && accountOAuthStatus === "error"
-        ? "Could not check Google sign-in availability."
-        : "";
-  const accountOAuthPanelMessageClassName = [
-    "online-browser-account-oauth-status",
-    accountOAuthStatus === "error" || (googleOAuthProviderSummary && !googleOAuthProvider) ? "error" : "",
-  ].filter(Boolean).join(" ");
   const socialLookupDisplayName = socialLookupName.trim();
   const socialBusy = socialLookupStatus === "loading" || socialAction !== undefined;
   const canSubmitSocialLookup = socialLookupDisplayName.length >= 2 && !socialBusy;
@@ -3653,72 +3573,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? `${formatCount(pendingIncomingChallengeCount, "incoming challenge")} awaiting your response`
       : `${formatCount(pendingOutgoingChallengeCount, "sent challenge")} awaiting response`;
   const accountNavSlot = (
-    <div
-      className={`online-browser-account-topbar ${account ? "signed-in" : "signed-out"}`}
-      role="group"
-      aria-label="Account"
-    >
-      <span className="online-browser-account-topbar-label">Account</span>
-      {account ? (
-        <>
-          <span className="online-browser-account-topbar-name" title={account.displayName}>{account.displayName}</span>
-          <button
-            type="button"
-            className="online-browser-account-topbar-button"
-            onClick={onSignOutAccount}
-            disabled={!onSignOutAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
-            title="Sign out"
-          >
-            <span className="online-browser-account-action-label">
-              {accountStatus === "signing-out" ? "Signing out" : "Sign out"}
-            </span>
-            <span className="online-browser-account-action-short" aria-hidden="true">Out</span>
-          </button>
-        </>
-      ) : (
-        <>
-          {googleOAuthProvider?.startUrl ? (
-            <a
-              className="online-browser-account-topbar-button online-browser-account-topbar-oauth"
-              href={googleOAuthProvider.startUrl}
-              aria-label="Continue with Google"
-              title="Continue with Google"
-            >
-              <span className="online-browser-account-action-label">Google</span>
-              <span className="online-browser-account-action-short" aria-hidden="true">G</span>
-            </a>
-          ) : accountOAuthStatus === "loading" ? (
-            <span className="online-browser-account-topbar-status" title="Checking Google sign-in">
-              Checking Google
-            </span>
-          ) : accountOAuthStatus === "ready" && accountOAuthProviders.some((provider) => provider.provider === "google") ? (
-            <span className="online-browser-account-topbar-status" title="Google OAuth is not configured on this server">
-              Google unavailable
-            </span>
-          ) : null}
-          <button
-            type="button"
-            className="online-browser-account-topbar-button primary"
-            onClick={() => focusAccountForm("create")}
-            aria-label="Create account"
-            title="Create account"
-          >
-            <span className="online-browser-account-action-label">Create</span>
-            <span className="online-browser-account-action-short" aria-hidden="true">+</span>
-          </button>
-          <button
-            type="button"
-            className="online-browser-account-topbar-button"
-            onClick={() => focusAccountForm("sign-in")}
-            aria-label="Sign in with password"
-            title="Sign in with password"
-          >
-            <span className="online-browser-account-action-label">Sign in</span>
-            <span className="online-browser-account-action-short" aria-hidden="true">In</span>
-          </button>
-        </>
-      )}
-    </div>
+    <OnlineAccountButton
+      displayName={account?.displayName ?? "Guest"}
+      onClick={() => setIsAccountDialogOpen(true)}
+      ariaLabel="Open account sign in"
+      title="Open account sign in"
+      className="online-browser-account-chip"
+    />
   );
 
   return (
@@ -3735,38 +3596,36 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         endSlot={accountNavSlot}
       />
 
-      <section className="online-browser-account-panel" aria-label="Online account" ref={accountPanelRef}>
-        <div className="online-browser-account-copy">
-          <span className="online-browser-section-kicker">Account</span>
-          {account ? (
-            <>
-              <strong>{account.displayName}</strong>
-              <p>Your signed-in games appear in your account archive.</p>
-              {accountSessionCountLabel && (
-                <p className="online-browser-account-session-summary">
-                  {accountSessionCountLabel}
-                  {currentAccountSession ? ` Current session last used ${formatUpdatedAt(currentAccountSession.lastUsedAt)}.` : ""}
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              <strong>Create or sign in</strong>
-              <p>Use a display name and password to keep your online games attached across devices.</p>
-            </>
-          )}
-          {accountStatusMessage && (
-            <p className={accountStatusMessageClassName} role="status" aria-live="polite">
-              {accountStatusMessage}
-            </p>
-          )}
-          {accountOAuthPanelMessage && (
-            <p className={accountOAuthPanelMessageClassName} role="status" aria-live="polite">
-              {accountOAuthPanelMessage}
-            </p>
-          )}
-        </div>
-        {account ? (
+      <OnlineAccountDialog
+        isOpen={isAccountDialogOpen}
+        onClose={() => setIsAccountDialogOpen(false)}
+        account={account}
+        accountStatus={accountStatus}
+        accountError={accountError}
+        onCreateAccount={onCreateAccount}
+        onSignInAccount={onSignInAccount}
+        loadAccountOAuthProviders={loadAccountOAuthProviders}
+        onSignOutAccount={onSignOutAccount}
+      />
+
+      {account && (
+        <section className="online-browser-account-panel" aria-label="Online account">
+          <div className="online-browser-account-copy">
+            <span className="online-browser-section-kicker">Account</span>
+            <strong>{account.displayName}</strong>
+            <p>Your signed-in games appear in your account archive.</p>
+            {accountSessionCountLabel && (
+              <p className="online-browser-account-session-summary">
+                {accountSessionCountLabel}
+                {currentAccountSession ? ` Current session last used ${formatUpdatedAt(currentAccountSession.lastUsedAt)}.` : ""}
+              </p>
+            )}
+            {accountStatusMessage && (
+              <p className={accountStatusMessageClassName} role="status" aria-live="polite">
+                {accountStatusMessage}
+              </p>
+            )}
+          </div>
           <div className="online-browser-account-actions">
             <button
               type="button"
@@ -3803,62 +3662,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               Delete Account
             </button>
           </div>
-        ) : (
-          <form className="online-browser-account-form" onSubmit={handleCreateAccountSubmit}>
-            <label>
-              <span>Display name</span>
-              <input
-                ref={accountDisplayNameInputRef}
-                type="text"
-                value={accountDisplayName}
-                onChange={(event) => setAccountDisplayName(event.currentTarget.value)}
-                minLength={2}
-                maxLength={32}
-                autoComplete="nickname"
-              />
-            </label>
-            <label>
-              <span>Password</span>
-              <input
-                ref={accountPasswordInputRef}
-                type="password"
-                value={accountPassword}
-                onChange={(event) => setAccountPassword(event.currentTarget.value)}
-                minLength={8}
-                maxLength={128}
-                autoComplete="current-password"
-              />
-            </label>
-            <button
-              type="submit"
-              className="online-browser-button primary"
-              disabled={
-                !onCreateAccount ||
-                accountStatus === "creating" ||
-                accountStatus === "signing-in" ||
-                accountDisplayName.trim().length < 2 ||
-                accountPassword.length < 8
-              }
-            >
-              {accountStatus === "creating" ? "Creating..." : "Create Account"}
-            </button>
-            <button
-              type="button"
-              className="online-browser-button subtle"
-              onClick={handleSignInAccountClick}
-              disabled={
-                !onSignInAccount ||
-                accountStatus === "creating" ||
-                accountStatus === "signing-in" ||
-                accountDisplayName.trim().length < 2 ||
-                accountPassword.length < 8
-              }
-            >
-              {accountStatus === "signing-in" ? "Signing In..." : "Sign In"}
-            </button>
-          </form>
-        )}
-      </section>
+        </section>
+      )}
       {account && isDeleteAccountConfirmOpen && (
         <section
           className="online-browser-account-delete-panel"

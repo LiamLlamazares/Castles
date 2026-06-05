@@ -68,6 +68,33 @@ describe("ControlPanel", () => {
     expect(screen.queryByRole("button", { name: "Watch" })).not.toBeInTheDocument();
   });
 
+  it("shows human and bot identity badges next to the player clocks", () => {
+    const onOpenAccount = vi.fn();
+    const OnlineControlPanel = ControlPanel as React.ComponentType<any>;
+
+    render(
+      <OnlineControlPanel
+        {...baseProps}
+        playerIdentities={{
+          w: { label: "Guest", kind: "human", onClick: onOpenAccount },
+          b: { label: "Bot", kind: "bot" },
+        }}
+      />
+    );
+
+    const whiteBadge = screen.getByRole("button", { name: "Guest human player. Open account sign in" });
+    const blackBadge = screen.getByLabelText("Bot bot player");
+
+    expect(whiteBadge).toHaveTextContent("Guest");
+    expect(blackBadge).toHaveTextContent("Bot");
+    expect(whiteBadge.querySelector(".player-identity-icon.human")).not.toBeNull();
+    expect(blackBadge.querySelector(".player-identity-icon.bot")).not.toBeNull();
+
+    fireEvent.click(whiteBadge);
+
+    expect(onOpenAccount).toHaveBeenCalledOnce();
+  });
+
   it("calls visible save and library actions from the game panel", () => {
     const onSaveGame = vi.fn();
     const onOpenLibrary = vi.fn();

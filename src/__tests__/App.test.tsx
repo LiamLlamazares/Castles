@@ -74,6 +74,8 @@ vi.mock("../components/Game", () => ({
     analysisReturnLabel?: string;
     rematchLabel?: string;
     onRematch?: () => void | Promise<void>;
+    onlineAccountDisplayName?: string | null;
+    onOpenOnlineAccount?: () => void;
     onSaveGameToLibrary?: (pgn: string, status: "ongoing" | "complete" | "analysis") => Promise<unknown> | unknown;
     onLoadGame: (data: {
       board: unknown;
@@ -93,6 +95,7 @@ vi.mock("../components/Game", () => ({
       <div>Online session: {props.onlineSession?.role ?? "none"}</div>
       <div>Online visibility: {props.onlineSession?.visibility ?? "none"}</div>
       <div>Online spectator URL: {props.onlineSession?.spectatorUrl ?? "none"}</div>
+      <div>Game account: {props.onlineAccountDisplayName ?? "none"}</div>
       <div>
         Initial castle owners: {
           props.initialCastles
@@ -156,6 +159,11 @@ vi.mock("../components/Game", () => ({
           }}
         >
           {props.rematchLabel ?? "Rematch"}
+        </button>
+      )}
+      {props.onOpenOnlineAccount && (
+        <button type="button" onClick={props.onOpenOnlineAccount}>
+          Mock Open Account
         </button>
       )}
       {props.onSaveGameToLibrary && (
@@ -879,6 +887,33 @@ describe("App game setup lifecycle", () => {
 
     expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
     expect(screen.getByText("Game Ready")).toBeInTheDocument();
+  });
+
+  it("opens online account sign-in from the in-game account entry point", async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      if (String(url) === "/api/online/account/oauth/providers") {
+        return new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            providers: [{ provider: "google", enabled: false }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(screen.getByText("Game account: Guest")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Open Account" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Online account" });
+    expect(dialog).toHaveTextContent("Guest");
+    expect(screen.getByLabelText("Display name")).toHaveFocus();
+    expect(screen.getByText("Google sign-in is not configured on this server.")).toBeInTheDocument();
   });
 
   it("supports keyboard dismissal and focus wrapping in the first-run introduction", async () => {

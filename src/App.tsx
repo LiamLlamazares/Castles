@@ -6,6 +6,7 @@ import BoardEditor from './components/BoardEditor';
 import Tutorial from './components/Tutorial';
 import GameLibrary from './components/GameLibrary';
 import OnlineGameBrowser from './components/OnlineGameBrowser';
+import { OnlineAccountDialog } from './components/OnlineAccountControls';
 import InstallAppHint from './components/InstallAppHint';
 import RulesManualPage from './components/RulesManualPage';
 import AppShellNav, { AppShellDestination } from './components/AppShellNav';
@@ -429,6 +430,7 @@ function App() {
     resolveOnlineAccountSession() ? "checking" : "signed-out"
   );
   const [onlineAccountError, setOnlineAccountError] = useState<string | null>(null);
+  const [isOnlineAccountDialogOpen, setOnlineAccountDialogOpen] = useState(false);
   const [onlineRematchTarget, setOnlineRematchTarget] = useState<OnlineRematchTarget | null>(null);
   const [rejoiningAccountGameId, setRejoiningAccountGameId] = useState<string | null>(null);
   const [analysisReturn, setAnalysisReturn] = useState<AnalysisReturnState | null>(null);
@@ -436,7 +438,7 @@ function App() {
   const onlineChallengePollInFlightRef = useRef(false);
   const isSaveDialogOpen = saveGameDialog !== null;
   const isFirstRunIntroVisible = isFirstRunIntroOpen && !isRulesPage;
-  const isAppModalOpen = isSaveDialogOpen || isFirstRunIntroVisible;
+  const isAppModalOpen = isSaveDialogOpen || isFirstRunIntroVisible || isOnlineAccountDialogOpen;
   const onlineSnapshotVisibility = onlineSnapshot
     ? onlineVisibilityByGameId[onlineSnapshot.gameId]
     : undefined;
@@ -2585,6 +2587,8 @@ function App() {
               pieceTheme={gameConfig.pieceTheme}
               opponentConfig={gameConfig.opponentConfig}
               onlineSession={onlineSession}
+              onlineAccountDisplayName={onlineAccount?.displayName ?? "Guest"}
+              onOpenOnlineAccount={() => setOnlineAccountDialogOpen(true)}
               initialPoolTypes={gameConfig.initialPoolTypes}
             />
         </div>
@@ -2684,6 +2688,18 @@ function App() {
           onUpdateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}
         />
       )}
+
+      <OnlineAccountDialog
+        isOpen={isOnlineAccountDialogOpen}
+        onClose={() => setOnlineAccountDialogOpen(false)}
+        account={onlineAccount}
+        accountStatus={onlineAccountStatus}
+        accountError={onlineAccountError}
+        onCreateAccount={handleCreateOnlineAccount}
+        onSignInAccount={handleSignInOnlineAccount}
+        loadAccountOAuthProviders={fetchOnlineAccountOAuthProviders}
+        onSignOutAccount={handleSignOutOnlineAccount}
+      />
 
       {isFirstRunIntroVisible && (
         <div className="confirm-dialog-backdrop app-modal-backdrop first-run-intro-backdrop">

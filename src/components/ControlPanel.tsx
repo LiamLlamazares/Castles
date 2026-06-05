@@ -14,6 +14,7 @@ import type {
   OnlineGameVisibility,
   OnlinePlayerSettableGameVisibility,
 } from "../online/visibility";
+import { IdentityIcon, type IdentityKind } from "./OnlineAccountControls";
 
 // SVG import
 import trophyIcon from "../Assets/Images/misc/trophy.svg";
@@ -51,6 +52,13 @@ interface ControlPanelProps {
   isActionPending?: boolean;
   viewNodeId?: string | null;
   victoryPoints?: { w: number, b: number };
+  playerIdentities?: Partial<Record<Color, PlayerIdentity>>;
+}
+
+export interface PlayerIdentity {
+  label: string;
+  kind: IdentityKind;
+  onClick?: () => void;
 }
 
 function formatClockMs(ms: number): string {
@@ -104,6 +112,42 @@ const NoClock: React.FC<{ player: Color }> = ({ player }) => (
     --:--
   </div>
 );
+
+const PlayerIdentityBadge: React.FC<{ identity: PlayerIdentity }> = ({ identity }) => {
+  const ariaLabel = identity.onClick
+    ? `${identity.label} ${identity.kind} player. Open account sign in`
+    : `${identity.label} ${identity.kind} player`;
+  const content = (
+    <>
+      <IdentityIcon kind={identity.kind} />
+      <span className="player-identity-name">{identity.label}</span>
+    </>
+  );
+
+  if (identity.onClick) {
+    return (
+      <button
+        type="button"
+        className={`player-identity-badge ${identity.kind} interactive`}
+        onClick={identity.onClick}
+        aria-label={ariaLabel}
+        title="Open account sign in"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <span
+      className={`player-identity-badge ${identity.kind}`}
+      aria-label={ariaLabel}
+      title={identity.label}
+    >
+      {content}
+    </span>
+  );
+};
 
 const VPTrack: React.FC<{ vp: number, player: Color }> = ({ vp, player }) => {
   const filled = Math.max(0, Math.min(vp, VP_VICTORY_THRESHOLD));
@@ -226,12 +270,17 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   isActionPending = false,
   viewNodeId,
   victoryPoints,
+  playerIdentities,
 }) => {
   // Calculate phase index within current player's turn (0-4)
   const phaseIndex = turnCounter % PHASE_CYCLE_LENGTH;
   const isGameOver = !!winner;
   const arePlayControlsDisabled = isGameOver || isReadOnly || isActionPending;
   const moveCount = moveHistory.length;
+  const resolvedPlayerIdentities: Partial<Record<Color, PlayerIdentity>> = {
+    b: playerIdentities?.b,
+    w: playerIdentities?.w,
+  };
   const renderHistory = () => (
     <HistoryTable
       moveHistory={moveHistory}
@@ -249,7 +298,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
         {currentPlayer === "b" && !winner && (
           <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+        <div className="player-clock-row">
           {onlineClock ? (
             <OnlineClock clock={onlineClock} player="b" />
           ) : isOnline ? (
@@ -262,6 +311,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               player="b"
             />
           )}
+          {resolvedPlayerIdentities.b && <PlayerIdentityBadge identity={resolvedPlayerIdentities.b} />}
         </div>
       </div>
 
@@ -276,7 +326,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
 
       {/* White Player Section (Bottom) */}
       <div className="player-section white">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+        <div className="player-clock-row">
           {onlineClock ? (
             <OnlineClock clock={onlineClock} player="w" />
           ) : isOnline ? (
@@ -289,6 +339,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
               player="w"
             />
           )}
+          {resolvedPlayerIdentities.w && <PlayerIdentityBadge identity={resolvedPlayerIdentities.w} />}
         </div>
         {currentPlayer === "w" && !winner && (
           <TurnBanner color={currentPlayer} phase={turnPhase} phaseIndex={phaseIndex} />
