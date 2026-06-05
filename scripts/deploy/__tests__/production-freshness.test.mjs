@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   checkProductionFreshness,
+  formatProductionFreshnessResult,
   normalizeProductionBaseUrl,
 } from "../production-freshness.mjs";
 
@@ -69,5 +70,34 @@ describe("production freshness diagnostics", () => {
       port: 22,
       error: "connect timed out",
     });
+  });
+
+  it("reports whether the expected commit is already on the upstream branch", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () => okHealth("old-sha"),
+      getGitDeployStatus: async () => ({
+        status: "upstream_contains_expected",
+        branch: "online-action-log",
+        headCommit: "expected-sha",
+        upstream: "origin/online-action-log",
+        upstreamCommit: "expected-sha",
+      }),
+    });
+
+    expect(result.git).toEqual({
+      status: "upstream_contains_expected",
+      branch: "online-action-log",
+      headCommit: "expected-sha",
+      upstream: "origin/online-action-log",
+      upstreamCommit: "expected-sha",
+    });
+    expect(formatProductionFreshnessResult(result)).toContain(
+      "Git: expected commit is present on upstream origin/online-action-log (branch=online-action-log head=expected-sha upstreamCommit=expected-sha)",
+    );
+    expect(formatProductionFreshnessResult(result)).toContain(
+      "Diagnosis: expected commit is pushed to the tracked upstream, but production health is still serving old-sha.",
+    );
   });
 });

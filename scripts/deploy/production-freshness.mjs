@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process";
 import net from "node:net";
+import { promisify } from "node:util";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_SSH_TIMEOUT_MS = 10_000;
+const execFileAsync = promisify(execFile);
 
 export function normalizeProductionBaseUrl(baseUrl) {
   const value = String(baseUrl ?? "").trim();
@@ -45,6 +48,65 @@ export function checkTcpPort(host, port = 22, options = {}) {
   });
 }
 
+async function gitOutput(args, options = {}) {
+  const result = await execFileAsync("git", args, {
+    cwd: options.cwd,
+    timeout: options.timeoutMs ?? 5_000,
+    windowsHide: true,
+  });
+  return result.stdout.trim();
+}
+
+async function gitExitCode(args, options = {}) {
+  try {
+    await gitOutput(args, options);
+    return 0;
+  } catch (error) {
+    if (typeof error.code === "number") return error.code;
+    throw error;
+  }
+}
+
+export async function getGitDeployStatus(expectedCommit, options = {}) {
+  if (!expectedCommit) return { status: "not_checked" };
+  try {
+    const branch = await gitOutput(["branch", "--show-current"], options);
+    const headCommit = await gitOutput(["rev-parse", "HEAD"], options);
+    let upstream;
+    let upstreamCommit;
+    try {
+      upstream = await gitOutput(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], options);
+      upstreamCommit = await gitOutput(["rev-parse", "@{u}"], options);
+    } catch {
+      return {
+        status: "no_upstream",
+        branch: branch || "detached",
+        headCommit,
+      };
+    }
+
+    const containsExitCode = await gitExitCode(["merge-base", "--is-ancestor", expectedCommit, "@{u}"], options);
+    if (containsExitCode !== 0 && containsExitCode !== 1) {
+      return {
+        status: "unavailable",
+        error: `git merge-base returned exit code ${containsExitCode}`,
+      };
+    }
+    return {
+      status: containsExitCode === 0 ? "upstream_contains_expected" : "upstream_missing_expected",
+      branch: branch || "detached",
+      headCommit,
+      upstream,
+      upstreamCommit,
+    };
+  } catch (error) {
+    return {
+      status: "unavailable",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function checkProductionFreshness(options) {
   const baseUrl = normalizeProductionBaseUrl(options.baseUrl);
   const expectedCommit = options.expectedCommit;
@@ -73,7 +135,15 @@ export async function checkProductionFreshness(options) {
       : { status: "unreachable", host: options.sshHost, port, error: result.error ?? "connection failed" };
   }
 
-  return {
+  const git =
+    expectedCommit && (options.getGitDeployStatus || options.includeGitStatus)
+      ? await (options.getGitDeployStatus ?? getGitDeployStatus)(expectedCommit, {
+          cwd: options.gitCwd,
+          timeoutMs: options.gitTimeoutMs,
+        })
+      : undefined;
+
+  const result = {
     baseUrl,
     expectedCommit,
     health,
@@ -81,6 +151,8 @@ export async function checkProductionFreshness(options) {
     ssh,
     ok: health.ok === true && commit.status !== "mismatch" && ssh.status !== "unreachable",
   };
+  if (git) result.git = git;
+  return result;
 }
 
 export function formatProductionFreshnessResult(result) {
@@ -103,6 +175,32 @@ export function formatProductionFreshnessResult(result) {
     lines.push(`SSH: unreachable ${result.ssh.host}:${result.ssh.port} (${result.ssh.error})`);
   } else {
     lines.push("SSH: not checked");
+  }
+  if (result.git) {
+    if (result.git.status === "upstream_contains_expected") {
+      lines.push(
+        `Git: expected commit is present on upstream ${result.git.upstream} (branch=${result.git.branch} head=${result.git.headCommit} upstreamCommit=${result.git.upstreamCommit})`,
+      );
+    } else if (result.git.status === "upstream_missing_expected") {
+      lines.push(
+        `Git: expected commit is not present on upstream ${result.git.upstream} (branch=${result.git.branch} head=${result.git.headCommit} upstreamCommit=${result.git.upstreamCommit})`,
+      );
+    } else if (result.git.status === "no_upstream") {
+      lines.push(`Git: no tracked upstream for branch ${result.git.branch} (head=${result.git.headCommit})`);
+    } else if (result.git.status === "unavailable") {
+      lines.push(`Git: unavailable (${result.git.error})`);
+    } else {
+      lines.push("Git: not checked");
+    }
+  }
+  if (result.commit.status === "mismatch" && result.git?.status === "upstream_contains_expected") {
+    lines.push(
+      `Diagnosis: expected commit is pushed to the tracked upstream, but production health is still serving ${
+        result.commit.actual ?? "unknown"
+      }.`,
+    );
+  } else if (result.commit.status === "mismatch" && result.git?.status === "upstream_missing_expected") {
+    lines.push("Diagnosis: expected commit is not on the tracked upstream; check push target or branch selection.");
   }
   lines.push(`Freshness: ${result.ok ? "ok" : "failed"}`);
   return lines.join("\n");

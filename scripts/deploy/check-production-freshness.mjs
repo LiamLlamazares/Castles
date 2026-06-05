@@ -16,6 +16,7 @@ checkProductionFreshness({
   sshHost,
   sshPort,
   sshTimeoutMs,
+  includeGitStatus: true,
 })
   .then((result) => {
     console.log(formatProductionFreshnessResult(result));

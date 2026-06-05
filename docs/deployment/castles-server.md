@@ -142,7 +142,7 @@ node scripts/deploy/check-online-smoke.mjs "https://${app_domain}" "$sha"
 npm run online:smoke:browser -- "https://${app_domain}" "$sha"
 ```
 
-`online:deploy:freshness` is a fast diagnostic before the mutating smoke checks. It reads `/api/health`, compares `build.commit` with the exact reviewed SHA, and optionally checks TCP reachability to the SSH host on port 22. A stale health commit means the service/environment was not restarted onto the reviewed SHA; an SSH failure means the deploy channel is unavailable even if HTTPS health is still serving the previous build.
+`online:deploy:freshness` is a fast diagnostic before the mutating smoke checks. It reads `/api/health`, compares `build.commit` with the exact reviewed SHA, checks whether that SHA is present on the tracked upstream branch, and optionally checks TCP reachability to the SSH host on port 22. If the expected SHA is already on the upstream branch but health is stale, the push target is not the likely failure mode; focus on the deploy/restart path. An SSH failure means the deploy channel is unavailable even if HTTPS health is still serving the previous build.
 
 If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If `server:check-config` fails, fix the PostgreSQL URL, permissions, or schema-readiness error before restarting. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.
 
