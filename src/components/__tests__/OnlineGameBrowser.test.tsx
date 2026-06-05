@@ -2095,6 +2095,36 @@ describe("OnlineGameBrowser", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a friend-facing unavailable state when account challenge privacy rejects", async () => {
+    const onChallengeAccount = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        403,
+        "not_allowed",
+        "That account is not accepting challenges."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.click(await within(people).findByRole("button", { name: "Challenge Samir" }));
+
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByText("Samir is not available for challenges right now.")).toBeInTheDocument();
+  });
+
   it("shows a copy-invite error when the direct invite handler rejects", async () => {
     const onCopyChallengeAccountInvite = vi.fn().mockRejectedValue(new Error("clipboard unavailable"));
     render(

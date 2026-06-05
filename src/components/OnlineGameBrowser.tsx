@@ -619,6 +619,19 @@ function onlineRequestErrorMessage(error: unknown): string | null {
   return error instanceof OnlineRequestError ? error.message : null;
 }
 
+function formatAccountChallengeErrorMessage(
+  error: unknown,
+  displayName: string,
+  intent: OnlineAccountChallengeIntent
+): string | null {
+  if (error instanceof OnlineRequestError && error.code === "not_allowed") {
+    return intent === "rematch"
+      ? `${displayName} is not available for rematches right now.`
+      : `${displayName} is not available for challenges right now.`;
+  }
+  return onlineRequestErrorMessage(error);
+}
+
 function presenceBadgeClassName(profile: OnlineAccountPublicProfile): string {
   if (profile.presence.visibility === "hidden") return "presence-hidden";
   if (profile.presence.status === "online") return "presence-online";
@@ -3239,7 +3252,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     } catch (error) {
       if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
       console.error("[OnlineGameBrowser] Failed to challenge account", error);
-      const serverMessage = onlineRequestErrorMessage(error);
+      const serverMessage = formatAccountChallengeErrorMessage(error, displayName, intent);
       setSocialMessage(serverMessage ?? (
         intent === "rematch"
           ? `Could not create a rematch challenge for ${displayName}.`
