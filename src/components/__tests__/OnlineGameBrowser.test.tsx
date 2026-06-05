@@ -1972,6 +1972,7 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onAcceptAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
     expect(await within(challenges).findByText("Accepted")).toBeInTheDocument();
+    expect(within(article as HTMLElement).getByText("Game game_account_accept")).toBeInTheDocument();
     expect(within(challenges).queryByText("No pending account challenges.")).not.toBeInTheDocument();
     expect(within(article as HTMLElement).queryByRole("button", { name: "Accept challenge from Samir" })).not.toBeInTheDocument();
   });

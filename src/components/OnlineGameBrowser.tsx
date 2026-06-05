@@ -4200,6 +4200,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             {expiry && <span>{expiry.timeLabel}</span>}
                             <span>{formatUpdatedAt(item.summary.updatedAt)}</span>
                             <span>{challengeId}</span>
+                            {item.summary.gameId && <span>Game {item.summary.gameId}</span>}
                           </div>
                           <div className="online-browser-social-actions">
                             {item.summary.status === "pending" && item.role === "challenged" && onAcceptAccountChallenge && (
