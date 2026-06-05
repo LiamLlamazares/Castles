@@ -100,4 +100,36 @@ describe("production freshness diagnostics", () => {
       "Diagnosis: expected commit is pushed to the tracked upstream, but production health is still serving old-sha.",
     );
   });
+
+  it("reports when the production health commit is behind the tracked upstream", async () => {
+    let gitOptions;
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () => okHealth("old-sha"),
+      getGitDeployStatus: async (_expectedCommit, options) => {
+        gitOptions = options;
+        return {
+          status: "upstream_contains_expected",
+          branch: "online-action-log",
+          headCommit: "expected-sha",
+          upstream: "origin/online-action-log",
+          upstreamCommit: "expected-sha",
+          productionCommit: {
+            status: "upstream_ancestor",
+            commit: "old-sha",
+            commitsBehindUpstream: 34,
+          },
+        };
+      },
+    });
+
+    expect(gitOptions.deployedCommit).toBe("old-sha");
+    expect(formatProductionFreshnessResult(result)).toContain(
+      "Git: production health commit old-sha is 34 commits behind upstream origin/online-action-log.",
+    );
+    expect(formatProductionFreshnessResult(result)).toContain(
+      "Diagnosis: expected commit is pushed to the tracked upstream, but production health is still serving old-sha (34 commits behind upstream).",
+    );
+  });
 });

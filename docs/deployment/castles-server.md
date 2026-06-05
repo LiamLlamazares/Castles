@@ -22,6 +22,8 @@ The server must have Node, npm, git, nginx, and certbot. PostgreSQL only has to 
 
 Use the public app domain, such as `castles.ls314.com` or `castles.ls314.xyz`, for `PUBLIC_BASE_URL`. A host/admin alias such as `contabo.ls314.xyz` can be useful for SSH or server management, but it should not become `PUBLIC_BASE_URL` unless players will actually open the app there.
 
+Current `.xyz` lift note, 2026-06-05: `castles.ls314.xyz` and `contabo.ls314.xyz` resolve to the same host and can be used for the deploy SSH reachability check. The root `ls314.xyz` currently resolves elsewhere, so using it as the freshness SSH host can produce a false SSH timeout even while the actual `.xyz` app host is reachable.
+
 Public firewall ports are `80` and `443` for nginx plus `22` for SSH administration. The Node app port, usually `3000`, should stay bound behind nginx and does not need to be public. PostgreSQL port `5432` only needs to be reachable from the app server to the database host; do not open the app server's PostgreSQL port unless PostgreSQL intentionally runs there and external database clients need it.
 
 By default the Node service binds to `127.0.0.1`, so nginx can reach it locally but public clients cannot connect directly to port `3000`. Keep `CASTLES_BIND_HOST=127.0.0.1` for the normal nginx-backed deployment.
@@ -142,7 +144,7 @@ node scripts/deploy/check-online-smoke.mjs "https://${app_domain}" "$sha"
 npm run online:smoke:browser -- "https://${app_domain}" "$sha"
 ```
 
-`online:deploy:freshness` is a fast diagnostic before the mutating smoke checks. It reads `/api/health`, compares `build.commit` with the exact reviewed SHA, checks whether that SHA is present on the tracked upstream branch, and optionally checks TCP reachability to the SSH host on port 22. If the expected SHA is already on the upstream branch but health is stale, the push target is not the likely failure mode; focus on the deploy/restart path. An SSH failure means the deploy channel is unavailable even if HTTPS health is still serving the previous build.
+`online:deploy:freshness` is a fast diagnostic before the mutating smoke checks. It reads `/api/health`, compares `build.commit` with the exact reviewed SHA, checks whether that SHA is present on the tracked upstream branch, reports when the production health commit is a known ancestor behind upstream, and optionally checks TCP reachability to the SSH host on port 22. If the expected SHA is already on the upstream branch but health is stale, the push target is not the likely failure mode; focus on the deploy/restart path. An SSH failure means the chosen deploy host is unavailable; confirm the SSH host resolves to the same server as the app domain before treating it as a service outage.
 
 If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If `server:check-config` fails, fix the PostgreSQL URL, permissions, or schema-readiness error before restarting. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.
 

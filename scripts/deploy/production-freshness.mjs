@@ -67,6 +67,40 @@ async function gitExitCode(args, options = {}) {
   }
 }
 
+async function getProductionCommitStatus(productionCommit, upstreamRef, options = {}) {
+  const commit = String(productionCommit ?? "").trim();
+  if (!commit) return undefined;
+  try {
+    const ancestorExitCode = await gitExitCode(["merge-base", "--is-ancestor", commit, upstreamRef], options);
+    if (ancestorExitCode === 0) {
+      const commitsBehindText = await gitOutput(["rev-list", "--count", `${commit}..${upstreamRef}`], options);
+      const commitsBehindUpstream = Number.parseInt(commitsBehindText, 10);
+      return {
+        status: "upstream_ancestor",
+        commit,
+        commitsBehindUpstream: Number.isFinite(commitsBehindUpstream) ? commitsBehindUpstream : undefined,
+      };
+    }
+    if (ancestorExitCode === 1) {
+      return {
+        status: "not_upstream_ancestor",
+        commit,
+      };
+    }
+    return {
+      status: "unavailable",
+      commit,
+      error: `git merge-base returned exit code ${ancestorExitCode}`,
+    };
+  } catch (error) {
+    return {
+      status: "unavailable",
+      commit,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function getGitDeployStatus(expectedCommit, options = {}) {
   if (!expectedCommit) return { status: "not_checked" };
   try {
@@ -92,13 +126,16 @@ export async function getGitDeployStatus(expectedCommit, options = {}) {
         error: `git merge-base returned exit code ${containsExitCode}`,
       };
     }
-    return {
+    const status = {
       status: containsExitCode === 0 ? "upstream_contains_expected" : "upstream_missing_expected",
       branch: branch || "detached",
       headCommit,
       upstream,
       upstreamCommit,
     };
+    const productionCommit = await getProductionCommitStatus(options.deployedCommit, "@{u}", options);
+    if (productionCommit) status.productionCommit = productionCommit;
+    return status;
   } catch (error) {
     return {
       status: "unavailable",
@@ -140,6 +177,7 @@ export async function checkProductionFreshness(options) {
       ? await (options.getGitDeployStatus ?? getGitDeployStatus)(expectedCommit, {
           cwd: options.gitCwd,
           timeoutMs: options.gitTimeoutMs,
+          deployedCommit: health.commit,
         })
       : undefined;
 
@@ -192,12 +230,35 @@ export function formatProductionFreshnessResult(result) {
     } else {
       lines.push("Git: not checked");
     }
+    if (result.git.productionCommit?.status === "upstream_ancestor") {
+      const count = result.git.productionCommit.commitsBehindUpstream;
+      const behindText =
+        typeof count === "number" ? `${count} ${count === 1 ? "commit" : "commits"}` : "an unknown number of commits";
+      lines.push(
+        `Git: production health commit ${result.git.productionCommit.commit} is ${behindText} behind upstream ${result.git.upstream}.`,
+      );
+    } else if (result.git.productionCommit?.status === "not_upstream_ancestor") {
+      lines.push(
+        `Git: production health commit ${result.git.productionCommit.commit} is not an ancestor of upstream ${result.git.upstream}.`,
+      );
+    } else if (result.git.productionCommit?.status === "unavailable") {
+      lines.push(
+        `Git: production health commit ${result.git.productionCommit.commit} could not be compared with upstream (${result.git.productionCommit.error}).`,
+      );
+    }
   }
   if (result.commit.status === "mismatch" && result.git?.status === "upstream_contains_expected") {
+    const productionCommit = result.git.productionCommit;
+    const behindText =
+      productionCommit?.status === "upstream_ancestor" && typeof productionCommit.commitsBehindUpstream === "number"
+        ? ` (${productionCommit.commitsBehindUpstream} ${
+            productionCommit.commitsBehindUpstream === 1 ? "commit" : "commits"
+          } behind upstream)`
+        : "";
     lines.push(
       `Diagnosis: expected commit is pushed to the tracked upstream, but production health is still serving ${
         result.commit.actual ?? "unknown"
-      }.`,
+      }${behindText}.`,
     );
   } else if (result.commit.status === "mismatch" && result.git?.status === "upstream_missing_expected") {
     lines.push("Diagnosis: expected commit is not on the tracked upstream; check push target or branch selection.");

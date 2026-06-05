@@ -846,6 +846,8 @@ Status: backend/client-helper and visible Online People slices are implemented a
 
 Friend-action reliability update on 2026-06-05: follow/unfollow and follow/presence/challenge privacy saves now preserve trusted server rejection copy, so friend setup failures such as throttles or privacy locks are not replaced with generic People-panel text.
 
+Deploy freshness diagnostic update on 2026-06-05: production `https://castles.ls314.xyz` reported health commit `c33b4c3263c103bd19dde2771817d4429d71339d`, which was 34 commits behind the then-current pushed branch head `a5d0d9b05ab10c691156292393c96ff2d216ca1d`. The app host `castles.ls314.xyz` and admin alias `contabo.ls314.xyz` are reachable on SSH port 22, while root `ls314.xyz` points elsewhere and can create a false SSH timeout in freshness checks. The remaining live gap is the deploy/restart path, not the push target.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.
