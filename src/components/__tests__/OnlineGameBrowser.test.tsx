@@ -3463,7 +3463,7 @@ describe("OnlineGameBrowser", () => {
       />
     );
 
-    const row = await screen.findByRole("article", { name: "Most active live game Samir vs Ada game_profile_plain" });
+    const row = await screen.findByRole("article", { name: "Current live selection Samir vs Ada game_profile_plain" });
     expect(within(row).queryByRole("button", { name: "Open Samir profile from game_profile_plain" })).not.toBeInTheDocument();
     expect(row).toHaveTextContent("Samir vs Ada");
   });
@@ -4331,7 +4331,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const watch = await screen.findByRole("article", {
-      name: /Most active live game Ada vs Ben game_watched_live/i,
+      name: /Current live selection Ada vs Ben game_watched_live/i,
     });
 
     expect(watch).toHaveTextContent("3 watching");
@@ -4376,7 +4376,9 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("game_many_moves_fewer_watchers");
 
-    expect(screen.getByRole("region", { name: "Most active public live game" })).toHaveTextContent(
+    expect(screen.getByRole("region", {
+      name: "Current public live selection by most moves in current list",
+    })).toHaveTextContent(
       "game_many_moves_fewer_watchers"
     );
 
@@ -4385,15 +4387,18 @@ describe("OnlineGameBrowser", () => {
     });
 
     const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
-    const featuredRegion = screen.getByRole("region", {
-      name: "Most watched public live game in current list",
+    const selectedRegion = screen.getByRole("region", {
+      name: "Current public live selection by most watched in current list",
     });
+    expect(liveOverview).toHaveTextContent("Selected by");
+    expect(liveOverview).not.toHaveTextContent("Featured by");
     expect(liveOverview).toHaveTextContent("Most watched in current list");
     expect(liveOverview).toHaveTextContent("Iris vs Jules, 6 watching, 4 moves");
-    expect(featuredRegion).toHaveTextContent("Most watched in current list");
-    expect(featuredRegion).toHaveTextContent("Current-list watcher leader");
-    expect(featuredRegion).toHaveTextContent("game_most_watched_now");
-    expect(featuredRegion).toHaveTextContent("6 watching");
+    expect(selectedRegion).toHaveTextContent("Current live selection");
+    expect(selectedRegion).toHaveTextContent("Most watched in current list");
+    expect(selectedRegion).not.toHaveTextContent("Most active live game");
+    expect(selectedRegion).toHaveTextContent("game_most_watched_now");
+    expect(selectedRegion).toHaveTextContent("6 watching");
   });
 
   it("falls back to the most-moves Watch model when watcher counts are missing", async () => {
@@ -4436,13 +4441,16 @@ describe("OnlineGameBrowser", () => {
     });
 
     const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
-    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
-    expect(liveOverview).toHaveTextContent("Most moves");
+    const selectedRegion = screen.getByRole("region", {
+      name: "Current public live selection by most moves in current list",
+    });
+    expect(liveOverview).toHaveTextContent("Selected by");
+    expect(liveOverview).toHaveTextContent("Most moves in current list");
     expect(liveOverview).toHaveTextContent("Mara vs Noor, 14 moves");
-    expect(featuredRegion).toHaveTextContent("Most active live game");
-    expect(featuredRegion).toHaveTextContent("Most moves in current list");
-    expect(featuredRegion).toHaveTextContent("game_many_moves_no_watchers");
-    expect(featuredRegion).not.toHaveTextContent("watching");
+    expect(selectedRegion).toHaveTextContent("Current live selection");
+    expect(selectedRegion).toHaveTextContent("Most moves in current list");
+    expect(selectedRegion).toHaveTextContent("game_many_moves_no_watchers");
+    expect(selectedRegion).not.toHaveTextContent("watching");
   });
 
   it("orders Watch rows by watcher count before move-count fallback", async () => {
@@ -4779,7 +4787,9 @@ describe("OnlineGameBrowser", () => {
 
     expect(screen.getByRole("button", { name: "Live public games" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("searchbox", { name: "Search live public games" })).toHaveValue("");
-    expect(screen.getByRole("region", { name: "Most active public live game" })).toHaveTextContent("game_lobby_watch_handoff");
+    expect(screen.getByRole("region", {
+      name: "Current public live selection by most moves in current list",
+    })).toHaveTextContent("game_lobby_watch_handoff");
   });
 
   it("auto-refreshes current public games while the Lobby tab is visible", async () => {
@@ -6302,14 +6312,17 @@ describe("OnlineGameBrowser", () => {
     );
 
     const row = await screen.findByRole("article", { name: /Ada vs Ben/i });
-    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
+    const selectedRegion = screen.getByRole("region", {
+      name: "Current public live selection by most moves in current list",
+    });
     const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
     expect(liveOverview).toHaveTextContent("1 public live game");
-    expect(liveOverview).toHaveTextContent("Most moves");
+    expect(liveOverview).toHaveTextContent("Selected by");
+    expect(liveOverview).toHaveTextContent("Most moves in current list");
     expect(liveOverview).toHaveTextContent("Ada vs Ben, 3 moves");
     expect(liveOverview).toHaveTextContent("Public only");
-    expect(featuredRegion).toContainElement(row);
-    expect(row).toHaveTextContent("Most active live game");
+    expect(selectedRegion).toContainElement(row);
+    expect(row).toHaveTextContent("Current live selection");
     expect(row).toHaveTextContent("Most moves in current list");
     expect(row).toHaveTextContent("Live");
     expect(row).toHaveTextContent("3 moves");
@@ -6327,7 +6340,7 @@ describe("OnlineGameBrowser", () => {
     expect(onSpectate).toHaveBeenCalledWith("game_public_active");
   });
 
-  it("features the most active live game even when the Watch list is sorted newest", async () => {
+  it("selects the most-moves live game even when the Watch list is sorted newest", async () => {
     render(
       <OnlineGameBrowser
         initialTab="watch"
@@ -6356,12 +6369,14 @@ describe("OnlineGameBrowser", () => {
     await screen.findByText("game_newest_few_moves");
 
     expect(screen.getByRole("combobox", { name: "Sort public games" })).toHaveValue("newest");
-    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
+    const selectedRegion = screen.getByRole("region", {
+      name: "Current public live selection by most moves in current list",
+    });
     const liveOverview = screen.getByRole("group", { name: "Watch live games overview" });
     expect(liveOverview).toHaveTextContent("2 public live games");
     expect(liveOverview).toHaveTextContent("Caro vs Dani, 9 moves");
-    expect(featuredRegion).toHaveTextContent("game_older_many_moves");
-    expect(featuredRegion).toHaveTextContent("9 moves");
+    expect(selectedRegion).toHaveTextContent("game_older_many_moves");
+    expect(selectedRegion).toHaveTextContent("9 moves");
     expect(screen.getByRole("region", { name: "Other public live games" })).toHaveTextContent("game_newest_few_moves");
   });
 
@@ -6747,8 +6762,10 @@ describe("OnlineGameBrowser", () => {
     await screen.findByText("game_newer_few_moves");
     expect(screen.queryByText("game_hidden_unlisted")).not.toBeInTheDocument();
 
-    const featuredRegion = screen.getByRole("region", { name: "Most active public live game" });
-    expect(featuredRegion).toHaveTextContent("game_older_many_moves");
+    const selectedRegion = screen.getByRole("region", {
+      name: "Current public live selection by most moves in current list",
+    });
+    expect(selectedRegion).toHaveTextContent("game_older_many_moves");
     let sideRows = within(screen.getByRole("region", { name: "Other public live games" })).getAllByRole("article");
     expect(sideRows[0]).toHaveTextContent("game_newer_few_moves");
     expect(sideRows[1]).toHaveTextContent("game_middle_moves");

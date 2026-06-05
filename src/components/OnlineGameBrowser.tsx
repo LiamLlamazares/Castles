@@ -2509,11 +2509,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const primaryActionAriaLabel = isArchivedGame
       ? `Analyze replay ${white} vs ${black}, ${game.gameId}`
       : `Spectate ${white} vs ${black}, ${game.gameId}`;
-    const featuredKicker = isArchivedGame
-      ? "Featured replay"
-      : options.featuredReason === "watchers"
-        ? "Most watched in current list"
-        : "Most active live game";
+    const featuredKicker = isArchivedGame ? "Selected replay" : "Current live selection";
     const spectatorCountLabel = isArchivedGame
       ? null
       : formatSpectatorCount(game.livePreview.spectatorCount);
@@ -2605,7 +2601,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             {options.featured && !isArchivedGame && (
               <span>
                 {options.featuredReason === "watchers"
-                  ? "Current-list watcher leader"
+                  ? "Most watched in current list"
                   : "Most moves in current list"}
               </span>
             )}
@@ -2816,19 +2812,19 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <strong>{formatPublicLiveCount(liveGameCount)}</strong>
         </div>
         <div className="online-browser-live-stat">
-          <span>Featured by</span>
+          <span>Selected by</span>
           <strong>
             {featuredGame
               ? featuredReason === "watchers"
                 ? "Most watched in current list"
-                : "Most moves"
+                : "Most moves in current list"
               : liveGameCount > 0
                 ? "No visible game"
-                : "No featured game"}
+                : "No public live games"}
           </strong>
         </div>
         <div className="online-browser-live-stat online-browser-live-stat-wide">
-          <span>Activity leader</span>
+          <span>Current selection</span>
           <strong>
             {featuredGame
               ? leaderLabel
@@ -5369,8 +5365,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     className="online-browser-featured-game"
                     aria-label={
                       watchFeaturedReason === "watchers"
-                        ? "Most watched public live game in current list"
-                        : "Most active public live game"
+                        ? "Current public live selection by most watched in current list"
+                        : "Current public live selection by most moves in current list"
                     }
                   >
                     {renderPublicGameRow(watchFeaturedGame, {

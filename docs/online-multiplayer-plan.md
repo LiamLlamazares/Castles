@@ -405,9 +405,9 @@ Status: implemented and locally verified on 2026-06-02. Lobby now separates "Fin
 
 Remaining work:
 
-- Add server-backed public-game thumbnails, side-to-move, last move, remaining clocks, spectator counts, and a real featured/TV selection signal before calling any game "featured".
-- Move Watch/Archive search and richer filters into indexed server queries once the read model carries those fields.
-- Decide whether current public-game preview belongs in Lobby long-term or should move entirely into Watch after Watch thumbnails exist.
+- Add a real TV-style selection signal from ratings, follows, account metadata, or another durable activity model before reintroducing any "featured game" claim.
+- Move Watch/Archive search and richer filters into indexed server queries once the read model carries the remaining searchable fields.
+- Decide whether current public-game preview belongs in Lobby long-term or should move entirely into Watch after the Watch selection model is stronger.
 
 ## Phase 6P: Learn Completion Progress Hardening
 
@@ -440,8 +440,8 @@ Status: implemented and locally verified on 2026-06-02. The slice keeps the exis
 
 Remaining work:
 
-- Add server-backed public-game thumbnails, side-to-move, last move, remaining clocks, spectator counts, and a real featured/TV selection signal before showing richer game previews.
-- Decide whether the current public-game preview belongs in Lobby long-term or should move entirely into Watch after Watch has thumbnails and stronger scan controls.
+- Add a real TV-style selection signal from ratings, follows, account metadata, or another durable activity model before reintroducing any "featured game" claim.
+- Decide whether the current public-game preview belongs in Lobby long-term or should move entirely into Watch after Watch has stronger selection controls.
 - Keep cancelled and expired lobby listings out of public rows and avoid showing dead owner refresh controls.
 - Re-audit Watch and Lobby at desktop/mobile sizes after each new public summary field is added.
 
@@ -530,11 +530,11 @@ Remaining work:
 
 Goal: make the current-games surfaces easier to scan without adding unsupported spectator counts, ratings, or TV-style ranking.
 
-Status: implemented locally on 2026-06-02. Lobby's Current games section and the Watch tab now show a compact live overview with the public live-game count, the fact that the featured game is selected by most moves, the current activity leader, and the public-only visibility scope. This reuses the existing public summary read model and does not infer private/unlisted games or process-local spectator presence.
+Status: implemented locally on 2026-06-02 and wording tightened on 2026-06-05. Lobby's Current games section and the Watch tab now show a compact live overview with the public live-game count, the current selected game, the literal selection reason, and the public-only visibility scope. This reuses the existing public summary read model and does not infer private/unlisted games or process-local spectator presence.
 
 Verification:
 
-- Focused OnlineGameBrowser tests cover the Lobby overview, the Watch overview, and the most-active featured-game leader when the visible list is sorted by newest.
+- Focused OnlineGameBrowser tests cover the Lobby overview, the Watch overview, and the most-moves selected game when the visible list is sorted by newest.
 - Regression tests cover total public-live counts when the Lobby preview is capped and when Watch filters reduce the visible game list.
 
 Remaining work:
@@ -602,7 +602,7 @@ Remaining work:
 
 Goal: let Watch use the live spectator-count metadata without implying ratings, global popularity, or durable archive history.
 
-Status: implemented on 2026-06-03. The Watch tab now has a `Most watched in current list` sort option that ranks only the loaded public live-game page by current response-decorated spectator count, falling back to move count and recency. The featured Watch card and live overview use the watcher-ranked label only when the selected game has a positive current watcher count; otherwise they keep the existing most-moves activity model. Online Archive intentionally does not expose this sort because spectator counts are active-game-only and are not persisted into completed summaries.
+Status: implemented on 2026-06-03 and wording tightened on 2026-06-05. The Watch tab now has a `Most watched in current list` sort option that ranks only the loaded public live-game page by current response-decorated spectator count, falling back to move count and recency. The selected Watch card and live overview use the watcher-ranked label only when the selected game has a positive current watcher count; otherwise they keep the existing most-moves activity model. Online Archive intentionally does not expose this sort because spectator counts are active-game-only and are not persisted into completed summaries.
 
 Remaining work:
 
@@ -856,7 +856,9 @@ Online account entry update on 2026-06-05: account creation/sign-in is now a mod
 
 Favicon update on 2026-06-05: the browser favicon, manifest SVG icon, service-worker core asset list, and `.ico` fallback now use an empty flat-top hexagonal board rendered with the same board background, alternating hex fills, and gray stroke colors as the app board. The visual preview artifact is `artifacts/favicon/favicon-preview.png`.
 
-Watch scanability update on 2026-06-05: the desktop Watch featured-game panel is top-aligned instead of stretching to the height of the secondary game list. This keeps the selected featured game content visible in the first viewport while preserving the two-column desktop Watch layout. The regenerated audit artifact is `artifacts/ui-audit/phase6ai-local-layout/desktop-online-watch.png`.
+Watch scanability update on 2026-06-05: the desktop Watch selected-game panel is top-aligned instead of stretching to the height of the secondary game list. This keeps the selected game content visible in the first viewport while preserving the two-column desktop Watch layout. The regenerated audit artifact is `artifacts/ui-audit/phase6ai-local-layout/desktop-online-watch.png`.
+
+Watch selection wording update on 2026-06-05: Watch no longer calls the current-list heuristic a featured game in visible or accessible copy. The selected row now uses `Current live selection`, the overview says `Selected by`, and the reason is literal: `Most moves in current list` or `Most watched in current list`. A true TV-style featured signal remains future work until ratings, follows, account metadata, or another durable activity model exists.
 
 Shared shell audit cleanup on 2026-06-05: the broad local UI audit now passes again after the shared app-shell back button kept its full `aria-label` while moving visible text into a child span that is removed from narrow icon-only layout flow, and the Online account chip compacts to an icon-only control at the same narrow breakpoint. This cleared the previous mobile/short-mobile `interactive-text-overflow` and account-chip overlap diagnostics without changing the desktop top strip. The regenerated audit artifacts are in `artifacts/ui-audit/phase6ai-local-layout/`.
 
@@ -921,7 +923,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after account metadata exists: public game rows already display registered participant names where safe, Lobby rows now display/search safe registered creator display names as of 2026-06-05, and Archive rows now open a separate detail surface from sanitized account/public summary data as of 2026-06-05. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+1. Improve public directory scanability after account metadata exists: public game rows already display registered participant names where safe, Lobby rows now display/search safe registered creator display names as of 2026-06-05, and Archive rows now open a separate detail surface from sanitized account/public summary data as of 2026-06-05. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, Watch can sort the currently loaded page by `Most watched in current list`, and the selected-game UI now avoids any unsupported featured-game claim.
 2. Add remaining account lifecycle work before public launch: account-linked game-history retention is now explicit in deletion UI and contracts as of 2026-06-05, and the PostgreSQL account-store tests now cover deletion removing social state while retaining rating rows plus moderation display-name snapshots; next tighten ratings and moderation contracts beyond deletion retention.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text. The 2026-06-05 shared-shell cleanup returned the broad local UI layout audit to green across desktop, mobile, and short-mobile scenarios.
 4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, fast production freshness diagnostics for health commit plus SSH reachability, expected-commit health checks after deploy, and browser smoke after each live push.
