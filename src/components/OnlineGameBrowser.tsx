@@ -3012,7 +3012,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         seekAutoRefreshPausedUntilRef.current = Date.now() + LOBBY_RATE_LIMIT_BACKOFF_MS;
       }
       if (!background) {
-        setSeekActionMessage("Could not refresh your lobby listing.");
+        setSeekActionMessage(onlineRequestErrorMessage(error) ?? "Could not refresh your lobby listing.");
       }
     } finally {
       ownedSeekRefreshInFlightRef.current = false;

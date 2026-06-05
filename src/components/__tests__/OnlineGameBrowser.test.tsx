@@ -5423,6 +5423,39 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onRefreshOwnedSeek).toHaveBeenCalledOnce());
   });
 
+  it("surfaces trusted server errors when refreshing an owned lobby listing fails", async () => {
+    const onRefreshOwnedSeek = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        429,
+        "rate_limited",
+        "Please wait before refreshing that lobby listing again."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        ownedSeekIds={["seek_mine"]}
+        ownedSeekResponse={{
+          role: "creator",
+          summary: openSeek({ seekId: "seek_mine" }),
+        }}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        onRefreshOwnedSeek={onRefreshOwnedSeek}
+      />
+    );
+
+    const panel = await screen.findByRole("region", { name: "Your lobby listing" });
+    fireEvent.click(within(panel).getByRole("button", { name: "Refresh your lobby listing" }));
+
+    await waitFor(() => expect(onRefreshOwnedSeek).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("status")).toHaveTextContent("Please wait before refreshing that lobby listing again.");
+    expect(screen.queryByText("Could not refresh your lobby listing.")).not.toBeInTheDocument();
+  });
+
   it("accepts and cancels lobby listings with row-local pending states", async () => {
     const onAcceptSeek = vi.fn().mockResolvedValue(undefined);
     const onCancelSeek = vi.fn().mockResolvedValue(undefined);
