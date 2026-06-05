@@ -905,7 +905,7 @@ Tests/review/deploy gates:
 
 ## Next Immediate Work
 
-1. Improve public directory scanability after account metadata exists: public game rows already display registered participant names where safe, and Lobby rows now display/search safe registered creator display names as of 2026-06-05. Design archive-detail pages separately from the current summary rows. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
+1. Improve public directory scanability after account metadata exists: public game rows already display registered participant names where safe, Lobby rows now display/search safe registered creator display names as of 2026-06-05, and Archive rows now open a separate detail surface from sanitized account/public summary data as of 2026-06-05. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, and Watch can sort the currently loaded page by `Most watched in current list`.
 2. Add remaining account lifecycle work before public launch: retention/anonymization policy for account-linked game history, then ratings and moderation contracts.
 3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
 4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, expected-commit health checks after deploy, and browser smoke after each live push.

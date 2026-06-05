@@ -1178,6 +1178,83 @@
   gap: 8px;
 }
 
+.online-browser-archive-detail {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(247, 204, 112, 0.28);
+  border-radius: 6px;
+  background: rgba(247, 204, 112, 0.07);
+  scroll-margin-top: 14px;
+}
+
+.online-browser-archive-detail:focus {
+  outline: 2px solid rgba(247, 204, 112, 0.55);
+  outline-offset: 2px;
+}
+
+.online-browser-archive-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.online-browser-archive-detail-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.online-browser-archive-detail-title strong {
+  color: #f7f1d6;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-archive-detail-title span:last-child {
+  color: #d9d0b8;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-archive-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.online-browser-archive-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.online-browser-archive-detail-grid div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid rgba(247, 241, 214, 0.12);
+}
+
+.online-browser-archive-detail-grid dt {
+  color: #9ed0c2;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.online-browser-archive-detail-grid dd {
+  margin: 0;
+  color: #f7f1d6;
+  font-size: 0.9rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .online-account-active-game-row {
   background: rgba(116, 199, 151, 0.07);
   border-color: rgba(116, 199, 151, 0.2);
@@ -1296,6 +1373,20 @@
     flex: 1 1 160px;
   }
 
+  .online-browser-archive-detail-header {
+    display: grid;
+  }
+
+  .online-browser-archive-detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .online-browser-archive-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .online-browser-social-actions .online-browser-button {
     flex: 1 1 140px;
   }
@@ -1387,6 +1478,11 @@
 
   .online-browser-challenge-notice {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .online-browser-archive-detail-actions,
+  .online-browser-archive-detail-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -473,6 +473,23 @@ function formatCount(count: number, singular: string, plural = `${singular}s`): 
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function formatGameVisibilityLabel(visibility: OnlineGameVisibility): string {
+  switch (visibility) {
+    case "public":
+      return "Public";
+    case "unlisted":
+      return "Unlisted";
+    case "private":
+      return "Private";
+    default:
+      return visibility;
+  }
+}
+
+function archiveDetailPanelId(gameId: string): string {
+  return `online-archive-detail-${gameId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
 function formatAccountChallengeRole(role: OnlineAccountChallengeListItem["role"]): string {
   return role === "challenged" ? "Incoming" : "Outgoing";
 }
@@ -999,6 +1016,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [challengePolicy, setChallengePolicy] = React.useState<OnlineAccountChallengePolicy>("followed");
   const [challengePolicyDraft, setChallengePolicyDraft] = React.useState<OnlineAccountChallengePolicy>("followed");
   const [privacyStatus, setPrivacyStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [selectedArchiveDetailGame, setSelectedArchiveDetailGame] = React.useState<OnlineGameSummary | null>(null);
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
   const accountGamesRequestIdRef = React.useRef(0);
@@ -1030,6 +1048,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const accountChallengesSectionRef = React.useRef<HTMLElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
   const closedOwnedSeekPanelRef = React.useRef<HTMLElement>(null);
+  const archiveDetailRef = React.useRef<HTMLElement>(null);
   const [recentClearMessage, setRecentClearMessage] = React.useState("");
   const deleteAccountConfirmPanelId = React.useId();
   const deleteAccountConfirmHeadingId = React.useId();
@@ -1066,7 +1085,22 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   React.useEffect(() => {
     setRecentClearMessage("");
+    if (tab !== "archive") {
+      setSelectedArchiveDetailGame(null);
+    }
   }, [tab]);
+
+  React.useEffect(() => {
+    setSelectedArchiveDetailGame(null);
+  }, [account?.accountId]);
+
+  React.useEffect(() => {
+    const detail = archiveDetailRef.current;
+    if (selectedArchiveDetailGame && detail) {
+      detail.scrollIntoView?.({ block: "start", inline: "nearest" });
+      detail.focus({ preventScroll: true });
+    }
+  }, [selectedArchiveDetailGame?.gameId]);
 
   React.useEffect(() => {
     seekActionByIdRef.current = seekActionById;
@@ -2271,6 +2305,106 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     });
   };
 
+  const renderArchiveDetailPage = (game: OnlineGameSummary) => {
+    const white = participantName(game.participants, "w");
+    const black = participantName(game.participants, "b");
+    const resultLabel = game.result ? formatOnlineGameResult(game.result) : "Completed";
+    const clockSnapshot = game.livePreview.clock ? formatClockSnapshot(game) : null;
+    const detailId = archiveDetailPanelId(game.gameId);
+
+    return (
+      <section
+        id={detailId}
+        ref={archiveDetailRef}
+        className="online-browser-archive-detail"
+        aria-label={`Archive details for ${game.gameId}`}
+        tabIndex={-1}
+      >
+        <div className="online-browser-archive-detail-header">
+          <div className="online-browser-archive-detail-title">
+            <span className="online-browser-section-kicker">Archive details</span>
+            <strong>{white} vs {black}</strong>
+            <span>{game.gameId}</span>
+          </div>
+          <div className="online-browser-archive-detail-actions">
+            <button
+              type="button"
+              className="online-browser-button primary"
+              onClick={() => onReplay(game.gameId)}
+              aria-label={`Analyze replay from archive details ${white} vs ${black}, ${game.gameId}`}
+            >
+              Analyze Replay
+            </button>
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => setSelectedArchiveDetailGame(null)}
+              aria-label={`Close archive details for ${game.gameId}`}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+        <dl className="online-browser-archive-detail-grid">
+          <div>
+            <dt>White</dt>
+            <dd>{white}</dd>
+          </div>
+          <div>
+            <dt>Black</dt>
+            <dd>{black}</dd>
+          </div>
+          <div>
+            <dt>Result</dt>
+            <dd>{resultLabel}</dd>
+          </div>
+          <div>
+            <dt>Replay</dt>
+            <dd>{formatMoveCount(game.livePreview.moveCount)}</dd>
+          </div>
+          <div>
+            <dt>Final phase</dt>
+            <dd>{formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}</dd>
+          </div>
+          <div>
+            <dt>Last move</dt>
+            <dd>{game.livePreview.lastMove ? game.livePreview.lastMove.notation : "None"}</dd>
+          </div>
+          <div>
+            <dt>Time control</dt>
+            <dd>{formatTimeControl(game)}</dd>
+          </div>
+          {clockSnapshot && (
+            <div>
+              <dt>Final clock</dt>
+              <dd>{clockSnapshot}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Rating</dt>
+            <dd>{formatRatingModeLabel(game.ratingMode)}</dd>
+          </div>
+          <div>
+            <dt>Visibility</dt>
+            <dd>{formatGameVisibilityLabel(game.visibility)}</dd>
+          </div>
+          <div>
+            <dt>Created</dt>
+            <dd>{formatUpdatedAt(game.createdAt)}</dd>
+          </div>
+          <div>
+            <dt>Ended</dt>
+            <dd>{game.endedAt ? formatUpdatedAt(game.endedAt) : "Unknown"}</dd>
+          </div>
+          <div>
+            <dt>Updated</dt>
+            <dd>{formatUpdatedAt(game.updatedAt)}</dd>
+          </div>
+        </dl>
+      </section>
+    );
+  };
+
   const renderPublicGameRow = (
     game: OnlineGameSummary,
     options: {
@@ -2414,6 +2548,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           {resultLabel && <div className="online-game-result">{resultLabel}</div>}
         </div>
         <div className="online-game-actions">
+          {isArchivedGame && (
+            <button
+              type="button"
+              className="online-browser-button neutral"
+              onClick={() => setSelectedArchiveDetailGame(game)}
+              aria-expanded={selectedArchiveDetailGame?.gameId === game.gameId}
+              aria-controls={archiveDetailPanelId(game.gameId)}
+              aria-label={`Show archive details for ${white} vs ${black}, ${game.gameId}`}
+            >
+              Details
+            </button>
+          )}
           <button
             type="button"
             className="online-browser-button primary"
@@ -5102,6 +5248,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ) : (
         <main className="online-browser-list" aria-label="Online archive">
           <>
+            {selectedArchiveDetailGame && renderArchiveDetailPage(selectedArchiveDetailGame)}
             {account && (
               <section className="online-browser-account-games" aria-label="Your account games">
                 <div className="online-browser-side-list-header">

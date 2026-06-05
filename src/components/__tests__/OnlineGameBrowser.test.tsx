@@ -5431,6 +5431,28 @@ describe("OnlineGameBrowser", () => {
     expect(row).toHaveTextContent(/Ended /);
     expect(row).toHaveTextContent(/Started /);
     expect(row).toHaveTextContent("White wins by resignation");
+
+    fireEvent.click(within(row).getByRole("button", {
+      name: "Show archive details for Ada vs Ben, game_public_archive",
+    }));
+    const details = screen.getByRole("region", { name: "Archive details for game_public_archive" });
+    await waitFor(() => expect(details).toHaveFocus());
+    expect(details).toHaveTextContent(/Archive details\s*Ada vs Ben\s*game_public_archive/);
+    expect(details).toHaveTextContent(/White\s*Ada/);
+    expect(details).toHaveTextContent(/Black\s*Ben/);
+    expect(details).toHaveTextContent(/Result\s*White wins by resignation/);
+    expect(details).toHaveTextContent(/Replay\s*3 moves/);
+    expect(details).toHaveTextContent(/Final phase\s*Black to move, Attack/);
+    expect(details).toHaveTextContent(/Last move\s*G13G12/);
+    expect(details).toHaveTextContent(/Time control\s*Timed 20\+20/);
+    expect(details).toHaveTextContent(/Final clock\s*Clock W 19:58 B 19:57/);
+    expect(details).toHaveTextContent(/Rating\s*Rated/);
+    expect(details).toHaveTextContent(/Visibility\s*Public/);
+    fireEvent.click(within(details).getByRole("button", {
+      name: "Close archive details for game_public_archive",
+    }));
+    expect(screen.queryByRole("region", { name: "Archive details for game_public_archive" })).not.toBeInTheDocument();
+
     fireEvent.click(within(row).getByRole("button", { name: "Analyze replay Ada vs Ben, game_public_archive" }));
 
     expect(onReplay).toHaveBeenCalledWith("game_public_archive");
