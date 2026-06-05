@@ -2705,6 +2705,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const isRejoining = rejoiningAccountGameId === game.gameId;
     const canSpectate = canSpectateOnlineGameSummary(game);
     const seatLabel = accountSeat === "w" ? "White" : accountSeat === "b" ? "Black" : "unknown";
+    const sideToMoveLabel = game.livePreview.sideToMove === "w" ? "White" : "Black";
+    const accountTurnLabel =
+      accountSeat && game.livePreview.sideToMove === accountSeat ? "Your turn" : `Waiting for ${sideToMoveLabel}`;
 
     return (
       <article key={game.gameId} className="online-game-row online-account-active-game-row" aria-label={`Active account game ${game.gameId}`}>
@@ -2723,6 +2726,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <span>Your seat {seatLabel}</span>
             <span>{formatMoveCount(game.livePreview.moveCount)}</span>
             <span>{formatSideToMove(game.livePreview.sideToMove)} to move, {game.livePreview.turnPhase}</span>
+            <span>{accountTurnLabel}</span>
             {game.livePreview.lastMove && <span>Last {game.livePreview.lastMove.notation}</span>}
             <span>{game.hasTimeControl ? formatClockSnapshot(game) : formatTimeControl(game)}</span>
             <span>Rating {formatRatingModeLabel(game.ratingMode)}</span>

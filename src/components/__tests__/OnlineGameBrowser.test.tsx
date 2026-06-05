@@ -3235,6 +3235,7 @@ describe("OnlineGameBrowser", () => {
     expect(loadAccountGames).toHaveBeenCalledWith({ state: "all", limit: 50 });
     expect(within(activeGames).getByText("game_active_account")).toBeInTheDocument();
     expect(within(activeGames).getByText("Your seat Black")).toBeInTheDocument();
+    expect(within(activeGames).getByText("Your turn")).toBeInTheDocument();
     fireEvent.click(
       within(activeGames).getByRole("button", {
         name: "Return to account game White vs Liam, game_active_account",
