@@ -27,6 +27,7 @@
     "online:deploy:freshness": "node scripts/deploy/check-production-freshness.mjs",
     "online:smoke:browser": "node scripts/deploy/check-online-browser-smoke.mjs",
     "ui:audit:local": "node scripts/deploy/check-local-ui-layout-audit.mjs",
+    "assets:favicon": "tsx scripts/assets/generate-empty-board-favicon.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "audit": "npm audit --audit-level=low"
