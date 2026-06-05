@@ -101,6 +101,22 @@ class FakeAccountQueryable {
       return { rows: rating ? [{ payload: rating }] : [] };
     }
 
+    if (normalizedText.startsWith("SELECT a.display_name, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
+      const [limit] = values as number[];
+      const rows = Array.from(this.ratingRows.entries())
+        .flatMap(([accountId, rating]) => {
+          const account = this.accounts.get(accountId);
+          return account ? [{ display_name: account.display_name, payload: rating }] : [];
+        })
+        .sort((left, right) => {
+          if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
+          if (left.payload.games !== right.payload.games) return right.payload.games - left.payload.games;
+          return String(left.display_name).localeCompare(String(right.display_name));
+        })
+        .slice(0, limit);
+      return { rows };
+    }
+
     if (normalizedText.startsWith("INSERT INTO online_account_display_names")) {
       if (values.length === 0) {
         for (const account of this.accounts.values()) {
@@ -801,5 +817,92 @@ describe("PostgresOnlineAccountStore", () => {
       relationship: { self: false, following: false, followedBy: false, blocked: false },
     });
     expect(queryable.advisoryLocks).toContain("account_liam|account_samir");
+  });
+
+  it("lists a sanitized public rating leaderboard without deleted accounts or engine internals", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_ada",
+      sessionId: "account_session_ada",
+      displayName: "Ada",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-ada"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+    await store.createAccount({
+      accountId: "account_ben",
+      sessionId: "account_session_ben",
+      displayName: "Ben",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-ben"),
+      createdAt: "2026-06-03T12:01:00.000Z",
+    });
+    await store.createAccount({
+      accountId: "account_cleo",
+      sessionId: "account_session_cleo",
+      displayName: "Cleo",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-cleo"),
+      createdAt: "2026-06-03T12:02:00.000Z",
+    });
+    queryable.ratingRows.set("account_ada", {
+      ...createDefaultOnlineRating("2026-06-03T12:03:00.000Z"),
+      rating: 1520.4,
+      deviation: 90,
+      games: 8,
+    });
+    queryable.ratingRows.set("account_ben", {
+      ...createDefaultOnlineRating("2026-06-03T12:04:00.000Z"),
+      rating: 1611.8,
+      deviation: 140,
+      games: 3,
+    });
+    queryable.ratingRows.set("account_cleo", {
+      ...createDefaultOnlineRating("2026-06-03T12:05:00.000Z"),
+      rating: 1611.2,
+      deviation: 80,
+      games: 12,
+    });
+    queryable.ratingRows.set("account_deleted", {
+      ...createDefaultOnlineRating("2026-06-03T12:06:00.000Z"),
+      rating: 1900,
+      deviation: 80,
+      games: 2,
+    });
+
+    const leaderboard = await store.listRatingLeaderboard(2);
+
+    expect(leaderboard).toEqual([
+      {
+        schemaVersion: 1,
+        displayName: "Ben",
+        rating: {
+          schemaVersion: 1,
+          rating: 1612,
+          display: "1612?",
+          provisional: true,
+          games: 3,
+          updatedAt: "2026-06-03T12:04:00.000Z",
+        },
+      },
+      {
+        schemaVersion: 1,
+        displayName: "Cleo",
+        rating: {
+          schemaVersion: 1,
+          rating: 1611,
+          display: "1611",
+          provisional: false,
+          games: 12,
+          updatedAt: "2026-06-03T12:05:00.000Z",
+        },
+      },
+    ]);
+    expect(JSON.stringify(leaderboard)).not.toContain("account_");
+    expect(JSON.stringify(leaderboard)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(leaderboard)).not.toContain("deviation");
+    expect(JSON.stringify(leaderboard)).not.toContain("volatility");
   });
 });

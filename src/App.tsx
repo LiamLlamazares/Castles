@@ -53,6 +53,7 @@ import {
   fetchOnlineAccountMe,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
+  fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
   fetchOnlineGameSummaries,
   fetchOnlineChallenge,
@@ -2580,6 +2581,7 @@ function App() {
           onCancelAccountChallenge={onlineAccountSession ? handleCancelOnlineAccountChallenge : undefined}
           loadAccountProfile={onlineAccountSession ? handleLoadOnlineAccountProfile : undefined}
           loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
+          loadRatingLeaderboard={onlineAccountSession ? fetchOnlineRatingLeaderboard : undefined}
           onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}
           onUnfollowAccount={onlineAccountSession ? handleUnfollowOnlineAccount : undefined}
           onBlockAccount={onlineAccountSession ? handleBlockOnlineAccount : undefined}

@@ -25,6 +25,7 @@ import {
   fetchOnlineAccountMe,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
+  fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
   fetchOpenSeek,
   fetchOpenSeekDirectory,
@@ -1155,6 +1156,79 @@ describe("online client helpers", () => {
       headers: { "content-type": "application/json", authorization: "Bearer account-token" },
       body: JSON.stringify({ followPolicy: "nobody", presencePolicy: "nobody" }),
     });
+  });
+
+  it("loads public rating leaderboards without accepting account ids or engine internals", async () => {
+    const entry = {
+      schemaVersion: 1,
+      displayName: "Cleo",
+      rating: {
+        schemaVersion: 1,
+        rating: 1620,
+        display: "1620",
+        provisional: false,
+        games: 8,
+        updatedAt: "2026-06-04T12:00:00.000Z",
+      },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 1,
+        entries: [entry],
+      }),
+    });
+
+    await expect(fetchOnlineRatingLeaderboard({ limit: 5 }, fetchImpl as any)).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      entries: [entry],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/ratings/leaderboard?limit=5");
+
+    await expect(
+      fetchOnlineRatingLeaderboard(
+        {},
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            schemaVersion: 1,
+            entries: [
+              {
+                ...entry,
+                accountId: "account_cleo",
+              },
+            ],
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/entry contains unsupported data/);
+
+    await expect(
+      fetchOnlineRatingLeaderboard(
+        {},
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            schemaVersion: 1,
+            entries: [
+              {
+                ...entry,
+                rating: {
+                  ...entry.rating,
+                  engineId: "glicko2-beta-v1",
+                  deviation: 80,
+                  volatility: 0.06,
+                },
+              },
+            ],
+          }),
+        }) as any
+      )
+    ).rejects.toThrow(/rating contains unsupported data/);
   });
 
   it("rejects malformed social profile and privacy responses", async () => {

@@ -14,6 +14,7 @@ import {
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
+  type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
 import { validateOnlineRating } from "../ratings";
@@ -328,6 +329,33 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       [accountId]
     );
     return result.rows.length > 0;
+  }
+
+  async listRatingLeaderboard(limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
+    await this.ensureSchema();
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    const result = await this.queryable.query(
+      `
+        SELECT a.display_name, r.payload
+        FROM online_account_ratings r
+        INNER JOIN online_accounts a ON a.account_id = r.account_id
+        ORDER BY
+          (r.payload->>'rating')::double precision DESC,
+          (r.payload->>'games')::integer DESC,
+          lower(a.display_name) ASC,
+          a.display_name ASC
+        LIMIT $1
+      `,
+      [boundedLimit]
+    );
+    return result.rows.map((row) => {
+      const rating = validateOnlineRating(row.payload, `online account leaderboard rating ${row.display_name}`);
+      return {
+        schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+        displayName: String(row.display_name),
+        rating: createOnlineAccountPublicRating(rating),
+      };
+    });
   }
 
   async getProfileForDisplayName(

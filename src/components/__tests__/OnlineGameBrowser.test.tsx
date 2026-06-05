@@ -682,6 +682,64 @@ describe("OnlineGameBrowser", () => {
     expect(within(profileCard).getByTitle("24 rated games")).toHaveTextContent("1612");
   });
 
+  it("shows sanitized public rating leaders in the People panel", async () => {
+    const loadRatingLeaderboard = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      entries: [
+        {
+          schemaVersion: 1,
+          displayName: "Cleo",
+          rating: publicRating({
+            rating: 1620,
+            display: "1620",
+            provisional: false,
+            games: 8,
+            updatedAt: "2026-06-04T12:00:00.000Z",
+          }),
+        },
+        {
+          schemaVersion: 1,
+          displayName: "Ben",
+          rating: publicRating({
+            rating: 1590,
+            display: "1590?",
+            provisional: true,
+            games: 3,
+            updatedAt: "2026-06-04T12:01:00.000Z",
+          }),
+        },
+      ],
+    });
+
+    render(
+      <OnlineGameBrowser
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        onReplay={vi.fn()}
+        onSpectate={vi.fn()}
+        onBack={vi.fn()}
+        account={accountFixture()}
+        {...socialPropsWithFollowing([])}
+        loadRatingLeaderboard={loadRatingLeaderboard}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const leaders = await within(people).findByRole("region", { name: "Rating leaders" });
+    expect(leaders).toHaveTextContent("Rating leaders");
+    expect(leaders).toHaveTextContent("2 players");
+    const rows = within(leaders).getAllByRole("article");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("1");
+    expect(rows[0]).toHaveTextContent("Cleo");
+    expect(within(rows[0]).getByTitle("8 rated games")).toHaveTextContent("1620");
+    expect(rows[1]).toHaveTextContent("2");
+    expect(rows[1]).toHaveTextContent("Ben");
+    expect(within(rows[1]).getByTitle("3 rated games")).toHaveTextContent("1590?");
+    expect(people).not.toHaveTextContent("account_cleo");
+    expect(loadRatingLeaderboard).toHaveBeenCalledWith({ limit: 10 });
+  });
+
   it("lets signed-in players watch public live games from profile cards", async () => {
     const onSpectate = vi.fn();
     const loadAccountProfile = vi.fn().mockResolvedValue({

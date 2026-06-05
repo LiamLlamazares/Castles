@@ -147,6 +147,7 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   parseOnlineAccountPrivacyPatch,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -179,6 +180,8 @@ const MIN_CHALLENGE_EXPIRES_IN_MS = 5 * 60 * 1000;
 const MAX_CHALLENGE_EXPIRES_IN_MS = 7 * 24 * 60 * 60 * 1000;
 const ACCOUNT_CHALLENGE_PAIR_COOLDOWN_MS = 60_000;
 const ACCOUNT_SESSION_TOKEN_BYTES = 24;
+const RATING_LEADERBOARD_DEFAULT_LIMIT = 10;
+const RATING_LEADERBOARD_MAX_LIMIT = 50;
 
 type PublicSessionIdentity = { kind: "session"; id: string };
 type PublicPlayerIdentity = OnlineIdentity;
@@ -529,6 +532,34 @@ function parseAccountChallengeDirectoryOptions(
     return { ok: false, message: "Account challenge state is invalid." };
   }
   return { ok: true, state: state as OnlineAccountChallengeDirectoryState };
+}
+
+function parseRatingLeaderboardOptions(
+  originalUrl: string
+): { ok: true; limit: number } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Rating leaderboard query is invalid." };
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "limit") {
+      return { ok: false, message: "Rating leaderboard query is invalid." };
+    }
+  }
+  if (url.searchParams.getAll("limit").length > 1) {
+    return { ok: false, message: "Rating leaderboard query is invalid." };
+  }
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? RATING_LEADERBOARD_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > RATING_LEADERBOARD_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Rating leaderboard limit is invalid." };
+  }
+  return { ok: true, limit };
 }
 
 function parseOpenSeekDirectoryOptions(
@@ -2759,6 +2790,37 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       account: auth.account,
     });
+  });
+
+  app.get("/api/online/ratings/leaderboard", async (req, res) => {
+    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many public rating requests were sent too quickly." },
+      });
+      return;
+    }
+    const parsed = parseRatingLeaderboardOptions(req.originalUrl);
+    if (!parsed.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: parsed.message },
+      });
+      return;
+    }
+    try {
+      const entries = await accountStore.listRatingLeaderboard(parsed.limit);
+      log({ event: "online.rating.leaderboard", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+        entries,
+      });
+    } catch (error) {
+      console.error("Failed to load rating leaderboard", error);
+      log({ event: "online.rating.leaderboard", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Rating leaderboard could not be loaded." },
+      });
+    }
   });
 
   app.get("/api/online/profiles/:displayName", async (req, res) => {

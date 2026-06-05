@@ -6,6 +6,7 @@ import {
 } from "./ratings";
 
 export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
+export const ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION = 1;
 
 export type OnlineAccountFollowPolicy = "everyone" | "nobody";
 export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
@@ -52,6 +53,18 @@ export interface OnlineAccountPublicProfile {
     followedBy: boolean;
     blocked: boolean;
   };
+}
+
+export interface OnlineRatingLeaderboardEntry {
+  schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
+  displayName: string;
+  rating: OnlineAccountPublicRating;
+}
+
+export interface OnlineRatingLeaderboardResponse {
+  protocolVersion: number;
+  schemaVersion: typeof ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION;
+  entries: OnlineRatingLeaderboardEntry[];
 }
 
 export function createOnlineAccountPublicRating(rating: OnlineRating): OnlineAccountPublicRating {

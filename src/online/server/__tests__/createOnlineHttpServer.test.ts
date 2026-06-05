@@ -44,6 +44,7 @@ import {
 } from "../../seeks";
 import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
 import { hashOnlineToken, verifyOnlineToken } from "../onlineTokenCredentials";
+import { createDefaultOnlineRating } from "../../ratings";
 
 const servers: Array<{ close: (callback: () => void) => void }> = [];
 
@@ -237,6 +238,22 @@ class FakePostgresAccountQueryable {
       const [accountId] = values as string[];
       const rating = this.ratingRows.get(accountId);
       return { rows: rating ? [{ payload: rating }] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT a.display_name, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
+      const [limit] = values as number[];
+      const rows = Array.from(this.ratingRows.entries())
+        .flatMap(([accountId, rating]) => {
+          const account = this.accounts.get(accountId);
+          return account ? [{ display_name: account.display_name, payload: rating }] : [];
+        })
+        .sort((left, right) => {
+          if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
+          if (left.payload.games !== right.payload.games) return right.payload.games - left.payload.games;
+          return String(left.display_name).localeCompare(String(right.display_name));
+        })
+        .slice(0, limit);
+      return { rows };
     }
 
     if (normalizedText.startsWith("INSERT INTO online_account_display_names")) {
@@ -657,6 +674,99 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(secondDevice)).not.toContain("correct-horse-battery-staple");
     expect(firstMeResponse.status).toBe(200);
     expect(secondMeResponse.status).toBe(200);
+  });
+
+  it("serves a public rating leaderboard without account ids or rating engine internals", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = createPostgresAccountStore(queryable);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const ada = await createAccountViaApi(port, "Ada");
+    const ben = await createAccountViaApi(port, "Ben");
+    const cleo = await createAccountViaApi(port, "Cleo");
+    queryable.ratingRows.set(ada.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:03:00.000Z"),
+      rating: 1490,
+      deviation: 90,
+      games: 4,
+    });
+    queryable.ratingRows.set(ben.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:04:00.000Z"),
+      rating: 1620,
+      deviation: 140,
+      games: 3,
+    });
+    queryable.ratingRows.set(cleo.account.accountId, {
+      ...createDefaultOnlineRating("2026-06-03T12:05:00.000Z"),
+      rating: 1620,
+      deviation: 80,
+      games: 8,
+    });
+    queryable.ratingRows.set("account_deleted", {
+      ...createDefaultOnlineRating("2026-06-03T12:06:00.000Z"),
+      rating: 1900,
+      deviation: 80,
+      games: 2,
+    });
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/ratings/leaderboard?limit=2`);
+    const body = await response.json();
+    const tokenQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?token=secret`
+    );
+    const badLimitResponse = await fetch(`http://127.0.0.1:${port}/api/online/ratings/leaderboard?limit=51`);
+    const duplicateLimitResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?limit=2&limit=3`
+    );
+    const unknownParamResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?sort=rating`
+    );
+
+    expect(response.status).toBe(200);
+    expect(tokenQueryResponse.status).toBe(400);
+    expect(badLimitResponse.status).toBe(400);
+    expect(duplicateLimitResponse.status).toBe(400);
+    expect(unknownParamResponse.status).toBe(400);
+    expect(body).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      entries: [
+        {
+          schemaVersion: 1,
+          displayName: "Cleo",
+          rating: {
+            schemaVersion: 1,
+            rating: 1620,
+            display: "1620",
+            provisional: false,
+            games: 8,
+            updatedAt: "2026-06-03T12:05:00.000Z",
+          },
+        },
+        {
+          schemaVersion: 1,
+          displayName: "Ben",
+          rating: {
+            schemaVersion: 1,
+            rating: 1620,
+            display: "1620?",
+            provisional: true,
+            games: 3,
+            updatedAt: "2026-06-03T12:04:00.000Z",
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toContain("account_");
+    expect(JSON.stringify(body)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(body)).not.toContain("deviation");
+    expect(JSON.stringify(body)).not.toContain("volatility");
   });
 
   it("supports exact profile lookup, follows, privacy, and blocks without exposing account ids", async () => {

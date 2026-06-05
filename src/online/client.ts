@@ -22,12 +22,16 @@ import {
 } from "./accounts";
 import {
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+  ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   type OnlineAccountFollowingResponse,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacyResponse,
   type OnlineAccountPrivacySettings,
   type OnlineAccountProfileResponse,
   type OnlineAccountPublicProfile,
+  type OnlineAccountPublicRating,
+  type OnlineRatingLeaderboardEntry,
+  type OnlineRatingLeaderboardResponse,
 } from "./social";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
@@ -177,6 +181,9 @@ export type {
   OnlineAccountPrivacyResponse,
   OnlineAccountProfileResponse,
   OnlineAccountPublicProfile,
+  OnlineAccountPublicRating,
+  OnlineRatingLeaderboardEntry,
+  OnlineRatingLeaderboardResponse,
   OnlineAccountChallengeDirectoryResponse,
   OnlineAccountChallengeListItem,
 };
@@ -748,6 +755,56 @@ async function createOnlineRequestError(response: Response, fallbackMessage: str
   return new Error(fallbackMessage);
 }
 
+function validateOnlineAccountPublicRating(
+  value: unknown,
+  label: string
+): OnlineAccountPublicRating {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} is invalid.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedRatingKeys = new Set(["schemaVersion", "rating", "display", "provisional", "games", "updatedAt"]);
+  for (const key of Object.keys(record)) {
+    if (!allowedRatingKeys.has(key)) {
+      throw new Error(`${label} contains unsupported data.`);
+    }
+  }
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label} schemaVersion is invalid.`);
+  }
+  if (typeof record.rating !== "number" || !Number.isSafeInteger(record.rating)) {
+    throw new Error(`${label} value is invalid.`);
+  }
+  if (
+    typeof record.display !== "string" ||
+    record.display.length === 0 ||
+    record.display.length > 16 ||
+    stringContainsDurableSecret(record.display)
+  ) {
+    throw new Error(`${label} display is invalid.`);
+  }
+  if (typeof record.provisional !== "boolean") {
+    throw new Error(`${label} provisional flag is invalid.`);
+  }
+  if (typeof record.games !== "number" || !Number.isSafeInteger(record.games) || record.games < 0) {
+    throw new Error(`${label} games is invalid.`);
+  }
+  if (
+    record.updatedAt !== null &&
+    (typeof record.updatedAt !== "string" || Number.isNaN(Date.parse(record.updatedAt)))
+  ) {
+    throw new Error(`${label} updatedAt is invalid.`);
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    rating: record.rating,
+    display: record.display,
+    provisional: record.provisional,
+    games: record.games,
+    updatedAt: record.updatedAt as string | null,
+  };
+}
+
 function validateOnlineAccountPublicProfile(
   value: unknown,
   label: string
@@ -773,51 +830,7 @@ function validateOnlineAccountPublicProfile(
   }
   let rating: OnlineAccountPublicProfile["rating"];
   if (record.rating !== undefined) {
-    const ratingRecord = record.rating;
-    if (!ratingRecord || typeof ratingRecord !== "object" || Array.isArray(ratingRecord)) {
-      throw new Error(`${label} was malformed: rating is invalid.`);
-    }
-    const allowedRatingKeys = new Set(["schemaVersion", "rating", "display", "provisional", "games", "updatedAt"]);
-    for (const key of Object.keys(ratingRecord as Record<string, unknown>)) {
-      if (!allowedRatingKeys.has(key)) {
-        throw new Error(`${label} was malformed: rating contains unsupported data.`);
-      }
-    }
-    const ratingObject = ratingRecord as Record<string, unknown>;
-    if (ratingObject.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
-      throw new Error(`${label} was malformed: rating schemaVersion is invalid.`);
-    }
-    if (typeof ratingObject.rating !== "number" || !Number.isSafeInteger(ratingObject.rating)) {
-      throw new Error(`${label} was malformed: rating value is invalid.`);
-    }
-    if (
-      typeof ratingObject.display !== "string" ||
-      ratingObject.display.length === 0 ||
-      ratingObject.display.length > 16 ||
-      stringContainsDurableSecret(ratingObject.display)
-    ) {
-      throw new Error(`${label} was malformed: rating display is invalid.`);
-    }
-    if (typeof ratingObject.provisional !== "boolean") {
-      throw new Error(`${label} was malformed: rating provisional flag is invalid.`);
-    }
-    if (typeof ratingObject.games !== "number" || !Number.isSafeInteger(ratingObject.games) || ratingObject.games < 0) {
-      throw new Error(`${label} was malformed: rating games is invalid.`);
-    }
-    if (
-      ratingObject.updatedAt !== null &&
-      (typeof ratingObject.updatedAt !== "string" || Number.isNaN(Date.parse(ratingObject.updatedAt)))
-    ) {
-      throw new Error(`${label} was malformed: rating updatedAt is invalid.`);
-    }
-    rating = {
-      schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
-      rating: ratingObject.rating,
-      display: ratingObject.display,
-      provisional: ratingObject.provisional,
-      games: ratingObject.games,
-      updatedAt: ratingObject.updatedAt as string | null,
-    };
+    rating = validateOnlineAccountPublicRating(record.rating, `${label} was malformed: rating`);
   }
   const presence = record.presence;
   if (!presence || typeof presence !== "object" || Array.isArray(presence)) {
@@ -966,6 +979,76 @@ export async function fetchOnlineAccountFollowing(
       validateOnlineAccountPublicProfile(profile, `Online following.following[${index}]`)
     ),
   };
+}
+
+function validateOnlineRatingLeaderboardEntry(
+  value: unknown,
+  label: string
+): OnlineRatingLeaderboardEntry {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedEntryKeys = new Set(["schemaVersion", "displayName", "rating"]);
+  for (const key of Object.keys(record)) {
+    if (!allowedEntryKeys.has(key)) {
+      throw new Error(`${label} was malformed: entry contains unsupported data.`);
+    }
+  }
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label} was malformed: schemaVersion is invalid.`);
+  }
+  if (typeof record.displayName !== "string" || record.displayName.length === 0) {
+    throw new Error(`${label} was malformed: displayName is invalid.`);
+  }
+  if (stringContainsDurableSecret(record.displayName)) {
+    throw new Error(`${label} was malformed: displayName must not contain secrets.`);
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    displayName: record.displayName,
+    rating: validateOnlineAccountPublicRating(record.rating, `${label} was malformed: rating`),
+  };
+}
+
+function validateOnlineRatingLeaderboardResponse(
+  body: unknown,
+  label: string
+): OnlineRatingLeaderboardResponse {
+  const record = validateVersionedObject(body, label);
+  const allowedResponseKeys = new Set(["protocolVersion", "schemaVersion", "entries"]);
+  for (const key of Object.keys(record)) {
+    if (!allowedResponseKeys.has(key)) {
+      throw new Error(`${label} response was malformed: response contains unsupported data.`);
+    }
+  }
+  if (record.schemaVersion !== ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION) {
+    throw new Error(`${label} response was malformed: schemaVersion is invalid.`);
+  }
+  if (!Array.isArray(record.entries)) {
+    throw new Error(`${label} response was malformed: entries is invalid.`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    schemaVersion: ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+    entries: record.entries.map((entry, index) =>
+      validateOnlineRatingLeaderboardEntry(entry, `${label}.entries[${index}]`)
+    ),
+  };
+}
+
+export async function fetchOnlineRatingLeaderboard(
+  options: { limit?: number } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineRatingLeaderboardResponse> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const query = params.toString();
+  const response = await fetchImpl(query ? `/api/online/ratings/leaderboard?${query}` : "/api/online/ratings/leaderboard");
+  if (!response.ok) {
+    throw new Error(`Could not load online rating leaderboard (${response.status})`);
+  }
+  return validateOnlineRatingLeaderboardResponse(await response.json(), "Online rating leaderboard");
 }
 
 async function putOrDeleteOnlineAccountRelationship(

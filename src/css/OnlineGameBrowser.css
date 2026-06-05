@@ -355,6 +355,13 @@
   color: #d8efff;
 }
 
+.online-browser-rating-rank {
+  display: inline-flex;
+  min-width: 2ch;
+  justify-content: center;
+  margin-right: 8px;
+}
+
 .online-browser-social-badges span.presence-offline,
 .online-browser-following-row span.presence-offline,
 .online-browser-social-badges span.presence-hidden,

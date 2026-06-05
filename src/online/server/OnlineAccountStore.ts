@@ -11,6 +11,7 @@ import {
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
+  type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
 import { hashOnlineToken, isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
@@ -65,6 +66,7 @@ export interface OnlineAccountStore {
   listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
   revokeSessionsForAccount(accountId: string): Promise<number>;
   deleteAccount(accountId: string): Promise<boolean>;
+  listRatingLeaderboard(limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
   getProfileForDisplayName(viewerAccountId: string, displayName: string, viewedAt?: string): Promise<OnlineAccountPublicProfile | null>;
   listFollowingProfiles(accountId: string, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
   followAccount(followerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
@@ -260,6 +262,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     for (const followed of this.following.values()) followed.delete(accountId);
     for (const blocked of this.blocks.values()) blocked.delete(accountId);
     return true;
+  }
+
+  async listRatingLeaderboard(_limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
+    return [];
   }
 
   async getProfileForDisplayName(
