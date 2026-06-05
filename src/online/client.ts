@@ -1955,7 +1955,10 @@ export async function createOpenSeek(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not create open seek (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not create open seek (${response.status})`
+    );
   }
 
   const body = await response.json();
@@ -1998,7 +2001,10 @@ export async function fetchOpenSeek(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not fetch open seek (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not fetch open seek (${response.status})`
+    );
   }
 
   return validateOpenSeekCreatorResponse(await response.json(), "Open seek");
@@ -2014,7 +2020,10 @@ export async function cancelOpenSeek(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not cancel open seek (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not cancel open seek (${response.status})`
+    );
   }
 
   return validateOpenSeekCreatorResponse(await response.json(), "Open seek cancel");
@@ -2034,7 +2043,10 @@ export async function acceptOpenSeek(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not accept open seek (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not accept open seek (${response.status})`
+    );
   }
 
   return validateOpenSeekAcceptResponse(await response.json(), "Open seek accept");

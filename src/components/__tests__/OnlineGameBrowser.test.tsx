@@ -5391,6 +5391,67 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onCancelSeek).toHaveBeenCalledWith("seek_mine"));
   });
 
+  it("surfaces trusted server errors when accepting a lobby listing fails", async () => {
+    const onAcceptSeek = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        404,
+        "not_found",
+        "That lobby listing is no longer available."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({ seekId: "seek_expired" }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={onAcceptSeek}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: /seek_expired/i });
+    fireEvent.click(within(row).getByRole("button", { name: "Accept lobby listing seek_expired" }));
+
+    await waitFor(() => expect(onAcceptSeek).toHaveBeenCalledWith("seek_expired"));
+    expect(await screen.findByRole("status")).toHaveTextContent("That lobby listing is no longer available.");
+    expect(screen.queryByText("Could not accept that lobby listing.")).not.toBeInTheDocument();
+  });
+
+  it("surfaces trusted server errors when cancelling a lobby listing fails", async () => {
+    const onCancelSeek = vi.fn().mockRejectedValue(
+      new OnlineRequestError(
+        429,
+        "rate_limited",
+        "Please wait before changing that lobby listing again."
+      )
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({ seekId: "seek_mine" }),
+        ]))}
+        ownedSeekIds={["seek_mine"]}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onCancelSeek={onCancelSeek}
+      />
+    );
+
+    const row = await screen.findByRole("article", { name: /seek_mine/i });
+    fireEvent.click(within(row).getByRole("button", { name: "Cancel lobby listing seek_mine" }));
+
+    await waitFor(() => expect(onCancelSeek).toHaveBeenCalledWith("seek_mine"));
+    expect(await screen.findByRole("status")).toHaveTextContent("Please wait before changing that lobby listing again.");
+    expect(screen.queryByText("Could not cancel that lobby listing.")).not.toBeInTheDocument();
+  });
+
   it("shows creator-owned seek status with refresh, cancel, and accepted-game join actions", async () => {
     const onRefreshOwnedSeek = vi.fn().mockResolvedValue(undefined);
     const onCancelSeek = vi.fn().mockResolvedValue(undefined);

@@ -2976,7 +2976,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       }
     } catch (error) {
       console.error(`[OnlineGameBrowser] Failed to ${action} open seek`, error);
-      setSeekActionMessage(action === "accept" ? "Could not accept that lobby listing." : "Could not cancel that lobby listing.");
+      setSeekActionMessage(
+        onlineRequestErrorMessage(error) ??
+        (action === "accept" ? "Could not accept that lobby listing." : "Could not cancel that lobby listing.")
+      );
     } finally {
       setSeekActionById((current) => {
         const next = { ...current };

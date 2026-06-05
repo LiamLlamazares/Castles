@@ -1823,6 +1823,48 @@ describe("online client helpers", () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(5, "/api/online/seeks/seek_123/accept", expect.objectContaining({ method: "POST" }));
   });
 
+  it("preserves trusted open seek rejection messages as request errors", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: async () => ({
+          error: {
+            code: "rate_limited",
+            message: "Please wait before changing that lobby listing again.",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({
+          error: {
+            code: "not_found",
+            message: "That lobby listing is no longer available.",
+          },
+        }),
+      });
+
+    await expect(
+      cancelOpenSeek({ seekId: "seek_123", token: "creator-token" }, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 429,
+      code: "rate_limited",
+      message: "Please wait before changing that lobby listing again.",
+    });
+    await expect(
+      acceptOpenSeek("seek_123", { acceptorSessionId: "anon_acceptor" }, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 404,
+      code: "not_found",
+      message: "That lobby listing is no longer available.",
+    });
+  });
+
   it("passes open seek directory filters as token-free query parameters", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
