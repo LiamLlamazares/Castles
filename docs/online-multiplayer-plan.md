@@ -856,6 +856,8 @@ Online account entry update on 2026-06-05: account creation/sign-in is now a mod
 
 Favicon update on 2026-06-05: the browser favicon, manifest SVG icon, service-worker core asset list, and `.ico` fallback now use an empty flat-top hexagonal board rendered with the same board background, alternating hex fills, and gray stroke colors as the app board. The visual preview artifact is `artifacts/favicon/favicon-preview.png`.
 
+Watch scanability update on 2026-06-05: the desktop Watch featured-game panel is top-aligned instead of stretching to the height of the secondary game list. This keeps the selected featured game content visible in the first viewport while preserving the two-column desktop Watch layout. The regenerated audit artifact is `artifacts/ui-audit/phase6ai-local-layout/desktop-online-watch.png`. The current broad layout audit still reports deferred mobile back-button text overflow, which remains out of scope until the desktop UI direction is final.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.

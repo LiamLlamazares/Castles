@@ -166,6 +166,9 @@ describe("Tutorial mobile layout CSS", () => {
 
     expect(onlineCss).toContain(".online-browser-watch-grid");
     expect(onlineCss).toMatch(/\.online-browser-watch-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.15fr\)\s*minmax\(280px,\s*0\.85fr\);/s);
+    expect(onlineCss).toMatch(/\.online-browser-watch-grid\s*\{[^}]*align-items:\s*start;/s);
+    expect(onlineCss).toMatch(/\.online-browser-featured-game\s*\{[^}]*align-self:\s*start;/s);
+    expect(onlineCss).not.toMatch(/\.online-browser-featured-game \.online-game-row\s*\{[^}]*height:\s*100%;/s);
     expect(onlineCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*\.online-browser-watch-grid\s*\{[^}]*grid-template-columns:\s*1fr;/s);
   });
 
