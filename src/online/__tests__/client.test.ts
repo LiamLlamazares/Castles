@@ -1501,6 +1501,50 @@ describe("online client helpers", () => {
     ).rejects.toThrow("Online account session was not revoked.");
   });
 
+  it("preserves trusted account creation rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: {
+          code: "bad_request",
+          message: "That display name is already taken.",
+        },
+      }),
+    });
+
+    await expect(
+      createOnlineAccount("Liam", "account-password", fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 400,
+      code: "bad_request",
+      message: "That display name is already taken.",
+    });
+  });
+
+  it("preserves trusted account sign-in rejection messages as request errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({
+        error: {
+          code: "unauthorized",
+          message: "That display name or password did not match.",
+        },
+      }),
+    });
+
+    await expect(
+      signInOnlineAccount("Liam", "account-password", fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 401,
+      code: "unauthorized",
+      message: "That display name or password did not match.",
+    });
+  });
+
   it("loads and revokes all online account sessions", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce({

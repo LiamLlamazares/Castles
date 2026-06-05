@@ -683,6 +683,10 @@ function onlineRequestErrorMessage(error: unknown): string | null {
   return error instanceof OnlineRequestError ? error.message : null;
 }
 
+function isAccountActionErrorMessage(message: string): boolean {
+  return message !== "" && message !== "Online account created." && message !== "Signed in.";
+}
+
 function formatAccountChallengeErrorMessage(
   error: unknown,
   displayName: string,
@@ -1267,8 +1271,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setAccountDisplayName("");
       setAccountPassword("");
       setAccountActionMessage("Online account created.");
-    } catch {
-      setAccountActionMessage("Could not create that online account name.");
+    } catch (error) {
+      setAccountActionMessage(onlineRequestErrorMessage(error) ?? "Could not create that online account name.");
     }
   }, [accountDisplayName, accountPassword, onCreateAccount]);
 
@@ -1281,8 +1285,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       setAccountDisplayName("");
       setAccountPassword("");
       setAccountActionMessage("Signed in.");
-    } catch {
-      setAccountActionMessage("Could not sign in with that display name and password.");
+    } catch (error) {
+      setAccountActionMessage(
+        onlineRequestErrorMessage(error) ?? "Could not sign in with that display name and password."
+      );
     }
   }, [accountDisplayName, accountPassword, onSignInAccount]);
 
@@ -3562,7 +3568,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           : "";
   const accountStatusMessageClassName = [
     "online-browser-account-message",
-    accountStatus === "error" || Boolean(accountError) || accountActionMessage.startsWith("Could not")
+    accountStatus === "error" || Boolean(accountError) || isAccountActionErrorMessage(accountActionMessage)
       ? "error"
       : "",
   ].filter(Boolean).join(" ");

@@ -1320,7 +1320,10 @@ export async function createOnlineAccount(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not create online account (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not create online account (${response.status})`
+    );
   }
 
   return validateOnlineAccountSessionResponse(await response.json(), "Online account creation");
@@ -1338,7 +1341,10 @@ export async function signInOnlineAccount(
   });
 
   if (!response.ok) {
-    throw new Error(`Could not sign in online account (${response.status})`);
+    throw await createOnlineRequestError(
+      response,
+      `Could not sign in online account (${response.status})`
+    );
   }
 
   return validateOnlineAccountSessionResponse(await response.json(), "Online account sign-in");

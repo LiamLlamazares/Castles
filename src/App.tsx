@@ -1148,7 +1148,11 @@ function App() {
     } catch (error) {
       console.error("Failed to create online account", error);
       setOnlineAccountStatus(onlineAccountSession ? "error" : "signed-out");
-      setOnlineAccountError("Could not create that online account name.");
+      setOnlineAccountError(
+        error instanceof OnlineRequestError
+          ? error.message
+          : "Could not create that online account name."
+      );
       throw error;
     }
   }, [onlineAccountSession]);
@@ -1170,7 +1174,11 @@ function App() {
     } catch (error) {
       console.error("Failed to sign in online account", error);
       setOnlineAccountStatus(onlineAccountSession ? "error" : "signed-out");
-      setOnlineAccountError("Could not sign in with that display name and password.");
+      setOnlineAccountError(
+        error instanceof OnlineRequestError
+          ? error.message
+          : "Could not sign in with that display name and password."
+      );
       throw error;
     }
   }, [onlineAccountSession]);

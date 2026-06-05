@@ -375,6 +375,36 @@ describe("OnlineGameBrowser", () => {
     expect(await screen.findByText("Online account created.")).toBeInTheDocument();
   });
 
+  it("surfaces trusted server errors when account creation fails", async () => {
+    const onCreateAccount = vi.fn().mockRejectedValue(
+      new OnlineRequestError(400, "bad_request", "That display name is already taken.")
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onCreateAccount={onCreateAccount}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Liam" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "account-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Account" }));
+
+    await waitFor(() => expect(onCreateAccount).toHaveBeenCalledWith("Liam", "account-password"));
+    expect(await screen.findByText("That display name is already taken.")).toHaveClass("error");
+    expect(screen.queryByText("Could not create that online account name.")).not.toBeInTheDocument();
+  });
+
   it("signs into an online account from the Online page account panel", async () => {
     const onSignInAccount = vi.fn().mockResolvedValue(undefined);
     render(
@@ -400,6 +430,36 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(onSignInAccount).toHaveBeenCalledWith("Liam", "account-password"));
     expect(await screen.findByText("Signed in.")).toBeInTheDocument();
+  });
+
+  it("surfaces trusted server errors when account sign-in fails", async () => {
+    const onSignInAccount = vi.fn().mockRejectedValue(
+      new OnlineRequestError(401, "unauthorized", "That display name or password did not match.")
+    );
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onSignInAccount={onSignInAccount}
+      />
+    );
+
+    await screen.findByText("No lobby listings yet.");
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Liam" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "account-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+
+    await waitFor(() => expect(onSignInAccount).toHaveBeenCalledWith("Liam", "account-password"));
+    expect(await screen.findByText("That display name or password did not match.")).toHaveClass("error");
+    expect(screen.queryByText("Could not sign in with that display name and password.")).not.toBeInTheDocument();
   });
 
   it("shows Google sign-in when the provider is enabled", async () => {
