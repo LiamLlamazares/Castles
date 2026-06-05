@@ -18,7 +18,7 @@ database user:     castles
 
 `deploy/systemd/castles-node.service` is committed for the current `lukasz` and `/home/lukasz/Castles` layout. If you change the linux user or repo path above, edit the service unit in the repo before copying it, or the validation step below must fail.
 
-The server must have Node, npm, git, nginx, and certbot. PostgreSQL only has to run on this server when `DATABASE_URL` points to localhost. If `DATABASE_URL` points to a managed or separate PostgreSQL host, do not install a local PostgreSQL server just for Castles; use the remote PostgreSQL URL in `/etc/castles/castles.env`. `psql` and `pg_dump` are still useful on the app server for verification and backups, but they are client tools in that setup.
+The server must have Node, npm, git, nginx, and certbot. PostgreSQL only has to run on this server when `DATABASE_URL` points to localhost. If `DATABASE_URL` points to a managed or separate PostgreSQL host, do not install a local PostgreSQL server just for Castles; use the remote PostgreSQL URL in `/etc/castles/castles.env`. `psql` and `pg_dump` are still useful on the app server for verification and full SQL backups, but they are client tools in that setup. If `pg_dump` is unavailable during a UI-only/private-beta deploy, `scripts/deploy/postgres-online-backup.mjs` can write a JSON snapshot of the known Castles `online_*` tables through the app's Node PostgreSQL client.
 
 Use the public app domain, such as `castles.ls314.com` or `castles.ls314.xyz`, for `PUBLIC_BASE_URL`. A host/admin alias such as `contabo.ls314.xyz` can be useful for SSH or server management, but it should not become `PUBLIC_BASE_URL` unless players will actually open the app there.
 
@@ -432,15 +432,20 @@ for (const [key, value] of Object.entries(env)) {
 }
 NODE
   )"
-  command -v pg_dump >/dev/null || {
-    echo "pg_dump is required to back up PostgreSQL online events."
-    exit 1
-  }
-  pg_dump > "$backup/postgres-online-events.sql"
-  test -s "$backup/postgres-online-events.sql" || {
-    echo "PostgreSQL backup is empty or failed."
-    exit 1
-  }
+  if command -v pg_dump >/dev/null; then
+    pg_dump > "$backup/postgres-online-events.sql"
+    test -s "$backup/postgres-online-events.sql" || {
+      echo "PostgreSQL backup is empty or failed."
+      exit 1
+    }
+  else
+    echo "pg_dump is unavailable; writing JSON backup with the Node PostgreSQL client."
+    node scripts/deploy/postgres-online-backup.mjs --env-file /etc/castles/castles.env --out "$backup/postgres-online-backup.json"
+    test -s "$backup/postgres-online-backup.json" || {
+      echo "PostgreSQL JSON backup is empty or failed."
+      exit 1
+    }
+  fi
 fi
 
 sudo sh -c 'find "$1" -type f ! -name SHA256SUMS.txt -exec sha256sum {} + > "$1/SHA256SUMS.txt"' sh "$backup"

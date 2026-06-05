@@ -862,6 +862,8 @@ Watch selection wording update on 2026-06-05: Watch no longer calls the current-
 
 Shared shell audit cleanup on 2026-06-05: the broad local UI audit now passes again after the shared app-shell back button kept its full `aria-label` while moving visible text into a child span that is removed from narrow icon-only layout flow, and the Online account chip compacts to an icon-only control at the same narrow breakpoint. This cleared the previous mobile/short-mobile `interactive-text-overflow` and account-chip overlap diagnostics without changing the desktop top strip. The regenerated audit artifacts are in `artifacts/ui-audit/phase6ai-local-layout/`.
 
+Deploy backup hardening on 2026-06-05: the deploy runbook now keeps `pg_dump` as the preferred full SQL backup, but falls back to `scripts/deploy/postgres-online-backup.mjs` when PostgreSQL client tools are unavailable on the app server. The fallback writes a JSON snapshot of the known Castles `online_*` persistence tables through the app's Node PostgreSQL client, avoiding UI-only deploys that have no database-state backup artifact.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.
