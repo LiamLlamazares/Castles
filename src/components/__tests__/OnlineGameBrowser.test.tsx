@@ -514,6 +514,7 @@ describe("OnlineGameBrowser", () => {
 
     await screen.findByText("No lobby listings yet.");
     expect(screen.queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();
+    expect(screen.getByText("Google sign-in is not configured on this server.")).toBeInTheDocument();
   });
 
   it("shows account session status and signs out everywhere", async () => {

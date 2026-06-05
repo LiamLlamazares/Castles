@@ -3587,7 +3587,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? "error"
       : "",
   ].filter(Boolean).join(" ");
-  const googleOAuthProvider = accountOAuthProviders.find((provider) => provider.provider === "google" && provider.enabled);
+  const googleOAuthProviderSummary = accountOAuthProviders.find((provider) => provider.provider === "google");
+  const googleOAuthProvider = googleOAuthProviderSummary?.enabled ? googleOAuthProviderSummary : undefined;
+  const accountOAuthPanelMessage =
+    !account && accountOAuthStatus === "ready" && googleOAuthProviderSummary && !googleOAuthProvider
+      ? "Google sign-in is not configured on this server."
+      : !account && accountOAuthStatus === "error"
+        ? "Could not check Google sign-in availability."
+        : "";
+  const accountOAuthPanelMessageClassName = [
+    "online-browser-account-oauth-status",
+    accountOAuthStatus === "error" || (googleOAuthProviderSummary && !googleOAuthProvider) ? "error" : "",
+  ].filter(Boolean).join(" ");
   const socialLookupDisplayName = socialLookupName.trim();
   const socialBusy = socialLookupStatus === "loading" || socialAction !== undefined;
   const canSubmitSocialLookup = socialLookupDisplayName.length >= 2 && !socialBusy;
@@ -3747,6 +3758,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           {accountStatusMessage && (
             <p className={accountStatusMessageClassName} role="status" aria-live="polite">
               {accountStatusMessage}
+            </p>
+          )}
+          {accountOAuthPanelMessage && (
+            <p className={accountOAuthPanelMessageClassName} role="status" aria-live="polite">
+              {accountOAuthPanelMessage}
             </p>
           )}
         </div>

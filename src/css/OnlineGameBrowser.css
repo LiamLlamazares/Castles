@@ -171,6 +171,16 @@
   color: #ffb7a8 !important;
 }
 
+.online-browser-account-oauth-status {
+  color: #bdb39f !important;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.online-browser-account-oauth-status.error {
+  color: #ffcf8a !important;
+}
+
 .online-browser-account-session-summary {
   font-size: 0.92rem;
 }
