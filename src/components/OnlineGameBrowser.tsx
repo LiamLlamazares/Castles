@@ -1062,6 +1062,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [openSeeks, setOpenSeeks] = React.useState<OpenSeekSummary[]>([]);
   const [query, setQuery] = React.useState("");
   const [debouncedGameQuery, setDebouncedGameQuery] = React.useState("");
+  const [loadedGameQuery, setLoadedGameQuery] = React.useState("");
   const [sort, setSort] = React.useState<OnlineBrowserSort>("newest");
   const [timeFilter, setTimeFilter] = React.useState<OnlineBrowserTimeFilter>("all");
   const [ratingFilter, setRatingFilter] = React.useState<OnlineBrowserRatingFilter>("all");
@@ -1705,6 +1706,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       }
       const loadedGames = response.games;
       setGames((current) => mode === "append" ? [...current, ...loadedGames] : loadedGames);
+      setLoadedGameQuery(gameDirectoryOptions.query ?? "");
       setNextCursor(response.nextCursor);
       setStatus("ready");
     } catch (error) {
@@ -1994,8 +1996,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return liveGames;
   }, [publicActiveGames]);
 
+  const activeHeadToHeadDisplayName = React.useMemo(() => {
+    const displayName = headToHeadDisplayName.trim();
+    if (!displayName) return "";
+    return normalizeDisplayNameKey(displayName) === normalizeDisplayNameKey(query) ? displayName : "";
+  }, [headToHeadDisplayName, query]);
+
   const visibleGames = React.useMemo(() => {
     const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(query) ?? query.trim().toLowerCase();
+    const shouldApplyLocalQueryFilter =
+      normalizedQuery !== "" &&
+      (normalizedQuery !== loadedGameQuery || (tab === "archive" && activeHeadToHeadDisplayName !== ""));
     const filtered = publicGames.filter((game) => {
       const tabMatches =
         tab === "watch"
@@ -2007,7 +2018,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (!matchesRatingFilter(game, ratingFilter)) return false;
       if (tab === "archive" && !matchesResultFilter(game, resultFilter)) return false;
       if (friendFilterActive && !gameHasFollowedParticipant(game, followedDisplayNames)) return false;
-      return !normalizedQuery || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery);
+      return !shouldApplyLocalQueryFilter || onlineGameSummaryDirectorySearchText(game).includes(normalizedQuery);
     });
     return filtered.sort(
       sort === "watchers" && tab === "watch"
@@ -2016,7 +2027,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           ? compareMostMoves
           : compareNewest
     );
-  }, [followedDisplayNames, friendFilterActive, publicGames, query, ratingFilter, resultFilter, sort, tab, timeFilter]);
+  }, [activeHeadToHeadDisplayName, followedDisplayNames, friendFilterActive, loadedGameQuery, publicGames, query, ratingFilter, resultFilter, sort, tab, timeFilter]);
 
   const lobbyLiveGames = React.useMemo(() => {
     return filteredPublicActiveGames.slice(0, 5);
@@ -2078,12 +2089,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       accountGamesRequestIdRef.current += 1;
     };
   }, [account?.accountId, loadAccountGames, tab]);
-
-  const activeHeadToHeadDisplayName = React.useMemo(() => {
-    const displayName = headToHeadDisplayName.trim();
-    if (!displayName) return "";
-    return normalizeDisplayNameKey(displayName) === normalizeDisplayNameKey(query) ? displayName : "";
-  }, [headToHeadDisplayName, query]);
 
   const loadHeadToHeadPage = React.useCallback(async (mode: "replace" | "append", cursor?: string) => {
     if (!account || !loadAccountHeadToHeadGames || !activeHeadToHeadDisplayName) return;

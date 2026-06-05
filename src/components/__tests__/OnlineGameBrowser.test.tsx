@@ -6167,6 +6167,38 @@ describe("OnlineGameBrowser", () => {
     expect(await screen.findByText("game_search_second_page")).toBeInTheDocument();
   });
 
+  it("trusts server-returned Watch search rows without filtering them again locally", async () => {
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_initial_page" })]))
+      .mockResolvedValueOnce(directory([summary({ gameId: "game_server_selected" })]));
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={loadGames}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("game_initial_page")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search live public games" }), {
+      target: { value: "server only indexed field" },
+    });
+
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "active",
+        limit: 50,
+        query: "server only indexed field",
+        cursor: undefined,
+      });
+    });
+    expect(await screen.findByText("game_server_selected")).toBeInTheDocument();
+  });
+
   it("shows an honest empty Watch state while only public games are listable", async () => {
     render(
       <OnlineGameBrowser
@@ -6700,19 +6732,22 @@ describe("OnlineGameBrowser", () => {
   });
 
   it("filters public summaries by player name and game id", async () => {
+    const gameAda = summary({ gameId: "game_ada_public" });
+    const gameCaro = summary({
+      gameId: "game_caro_public",
+      participants: [
+        { seat: "w", role: "white", identity: { kind: "registered", id: "caro_w", displayName: "Caro" } },
+        { seat: "b", role: "black", identity: { kind: "registered", id: "dani_b", displayName: "Dani" } },
+      ],
+    });
+    const loadGames = vi
+      .fn()
+      .mockResolvedValueOnce(directory([gameAda, gameCaro]))
+      .mockResolvedValueOnce(directory([gameCaro]));
     render(
       <OnlineGameBrowser
         initialTab="watch"
-        loadGames={vi.fn().mockResolvedValue(directory([
-          summary({ gameId: "game_ada_public" }),
-          summary({
-            gameId: "game_caro_public",
-            participants: [
-              { seat: "w", role: "white", identity: { kind: "registered", id: "caro_w", displayName: "Caro" } },
-              { seat: "b", role: "black", identity: { kind: "registered", id: "dani_b", displayName: "Dani" } },
-            ],
-          }),
-        ]))}
+        loadGames={loadGames}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
@@ -6725,7 +6760,15 @@ describe("OnlineGameBrowser", () => {
     });
 
     expect(screen.queryByText("game_ada_public")).not.toBeInTheDocument();
-    expect(screen.getByText("game_caro_public")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(loadGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "active",
+        limit: 50,
+        query: "caro",
+        cursor: undefined,
+      });
+    });
+    expect(await screen.findByText("game_caro_public")).toBeInTheDocument();
   });
 
   it("sorts and filters live public games without exposing hidden summaries", async () => {
