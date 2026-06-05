@@ -752,8 +752,11 @@ function seekSearchText(summary: OpenSeekSummary): string {
   const clock = formatSeekClock(summary);
   const scoring = formatSeekScoringLabel(summary);
   const rating = formatSeekRatingLabel(summary);
+  const creatorDisplayName = identityDisplayName(summary.creatorIdentity) ?? "";
   return [
     summary.seekId,
+    creatorDisplayName,
+    creatorDisplayName ? `${creatorDisplayName} creator` : "",
     summary.creatorSeat,
     sideLabel,
     sideDetail,
@@ -4866,19 +4869,44 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   const owned = ownedSeekIds.includes(seek.seekId);
                   const pendingAction = seekActionById[seek.seekId];
                   const radius = seek.setup.board.config.nSquares;
+                  const creatorDisplayName = identityDisplayName(seek.creatorIdentity);
                   return (
                     <article
                       key={seek.seekId}
                       className="online-game-row online-seek-row"
-                      aria-label={`Lobby listing ${seek.seekId}`}
+                      aria-label={
+                        creatorDisplayName
+                          ? `Lobby listing by ${creatorDisplayName}, ${seek.seekId}`
+                          : `Lobby listing ${seek.seekId}`
+                      }
                     >
                       <div className="online-game-row-main">
                         <div className="online-game-players">
-                          <strong>Lobby listing</strong>
+                          <strong className="online-game-player-line">
+                            <span>Lobby listing</span>
+                            {creatorDisplayName && (
+                              <>
+                                <span aria-hidden="true"> by </span>
+                                {canUseAccountSocial ? (
+                                  <button
+                                    type="button"
+                                    className="online-game-player-link"
+                                    onClick={() => void handleSocialLookupByName(creatorDisplayName, { focus: true })}
+                                    aria-label={`Open ${creatorDisplayName} profile from lobby listing ${seek.seekId}`}
+                                  >
+                                    {creatorDisplayName}
+                                  </button>
+                                ) : (
+                                  <span>{creatorDisplayName}</span>
+                                )}
+                              </>
+                            )}
+                          </strong>
                           <span>{seek.seekId}</span>
                         </div>
                         <div className="online-game-meta">
                           <span className="online-game-pill active">Open</span>
+                          <span>{creatorDisplayName ? `Creator ${creatorDisplayName}` : "Creator unregistered"}</span>
                           <span>{formatSeekSideDetail(seek, owned)}</span>
                           <span>Board Radius {radius}</span>
                           <span>Clock {formatSeekClock(seek)}</span>

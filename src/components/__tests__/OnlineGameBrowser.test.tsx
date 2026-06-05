@@ -3380,6 +3380,7 @@ describe("OnlineGameBrowser", () => {
 
     expect(loadOpenSeeks).toHaveBeenCalledWith({ state: "open", limit: 50 });
     expect(loadGames).toHaveBeenCalledWith({ state: "active", limit: 50, cursor: undefined });
+    expect(row).toHaveTextContent("Creator unregistered");
     expect(row).toHaveTextContent("Creator side Random");
     expect(row).toHaveTextContent("Radius 7");
     expect(row).toHaveTextContent("Timed 20+20");
@@ -3395,6 +3396,46 @@ describe("OnlineGameBrowser", () => {
     expect(within(currentGames).getByRole("button", { name: "Spectate Ada vs Ben, game_lobby_live" })).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Open Watch tab" })).toBeInTheDocument();
     expect(within(currentGames).getByRole("button", { name: "Refresh live public games" })).toHaveTextContent("Refresh live games");
+  });
+
+  it("shows safe registered Lobby creators and opens their profiles", async () => {
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Samir", { following: true }),
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({
+            seekId: "seek_registered_creator",
+            creatorIdentity: { kind: "registered", id: "account_samir_private", displayName: "Samir" },
+          }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        onAcceptSeek={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([])}
+        loadAccountProfile={loadAccountProfile}
+      />
+    );
+
+    const row = await screen.findByRole("article", {
+      name: /Lobby listing by Samir, seek_registered_creator/i,
+    });
+    expect(row).toHaveTextContent("Lobby listing by Samir");
+    expect(row).toHaveTextContent("Creator Samir");
+    expect(row).not.toHaveTextContent("account_samir_private");
+
+    fireEvent.click(within(row).getByRole("button", {
+      name: "Open Samir profile from lobby listing seek_registered_creator",
+    }));
+
+    await waitFor(() => expect(loadAccountProfile).toHaveBeenCalledWith("Samir"));
   });
 
   it("shows server-backed spectator counts for live public games", async () => {
@@ -3754,6 +3795,10 @@ describe("OnlineGameBrowser", () => {
         loadGames={vi.fn().mockResolvedValue(directory([]))}
         loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
           openSeek({ seekId: "seek_creator_white_timed", creatorSeat: "w" }),
+          openSeek({
+            seekId: "seek_creator_samir",
+            creatorIdentity: { kind: "registered", id: "account_samir_private", displayName: "Samir" },
+          }),
         ]))}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
@@ -3774,6 +3819,13 @@ describe("OnlineGameBrowser", () => {
     });
 
     expect(screen.getByRole("article", { name: /Lobby listing seek_creator_white_timed/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search lobby listings" }), {
+      target: { value: "Samir creator" },
+    });
+
+    expect(screen.getByRole("article", { name: /Lobby listing by Samir, seek_creator_samir/i })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: /seek_creator_white_timed/i })).not.toBeInTheDocument();
   });
 
   it("does not send Lobby listing search to current public game requests", async () => {
