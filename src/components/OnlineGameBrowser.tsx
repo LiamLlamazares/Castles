@@ -3514,6 +3514,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const socialProfileLiveGameBlack = socialProfileLiveGame
     ? participantName(socialProfileLiveGame.participants, "b")
     : "";
+  const socialProfileHeadToHeadRematchGame =
+    socialProfileKey &&
+    accountHeadToHeadSummary &&
+    normalizeDisplayNameKey(accountHeadToHeadSummary.opponentDisplayName) === socialProfileKey
+      ? accountHeadToHeadSummary.latestGame
+      : null;
   const pendingChallengeNoticeTitle =
     pendingIncomingChallengeCount > 0
       ? `${formatCount(pendingIncomingChallengeCount, "incoming challenge")} awaiting your response`
@@ -4294,6 +4300,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           aria-label={`Challenge ${socialProfile.displayName}`}
                         >
                           {socialAction === "challenge" ? "Challenging" : "Challenge"}
+                        </button>
+                      )}
+                      {!socialProfilePendingChallenge && onChallengeAccount && socialProfileHeadToHeadRematchGame && (
+                        <button
+                          type="button"
+                          className="online-browser-button neutral"
+                          onClick={() => void runSocialChallengeAction(socialProfile.displayName, {
+                            intent: "rematch",
+                            sourceGameId: socialProfileHeadToHeadRematchGame.gameId,
+                          })}
+                          disabled={socialAction !== undefined}
+                          aria-label={`Rematch ${socialProfile.displayName} from latest head-to-head game ${socialProfileHeadToHeadRematchGame.gameId}`}
+                        >
+                          Rematch
                         </button>
                       )}
                       {!socialProfilePendingChallenge && onCopyChallengeAccountInvite && (

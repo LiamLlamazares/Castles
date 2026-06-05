@@ -694,6 +694,71 @@ describe("OnlineGameBrowser", () => {
     expect(await within(people).findByText("Challenge invite copied for Ada.")).toBeInTheDocument();
   });
 
+  it("offers a profile-card rematch from loaded head-to-head account history", async () => {
+    const account = accountFixture("Liam");
+    const latestHeadToHead = summary({
+      gameId: "game_profile_h2h_latest_rematch",
+      updatedAt: "2026-06-01T12:08:00.000Z",
+      endedAt: "2026-06-01T12:08:00.000Z",
+      status: "complete",
+      archiveState: "archived",
+      visibility: "private",
+      hasTimeControl: false,
+      participants: [
+        { seat: "w", role: "white", identity: account.identity },
+        { seat: "b", role: "black", identity: registeredParticipant("b", "Ada").identity },
+      ],
+      result: { winner: "w", reason: "resignation" },
+    });
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Ada"),
+    });
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountProfile={loadAccountProfile}
+        loadAccountGames={vi.fn().mockResolvedValue(directory([]))}
+        loadAccountHeadToHeadGames={vi.fn().mockResolvedValue(directory([latestHeadToHead]))}
+        onChallengeAccount={onChallengeAccount}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+      target: { value: "Ada" },
+    });
+    fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
+
+    const profileCard = await within(people).findByRole("article", { name: "Profile Ada" });
+    expect(within(profileCard).queryByRole("button", {
+      name: "Rematch Ada from latest head-to-head game game_profile_h2h_latest_rematch",
+    })).not.toBeInTheDocument();
+
+    fireEvent.click(within(profileCard).getByRole("button", { name: "Show Ada game history from profile" }));
+
+    await screen.findByRole("region", { name: "Head-to-head with Ada" });
+    fireEvent.click(await within(profileCard).findByRole("button", {
+      name: "Rematch Ada from latest head-to-head game game_profile_h2h_latest_rematch",
+    }));
+
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Ada", {
+      intent: "rematch",
+      sourceGameId: "game_profile_h2h_latest_rematch",
+    }));
+    expect(await screen.findByText("Rematch challenge created for Ada.")).toBeInTheDocument();
+  });
+
   it("shows public rating summaries on profile cards and followed players", async () => {
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
