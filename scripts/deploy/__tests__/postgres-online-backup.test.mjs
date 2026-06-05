@@ -173,9 +173,12 @@ describe("PostgreSQL online backup helper", () => {
   });
 
   it("requires an output path and a PostgreSQL DATABASE_URL at the CLI boundary", () => {
-    expect(() => parseBackupArgs(["--env-file"])).toThrow(/--env-file requires/);
+    expect(() => parseBackupArgs(["--castles-env-file"])).toThrow(/--castles-env-file requires/);
     expect(() => parseBackupArgs(["--out"])).toThrow(/--out requires/);
-    expect(() => parseBackupArgs(["--out", "backup.json"])).not.toThrow();
+    expect(parseBackupArgs(["--castles-env-file", "castles.env", "--out", "backup.json"])).toEqual({
+      envFile: "castles.env",
+      outputPath: "backup.json",
+    });
     expect(parseBackupArgs(["backup.json"]).outputPath).toBe("backup.json");
   });
 

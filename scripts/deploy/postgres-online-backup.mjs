@@ -72,9 +72,9 @@ export function parseBackupArgs(argv) {
   const args = {};
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--env-file") {
+    if (arg === "--castles-env-file" || arg === "--env-file") {
       const envFile = argv[index + 1];
-      if (!envFile) throw new Error("--env-file requires a file path.");
+      if (!envFile) throw new Error(`${arg} requires a file path.`);
       args.envFile = envFile;
       index += 1;
     } else if (arg === "--out") {
@@ -204,7 +204,9 @@ export async function backupOnlinePostgresTables({
 async function main() {
   const args = parseBackupArgs(process.argv.slice(2));
   if (args.help) {
-    console.log("Usage: node scripts/deploy/postgres-online-backup.mjs --out <backup.json> [--env-file <file>]");
+    console.log(
+      "Usage: node scripts/deploy/postgres-online-backup.mjs --out <backup.json> [--castles-env-file <file>]"
+    );
     return;
   }
   const env = await loadBackupEnvironment({ env: process.env, envFile: args.envFile });

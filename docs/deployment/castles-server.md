@@ -440,7 +440,7 @@ NODE
     }
   else
     echo "pg_dump is unavailable; writing JSON backup with the Node PostgreSQL client."
-    node scripts/deploy/postgres-online-backup.mjs --env-file /etc/castles/castles.env --out "$backup/postgres-online-backup.json"
+    node scripts/deploy/postgres-online-backup.mjs --castles-env-file /etc/castles/castles.env --out "$backup/postgres-online-backup.json"
     test -s "$backup/postgres-online-backup.json" || {
       echo "PostgreSQL JSON backup is empty or failed."
       exit 1
