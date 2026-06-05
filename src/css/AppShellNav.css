@@ -202,6 +202,25 @@
 }
 
 @media (max-width: 520px) {
+  .app-shell-back-button {
+    position: relative;
+    width: 36px;
+    padding-inline: 7px;
+    overflow: hidden;
+    color: transparent;
+  }
+
+  .app-shell-back-button::after {
+    content: "<";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #201812;
+    font-size: 0.9rem;
+    font-weight: 900;
+  }
+
   .app-shell-brand-name {
     position: absolute;
     width: 1px;
