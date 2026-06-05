@@ -6,14 +6,17 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   defaultOnlineAccountPrivacySettings,
+  type OnlineAccountModerationReport,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
   type OnlineAccountPublicProfile,
   type OnlineAccountReportInput,
   type OnlineAccountReportSummary,
+  type OnlineAccountReportStatus,
   type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -89,6 +92,11 @@ export type OnlineAccountReportSubmissionResult =
       status: "not_found" | "self";
     };
 
+export interface ListOnlineAccountReportsOptions {
+  status: OnlineAccountReportStatus;
+  limit: number;
+}
+
 interface MemoryOnlineAccountReportRecord {
   reportId: string;
   reporterAccountId: string;
@@ -97,7 +105,9 @@ interface MemoryOnlineAccountReportRecord {
   targetDisplayName: string;
   reason: OnlineAccountReportSummary["reason"];
   details: string;
+  status: OnlineAccountReportStatus;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface OnlineAccountStore {
@@ -118,6 +128,7 @@ export interface OnlineAccountStore {
   blockAccount(blockerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
   unblockAccount(blockerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
   submitAccountReport(input: SubmitOnlineAccountReportStoreInput): Promise<OnlineAccountReportSubmissionResult>;
+  listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]>;
   resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
   updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
@@ -493,7 +504,9 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       targetDisplayName: target.displayName,
       reason: input.reason,
       details: input.details,
+      status: "open",
       createdAt: input.createdAt,
+      updatedAt: input.createdAt,
     });
     return {
       status: "ok",
@@ -504,6 +517,17 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
         createdAt: input.createdAt,
       },
     };
+  }
+
+  async listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]> {
+    return this.reports
+      .filter((report) => report.status === options.status)
+      .sort((left, right) => {
+        const createdOrder = right.createdAt.localeCompare(left.createdAt);
+        return createdOrder !== 0 ? createdOrder : right.reportId.localeCompare(left.reportId);
+      })
+      .slice(0, options.limit)
+      .map((report) => this.moderationReportFromRecord(report));
   }
 
   async resolveChallengeTarget(
@@ -617,6 +641,20 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
 
   private externalLoginKey(provider: OnlineAccountExternalLoginProvider, providerSubject: string): string {
     return `${provider}\u0000${providerSubject}`;
+  }
+
+  private moderationReportFromRecord(report: MemoryOnlineAccountReportRecord): OnlineAccountModerationReport {
+    return {
+      schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+      reportId: report.reportId,
+      reporterDisplayName: report.reporterDisplayName,
+      targetDisplayName: report.targetDisplayName,
+      reason: report.reason,
+      details: report.details,
+      status: report.status,
+      createdAt: report.createdAt,
+      updatedAt: report.updatedAt,
+    };
   }
 
   private async createProfile(

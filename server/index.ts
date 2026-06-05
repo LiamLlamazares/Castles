@@ -155,6 +155,7 @@ async function main() {
       listPersonalGameSummaries: (options) => store.listPersonalGameSummaries(options),
       loadGameSummary: (gameId) => store.loadGameSummary(gameId),
       accountStore,
+      adminBearerToken: config.adminBearerToken,
       oauth: config.googleOAuth
         ? {
             google: config.googleOAuth,

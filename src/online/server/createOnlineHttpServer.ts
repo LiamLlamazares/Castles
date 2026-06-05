@@ -1,5 +1,6 @@
 import http from "node:http";
-import { randomBytes } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import express, { NextFunction, Request, Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RawData } from "ws";
@@ -153,9 +154,12 @@ import {
   type OnlineAccountOAuthProviderSummary,
 } from "../accounts";
 import {
+  ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   parseOnlineAccountReportInput,
   parseOnlineAccountPrivacyPatch,
+  type OnlineAccountModerationReportQueueResponse,
+  type OnlineAccountReportStatus,
   type OnlineRatingLeaderboardScope,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -206,6 +210,8 @@ const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 const RATING_LEADERBOARD_DEFAULT_LIMIT = 10;
 const RATING_LEADERBOARD_MAX_LIMIT = 50;
 const RATING_LEADERBOARD_SCOPES = new Set<OnlineRatingLeaderboardScope>(["global", "following"]);
+const MODERATION_REPORT_DEFAULT_LIMIT = 50;
+const MODERATION_REPORT_MAX_LIMIT = 100;
 
 type PublicSessionIdentity = { kind: "session"; id: string };
 type PublicPlayerIdentity = OnlineIdentity;
@@ -277,6 +283,7 @@ export interface CreateOnlineHttpServerOptions {
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
   loadGameSummary?: (gameId: string) => OnlineGameSummary | null | Promise<OnlineGameSummary | null>;
   accountStore?: OnlineAccountStore;
+  adminBearerToken?: string;
   oauth?: {
     google?: GoogleOAuthProviderConfig;
   };
@@ -606,6 +613,38 @@ function parseRatingLeaderboardOptions(
   return { ok: true, limit, scope: rawScope as OnlineRatingLeaderboardScope };
 }
 
+function parseModerationReportQueueOptions(
+  originalUrl: string
+): { ok: true; status: OnlineAccountReportStatus; limit: number } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Moderation report query is invalid." };
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "status" && name !== "limit") {
+      return { ok: false, message: "Moderation report query is invalid." };
+    }
+  }
+  if (url.searchParams.getAll("status").length > 1 || url.searchParams.getAll("limit").length > 1) {
+    return { ok: false, message: "Moderation report query is invalid." };
+  }
+  const rawStatus = getSingleSearchParam(url.searchParams, "status") ?? "open";
+  if (rawStatus !== "open") {
+    return { ok: false, message: "Moderation report status is invalid." };
+  }
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? MODERATION_REPORT_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > MODERATION_REPORT_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Moderation report limit is invalid." };
+  }
+  return { ok: true, status: rawStatus, limit };
+}
+
 function parseOpenSeekDirectoryOptions(
   originalUrl: string
 ): { ok: true; options: OpenSeekDirectoryListOptions } | { ok: false; message: string } {
@@ -835,6 +874,13 @@ function getBearerToken(header: unknown): string | null {
 function setOnlineNoStoreHeaders(res: Response): void {
   res.setHeader("Cache-Control", "no-store");
   res.vary("Authorization");
+}
+
+function constantTimeStringEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, "utf8");
+  const rightBuffer = Buffer.from(right, "utf8");
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function httpStatusForOnlineError(error: OnlineReject): number {
@@ -1139,6 +1185,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const accountCreateLimiter = new FixedWindowRateLimiter(10, 60_000);
   const accountAuthLimiter = new FixedWindowRateLimiter(30, 60_000);
   const accountReadLimiter = new FixedWindowRateLimiter(120, 10_000);
+  const adminReadLimiter = new FixedWindowRateLimiter(60, 10_000);
   const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
   const createOpenSeekLimiter = new FixedWindowRateLimiter(20, 60_000);
   const quickMatchLimiter = new FixedWindowRateLimiter(20, 60_000);
@@ -1167,6 +1214,17 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     } catch (error) {
       console.error("Online server log hook failed", error);
     }
+  };
+
+  const adminNotFoundError = (): OnlineReject => ({
+    code: "not_found",
+    message: "No online admin resource was found.",
+  });
+
+  const resolveAdminBearer = (req: Request): boolean => {
+    if (!options.adminBearerToken) return false;
+    const token = getBearerToken(req.headers.authorization);
+    return token !== null && constantTimeStringEqual(token, options.adminBearerToken);
   };
 
   const resolveAccountBearer = async (
@@ -3413,6 +3471,53 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.account.report", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account report could not be submitted." },
+      });
+    }
+  });
+
+  app.get("/api/online/admin/reports", async (req, res) => {
+    setOnlineNoStoreHeaders(res);
+    const authorized = resolveAdminBearer(req);
+    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    if (!authorized) {
+      log({
+        event: "online.admin.reports",
+        status: "rejected",
+        reason: rateLimitAllowed ? "not_found" : "rate_limited_not_found",
+      });
+      res.status(404).json({ error: adminNotFoundError() });
+      return;
+    }
+    if (!rateLimitAllowed) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many admin requests were sent too quickly." },
+      });
+      return;
+    }
+    const parsed = parseModerationReportQueueOptions(req.originalUrl);
+    if (!parsed.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: parsed.message },
+      });
+      return;
+    }
+    try {
+      const reports = await accountStore.listAccountReports({
+        status: parsed.status,
+        limit: parsed.limit,
+      });
+      const body: OnlineAccountModerationReportQueueResponse = {
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+        reports,
+      };
+      log({ event: "online.admin.reports", status: "accepted" });
+      res.json(body);
+    } catch (error) {
+      console.error("Failed to load account reports", error);
+      log({ event: "online.admin.reports", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account reports could not be loaded." },
       });
     }
   });

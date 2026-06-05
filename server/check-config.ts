@@ -55,6 +55,9 @@ async function main() {
               `${config.publicBaseUrl}/api/online/account/oauth/google/callback`,
           },
         },
+        moderation: {
+          adminReportsEnabled: Boolean(config.adminBearerToken),
+        },
         staticDir: config.staticDir,
         staticDirRequired: config.requireStaticDir,
         onlineStore: {

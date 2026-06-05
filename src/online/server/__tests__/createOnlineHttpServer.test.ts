@@ -464,10 +464,33 @@ class FakePostgresAccountQueryable {
         target_display_name: targetDisplayName,
         reason,
         details,
+        status: "open",
         created_at: createdAt,
         updated_at: createdAt,
       });
       return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, status, created_at, updated_at FROM online_account_reports")) {
+      const [status, limit] = values as [string, number];
+      const rows = this.reports
+        .filter((report) => report.status === status)
+        .sort((left, right) => {
+          if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
+          return String(right.report_id).localeCompare(String(left.report_id));
+        })
+        .slice(0, limit)
+        .map((report) => ({
+          report_id: report.report_id,
+          reporter_display_name: report.reporter_display_name,
+          target_display_name: report.target_display_name,
+          reason: report.reason,
+          details: report.details,
+          status: report.status,
+          created_at: report.created_at,
+          updated_at: report.updated_at,
+        }));
+      return { rows };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_sessions WHERE account_id")) {
@@ -1269,11 +1292,141 @@ describe("createOnlineHttpServer", () => {
         target_display_name: "Samir",
         reason: "abuse",
         details: "Hostile challenge message.",
+        status: "open",
       }),
     ]);
     expect(selfResponse.status).toBe(400);
     expect(blockedByTargetResponse.status).toBe(404);
     expect(queryable.reports).toHaveLength(1);
+  });
+
+  it("keeps the admin report queue hidden unless an admin bearer token is configured", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("vary")).toContain("Authorization");
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "No online admin resource was found.",
+      },
+    });
+  });
+
+  it("protects the admin report queue and returns sanitized open reports", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = createPostgresAccountStore(queryable);
+    const adminToken = "admin-token-with-enough-length";
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      adminBearerToken: adminToken,
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const ben = await createAccountViaApi(port, "Ben");
+
+    now = Date.parse("2026-06-01T12:03:00.000Z");
+    const firstReportResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "abuse", details: "Hostile challenge message." }),
+    });
+    now = Date.parse("2026-06-01T12:04:00.000Z");
+    const secondReportResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Ben`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "spam", details: "Open seek invite spam." }),
+    });
+
+    const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports`);
+    const wrongAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+      headers: bearer("wrong-token-with-enough-length"),
+    });
+    const badStatusResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?status=closed`, {
+      headers: bearer(adminToken),
+    });
+    const lowLimitResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?limit=0`, {
+      headers: bearer(adminToken),
+    });
+    const highLimitResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?limit=101`, {
+      headers: bearer(adminToken),
+    });
+    const queueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?limit=1`, {
+      headers: bearer(adminToken),
+    });
+    const queue = await queueResponse.json();
+
+    expect(firstReportResponse.status).toBe(201);
+    expect(secondReportResponse.status).toBe(201);
+    expect(missingAuthResponse.status).toBe(404);
+    expect(wrongAuthResponse.status).toBe(404);
+    expect(badStatusResponse.status).toBe(400);
+    expect(lowLimitResponse.status).toBe(400);
+    expect(highLimitResponse.status).toBe(400);
+    expect(queueResponse.status).toBe(200);
+    expect(queueResponse.headers.get("cache-control")).toBe("no-store");
+    expect(queueResponse.headers.get("vary")).toContain("Authorization");
+    expect(queue).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      reports: [
+        {
+          schemaVersion: 1,
+          reportId: expect.any(String),
+          reporterDisplayName: "Liam",
+          targetDisplayName: "Ben",
+          reason: "spam",
+          details: "Open seek invite spam.",
+          status: "open",
+          createdAt: "2026-06-01T12:04:00.000Z",
+          updatedAt: "2026-06-01T12:04:00.000Z",
+        },
+      ],
+    });
+    expect(JSON.stringify(queue)).not.toContain(liam.account.accountId);
+    expect(JSON.stringify(queue)).not.toContain(samir.account.accountId);
+    expect(JSON.stringify(queue)).not.toContain(ben.account.accountId);
+    expect(JSON.stringify(queue)).not.toContain(liam.session.token);
+    expect(JSON.stringify(queue)).not.toContain("account_");
+  });
+
+  it("keeps wrong admin bearer attempts hidden while consuming the admin rate limit", async () => {
+    const adminToken = "admin-token-with-enough-length";
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      adminBearerToken: adminToken,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+        headers: bearer("wrong-token-with-enough-length"),
+      });
+      expect(response.status).toBe(404);
+    }
+
+    const validResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+      headers: bearer(adminToken),
+    });
+
+    expect(validResponse.status).toBe(429);
   });
 
   it("supports exact profile lookup, follows, privacy, and blocks without exposing account ids", async () => {

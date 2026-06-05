@@ -79,4 +79,16 @@ describe("server/check-config", () => {
     expect(result.stderr).toContain("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together");
     expect(result.stderr).not.toContain("google-client-id");
   });
+
+  it("rejects malformed admin bearer tokens without printing the token", () => {
+    const result = runCheckConfig({
+      CASTLES_ADMIN_BEARER_TOKEN: "short-secret",
+      CASTLES_STATIC_DIR: process.cwd(),
+      CASTLES_REQUIRE_STATIC_DIR: "0",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("CASTLES_ADMIN_BEARER_TOKEN");
+    expect(result.stderr).not.toContain("short-secret");
+  });
 });

@@ -8,9 +8,11 @@ import {
 export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
 export const ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION = 1;
 export const ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION = 1;
+export const ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION = 1;
 
 export type OnlineRatingLeaderboardScope = "global" | "following";
 export type OnlineAccountReportReason = "abuse" | "cheating" | "spam" | "impersonation" | "other";
+export type OnlineAccountReportStatus = "open";
 export type OnlineAccountFollowPolicy = "everyone" | "nobody";
 export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountChallengePolicy = "followed" | "everyone" | "nobody";
@@ -86,6 +88,24 @@ export interface OnlineAccountReportSummary {
 export interface OnlineAccountReportResponse {
   protocolVersion: number;
   report: OnlineAccountReportSummary;
+}
+
+export interface OnlineAccountModerationReport {
+  schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
+  reportId: string;
+  reporterDisplayName: string;
+  targetDisplayName: string;
+  reason: OnlineAccountReportReason;
+  details: string;
+  status: OnlineAccountReportStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OnlineAccountModerationReportQueueResponse {
+  protocolVersion: number;
+  schemaVersion: typeof ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION;
+  reports: OnlineAccountModerationReport[];
 }
 
 export function createOnlineAccountPublicRating(rating: OnlineRating): OnlineAccountPublicRating {

@@ -10,6 +10,7 @@ export interface ServerRuntimeConfig {
     clientSecret: string;
     redirectUri?: string;
   };
+  adminBearerToken?: string;
   staticDir: string;
   requireStaticDir: boolean;
   localShutdownEnabled: boolean;
@@ -144,6 +145,18 @@ function parseGoogleOAuthConfig(env: NodeJS.ProcessEnv): ServerRuntimeConfig["go
   };
 }
 
+function parseAdminBearerToken(env: NodeJS.ProcessEnv): string | undefined {
+  const token = env.CASTLES_ADMIN_BEARER_TOKEN?.trim();
+  if (!token) return undefined;
+  if (token.length < 24) {
+    throw new Error("CASTLES_ADMIN_BEARER_TOKEN must be at least 24 characters when set.");
+  }
+  if (/[\u0000-\u001f\u007f\s]/.test(token)) {
+    throw new Error("CASTLES_ADMIN_BEARER_TOKEN must not contain whitespace or control characters.");
+  }
+  return token;
+}
+
 function requireProductionMetadata(env: NodeJS.ProcessEnv): void {
   if (env.NODE_ENV !== "production") return;
 
@@ -169,6 +182,7 @@ export function parseServerRuntimeConfig(
   const bindHost = parseBindHost(env.CASTLES_BIND_HOST);
   const publicBaseUrl = normalizePublicBaseUrl(env, port);
   const googleOAuth = parseGoogleOAuthConfig(env);
+  const adminBearerToken = parseAdminBearerToken(env);
   requireProductionMetadata(env);
   const staticDir = env.CASTLES_STATIC_DIR?.trim()
     ? env.CASTLES_STATIC_DIR.trim()
@@ -194,6 +208,7 @@ export function parseServerRuntimeConfig(
     bindHost,
     publicBaseUrl,
     googleOAuth,
+    adminBearerToken,
     staticDir: normalizePath(staticDir),
     requireStaticDir,
     localShutdownEnabled,

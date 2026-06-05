@@ -422,10 +422,33 @@ class FakeAccountQueryable {
         target_display_name: targetDisplayName,
         reason,
         details,
+        status: "open",
         created_at: createdAt,
         updated_at: createdAt,
       });
       return { rows: [] };
+    }
+
+    if (normalizedText.startsWith("SELECT report_id, reporter_display_name, target_display_name, reason, details, status, created_at, updated_at FROM online_account_reports")) {
+      const [status, limit] = values as [string, number];
+      const rows = this.reports
+        .filter((report) => report.status === status)
+        .sort((left, right) => {
+          if (left.created_at !== right.created_at) return String(right.created_at).localeCompare(String(left.created_at));
+          return String(right.report_id).localeCompare(String(left.report_id));
+        })
+        .slice(0, limit)
+        .map((report) => ({
+          report_id: report.report_id,
+          reporter_display_name: report.reporter_display_name,
+          target_display_name: report.target_display_name,
+          reason: report.reason,
+          details: report.details,
+          status: report.status,
+          created_at: report.created_at,
+          updated_at: report.updated_at,
+        }));
+      return { rows };
     }
 
     if (normalizedText.startsWith("DELETE FROM online_account_blocks")) {
@@ -1073,6 +1096,7 @@ describe("PostgresOnlineAccountStore", () => {
         target_display_name: "Samir",
         reason: "abuse",
         details: "Repeated hostile chat in challenge notes.",
+        status: "open",
       }),
     ]);
     const secondReport = await store.submitAccountReport({
@@ -1085,6 +1109,26 @@ describe("PostgresOnlineAccountStore", () => {
     });
     expect(secondReport.status).toBe("ok");
     expect(JSON.stringify(secondReport)).not.toContain("account_");
+    await expect(store.listAccountReports({ status: "open", limit: 1 })).resolves.toEqual([
+      {
+        schemaVersion: 1,
+        reportId: "report_liam_ben",
+        reporterDisplayName: "Liam",
+        targetDisplayName: "Ben",
+        reason: "spam",
+        details: "",
+        status: "open",
+        createdAt: "2026-06-03T12:04:00.000Z",
+        updatedAt: "2026-06-03T12:04:00.000Z",
+      },
+    ]);
+    await expect(store.listAccountReports({ status: "open", limit: 10 })).resolves.toMatchObject([
+      { reportId: "report_liam_ben" },
+      { reportId: "report_liam_samir" },
+    ]);
+    const queue = await store.listAccountReports({ status: "open", limit: 10 });
+    expect(JSON.stringify(queue)).not.toContain("account_");
+    expect(JSON.stringify(queue)).not.toContain("token-");
 
     await expect(
       store.submitAccountReport({

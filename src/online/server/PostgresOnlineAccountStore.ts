@@ -7,10 +7,12 @@ import {
   type OnlineAccount,
 } from "../accounts";
 import {
+  ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   createOnlineAccountPublicRating,
   defaultOnlineAccountPrivacySettings,
+  type OnlineAccountModerationReport,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
@@ -27,6 +29,7 @@ import {
   DuplicateOnlineAccountDisplayNameError,
   DuplicateOnlineAccountIdError,
   DuplicateOnlineAccountSessionCredentialError,
+  type ListOnlineAccountReportsOptions,
   type OnlineAccountSessionListItem,
   type OnlineAccountExternalLoginProvider,
   type OnlineAccountChallengeTargetResult,
@@ -704,6 +707,29 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     });
   }
 
+  async listAccountReports(options: ListOnlineAccountReportsOptions): Promise<OnlineAccountModerationReport[]> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        SELECT
+          report_id,
+          reporter_display_name,
+          target_display_name,
+          reason,
+          details,
+          status,
+          created_at,
+          updated_at
+        FROM online_account_reports
+        WHERE status = $1
+        ORDER BY created_at DESC, report_id DESC
+        LIMIT $2
+      `,
+      [options.status, options.limit]
+    );
+    return result.rows.map((row) => this.moderationReportFromRow(row));
+  }
+
   async resolveChallengeTarget(
     challengerAccountId: string,
     targetDisplayName: string
@@ -948,6 +974,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       CREATE INDEX IF NOT EXISTS online_account_reports_reporter_idx
         ON online_account_reports (reporter_account_id, created_at DESC)
     `);
+    await this.queryable.query(`
+      CREATE INDEX IF NOT EXISTS online_account_reports_status_created_idx
+        ON online_account_reports (status, created_at DESC, report_id DESC)
+    `);
   }
 
   private async loadAccountByDisplayName(
@@ -1080,6 +1110,20 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
         rating: createOnlineAccountPublicRating(rating),
       };
     });
+  }
+
+  private moderationReportFromRow(row: Record<string, unknown>): OnlineAccountModerationReport {
+    return {
+      schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+      reportId: String(row.report_id),
+      reporterDisplayName: String(row.reporter_display_name),
+      targetDisplayName: String(row.target_display_name),
+      reason: row.reason as OnlineAccountModerationReport["reason"],
+      details: String(row.details ?? ""),
+      status: row.status as OnlineAccountModerationReport["status"],
+      createdAt: timestampToIso(row.created_at),
+      updatedAt: timestampToIso(row.updated_at),
+    };
   }
 
   private accountReportSummary(

@@ -94,6 +94,7 @@ DATABASE_URL=postgresql://<user>:<url-encoded-password>@<postgres-host>:5432/<da
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=
+CASTLES_ADMIN_BEARER_TOKEN=
 CASTLES_STATIC_DIR=${repo}/build
 CASTLES_REQUIRE_STATIC_DIR=1
 BUILD_ID=$(date -u +%Y%m%d-%H%M%S)
@@ -102,7 +103,7 @@ ENV
 sudo chmod 600 /etc/castles/castles.env
 ```
 
-For the current remote-database setup, the database host should be the provided PostgreSQL host, not `localhost`. URL-encode the username and password inside `DATABASE_URL`; do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL. Google OAuth is optional; leave the Google variables empty to disable it. If enabled, authorize `${PUBLIC_BASE_URL}/api/online/account/oauth/google/callback` in Google Cloud, or set `GOOGLE_OAUTH_REDIRECT_URI` to the exact authorized callback URL.
+For the current remote-database setup, the database host should be the provided PostgreSQL host, not `localhost`. URL-encode the username and password inside `DATABASE_URL`; do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL. Google OAuth is optional; leave the Google variables empty to disable it. If enabled, authorize `${PUBLIC_BASE_URL}/api/online/account/oauth/google/callback` in Google Cloud, or set `GOOGLE_OAUTH_REDIRECT_URI` to the exact authorized callback URL. `CASTLES_ADMIN_BEARER_TOKEN` is optional and disables the admin report queue when empty; when enabled, use a generated token at least 24 characters long with no whitespace and keep it out of Git, logs, and shell history.
 
 5. Verify the remote database connection from the app server:
 
@@ -216,6 +217,7 @@ DATABASE_URL=postgresql://<user>:<password>@<postgres-host>:5432/<database>
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=
+CASTLES_ADMIN_BEARER_TOKEN=
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
 CASTLES_REQUIRE_STATIC_DIR=1
 BUILD_ID=<timestamp-or-release-id>
@@ -224,7 +226,7 @@ ENV
 sudo chmod 600 /etc/castles/castles.env
 ```
 
-For a cloud database, use that cloud host in `DATABASE_URL`. Do not create a local PostgreSQL database unless the URL is intentionally `localhost`. URL-encode the database username and password inside `DATABASE_URL`; for example, a literal password `p@$&;#` becomes `p%40%24%26%3B%23`. Do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL.
+For a cloud database, use that cloud host in `DATABASE_URL`. Do not create a local PostgreSQL database unless the URL is intentionally `localhost`. URL-encode the database username and password inside `DATABASE_URL`; for example, a literal password `p@$&;#` becomes `p%40%24%26%3B%23`. Do not paste raw values containing `@`, `#`, `?`, `&`, `/`, or spaces into the URL. Leave `CASTLES_ADMIN_BEARER_TOKEN` empty to disable the protected report queue, or set a generated 24+ character token with no whitespace.
 
 6. Prepare and verify the database connection before starting Node.
 
@@ -504,6 +506,7 @@ CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://castles.ls314.com
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://castles:<url-encoded-password>@<postgres-host>:5432/castles
+CASTLES_ADMIN_BEARER_TOKEN=
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
 CASTLES_REQUIRE_STATIC_DIR=1
 BUILD_ID=<timestamp>

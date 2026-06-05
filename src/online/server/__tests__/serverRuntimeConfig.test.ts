@@ -204,6 +204,28 @@ describe("parseServerRuntimeConfig", () => {
     ).toBe(false);
   });
 
+  it("parses optional admin bearer tokens and rejects weak token shapes", () => {
+    expect(
+      parseServerRuntimeConfig(
+        { CASTLES_ADMIN_BEARER_TOKEN: "  admin-token-with-enough-length  " },
+        "/srv/castles"
+      ).adminBearerToken
+    ).toBe("admin-token-with-enough-length");
+
+    expect(() =>
+      parseServerRuntimeConfig(
+        { CASTLES_ADMIN_BEARER_TOKEN: "short-secret" },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_ADMIN_BEARER_TOKEN/);
+    expect(() =>
+      parseServerRuntimeConfig(
+        { CASTLES_ADMIN_BEARER_TOKEN: "admin-token-with whitespace-123" },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_ADMIN_BEARER_TOKEN/);
+  });
+
   it("requires index.html when static assets are required", () => {
     const config = parseServerRuntimeConfig(
       {
