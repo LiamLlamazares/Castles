@@ -1566,6 +1566,41 @@ describe("OnlineGameBrowser", () => {
     expect(await within(challenges).findByText("Samir")).toBeInTheDocument();
   });
 
+  it("emphasizes pending account challenges that expire soon", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-03T12:08:30.000Z"));
+    const account = accountFixture("Liam");
+    const expiringSummary = accountChallengeSummary({
+      challengedIdentity: account.identity,
+      expiresAt: "2026-06-03T12:10:30.000Z",
+    });
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountChallenges={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          ...accountChallengeDirectory([{ role: "challenged", summary: expiringSummary }]),
+        })}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    const row = await within(challenges).findByText("Samir");
+    const article = row.closest("article");
+    expect(article).not.toBeNull();
+    expect(within(article as HTMLElement).getByText("Expires soon")).toBeInTheDocument();
+    expect(within(article as HTMLElement).getByText("2 min left")).toBeInTheDocument();
+  });
+
   it("loads terminal account challenge history from the all inbox filter", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });

@@ -419,6 +419,12 @@
   color: #d8efff;
 }
 
+.online-browser-social-badges span.online-browser-expiring-badge,
+.online-browser-following-row span.online-browser-expiring-badge {
+  background: rgba(255, 199, 68, 0.24);
+  color: #ffe19a;
+}
+
 .online-browser-rating-rank {
   display: inline-flex;
   min-width: 2ch;

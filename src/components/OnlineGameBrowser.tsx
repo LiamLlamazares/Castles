@@ -116,6 +116,7 @@ interface QuickMatchSetupSummary {
 const LOBBY_AUTO_REFRESH_MS = 30_000;
 const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
 const ACCOUNT_CHALLENGE_AUTO_REFRESH_MS = 1_000;
+const ACCOUNT_CHALLENGE_EXPIRING_SOON_MS = 5 * 60 * 1000;
 const FOLLOWING_AUTO_REFRESH_MS = 30_000;
 const GAME_SEARCH_DEBOUNCE_MS = 300;
 const HEAD_TO_HEAD_HISTORY_PAGE_LIMIT = 5;
@@ -525,6 +526,28 @@ function formatAccountChallengeStatus(item: OnlineAccountChallengeListItem): str
     default:
       return item.summary.status;
   }
+}
+
+function formatPendingAccountChallengeExpiry(
+  item: OnlineAccountChallengeListItem,
+  now = Date.now()
+): { timeLabel: string; isSoon: boolean } | null {
+  if (item.summary.status !== "pending") return null;
+  const expiresAt = Date.parse(item.summary.expiresAt);
+  if (Number.isNaN(expiresAt)) return null;
+  const remainingMs = expiresAt - now;
+  if (remainingMs <= 0) return null;
+  const remainingMinutes = Math.max(1, Math.ceil(remainingMs / 60_000));
+  if (remainingMinutes < 60) {
+    return {
+      timeLabel: `${remainingMinutes} min left`,
+      isSoon: remainingMs <= ACCOUNT_CHALLENGE_EXPIRING_SOON_MS,
+    };
+  }
+  return {
+    timeLabel: `Expires ${formatSeekExpiresAt(item.summary.expiresAt)}`,
+    isSoon: remainingMs <= ACCOUNT_CHALLENGE_EXPIRING_SOON_MS,
+  };
 }
 
 function formatSpectatorCount(count: number | undefined): string | null {
@@ -4107,6 +4130,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   {accountChallenges.map((item) => {
                     const challengeId = item.summary.challengeId;
                     const pendingAction = accountChallengeActionById[challengeId];
+                    const expiry = formatPendingAccountChallengeExpiry(item);
                     const canActOnChallenge = item.summary.status === "pending" && !pendingAction;
                     return (
                       <article key={challengeId} className="online-browser-following-row">
@@ -4116,10 +4140,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             <span>{formatAccountChallengeRole(item.role)}</span>
                             <span>{formatAccountChallengeStatus(item)}</span>
                             <span>{formatChallengeSeatChoice(item)}</span>
+                            {expiry?.isSoon && <span className="online-browser-expiring-badge">Expires soon</span>}
                           </div>
                         </div>
                         <div className="online-browser-account-challenge-side">
                           <div className="online-browser-social-badges online-browser-account-challenge-meta">
+                            {expiry && <span>{expiry.timeLabel}</span>}
                             <span>{formatUpdatedAt(item.summary.updatedAt)}</span>
                             <span>{challengeId}</span>
                           </div>
