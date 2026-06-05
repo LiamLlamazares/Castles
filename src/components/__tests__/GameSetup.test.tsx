@@ -58,6 +58,29 @@ describe("GameSetup", () => {
       SanctuaryType.WolfCovenant,
       SanctuaryType.SacredSpring,
     ]);
+    expect(onCreateOpenSeek.mock.calls[0][9]).toBe("casual");
+  });
+
+  it("passes rated mode through online setup actions", () => {
+    const onPlay = vi.fn();
+    const onCreateOpenSeek = vi.fn();
+    const onCreateOnlineChallenge = vi.fn();
+    render(
+      <GameSetup
+        onPlay={onPlay}
+        onCreateOpenSeek={onCreateOpenSeek}
+        onCreateOnlineChallenge={onCreateOnlineChallenge}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rated" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play Local" }));
+    fireEvent.click(screen.getByRole("button", { name: "Invite Friend" }));
+    fireEvent.click(screen.getByRole("button", { name: "List in Lobby" }));
+
+    expect(onPlay.mock.calls[0][10]).toBe("rated");
+    expect(onCreateOnlineChallenge.mock.calls[0][9]).toBe("rated");
+    expect(onCreateOpenSeek.mock.calls[0][9]).toBe("rated");
   });
 
   it("passes the preview setup through when creating an invite challenge", () => {

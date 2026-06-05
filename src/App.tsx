@@ -109,7 +109,7 @@ import {
 import type { OnlineAccount } from './online/accounts';
 import type { OnlineGameSummary } from './online/readModel';
 import type { OpenSeekVisibility } from './online/seeks';
-import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO } from './online/types';
+import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO, OnlineRatingMode } from './online/types';
 import {
   clearRecentOnlineGames,
   loadRecentOnlineGames,
@@ -174,6 +174,7 @@ interface GameConfig {
   promotionPending?: Piece | null;
   victoryPoints?: { w: number; b: number };
   pieceTheme?: PieceTheme;
+  ratingMode?: OnlineRatingMode;
   isAnalysisMode?: boolean;
   opponentConfig?: AIOpponentConfig;
 }
@@ -290,6 +291,7 @@ function createGameConfigFromOnlineSnapshot(
     victoryPoints: state.victoryPoints,
     pieceTheme: setup.pieceTheme,
     timeControl: setup.timeControl,
+    ratingMode: setup.ratingMode,
     isAnalysisMode,
   };
 }
@@ -946,6 +948,7 @@ function App() {
       gameRules: gameConfig.gameRules,
       initialPoolTypes: gameConfig.initialPoolTypes,
       pieceTheme: gameConfig.pieceTheme,
+      ratingMode: gameConfig.ratingMode,
     });
   }, [
     gameConfig.board,
@@ -953,6 +956,7 @@ function App() {
     gameConfig.initialPoolTypes,
     gameConfig.pieceTheme,
     gameConfig.pieces,
+    gameConfig.ratingMode,
     gameConfig.sanctuaries,
     gameConfig.sanctuarySettings,
     gameConfig.timeControl,
@@ -970,6 +974,7 @@ function App() {
       boardRadius: onlineLobbySetup.board.config.nSquares,
       clock: `Timed ${clock.initial}+${clock.increment}`,
       scoring: onlineLobbySetup.gameRules?.vpModeEnabled ? "Victory points" : "Castle control",
+      rating: onlineLobbySetup.ratingMode === "rated" ? "Rated" : "Casual",
     };
   }, [onlineLobbySetup]);
 
@@ -983,7 +988,8 @@ function App() {
     gameRules?: { vpModeEnabled: boolean },
     initialPoolTypes?: SanctuaryType[],
     pieceTheme?: PieceTheme,
-    opponentConfig?: AIOpponentConfig
+    opponentConfig?: AIOpponentConfig,
+    ratingMode?: OnlineRatingMode
   ) => {
     cancelPendingReplay();
     clearAnalysisReturn();
@@ -1007,7 +1013,7 @@ function App() {
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
     setOnlineOpponentInviteUrl(null);
-    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, isAnalysisMode: false, opponentConfig });
+    setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, ratingMode, isAnalysisMode: false, opponentConfig });
     setGameKey(prev => prev + 1);
     enterGameView();
   };
@@ -1506,7 +1512,8 @@ function App() {
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     gameRules?: { vpModeEnabled: boolean },
     initialPoolTypes?: SanctuaryType[],
-    pieceTheme?: PieceTheme
+    pieceTheme?: PieceTheme,
+    ratingMode?: OnlineRatingMode
   ) => {
     await createChallengeFromSetup(
       serializeOnlineGameSetup({
@@ -1518,6 +1525,7 @@ function App() {
         gameRules,
         initialPoolTypes,
         pieceTheme,
+        ratingMode,
       })
     );
   };
@@ -1636,7 +1644,8 @@ function App() {
     sanctuarySettings?: { unlockTurn: number, cooldown: number },
     gameRules?: { vpModeEnabled: boolean },
     initialPoolTypes?: SanctuaryType[],
-    pieceTheme?: PieceTheme
+    pieceTheme?: PieceTheme,
+    ratingMode?: OnlineRatingMode
   ) => {
     await createOpenSeekFromSetup(
       serializeOnlineGameSetup({
@@ -1648,6 +1657,7 @@ function App() {
         gameRules,
         initialPoolTypes,
         pieceTheme,
+        ratingMode,
       })
     );
   };

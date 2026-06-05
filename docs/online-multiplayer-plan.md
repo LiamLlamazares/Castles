@@ -40,7 +40,7 @@ Current constraints:
 - One writer process only; no cross-process coordination yet.
 - Private invite links are bearer secrets and require HTTPS.
 - Public spectator URLs expose games to anyone with the random game id.
-- Display-name accounts and account-backed personal history exist as a beta foundation. Ratings, moderation, anti-cheat, admin tooling, passwords, and email are not implemented.
+- Display-name/password accounts and account-backed personal history exist as a beta foundation. Ratings now have a beta Glicko-2 write path, public summaries, public leaders, and visible Casual/Rated setup controls. Moderation, anti-cheat, admin tooling, OAuth, email, and password reset are not implemented.
 
 ## Phase Gates
 
@@ -689,7 +689,7 @@ Goal: add public-service trust and governance features.
 
 ## Phase 7A: Account Session and Personal History Foundation
 
-Goal: add the first server-resolved account identity layer without yet adding passwords, profiles, ratings, chat, or moderation.
+Goal: add the first server-resolved account identity layer without yet adding profiles, ratings, chat, or moderation.
 
 Status: implemented locally on 2026-06-03. The server now has account/session endpoints, PostgreSQL-backed `online_accounts` and `online_account_sessions` tables, account bearer resolution, and an authenticated personal-history endpoint. Account tokens are stored separately from public identities; `OnlineIdentity.id` remains a public non-secret registered-account id. Open seek creation, open seek acceptance, Quick Match, and challenge creation can use the authenticated account identity when an account bearer is present, while anonymous browser-session ids remain the fallback. Personal game history is derived from the server-resolved account identity and can include private, unlisted, and public game summaries for that account. Direct game/challenge bearer tokens remain separate from account sessions.
 
@@ -707,9 +707,9 @@ Tests/review/deploy gates:
 
 ## Phase 7B: Visible Account UI and Account Archive
 
-Goal: expose the Phase 7A account/session foundation to players without adding passwords, ratings, profiles, or moderation yet.
+Goal: expose the Phase 7A account/session foundation to players without adding ratings, profiles, or moderation yet.
 
-Status: implemented locally on 2026-06-03. The Online page now has a compact account panel for display-name account creation, saved-session refresh, current account display, sign-out, and account error messages. The browser persists the account session in local storage as an account bearer session, separate from game/challenge/seek credentials. Signed-in challenge creation, open lobby listing, open seek acceptance, and Quick Match pass the account bearer so server summaries use the registered identity. The Online Archive now has an account archive section backed by `GET /api/online/account/games`, while device-local recent replays remain the anonymous fallback.
+Status: implemented locally on 2026-06-03. The Online page now has a compact account panel for display-name/password account creation, password sign-in, saved-session refresh, current account display, sign-out, and account error messages. The browser persists the account session in local storage as an account bearer session, separate from game/challenge/seek credentials. Signed-in challenge creation, open lobby listing, open seek acceptance, and Quick Match pass the account bearer so server summaries use the registered identity. The Online Archive now has an account archive section backed by `GET /api/online/account/games`, while device-local recent replays remain the anonymous fallback.
 
 Tests/review/deploy gates:
 
@@ -791,7 +791,7 @@ Tests/review/deploy gates:
 
 ## Phase 7I: Account Session List and Sign Out Everywhere
 
-Goal: give signed-in users basic control over account sessions before public account launch, without adding passwords, profiles, or account deletion yet.
+Goal: give signed-in users basic control over account sessions before public account launch, without adding profiles or account deletion yet.
 
 Status: implemented locally on 2026-06-03. The account store now lists token-free account sessions and can revoke every session for an account. `GET /api/online/account/sessions` returns only session id, created time, last-used time, and a current-session flag after resolving the account bearer server-side. `DELETE /api/online/account/sessions` revokes all server-side account sessions for that account and fails closed if no sessions are revoked after authentication. The Online account panel shows active session count, supports manual session refresh, and adds `Sign Out Everywhere`, which waits for server revocation before clearing the local browser account session.
 
@@ -819,7 +819,7 @@ Tests/review/deploy gates:
 
 Goal: add tested, swappable rating primitives and the first public-safe rating read models before wiring deeper live games, matchmaking, profiles, friends, or moderation to ratings.
 
-Status: implemented locally on 2026-06-03, with setup-level rated/casual protocol metadata added locally on 2026-06-04, the PostgreSQL rated-result write path added locally on 2026-06-05, and the first public rating leaderboard read model added locally on 2026-06-05. `src/online/ratings.ts` defines a modular rating-engine contract with `glicko2-beta-v1` as the default Lichess-inspired Glicko-2 baseline, Castles beta defaults, durable engine ids on rating records, provisional display formatting, inactive-period deviation growth, and Glicko-2 rating-period updates. Online setup payloads now carry `ratingMode?: "casual" | "rated"`; server-created games, challenges, lobby seeks, and quick-match fallback listings normalize missing setup modes to `"casual"`, and setup matching keeps casual and rated requests separate. Completed PostgreSQL games now write ratings only when the game setup is rated, the terminal result is persisted through the locked action/timeout path, and both durable participants are distinct registered accounts. Account profile and following read models now surface only public rating summaries when a rating row exists. `GET /api/online/ratings/leaderboard` and the signed-in People panel now expose a bounded public rating-leader list using display names and sanitized public rating summaries only. The tests include the standard worked example, engine-swappability coverage, invalid future-engine rejection, rating input/output validation coverage, setup-mode validation, setup-mode serialization, default casual game creation, rated game creation, casual-vs-rated quick-match separation, rated resignation writes, rated timeout writes, retry idempotency, casual/anonymous no-write gates, rollback on rating-result persistence failure, public-profile rating summary exposure, client rejection of private rating internals, leaderboard query ordering, HTTP limit/no-leak validation, client leaderboard validation, and People-panel rendering. Ratings are still not surfaced in lobby rows, account archive rows, rating-derived matchmaking, or rated-game setup controls.
+Status: implemented locally on 2026-06-03, with setup-level rated/casual protocol metadata added locally on 2026-06-04, the PostgreSQL rated-result write path added locally on 2026-06-05, the first public rating leaderboard read model added locally on 2026-06-05, and visible Casual/Rated setup controls added locally on 2026-06-05. `src/online/ratings.ts` defines a modular rating-engine contract with `glicko2-beta-v1` as the default Lichess-inspired Glicko-2 baseline, Castles beta defaults, durable engine ids on rating records, provisional display formatting, inactive-period deviation growth, and Glicko-2 rating-period updates. Online setup payloads now carry `ratingMode?: "casual" | "rated"`; the Play setup UI exposes this choice, Online lobby setup summaries show it, server-created games, challenges, lobby seeks, and quick-match fallback listings normalize missing setup modes to `"casual"`, and setup matching keeps casual and rated requests separate. Completed PostgreSQL games now write ratings only when the game setup is rated, the terminal result is persisted through the locked action/timeout path, and both durable participants are distinct registered accounts. Account profile and following read models now surface only public rating summaries when a rating row exists. `GET /api/online/ratings/leaderboard` and the signed-in People panel now expose a bounded public rating-leader list using display names and sanitized public rating summaries only. The tests include the standard worked example, engine-swappability coverage, invalid future-engine rejection, rating input/output validation coverage, setup-mode validation, setup-mode serialization, visible setup-mode propagation, default casual game creation, rated game creation, casual-vs-rated quick-match separation, rated resignation writes, rated timeout writes, retry idempotency, casual/anonymous no-write gates, rollback on rating-result persistence failure, public-profile rating summary exposure, client rejection of private rating internals, leaderboard query ordering, HTTP limit/no-leak validation, client leaderboard validation, and People-panel rendering. Ratings are still not surfaced in lobby rows, account archive rows, or rating-derived matchmaking.
 
 Contract notes:
 

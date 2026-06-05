@@ -17,6 +17,7 @@ import { ModeSelector, TimeControls, SanctuarySelector, BoardConfig, GameRulesSe
 import AppShellNav, { AppShellDestination } from './AppShellNav';
 import { Palette, Colors } from '../Theme';
 import '../css/Board.css';
+import type { OnlineRatingMode } from '../online/types';
 
 interface GameSetupProps {
     onPlay: (
@@ -29,7 +30,8 @@ interface GameSetupProps {
         gameRules?: { vpModeEnabled: boolean },
         initialPoolTypes?: SanctuaryType[],
         pieceTheme?: PieceTheme,
-        opponentConfig?: AIOpponentConfig
+        opponentConfig?: AIOpponentConfig,
+        ratingMode?: OnlineRatingMode
     ) => void;
     onCreateOnlineChallenge?: (
         board: Board,
@@ -40,7 +42,8 @@ interface GameSetupProps {
         sanctuarySettings?: { unlockTurn: number, cooldown: number },
         gameRules?: { vpModeEnabled: boolean },
         initialPoolTypes?: SanctuaryType[],
-        pieceTheme?: PieceTheme
+        pieceTheme?: PieceTheme,
+        ratingMode?: OnlineRatingMode
     ) => void;
     onCreateOpenSeek?: (
         board: Board,
@@ -51,7 +54,8 @@ interface GameSetupProps {
         sanctuarySettings?: { unlockTurn: number, cooldown: number },
         gameRules?: { vpModeEnabled: boolean },
         initialPoolTypes?: SanctuaryType[],
-        pieceTheme?: PieceTheme
+        pieceTheme?: PieceTheme,
+        ratingMode?: OnlineRatingMode
     ) => void;
     onBack?: () => void;
     backLabel?: string;
@@ -159,6 +163,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
 
     // Game Rules - Optional modes
     const [vpModeEnabled, setVpModeEnabled] = useState<boolean>(false);
+    const [ratingMode, setRatingMode] = useState<OnlineRatingMode>('casual');
     
     // Piece Theme Selection - Default to Castles
     const [pieceTheme, setPieceTheme] = useState<PieceTheme>("Castles");
@@ -283,7 +288,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
             { vpModeEnabled },
             Array.from(selectedPoolTypes),
             pieceTheme,
-            opponentConfig
+            opponentConfig,
+            ratingMode
         );
     };
 
@@ -297,7 +303,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
             { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
             { vpModeEnabled },
             Array.from(selectedPoolTypes),
-            pieceTheme
+            pieceTheme,
+            ratingMode
         );
     };
 
@@ -311,7 +318,8 @@ const GameSetup: React.FC<GameSetupProps> = ({
             { unlockTurn: sanctuaryUnlockTurn, cooldown: sanctuaryCooldown },
             { vpModeEnabled },
             Array.from(selectedPoolTypes),
-            pieceTheme
+            pieceTheme,
+            ratingMode
         );
     };
 
@@ -435,6 +443,26 @@ const GameSetup: React.FC<GameSetupProps> = ({
                         </div>
                     </div>
                 )}
+
+                <div className="setup-rating-mode" role="group" aria-label="Rating mode">
+                    <label style={labelStyle}>Rating</label>
+                    <div className="setup-rating-options">
+                        {(['casual', 'rated'] as OnlineRatingMode[]).map(mode => {
+                            const isSelected = ratingMode === mode;
+                            return (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    className={`setup-rating-option ${isSelected ? 'selected' : ''}`}
+                                    aria-pressed={isSelected}
+                                    onClick={() => setRatingMode(mode)}
+                                >
+                                    {mode === 'rated' ? 'Rated' : 'Casual'}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
 
                 <div className="setup-primary-actions" role="group" aria-label="Game actions">
                     <button

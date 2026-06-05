@@ -2227,6 +2227,52 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.setup-rating-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(30, 30, 30, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.setup-rating-options {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  min-width: 148px;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.setup-rating-option {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 66px;
+  background: transparent;
+  color: #d8d8d8;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.setup-rating-option.selected {
+  border-color: rgba(255, 255, 255, 0.72);
+  background: #2f855a;
+  color: #ffffff;
+}
+
+.setup-rating-option:focus-visible {
+  outline: 2px solid #f5d76e;
+  outline-offset: 2px;
+}
+
 .setup-action-button {
   width: 100%;
   min-height: 46px;

@@ -100,6 +100,7 @@ interface QuickMatchSetupSummary {
   boardRadius: number;
   clock: string;
   scoring: string;
+  rating: string;
 }
 
 const LOBBY_AUTO_REFRESH_MS = 30_000;
@@ -4398,6 +4399,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   <span>Radius {quickMatchSetupSummary.boardRadius}</span>
                   <span>{quickMatchSetupSummary.clock}</span>
                   <span>{quickMatchSetupSummary.scoring}</span>
+                  <span>{quickMatchSetupSummary.rating}</span>
                 </div>
               )}
               <div className="online-browser-quick-match-actions">

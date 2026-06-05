@@ -3756,6 +3756,7 @@ describe("OnlineGameBrowser", () => {
           boardRadius: 7,
           clock: "Timed 20+20",
           scoring: "Victory points",
+          rating: "Rated",
         }}
       />
     );
@@ -3767,6 +3768,7 @@ describe("OnlineGameBrowser", () => {
     expect(within(setupSummary).getByText("Radius 7")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Timed 20+20")).toBeInTheDocument();
     expect(within(setupSummary).getByText("Victory points")).toBeInTheDocument();
+    expect(within(setupSummary).getByText("Rated")).toBeInTheDocument();
     expect(screen.getByText(/Quick Match tries open listings for this setup, then lists yours/i))
       .toBeInTheDocument();
 
