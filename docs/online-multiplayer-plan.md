@@ -947,9 +947,61 @@ Tests/review/deploy gates:
 - Review: ops review for capacity, observability, failure domains, and incident response.
 - Deploy: scale changes ship behind flags or staged rollout with rollback and alert thresholds.
 
-## Next Immediate Work
+## Living Execution Plan
 
-1. Improve public directory scanability after account metadata exists: public game rows already display registered participant names where safe, Lobby rows now display/search safe registered creator display names as of 2026-06-05, and Archive rows now open a separate detail surface from sanitized account/public summary data as of 2026-06-05. Live spectator counts are response-decorated from current WebSocket state rather than persisted summary rows, Watch can sort the currently loaded page by `Most watched in current list`, and the selected-game UI now avoids any unsupported featured-game claim.
-2. Add remaining account lifecycle work before public launch: account-linked game-history retention is now explicit in deletion UI and contracts as of 2026-06-05, and the PostgreSQL account-store tests now cover deletion removing social state while retaining rating rows plus moderation display-name snapshots; next tighten ratings and moderation contracts beyond deletion retention.
-3. Keep running screenshot QA after each broad UI destination is added, especially for 360 x 640 short mobile layouts, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text. The 2026-06-05 shared-shell cleanup returned the broad local UI layout audit to green across desktop, mobile, and short-mobile scenarios.
-4. Keep deployment freshness in the gate: local PostgreSQL preflight/smokes before deploy, fast production freshness diagnostics for health commit plus SSH reachability, expected-commit health checks after deploy, and browser smoke after each live push.
+Last execution-plan refresh: 2026-06-06, production at `b640ab0`.
+
+This section is the working queue for the current `online-action-log` branch. Future online-multiplayer slices should come from this queue or first update this queue with a short reason. After each meaningful slice, update the relevant item from `Next` to `Done`, `Deferred`, or `Still open`, record the verification/deploy evidence when it matters, and keep this section honest before moving to another area.
+
+### Recently Completed
+
+- Done: production deploy freshness now points at `https://castles.ls314.xyz` and verifies the expected commit, SSH reachability, upstream branch presence, and production lag.
+- Done: deploy backup hardening validates JSON PostgreSQL backups before code checkout/build/restart, so a malformed fallback backup blocks deployment before live code changes.
+- Done: local and production smoke cleanup now resigns or cancels smoke games/challenges/seeks so repeated rehearsals do not leave ordinary active rows behind.
+- Done: account recovery smoke now exercises disposable registered accounts, targeted challenge directories, account-history rejoin, fresh seat-token recovery, game cleanup, and account cleanup.
+- Done: query-secret hardening now covers path-only account game snapshot/rejoin routes, direct challenge view/action routes, direct player snapshot/visibility routes, creator-owned open-seek refresh/cancel routes, and account session lookup/list/revoke/delete routes. The production commit is `b640ab0`.
+
+### Next Ordered Slices
+
+1. Route-surface audit for the remaining bearer/admin endpoints.
+   - Inventory every `Authorization: Bearer` route in `src/online/server/createOnlineHttpServer.ts`.
+   - Classify each route as `path-only`, `safe-query`, `oauth-query`, or `admin-filter-query`.
+   - Add regression tests and docs for any remaining path-only route that still accepts query strings after valid bearer auth.
+   - Do not convert legitimate filter routes such as public directories, account archive filters, moderation report filters, OAuth callback/start, or rating leader scopes into path-only routes.
+
+2. Account/social privacy and moderation boundary pass.
+   - Confirm profile, follow, block, report, privacy, rating-leader, account challenge, and account history responses do not expose raw account ids, token hashes, bearer tokens, game seat tokens, challenge tokens, open-seek creator tokens, or internal database keys.
+   - Tighten any remaining trusted-error paths so user-facing copy can explain privacy/rate-limit failures without echoing submitted secrets.
+   - Keep report adjudication policy, sanctions, appeals, direct messages, public profile text, and broad notifications deferred until moderation rules are stronger.
+
+3. Challenge inbox and rematch reliability.
+   - Keep the current account challenge inbox as the notification foundation.
+   - Add dedicated rematch request records only after the existing same-settings challenge flow, block rules, cooldown rules, and accepted-game recovery stay stable.
+   - Add report/block actions from invite or challenge rows without exposing hidden target state.
+
+4. Lobby, Watch, Archive, and account-history scanability.
+   - Continue list-first desktop design: quiet dense rows, stable filters, clear current-setup actions, no marketing layout.
+   - Improve friend-aware discovery where it helps play: friends filters for Watch/Archive/account history, compact friends-playing-now, and richer authorized head-to-head/history links.
+   - Add archive detail/search read models only when the current `OnlineGameSummary` payload stops being enough for replay/detail pages.
+
+5. UI/navigation/tutorial/save QA.
+   - Run screenshot QA after every broad destination change.
+   - Keep desktop-first polish, but continue checking 360 x 640 short mobile, drawer-open states, Lobby rows, tutorial progress, first-run welcome, save modal overlays, and long online status/error text.
+   - Fix overlap, clipped controls, unreadable status text, and confusing back/return paths before adding broader surfaces.
+
+6. Ratings and moderation pre-public hardening.
+   - Keep rated writes restricted to completed rated PostgreSQL games with two distinct registered accounts.
+   - Verify public rating UI exposes only sanitized summaries and no rating-engine internals.
+   - Add only the admin/report queue affordances needed for the trusted beta; defer fair-play signals, sanctions, appeals, and broad abuse policy until the audience grows.
+
+7. Operational readiness before public load.
+   - Keep deploy freshness, backup validation, production API smoke, and browser smoke in the live-push gate.
+   - Add restore drills, pool-limit checks, load tests, metrics/alerts, and incident runbooks before attempting public-scale traffic.
+   - Defer multi-instance work until the single-node service has clear observability and rollback evidence.
+
+### Current Slice Selection Rule
+
+- Pick the next slice from `Next Ordered Slices`, starting at item 1 unless a production blocker or user instruction overrides it.
+- Before implementation, state which numbered item the slice advances.
+- If a new issue is discovered while working, add it to this section before implementing it unless it is an emergency fix.
+- After the slice, update this section with status, commit/deploy evidence if applicable, and any remaining follow-up.
