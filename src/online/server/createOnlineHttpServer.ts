@@ -6017,6 +6017,20 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         });
         return;
       }
+      const sourceRoom = service.getRoom(sourceGameId.value);
+      if (!sourceRoom) {
+        res.status(404).json({
+          error: { code: "not_found", message: "No source game was found for that rematch." },
+        });
+        return;
+      }
+      const sourceSetup = normalizeOnlineSetupForCreation(sourceRoom.getSnapshot().setup);
+      if (canonicalSetupSignature(sourceSetup) !== canonicalSetupSignature(normalizedSetup)) {
+        res.status(400).json({
+          error: { code: "bad_request", message: "Rematch setup must match the source game." },
+        });
+        return;
+      }
       authorizedSourceGameId = sourceGameId.value;
     }
 

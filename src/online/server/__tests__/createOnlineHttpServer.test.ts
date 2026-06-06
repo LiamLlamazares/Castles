@@ -5649,8 +5649,21 @@ describe("createOnlineHttpServer", () => {
       result: { winner: "w", reason: "resignation" },
       lastEventId: `${gameId}_terminal_evt`,
     });
+    const setup = createSetup();
+    const sourceGameIds = ["game_liam_samir_source", "game_liam_dani_source"];
+    const service = new OnlineGameService({
+      idFactory: () => {
+        const gameId = sourceGameIds.shift();
+        if (!gameId) throw new Error("Unexpected source game creation");
+        return gameId;
+      },
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    service.createGame(setup, { publicBaseUrl: "https://castles.example/play" });
+    service.createGame(setup, { publicBaseUrl: "https://castles.example/play" });
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
+      service,
       now: () => Date.parse("2026-06-01T12:00:00.000Z"),
       loadGameSummary: (gameId) => {
         if (gameId === "game_liam_samir_source" && liamIdentity && samirIdentity) {
@@ -5664,7 +5677,6 @@ describe("createOnlineHttpServer", () => {
     });
     servers.push(server);
     const port = await listen(server);
-    const setup = createSetup();
     const liam = await createAccountViaApi(port, "Liam");
     const samir = await createAccountViaApi(port, "Samir");
     const dani = await createAccountViaApi(port, "Dani");
@@ -5690,6 +5702,20 @@ describe("createOnlineHttpServer", () => {
       }),
     });
     const unauthorizedSource = await unauthorizedSourceResponse.json();
+
+    const mismatchedSetupResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup: { ...setup, pieceTheme: "Chess" },
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "samir",
+        intent: "rematch",
+        sourceGameId: "game_liam_samir_source",
+      }),
+    });
+    const mismatchedSetup = await mismatchedSetupResponse.json();
 
     const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
       method: "POST",
@@ -5720,6 +5746,13 @@ describe("createOnlineHttpServer", () => {
       error: {
         code: "not_found",
         message: "No source game was found for that rematch.",
+      },
+    });
+    expect(mismatchedSetupResponse.status).toBe(400);
+    expect(mismatchedSetup).toMatchObject({
+      error: {
+        code: "bad_request",
+        message: "Rematch setup must match the source game.",
       },
     });
     expect(createResponse.status).toBe(201);
