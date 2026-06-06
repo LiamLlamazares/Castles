@@ -489,6 +489,18 @@ function App() {
   const onlineChallengeOpponentBlocked =
     onlineChallengeBlockedOpponentKey !== null &&
     onlineChallengeBlockedOpponentKey === onlineChallengeOpponentKey;
+  const onlineChallengeNavigationActivityMarker = useMemo(() => {
+    if (!onlineChallengeResponse) return null;
+    return [
+      onlineChallengeResponse.role,
+      onlineChallengeResponse.summary.status,
+      onlineChallengeResponse.summary.gameId ?? "",
+    ].join(":");
+  }, [
+    onlineChallengeResponse?.role,
+    onlineChallengeResponse?.summary.gameId,
+    onlineChallengeResponse?.summary.status,
+  ]);
   const canUseOnlineChallengeAccountActions = Boolean(
     onlineAccountSession &&
       onlineAccount &&
@@ -499,6 +511,36 @@ function App() {
   const canShowOnlineChallengeGameplayActions = !onlineChallengeOpponentBlocked;
   const onlineChallengeReportDetailsRemaining =
     ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH - onlineChallengeReportDetails.length;
+
+  const loadOnlineChallengeNavigationActivityCount = useCallback(async (): Promise<number | null> => {
+    if (!onlineAccountAuth || onlineAccountStatus !== "ready") return null;
+    try {
+      const directory = await fetchOnlineAccountChallenges(onlineAccountAuth, { state: "all" });
+      return countOnlineAccountChallengeNavigationActivity(directory.challenges);
+    } catch (error) {
+      console.warn("Failed to refresh online challenge activity", error);
+      return null;
+    }
+  }, [onlineAccountAuth, onlineAccountStatus]);
+
+  const refreshOnlineChallengeNavigationActivity = useCallback(async () => {
+    const count = await loadOnlineChallengeNavigationActivityCount();
+    if (count !== null) {
+      setOnlineChallengeNavigationActivityCount(count);
+    }
+  }, [loadOnlineChallengeNavigationActivityCount]);
+
+  const shouldRefreshOnlineChallengeNavigationActivityAfterDirectResponse = useCallback((
+    response: OnlineChallengeResponse
+  ) => {
+    if (!onlineChallengeNavigationActivityMarker) return false;
+    const nextMarker = [
+      response.role,
+      response.summary.status,
+      response.summary.gameId ?? "",
+    ].join(":");
+    return nextMarker !== onlineChallengeNavigationActivityMarker;
+  }, [onlineChallengeNavigationActivityMarker]);
 
   useEffect(() => {
     const handleOnlineAccountStorageChange = (event: StorageEvent) => {
@@ -565,24 +607,19 @@ function App() {
   }, [onlineAccountSession?.token]);
 
   useEffect(() => {
-    const accountToken = onlineAccountSession?.token;
-    if (!accountToken || onlineAccountStatus !== "ready") {
+    if (!onlineAccountAuth || onlineAccountStatus !== "ready") {
       setOnlineChallengeNavigationActivityCount(0);
       return;
     }
 
     let cancelled = false;
     const refreshChallengeNavigationActivity = () => {
-      fetchOnlineAccountChallenges({ token: accountToken }, { state: "all" })
-        .then((directory) => {
+      loadOnlineChallengeNavigationActivityCount()
+        .then((count) => {
           if (cancelled) return;
-          setOnlineChallengeNavigationActivityCount(
-            countOnlineAccountChallengeNavigationActivity(directory.challenges)
-          );
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          console.warn("Failed to refresh online challenge activity", error);
+          if (count !== null) {
+            setOnlineChallengeNavigationActivityCount(count);
+          }
         });
     };
     const refreshChallengeNavigationActivityIfVisible = () => {
@@ -601,7 +638,7 @@ function App() {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", refreshChallengeNavigationActivityIfVisible);
     };
-  }, [onlineAccountSession?.token, onlineAccountStatus]);
+  }, [loadOnlineChallengeNavigationActivityCount, onlineAccountAuth, onlineAccountStatus]);
 
   useEffect(() => {
     if (isRulesPage || onlineJoin || onlineSpectator || onlineChallenge) return;
@@ -847,6 +884,9 @@ function App() {
       fetchOnlineChallenge(onlineChallenge)
         .then((response) => {
           if (cancelled) return;
+          if (shouldRefreshOnlineChallengeNavigationActivityAfterDirectResponse(response)) {
+            void refreshOnlineChallengeNavigationActivity();
+          }
           setOnlineChallengeResponse(response);
           setOnlineChallengeError(null);
           setOnlineChallengeStatus((status) => (status === "error" ? "idle" : status));
@@ -868,7 +908,13 @@ function App() {
       onlineChallengePollInFlightRef.current = false;
       window.clearInterval(intervalId);
     };
-  }, [onlineChallenge, onlineChallengeResponse?.summary.status, onlineChallengeStatus]);
+  }, [
+    onlineChallenge,
+    onlineChallengeResponse?.summary.status,
+    onlineChallengeStatus,
+    refreshOnlineChallengeNavigationActivity,
+    shouldRefreshOnlineChallengeNavigationActivityAfterDirectResponse,
+  ]);
 
   useEffect(() => {
     if (!openSeekCreator || openSeekResponse?.summary.seekId === openSeekCreator.seekId) return;
@@ -2002,6 +2048,7 @@ function App() {
       if (onlineChallenge) {
         forgetOnlineChallengeStorage(onlineChallenge);
       }
+      await refreshOnlineChallengeNavigationActivity();
       setOnlineChallengeReportOpen(false);
       setOnlineChallengeReportReason("abuse");
       setOnlineChallengeReportDetails("");
@@ -2018,6 +2065,7 @@ function App() {
     onlineAccountSession,
     onlineChallenge,
     onlineChallengeOpponentDisplayName,
+    refreshOnlineChallengeNavigationActivity,
   ]);
 
   const handleRefreshOwnedOpenSeek = async () => {
@@ -2046,6 +2094,7 @@ function App() {
     try {
       const response = await acceptOnlineChallenge(onlineChallenge);
       setOnlineChallengeResponse(response);
+      await refreshOnlineChallengeNavigationActivity();
       setOnlineChallengeStatus("idle");
       if (response.gameInvite) {
         enterOnlineGameFromInvite(response.gameInvite);
@@ -2067,6 +2116,7 @@ function App() {
       forgetOnlineChallengeStorage(onlineChallenge);
       setOnlineChallengeResponse(response);
       setOnlineChallengeShareUrl(null);
+      await refreshOnlineChallengeNavigationActivity();
       setOnlineChallengeStatus("idle");
     } catch (error) {
       console.error("Failed to decline online challenge", error);
@@ -2089,6 +2139,7 @@ function App() {
       forgetOnlineChallengeStorage(onlineChallenge);
       setOnlineChallengeResponse(response);
       setOnlineChallengeShareUrl(null);
+      await refreshOnlineChallengeNavigationActivity();
       setOnlineChallengeStatus("idle");
     } catch (error) {
       console.error("Failed to cancel online challenge", error);
@@ -2108,6 +2159,9 @@ function App() {
     setOnlineChallengeError(null);
     try {
       const response = await fetchOnlineChallenge(onlineChallenge);
+      if (shouldRefreshOnlineChallengeNavigationActivityAfterDirectResponse(response)) {
+        void refreshOnlineChallengeNavigationActivity();
+      }
       setOnlineChallengeResponse(response);
       setOnlineChallengeStatus("idle");
     } catch (error) {
