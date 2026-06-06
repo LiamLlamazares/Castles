@@ -1910,6 +1910,86 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(history)).not.toContain("account_");
   });
 
+  it("fails closed when admin moderation stores return unsupported internal response fields", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    const adminToken = "admin-token-with-enough-length";
+    const reportId = "report_badshape123456";
+    const auditId = "report_audit_badshape123456";
+    const report = {
+      schemaVersion: 2,
+      reportId,
+      reporterDisplayName: "Liam",
+      targetDisplayName: "Samir",
+      reason: "abuse",
+      details: "Hostile challenge message.",
+      status: "open",
+      moderatorNote: "",
+      createdAt: "2026-06-01T12:04:00.000Z",
+      updatedAt: "2026-06-01T12:04:00.000Z",
+      reviewedAt: null,
+      accountId: "account_samir",
+    };
+    const audit = {
+      schemaVersion: 2,
+      auditId,
+      reportId,
+      action: "status_changed",
+      actor: "admin",
+      previousStatus: "open",
+      nextStatus: "resolved",
+      note: "Reviewed.",
+      createdAt: "2026-06-01T12:05:00.000Z",
+      tokenHash: "account_session_hash",
+    };
+    vi.spyOn(accountStore, "listAccountReports").mockResolvedValue([report as any]);
+    vi.spyOn(accountStore, "updateAccountReportStatus").mockResolvedValue({
+      status: "ok",
+      report: report as any,
+      audit: audit as any,
+    });
+    vi.spyOn(accountStore, "listAccountReportAudits").mockResolvedValue({
+      status: "ok",
+      reportId,
+      audits: [audit as any],
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      adminBearerToken: adminToken,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const queueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+      headers: bearer(adminToken),
+    });
+    const updateResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(adminToken) },
+      body: JSON.stringify({ status: "resolved" }),
+    });
+    const auditsResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports/${reportId}/audits`, {
+      headers: bearer(adminToken),
+    });
+    const bodies = [
+      await queueResponse.json(),
+      await updateResponse.json(),
+      await auditsResponse.json(),
+    ];
+
+    expect(queueResponse.status).toBe(503);
+    expect(updateResponse.status).toBe(503);
+    expect(auditsResponse.status).toBe(503);
+    expect(bodies).toEqual([
+      { error: { code: "persistence_failed", message: "Account reports could not be loaded." } },
+      { error: { code: "persistence_failed", message: "Account report could not be updated." } },
+      { error: { code: "persistence_failed", message: "Account report audits could not be loaded." } },
+    ]);
+    expect(JSON.stringify(bodies)).not.toContain("account_samir");
+    expect(JSON.stringify(bodies)).not.toContain("account_session_hash");
+    expect(JSON.stringify(bodies)).not.toContain("tokenHash");
+  });
+
   it("keeps wrong admin bearer attempts hidden while consuming the admin rate limit", async () => {
     const adminToken = "admin-token-with-enough-length";
     const { server } = createOnlineHttpServer({

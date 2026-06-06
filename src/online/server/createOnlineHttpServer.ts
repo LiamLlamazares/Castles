@@ -161,7 +161,9 @@ import {
   parseOnlineAccountModerationReportStatusPatch,
   parseOnlineAccountReportInput,
   parseOnlineAccountPrivacyPatch,
+  type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationAuditListResponse,
+  type OnlineAccountModerationReport,
   type OnlineAccountModerationReportQueueResponse,
   type OnlineAccountModerationReportStatusResponse,
   type OnlineAccountReportReason,
@@ -218,6 +220,30 @@ const RATING_LEADERBOARD_MAX_LIMIT = 50;
 const RATING_LEADERBOARD_SCOPES = new Set<OnlineRatingLeaderboardScope>(["global", "following"]);
 const MODERATION_REPORT_DEFAULT_LIMIT = 50;
 const MODERATION_REPORT_MAX_LIMIT = 100;
+const MODERATION_REPORT_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "reportId",
+  "reporterDisplayName",
+  "targetDisplayName",
+  "reason",
+  "details",
+  "status",
+  "moderatorNote",
+  "createdAt",
+  "updatedAt",
+  "reviewedAt",
+]);
+const MODERATION_AUDIT_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "auditId",
+  "reportId",
+  "action",
+  "actor",
+  "previousStatus",
+  "nextStatus",
+  "note",
+  "createdAt",
+]);
 
 type PublicSessionIdentity = { kind: "session"; id: string };
 type PublicPlayerIdentity = OnlineIdentity;
@@ -1310,6 +1336,108 @@ function normalizeModerationReportId(value: unknown): string | null {
   if (typeof value !== "string" || !/^report_[A-Za-z0-9_-]{6,128}$/.test(value)) return null;
   if (stringContainsDurableSecret(value)) return null;
   return value;
+}
+
+function normalizeModerationAuditId(value: unknown): string | null {
+  if (typeof value !== "string" || !/^report_audit_[A-Za-z0-9_-]{6,128}$/.test(value)) return null;
+  if (stringContainsDurableSecret(value)) return null;
+  return value;
+}
+
+function isResponseRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertAllowedResponseKeys(
+  record: Record<string, unknown>,
+  allowedKeys: ReadonlySet<string>,
+  label: string
+): void {
+  for (const key of Object.keys(record)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`${label} contains unsupported data.`);
+    }
+  }
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const timestamp = Date.parse(value);
+  return !Number.isNaN(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+function isModerationDisplayName(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  return normalizeOnlineAccountDisplayName(value).ok && !stringContainsDurableSecret(value);
+}
+
+function isModerationText(value: unknown, maxLength: number): value is string {
+  return typeof value === "string" && value.length <= maxLength && !stringContainsDurableSecret(value);
+}
+
+function validateModerationReportResponseShape(value: unknown): OnlineAccountModerationReport {
+  if (!isResponseRecord(value)) throw new Error("Moderation report must be an object.");
+  assertAllowedResponseKeys(value, MODERATION_REPORT_RESPONSE_KEYS, "Moderation report");
+  const reportId = normalizeModerationReportId(value.reportId);
+  if (
+    value.schemaVersion !== ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION ||
+    !reportId ||
+    !isModerationDisplayName(value.reporterDisplayName) ||
+    !isModerationDisplayName(value.targetDisplayName) ||
+    !ONLINE_ACCOUNT_REPORT_REASONS.has(value.reason as OnlineAccountReportReason) ||
+    !isModerationText(value.details, 1000) ||
+    !ONLINE_ACCOUNT_REPORT_STATUSES.has(value.status as OnlineAccountReportStatus) ||
+    !isModerationText(value.moderatorNote, 1000) ||
+    !isIsoTimestamp(value.createdAt) ||
+    !isIsoTimestamp(value.updatedAt) ||
+    (value.reviewedAt !== null && !isIsoTimestamp(value.reviewedAt))
+  ) {
+    throw new Error("Moderation report is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    reportId,
+    reporterDisplayName: value.reporterDisplayName,
+    targetDisplayName: value.targetDisplayName,
+    reason: value.reason as OnlineAccountReportReason,
+    details: value.details,
+    status: value.status as OnlineAccountReportStatus,
+    moderatorNote: value.moderatorNote,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    reviewedAt: value.reviewedAt,
+  };
+}
+
+function validateModerationAuditResponseShape(value: unknown): OnlineAccountModerationAuditEntry {
+  if (!isResponseRecord(value)) throw new Error("Moderation audit must be an object.");
+  assertAllowedResponseKeys(value, MODERATION_AUDIT_RESPONSE_KEYS, "Moderation audit");
+  const auditId = normalizeModerationAuditId(value.auditId);
+  const reportId = normalizeModerationReportId(value.reportId);
+  if (
+    value.schemaVersion !== ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION ||
+    !auditId ||
+    !reportId ||
+    value.action !== "status_changed" ||
+    value.actor !== "admin" ||
+    !ONLINE_ACCOUNT_REPORT_STATUSES.has(value.previousStatus as OnlineAccountReportStatus) ||
+    !ONLINE_ACCOUNT_REPORT_STATUSES.has(value.nextStatus as OnlineAccountReportStatus) ||
+    !isModerationText(value.note, 1000) ||
+    !isIsoTimestamp(value.createdAt)
+  ) {
+    throw new Error("Moderation audit is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    auditId,
+    reportId,
+    action: "status_changed",
+    actor: "admin",
+    previousStatus: value.previousStatus as OnlineAccountReportStatus,
+    nextStatus: value.nextStatus as OnlineAccountReportStatus,
+    note: value.note,
+    createdAt: value.createdAt,
+  };
 }
 
 function encodeModerationReportQueueCursor(report: { createdAt: string; reportId: string }): string {
@@ -3869,7 +3997,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         cursor: parsed.cursor,
         limit: parsed.limit + 1,
       });
-      const pageReports = reports.slice(0, parsed.limit);
+      const pageReports = reports
+        .slice(0, parsed.limit)
+        .map(validateModerationReportResponseShape);
       const nextCursor =
         reports.length > parsed.limit && pageReports.length > 0
           ? encodeModerationReportQueueCursor(pageReports[pageReports.length - 1])
@@ -3963,11 +4093,16 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         });
         return;
       }
+      const report = validateModerationReportResponseShape(result.report);
+      const audit = validateModerationAuditResponseShape(result.audit);
+      if (audit.reportId !== report.reportId) {
+        throw new Error("Moderation audit does not match its report.");
+      }
       const body: OnlineAccountModerationReportStatusResponse = {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
-        report: result.report,
-        audit: result.audit,
+        report,
+        audit,
       };
       log({ event: "online.admin.report.update", status: "accepted" });
       res.json(body);
@@ -4023,11 +4158,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         });
         return;
       }
+      const responseReportId = normalizeModerationReportId(result.reportId);
+      if (!responseReportId || responseReportId !== reportId) {
+        throw new Error("Moderation audit report id is invalid.");
+      }
+      const audits = result.audits.map(validateModerationAuditResponseShape);
+      if (audits.some((audit) => audit.reportId !== responseReportId)) {
+        throw new Error("Moderation audit does not match its report.");
+      }
       const body: OnlineAccountModerationAuditListResponse = {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
-        reportId: result.reportId,
-        audits: result.audits,
+        reportId: responseReportId,
+        audits,
       };
       log({ event: "online.admin.report.audits", status: "accepted" });
       res.json(body);
