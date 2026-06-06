@@ -1668,6 +1668,68 @@ describe("online client helpers", () => {
     ).rejects.toThrow(/followPolicy is invalid/);
   });
 
+  it("rejects social and privacy responses with unsupported internal fields", async () => {
+    const profile = {
+      schemaVersion: 1,
+      displayName: "Samir",
+      presence: { visibility: "hidden", status: null },
+      relationship: { self: false, following: false, blocked: false },
+    };
+    const privacy = {
+      schemaVersion: 1,
+      followPolicy: "everyone",
+      presencePolicy: "followed",
+      challengePolicy: "followed",
+      updatedAt: null,
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile,
+          accountId: "account_samir",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          following: [profile],
+          databaseKey: "online_account_follows.followed_account_id",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          privacy: {
+            ...privacy,
+            tokenHash: "account_session_hash",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          privacy,
+          accountId: "account_liam",
+        }),
+      });
+
+    await expect(
+      fetchOnlineAccountProfile({ token: "account-token" }, "Samir", fetchImpl as any)
+    ).rejects.toThrow(/unsupported data/);
+    await expect(fetchOnlineAccountFollowing({ token: "account-token" }, fetchImpl as any))
+      .rejects.toThrow(/unsupported data/);
+    await expect(fetchOnlineAccountPrivacy({ token: "account-token" }, fetchImpl as any))
+      .rejects.toThrow(/unsupported data/);
+    await expect(
+      updateOnlineAccountPrivacy({ token: "account-token" }, { followPolicy: "nobody" }, fetchImpl as any)
+    ).rejects.toThrow(/unsupported data/);
+  });
+
   it("rejects account session revocation responses that did not revoke the session", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,

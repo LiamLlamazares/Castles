@@ -99,6 +99,16 @@ const ONLINE_REJECT_CODES = new Set<OnlineRejectCode>([
   "persistence_failed",
 ]);
 const MAX_ONLINE_ERROR_MESSAGE_LENGTH = 240;
+const ONLINE_ACCOUNT_PROFILE_RESPONSE_KEYS = new Set(["protocolVersion", "profile"]);
+const ONLINE_ACCOUNT_FOLLOWING_RESPONSE_KEYS = new Set(["protocolVersion", "following"]);
+const ONLINE_ACCOUNT_PRIVACY_RESPONSE_KEYS = new Set(["protocolVersion", "privacy"]);
+const ONLINE_ACCOUNT_PRIVACY_SETTINGS_KEYS = new Set([
+  "schemaVersion",
+  "followPolicy",
+  "presencePolicy",
+  "challengePolicy",
+  "updatedAt",
+]);
 
 export interface OnlineJoinParams {
   gameId: string;
@@ -823,6 +833,18 @@ function validateOnlineAccountPublicRating(
   };
 }
 
+function assertAllowedKeys(
+  record: Record<string, unknown>,
+  allowedKeys: ReadonlySet<string>,
+  message: string
+): void {
+  for (const key of Object.keys(record)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(message);
+    }
+  }
+}
+
 function validateOnlineAccountPublicProfile(
   value: unknown,
   label: string
@@ -923,6 +945,11 @@ function validateOnlineAccountPrivacySettings(
     throw new Error(`${label} was malformed.`);
   }
   const record = value as Record<string, unknown>;
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_PRIVACY_SETTINGS_KEYS,
+    `${label} was malformed: privacy contains unsupported data.`
+  );
   if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
     throw new Error(`${label} was malformed: schemaVersion is invalid.`);
   }
@@ -957,9 +984,30 @@ function validateOnlineAccountPrivacySettings(
 
 function validateProfileResponse(body: unknown, label: string): OnlineAccountProfileResponse {
   const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_PROFILE_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
   return {
     protocolVersion: ONLINE_PROTOCOL_VERSION,
     profile: validateOnlineAccountPublicProfile(record.profile, `${label}.profile`),
+  };
+}
+
+function validateOnlineAccountPrivacyResponse(
+  body: unknown,
+  label: string
+): OnlineAccountPrivacyResponse {
+  const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_PRIVACY_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    privacy: validateOnlineAccountPrivacySettings(record.privacy, `${label}.privacy`),
   };
 }
 
@@ -1043,6 +1091,11 @@ export async function fetchOnlineAccountFollowing(
     throw new Error(`Could not load followed online accounts (${response.status})`);
   }
   const record = validateVersionedObject(await response.json(), "Online following");
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_FOLLOWING_RESPONSE_KEYS,
+    "Online following response was malformed: response contains unsupported data."
+  );
   if (!Array.isArray(record.following)) {
     throw new Error("Online following response was malformed: following is invalid.");
   }
@@ -1212,11 +1265,7 @@ export async function fetchOnlineAccountPrivacy(
   if (!response.ok) {
     throw new Error(`Could not load online account privacy (${response.status})`);
   }
-  const record = validateVersionedObject(await response.json(), "Online account privacy");
-  return {
-    protocolVersion: ONLINE_PROTOCOL_VERSION,
-    privacy: validateOnlineAccountPrivacySettings(record.privacy, "Online account privacy.privacy"),
-  };
+  return validateOnlineAccountPrivacyResponse(await response.json(), "Online account privacy");
 }
 
 export async function updateOnlineAccountPrivacy(
@@ -1235,11 +1284,7 @@ export async function updateOnlineAccountPrivacy(
       `Could not update online account privacy (${response.status})`
     );
   }
-  const record = validateVersionedObject(await response.json(), "Online account privacy update");
-  return {
-    protocolVersion: ONLINE_PROTOCOL_VERSION,
-    privacy: validateOnlineAccountPrivacySettings(record.privacy, "Online account privacy update.privacy"),
-  };
+  return validateOnlineAccountPrivacyResponse(await response.json(), "Online account privacy update");
 }
 
 export interface FetchOnlineAccountChallengesOptions {
