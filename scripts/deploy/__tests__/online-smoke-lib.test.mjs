@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertGoogleOAuthSmoke } from "../online-smoke-lib.mjs";
+import { assertGoogleOAuthSmoke, resolveOnlineSmokeCliOptions } from "../online-smoke-lib.mjs";
 
 function jsonResponse(url, body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -20,6 +20,45 @@ function stateWithReturnTo(returnTo = "/?onlineGame=game_return&seat=w&view=spec
 }
 
 describe("online smoke helpers", () => {
+  it("defaults the API smoke to the current production domain and ignores empty env overrides", () => {
+    expect(resolveOnlineSmokeCliOptions).toEqual(expect.any(Function));
+
+    expect(resolveOnlineSmokeCliOptions([], {})).toMatchObject({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: undefined,
+    });
+    expect(
+      resolveOnlineSmokeCliOptions(
+        [],
+        {
+          BASE_URL: "   ",
+          EXPECTED_COMMIT: "   ",
+        },
+      ),
+    ).toMatchObject({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: undefined,
+    });
+    expect(
+      resolveOnlineSmokeCliOptions(["https://preview.example/", "abcdef"], {
+        BASE_URL: "https://wrong.example",
+        EXPECTED_COMMIT: "wrong",
+      }),
+    ).toMatchObject({
+      baseUrl: "https://preview.example",
+      expectedCommit: "abcdef",
+    });
+    expect(
+      resolveOnlineSmokeCliOptions([], {
+        BASE_URL: " https://env.example/ ",
+        EXPECTED_COMMIT: " abcdef ",
+      }),
+    ).toMatchObject({
+      baseUrl: "https://env.example",
+      expectedCommit: "abcdef",
+    });
+  });
+
   it("accepts a configured Google OAuth provider and production callback redirect", async () => {
     const calls = [];
     const fetchWithTimeout = async (url, options) => {

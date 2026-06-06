@@ -137,6 +137,6 @@ The browser smoke additionally:
 Do not point this script at the live database. The live server check remains:
 
 ```powershell
-node scripts/deploy/check-online-smoke.mjs https://castles.ls314.com <reviewed-commit-sha>
-npm run online:smoke:browser -- https://castles.ls314.com <reviewed-commit-sha>
+node scripts/deploy/check-online-smoke.mjs https://castles.ls314.xyz <reviewed-commit-sha>
+npm run online:smoke:browser -- https://castles.ls314.xyz <reviewed-commit-sha>
 ```

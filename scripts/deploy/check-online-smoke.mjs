@@ -11,15 +11,12 @@ import {
   createWebSocketWaiters,
   makeSmokeSetup,
   readJson,
+  resolveOnlineSmokeCliOptions,
   versionedSocketMessage,
 } from "./online-smoke-lib.mjs";
 
 const require = createRequire(import.meta.url);
-const baseUrl = (process.argv[2] ?? process.env.BASE_URL ?? "https://castles.ls314.com").replace(
-  /\/$/,
-  ""
-);
-const expectedCommit = process.argv[3] ?? process.env.EXPECTED_COMMIT;
+const { baseUrl, expectedCommit } = resolveOnlineSmokeCliOptions(process.argv.slice(2));
 const requestTimeoutMs = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS ?? 15_000);
 const socketTimeoutMs = Number(process.env.SMOKE_SOCKET_TIMEOUT_MS ?? 10_000);
 const fetchWithTimeout = createFetchWithTimeout(requestTimeoutMs);

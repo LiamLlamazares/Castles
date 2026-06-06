@@ -5,6 +5,19 @@ export function assert(condition, message) {
 }
 
 export const ONLINE_PROTOCOL_VERSION = 1;
+const DEFAULT_PRODUCTION_BASE_URL = "https://castles.ls314.xyz";
+
+function firstNonEmpty(...values) {
+  const match = values.find((value) => String(value ?? "").trim() !== "");
+  return match === undefined ? undefined : String(match).trim();
+}
+
+export function resolveOnlineSmokeCliOptions(argv = [], env = process.env) {
+  return {
+    baseUrl: firstNonEmpty(argv[0], env.BASE_URL, DEFAULT_PRODUCTION_BASE_URL).replace(/\/$/, ""),
+    expectedCommit: firstNonEmpty(argv[1], env.EXPECTED_COMMIT),
+  };
+}
 
 export async function readJson(response) {
   const text = await response.text();
