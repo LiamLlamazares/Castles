@@ -4,12 +4,20 @@ import { promisify } from "node:util";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_SSH_TIMEOUT_MS = 10_000;
+const DEFAULT_BASE_URL = "https://castles.ls314.xyz";
+const DEFAULT_SSH_TARGET = "lukasz@contabo.ls314.xyz";
 const execFileAsync = promisify(execFile);
 
 export function normalizeProductionBaseUrl(baseUrl) {
   const value = String(baseUrl ?? "").trim();
   if (!value) throw new Error("Production base URL is required.");
   return value.replace(/\/+$/, "");
+}
+
+export function extractSshHostname(sshTarget) {
+  const withoutUser = String(sshTarget ?? "").split("@").pop() ?? "";
+  const withoutPort = withoutUser.replace(/^\[/, "").replace(/\](:\d+)?$/, "").split(":")[0];
+  return withoutPort || undefined;
 }
 
 export async function fetchProductionHealth(baseUrl, options = {}) {
@@ -55,6 +63,35 @@ async function gitOutput(args, options = {}) {
     windowsHide: true,
   });
   return result.stdout.trim();
+}
+
+export async function getCurrentGitCommit(options = {}) {
+  return gitOutput(["rev-parse", "HEAD"], options);
+}
+
+function firstNonEmpty(...values) {
+  return values.find((value) => String(value ?? "").trim() !== "");
+}
+
+export async function resolveProductionFreshnessCliOptions(argv = [], env = process.env, dependencies = {}) {
+  const baseUrl = firstNonEmpty(argv[0], env.BASE_URL, DEFAULT_BASE_URL);
+  const expectedCommit =
+    firstNonEmpty(argv[1], env.EXPECTED_COMMIT) ??
+    (await (dependencies.getCurrentGitCommit ?? getCurrentGitCommit)({
+      cwd: dependencies.gitCwd,
+      timeoutMs: dependencies.gitTimeoutMs,
+    }));
+  const sshHost =
+    firstNonEmpty(argv[2], env.DEPLOY_SSH_HOST) ??
+    extractSshHostname(firstNonEmpty(env.DEPLOY_SSH_TARGET, DEFAULT_SSH_TARGET));
+  return {
+    baseUrl,
+    expectedCommit,
+    sshHost,
+    sshPort: Number(firstNonEmpty(env.DEPLOY_SSH_PORT, 22)),
+    sshTimeoutMs: Number(firstNonEmpty(env.DEPLOY_SSH_TIMEOUT_MS, DEFAULT_SSH_TIMEOUT_MS)),
+    includeGitStatus: true,
+  };
 }
 
 async function gitExitCode(args, options = {}) {

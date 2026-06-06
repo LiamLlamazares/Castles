@@ -3,6 +3,7 @@ import {
   checkProductionFreshness,
   formatProductionFreshnessResult,
   normalizeProductionBaseUrl,
+  resolveProductionFreshnessCliOptions,
 } from "../production-freshness.mjs";
 
 function okHealth(commit = "expected-sha") {
@@ -22,6 +23,52 @@ function okHealth(commit = "expected-sha") {
 describe("production freshness diagnostics", () => {
   it("normalizes production base URLs without trailing slashes", () => {
     expect(normalizeProductionBaseUrl("https://castles.ls314.xyz/")).toBe("https://castles.ls314.xyz");
+  });
+
+  it("defaults the CLI diagnostic to local HEAD and the production deploy SSH host", async () => {
+    expect(resolveProductionFreshnessCliOptions).toEqual(expect.any(Function));
+
+    const options = await resolveProductionFreshnessCliOptions(
+      [],
+      {},
+      {
+        getCurrentGitCommit: async () => "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      },
+    );
+
+    expect(options).toMatchObject({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      sshHost: "contabo.ls314.xyz",
+      sshPort: 22,
+      sshTimeoutMs: 10_000,
+      includeGitStatus: true,
+    });
+  });
+
+  it("ignores empty freshness environment overrides instead of silently unpinning the check", async () => {
+    const options = await resolveProductionFreshnessCliOptions(
+      [],
+      {
+        BASE_URL: "",
+        EXPECTED_COMMIT: "",
+        DEPLOY_SSH_HOST: "",
+        DEPLOY_SSH_PORT: "",
+        DEPLOY_SSH_TIMEOUT_MS: "",
+        DEPLOY_SSH_TARGET: "",
+      },
+      {
+        getCurrentGitCommit: async () => "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      },
+    );
+
+    expect(options).toMatchObject({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      sshHost: "contabo.ls314.xyz",
+      sshPort: 22,
+      sshTimeoutMs: 10_000,
+    });
   });
 
   it("reports matching health and reachable SSH when both deploy channels are fresh", async () => {

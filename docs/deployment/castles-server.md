@@ -139,12 +139,12 @@ curl -sS http://127.0.0.1:3000/api/health
 app_domain="<app-domain>"
 sha="<40-character-reviewed-commit-sha>"
 curl -sS "https://${app_domain}/api/health"
-npm run online:deploy:freshness -- "https://${app_domain}" "$sha" "${ssh_host:-$app_domain}"
+npm run online:deploy:freshness
 node scripts/deploy/check-online-smoke.mjs "https://${app_domain}" "$sha"
 npm run online:smoke:browser -- "https://${app_domain}" "$sha"
 ```
 
-`online:deploy:freshness` is a fast diagnostic before the mutating smoke checks. It reads `/api/health`, compares `build.commit` with the exact reviewed SHA, checks whether that SHA is present on the tracked upstream branch, reports when the production health commit is a known ancestor behind upstream, and optionally checks TCP reachability to the SSH host on port 22. If the expected SHA is already on the upstream branch but health is stale, the push target is not the likely failure mode; focus on the deploy/restart path. An SSH failure means the chosen deploy host is unavailable; confirm the SSH host resolves to the same server as the app domain before treating it as a service outage.
+`online:deploy:freshness` is a fast diagnostic before the mutating smoke checks. With no arguments, it checks the default production domain against the local Git `HEAD`, verifies that commit against the tracked upstream branch, reports when the production health commit is a known ancestor behind upstream, and checks TCP reachability to the default deploy host on port 22. Pass `npm run online:deploy:freshness -- "https://${app_domain}" "$sha" "${ssh_host:-$app_domain}"` when verifying a different app domain or reviewed SHA. If the expected SHA is already on the upstream branch but health is stale, the push target is not the likely failure mode; focus on the deploy/restart path. An SSH failure means the chosen deploy host is unavailable; confirm the SSH host resolves to the same server as the app domain before treating it as a service outage.
 `check-online-smoke.mjs` also verifies that Google OAuth is enabled, that the OAuth start route redirects to Google, and that the redirect callback URL matches the deployed app domain. For intentionally OAuth-free staging hosts, add a separate staging smoke rather than weakening the production gate.
 
 If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If `server:check-config` fails, fix the PostgreSQL URL, permissions, or schema-readiness error before restarting. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.

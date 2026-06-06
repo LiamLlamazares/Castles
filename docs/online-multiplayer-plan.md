@@ -868,6 +868,8 @@ Deploy backup hardening on 2026-06-05: the deploy runbook now keeps `pg_dump` as
 
 JSON backup validation update on 2026-06-06: `scripts/deploy/postgres-online-backup.mjs --validate <backup.json>` now checks the fallback JSON artifact before it is trusted for rollback evidence, including backup format, timestamp, sanitized database metadata, whitelisted table names, duplicate tables, safe column names, and table/global row-count consistency. The deploy runbook now validates fallback JSON backups immediately after writing them.
 
+Deploy freshness default update on 2026-06-06: `npm run online:deploy:freshness` now defaults to the local Git `HEAD`, default production domain, tracked upstream branch, and deploy SSH host, so the common no-argument diagnostic catches stale live builds instead of reporting `Commit: not checked`. Empty freshness environment overrides are ignored rather than silently disabling the pinned commit or SSH checks.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.
