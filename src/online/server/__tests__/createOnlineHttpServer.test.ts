@@ -1708,6 +1708,77 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(update)).not.toContain("account_");
   });
 
+  it("rejects token-bearing admin report status query strings even with admin bearer auth", async () => {
+    const queryable = new FakePostgresAccountQueryable();
+    const accountStore = createPostgresAccountStore(queryable);
+    const adminToken = "admin-token-with-enough-length";
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      adminBearerToken: adminToken,
+      now: () => now,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    now = Date.parse("2026-06-01T12:03:00.000Z");
+    await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "abuse", details: "Hostile challenge message." }),
+    });
+    const reportId = queryable.reports[0].report_id;
+
+    now = Date.parse("2026-06-01T12:05:00.000Z");
+    const queryOnlyResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}?token=${adminToken}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "resolved", note: "Reviewed challenge evidence." }),
+      }
+    );
+    const rejectedResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/admin/reports/${reportId}?token=leaked-admin-token`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json", ...bearer(adminToken) },
+        body: JSON.stringify({ status: "resolved", note: "Reviewed challenge evidence." }),
+      }
+    );
+    const rejected = await rejectedResponse.json();
+    const queueResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports?status=open`, {
+      headers: bearer(adminToken),
+    });
+    const queue = await queueResponse.json();
+
+    expect(queryOnlyResponse.status).toBe(404);
+    expect(rejectedResponse.status).toBe(400);
+    expect(rejected.error).toMatchObject({
+      code: "bad_request",
+      message: "Moderation report action query is invalid.",
+    });
+    expect(queueResponse.status).toBe(200);
+    expect(queue.reports).toEqual([
+      expect.objectContaining({
+        reportId,
+        status: "open",
+        moderatorNote: "",
+        reviewedAt: null,
+      }),
+    ]);
+    expect(queryable.reports[0]).toMatchObject({
+      report_id: reportId,
+      status: "open",
+      moderator_note: "",
+      reviewed_at: null,
+    });
+    expect(queryable.reportAudits).toEqual([]);
+  });
+
   it("lists admin report audit history with sanitized bounded entries", async () => {
     const queryable = new FakePostgresAccountQueryable();
     const accountStore = createPostgresAccountStore(queryable);

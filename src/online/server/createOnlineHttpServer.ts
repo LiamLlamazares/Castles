@@ -650,6 +650,15 @@ function validateAccountSocialActionQuery(originalUrl: string):
     : { ok: false, message: "Account social action query is invalid." };
 }
 
+function validateModerationReportActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Moderation report action query is invalid." };
+}
+
 function validateDirectChallengeActionQuery(originalUrl: string):
   | { ok: true }
   | { ok: false; message: string } {
@@ -3843,6 +3852,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many admin requests were sent too quickly." },
       });
+      return;
+    }
+    const query = validateModerationReportActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.admin.report.update", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
     const reportId = normalizeModerationReportId(req.params.reportId);
