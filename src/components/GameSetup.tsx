@@ -62,6 +62,8 @@ interface GameSetupProps {
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
     onOpenOnlineBrowser?: () => void;
+    onlineNotificationCount?: number;
+    onlineNotificationLabel?: string;
 }
 
 // Opponent options for card-based selection
@@ -130,7 +132,9 @@ const GameSetup: React.FC<GameSetupProps> = ({
     backLabel = "Back to game",
     onTutorial,
     onOpenLibrary,
-    onOpenOnlineBrowser
+    onOpenOnlineBrowser,
+    onlineNotificationCount = 0,
+    onlineNotificationLabel
 }) => {
     // Game Mode State
     const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
@@ -326,7 +330,14 @@ const GameSetup: React.FC<GameSetupProps> = ({
     const navDestinations: AppShellDestination[] = [
         { id: "play", label: "Play" },
         ...(onTutorial ? [{ id: "learn" as const, label: "Tutorial", onClick: onTutorial }] : []),
-        ...(onOpenOnlineBrowser ? [{ id: "online" as const, label: "Online", onClick: onOpenOnlineBrowser }] : []),
+        ...(onOpenOnlineBrowser ? [{
+            id: "online" as const,
+            label: "Online",
+            onClick: onOpenOnlineBrowser,
+            notificationCount: onlineNotificationCount,
+            notificationSingularLabel: "challenge activity",
+            notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
+        }] : []),
         ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
     ];
 

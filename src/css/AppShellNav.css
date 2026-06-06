@@ -139,6 +139,20 @@
   min-width: 0;
 }
 
+.app-shell-destination-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #f4d287;
+  color: #201812;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .app-shell-back-button:hover:not(:disabled),
 .app-shell-destination:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.16);
@@ -245,6 +259,7 @@
   .app-shell-destination {
     width: 36px;
     padding-inline: 7px;
+    position: relative;
   }
 
   .app-shell-destination-label {
@@ -254,6 +269,16 @@
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+
+  .app-shell-destination-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    font-size: 0.58rem;
   }
 }
 
@@ -271,6 +296,7 @@
 .tutorial-sidebar .app-shell-destination {
   width: 36px;
   padding-inline: 7px;
+  position: relative;
 }
 
 .setup-sidebar .app-shell-destination-label,
@@ -281,4 +307,15 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.setup-sidebar .app-shell-destination-badge,
+.tutorial-sidebar .app-shell-destination-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  font-size: 0.58rem;
 }

@@ -112,6 +112,7 @@ import {
   OnlineAccountReportInput,
 } from './online/client';
 import type { OnlineAccount } from './online/accounts';
+import type { OnlineAccountChallengeListItem } from './online/challenges';
 import type { OnlineGameSummary } from './online/readModel';
 import type { OpenSeekVisibility } from './online/seeks';
 import {
@@ -163,6 +164,7 @@ interface OnlineRematchTarget {
 
 const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
+const ONLINE_CHALLENGE_NAV_REFRESH_MS = 30_000;
 const FIRST_RUN_INTRO_STORAGE_KEY = "castles_first_run_intro_seen";
 const QUICK_START_STORAGE_KEY = "hasSeenQuickStart";
 const ONLINE_CHALLENGE_REPORT_REASON_OPTIONS: Array<{ value: OnlineAccountReportReason; label: string }> = [
@@ -193,6 +195,13 @@ interface GameConfig {
   ratingMode?: OnlineRatingMode;
   isAnalysisMode?: boolean;
   opponentConfig?: AIOpponentConfig;
+}
+
+function countOnlineChallengeNavigationActivity(challenges: OnlineAccountChallengeListItem[]): number {
+  return challenges.filter((item) =>
+    (item.role === "challenged" && item.summary.status === "pending") ||
+    (item.summary.status === "accepted" && Boolean(item.summary.gameId))
+  ).length;
 }
 
 interface LoadGameData {
@@ -451,6 +460,7 @@ function App() {
     resolveOnlineAccountSession() ? "checking" : "signed-out"
   );
   const [onlineAccountError, setOnlineAccountError] = useState<string | null>(null);
+  const [onlineChallengeNavigationActivityCount, setOnlineChallengeNavigationActivityCount] = useState(0);
   const [isOnlineAccountDialogOpen, setOnlineAccountDialogOpen] = useState(false);
   const [onlineRematchTarget, setOnlineRematchTarget] = useState<OnlineRematchTarget | null>(null);
   const [rejoiningAccountGameId, setRejoiningAccountGameId] = useState<string | null>(null);
@@ -560,6 +570,45 @@ function App() {
       cancelled = true;
     };
   }, [onlineAccountSession?.token]);
+
+  useEffect(() => {
+    const accountToken = onlineAccountSession?.token;
+    if (!accountToken || onlineAccountStatus !== "ready") {
+      setOnlineChallengeNavigationActivityCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    const refreshChallengeNavigationActivity = () => {
+      fetchOnlineAccountChallenges({ token: accountToken }, { state: "all" })
+        .then((directory) => {
+          if (cancelled) return;
+          setOnlineChallengeNavigationActivityCount(
+            countOnlineChallengeNavigationActivity(directory.challenges)
+          );
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          console.warn("Failed to refresh online challenge activity", error);
+        });
+    };
+    const refreshChallengeNavigationActivityIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      refreshChallengeNavigationActivity();
+    };
+
+    refreshChallengeNavigationActivity();
+    const interval = window.setInterval(
+      refreshChallengeNavigationActivityIfVisible,
+      ONLINE_CHALLENGE_NAV_REFRESH_MS
+    );
+    document.addEventListener("visibilitychange", refreshChallengeNavigationActivityIfVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshChallengeNavigationActivityIfVisible);
+    };
+  }, [onlineAccountSession?.token, onlineAccountStatus]);
 
   useEffect(() => {
     if (isRulesPage || onlineJoin || onlineSpectator || onlineChallenge) return;
@@ -2503,12 +2552,26 @@ function App() {
     setView('online');
   }, [clearTransientOnlineState]);
 
+  const onlineNavigationNotificationLabel = "challenge activities";
   const onlineStateDestinations = useMemo<AppShellDestination[]>(() => [
     { id: "play", label: "Play" },
     { id: "learn", label: "Tutorial", onClick: handleOnlineStateTutorial },
-    { id: "online", label: "Online", onClick: handleOnlineStateOnline },
+    {
+      id: "online",
+      label: "Online",
+      onClick: handleOnlineStateOnline,
+      notificationCount: onlineChallengeNavigationActivityCount,
+      notificationSingularLabel: "challenge activity",
+      notificationPluralLabel: onlineNavigationNotificationLabel,
+    },
     { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
-  ], [handleOnlineStateTutorial, handleOnlineStateLibrary, handleOnlineStateOnline]);
+  ], [
+    handleOnlineStateTutorial,
+    handleOnlineStateLibrary,
+    handleOnlineStateOnline,
+    onlineChallengeNavigationActivityCount,
+    onlineNavigationNotificationLabel,
+  ]);
 
   useEffect(() => {
     setOnlineChallengeAccountAction(undefined);
@@ -2575,6 +2638,8 @@ function App() {
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onlineNotificationCount={onlineChallengeNavigationActivityCount}
+          onlineNotificationLabel={onlineNavigationNotificationLabel}
         />
       )}
 
@@ -2843,6 +2908,8 @@ function App() {
               onlineSession={onlineSession}
               onlineAccountDisplayName={onlineAccount?.displayName}
               onOpenOnlineAccount={() => setOnlineAccountDialogOpen(true)}
+              onlineNotificationCount={onlineChallengeNavigationActivityCount}
+              onlineNotificationLabel={onlineNavigationNotificationLabel}
               initialPoolTypes={gameConfig.initialPoolTypes}
             />
         </div>
@@ -2856,6 +2923,8 @@ function App() {
           backLabel={currentBackLabel}
           onTutorial={handleTutorialClick}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onlineNotificationCount={onlineChallengeNavigationActivityCount}
+          onlineNotificationLabel={onlineNavigationNotificationLabel}
           onLoadGame={handleLoadSavedGame}
           onImportPGN={handleImportPGNToLibrary}
         />
@@ -2878,6 +2947,8 @@ function App() {
           backLabel={currentBackLabel}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onlineNotificationCount={onlineChallengeNavigationActivityCount}
+          onlineNotificationLabel={onlineNavigationNotificationLabel}
         />
       )}
 
@@ -2892,6 +2963,8 @@ function App() {
           onTabChange={setOnlineBrowserTab}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
+          onlineNotificationCount={onlineChallengeNavigationActivityCount}
+          onlineNotificationLabel={onlineNavigationNotificationLabel}
           onCreateSeek={onlineLobbySetup ? handleListCurrentSetupInLobby : undefined}
           onQuickMatch={onlineLobbySetup ? handleQuickMatch : undefined}
           quickMatchSetupSummary={quickMatchSetupSummary}

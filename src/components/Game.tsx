@@ -113,6 +113,8 @@ interface GameBoardProps {
   onlineSession?: OnlineClientSession;
   onlineAccountDisplayName?: string | null;
   onOpenOnlineAccount?: () => void;
+  onlineNotificationCount?: number;
+  onlineNotificationLabel?: string;
   initialVictoryPoints?: { w: number; b: number };
   showNavigationMenu?: boolean;
   showTooltipHint?: boolean;
@@ -170,6 +172,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onlineSession,
   onlineAccountDisplayName,
   onOpenOnlineAccount,
+  onlineNotificationCount = 0,
+  onlineNotificationLabel,
   showNavigationMenu = true,
   showTooltipHint: shouldShowTooltipHint = true,
   onTutorialEvent
@@ -933,6 +937,8 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onSaveGameToLibrary={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
           onOpenOnlineBrowser={onOpenOnlineBrowser}
+          onlineNotificationCount={onlineNotificationCount}
+          onlineNotificationLabel={onlineNotificationLabel}
           onReturnFromAnalysis={onReturnFromAnalysis}
           analysisReturnLabel={analysisReturnLabel}
           onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}

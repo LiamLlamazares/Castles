@@ -12,6 +12,9 @@ export interface AppShellDestination {
   id: AppDestinationId;
   label: string;
   onClick?: () => void;
+  notificationCount?: number;
+  notificationSingularLabel?: string;
+  notificationPluralLabel?: string;
 }
 
 interface AppShellNavProps {
@@ -33,6 +36,22 @@ const destinationIcons: Record<AppDestinationId, string> = {
   library: scrollsIcon,
   tools: shieldIcon,
 };
+
+function normalizedNotificationCount(count: number | undefined): number {
+  if (typeof count !== "number" || !Number.isFinite(count)) return 0;
+  return Math.max(0, Math.floor(count));
+}
+
+function visualNotificationCount(count: number): string {
+  return count > 99 ? "99+" : String(count);
+}
+
+function destinationLabelWithNotification(destination: AppShellDestination, count: number): string {
+  if (count <= 0) return destination.label;
+  const singular = destination.notificationSingularLabel ?? "notification";
+  const plural = destination.notificationPluralLabel ?? `${singular}s`;
+  return `${destination.label}, ${count} ${count === 1 ? singular : plural}`;
+}
 
 const AppShellNav: React.FC<AppShellNavProps> = ({
   ariaLabel,
@@ -67,6 +86,8 @@ const AppShellNav: React.FC<AppShellNavProps> = ({
           <div className="app-shell-destinations" aria-label="App destinations">
             {destinations.map((destination) => {
               const isActive = destination.id === activeDestination;
+              const notificationCount = normalizedNotificationCount(destination.notificationCount);
+              const destinationAriaLabel = destinationLabelWithNotification(destination, notificationCount);
               return (
                 <button
                   key={destination.id}
@@ -75,13 +96,18 @@ const AppShellNav: React.FC<AppShellNavProps> = ({
                   onClick={destination.onClick}
                   disabled={isActive || !destination.onClick}
                   aria-current={isActive ? "page" : undefined}
-                  aria-label={destination.label}
-                  title={destination.label}
+                  aria-label={destinationAriaLabel}
+                  title={destinationAriaLabel}
                 >
                   <span className="app-shell-destination-icon" aria-hidden="true">
                     <img src={destinationIcons[destination.id]} alt="" />
                   </span>
                   <span className="app-shell-destination-label">{destination.label}</span>
+                  {notificationCount > 0 && (
+                    <span className="app-shell-destination-badge" aria-hidden="true">
+                      {visualNotificationCount(notificationCount)}
+                    </span>
+                  )}
                 </button>
               );
             })}

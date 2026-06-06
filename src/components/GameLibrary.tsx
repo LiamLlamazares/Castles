@@ -14,6 +14,8 @@ interface GameLibraryProps {
   backLabel?: string;
   onTutorial?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onlineNotificationCount?: number;
+  onlineNotificationLabel?: string;
   onLoadGame: (record: SavedGameRecord) => void;
   onImportPGN: (pgn: string, name: string) => Promise<void>;
 }
@@ -29,6 +31,8 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
   backLabel = "Back to game",
   onTutorial,
   onOpenOnlineBrowser,
+  onlineNotificationCount = 0,
+  onlineNotificationLabel,
   onLoadGame,
   onImportPGN,
 }) => {
@@ -287,7 +291,14 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     ...(onTutorial ? [{ id: "learn" as const, label: "Tutorial", onClick: onTutorial }] : []),
-    ...(onOpenOnlineBrowser ? [{ id: "online" as const, label: "Online", onClick: onOpenOnlineBrowser }] : []),
+    ...(onOpenOnlineBrowser ? [{
+      id: "online" as const,
+      label: "Online",
+      onClick: onOpenOnlineBrowser,
+      notificationCount: onlineNotificationCount,
+      notificationSingularLabel: "challenge activity",
+      notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
+    }] : []),
     { id: "library", label: "Library" },
   ];
 

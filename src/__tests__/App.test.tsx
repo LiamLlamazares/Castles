@@ -15,7 +15,12 @@ import {
   ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
   type OpenSeekSummary,
 } from "../online/seeks";
+import {
+  ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+  ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+} from "../online/challenges";
 import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../online/readModel";
+import { ONLINE_PROTOCOL_VERSION } from "../online/protocolVersion";
 import {
   ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
   rememberOnlineChallengeParams,
@@ -76,6 +81,8 @@ vi.mock("../components/Game", () => ({
     onRematch?: () => void | Promise<void>;
     onlineAccountDisplayName?: string | null;
     onOpenOnlineAccount?: () => void;
+    onlineNotificationCount?: number;
+    onlineNotificationLabel?: string;
     onSaveGameToLibrary?: (pgn: string, status: "ongoing" | "complete" | "analysis") => Promise<unknown> | unknown;
     onLoadGame: (data: {
       board: unknown;
@@ -96,6 +103,9 @@ vi.mock("../components/Game", () => ({
       <div>Online visibility: {props.onlineSession?.visibility ?? "none"}</div>
       <div>Online spectator URL: {props.onlineSession?.spectatorUrl ?? "none"}</div>
       <div>Game account: {props.onlineAccountDisplayName ?? "none"}</div>
+      <div>
+        Game online notifications: {props.onlineNotificationCount ?? 0} {props.onlineNotificationLabel ?? "none"}
+      </div>
       <div>
         Initial castle owners: {
           props.initialCastles
@@ -225,6 +235,8 @@ vi.mock("../components/GameSetup", () => ({
     onOpenOnlineBrowser,
     onCreateOnlineChallenge,
     onCreateOpenSeek,
+    onlineNotificationCount = 0,
+    onlineNotificationLabel,
   }: {
     onPlay: (...args: unknown[]) => void;
     onBack: () => void;
@@ -234,9 +246,14 @@ vi.mock("../components/GameSetup", () => ({
     onOpenOnlineBrowser: () => void;
     onCreateOnlineChallenge?: (...args: unknown[]) => void;
     onCreateOpenSeek?: (...args: unknown[]) => void;
+    onlineNotificationCount?: number;
+    onlineNotificationLabel?: string;
   }) => (
     <div>
       <div>Setup Ready</div>
+      <div>
+        Setup online notifications: {onlineNotificationCount} {onlineNotificationLabel ?? "none"}
+      </div>
       <button
         type="button"
         onClick={() =>
@@ -367,6 +384,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onCopyChallengeAccountInvite,
     recentOnlineGames = [],
     onClearRecentOnlineGames,
+    onlineNotificationCount = 0,
+    onlineNotificationLabel,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
@@ -413,6 +432,8 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
     recentOnlineGames?: { gameId: string; status: string }[];
     onClearRecentOnlineGames?: () => void;
+    onlineNotificationCount?: number;
+    onlineNotificationLabel?: string;
     backLabel?: string;
   }) => {
     const [quickMatchStatus, setQuickMatchStatus] = React.useState("");
@@ -422,6 +443,9 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       <div>Online Browser Ready</div>
       <div>Initial tab: {initialTab ?? "none"}</div>
       <div>Active tab: {activeTab ?? "none"}</div>
+      <div>
+        Browser online notifications: {onlineNotificationCount} {onlineNotificationLabel ?? "none"}
+      </div>
       <div>Owned seek ids: {ownedSeekIds.join(",") || "none"}</div>
       <div>Owned seek status: {ownedSeekResponse?.summary.status ?? "none"}</div>
       <div>
@@ -682,6 +706,8 @@ vi.mock("../components/GameLibrary", () => ({
     onTutorial,
     onOpenOnlineBrowser,
     onLoadGame,
+    onlineNotificationCount = 0,
+    onlineNotificationLabel,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
@@ -689,10 +715,15 @@ vi.mock("../components/GameLibrary", () => ({
     onTutorial?: () => void;
     onOpenOnlineBrowser?: () => void;
     onLoadGame?: (record: { pgn: string }) => void;
+    onlineNotificationCount?: number;
+    onlineNotificationLabel?: string;
     backLabel?: string;
   }) => (
     <div>
       <div>Library Ready</div>
+      <div>
+        Library online notifications: {onlineNotificationCount} {onlineNotificationLabel ?? "none"}
+      </div>
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
@@ -726,16 +757,23 @@ vi.mock("../components/Tutorial", () => ({
     onOpenGame,
     onOpenLibrary,
     onOpenOnlineBrowser,
+    onlineNotificationCount = 0,
+    onlineNotificationLabel,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
     onOpenGame?: () => void;
     onOpenLibrary?: () => void;
     onOpenOnlineBrowser?: () => void;
+    onlineNotificationCount?: number;
+    onlineNotificationLabel?: string;
     backLabel?: string;
   }) => (
     <div>
       <div>Tutorial Ready</div>
+      <div>
+        Tutorial online notifications: {onlineNotificationCount} {onlineNotificationLabel ?? "none"}
+      </div>
       <button type="button" onClick={onBack}>
         {backLabel}
       </button>
@@ -817,6 +855,35 @@ function openSeekSummary(overrides: Partial<OpenSeekSummary> = {}): OpenSeekSumm
     expiresAt: "2026-06-01T12:20:00.000Z",
     status: "open",
     lastEventId: "seek_evt_created",
+    ...overrides,
+  };
+}
+
+function appChallengeSetup() {
+  return {
+    board: { config: { nSquares: 6 }, castles: [] },
+    pieces: [],
+    sanctuaries: [],
+    gameRules: { vpModeEnabled: true },
+    initialPoolTypes: [],
+  };
+}
+
+function appAccountChallengeSummary(overrides: Record<string, unknown> = {}) {
+  const challengeId = typeof overrides.challengeId === "string" ? overrides.challengeId : "challenge_samir_liam";
+  return {
+    schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+    challengeId,
+    challengerIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+    challengedIdentity: { kind: "registered", id: "account_liam", displayName: "Liam" },
+    challengerSeat: "random",
+    visibility: "unlisted",
+    setup: appChallengeSetup(),
+    createdAt: "2026-06-06T12:00:00.000Z",
+    updatedAt: "2026-06-06T12:01:00.000Z",
+    expiresAt: "2026-06-06T12:11:00.000Z",
+    status: "pending",
+    lastEventId: `${challengeId}_evt`,
     ...overrides,
   };
 }
@@ -3355,6 +3422,100 @@ describe("App game setup lifecycle", () => {
         { headers: { authorization: "Bearer account-token" } }
       );
     });
+  });
+
+  it("polls signed-in account challenges into count-only Online navigation activity", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_nav_challenge",
+      displayName: "Liam",
+      createdAt: "2026-06-06T12:00:00.000Z",
+      updatedAt: "2026-06-06T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_nav_challenge", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: ONLINE_PROTOCOL_VERSION, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/challenges?state=all") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+              challenges: [
+                {
+                  role: "challenged",
+                  summary: appAccountChallengeSummary({
+                    challengeId: "challenge_samir_liam",
+                    challengerIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+                    challengedIdentity: account.identity,
+                    status: "pending",
+                  }),
+                },
+                {
+                  role: "challenged",
+                  summary: appAccountChallengeSummary({
+                    challengeId: "challenge_ada_liam_ready",
+                    challengerIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+                    challengedIdentity: account.identity,
+                    status: "accepted",
+                    updatedAt: "2026-06-06T12:02:00.000Z",
+                    acceptedAt: "2026-06-06T12:02:00.000Z",
+                    acceptedBy: account.identity,
+                    gameId: "game_ada_liam_ready",
+                    whiteIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+                    blackIdentity: account.identity,
+                  }),
+                },
+                {
+                  role: "challenger",
+                  summary: appAccountChallengeSummary({
+                    challengeId: "challenge_liam_ben_waiting",
+                    challengerIdentity: account.identity,
+                    challengedIdentity: { kind: "registered", id: "account_ben", displayName: "Ben" },
+                    status: "pending",
+                  }),
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ schemaVersion: 1, games: [] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+
+    expect(await screen.findByText("Setup Ready")).toBeInTheDocument();
+    expect(await screen.findByText("Setup online notifications: 2 challenge activities")).toBeInTheDocument();
+    expect(screen.queryByText("Samir")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ada")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ben")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/online/account/challenges?state=all",
+      { headers: { authorization: "Bearer account-token" } }
+    );
   });
 
   it("shows access denied for an invalid challenge link", async () => {

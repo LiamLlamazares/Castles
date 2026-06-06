@@ -27,6 +27,8 @@ interface HamburgerMenuProps {
   onSaveGameToLibrary?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onlineNotificationCount?: number;
+  onlineNotificationLabel?: string;
   onReturnFromAnalysis?: () => void;
   analysisReturnLabel?: string;
   onEditPosition?: () => void;
@@ -56,6 +58,8 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onSaveGameToLibrary,
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onlineNotificationCount = 0,
+  onlineNotificationLabel = "notifications",
   onReturnFromAnalysis,
   analysisReturnLabel = "Return to Game",
   onEditPosition,
@@ -86,6 +90,16 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
     tabIndex: string | null;
   } | null>(null);
   const { toggleTheme, isDark } = useTheme();
+  const normalizedOnlineNotificationCount =
+    typeof onlineNotificationCount === "number" && Number.isFinite(onlineNotificationCount)
+      ? Math.max(0, Math.floor(onlineNotificationCount))
+      : 0;
+  const onlineLobbyLabel =
+    normalizedOnlineNotificationCount > 0
+      ? `Online Lobby, ${normalizedOnlineNotificationCount} ${onlineNotificationLabel}`
+      : "Online Lobby";
+  const onlineLobbyBadge =
+    normalizedOnlineNotificationCount > 99 ? "99+" : String(normalizedOnlineNotificationCount);
 
   const hideMenuButtonForModal = React.useCallback(() => {
     const menuButton = menuButtonRef.current;
@@ -375,9 +389,16 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                 <button
                   className="menu-item"
                   onClick={() => handleMenuItemClick(onOpenOnlineBrowser)}
+                  aria-label={onlineLobbyLabel}
+                  title={onlineLobbyLabel}
                 >
                   {renderImageIcon(castleIcon)}
                   <span>Online Lobby</span>
+                  {normalizedOnlineNotificationCount > 0 && (
+                    <span className="menu-item-badge" aria-hidden="true">
+                      {onlineLobbyBadge}
+                    </span>
+                  )}
                 </button>
               </section>
             )}

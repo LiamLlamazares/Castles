@@ -197,6 +197,8 @@ interface OnlineGameBrowserProps {
   initialTab?: OnlineBrowserTab;
   activeTab?: OnlineBrowserTab;
   onTabChange?: (tab: OnlineBrowserTab) => void;
+  onlineNotificationCount?: number;
+  onlineNotificationLabel?: string;
 }
 
 function participantName(
@@ -1100,6 +1102,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   initialTab = "lobby",
   activeTab,
   onTabChange,
+  onlineNotificationCount = 0,
+  onlineNotificationLabel,
 }) => {
   const [uncontrolledTab, setUncontrolledTab] = React.useState<OnlineBrowserTab>(initialTab);
   const tab = activeTab ?? uncontrolledTab;
@@ -3624,10 +3628,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, challengePolicyDraft, onUpdateAccountPrivacy]);
 
+  const onlineDestinationNotificationCount = Math.max(
+    onlineNotificationCount,
+    pendingIncomingChallengeCount + accountChallengeUnreadActivity.acceptedReady
+  );
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     ...(onTutorial ? [{ id: "learn" as const, label: "Tutorial", onClick: onTutorial }] : []),
-    { id: "online", label: "Online" },
+    {
+      id: "online",
+      label: "Online",
+      notificationCount: onlineDestinationNotificationCount,
+      notificationSingularLabel: "challenge activity",
+      notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
+    },
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
   const accountStatusMessage = (() => {

@@ -25,6 +25,8 @@ interface TutorialProps {
   backLabel?: string;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onlineNotificationCount?: number;
+  onlineNotificationLabel?: string;
 }
 
 const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
@@ -302,6 +304,8 @@ const Tutorial: React.FC<TutorialProps> = ({
   backLabel = "Back to game",
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onlineNotificationCount = 0,
+  onlineNotificationLabel,
 }) => {
   const { isDark } = useTheme();
   const lessons = useMemo(() => getAllLessons(), []);
@@ -518,7 +522,14 @@ const Tutorial: React.FC<TutorialProps> = ({
   const navDestinations: AppShellDestination[] = [
     { id: "play", label: "Play", onClick: onOpenGame ?? onBack },
     { id: "learn", label: "Tutorial" },
-    ...(onOpenOnlineBrowser ? [{ id: "online" as const, label: "Online", onClick: onOpenOnlineBrowser }] : []),
+    ...(onOpenOnlineBrowser ? [{
+      id: "online" as const,
+      label: "Online",
+      onClick: onOpenOnlineBrowser,
+      notificationCount: onlineNotificationCount,
+      notificationSingularLabel: "challenge activity",
+      notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
+    }] : []),
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
   const lessonProgressLabel = `Lesson ${currentLessonIndex + 1} of ${lessons.length}`;

@@ -43,4 +43,32 @@ describe("AppShellNav", () => {
     expect(onOnline).toHaveBeenCalledOnce();
     expect(onBack).toHaveBeenCalledOnce();
   });
+
+  it("renders count-only destination notifications without replacing the destination label", () => {
+    render(
+      <AppShellNav
+        ariaLabel="Play navigation"
+        activeDestination="play"
+        title="Play"
+        destinations={[
+          { id: "play", label: "Play" },
+          {
+            id: "online",
+            label: "Online",
+            onClick: vi.fn(),
+            notificationCount: 2,
+            notificationSingularLabel: "challenge activity",
+            notificationPluralLabel: "challenge activities",
+          },
+        ]}
+      />
+    );
+
+    const onlineButton = screen.getByRole("button", { name: "Online, 2 challenge activities" });
+
+    expect(onlineButton).toHaveAttribute("title", "Online, 2 challenge activities");
+    expect(onlineButton.querySelector(".app-shell-destination-label")).toHaveTextContent("Online");
+    expect(onlineButton.querySelector(".app-shell-destination-badge")).toHaveTextContent("2");
+    expect(onlineButton).not.toHaveTextContent("Samir");
+  });
 });

@@ -1331,6 +1331,21 @@ body {
   text-align: left;
 }
 
+.menu-item-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f4d287;
+  color: #201812;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .menu-item > span {
   min-width: 0;
   overflow-wrap: anywhere;

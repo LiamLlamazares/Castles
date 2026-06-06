@@ -91,6 +91,21 @@ describe("HamburgerMenu", () => {
     ]);
   });
 
+  it("shows count-only online challenge activity in the drawer", () => {
+    renderMenu({
+      onlineNotificationCount: 2,
+      onlineNotificationLabel: "challenge activities",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    const onlineButton = screen.getByRole("button", { name: "Online Lobby, 2 challenge activities" });
+
+    expect(onlineButton).toHaveTextContent("Online Lobby");
+    expect(onlineButton.querySelector(".menu-item-badge")).toHaveTextContent("2");
+    expect(onlineButton).not.toHaveTextContent("Samir");
+  });
+
   it("keeps save, learning, and secondary tools in their intended sections", () => {
     renderMenu({
       onEnableAnalysis: vi.fn(),
