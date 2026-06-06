@@ -231,6 +231,34 @@ const SCENARIOS = [
     ],
   },
   {
+    name: "online-connection-access-denied",
+    prepare: async (page) => {
+      const missingInviteUrl = new URL("/", page.url());
+      missingInviteUrl.searchParams.set(
+        "onlineGame",
+        "game_ui_audit_missing_connection_recovery_0123456789abcdefghijklmnopqrstuvwxyz"
+      );
+      missingInviteUrl.searchParams.set("seat", "w");
+      missingInviteUrl.searchParams.set(
+        "token",
+        "ui_audit_missing_player_token_0123456789abcdefghijklmnopqrstuvwxyz"
+      );
+      await page.goto(missingInviteUrl.toString(), {
+        waitUntil: "domcontentloaded",
+        timeout: browserTimeoutMs,
+      });
+      await waitForRegion(page, "Online game connection");
+      await waitForText(page, "Access denied: No online game was found for that id and token.");
+      await waitForButton(page, "Configure New Game");
+    },
+    requiredTexts: () => [
+      "Online Game",
+      "Reconnect, recover, or move to another Castles area.",
+      "Access denied: No online game was found for that id and token.",
+      "Configure New Game",
+    ],
+  },
+  {
     name: "online-player-board",
     prepare: async (page, fixtures) => {
       await seedOnlineJoinSession(page, fixtures.liveGameId, "w", fixtures.playerToken);
@@ -1525,10 +1553,24 @@ async function collectRequiredTextViolations(page, requiredTexts) {
       }
       if (rects.length > 0) return rects;
 
-      return matchingAccessibleElements(needle).map((element) => ({
+      return [
+        ...matchingTextElements(needle),
+        ...matchingAccessibleElements(needle),
+      ].map((element) => ({
         rect: element.getBoundingClientRect(),
         element,
       }));
+    }
+
+    function matchingTextElements(needle) {
+      return Array.from(document.body.querySelectorAll("*"))
+        .filter((element) => element instanceof HTMLElement)
+        .filter((element) => normalize(element.innerText).includes(needle))
+        .filter((element) =>
+          !Array.from(element.children).some(
+            (child) => child instanceof HTMLElement && normalize(child.innerText).includes(needle)
+          )
+        );
     }
 
     function matchingAccessibleElements(needle) {
