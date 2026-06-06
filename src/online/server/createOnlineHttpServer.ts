@@ -659,6 +659,15 @@ function validateModerationReportActionQuery(originalUrl: string):
     : { ok: false, message: "Moderation report action query is invalid." };
 }
 
+function validateOptionalAccountActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Online optional account action query is invalid." };
+}
+
 function validateDirectChallengeActionQuery(originalUrl: string):
   | { ok: true }
   | { ok: false; message: string } {
@@ -4915,6 +4924,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
+    const query = validateOptionalAccountActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
+
     const setup = validateOnlineGameSetup(req.body?.setup);
     if (!setup.ok) {
       res.status(400).json({ error: setup.error });
@@ -5097,6 +5112,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
+    const query = validateOptionalAccountActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
+
     const seekId = validateOnlineGameId(req.params.seekId, "seek.seekId");
     if (!seekId.ok) {
       res.status(400).json({ error: seekId.error });
@@ -5163,6 +5184,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           message: "Too many quick match requests were sent too quickly.",
         },
       });
+      return;
+    }
+
+    const query = validateOptionalAccountActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
 
@@ -5279,6 +5306,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           message: "Too many online challenges have been created from this client. Try again shortly.",
         },
       });
+      return;
+    }
+
+    const query = validateOptionalAccountActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
 
@@ -5770,6 +5803,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           message: "Too many online games have been created from this client. Try again shortly.",
         },
       });
+      return;
+    }
+
+    const query = validateOptionalAccountActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.game.create", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
 

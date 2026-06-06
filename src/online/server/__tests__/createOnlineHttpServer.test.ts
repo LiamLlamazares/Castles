@@ -4825,6 +4825,125 @@ describe("createOnlineHttpServer", () => {
     expect(cleanRefresh.summary.status).toBe("open");
   });
 
+  it("rejects query strings on optional-account action routes", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    const followResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+    expect(followResponse.status).toBe(200);
+
+    const cleanSeekResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        creatorSeat: "w",
+        visibility: "public",
+      }),
+    });
+    const cleanSeek = await cleanSeekResponse.json();
+    expect(cleanSeekResponse.status).toBe(201);
+
+    const expectBadQuery = async (response: Response) => {
+      const body = await response.json();
+      expect(response.status).toBe(400);
+      expect(body.error).toMatchObject({
+        code: "bad_request",
+        message: "Online optional account action query is invalid.",
+      });
+    };
+
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/games?token=${liam.session.token}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ setup, creatorSeat: "w" }),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/games?token=leaked-account-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({ setup, creatorSeat: "w" }),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/seeks?token=leaked-account-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({
+          setup,
+          creatorSeat: "b",
+          visibility: "public",
+        }),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/seeks/${cleanSeek.seekId}/accept?token=leaked-account-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+        body: JSON.stringify({}),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick?token=leaked-account-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({ setup }),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/challenges?token=leaked-account-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName: "Samir",
+        }),
+      })
+    );
+
+    const cleanSeekRefreshResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${cleanSeek.seekId}`,
+      { headers: bearer(cleanSeek.creator.token) }
+    );
+    const cleanSeekRefresh = await cleanSeekRefreshResponse.json();
+    const publicGamesResponse = await fetch(`http://127.0.0.1:${port}/api/online/games?state=active`);
+    const publicGames = await publicGamesResponse.json();
+    const seeksResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
+    const seeks = await seeksResponse.json();
+    const challengeDirectoryResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges?state=all`, {
+      headers: bearer(samir.session.token),
+    });
+    const challengeDirectory = await challengeDirectoryResponse.json();
+
+    expect(cleanSeekRefreshResponse.status).toBe(200);
+    expect(cleanSeekRefresh.summary.status).toBe("open");
+    expect(publicGamesResponse.status).toBe(200);
+    expect(publicGames.games).toEqual([]);
+    expect(seeksResponse.status).toBe(200);
+    expect(seeks.seeks).toEqual([
+      expect.objectContaining({
+        seekId: cleanSeek.seekId,
+        status: "open",
+      }),
+    ]);
+    expect(challengeDirectoryResponse.status).toBe(200);
+    expect(challengeDirectory.challenges).toEqual([]);
+  });
+
   it("rejects sensitive public seek directory queries and creator self-accept", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
