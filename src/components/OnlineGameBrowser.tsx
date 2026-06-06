@@ -122,6 +122,7 @@ const LOBBY_RATE_LIMIT_BACKOFF_MS = 60_000;
 const ACCOUNT_CHALLENGE_AUTO_REFRESH_MS = 1_000;
 const ACCOUNT_CHALLENGE_EXPIRING_SOON_MS = 5 * 60 * 1000;
 const FOLLOWING_AUTO_REFRESH_MS = 30_000;
+const WATCH_FOLLOWED_LIVE_LIMIT = 4;
 const GAME_SEARCH_DEBOUNCE_MS = 300;
 const HEAD_TO_HEAD_HISTORY_PAGE_LIMIT = 5;
 const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
@@ -2142,6 +2143,22 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
     return liveGames;
   }, [followedDisplayNames, publicActiveGames]);
+  const watchFollowedLiveItems = React.useMemo<Array<{ profile: OnlineAccountPublicProfile; game: OnlineGameSummary }>>(() => {
+    const seenGameIds = new Set<string>();
+    const items: Array<{ profile: OnlineAccountPublicProfile; game: OnlineGameSummary }> = [];
+    for (const profile of onlineFollowingProfiles) {
+      if (profile.relationship.blocked || profile.relationship.self) continue;
+      const game = liveGameByFollowedDisplayName.get(normalizeDisplayNameKey(profile.displayName));
+      if (!game || seenGameIds.has(game.gameId)) continue;
+      seenGameIds.add(game.gameId);
+      items.push({ profile, game });
+    }
+    return items;
+  }, [liveGameByFollowedDisplayName, onlineFollowingProfiles]);
+  const visibleWatchFollowedLiveItems = React.useMemo(
+    () => watchFollowedLiveItems.slice(0, WATCH_FOLLOWED_LIVE_LIMIT),
+    [watchFollowedLiveItems]
+  );
   const liveGameByRegisteredDisplayName = React.useMemo(() => {
     const liveGames = new Map<string, OnlineGameSummary>();
     for (const game of publicActiveGames) {
@@ -5641,6 +5658,59 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               watchFeaturedGame,
               "Watch live games overview",
               watchFeaturedReason
+            )}
+            {canUseAccountSocial && followingStatus === "ready" && visibleWatchFollowedLiveItems.length > 0 && (
+              <section className="online-browser-watch-friends" aria-label="Followed players live now">
+                <div className="online-browser-side-list-header">
+                  <div className="online-browser-side-list-heading">
+                    <span className="online-browser-section-kicker">Following</span>
+                    <strong>Followed players live now</strong>
+                  </div>
+                  <span>
+                    {formatCount(watchFollowedLiveItems.length, "public game")}
+                    {watchFollowedLiveItems.length > visibleWatchFollowedLiveItems.length
+                      ? `, +${watchFollowedLiveItems.length - visibleWatchFollowedLiveItems.length} more`
+                      : ""}
+                  </span>
+                </div>
+                <div className="online-browser-watch-friend-rows">
+                  {visibleWatchFollowedLiveItems.map(({ profile, game }) => {
+                    const white = participantName(game.participants, "w");
+                    const black = participantName(game.participants, "b");
+                    return (
+                      <article
+                        key={`${profile.displayName}:${game.gameId}`}
+                        className="online-browser-watch-friend-row"
+                      >
+                        <div className="online-browser-watch-friend-main">
+                          <strong>{profile.displayName}</strong>
+                          <span>{white} vs {black}</span>
+                          <span>{game.gameId}</span>
+                        </div>
+                        <div className="online-browser-watch-friend-actions">
+                          <button
+                            type="button"
+                            className="online-browser-button primary"
+                            onClick={() => onSpectate(game.gameId)}
+                            aria-label={`Watch ${profile.displayName}'s live game from Watch ${white} vs ${black}, ${game.gameId}`}
+                          >
+                            Watch
+                          </button>
+                          <button
+                            type="button"
+                            className="online-browser-button subtle"
+                            onClick={() => showVisiblePlayerHistory(profile.displayName)}
+                            disabled={socialAction !== undefined}
+                            aria-label={`Show ${profile.displayName} game history from Watch live strip`}
+                          >
+                            History
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
             )}
             {visibleGames.length === 0 && status === "ready" ? (
               <section className="online-browser-empty online-browser-empty-compact">

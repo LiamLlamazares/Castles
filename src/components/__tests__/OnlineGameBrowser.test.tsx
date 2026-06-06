@@ -3407,6 +3407,65 @@ describe("OnlineGameBrowser", () => {
     expect(loadGames).toHaveBeenCalledWith({ state: "active", limit: 50 });
   });
 
+  it("surfaces followed-player live games directly on Watch", async () => {
+    const onSpectate = vi.fn();
+    const loadAccountHeadToHeadGames = vi.fn().mockResolvedValue(directory([]));
+    const samirLiveGame = summary({
+      gameId: "game_watch_friend_samir",
+      participants: [
+        registeredParticipant("w", "Ben"),
+        registeredParticipant("b", "Samir"),
+      ],
+    });
+    const hiddenPresenceLiveGame = summary({
+      gameId: "game_watch_friend_hidden",
+      participants: [
+        registeredParticipant("w", "Kai"),
+        registeredParticipant("b", "Nora"),
+      ],
+    });
+
+    render(
+      <OnlineGameBrowser
+        initialTab="watch"
+        loadGames={vi.fn().mockResolvedValue(directory([samirLiveGame, hiddenPresenceLiveGame]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={onSpectate}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([
+          publicProfile("Ada", { following: true }, { visibility: "visible", status: "online" }),
+          publicProfile("Kai", { following: true }, { visibility: "hidden", status: "online" }),
+          publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" }),
+        ])}
+        loadAccountHeadToHeadGames={loadAccountHeadToHeadGames}
+      />
+    );
+
+    const strip = await screen.findByRole("region", { name: "Followed players live now" });
+    expect(strip).toHaveTextContent("1 public game");
+    expect(strip).toHaveTextContent("Samir");
+    expect(within(strip).queryByText("Ada")).not.toBeInTheDocument();
+    expect(within(strip).queryByText("Kai")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Followed players filter" })).toHaveValue("all");
+
+    fireEvent.click(within(strip).getByRole("button", {
+      name: "Watch Samir's live game from Watch Ben vs Samir, game_watch_friend_samir",
+    }));
+    expect(onSpectate).toHaveBeenCalledWith("game_watch_friend_samir");
+
+    fireEvent.click(within(strip).getByRole("button", {
+      name: "Show Samir game history from Watch live strip",
+    }));
+    await waitFor(() =>
+      expect(screen.getByRole("searchbox", { name: "Search online archive" })).toHaveValue("Samir")
+    );
+    await waitFor(() => expect(loadAccountHeadToHeadGames).toHaveBeenCalledWith("Samir", { limit: 5 }));
+    expect(screen.getByText("Showing visible games with Samir.")).toBeInTheDocument();
+  });
+
   it("opens registered player profiles from public game rows", async () => {
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
