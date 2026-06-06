@@ -222,7 +222,7 @@ function accountOpponentProfileNames(
 ): string[] {
   if (!account) return [];
   const accountParticipant = summary.participants.find((participant) =>
-    isSameOnlineIdentity(participant.identity, account.identity)
+    identityMatchesAccount(participant.identity, account)
   );
   if (!accountParticipant) return [];
   const seen = new Set<string>();
@@ -248,7 +248,7 @@ function accountCompletedGameForOpponent(
     return null;
   }
   const accountParticipant = summary.participants.find((participant) =>
-    isSameOnlineIdentity(participant.identity, account.identity)
+    identityMatchesAccount(participant.identity, account)
   );
   if (!accountParticipant || (accountParticipant.seat !== "w" && accountParticipant.seat !== "b")) {
     return null;
@@ -267,6 +267,15 @@ function identityDisplayName(identity: OnlineIdentity): string | null {
 
 function normalizeDisplayNameKey(displayName: string): string {
   return displayName.trim().toLowerCase();
+}
+
+function identityMatchesAccount(identity: OnlineIdentity | null | undefined, account: OnlineAccount): boolean {
+  if (!identity || identity.kind !== "registered") return false;
+  if (isSameOnlineIdentity(identity, account.identity)) return true;
+  return Boolean(
+    identity.displayName &&
+      normalizeDisplayNameKey(identity.displayName) === normalizeDisplayNameKey(account.displayName)
+  );
 }
 
 const PINNED_FOLLOWING_STORAGE_KEY_PREFIX = "castles_online_pinned_following_v1:";
@@ -552,10 +561,10 @@ function formatChallengeSeatChoice(
   account?: OnlineAccount | null
 ): string {
   if (item.summary.status === "accepted" && account) {
-    if (item.summary.whiteIdentity && isSameOnlineIdentity(item.summary.whiteIdentity, account.identity)) {
+    if (identityMatchesAccount(item.summary.whiteIdentity, account)) {
       return "Your side White";
     }
-    if (item.summary.blackIdentity && isSameOnlineIdentity(item.summary.blackIdentity, account.identity)) {
+    if (identityMatchesAccount(item.summary.blackIdentity, account)) {
       return "Your side Black";
     }
   }
@@ -2730,7 +2739,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const blackProfileName = participantProfileName(game.participants, "b");
     const accountSeat = account
       ? game.participants.find((participant) =>
-          isSameOnlineIdentity(participant.identity, account.identity)
+          identityMatchesAccount(participant.identity, account)
         )?.seat
       : undefined;
     const storedJoin =

@@ -244,7 +244,10 @@ function resolveRegisteredRematchOpponent(
   if (summary.status !== "complete") return null;
   const accountParticipant = summary.participants.find((participant) =>
     participant.identity.kind === "registered" &&
-    participant.identity.id === account.identity.id
+    (
+      participant.identity.id === account.identity.id ||
+      participant.identity.displayName?.trim().toLowerCase() === account.displayName.trim().toLowerCase()
+    )
   );
   if (!accountParticipant) return null;
   const opponent = summary.participants.find((participant) => participant.seat !== accountParticipant.seat);

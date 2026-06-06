@@ -1,6 +1,6 @@
 import http from "node:http";
 import { Buffer } from "node:buffer";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import express, { NextFunction, Request, Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import type { RawData } from "ws";
@@ -666,6 +666,53 @@ function validateOptionalAccountActionQuery(originalUrl: string):
   return Array.from(url.searchParams.keys()).length === 0
     ? { ok: true }
     : { ok: false, message: "Online optional account action query is invalid." };
+}
+
+function publicRegisteredIdentityId(identity: Extract<OnlineIdentity, { kind: "registered" }>): string {
+  if (identity.displayName) {
+    return `registered:${normalizeOnlineAccountDisplayNameKey(identity.displayName)}`;
+  }
+  const digest = createHash("sha256").update(identity.id).digest("base64url").slice(0, 22);
+  return `registered:${digest}`;
+}
+
+function redactAccountResponseIdentity(identity: OnlineIdentity): OnlineIdentity {
+  return identity.kind === "registered"
+    ? {
+        ...identity,
+        id: publicRegisteredIdentityId(identity),
+      }
+    : identity;
+}
+
+function redactAccountResponseChallengeSummary(summary: OnlineChallengeSummary): OnlineChallengeSummary {
+  return {
+    ...summary,
+    challengerIdentity: redactAccountResponseIdentity(summary.challengerIdentity),
+    challengedIdentity: redactAccountResponseIdentity(summary.challengedIdentity),
+    ...(summary.acceptedBy ? { acceptedBy: redactAccountResponseIdentity(summary.acceptedBy) } : {}),
+    ...(summary.whiteIdentity ? { whiteIdentity: redactAccountResponseIdentity(summary.whiteIdentity) } : {}),
+    ...(summary.blackIdentity ? { blackIdentity: redactAccountResponseIdentity(summary.blackIdentity) } : {}),
+    ...(summary.declinedBy ? { declinedBy: redactAccountResponseIdentity(summary.declinedBy) } : {}),
+    ...(summary.cancelledBy ? { cancelledBy: redactAccountResponseIdentity(summary.cancelledBy) } : {}),
+  };
+}
+
+function redactAccountResponseGameSummary(summary: OnlineGameSummary): OnlineGameSummary {
+  return {
+    ...summary,
+    participants: summary.participants.map((participant) => ({
+      ...participant,
+      identity: redactAccountResponseIdentity(participant.identity),
+    })),
+  };
+}
+
+function redactAccountResponseGameDirectory(response: OnlineGameDirectoryResponse): OnlineGameDirectoryResponse {
+  return {
+    ...response,
+    games: response.games.map(redactAccountResponseGameSummary),
+  };
 }
 
 function validateDirectChallengeActionQuery(originalUrl: string):
@@ -4100,6 +4147,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         ...directory,
+        challenges: directory.challenges.map((item) => ({
+          ...item,
+          summary: redactAccountResponseChallengeSummary(item.summary),
+        })),
       });
     } catch (error) {
       console.error("Failed to list account challenges", error);
@@ -4165,7 +4216,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         role: accountChallenge.credential.role,
-        summary: result.challengeSummary,
+        summary: redactAccountResponseChallengeSummary(result.challengeSummary),
         gameInvite,
       });
     } catch (error) {
@@ -4244,7 +4295,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         role: accountChallenge.credential.role,
-        summary: declinedSummary,
+        summary: redactAccountResponseChallengeSummary(declinedSummary),
       });
     } catch (error) {
       console.error("Failed to decline account challenge", error);
@@ -4315,7 +4366,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         role: accountChallenge.credential.role,
-        summary: cancelledSummary,
+        summary: redactAccountResponseChallengeSummary(cancelledSummary),
       });
     } catch (error) {
       console.error("Failed to cancel account challenge", error);
@@ -4538,7 +4589,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      res.json(await listPersonalGameDirectory(parsed.options));
+      res.json(redactAccountResponseGameDirectory(await listPersonalGameDirectory(parsed.options)));
     } catch (error) {
       console.error("Failed to load account game history", error);
       res.status(503).json({
@@ -4578,7 +4629,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      res.json(await listPersonalGameDirectory(parsed.options));
+      res.json(redactAccountResponseGameDirectory(await listPersonalGameDirectory(parsed.options)));
     } catch (error) {
       console.error("Failed to load account head-to-head history", error);
       res.status(503).json({
@@ -5446,7 +5497,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           status: 201,
           body: {
             challengeId,
-            summary,
+            summary: redactAccountResponseChallengeSummary(summary),
             challenger: {
               url: buildChallengeUrl(options.publicBaseUrl, challengeId, "challenger", challengerToken),
             },
@@ -5500,7 +5551,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         role: auth.credential.role,
-        summary,
+        summary: redactAccountResponseChallengeSummary(summary),
         gameInvite: gameInviteForChallenge(summary, auth.credential, auth.token),
       });
     } catch (error) {
@@ -5554,7 +5605,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         role: auth.credential.role,
-        summary: result.challengeSummary,
+        summary: redactAccountResponseChallengeSummary(result.challengeSummary),
         gameInvite,
       });
     } catch (error) {
@@ -5621,7 +5672,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           { createdAt: declinedAt }
         )
       );
-      res.json({ protocolVersion: ONLINE_PROTOCOL_VERSION, role: auth.credential.role, summary: declinedSummary });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: auth.credential.role,
+        summary: redactAccountResponseChallengeSummary(declinedSummary),
+      });
     } catch (error) {
       res.status(challengeTerminalError(error) ? 409 : 503).json({
         error: challengeTerminalError(error)
@@ -5682,7 +5737,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           { createdAt: cancelledAt }
         )
       );
-      res.json({ protocolVersion: ONLINE_PROTOCOL_VERSION, role: auth.credential.role, summary: cancelledSummary });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: auth.credential.role,
+        summary: redactAccountResponseChallengeSummary(cancelledSummary),
+      });
     } catch (error) {
       res.status(challengeTerminalError(error) ? 409 : 503).json({
         error: challengeTerminalError(error)

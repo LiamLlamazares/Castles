@@ -154,6 +154,14 @@ function fragmentChallengeToken(url: string): string {
   return token;
 }
 
+function redactedRegisteredIdentity(account: { account: { displayName: string } }) {
+  return {
+    kind: "registered",
+    id: `registered:${String(account.account.displayName).toLowerCase()}`,
+    displayName: account.account.displayName,
+  };
+}
+
 function bearer(token: string): HeadersInit {
   return { authorization: `Bearer ${token}` };
 }
@@ -2835,13 +2843,13 @@ describe("createOnlineHttpServer", () => {
         expect.objectContaining({
           gameId: defaultSeatGame.gameId,
           participants: expect.arrayContaining([
-            { seat: "w", role: "white", identity: account.account.identity },
+            { seat: "w", role: "white", identity: redactedRegisteredIdentity(account) },
           ]),
         }),
         expect.objectContaining({
           gameId: blackSeatGame.gameId,
           participants: expect.arrayContaining([
-            { seat: "b", role: "black", identity: account.account.identity },
+            { seat: "b", role: "black", identity: redactedRegisteredIdentity(account) },
           ]),
         }),
       ])
@@ -2939,8 +2947,9 @@ describe("createOnlineHttpServer", () => {
       visibility: "private",
     });
     expect(history.games[0].participants).toContainEqual(
-      expect.objectContaining({ identity: account.account.identity })
+      expect.objectContaining({ identity: redactedRegisteredIdentity(account) })
     );
+    expect(JSON.stringify(history)).not.toContain(account.account.accountId);
 
     const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games`);
     expect(missingAuthResponse.status).toBe(401);
@@ -5223,8 +5232,8 @@ describe("createOnlineHttpServer", () => {
     const created = await createResponse.json();
 
     expect(createResponse.status).toBe(201);
-    expect(created.summary.challengerIdentity).toEqual(liam.account.identity);
-    expect(created.summary.challengedIdentity).toEqual(samir.account.identity);
+    expect(created.summary.challengerIdentity).toEqual(redactedRegisteredIdentity(liam));
+    expect(created.summary.challengedIdentity).toEqual(redactedRegisteredIdentity(samir));
     expect(new URL(created.challenged.url).hash).toContain("challengeToken=");
     expect(new URL(created.challenged.url).searchParams.has("token")).toBe(false);
 
@@ -5238,8 +5247,8 @@ describe("createOnlineHttpServer", () => {
     expect(acceptResponse.status).toBe(200);
     expect(accepted.summary).toMatchObject({
       status: "accepted",
-      acceptedBy: samir.account.identity,
-      blackIdentity: samir.account.identity,
+      acceptedBy: redactedRegisteredIdentity(samir),
+      blackIdentity: redactedRegisteredIdentity(samir),
     });
   });
 
@@ -5488,7 +5497,7 @@ describe("createOnlineHttpServer", () => {
           summary: {
             challengeId: created.challengeId,
             status: "pending",
-            challengedIdentity: samir.account.identity,
+            challengedIdentity: redactedRegisteredIdentity(samir),
           },
         },
       ],
@@ -5502,7 +5511,7 @@ describe("createOnlineHttpServer", () => {
           summary: {
             challengeId: created.challengeId,
             status: "pending",
-            challengerIdentity: liam.account.identity,
+            challengerIdentity: redactedRegisteredIdentity(liam),
           },
         },
       ],
@@ -5515,6 +5524,107 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(challengedDirectory.body)).not.toContain(fragmentChallengeToken(created.challenged.url));
     expect(invalidQueryResponse.status).toBe(400);
     expect(unauthenticatedResponse.status).toBe(401);
+  });
+
+  it("redacts raw account ids from account challenge and history responses", async () => {
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    let samirIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const listPersonalGameSummaries = vi.fn((options: OnlinePersonalGameDirectoryListOptions): OnlineGameDirectoryResponse => {
+      if (!liamIdentity || !samirIdentity) {
+        return { schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, games: [] };
+      }
+      return {
+        schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+        games: [
+          {
+            ...summaryForGame("game_private_history_redacted", "private"),
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-05-31T12:00:00.000Z",
+            participants: [
+              { seat: "w" as const, role: "white" as const, identity: options.identity },
+              { seat: "b" as const, role: "black" as const, identity: samirIdentity },
+            ],
+            result: { winner: "w", reason: "resignation" },
+          },
+        ],
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      listPersonalGameSummaries,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    liamIdentity = liam.account.identity;
+    samirIdentity = samir.account.identity;
+
+    const assertNoRawAccountIds = (...bodies: unknown[]) => {
+      for (const body of bodies) {
+        const serialized = JSON.stringify(body);
+        expect(serialized).not.toContain(liam.account.accountId);
+        expect(serialized).not.toContain(samir.account.accountId);
+      }
+    };
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const created = await createResponse.json();
+    const directViewResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}`, {
+      headers: bearer(fragmentChallengeToken(created.challenged.url)),
+    });
+    const directView = await directViewResponse.json();
+    const challengerDirectoryResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges?state=all`, {
+      headers: bearer(liam.session.token),
+    });
+    const challengerDirectory = await challengerDirectoryResponse.json();
+    const challengedDirectoryResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges?state=all`, {
+      headers: bearer(samir.session.token),
+    });
+    const challengedDirectory = await challengedDirectoryResponse.json();
+    const historyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games?state=all`, {
+      headers: bearer(liam.session.token),
+    });
+    const history = await historyResponse.json();
+    const headToHeadResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games/head-to-head/Samir`, {
+      headers: bearer(liam.session.token),
+    });
+    const headToHead = await headToHeadResponse.json();
+    const declineResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${created.challengeId}/decline`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+    const declined = await declineResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(directViewResponse.status).toBe(200);
+    expect(challengerDirectoryResponse.status).toBe(200);
+    expect(challengedDirectoryResponse.status).toBe(200);
+    expect(historyResponse.status).toBe(200);
+    expect(headToHeadResponse.status).toBe(200);
+    expect(declineResponse.status).toBe(200);
+    expect(history.games).toHaveLength(1);
+    expect(headToHead.games).toHaveLength(1);
+    expect(JSON.stringify(directView)).not.toContain(fragmentChallengeToken(created.challenged.url));
+    expect(JSON.stringify(challengerDirectory)).not.toContain(fragmentChallengeToken(created.challenged.url));
+    expect(JSON.stringify(challengedDirectory)).not.toContain(fragmentChallengeToken(created.challenged.url));
+    assertNoRawAccountIds(created, directView, challengerDirectory, challengedDirectory, history, headToHead, declined);
   });
 
   it("rejects token-bearing account challenge action query strings even with bearer auth", async () => {
@@ -5736,7 +5846,7 @@ describe("createOnlineHttpServer", () => {
       expect(blockResponse.status).toBe(200);
       expect(viewResponse.status).toBe(200);
       expect(viewed.summary.status).toBe(expectedStatus);
-      expect(viewed.summary[actorField]).toEqual(blocker.account.identity);
+      expect(viewed.summary[actorField]).toEqual(redactedRegisteredIdentity(blocker));
     }
   );
 
@@ -5816,7 +5926,7 @@ describe("createOnlineHttpServer", () => {
       summary: {
         challengeId: acceptedChallenge.challengeId,
         status: "accepted",
-        acceptedBy: samir.account.identity,
+        acceptedBy: redactedRegisteredIdentity(samir),
       },
       gameInvite: {
         seat: "b",
@@ -5834,7 +5944,7 @@ describe("createOnlineHttpServer", () => {
       summary: {
         challengeId: declinedChallenge.challengeId,
         status: "declined",
-        declinedBy: samir.account.identity,
+        declinedBy: redactedRegisteredIdentity(samir),
       },
     });
 
@@ -5845,7 +5955,7 @@ describe("createOnlineHttpServer", () => {
       summary: {
         challengeId: cancelledChallenge.challengeId,
         status: "cancelled",
-        cancelledBy: liam.account.identity,
+        cancelledBy: redactedRegisteredIdentity(liam),
       },
     });
   });
@@ -5880,8 +5990,8 @@ describe("createOnlineHttpServer", () => {
     const created = await createResponse.json();
 
     expect(createResponse.status).toBe(201);
-    expect(created.summary.challengerIdentity).toEqual(liam.account.identity);
-    expect(created.summary.challengedIdentity).toEqual(samir.account.identity);
+    expect(created.summary.challengerIdentity).toEqual(redactedRegisteredIdentity(liam));
+    expect(created.summary.challengedIdentity).toEqual(redactedRegisteredIdentity(samir));
   });
 
   it("rejects targeted account challenges that are unauthorized, hidden, self, or blocked", async () => {
