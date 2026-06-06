@@ -15,4 +15,13 @@ describe("production online browser smoke script", () => {
     expect(script).toContain("White wins by resignation");
     expect(script).toMatch(/fetchSpectatorSnapshot\(gameId\)[\s\S]*result\?\.winner === "w"/);
   });
+
+  it("ends the stale-action helper game before reporting production healthy", () => {
+    const script = readScript();
+
+    expect(script).toContain("browser-smoke-stale-cleanup-resign");
+    expect(script).toContain("created.black.token");
+    expect(script).toContain("Stale-action cleanup");
+    expect(script).toMatch(/RESIGN[\s\S]*baseVersion:\s*1/);
+  });
 });

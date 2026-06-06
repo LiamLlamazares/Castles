@@ -882,6 +882,8 @@ Production smoke cleanup update on 2026-06-06: the same API smoke now resigns it
 
 Browser smoke cleanup update on 2026-06-06: `scripts/deploy/check-online-browser-smoke.mjs` now also resigns the accepted UI challenge-flow game after both players join and waits for both player pages to show the resignation result, so browser smoke runs do not leave accepted challenge games active.
 
+Browser stale-action smoke cleanup update on 2026-06-06: the browser smoke's raw stale-action contract helper now resigns its helper game after verifying the stale rejection snapshot, so that auxiliary protocol check no longer leaves an active game in production or local smoke persistence.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.

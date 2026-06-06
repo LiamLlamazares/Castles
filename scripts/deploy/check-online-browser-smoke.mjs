@@ -277,6 +277,17 @@ async function verifyStaleActionContract(setup) {
       rejected.snapshot?.version === 1,
       `Stale-action rejection snapshot version was ${rejected.snapshot?.version}`
     );
+
+    const cleanup = await submitRawPlayerAction(
+      created.gameId,
+      created.black.token,
+      `browser-smoke-stale-cleanup-resign-${Date.now().toString(36)}`,
+      { type: "RESIGN", baseVersion: 1 }
+    );
+    assert(
+      cleanup.result?.winner === "w" && cleanup.result?.reason === "resignation",
+      "Stale-action cleanup resignation did not end the helper game"
+    );
   } finally {
     socket.close();
   }
