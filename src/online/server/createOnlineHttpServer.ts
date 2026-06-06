@@ -632,6 +632,15 @@ function validateAccountSessionActionQuery(originalUrl: string):
     : { ok: false, message: "Account session action query is invalid." };
 }
 
+function validateAccountChallengeActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Account challenge action query is invalid." };
+}
+
 function validateDirectChallengeActionQuery(originalUrl: string):
   | { ok: true }
   | { ok: false; message: string } {
@@ -4027,6 +4036,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountChallengeActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.challenge.accept", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     try {
       const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.account, auth.identity);
       if (!accountChallenge.ok) {
@@ -4096,6 +4111,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountChallengeActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.challenge.decline", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     try {
       const accountChallenge = await getAuthorizedAccountChallenge(req.params.challengeId, auth.account, auth.identity);
       if (!accountChallenge.ok) {
@@ -4159,6 +4180,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!auth.ok) {
       log({ event: "online.account.challenge.cancel", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountChallengeActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.challenge.cancel", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
     try {

@@ -949,7 +949,7 @@ Tests/review/deploy gates:
 
 ## Living Execution Plan
 
-Last execution-plan refresh: 2026-06-06, production at `b640ab0`.
+Last execution-plan refresh: 2026-06-06. Production evidence is recorded in the completed bullets when a slice is deployed.
 
 This section is the working queue for the current `online-action-log` branch. Future online-multiplayer slices should come from this queue or first update this queue with a short reason. After each meaningful slice, update the relevant item from `Next` to `Done`, `Deferred`, or `Still open`, record the verification/deploy evidence when it matters, and keep this section honest before moving to another area.
 
@@ -960,6 +960,7 @@ This section is the working queue for the current `online-action-log` branch. Fu
 - Done: local and production smoke cleanup now resigns or cancels smoke games/challenges/seeks so repeated rehearsals do not leave ordinary active rows behind.
 - Done: account recovery smoke now exercises disposable registered accounts, targeted challenge directories, account-history rejoin, fresh seat-token recovery, game cleanup, and account cleanup.
 - Done: query-secret hardening now covers path-only account game snapshot/rejoin routes, direct challenge view/action routes, direct player snapshot/visibility routes, creator-owned open-seek refresh/cancel routes, and account session lookup/list/revoke/delete routes. The production commit is `b640ab0`.
+- Done: account-token challenge accept/decline/cancel routes now reject query strings after valid account bearer auth. Red/green regression, account-challenge neighborhood tests, full HTTP server tests, `server:build`, and app build passed locally. Item 1 remains open for the remaining bearer/admin route-surface audit.
 
 ### Next Ordered Slices
 
@@ -968,6 +969,7 @@ This section is the working queue for the current `online-action-log` branch. Fu
    - Classify each route as `path-only`, `safe-query`, `oauth-query`, or `admin-filter-query`.
    - Add regression tests and docs for any remaining path-only route that still accepts query strings after valid bearer auth.
    - Do not convert legitimate filter routes such as public directories, account archive filters, moderation report filters, OAuth callback/start, or rating leader scopes into path-only routes.
+   - Current audit notes after the account-challenge sub-slice: remaining likely path-only candidates are social/profile/privacy/report actions, admin report status update, and optional-account create/action routes; OAuth, rating, directory, archive, moderation list, and moderation audit filter routes keep their legitimate parsers.
 
 2. Account/social privacy and moderation boundary pass.
    - Confirm profile, follow, block, report, privacy, rating-leader, account challenge, and account history responses do not expose raw account ids, token hashes, bearer tokens, game seat tokens, challenge tokens, open-seek creator tokens, or internal database keys.

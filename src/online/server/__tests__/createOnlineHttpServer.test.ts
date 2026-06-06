@@ -5212,6 +5212,102 @@ describe("createOnlineHttpServer", () => {
     expect(unauthenticatedResponse.status).toBe(401);
   });
 
+  it("rejects token-bearing account challenge action query strings even with bearer auth", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+    const priya = await createAccountViaApi(port, "Priya");
+
+    for (const account of [samir, dani, priya]) {
+      const followResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+        method: "PUT",
+        headers: bearer(account.session.token),
+      });
+      expect(followResponse.status).toBe(200);
+    }
+
+    const createChallenge = async (challengedDisplayName: string) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName,
+        }),
+      });
+      const body = await response.json();
+      expect(response.status).toBe(201);
+      return body;
+    };
+    const expectBadQuery = async (response: Response) => {
+      const body = await response.json();
+      expect(response.status).toBe(400);
+      expect(body.error).toMatchObject({
+        code: "bad_request",
+        message: "Account challenge action query is invalid.",
+      });
+    };
+    const expectPendingChallenge = async (token: string, challengeId: string, role: string) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/account/challenges?state=all`, {
+        headers: bearer(token),
+      });
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.challenges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role,
+            summary: expect.objectContaining({
+              challengeId,
+              status: "pending",
+            }),
+          }),
+        ])
+      );
+    };
+
+    const acceptChallenge = await createChallenge("Samir");
+    const declineChallenge = await createChallenge("Dani");
+    const cancelChallenge = await createChallenge("Priya");
+    const queryOnlyAcceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${acceptChallenge.challengeId}/accept?token=${samir.session.token}`,
+      { method: "POST" }
+    );
+
+    await expectBadQuery(
+      await fetch(
+        `http://127.0.0.1:${port}/api/online/account/challenges/${acceptChallenge.challengeId}/accept?token=leaked-account-token`,
+        { method: "POST", headers: bearer(samir.session.token) }
+      )
+    );
+    await expectBadQuery(
+      await fetch(
+        `http://127.0.0.1:${port}/api/online/account/challenges/${declineChallenge.challengeId}/decline?token=leaked-account-token`,
+        { method: "POST", headers: bearer(dani.session.token) }
+      )
+    );
+    await expectBadQuery(
+      await fetch(
+        `http://127.0.0.1:${port}/api/online/account/challenges/${cancelChallenge.challengeId}/cancel?token=leaked-account-token`,
+        { method: "POST", headers: bearer(liam.session.token) }
+      )
+    );
+
+    expect(queryOnlyAcceptResponse.status).toBe(401);
+    await expectPendingChallenge(samir.session.token, acceptChallenge.challengeId, "challenged");
+    await expectPendingChallenge(dani.session.token, declineChallenge.challengeId, "challenged");
+    await expectPendingChallenge(liam.session.token, cancelChallenge.challengeId, "challenger");
+  });
+
   it("hides account challenges from both participants after either side blocks the other", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
