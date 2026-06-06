@@ -446,7 +446,6 @@ NODE
       echo "PostgreSQL JSON backup is empty or failed."
       exit 1
     }
-    node scripts/deploy/postgres-online-backup.mjs --validate "$backup/postgres-online-backup.json"
   fi
 fi
 
@@ -475,6 +474,9 @@ test -z "$(git status --porcelain)" || {
   git status --short
   exit 1
 }
+if [ -n "${backup:-}" ] && [ -f "$backup/postgres-online-backup.json" ]; then
+  node scripts/deploy/postgres-online-backup.mjs --validate "$backup/postgres-online-backup.json"
+fi
 npm ci
 npm run build
 npm run server:build
