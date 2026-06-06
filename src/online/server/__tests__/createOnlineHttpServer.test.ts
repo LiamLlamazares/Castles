@@ -2305,6 +2305,95 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(logs)).not.toContain(samir.session.token);
   });
 
+  it("fails closed when social and privacy stores return unsupported internal response fields", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    await createAccountViaApi(port, "Samir");
+    const unsafeProfile = {
+      schemaVersion: 1,
+      displayName: "Samir",
+      accountId: "account_samir",
+      presence: { visibility: "hidden", status: null, tokenHash: "presence_session_hash" },
+      relationship: {
+        self: false,
+        following: false,
+        followedBy: false,
+        blocked: false,
+        databaseKey: "relationship_row_1",
+      },
+    };
+    const unsafePrivacy = {
+      schemaVersion: 1,
+      followPolicy: "everyone",
+      presencePolicy: "followed",
+      challengePolicy: "followed",
+      updatedAt: null,
+      accountId: "account_samir",
+      tokenHash: "account_session_hash",
+    };
+    vi.spyOn(accountStore, "getProfileForDisplayName").mockResolvedValue(unsafeProfile as any);
+    vi.spyOn(accountStore, "listFollowingProfiles").mockResolvedValue([unsafeProfile as any]);
+    vi.spyOn(accountStore, "followAccount").mockResolvedValue({ status: "ok", profile: unsafeProfile } as any);
+    vi.spyOn(accountStore, "unfollowAccount").mockResolvedValue({ status: "ok", profile: unsafeProfile } as any);
+    vi.spyOn(accountStore, "blockAccount").mockResolvedValue({ status: "ok", profile: unsafeProfile } as any);
+    vi.spyOn(accountStore, "unblockAccount").mockResolvedValue({ status: "ok", profile: unsafeProfile } as any);
+    vi.spyOn(accountStore, "getPrivacySettings").mockResolvedValue(unsafePrivacy as any);
+    vi.spyOn(accountStore, "updatePrivacySettings").mockResolvedValue(unsafePrivacy as any);
+
+    const requests = [
+      fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`, { headers: bearer(liam.session.token) }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/follows`, { headers: bearer(liam.session.token) }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+        method: "PUT",
+        headers: bearer(liam.session.token),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir`, {
+        method: "DELETE",
+        headers: bearer(liam.session.token),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Samir`, {
+        method: "PUT",
+        headers: bearer(liam.session.token),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Samir`, {
+        method: "DELETE",
+        headers: bearer(liam.session.token),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, { headers: bearer(liam.session.token) }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({ presencePolicy: "nobody" }),
+      }),
+    ];
+    const responses = await Promise.all(requests);
+    const bodies = await Promise.all(responses.map((response) => response.json()));
+
+    expect(responses.map((response) => response.status)).toEqual([503, 503, 503, 503, 503, 503, 503, 503]);
+    expect(bodies).toEqual([
+      { error: { code: "persistence_failed", message: "Online profile could not be loaded." } },
+      { error: { code: "persistence_failed", message: "Followed accounts could not be loaded." } },
+      { error: { code: "persistence_failed", message: "Account could not be followed." } },
+      { error: { code: "persistence_failed", message: "Account could not be unfollowed." } },
+      { error: { code: "persistence_failed", message: "Account could not be blocked." } },
+      { error: { code: "persistence_failed", message: "Account could not be unblocked." } },
+      { error: { code: "persistence_failed", message: "Account privacy settings could not be loaded." } },
+      { error: { code: "persistence_failed", message: "Account privacy settings could not be updated." } },
+    ]);
+    expect(JSON.stringify(bodies)).not.toContain("account_samir");
+    expect(JSON.stringify(bodies)).not.toContain("presence_session_hash");
+    expect(JSON.stringify(bodies)).not.toContain("account_session_hash");
+    expect(JSON.stringify(bodies)).not.toContain("relationship_row_1");
+    expect(JSON.stringify(bodies)).not.toContain("tokenHash");
+    expect(JSON.stringify(bodies)).not.toContain("databaseKey");
+  });
+
   it("rejects token-bearing social and privacy query strings even with bearer auth", async () => {
     const adminToken = "admin-token-with-enough-length";
     const { server } = createOnlineHttpServer({

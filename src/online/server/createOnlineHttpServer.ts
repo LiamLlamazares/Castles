@@ -168,7 +168,10 @@ import {
   type OnlineAccountModerationReport,
   type OnlineAccountModerationReportQueueResponse,
   type OnlineAccountModerationReportStatusResponse,
+  type OnlineAccountPresence,
   type OnlineAccountPublicRating,
+  type OnlineAccountPublicProfile,
+  type OnlineAccountPrivacySettings,
   type OnlineAccountReportReason,
   type OnlineAccountReportSummary,
   type OnlineAccountReportStatus,
@@ -230,6 +233,22 @@ const PUBLIC_RATING_RESPONSE_KEYS = new Set([
   "display",
   "provisional",
   "games",
+  "updatedAt",
+]);
+const ACCOUNT_PUBLIC_PROFILE_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "displayName",
+  "rating",
+  "presence",
+  "relationship",
+]);
+const ACCOUNT_PRESENCE_RESPONSE_KEYS = new Set(["visibility", "status"]);
+const ACCOUNT_RELATIONSHIP_RESPONSE_KEYS = new Set(["self", "following", "followedBy", "blocked"]);
+const ACCOUNT_PRIVACY_SETTINGS_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "followPolicy",
+  "presencePolicy",
+  "challengePolicy",
   "updatedAt",
 ]);
 const ACCOUNT_REPORT_SUMMARY_RESPONSE_KEYS = new Set([
@@ -1442,6 +1461,94 @@ function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRati
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: value.displayName,
     rating: validatePublicRatingResponseShape(value.rating),
+  };
+}
+
+function validateAccountPresenceResponseShape(value: unknown): OnlineAccountPresence {
+  if (!isResponseRecord(value)) throw new Error("Account presence must be an object.");
+  assertAllowedResponseKeys(value, ACCOUNT_PRESENCE_RESPONSE_KEYS, "Account presence");
+  const { visibility, status } = value;
+  if (
+    (visibility !== "visible" && visibility !== "hidden") ||
+    (
+      status !== null &&
+      status !== "online" &&
+      status !== "recent" &&
+      status !== "away" &&
+      status !== "offline"
+    ) ||
+    (visibility === "hidden" && status !== null) ||
+    (visibility === "visible" && status === null)
+  ) {
+    throw new Error("Account presence is malformed.");
+  }
+  return { visibility, status };
+}
+
+function validateAccountRelationshipResponseShape(
+  value: unknown
+): OnlineAccountPublicProfile["relationship"] {
+  if (!isResponseRecord(value)) throw new Error("Account relationship must be an object.");
+  assertAllowedResponseKeys(value, ACCOUNT_RELATIONSHIP_RESPONSE_KEYS, "Account relationship");
+  const { self, following, followedBy, blocked } = value;
+  if (
+    typeof self !== "boolean" ||
+    typeof following !== "boolean" ||
+    typeof followedBy !== "boolean" ||
+    typeof blocked !== "boolean"
+  ) {
+    throw new Error("Account relationship is malformed.");
+  }
+  return { self, following, followedBy, blocked };
+}
+
+function validateAccountPublicProfileResponseShape(value: unknown): OnlineAccountPublicProfile {
+  if (!isResponseRecord(value)) throw new Error("Account public profile must be an object.");
+  assertAllowedResponseKeys(value, ACCOUNT_PUBLIC_PROFILE_RESPONSE_KEYS, "Account public profile");
+  if (
+    value.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION ||
+    !isModerationDisplayName(value.displayName)
+  ) {
+    throw new Error("Account public profile is malformed.");
+  }
+  const rating = value.rating === undefined
+    ? undefined
+    : validatePublicRatingResponseShape(value.rating);
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    displayName: value.displayName,
+    ...(rating ? { rating } : {}),
+    presence: validateAccountPresenceResponseShape(value.presence),
+    relationship: validateAccountRelationshipResponseShape(value.relationship),
+  };
+}
+
+function validateAccountPrivacySettingsResponseShape(value: unknown): OnlineAccountPrivacySettings {
+  if (!isResponseRecord(value)) throw new Error("Account privacy settings must be an object.");
+  assertAllowedResponseKeys(value, ACCOUNT_PRIVACY_SETTINGS_RESPONSE_KEYS, "Account privacy settings");
+  if (
+    value.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION ||
+    (value.followPolicy !== "everyone" && value.followPolicy !== "nobody") ||
+    (
+      value.presencePolicy !== "followed" &&
+      value.presencePolicy !== "everyone" &&
+      value.presencePolicy !== "nobody"
+    ) ||
+    (
+      value.challengePolicy !== "followed" &&
+      value.challengePolicy !== "everyone" &&
+      value.challengePolicy !== "nobody"
+    ) ||
+    (value.updatedAt !== null && !isIsoTimestamp(value.updatedAt))
+  ) {
+    throw new Error("Account privacy settings are malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    followPolicy: value.followPolicy,
+    presencePolicy: value.presencePolicy,
+    challengePolicy: value.challengePolicy,
+    updatedAt: value.updatedAt,
   };
 }
 
@@ -3737,10 +3844,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         });
         return;
       }
+      const responseProfile = validateAccountPublicProfileResponseShape(profile);
       log({ event: "online.account.profile.lookup", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        profile,
+        profile: responseProfile,
       });
     } catch (error) {
       console.error("Failed to load account profile", error);
@@ -3772,10 +3880,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
     try {
       const following = await accountStore.listFollowingProfiles(auth.account.accountId, auth.usedAt);
+      const responseFollowing = following.map(validateAccountPublicProfileResponseShape);
       log({ event: "online.account.follows.list", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        following,
+        following: responseFollowing,
       });
     } catch (error) {
       console.error("Failed to list followed accounts", error);
@@ -3821,10 +3930,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         res.status(failure.status).json({ error: failure.error });
         return;
       }
+      const profile = validateAccountPublicProfileResponseShape(result.profile);
       log({ event: "online.account.follow", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        profile: result.profile,
+        profile,
       });
     } catch (error) {
       console.error("Failed to follow account", error);
@@ -3869,10 +3979,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         res.status(failure.status).json({ error: failure.error });
         return;
       }
+      const profile = validateAccountPublicProfileResponseShape(result.profile);
       log({ event: "online.account.unfollow", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        profile: result.profile,
+        profile,
       });
     } catch (error) {
       console.error("Failed to unfollow account", error);
@@ -3918,8 +4029,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         res.status(failure.status).json({ error: failure.error });
         return;
       }
+      const profile = validateAccountPublicProfileResponseShape(result.profile);
       try {
-        await terminatePendingAccountChallengesForBlock(auth.identity, result.profile.displayName, createdAt);
+        await terminatePendingAccountChallengesForBlock(auth.identity, profile.displayName, createdAt);
       } catch (error) {
         console.error("Failed to terminate blocked account challenges", error);
         log({ event: "online.account.block.challenge_cleanup", status: "failed", reason: "persistence_failed" });
@@ -3927,7 +4039,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.account.block", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        profile: result.profile,
+        profile,
       });
     } catch (error) {
       console.error("Failed to block account", error);
@@ -3972,10 +4084,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         res.status(failure.status).json({ error: failure.error });
         return;
       }
+      const profile = validateAccountPublicProfileResponseShape(result.profile);
       log({ event: "online.account.unblock", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        profile: result.profile,
+        profile,
       });
     } catch (error) {
       console.error("Failed to unblock account", error);
@@ -4295,10 +4408,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
     try {
       const privacy = await accountStore.getPrivacySettings(auth.account.accountId);
+      const responsePrivacy = validateAccountPrivacySettingsResponseShape(privacy);
       log({ event: "online.account.privacy.get", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        privacy,
+        privacy: responsePrivacy,
       });
     } catch (error) {
       console.error("Failed to load account privacy settings", error);
@@ -4343,10 +4457,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         });
         return;
       }
+      const responsePrivacy = validateAccountPrivacySettingsResponseShape(privacy);
       log({ event: "online.account.privacy.update", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        privacy,
+        privacy: responsePrivacy,
       });
     } catch (error) {
       console.error("Failed to update account privacy settings", error);
