@@ -97,8 +97,7 @@ const SCENARIOS = [
   {
     name: "online-lobby",
     prepare: async (page, fixtures) => {
-      await ensureSetupPage(page);
-      await clickButton(page, "Online");
+      await openOnlineFromSetup(page);
       await waitForText(page, "Open listings");
       await waitForText(page, fixtures.openSeekId);
       await waitForText(page, fixtures.liveGameId);
@@ -113,8 +112,7 @@ const SCENARIOS = [
   {
     name: "online-watch",
     prepare: async (page, fixtures) => {
-      await ensureSetupPage(page);
-      await clickButton(page, "Online");
+      await openOnlineFromSetup(page);
       await clickButton(page, "Live public games");
       await waitForText(page, "Live public games");
       await waitForText(page, fixtures.liveGameId);
@@ -124,13 +122,42 @@ const SCENARIOS = [
   {
     name: "online-archive",
     prepare: async (page, fixtures) => {
-      await ensureSetupPage(page);
-      await clickButton(page, "Online");
+      await openOnlineFromSetup(page);
       await clickButton(page, "Online Archive");
       await waitForText(page, "Browse archive");
       await waitForText(page, fixtures.archivedGameId);
     },
     requiredTexts: (fixtures) => [fixtures.archivedGameId, "Analyze Replay", "White wins by resignation"],
+  },
+  {
+    name: "online-account-archive-history",
+    accountSession: "liam",
+    prepare: async (page, fixtures) => {
+      await openOnlineFromSetup(page);
+      await clickButton(page, "Online Archive");
+      await waitForText(page, "Account archive");
+      await waitForText(page, fixtures.accountGameId);
+      await waitForText(page, "Followed opponents in your games");
+      await clickButton(page, `Show ${fixtures.samirDisplayName} game history from followed account archive`);
+      await waitForText(page, `Showing games with ${fixtures.samirDisplayName}`);
+      await waitForRegion(page, `Head-to-head with ${fixtures.samirDisplayName}`);
+      await waitForRegion(page, `Head-to-head games with ${fixtures.samirDisplayName}`);
+      await waitForButton(page, `Show archive details for latest head-to-head game ${fixtures.accountGameId}`);
+      await waitForButton(page, `Analyze latest head-to-head replay ${fixtures.accountGameId}`);
+      await waitForText(page, "Challenge pending");
+      await waitForText(page, fixtures.accountGameId);
+    },
+    requiredTexts: (fixtures) => [
+      "Account archive",
+      "Followed opponents in your games",
+      "Head-to-head",
+      "Head-to-head games",
+      fixtures.accountGameId,
+      "Details",
+      "Analyze",
+      "Challenge pending",
+      "Clear History Filter",
+    ],
   },
   {
     name: "tutorial-overview",
@@ -394,6 +421,8 @@ async function createUiAuditFixtures(baseUrl) {
     { type: "RESIGN", baseVersion: 0 }
   );
 
+  const accountFixture = await createAccountArchiveFixture(baseUrl, setup);
+
   return {
     openSeekId: openSeek.seekId,
     openSeekToken: openSeek.creator.token,
@@ -405,7 +434,179 @@ async function createUiAuditFixtures(baseUrl) {
     playerUrl: buildPlayerUrl(baseUrl, liveGame.gameId, "w"),
     playerToken: liveGame.white.token,
     spectatorUrl: buildSpectatorUrl(baseUrl, liveGame.gameId),
+    accountGameId: accountFixture.gameId,
+    liamDisplayName: accountFixture.liam.account.displayName,
+    samirDisplayName: accountFixture.samir.account.displayName,
+    liamAccountSession: {
+      sessionId: accountFixture.liam.session.sessionId,
+      token: accountFixture.liam.session.token,
+      account: accountFixture.liam.account,
+    },
+    samirAccountToken: accountFixture.samir.session.token,
   };
+}
+
+function bearer(token) {
+  return { authorization: `Bearer ${token}` };
+}
+
+function jsonHeaders(token) {
+  return {
+    "content-type": "application/json",
+    ...(token ? bearer(token) : {}),
+  };
+}
+
+function uniqueAuditDisplayName(prefix) {
+  return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+async function createAccountFixture(baseUrl, displayName) {
+  const password = "correct-horse-battery-staple";
+  const response = await fetchWithTimeout(`${baseUrl}/api/online/accounts`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ displayName, password }),
+  });
+  const body = await readJson(response);
+  assert(response.status === 201, `UI audit account ${displayName} creation failed with ${response.status}`);
+  assert(body.account?.displayName === displayName, `UI audit account ${displayName} returned the wrong display name`);
+  assert(typeof body.session?.token === "string", `UI audit account ${displayName} did not return a session token`);
+  assert(typeof body.session?.sessionId === "string", `UI audit account ${displayName} did not return a session id`);
+  return body;
+}
+
+async function followAccountFixture(baseUrl, followerToken, targetDisplayName, label) {
+  const response = await fetchWithTimeout(
+    `${baseUrl}/api/online/account/follows/${encodeURIComponent(targetDisplayName)}`,
+    { method: "PUT", headers: bearer(followerToken) }
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `${label} follow failed with ${response.status}`);
+  assert(body.profile?.displayName === targetDisplayName, `${label} follow returned the wrong profile`);
+  return body;
+}
+
+async function createAccountChallengeFixture(baseUrl, setup, challenger, challenged) {
+  const response = await fetchWithTimeout(`${baseUrl}/api/online/challenges`, {
+    method: "POST",
+    headers: jsonHeaders(challenger.session.token),
+    body: JSON.stringify({
+      setup,
+      challengerSeat: "w",
+      visibility: "unlisted",
+      challengedDisplayName: challenged.account.displayName,
+    }),
+  });
+  const body = await readJson(response);
+  assert(response.status === 201, `UI audit account challenge creation failed with ${response.status}`);
+  assert(body.summary?.status === "pending", "UI audit account challenge was not pending");
+  assert(
+    body.summary?.challengerIdentity?.displayName === challenger.account.displayName,
+    "UI audit account challenge returned the wrong challenger"
+  );
+  assert(
+    body.summary?.challengedIdentity?.displayName === challenged.account.displayName,
+    "UI audit account challenge returned the wrong challenged account"
+  );
+  return body;
+}
+
+async function acceptAccountChallengeFixture(baseUrl, challengedToken, challengeId) {
+  const response = await fetchWithTimeout(
+    `${baseUrl}/api/online/account/challenges/${encodeURIComponent(challengeId)}/accept`,
+    { method: "POST", headers: bearer(challengedToken) }
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `UI audit account challenge accept failed with ${response.status}`);
+  assert(body.summary?.status === "accepted", "UI audit account challenge accept did not return accepted status");
+  assert(typeof body.gameInvite?.gameId === "string", "UI audit account challenge accept did not return a game id");
+  assert(typeof body.gameInvite?.token === "string", "UI audit account challenge accept did not return a game token");
+  return body;
+}
+
+async function createAccountArchiveFixture(baseUrl, setup) {
+  let liam;
+  let samir;
+  try {
+    liam = await createAccountFixture(baseUrl, uniqueAuditDisplayName("UiLiam"));
+    samir = await createAccountFixture(baseUrl, uniqueAuditDisplayName("UiSamir"));
+    await followAccountFixture(baseUrl, liam.session.token, samir.account.displayName, "UI audit Liam");
+    await followAccountFixture(baseUrl, samir.session.token, liam.account.displayName, "UI audit Samir");
+    const challenge = await createAccountChallengeFixture(baseUrl, setup, liam, samir);
+    const accepted = await acceptAccountChallengeFixture(baseUrl, samir.session.token, challenge.challengeId);
+    await submitOnlineAction(
+      baseUrl,
+      accepted.gameInvite.gameId,
+      accepted.gameInvite.token,
+      `ui-audit-account-black-resign-${Date.now().toString(36)}`,
+      { type: "RESIGN", baseVersion: 0 }
+    );
+    await waitForAccountHeadToHeadFixture(
+      baseUrl,
+      liam.session.token,
+      samir.account.displayName,
+      accepted.gameInvite.gameId
+    );
+    return {
+      liam,
+      samir,
+      gameId: accepted.gameInvite.gameId,
+    };
+  } catch (error) {
+    try {
+      await cleanupPartialAccountArchiveFixture(baseUrl, liam, samir);
+    } catch (cleanupError) {
+      const originalMessage = error instanceof Error ? error.message : String(error);
+      const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+      throw new Error(`${originalMessage}\nPartial account fixture cleanup failed: ${cleanupMessage}`);
+    }
+    throw error;
+  }
+}
+
+async function waitForAccountHeadToHeadFixture(baseUrl, token, opponentDisplayName, gameId) {
+  const deadline = Date.now() + browserTimeoutMs;
+  let lastStatus = 0;
+  let lastBody = null;
+  while (Date.now() < deadline) {
+    const url = new URL(
+      `${baseUrl}/api/online/account/games/head-to-head/${encodeURIComponent(opponentDisplayName)}`
+    );
+    url.searchParams.set("limit", "5");
+    const response = await fetchWithTimeout(url.toString(), { headers: bearer(token) });
+    const body = await readJson(response);
+    lastStatus = response.status;
+    lastBody = body;
+    if (
+      response.status === 200 &&
+      Array.isArray(body.games) &&
+      body.games.some((game) => game?.gameId === gameId)
+    ) {
+      return body;
+    }
+    await sleep(250);
+  }
+  throw new Error(
+    `UI audit account head-to-head fixture ${gameId} was not listed for ${opponentDisplayName}; last response ${lastStatus}: ${JSON.stringify(lastBody).slice(0, 500)}`
+  );
+}
+
+async function cleanupPartialAccountArchiveFixture(baseUrl, liam, samir) {
+  const cleanupErrors = [];
+  const deletePartial = async (label, accountFixture) => {
+    if (!accountFixture?.session?.token || !accountFixture?.account?.displayName) return;
+    try {
+      await deleteAccountFixture(baseUrl, accountFixture.session.token, accountFixture.account.displayName);
+    } catch (error) {
+      cleanupErrors.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  await deletePartial("delete partial Liam audit account", liam);
+  await deletePartial("delete partial Samir audit account", samir);
+  if (cleanupErrors.length > 0) {
+    throw new Error(cleanupErrors.join("\n"));
+  }
 }
 
 async function createOpenSeekFixture(baseUrl, setup) {
@@ -508,10 +709,27 @@ async function cleanupUiAuditFixtures(baseUrl, fixtures) {
   await runCleanup("unlist archived game", () =>
     setOnlineGameVisibility(baseUrl, fixtures.archivedGameId, fixtures.archivedWhiteToken, "unlisted")
   );
+  await runCleanup("delete Liam audit account", () =>
+    deleteAccountFixture(baseUrl, fixtures.liamAccountSession.token, fixtures.liamDisplayName)
+  );
+  await runCleanup("delete Samir audit account", () =>
+    deleteAccountFixture(baseUrl, fixtures.samirAccountToken, fixtures.samirDisplayName)
+  );
 
   if (cleanupErrors.length > 0) {
     throw new Error(`UI audit fixture cleanup failed:\n${cleanupErrors.join("\n")}`);
   }
+}
+
+async function deleteAccountFixture(baseUrl, token, displayName) {
+  const response = await fetchWithTimeout(`${baseUrl}/api/online/account`, {
+    method: "DELETE",
+    headers: bearer(token),
+  });
+  if (response.status === 404 || response.status === 401) return;
+  const body = await readJson(response);
+  assert(response.status === 200, `UI audit account ${displayName} cleanup failed with ${response.status}`);
+  assert(body.deleted === true, `UI audit account ${displayName} cleanup did not report deleted=true`);
 }
 
 async function submitOnlineAction(baseUrl, gameId, token, clientActionId, action) {
@@ -580,6 +798,22 @@ async function waitForText(page, text) {
   await waitForPageQuiet(page);
 }
 
+async function waitForRegion(page, name) {
+  await page.getByRole("region", { name, exact: true }).waitFor({
+    state: "visible",
+    timeout: browserTimeoutMs,
+  });
+  await waitForPageQuiet(page);
+}
+
+async function waitForButton(page, name) {
+  await page.getByRole("button", { name, exact: true }).waitFor({
+    state: "visible",
+    timeout: browserTimeoutMs,
+  });
+  await waitForPageQuiet(page);
+}
+
 async function clickButton(page, name) {
   const button = page.getByRole("button", { name, exact: true });
   const count = await button.count();
@@ -630,6 +864,11 @@ async function ensureSetupPage(page) {
   throw new Error(`Could not reach Play setup. Visible buttons: ${visibleButtons.join(", ")}`);
 }
 
+async function openOnlineFromSetup(page) {
+  await ensureSetupPage(page);
+  await clickButtonMatching(page, /^Online(?:, \d+ challenge activit(?:y|ies))?$/, "Online");
+}
+
 async function ensureGameBoard(page) {
   if (await page.locator(".hamburger-button").isVisible().catch(() => false)) {
     return;
@@ -656,6 +895,21 @@ async function confirmLeaveGameIfNeeded(page) {
   if (await hasVisibleButton(page, "Leave Game")) {
     await clickButton(page, "Leave Game");
   }
+}
+
+async function clickButtonMatching(page, name, description) {
+  const button = page.getByRole("button", { name });
+  const count = await button.count();
+  for (let index = 0; index < count; index += 1) {
+    const candidate = button.nth(index);
+    if (await candidate.isVisible().catch(() => false)) {
+      await candidate.click({ timeout: browserTimeoutMs });
+      await waitForPageQuiet(page);
+      return;
+    }
+  }
+  const visibleButtons = await listVisibleButtons(page);
+  throw new Error(`Visible button matching "${description}" was not found. Visible buttons: ${visibleButtons.join(", ")}`);
 }
 
 async function listVisibleButtons(page) {
@@ -697,6 +951,12 @@ async function installFirstRunAuditDefaults(context) {
   });
 }
 
+async function installAccountSession(context, session) {
+  await context.addInitScript((storedSession) => {
+    window.localStorage.setItem("castles_online_account_session_v1", JSON.stringify(storedSession));
+  }, session);
+}
+
 async function runScenario(browser, baseUrl, viewport, scenario, fixtures) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -707,6 +967,9 @@ async function runScenario(browser, baseUrl, viewport, scenario, fixtures) {
     await installFirstRunAuditDefaults(context);
   } else {
     await installAuditDefaults(context);
+  }
+  if (scenario.accountSession === "liam") {
+    await installAccountSession(context, fixtures.liamAccountSession);
   }
   const page = await context.newPage();
   try {
@@ -1322,6 +1585,9 @@ async function runBrowserAudit(baseUrl) {
           openSeekId: fixtures.openSeekId,
           liveGameId: fixtures.liveGameId,
           archivedGameId: fixtures.archivedGameId,
+          accountGameId: fixtures.accountGameId,
+          liamDisplayName: fixtures.liamDisplayName,
+          samirDisplayName: fixtures.samirDisplayName,
         },
         results,
       },
