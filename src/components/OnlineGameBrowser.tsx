@@ -508,11 +508,15 @@ function formatAccountChallengeRole(role: OnlineAccountChallengeListItem["role"]
 }
 
 function challengeOpponentName(item: OnlineAccountChallengeListItem): string {
+  return challengeOpponentDisplayName(item) ?? (item.role === "challenged" ? "Challenger" : "Opponent");
+}
+
+function challengeOpponentDisplayName(item: OnlineAccountChallengeListItem): string | null {
   const identity =
     item.role === "challenged"
       ? item.summary.challengerIdentity
       : item.summary.challengedIdentity;
-  return identityDisplayName(identity) ?? (item.role === "challenged" ? "Challenger" : "Opponent");
+  return identityDisplayName(identity);
 }
 
 function isAccountChallengeShortcutItem(item: OnlineAccountChallengeListItem): boolean {
@@ -3199,14 +3203,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       unblock: onUnblockAccount,
     };
     const handler = handlers[action];
-    if (!handler) return;
+    if (!handler) return false;
     const requestId = ++socialMutationRequestIdRef.current;
     const accountId = account?.accountId;
     setSocialAction(action);
     setSocialMessage("");
     try {
       const response = await handler(displayName);
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return false;
       mergeSocialProfile(response.profile);
       if (action === "unfollow" || action === "block" || !response.profile.relationship.following) {
         removePinnedFollowingProfile(response.profile.displayName);
@@ -3223,8 +3227,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               : `Unblocked ${response.profile.displayName}.`
       );
       void refreshFollowingProfiles({ quiet: true });
+      return true;
     } catch (error) {
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
+      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return false;
       console.error(`[OnlineGameBrowser] Failed to ${action} account`, error);
       setSocialMessage(
         onlineRequestErrorMessage(error) ??
@@ -3234,8 +3239,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               ? "Could not unfollow that account."
               : action === "block"
                 ? "Could not block that account."
-                : "Could not unblock that account.")
+              : "Could not unblock that account.")
       );
+      return false;
     } finally {
       if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
         setSocialAction(undefined);
@@ -3252,6 +3258,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     onUnfollowAccount,
     refreshFollowingProfiles,
   ]);
+
+  const pruneAccountChallengesForOpponent = React.useCallback((displayName: string) => {
+    const opponentKey = normalizeDisplayNameKey(displayName);
+    const keepChallenge = (item: OnlineAccountChallengeListItem) =>
+      normalizeDisplayNameKey(challengeOpponentDisplayName(item) ?? "") !== opponentKey;
+    setAccountChallenges((current) => current.filter(keepChallenge));
+    setAccountChallengeShortcutItems((current) => current.filter(keepChallenge));
+  }, []);
+
+  const blockAccountChallengeOpponent = React.useCallback(async (displayName: string) => {
+    const blocked = await runSocialProfileAction("block", displayName);
+    if (blocked) {
+      pruneAccountChallengesForOpponent(displayName);
+    }
+  }, [pruneAccountChallengesForOpponent, runSocialProfileAction]);
 
   const openSocialReport = React.useCallback((
     displayName: string,
@@ -4210,10 +4231,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     const canActOnChallenge = item.summary.status === "pending" && !pendingAction;
                     const acceptedChallengeGameId =
                       item.summary.status === "accepted" ? item.summary.gameId : undefined;
+                    const opponentDisplayName = challengeOpponentDisplayName(item);
+                    const opponentName = opponentDisplayName ?? challengeOpponentName(item);
                     return (
                       <article key={challengeId} className="online-browser-following-row">
                         <div>
-                          <strong>{challengeOpponentName(item)}</strong>
+                          <strong>{opponentName}</strong>
                           <div className="online-browser-social-badges">
                             <span>{formatAccountChallengeRole(item.role)}</span>
                             <span>{formatAccountChallengeStatus(item)}</span>
@@ -4238,7 +4261,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 className="online-browser-button primary"
                                 onClick={() => void runAccountChallengeAction(item, "accept")}
                                 disabled={!canActOnChallenge}
-                                aria-label={`Accept challenge from ${challengeOpponentName(item)}`}
+                                aria-label={`Accept challenge from ${opponentName}`}
                               >
                                 {pendingAction === "accept" ? "Joining..." : "Accept & Join"}
                               </button>
@@ -4249,7 +4272,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 className="online-browser-button subtle"
                                 onClick={() => void runAccountChallengeAction(item, "decline")}
                                 disabled={!canActOnChallenge}
-                                aria-label={`Decline challenge from ${challengeOpponentName(item)}`}
+                                aria-label={`Decline challenge from ${opponentName}`}
                               >
                                 {pendingAction === "decline" ? "Declining" : "Decline"}
                               </button>
@@ -4260,9 +4283,31 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 className="online-browser-button subtle online-browser-button-danger"
                                 onClick={() => void runAccountChallengeAction(item, "cancel")}
                                 disabled={!canActOnChallenge}
-                                aria-label={`Cancel challenge to ${challengeOpponentName(item)}`}
+                                aria-label={`Cancel challenge to ${opponentName}`}
                               >
                                 {pendingAction === "cancel" ? "Cancelling" : "Cancel"}
+                              </button>
+                            )}
+                            {opponentDisplayName && onReportAccount && (
+                              <button
+                                type="button"
+                                className="online-browser-button subtle"
+                                onClick={() => openSocialReport(opponentDisplayName)}
+                                disabled={socialAction !== undefined}
+                                aria-label={`Report ${opponentDisplayName} from challenge row`}
+                              >
+                                Report
+                              </button>
+                            )}
+                            {opponentDisplayName && onBlockAccount && (
+                              <button
+                                type="button"
+                                className="online-browser-button subtle online-browser-button-danger"
+                                onClick={() => void blockAccountChallengeOpponent(opponentDisplayName)}
+                                disabled={socialAction !== undefined}
+                                aria-label={`Block ${opponentDisplayName} from challenge row`}
+                              >
+                                Block
                               </button>
                             )}
                             {acceptedChallengeGameId && onRejoinAccountChallengeGame && (
@@ -4271,7 +4316,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                                 className="online-browser-button primary"
                                 onClick={() => onRejoinAccountChallengeGame(acceptedChallengeGameId, item.summary.visibility)}
                                 disabled={rejoiningAccountGameId === acceptedChallengeGameId}
-                                aria-label={`Join accepted challenge game ${acceptedChallengeGameId} against ${challengeOpponentName(item)}`}
+                                aria-label={`Join accepted challenge game ${acceptedChallengeGameId} against ${opponentName}`}
                               >
                                 {rejoiningAccountGameId === acceptedChallengeGameId ? "Joining..." : "Join Game"}
                               </button>

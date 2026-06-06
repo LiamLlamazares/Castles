@@ -2502,6 +2502,58 @@ describe("OnlineGameBrowser", () => {
     expect(within(people).queryByRole("region", { name: "Pending challenge notice" })).not.toBeInTheDocument();
   });
 
+  it("offers block and report actions from registered account challenge rows", async () => {
+    const account = accountFixture("Liam");
+    const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
+    const socialProps = socialPropsWithFollowing();
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialProps}
+        loadAccountChallenges={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          ...accountChallengeDirectory([{ role: "challenged", summary: pendingSummary }]),
+        })}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    const row = await within(challenges).findByText("Samir");
+    const article = row.closest("article");
+    expect(article).not.toBeNull();
+
+    fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Report Samir from challenge row" }));
+
+    const reportForm = await within(people).findByRole("form", { name: "Report Samir" });
+    fireEvent.change(within(reportForm).getByRole("textbox", { name: "Details" }), {
+      target: { value: "Repeated targeted challenge spam." },
+    });
+    fireEvent.click(within(reportForm).getByRole("button", { name: "Submit Report" }));
+
+    await waitFor(() =>
+      expect(socialProps.onReportAccount).toHaveBeenCalledWith("Samir", {
+        reason: "abuse",
+        details: "Repeated targeted challenge spam.",
+      })
+    );
+    expect(await within(people).findByText("Report submitted for Samir.")).toBeInTheDocument();
+
+    fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Block Samir from challenge row" }));
+
+    await waitFor(() => expect(socialProps.onBlockAccount).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByText("Blocked Samir.")).toBeInTheDocument();
+    await waitFor(() => expect(within(challenges).queryByText("Samir")).not.toBeInTheDocument());
+    expect(within(people).queryByRole("region", { name: "Pending challenge notice" })).not.toBeInTheDocument();
+  });
+
   it("keeps accepted challenge status visible after acting from the all inbox", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
