@@ -1873,6 +1873,14 @@ describe("OnlineGameBrowser", () => {
     const rematchSummary = accountChallengeSummary({
       challengedIdentity: account.identity,
       intent: "rematch",
+      sourceGameId: "game_source_rematch",
+      rematch: {
+        schemaVersion: 1,
+        sourceGameId: "game_source_rematch",
+        requesterDisplayName: "Samir",
+        responderDisplayName: "Liam",
+        requestedAt: "2026-06-03T12:00:00.000Z",
+      },
     } as Partial<OnlineChallengeSummary>);
     render(
       <OnlineGameBrowser
@@ -1900,6 +1908,7 @@ describe("OnlineGameBrowser", () => {
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText("Incoming")).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText("Rematch")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("Source game game_source_rematch")).toBeInTheDocument();
   });
 
   it("emphasizes pending account challenges that expire soon", async () => {

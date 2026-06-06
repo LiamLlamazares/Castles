@@ -2119,6 +2119,13 @@ describe("online client helpers", () => {
       visibility: "unlisted",
       intent: "rematch",
       sourceGameId: "game_source_rematch",
+      rematch: {
+        schemaVersion: 1,
+        sourceGameId: "game_source_rematch",
+        requesterDisplayName: "Liam",
+        responderDisplayName: "Samir",
+        requestedAt: "2026-06-03T12:00:00.000Z",
+      },
       setup,
       createdAt: "2026-06-03T12:00:00.000Z",
       updatedAt: "2026-06-03T12:00:00.000Z",
@@ -2154,6 +2161,11 @@ describe("online client helpers", () => {
         challengeId: "challenge_rematch_123",
         intent: "rematch",
         sourceGameId: "game_source_rematch",
+        rematch: {
+          sourceGameId: "game_source_rematch",
+          requesterDisplayName: "Liam",
+          responderDisplayName: "Samir",
+        },
       },
     });
     expect(JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string)).toMatchObject({

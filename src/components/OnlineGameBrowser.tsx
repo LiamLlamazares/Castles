@@ -4275,6 +4275,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                             {expiry && <span>{expiry.timeLabel}</span>}
                             <span>{formatUpdatedAt(item.summary.updatedAt)}</span>
                             <span>{challengeId}</span>
+                            {item.summary.rematch?.sourceGameId && (
+                              <span>Source game {item.summary.rematch.sourceGameId}</span>
+                            )}
                             {item.summary.gameId && <span>Game {item.summary.gameId}</span>}
                           </div>
                           <div className="online-browser-social-actions">

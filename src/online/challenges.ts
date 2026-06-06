@@ -1,4 +1,8 @@
 import {
+  normalizeOnlineAccountDisplayName,
+  normalizeOnlineAccountDisplayNameKey,
+} from "./accounts";
+import {
   validateOnlineIdentity,
   type OnlineIdentity,
 } from "./identity";
@@ -13,6 +17,7 @@ import type { OnlineGameSetupDTO } from "./types";
 export const ONLINE_CHALLENGE_EVENT_SCHEMA_VERSION = 1;
 export const ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION = 1;
 export const ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION = 1;
+export const ONLINE_CHALLENGE_REMATCH_SCHEMA_VERSION = 1;
 
 export type OnlineChallengeStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
 export type OnlineChallengeVisibility = "private" | "unlisted";
@@ -82,6 +87,7 @@ export interface OnlineChallengeSummary {
   visibility: OnlineChallengeVisibility;
   intent?: OnlineChallengeIntent;
   sourceGameId?: string;
+  rematch?: OnlineChallengeRematchRecord;
   setup: OnlineGameSetupDTO;
   createdAt: string;
   updatedAt: string;
@@ -99,6 +105,14 @@ export interface OnlineChallengeSummary {
   cancelledBy?: OnlineIdentity;
   expiredAt?: string;
   expiredBy?: "system";
+}
+
+export interface OnlineChallengeRematchRecord {
+  schemaVersion: typeof ONLINE_CHALLENGE_REMATCH_SCHEMA_VERSION;
+  sourceGameId?: string;
+  requesterDisplayName: string;
+  responderDisplayName: string;
+  requestedAt: string;
 }
 
 export interface OnlineAccountChallengeListItem {
@@ -135,6 +149,7 @@ const CHALLENGE_SUMMARY_KEYS = new Set([
   "visibility",
   "intent",
   "sourceGameId",
+  "rematch",
   "setup",
   "createdAt",
   "updatedAt",
@@ -152,6 +167,13 @@ const CHALLENGE_SUMMARY_KEYS = new Set([
   "cancelledBy",
   "expiredAt",
   "expiredBy",
+]);
+const CHALLENGE_REMATCH_KEYS = new Set([
+  "schemaVersion",
+  "sourceGameId",
+  "requesterDisplayName",
+  "responderDisplayName",
+  "requestedAt",
 ]);
 const ACCOUNT_CHALLENGE_DIRECTORY_KEYS = new Set(["protocolVersion", "schemaVersion", "challenges"]);
 const ACCOUNT_CHALLENGE_LIST_ITEM_KEYS = new Set(["role", "summary"]);
@@ -220,6 +242,61 @@ function validateOptionalSourceGameId(value: unknown, label: string): Validation
   const gameId = validateOnlineGameId(value, label);
   if (!gameId.ok) return gameId;
   return { ok: true, value: gameId.value };
+}
+
+function registeredDisplayName(identity: OnlineIdentity): string | null {
+  return identity.kind === "registered" && identity.displayName ? identity.displayName : null;
+}
+
+function createRematchRecordFromCreatedEvent(
+  event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>
+): OnlineChallengeRematchRecord | undefined {
+  if (event.intent !== "rematch") return undefined;
+  const requesterDisplayName = registeredDisplayName(event.challengerIdentity);
+  const responderDisplayName = registeredDisplayName(event.challengedIdentity);
+  if (!requesterDisplayName || !responderDisplayName) return undefined;
+  return {
+    schemaVersion: ONLINE_CHALLENGE_REMATCH_SCHEMA_VERSION,
+    ...(event.sourceGameId ? { sourceGameId: event.sourceGameId } : {}),
+    requesterDisplayName,
+    responderDisplayName,
+    requestedAt: event.createdAt,
+  };
+}
+
+function validateRematchRecord(
+  value: unknown,
+  label: string
+): ValidationResult<OnlineChallengeRematchRecord | undefined> {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!isRecord(value)) return bad(`${label} must be an object.`);
+  const allowedKeys = validateAllowedKeys(value, CHALLENGE_REMATCH_KEYS, label);
+  if (!allowedKeys.ok) return allowedKeys;
+  if (containsDurableSecret(value)) {
+    return bad(`${label} must not contain token, credential, session, auth, cookie, or invite fields.`);
+  }
+  if (value.schemaVersion !== ONLINE_CHALLENGE_REMATCH_SCHEMA_VERSION) {
+    return bad(`${label}.schemaVersion must be ${ONLINE_CHALLENGE_REMATCH_SCHEMA_VERSION}.`);
+  }
+  const sourceGameId = validateOptionalSourceGameId(value.sourceGameId, `${label}.sourceGameId`);
+  if (!sourceGameId.ok) return sourceGameId;
+  const requesterDisplayName = normalizeOnlineAccountDisplayName(value.requesterDisplayName);
+  if (!requesterDisplayName.ok) return bad(`${label}.requesterDisplayName is invalid.`);
+  const responderDisplayName = normalizeOnlineAccountDisplayName(value.responderDisplayName);
+  if (!responderDisplayName.ok) return bad(`${label}.responderDisplayName is invalid.`);
+  if (!isIsoDateString(value.requestedAt)) {
+    return bad(`${label}.requestedAt must be a valid timestamp.`);
+  }
+  return {
+    ok: true,
+    value: {
+      schemaVersion: ONLINE_CHALLENGE_REMATCH_SCHEMA_VERSION,
+      ...(sourceGameId.value ? { sourceGameId: sourceGameId.value } : {}),
+      requesterDisplayName: requesterDisplayName.value,
+      responderDisplayName: responderDisplayName.value,
+      requestedAt: value.requestedAt,
+    },
+  };
 }
 
 function createEnvelope(
@@ -560,6 +637,7 @@ export function projectOnlineChallengeSummaries(
       if (summaries.has(event.challengeId)) {
         throw new Error(`Duplicate challenge creation event for ${event.challengeId}.`);
       }
+      const rematch = createRematchRecordFromCreatedEvent(event);
       summaries.set(event.challengeId, {
         schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
         challengeId: event.challengeId,
@@ -569,6 +647,7 @@ export function projectOnlineChallengeSummaries(
         visibility: event.visibility,
         ...(event.intent ? { intent: event.intent } : {}),
         ...(event.sourceGameId ? { sourceGameId: event.sourceGameId } : {}),
+        ...(rematch ? { rematch } : {}),
         setup: event.setup,
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
@@ -717,6 +796,33 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
   if (sourceGameId.value && intent.value !== "rematch") {
     return bad("summary.sourceGameId is only allowed for rematch challenges.");
   }
+  const rematch = validateRematchRecord(value.rematch, "summary.rematch");
+  if (!rematch.ok) return rematch;
+  if (rematch.value) {
+    if (intent.value !== "rematch") {
+      return bad("summary.rematch is only allowed for rematch challenges.");
+    }
+    if ((sourceGameId.value ?? undefined) !== (rematch.value.sourceGameId ?? undefined)) {
+      return bad("summary.rematch.sourceGameId must match summary.sourceGameId.");
+    }
+    const requesterDisplayName = registeredDisplayName(challengerIdentity.value);
+    const responderDisplayName = registeredDisplayName(challengedIdentity.value);
+    if (!requesterDisplayName || !responderDisplayName) {
+      return bad("summary.rematch requires registered challenge identities.");
+    }
+    if (
+      normalizeOnlineAccountDisplayNameKey(requesterDisplayName) !==
+      normalizeOnlineAccountDisplayNameKey(rematch.value.requesterDisplayName)
+    ) {
+      return bad("summary.rematch.requesterDisplayName must match challengerIdentity.");
+    }
+    if (
+      normalizeOnlineAccountDisplayNameKey(responderDisplayName) !==
+      normalizeOnlineAccountDisplayNameKey(rematch.value.responderDisplayName)
+    ) {
+      return bad("summary.rematch.responderDisplayName must match challengedIdentity.");
+    }
+  }
   const setup = validateOnlineGameSetup(value.setup);
   if (!setup.ok) return setup;
   if (!isIsoDateString(value.createdAt)) {
@@ -733,6 +839,9 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
   }
   if (timestamp(value.expiresAt) <= timestamp(value.createdAt)) {
     return bad("summary.expiresAt must be later than createdAt.");
+  }
+  if (rematch.value && rematch.value.requestedAt !== value.createdAt) {
+    return bad("summary.rematch.requestedAt must equal summary.createdAt.");
   }
   if (typeof value.status !== "string" || !CHALLENGE_STATUSES.has(value.status as OnlineChallengeStatus)) {
     return bad("summary.status is invalid.");
@@ -769,6 +878,7 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
     visibility: value.visibility,
     ...(intent.value ? { intent: intent.value } : {}),
     ...(sourceGameId.value ? { sourceGameId: sourceGameId.value } : {}),
+    ...(rematch.value ? { rematch: rematch.value } : {}),
     setup: setup.value,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,

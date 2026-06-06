@@ -5727,6 +5727,13 @@ describe("createOnlineHttpServer", () => {
       challengeId: created.challengeId,
       intent: "rematch",
       sourceGameId: "game_liam_samir_source",
+      rematch: {
+        schemaVersion: 1,
+        sourceGameId: "game_liam_samir_source",
+        requesterDisplayName: "Liam",
+        responderDisplayName: "Samir",
+        requestedAt: "2026-06-01T12:00:00.000Z",
+      },
       challengerIdentity: redactedRegisteredIdentity(liam),
       challengedIdentity: redactedRegisteredIdentity(samir),
     });
@@ -5739,6 +5746,13 @@ describe("createOnlineHttpServer", () => {
           challengeId: created.challengeId,
           intent: "rematch",
           sourceGameId: "game_liam_samir_source",
+          rematch: {
+            schemaVersion: 1,
+            sourceGameId: "game_liam_samir_source",
+            requesterDisplayName: "Liam",
+            responderDisplayName: "Samir",
+            requestedAt: "2026-06-01T12:00:00.000Z",
+          },
         }),
       }),
     ]);
@@ -5749,6 +5763,13 @@ describe("createOnlineHttpServer", () => {
           challengeId: created.challengeId,
           intent: "rematch",
           sourceGameId: "game_liam_samir_source",
+          rematch: {
+            schemaVersion: 1,
+            sourceGameId: "game_liam_samir_source",
+            requesterDisplayName: "Liam",
+            responderDisplayName: "Samir",
+            requestedAt: "2026-06-01T12:00:00.000Z",
+          },
         }),
       }),
     ]);

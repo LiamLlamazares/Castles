@@ -222,7 +222,13 @@ describe("online challenge event validation", () => {
   });
 
   it("projects rematch intent and source game ids from creation events into challenge summaries", () => {
+    const registeredChallenger: OnlineIdentity = {
+      kind: "registered",
+      id: "user_challenger",
+      displayName: "Challenger",
+    };
     const event = createdEvent({
+      challengerIdentity: registeredChallenger,
       intent: "rematch",
       sourceGameId: "game_source_rematch",
     } as unknown as Partial<Extract<OnlineChallengeEvent, { type: "challenge_created" }>>);
@@ -240,8 +246,49 @@ describe("online challenge event validation", () => {
       challengeId: "challenge_test",
       intent: "rematch",
       sourceGameId: "game_source_rematch",
+      rematch: {
+        schemaVersion: 1,
+        sourceGameId: "game_source_rematch",
+        requesterDisplayName: "Challenger",
+        responderDisplayName: "Challenged",
+        requestedAt: CREATED_AT,
+      },
     });
     expect(validateOnlineChallengeSummary(summary).ok).toBe(true);
+  });
+
+  it("rejects rematch records that drift from challenge identities or source games", () => {
+    const registeredChallenger: OnlineIdentity = {
+      kind: "registered",
+      id: "user_challenger",
+      displayName: "Challenger",
+    };
+    const [summary] = projectOnlineChallengeSummaries([
+      createdEvent({
+        challengerIdentity: registeredChallenger,
+        intent: "rematch",
+        sourceGameId: "game_source_rematch",
+      } as unknown as Partial<Extract<OnlineChallengeEvent, { type: "challenge_created" }>>),
+    ]);
+
+    expectInvalidSummary({
+      ...summary,
+      intent: "challenge",
+    });
+    expectInvalidSummary({
+      ...summary,
+      rematch: {
+        ...summary.rematch,
+        sourceGameId: "game_other_source",
+      },
+    });
+    expectInvalidSummary({
+      ...summary,
+      rematch: {
+        ...summary.rematch,
+        requesterDisplayName: "Someone Else",
+      },
+    });
   });
 
   it("requires immutable setup terms on challenge creation events", () => {
