@@ -878,6 +878,8 @@ Registered challenge smoke update on 2026-06-06: `npm run online:smoke:local:cha
 
 Local challenge smoke cleanup update on 2026-06-06: the same local PostgreSQL challenge smoke now resigns both its anonymous accepted challenge game and its registered account challenge game after verification, then checks the persisted summaries are complete, so repeated local rehearsal runs do not leave active smoke games behind.
 
+Local restart smoke cleanup update on 2026-06-06: `npm run online:smoke:local` now resigns its restarted game after proving version-1 action persistence across shutdown and restart, then verifies the terminal spectator snapshot reaches version 2 with a resignation result, so local restart rehearsals no longer leave their primary smoke game active.
+
 Production account recovery smoke update on 2026-06-06: `scripts/deploy/check-online-smoke.mjs` now creates two disposable production accounts, follows the challenger from the challenged account, creates a targeted unlisted challenge, verifies both account challenge directories and account histories, accepts through the account route, rejoins the accepted game from both account sessions, ends the smoke game by resignation with the fresh player-seat token, and deletes both disposable accounts before reporting production healthy.
 
 Production smoke cleanup update on 2026-06-06: the same API smoke now resigns its direct-created game after the persisted player/spectator snapshot checks pass, so repeated deploy gates do not leave active anonymous smoke games in production persistence.

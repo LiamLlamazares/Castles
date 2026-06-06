@@ -117,7 +117,8 @@ What this checks:
 - confirms the snapshot advanced to version 1,
 - asks the local server to run its graceful shutdown path,
 - restarts the server,
-- fetches the same game and confirms version 1 is still there.
+- fetches the same game and confirms version 1 is still there,
+- resigns the restarted smoke game with the opposite seat at version 1, then confirms the terminal spectator snapshot reaches version 2 with a resignation result so the rehearsal does not leave an active smoke game behind.
 
 The concurrency smoke additionally:
 

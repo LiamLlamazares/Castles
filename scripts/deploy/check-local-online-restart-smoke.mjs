@@ -21,6 +21,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const { WebSocket } = require("ws");
+const { Client } = require("pg");
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "../..");
 const serverEntry = path.join(repoRoot, "server-build", "server", "index.js");
@@ -223,6 +224,7 @@ async function playOnePass(baseUrl) {
   return {
     gameId: created.gameId,
     token: created.white.token,
+    blackToken: created.black.token,
   };
 }
 
@@ -236,6 +238,102 @@ async function fetchPersistedSnapshot(baseUrl, gameId, token) {
   assert(body.snapshot?.version === 1, "Restart did not preserve the accepted action");
   assertDefaultOnlineClock(body.snapshot, "Restart snapshot");
   await assertSpectatorSnapshot(fetchWithTimeout, baseUrl, gameId, 1);
+}
+
+async function assertTerminalSpectatorSnapshot(baseUrl, gameId, expectedVersion) {
+  const response = await fetchWithTimeout(
+    `${baseUrl}/api/online/games/${encodeURIComponent(gameId)}/spectator`
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `Terminal spectator snapshot fetch failed with ${response.status}`);
+  assertProtocolVersionedBody(body, "Terminal spectator snapshot response");
+  assert(body.role === "spectator", "Terminal spectator snapshot did not report spectator role");
+  assert(
+    body.snapshot?.version === expectedVersion,
+    `Terminal spectator snapshot returned version ${body.snapshot?.version}, expected ${expectedVersion}`
+  );
+  assertDefaultOnlineClock(body.snapshot, "Terminal spectator snapshot");
+  assert(
+    body.snapshot?.result?.winner === "w" && body.snapshot?.result?.reason === "resignation",
+    "White wins by resignation was not preserved in the terminal spectator snapshot"
+  );
+}
+
+async function assertPersistedArchivedSummary(gameId, expectedVersion) {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `SELECT status, archive_state, game_version, payload->'result' AS result
+       FROM online_game_summaries
+       WHERE game_id = $1`,
+      [gameId]
+    );
+    assert(result.rows.length === 1, `Persisted restart smoke summary count was ${result.rows.length}`);
+    const row = result.rows[0];
+    assert(row.status === "complete", `Persisted restart smoke summary status was ${row.status}`);
+    assert(row.archive_state === "archived", `Persisted restart smoke summary archive_state was ${row.archive_state}`);
+    assert(
+      Number(row.game_version) === expectedVersion,
+      `Persisted restart smoke summary version was ${row.game_version}, expected ${expectedVersion}`
+    );
+    assert(
+      row.result?.winner === "w" && row.result?.reason === "resignation",
+      "White wins by resignation was not preserved in the persisted restart smoke summary"
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+async function cleanupRestartSmokeGame(baseUrl, gameId, token) {
+  const socket = new WebSocket(buildWebSocketUrl(baseUrl));
+  try {
+    const joined = nextSocketMessage(socket, "cleanup join response");
+    await waitForSocketOpen(socket);
+    socket.send(
+      JSON.stringify(versionedSocketMessage({
+        type: "join",
+        gameId,
+        token,
+      }))
+    );
+
+    const joinedMessage = await joined;
+    assertProtocolVersionedBody(joinedMessage, "Cleanup join WebSocket response");
+    assert(joinedMessage.type === "joined", "Cleanup WebSocket did not join the restarted game");
+    assert(
+      joinedMessage.snapshot?.version === 1,
+      `Cleanup join saw version ${joinedMessage.snapshot?.version}, expected 1`
+    );
+
+    const snapshot = nextSocketMessage(socket, "cleanup resignation snapshot");
+    socket.send(
+      JSON.stringify(versionedSocketMessage({
+        type: "action",
+        clientActionId: `restart-smoke-cleanup-resign-${Date.now().toString(36)}`,
+        action: { type: "RESIGN", baseVersion: 1 },
+      }))
+    );
+    const snapshotMessage = await snapshot;
+    assertProtocolVersionedBody(snapshotMessage, "Cleanup resignation WebSocket response");
+    assert(snapshotMessage.type === "snapshot", "Cleanup resignation did not produce a snapshot");
+    assert(
+      snapshotMessage.snapshot?.version === 2,
+      `Cleanup resignation produced version ${snapshotMessage.snapshot?.version}, expected 2`
+    );
+    assert(
+      snapshotMessage.snapshot?.result?.winner === "w" &&
+        snapshotMessage.snapshot?.result?.reason === "resignation",
+      "White wins by resignation was not reported after restart smoke cleanup"
+    );
+    assertDefaultOnlineClock(snapshotMessage.snapshot, "Cleanup resignation snapshot");
+  } finally {
+    socket.close();
+  }
+
+  await assertTerminalSpectatorSnapshot(baseUrl, gameId, 2);
+  await assertPersistedArchivedSummary(gameId, 2);
 }
 
 async function withServer(port, callback) {
@@ -264,9 +362,10 @@ async function main() {
   const port = await findFreePort();
 
   const played = await withServer(port, (baseUrl) => playOnePass(baseUrl));
-  await withServer(port, (baseUrl) =>
-    fetchPersistedSnapshot(baseUrl, played.gameId, played.token)
-  );
+  await withServer(port, async (baseUrl) => {
+    await fetchPersistedSnapshot(baseUrl, played.gameId, played.token);
+    await cleanupRestartSmokeGame(baseUrl, played.gameId, played.blackToken);
+  });
 
   console.log(`Local restart smoke passed on http://127.0.0.1:${port} using game ${played.gameId}`);
 }
