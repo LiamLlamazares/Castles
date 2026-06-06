@@ -114,9 +114,11 @@ const NoClock: React.FC<{ player: Color }> = ({ player }) => (
 );
 
 const PlayerIdentityBadge: React.FC<{ identity: PlayerIdentity }> = ({ identity }) => {
+  const isGenericBotLabel = identity.kind === "bot" && identity.label.trim().toLowerCase() === "bot";
+  const playerKindLabel = isGenericBotLabel ? "player" : `${identity.kind} player`;
   const ariaLabel = identity.onClick
-    ? `${identity.label} ${identity.kind} player. Open account sign in`
-    : `${identity.label} ${identity.kind} player`;
+    ? `${identity.label} ${playerKindLabel}. Open account sign in`
+    : `${identity.label} ${playerKindLabel}`;
   const content = (
     <>
       <IdentityIcon kind={identity.kind} />

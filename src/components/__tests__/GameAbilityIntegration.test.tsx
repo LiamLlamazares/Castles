@@ -159,6 +159,21 @@ describe("Game ability integration", () => {
     window.history.replaceState({}, "", "/");
   });
 
+  test("local human player identity chips both open the account dialog", () => {
+    const onOpenOnlineAccount = vi.fn();
+
+    render(
+      <ThemeProvider>
+        <GameBoard onOpenOnlineAccount={onOpenOnlineAccount} />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Guest 1 human player. Open account sign in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guest 2 human player. Open account sign in" }));
+
+    expect(onOpenOnlineAccount).toHaveBeenCalledTimes(2);
+  });
+
   test("Teleport selected from the HUD is used by board clicks", async () => {
     const lesson = createM5L5();
     const teleportTarget = new Hex(-3, 1, 2);

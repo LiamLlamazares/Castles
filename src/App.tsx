@@ -2587,7 +2587,7 @@ function App() {
               pieceTheme={gameConfig.pieceTheme}
               opponentConfig={gameConfig.opponentConfig}
               onlineSession={onlineSession}
-              onlineAccountDisplayName={onlineAccount?.displayName ?? "Guest"}
+              onlineAccountDisplayName={onlineAccount?.displayName}
               onOpenOnlineAccount={() => setOnlineAccountDialogOpen(true)}
               initialPoolTypes={gameConfig.initialPoolTypes}
             />

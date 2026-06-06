@@ -910,7 +910,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
 
     return {
       w: createHumanIdentity(onlineAccountDisplayName?.trim() || "Guest 1", true),
-      b: createHumanIdentity("Guest 2", false),
+      b: createHumanIdentity("Guest 2", true),
     };
   }, [accountChipName, createHumanIdentity, onlineAccountDisplayName, onlineSession, opponentConfig]);
   const shellClasses = [

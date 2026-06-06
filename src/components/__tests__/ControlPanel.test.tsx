@@ -83,7 +83,7 @@ describe("ControlPanel", () => {
     );
 
     const whiteBadge = screen.getByRole("button", { name: "Guest human player. Open account sign in" });
-    const blackBadge = screen.getByLabelText("Bot bot player");
+    const blackBadge = screen.getByLabelText("Bot player");
 
     expect(whiteBadge).toHaveTextContent("Guest");
     expect(blackBadge).toHaveTextContent("Bot");
@@ -93,6 +93,21 @@ describe("ControlPanel", () => {
     fireEvent.click(whiteBadge);
 
     expect(onOpenAccount).toHaveBeenCalledOnce();
+  });
+
+  it("keeps named bot identity labels distinct from human players", () => {
+    const OnlineControlPanel = ControlPanel as React.ComponentType<any>;
+
+    render(
+      <OnlineControlPanel
+        {...baseProps}
+        playerIdentities={{
+          b: { label: "Random", kind: "bot" },
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText("Random bot player")).toBeInTheDocument();
   });
 
   it("calls visible save and library actions from the game panel", () => {

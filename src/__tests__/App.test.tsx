@@ -906,12 +906,12 @@ describe("App game setup lifecycle", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Game account: Guest")).toBeInTheDocument();
+    expect(screen.getByText("Game account: none")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Mock Open Account" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Online account" });
-    expect(dialog).toHaveTextContent("Guest");
+    expect(dialog).toHaveTextContent("Continue as Guest");
     expect(screen.getByLabelText("Display name")).toHaveFocus();
     expect(screen.getByText("Google sign-in is not configured on this server.")).toBeInTheDocument();
   });
