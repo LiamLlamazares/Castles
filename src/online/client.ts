@@ -713,6 +713,13 @@ function accountAuthorizationHeader(account?: OnlineAccountSessionParams): Recor
   return account ? { authorization: `Bearer ${account.token}` } : {};
 }
 
+const ONLINE_INTERNAL_IDENTIFIER_PATTERN =
+  /\b(?:account_session|report_audit|account|challenge|game|seek|report)_[A-Za-z0-9_-]+\b/;
+
+function stringContainsInternalOnlineIdentifier(value: string): boolean {
+  return ONLINE_INTERNAL_IDENTIFIER_PATTERN.test(value);
+}
+
 function validateOnlineAccountResponse(body: unknown, label: string): OnlineAccount {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error(`${label} response was malformed.`);
@@ -755,7 +762,8 @@ async function createOnlineRequestError(response: Response, fallbackMessage: str
       typeof message === "string" &&
       message.length > 0 &&
       message.length <= MAX_ONLINE_ERROR_MESSAGE_LENGTH &&
-      !stringContainsDurableSecret(message)
+      !stringContainsDurableSecret(message) &&
+      !stringContainsInternalOnlineIdentifier(message)
     ) {
       return new OnlineRequestError(response.status, code as OnlineRejectCode, message);
     }

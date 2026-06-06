@@ -1323,6 +1323,37 @@ describe("online client helpers", () => {
     });
   });
 
+  it("does not trust server error messages that include raw online identifiers", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: {
+            code: "not_allowed",
+            message: "Account account_samir cannot be followed right now.",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({
+          error: {
+            code: "persistence_failed",
+            message: "Account session account_session_secret123 could not update privacy.",
+          },
+        }),
+      });
+
+    await expect(
+      followOnlineAccount({ token: "account-token" }, "Samir", fetchImpl as any)
+    ).rejects.toThrow("Could not follow online account (409)");
+    await expect(
+      updateOnlineAccountPrivacy({ token: "account-token" }, { followPolicy: "nobody" }, fetchImpl as any)
+    ).rejects.toThrow("Could not update online account privacy (503)");
+  });
+
   it("rejects malformed online account report responses", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce({
       ok: true,
