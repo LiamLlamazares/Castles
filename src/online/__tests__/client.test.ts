@@ -965,6 +965,54 @@ describe("online client helpers", () => {
     ).rejects.toThrow("Online account challenges response was malformed");
   });
 
+  it("rejects account game history responses with unsupported internal fields", async () => {
+    const participants = [
+      { seat: "w", role: "white", identity: { kind: "registered", id: "registered:liam", displayName: "Liam" } },
+      { seat: "b", role: "black", identity: { kind: "registered", id: "registered:samir", displayName: "Samir" } },
+    ];
+    const validGameSummary = publicSummary({
+      gameId: "game_liam_samir",
+      participants,
+    });
+    const directoryResponse = (summary: unknown) => ({
+      ok: true,
+      json: async () => ({
+        schemaVersion: 1,
+        games: [summary],
+      }),
+    });
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(directoryResponse({
+        ...validGameSummary,
+        accountId: "account_liam",
+      }))
+      .mockResolvedValueOnce(directoryResponse({
+        ...validGameSummary,
+        participants: [
+          {
+            ...participants[0],
+            databaseKey: "online_accounts.account_id",
+          },
+          participants[1],
+        ],
+      }));
+
+    await expect(
+      fetchOnlineAccountGames(
+        { token: "account-token" },
+        { state: "all" },
+        fetchImpl as any
+      )
+    ).rejects.toThrow("Online account game history response was malformed");
+    await expect(
+      fetchOnlineAccountGames(
+        { token: "account-token" },
+        { state: "all" },
+        fetchImpl as any
+      )
+    ).rejects.toThrow("Online account game history response was malformed");
+  });
+
   it("loads Google OAuth provider availability", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string, init?: RequestInit) => {

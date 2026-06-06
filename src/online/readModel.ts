@@ -184,6 +184,51 @@ const PIECE_TYPES = new Set<PieceType>(Object.values(PieceType));
 const BOARD_PREVIEW_MAX_RADIUS = 12;
 const BOARD_PREVIEW_MAX_PIECES = 300;
 const BOARD_PREVIEW_MAX_CASTLES = 40;
+const ONLINE_GAME_DIRECTORY_RESPONSE_KEYS = new Set(["schemaVersion", "games", "nextCursor"]);
+const ONLINE_GAME_SUMMARY_KEYS = new Set([
+  "schemaVersion",
+  "gameId",
+  "rulesetVersion",
+  "createdAt",
+  "updatedAt",
+  "endedAt",
+  "version",
+  "status",
+  "visibility",
+  "archiveState",
+  "hasTimeControl",
+  "ratingMode",
+  "participants",
+  "livePreview",
+  "result",
+  "lastEventId",
+]);
+const SUMMARY_PARTICIPANT_KEYS = new Set(["seat", "role", "identity"]);
+const SUMMARY_RESULT_KEYS = new Set(["winner", "reason"]);
+const SUMMARY_LIVE_PREVIEW_KEYS = new Set([
+  "sideToMove",
+  "turnPhase",
+  "moveCount",
+  "lastMove",
+  "clock",
+  "spectatorCount",
+  "boardPreview",
+]);
+const SUMMARY_MOVE_RECORD_KEYS = new Set(["notation", "turnNumber", "color", "phase"]);
+const SUMMARY_CLOCK_KEYS = new Set([
+  "timeControl",
+  "remainingMs",
+  "activeColor",
+  "runningSince",
+  "serverNow",
+  "flag",
+]);
+const SUMMARY_CLOCK_TIME_CONTROL_KEYS = new Set(["initialMs", "incrementMs"]);
+const SUMMARY_CLOCK_REMAINING_KEYS = new Set(["w", "b"]);
+const SUMMARY_CLOCK_FLAG_KEYS = new Set(["color", "at"]);
+const SUMMARY_BOARD_PREVIEW_KEYS = new Set(["radius", "pieces", "castles"]);
+const SUMMARY_BOARD_PREVIEW_PIECE_KEYS = new Set(["q", "r", "s", "color", "type"]);
+const SUMMARY_BOARD_PREVIEW_CASTLE_KEYS = new Set(["q", "r", "s", "owner"]);
 export const ONLINE_GAME_DIRECTORY_STATES = new Set<OnlineGameDirectoryState>([
   "active",
   "archived",
@@ -222,6 +267,19 @@ function bad(message: string): ValidationResult<never> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateAllowedKeys(
+  value: Record<string, unknown>,
+  allowedKeys: ReadonlySet<string>,
+  label: string
+): ValidationResult<void> {
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      return bad(`${label} contains unsupported data.`);
+    }
+  }
+  return { ok: true, value: undefined };
 }
 
 export function stripOnlineGameSummaryResponseOnlyFields(value: unknown): unknown {
@@ -477,6 +535,8 @@ export function onlineGameSummaryDirectorySearchText(summary: OnlineGameSummary)
 
 function validateResult(value: unknown): ValidationResult<OnlineGameResultDTO> {
   if (!isRecord(value)) return bad("summary.result must be an object.");
+  const allowedKeys = validateAllowedKeys(value, SUMMARY_RESULT_KEYS, "summary.result");
+  if (!allowedKeys.ok) return allowedKeys;
   if (!isColor(value.winner)) return bad("summary.result.winner must be w or b.");
   if (typeof value.reason !== "string" || !RESULT_REASONS.has(value.reason as OnlineGameResultDTO["reason"])) {
     return bad("summary.result.reason is not supported.");
@@ -492,6 +552,8 @@ function validateResult(value: unknown): ValidationResult<OnlineGameResultDTO> {
 
 function validateParticipant(value: unknown): ValidationResult<OnlineGameSummaryParticipant> {
   if (!isRecord(value)) return bad("summary.participants[] must be an object.");
+  const allowedKeys = validateAllowedKeys(value, SUMMARY_PARTICIPANT_KEYS, "summary.participants[]");
+  if (!allowedKeys.ok) return allowedKeys;
   if (!isColor(value.seat)) return bad("summary.participants[].seat must be w or b.");
   if (typeof value.role !== "string" || !SUMMARY_ROLES.has(value.role)) {
     return bad("summary.participants[].role is invalid.");
@@ -516,6 +578,8 @@ function validateSummaryMoveRecord(
   label = "summary.lastMove"
 ): ValidationResult<MoveRecord> {
   if (!isRecord(value)) return bad(`${label} must be an object.`);
+  const allowedKeys = validateAllowedKeys(value, SUMMARY_MOVE_RECORD_KEYS, label);
+  if (!allowedKeys.ok) return allowedKeys;
   if (!isBoundedString(value.notation, 128)) return bad(`${label}.notation is invalid.`);
   if (!isPositiveSafeInteger(value.turnNumber)) {
     return bad(`${label}.turnNumber must be a positive integer.`);
@@ -537,7 +601,15 @@ function validateSummaryMoveRecord(
 
 function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummaryPreviewClock> {
   if (!isRecord(value)) return bad("summary.clock must be an object.");
+  const allowedKeys = validateAllowedKeys(value, SUMMARY_CLOCK_KEYS, "summary.clock");
+  if (!allowedKeys.ok) return allowedKeys;
   if (!isRecord(value.timeControl)) return bad("summary.clock.timeControl must be an object.");
+  const timeControlKeys = validateAllowedKeys(
+    value.timeControl,
+    SUMMARY_CLOCK_TIME_CONTROL_KEYS,
+    "summary.clock.timeControl"
+  );
+  if (!timeControlKeys.ok) return timeControlKeys;
   if (!isNonNegativeSafeInteger(value.timeControl.initialMs)) {
     return bad("summary.clock.timeControl.initialMs must be a non-negative integer.");
   }
@@ -545,6 +617,12 @@ function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummar
     return bad("summary.clock.timeControl.incrementMs must be a non-negative integer.");
   }
   if (!isRecord(value.remainingMs)) return bad("summary.clock.remainingMs must be an object.");
+  const remainingKeys = validateAllowedKeys(
+    value.remainingMs,
+    SUMMARY_CLOCK_REMAINING_KEYS,
+    "summary.clock.remainingMs"
+  );
+  if (!remainingKeys.ok) return remainingKeys;
   if (
     !isNonNegativeSafeInteger(value.remainingMs.w) ||
     !isNonNegativeSafeInteger(value.remainingMs.b)
@@ -571,6 +649,8 @@ function validateSummaryClock(value: unknown): ValidationResult<OnlineGameSummar
   let flag: OnlineGameSummaryPreviewClock["flag"];
   if (value.flag !== undefined) {
     if (!isRecord(value.flag)) return bad("summary.clock.flag must be an object when present.");
+    const flagKeys = validateAllowedKeys(value.flag, SUMMARY_CLOCK_FLAG_KEYS, "summary.clock.flag");
+    if (!flagKeys.ok) return flagKeys;
     if (!isColor(value.flag.color)) return bad("summary.clock.flag.color must be w or b.");
     if (!isNonNegativeSafeInteger(value.flag.at)) {
       return bad("summary.clock.flag.at must be a non-negative integer.");
@@ -623,9 +703,15 @@ function validateBoardPreviewPiece(
   value: unknown,
   radius: number
 ): ValidationResult<OnlineGameSummaryBoardPreviewPiece> {
+  if (!isRecord(value)) return bad("summary.livePreview.boardPreview.pieces[] must be an object.");
+  const allowedKeys = validateAllowedKeys(
+    value,
+    SUMMARY_BOARD_PREVIEW_PIECE_KEYS,
+    "summary.livePreview.boardPreview.pieces[]"
+  );
+  if (!allowedKeys.ok) return allowedKeys;
   const hex = validateBoardPreviewHex(value, radius, "summary.livePreview.boardPreview.pieces[]");
   if (!hex.ok) return hex;
-  if (!isRecord(value)) return bad("summary.livePreview.boardPreview.pieces[] must be an object.");
   if (!isColor(value.color)) return bad("summary.livePreview.boardPreview.pieces[].color must be w or b.");
   if (typeof value.type !== "string" || !PIECE_TYPES.has(value.type as PieceType)) {
     return bad("summary.livePreview.boardPreview.pieces[].type is invalid.");
@@ -644,9 +730,15 @@ function validateBoardPreviewCastle(
   value: unknown,
   radius: number
 ): ValidationResult<OnlineGameSummaryBoardPreviewCastle> {
+  if (!isRecord(value)) return bad("summary.livePreview.boardPreview.castles[] must be an object.");
+  const allowedKeys = validateAllowedKeys(
+    value,
+    SUMMARY_BOARD_PREVIEW_CASTLE_KEYS,
+    "summary.livePreview.boardPreview.castles[]"
+  );
+  if (!allowedKeys.ok) return allowedKeys;
   const hex = validateBoardPreviewHex(value, radius, "summary.livePreview.boardPreview.castles[]");
   if (!hex.ok) return hex;
-  if (!isRecord(value)) return bad("summary.livePreview.boardPreview.castles[] must be an object.");
   if (!isColor(value.owner)) return bad("summary.livePreview.boardPreview.castles[].owner must be w or b.");
   return {
     ok: true,
@@ -659,6 +751,8 @@ function validateBoardPreviewCastle(
 
 function validateBoardPreview(value: unknown): ValidationResult<OnlineGameSummaryBoardPreview> {
   if (!isRecord(value)) return bad("summary.livePreview.boardPreview must be an object.");
+  const allowedKeys = validateAllowedKeys(value, SUMMARY_BOARD_PREVIEW_KEYS, "summary.livePreview.boardPreview");
+  if (!allowedKeys.ok) return allowedKeys;
   if (!isPositiveSafeInteger(value.radius) || value.radius > BOARD_PREVIEW_MAX_RADIUS) {
     return bad("summary.livePreview.boardPreview.radius is invalid.");
   }
@@ -896,6 +990,8 @@ export function projectOnlineGameSummaries(events: OnlineGameEvent[]): OnlineGam
 
 export function validateOnlineGameSummary(value: unknown): ValidationResult<OnlineGameSummary> {
   if (!isRecord(value)) return bad("summary must be an object.");
+  const allowedKeys = validateAllowedKeys(value, ONLINE_GAME_SUMMARY_KEYS, "summary");
+  if (!allowedKeys.ok) return allowedKeys;
   if (value.schemaVersion !== ONLINE_GAME_SUMMARY_SCHEMA_VERSION) {
     return bad(`summary.schemaVersion must be ${ONLINE_GAME_SUMMARY_SCHEMA_VERSION}.`);
   }
@@ -952,6 +1048,12 @@ export function validateOnlineGameSummary(value: unknown): ValidationResult<Onli
     return bad("summary.participants must contain white and black seats.");
   }
   if (!isRecord(value.livePreview)) return bad("summary.livePreview must be an object.");
+  const livePreviewKeys = validateAllowedKeys(
+    value.livePreview,
+    SUMMARY_LIVE_PREVIEW_KEYS,
+    "summary.livePreview"
+  );
+  if (!livePreviewKeys.ok) return livePreviewKeys;
   if (!isColor(value.livePreview.sideToMove)) {
     return bad("summary.livePreview.sideToMove must be w or b.");
   }
@@ -1072,6 +1174,12 @@ export function validateOnlineGameDirectoryResponse(
   value: unknown
 ): ValidationResult<OnlineGameDirectoryResponse> {
   if (!isRecord(value)) return bad("directory response must be an object.");
+  const allowedKeys = validateAllowedKeys(
+    value,
+    ONLINE_GAME_DIRECTORY_RESPONSE_KEYS,
+    "directory response"
+  );
+  if (!allowedKeys.ok) return allowedKeys;
   if (value.schemaVersion !== ONLINE_GAME_DIRECTORY_SCHEMA_VERSION) {
     return bad(`directory.schemaVersion must be ${ONLINE_GAME_DIRECTORY_SCHEMA_VERSION}.`);
   }

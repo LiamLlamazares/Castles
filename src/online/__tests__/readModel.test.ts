@@ -238,6 +238,54 @@ describe("online read model", () => {
     });
   });
 
+  it("rejects unsupported data in game directory response shapes", () => {
+    const summary = validSummary();
+    const expectUnsupported = (value: unknown) => {
+      const validation = validateOnlineGameDirectoryResponse(value);
+      expect(validation.ok).toBe(false);
+      if (!validation.ok) {
+        expect(validation.error.message).toContain("unsupported data");
+      }
+    };
+
+    expectUnsupported({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [],
+      accountId: "account_liam",
+    });
+    expectUnsupported({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [{ ...summary, accountId: "account_liam" }],
+    });
+    expectUnsupported({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [
+        {
+          ...summary,
+          participants: [
+            { ...summary.participants[0], databaseKey: "online_accounts.account_id" },
+            summary.participants[1],
+          ],
+        },
+      ],
+    });
+    expectUnsupported({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [
+        {
+          ...summary,
+          livePreview: {
+            ...summary.livePreview,
+            clock: {
+              ...summary.livePreview.clock!,
+              tokenHash: "hash_secret",
+            },
+          },
+        },
+      ],
+    });
+  });
+
   it("normalizes and bounds public directory search queries", () => {
     expect(normalizeOnlineGameDirectorySearchQuery("  Ada   timeout  ")).toBe("ada timeout");
     expect(normalizeOnlineGameDirectorySearchQuery("")).toBeNull();

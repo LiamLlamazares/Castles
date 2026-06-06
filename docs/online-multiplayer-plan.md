@@ -1,6 +1,6 @@
 # Online Multiplayer Master Roadmap
 
-Last refreshed: 2026-06-04
+Last refreshed: 2026-06-06
 
 This document is the source of truth for Castles online multiplayer work. The current direction assumes no legacy compatibility burden: old online drafts, incomplete protocols, and pre-roadmap UI assumptions may be replaced instead of preserved.
 
@@ -981,7 +981,7 @@ This section is the working queue for the current `online-action-log` branch. Fu
    - Confirm profile, follow, block, report, privacy, rating-leader, account challenge, and account history responses do not expose raw account ids, token hashes, bearer tokens, game seat tokens, challenge tokens, open-seek creator tokens, or internal database keys.
    - Tighten any remaining trusted-error paths so user-facing copy can explain privacy/rate-limit failures without echoing submitted secrets.
    - Keep report adjudication policy, sanctions, appeals, direct messages, public profile text, and broad notifications deferred until moderation rules are stronger.
-   - Current item 2 notes: account challenge and account-history raw account id redaction is implemented with local and production verification passed. Client trusted-error promotion now refuses server messages containing raw online identifiers such as account/session/challenge/game/seek/report ids, with local and production verification passed. Account challenge directory and summary response shapes now fail closed on unsupported fields with local and production verification passed. Continue the privacy pass with remaining response-shape checks before marking item 2 done.
+   - Current item 2 notes: account challenge and account-history raw account id redaction is implemented with local and production verification passed. Client trusted-error promotion now refuses server messages containing raw online identifiers such as account/session/challenge/game/seek/report ids, with local and production verification passed. Account challenge directory and summary response shapes now fail closed on unsupported fields with local and production verification passed. Current local sub-slice: account-history, head-to-head, and shared public game-directory summary response shapes now fail closed on unsupported directory, summary, participant, live-preview, clock, and board-preview fields; focused red/green regressions, full online client/read-model/server/Postgres/App/OnlineGameBrowser tests, `server:build`, `git diff --check`, app build, and local review have passed, but push, deploy, and production evidence are still outstanding. Continue the privacy pass with remaining response-shape checks before marking item 2 done.
 
 3. Challenge inbox and rematch reliability.
    - Keep the current account challenge inbox as the notification foundation.
