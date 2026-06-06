@@ -2195,8 +2195,8 @@ describe("createOnlineHttpServer", () => {
     });
     const body = await revokeResponse.json();
 
-    expect(revokeResponse.status).toBe(409);
-    expect(body.error).toMatchObject({ code: "session_not_revoked" });
+    expect(revokeResponse.status).toBe(503);
+    expect(body.error).toMatchObject({ code: "persistence_failed" });
   });
 
   it("revokes account sessions through the PostgreSQL account store route", async () => {
@@ -2404,8 +2404,8 @@ describe("createOnlineHttpServer", () => {
     });
     const body = await revokeAllResponse.json();
 
-    expect(revokeAllResponse.status).toBe(409);
-    expect(body.error).toMatchObject({ code: "sessions_not_revoked" });
+    expect(revokeAllResponse.status).toBe(503);
+    expect(body.error).toMatchObject({ code: "persistence_failed" });
     expect(accountStore.revokeSessionsForAccount).toHaveBeenCalledWith(account.account.accountId);
   });
 
@@ -2432,8 +2432,8 @@ describe("createOnlineHttpServer", () => {
     });
     const body = await deleteResponse.json();
 
-    expect(deleteResponse.status).toBe(409);
-    expect(body.error).toMatchObject({ code: "account_not_deleted" });
+    expect(deleteResponse.status).toBe(503);
+    expect(body.error).toMatchObject({ code: "persistence_failed" });
     expect(accountStore.deleteAccount).toHaveBeenCalledWith(account.account.accountId);
   });
 

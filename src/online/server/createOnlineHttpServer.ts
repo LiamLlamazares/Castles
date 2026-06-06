@@ -4178,8 +4178,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         reason: revoked ? undefined : "already_revoked",
       });
       if (!revoked) {
-        res.status(409).json({
-          error: { code: "session_not_revoked", message: "Account session could not be revoked." },
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "Account session could not be revoked." },
         });
         return;
       }
@@ -4219,8 +4219,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         reason: revokedSessions > 0 ? undefined : "already_revoked",
       });
       if (revokedSessions <= 0) {
-        res.status(409).json({
-          error: { code: "sessions_not_revoked", message: "Account sessions could not be revoked." },
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "Account sessions could not be revoked." },
         });
         return;
       }
@@ -4260,8 +4260,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         reason: deleted ? undefined : "already_deleted",
       });
       if (!deleted) {
-        res.status(409).json({
-          error: { code: "account_not_deleted", message: "Account could not be deleted." },
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "Account could not be deleted." },
         });
         return;
       }
