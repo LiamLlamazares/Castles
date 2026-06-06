@@ -817,6 +817,26 @@
   color: #ffb7a8;
 }
 
+.online-browser-history-filter-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(158, 208, 194, 0.32);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: rgba(158, 208, 194, 0.08);
+  color: #e8dec4;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.online-browser-history-filter-note span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .online-browser-list {
   display: grid;
   gap: 10px;
@@ -1610,6 +1630,11 @@
   .online-browser-section-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .online-browser-history-filter-note {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .online-browser-featured-game .online-game-row {

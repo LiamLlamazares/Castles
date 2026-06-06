@@ -3600,6 +3600,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     window.setTimeout(() => gameSearchInputRef.current?.focus(), 0);
   }, [setBrowserTab]);
 
+  const clearVisiblePlayerHistory = React.useCallback(() => {
+    setHeadToHeadDisplayName("");
+    setHeadToHeadMessage("");
+    setQuery("");
+    setCopyMessage("");
+    setRecentClearMessage("");
+    setSocialMessage("");
+    window.setTimeout(() => gameSearchInputRef.current?.focus(), 0);
+  }, []);
+
   const focusAccountChallenges = React.useCallback(() => {
     setSocialMessage("");
     clearAccountChallengeUnreadActivity();
@@ -5770,6 +5780,21 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         <main className="online-browser-list" aria-label="Online archive">
           <>
             {selectedArchiveDetailGame && renderArchiveDetailPage(selectedArchiveDetailGame)}
+            {activeHeadToHeadDisplayName && (
+              <section className="online-browser-history-filter-note" aria-label="Archive player history filter">
+                <span aria-live="polite">
+                  Showing games with <strong>{activeHeadToHeadDisplayName}</strong>.
+                </span>
+                <button
+                  type="button"
+                  className="online-browser-button subtle"
+                  onClick={clearVisiblePlayerHistory}
+                  aria-label={`Clear game history filter for ${activeHeadToHeadDisplayName}`}
+                >
+                  Clear History Filter
+                </button>
+              </section>
+            )}
             {account && (
               <section className="online-browser-account-games" aria-label="Your account games">
                 <div className="online-browser-side-list-header">

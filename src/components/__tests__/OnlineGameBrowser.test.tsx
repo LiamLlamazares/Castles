@@ -3589,6 +3589,15 @@ describe("OnlineGameBrowser", () => {
     expect(within(publicArchive).getByText("game_public_history_samir")).toBeInTheDocument();
     expect(within(publicArchive).queryByText("game_public_history_ben")).not.toBeInTheDocument();
     expect(screen.getByText("Showing visible games with Samir.")).toBeInTheDocument();
+
+    const historyFilter = screen.getByRole("region", { name: "Archive player history filter" });
+    expect(historyFilter).toHaveTextContent("Showing games with Samir.");
+    fireEvent.click(within(historyFilter).getByRole("button", { name: "Clear game history filter for Samir" }));
+
+    await waitFor(() => expect(search).toHaveValue(""));
+    expect(screen.queryByRole("region", { name: "Archive player history filter" })).not.toBeInTheDocument();
+    await waitFor(() => expect(within(accountGames).getByText("game_account_history_ben")).toBeInTheDocument());
+    expect(within(publicArchive).getByText("game_public_history_ben")).toBeInTheDocument();
   });
 
   it("summarizes head-to-head account history after opening a followed player history", async () => {
