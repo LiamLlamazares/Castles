@@ -3573,12 +3573,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     pendingIncomingChallengeCount > 0
       ? `${formatCount(pendingIncomingChallengeCount, "incoming challenge")} awaiting your response`
       : `${formatCount(pendingOutgoingChallengeCount, "sent challenge")} awaiting response`;
+  const accountChipDisplayName = account?.displayName ?? "Guest";
+  const accountChipActionLabel = account ? "Open account controls" : "Open account sign in";
   const accountNavSlot = (
     <OnlineAccountButton
-      displayName={account?.displayName ?? "Guest"}
+      displayName={accountChipDisplayName}
       onClick={() => setIsAccountDialogOpen(true)}
-      ariaLabel="Open account sign in"
-      title="Open account sign in"
+      ariaLabel={`${accountChipDisplayName} account. ${accountChipActionLabel}`}
+      title={accountChipActionLabel}
       className="online-browser-account-chip"
     />
   );

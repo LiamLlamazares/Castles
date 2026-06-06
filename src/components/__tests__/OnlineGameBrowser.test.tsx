@@ -350,7 +350,7 @@ describe("OnlineGameBrowser", () => {
 
   async function openAccountDialog() {
     await screen.findByText("No lobby listings yet.");
-    fireEvent.click(screen.getByRole("button", { name: "Open account sign in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guest account. Open account sign in" }));
     return screen.findByRole("dialog", { name: "Online account" });
   }
 
@@ -492,7 +492,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const nav = screen.getByRole("navigation", { name: "Online navigation" });
-    const accountButton = await within(nav).findByRole("button", { name: "Open account sign in" });
+    const accountButton = await within(nav).findByRole("button", { name: "Guest account. Open account sign in" });
     expect(accountButton).toHaveTextContent("Guest");
     expect(within(nav).queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();
     expect(within(nav).queryByRole("button", { name: "Create account" })).not.toBeInTheDocument();
@@ -507,6 +507,27 @@ describe("OnlineGameBrowser", () => {
     expect(within(dialog).getByRole("button", { name: "Sign In" })).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByLabelText("Display name")).toHaveFocus());
+  });
+
+  it("labels the Online navigation identity chip with the signed-in display name", async () => {
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        account={accountFixture("Liam")}
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+      />
+    );
+
+    const nav = screen.getByRole("navigation", { name: "Online navigation" });
+    const accountButton = await within(nav).findByRole("button", { name: "Liam account. Open account controls" });
+
+    expect(accountButton).toHaveTextContent("Liam");
+    fireEvent.click(accountButton);
+    expect(await screen.findByRole("dialog", { name: "Online account" })).toHaveTextContent("Signed in as");
   });
 
   it("hides the default account form and shows disabled Google sign-in only in the account dialog", async () => {
@@ -531,7 +552,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Online account" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open account sign in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guest account. Open account sign in" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Online account" });
     expect(within(dialog).queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();

@@ -183,7 +183,7 @@ export function renderEmptyBoardFaviconSvg(): string {
   });
 
   return [
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Empty Castles hex board">',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Empty Castles hex board">',
     `  <rect width="512" height="512" fill="${background}"/>`,
     "  <defs>",
     '    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">',

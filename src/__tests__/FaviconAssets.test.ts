@@ -31,6 +31,7 @@ describe("favicon assets", () => {
 
     for (const svg of [faviconSvg, appIconSvg]) {
       expect(svg).toBe(expectedSvg);
+      expect(svg.split("\n")[0]).toContain('width="512" height="512"');
       expect(svg).toContain("rgb(209,139,71)");
       expect(svg).toContain("rgb(232,171,111)");
       expect(svg).toContain("rgb(255,206,158)");
