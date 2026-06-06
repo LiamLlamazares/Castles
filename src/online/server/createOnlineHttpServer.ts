@@ -157,6 +157,7 @@ import {
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_REASONS,
   ONLINE_ACCOUNT_REPORT_STATUSES,
+  ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   parseOnlineAccountModerationReportStatusPatch,
   parseOnlineAccountReportInput,
@@ -166,8 +167,10 @@ import {
   type OnlineAccountModerationReport,
   type OnlineAccountModerationReportQueueResponse,
   type OnlineAccountModerationReportStatusResponse,
+  type OnlineAccountPublicRating,
   type OnlineAccountReportReason,
   type OnlineAccountReportStatus,
+  type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardScope,
   type OnlineAccountSocialActionResult,
 } from "../social";
@@ -218,6 +221,15 @@ const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 const RATING_LEADERBOARD_DEFAULT_LIMIT = 10;
 const RATING_LEADERBOARD_MAX_LIMIT = 50;
 const RATING_LEADERBOARD_SCOPES = new Set<OnlineRatingLeaderboardScope>(["global", "following"]);
+const RATING_LEADERBOARD_ENTRY_RESPONSE_KEYS = new Set(["schemaVersion", "displayName", "rating"]);
+const PUBLIC_RATING_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "rating",
+  "display",
+  "provisional",
+  "games",
+  "updatedAt",
+]);
 const MODERATION_REPORT_DEFAULT_LIMIT = 50;
 const MODERATION_REPORT_MAX_LIMIT = 100;
 const MODERATION_REPORT_RESPONSE_KEYS = new Set([
@@ -1373,6 +1385,56 @@ function isModerationDisplayName(value: unknown): value is string {
 
 function isModerationText(value: unknown, maxLength: number): value is string {
   return typeof value === "string" && value.length <= maxLength && !stringContainsDurableSecret(value);
+}
+
+function validatePublicRatingResponseShape(value: unknown): OnlineAccountPublicRating {
+  if (!isResponseRecord(value)) throw new Error("Public rating must be an object.");
+  assertAllowedResponseKeys(value, PUBLIC_RATING_RESPONSE_KEYS, "Public rating");
+  const { schemaVersion, rating, display, provisional, games, updatedAt } = value;
+  if (
+    schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION ||
+    typeof rating !== "number" ||
+    !Number.isSafeInteger(rating) ||
+    typeof display !== "string" ||
+    display.length === 0 ||
+    display.length > 16 ||
+    stringContainsDurableSecret(display) ||
+    typeof provisional !== "boolean" ||
+    typeof games !== "number" ||
+    !Number.isSafeInteger(games) ||
+    games < 0 ||
+    (updatedAt !== null && !isIsoTimestamp(updatedAt))
+  ) {
+    throw new Error("Public rating is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    rating,
+    display,
+    provisional,
+    games,
+    updatedAt,
+  };
+}
+
+function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRatingLeaderboardEntry {
+  if (!isResponseRecord(value)) throw new Error("Rating leaderboard entry must be an object.");
+  assertAllowedResponseKeys(
+    value,
+    RATING_LEADERBOARD_ENTRY_RESPONSE_KEYS,
+    "Rating leaderboard entry"
+  );
+  if (
+    value.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION ||
+    !isModerationDisplayName(value.displayName)
+  ) {
+    throw new Error("Rating leaderboard entry is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    displayName: value.displayName,
+    rating: validatePublicRatingResponseShape(value.rating),
+  };
 }
 
 function validateModerationReportResponseShape(value: unknown): OnlineAccountModerationReport {
@@ -3596,12 +3658,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       } else {
         entries = await accountStore.listRatingLeaderboard(parsed.limit);
       }
+      const responseEntries = entries.map(validateRatingLeaderboardEntryResponseShape);
       log({ event: "online.rating.leaderboard", status: "accepted" });
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         schemaVersion: ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
         scope: parsed.scope,
-        entries,
+        entries: responseEntries,
       });
     } catch (error) {
       console.error("Failed to load rating leaderboard", error);

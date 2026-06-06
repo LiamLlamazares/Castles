@@ -1317,6 +1317,56 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("Cleo");
   });
 
+  it("fails closed when rating leaderboard stores return unsupported internal response fields", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    const unsafeEntry = {
+      schemaVersion: 1,
+      displayName: "Ada",
+      accountId: "account_ada",
+      rating: {
+        schemaVersion: 1,
+        rating: 1620,
+        display: "1620",
+        provisional: false,
+        games: 8,
+        updatedAt: "2026-06-03T12:05:00.000Z",
+        engineId: "glicko2-beta-v1",
+        deviation: 80,
+        tokenHash: "account_session_hash",
+      },
+    };
+    vi.spyOn(accountStore, "listRatingLeaderboard").mockResolvedValue([unsafeEntry as any]);
+    vi.spyOn(accountStore, "listFollowingRatingLeaderboard").mockResolvedValue([unsafeEntry as any]);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+
+    const publicResponse = await fetch(`http://127.0.0.1:${port}/api/online/ratings/leaderboard`);
+    const followingResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/ratings/leaderboard?scope=following`,
+      { headers: bearer(liam.session.token) }
+    );
+    const bodies = [
+      await publicResponse.json(),
+      await followingResponse.json(),
+    ];
+
+    expect(publicResponse.status).toBe(503);
+    expect(followingResponse.status).toBe(503);
+    expect(bodies).toEqual([
+      { error: { code: "persistence_failed", message: "Rating leaderboard could not be loaded." } },
+      { error: { code: "persistence_failed", message: "Rating leaderboard could not be loaded." } },
+    ]);
+    expect(JSON.stringify(bodies)).not.toContain("account_ada");
+    expect(JSON.stringify(bodies)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(bodies)).not.toContain("account_session_hash");
+    expect(JSON.stringify(bodies)).not.toContain("tokenHash");
+  });
+
   it("accepts sanitized account reports and preserves moderation-only fields", async () => {
     const queryable = new FakePostgresAccountQueryable();
     const accountStore = createPostgresAccountStore(queryable);
