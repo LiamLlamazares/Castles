@@ -1205,6 +1205,18 @@
   overflow-wrap: anywhere;
 }
 
+.online-browser-head-to-head-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.online-browser-head-to-head-action-row .online-browser-button {
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
 .online-browser-lobby-listings {
   display: grid;
   gap: 10px;

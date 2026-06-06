@@ -3119,6 +3119,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const renderAccountHeadToHeadSummary = (summary: AccountHeadToHeadSummary) => {
     const accountDisplayName = account?.displayName ?? "You";
+    const opponentKey = normalizeDisplayNameKey(summary.opponentDisplayName);
+    const pendingChallenge = accountChallengeByOpponentDisplayName.get(opponentKey);
     return (
       <section
         className="online-browser-live-overview online-browser-head-to-head-summary"
@@ -3139,6 +3141,42 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         <div className="online-browser-live-stat online-browser-live-stat-wide">
           <span>Last game</span>
           <strong>Last game {summary.latestGame.gameId}</strong>
+          <div className="online-browser-head-to-head-action-row">
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => setSelectedArchiveDetailGame(summary.latestGame)}
+              aria-expanded={selectedArchiveDetailGame?.gameId === summary.latestGame.gameId}
+              aria-controls={archiveDetailPanelId(summary.latestGame.gameId)}
+              aria-label={`Show archive details for latest head-to-head game ${summary.latestGame.gameId}`}
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              className="online-browser-button primary"
+              onClick={() => onReplay(summary.latestGame.gameId)}
+              aria-label={`Analyze latest head-to-head replay ${summary.latestGame.gameId}`}
+            >
+              Analyze
+            </button>
+            {onChallengeAccount && !pendingChallenge ? (
+              <button
+                type="button"
+                className="online-browser-button neutral"
+                onClick={() => void runSocialChallengeAction(summary.opponentDisplayName, {
+                  intent: "rematch",
+                  sourceGameId: summary.latestGame.gameId,
+                })}
+                disabled={socialAction !== undefined}
+                aria-label={`Rematch ${summary.opponentDisplayName} from head-to-head summary ${summary.latestGame.gameId}`}
+              >
+                Rematch
+              </button>
+            ) : pendingChallenge ? (
+              <span className="online-game-action-note">Challenge pending</span>
+            ) : null}
+          </div>
         </div>
       </section>
     );

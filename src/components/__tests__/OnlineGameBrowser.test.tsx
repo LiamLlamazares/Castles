@@ -3660,6 +3660,8 @@ describe("OnlineGameBrowser", () => {
     const loadAccountHeadToHeadGames = vi.fn()
       .mockResolvedValueOnce(directory([liamWin, samirWin], "pair_cursor_2"))
       .mockResolvedValueOnce(directory([laterLiamWin]));
+    const onReplay = vi.fn();
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
 
     render(
       <OnlineGameBrowser
@@ -3668,7 +3670,8 @@ describe("OnlineGameBrowser", () => {
         loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
         onBack={vi.fn()}
         onSpectate={vi.fn()}
-        onReplay={vi.fn()}
+        onReplay={onReplay}
+        onChallengeAccount={onChallengeAccount}
         account={account}
         accountStatus="ready"
         {...socialPropsWithFollowing([
@@ -3691,6 +3694,23 @@ describe("OnlineGameBrowser", () => {
     expect(summaryCard).toHaveTextContent("Samir 1");
     expect(summaryCard).toHaveTextContent("Last game game_h2h_samir_win");
     expect(summaryCard).not.toHaveTextContent("game_h2h_other");
+    fireEvent.click(within(summaryCard).getByRole("button", {
+      name: "Show archive details for latest head-to-head game game_h2h_samir_win",
+    }));
+    expect(await screen.findByRole("region", {
+      name: "Archive details for game_h2h_samir_win",
+    })).toBeInTheDocument();
+    fireEvent.click(within(summaryCard).getByRole("button", {
+      name: "Analyze latest head-to-head replay game_h2h_samir_win",
+    }));
+    expect(onReplay).toHaveBeenCalledWith("game_h2h_samir_win");
+    fireEvent.click(within(summaryCard).getByRole("button", {
+      name: "Rematch Samir from head-to-head summary game_h2h_samir_win",
+    }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir", {
+      intent: "rematch",
+      sourceGameId: "game_h2h_samir_win",
+    }));
 
     const pairGames = screen.getByRole("region", { name: "Head-to-head games with Samir" });
     expect(within(pairGames).getByText("game_h2h_samir_win")).toBeInTheDocument();
