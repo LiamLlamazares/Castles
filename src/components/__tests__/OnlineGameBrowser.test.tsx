@@ -1868,6 +1868,40 @@ describe("OnlineGameBrowser", () => {
     expect(await within(challenges).findByText("Samir")).toBeInTheDocument();
   });
 
+  it("labels persisted rematch requests in account challenge rows", async () => {
+    const account = accountFixture("Liam");
+    const rematchSummary = accountChallengeSummary({
+      challengedIdentity: account.identity,
+      intent: "rematch",
+    } as Partial<OnlineChallengeSummary>);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Samir", { following: true })])}
+        loadAccountChallenges={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          ...accountChallengeDirectory([{ role: "challenged", summary: rematchSummary }]),
+        })}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    const rowLabel = await within(challenges).findByText("Samir");
+    const row = rowLabel.closest("article");
+
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByText("Incoming")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("Rematch")).toBeInTheDocument();
+  });
+
   it("emphasizes pending account challenges that expire soon", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-03T12:08:30.000Z"));

@@ -221,6 +221,24 @@ describe("online challenge event validation", () => {
     expect(validateOnlineChallengeEvent(event).ok).toBe(true);
   });
 
+  it("projects rematch intent from creation events into challenge summaries", () => {
+    const event = createdEvent({ intent: "rematch" } as unknown as Partial<Extract<OnlineChallengeEvent, { type: "challenge_created" }>>);
+
+    expect(validateOnlineChallengeEvent(event)).toMatchObject({
+      ok: true,
+      value: {
+        intent: "rematch",
+      },
+    });
+    const [summary] = projectOnlineChallengeSummaries([event]);
+
+    expect(summary).toMatchObject({
+      challengeId: "challenge_test",
+      intent: "rematch",
+    });
+    expect(validateOnlineChallengeSummary(summary).ok).toBe(true);
+  });
+
   it("requires immutable setup terms on challenge creation events", () => {
     const event = createdEvent({ setup: setupFixture({ timeControl: { initial: 12, increment: 3 } }) });
     const { setup: _missingSetup, ...missingSetup } = event;

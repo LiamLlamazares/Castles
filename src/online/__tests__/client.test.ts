@@ -2108,6 +2108,57 @@ describe("online client helpers", () => {
     });
   });
 
+  it("sends and accepts persisted rematch intent when creating account challenges", async () => {
+    const setup = snapshot().setup;
+    const challengeSummary = {
+      schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      challengeId: "challenge_rematch_123",
+      challengerIdentity: { kind: "registered", id: "registered:liam", displayName: "Liam" },
+      challengedIdentity: { kind: "registered", id: "registered:samir", displayName: "Samir" },
+      challengerSeat: "w",
+      visibility: "unlisted",
+      intent: "rematch",
+      setup,
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      expiresAt: "2026-06-04T12:00:00.000Z",
+      status: "pending",
+      lastEventId: "challenge_evt_created",
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        challengeId: "challenge_rematch_123",
+        summary: challengeSummary,
+        challenger: { url: "https://castles.example/?onlineChallenge=challenge_rematch_123&challengeRole=challenger" },
+        challenged: { url: "https://castles.example/?onlineChallenge=challenge_rematch_123&challengeRole=challenged" },
+      }),
+    });
+
+    await expect(
+      createOnlineChallenge(
+        setup,
+        {
+          challengerSeat: "w",
+          visibility: "unlisted",
+          challengedDisplayName: "Samir",
+          intent: "rematch",
+          account: { token: "account-token" },
+        } as Parameters<typeof createOnlineChallenge>[1],
+        fetchImpl as any
+      )
+    ).resolves.toMatchObject({
+      summary: {
+        challengeId: "challenge_rematch_123",
+        intent: "rematch",
+      },
+    });
+    expect(JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string)).toMatchObject({
+      challengedDisplayName: "Samir",
+      intent: "rematch",
+    });
+  });
+
   it("creates, fetches, cancels, lists, and accepts open seeks with validated responses", async () => {
     const baseSummary = {
       schemaVersion: 1,

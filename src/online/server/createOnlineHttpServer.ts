@@ -1768,6 +1768,11 @@ function normalizeChallengeVisibility(value: unknown): "private" | "unlisted" | 
   return value === "private" || value === "unlisted" ? value : null;
 }
 
+function normalizeChallengeIntent(value: unknown): "challenge" | "rematch" | null {
+  if (value === undefined) return "challenge";
+  return value === "challenge" || value === "rematch" ? value : null;
+}
+
 function normalizeGameVisibility(value: unknown): OnlinePlayerSettableGameVisibility | null {
   return isOnlinePlayerSettableGameVisibility(value) ? value : null;
 }
@@ -5734,6 +5739,13 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       });
       return;
     }
+    const intent = normalizeChallengeIntent(req.body?.intent);
+    if (!intent) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Challenge intent must be challenge or rematch." },
+      });
+      return;
+    }
     const expiry = parseChallengeExpiry(req.body?.expiresInMs);
     if (!expiry.ok) {
       res.status(400).json({ error: expiry.error });
@@ -5831,6 +5843,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             challengedIdentity,
             challengerSeat,
             visibility,
+            ...(intent === "rematch" ? { intent } : {}),
             setup: normalizedSetup,
             expiresAt,
           },

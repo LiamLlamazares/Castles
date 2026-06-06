@@ -4239,6 +4239,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           <strong>{opponentName}</strong>
                           <div className="online-browser-social-badges">
                             <span>{formatAccountChallengeRole(item.role)}</span>
+                            {item.summary.intent === "rematch" && <span>Rematch</span>}
                             <span>{formatAccountChallengeStatus(item)}</span>
                             <span>{formatChallengeSeatChoice(item, account)}</span>
                             {formatChallengeSetupSummary(item).map((detail) => (

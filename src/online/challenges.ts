@@ -16,6 +16,7 @@ export const ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION = 1;
 export type OnlineChallengeStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
 export type OnlineChallengeVisibility = "private" | "unlisted";
 export type OnlineChallengeSeat = "w" | "b" | "random";
+export type OnlineChallengeIntent = "challenge" | "rematch";
 export type OnlineAccountChallengeDirectoryState = "pending" | "all";
 export type OnlineAccountChallengeRole = "challenger" | "challenged";
 
@@ -38,6 +39,7 @@ export type OnlineChallengeEvent =
       challengedIdentity: OnlineIdentity;
       challengerSeat: OnlineChallengeSeat;
       visibility: OnlineChallengeVisibility;
+      intent?: OnlineChallengeIntent;
       setup: OnlineGameSetupDTO;
       expiresAt: string;
     })
@@ -76,6 +78,7 @@ export interface OnlineChallengeSummary {
   challengedIdentity: OnlineIdentity;
   challengerSeat: OnlineChallengeSeat;
   visibility: OnlineChallengeVisibility;
+  intent?: OnlineChallengeIntent;
   setup: OnlineGameSetupDTO;
   createdAt: string;
   updatedAt: string;
@@ -108,6 +111,7 @@ export interface OnlineAccountChallengeDirectoryResponse {
 const MAX_ID_LENGTH = 128;
 const CHALLENGE_VISIBILITIES = new Set<OnlineChallengeVisibility>(["private", "unlisted"]);
 const CHALLENGE_SEATS = new Set<OnlineChallengeSeat>(["w", "b", "random"]);
+const CHALLENGE_INTENTS = new Set<OnlineChallengeIntent>(["challenge", "rematch"]);
 export const ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_STATES = new Set<OnlineAccountChallengeDirectoryState>([
   "pending",
   "all",
@@ -126,6 +130,7 @@ const CHALLENGE_SUMMARY_KEYS = new Set([
   "challengedIdentity",
   "challengerSeat",
   "visibility",
+  "intent",
   "setup",
   "createdAt",
   "updatedAt",
@@ -196,6 +201,14 @@ function isChallengeSeat(value: unknown): value is OnlineChallengeSeat {
 
 function isChallengeVisibility(value: unknown): value is OnlineChallengeVisibility {
   return typeof value === "string" && CHALLENGE_VISIBILITIES.has(value as OnlineChallengeVisibility);
+}
+
+function validateChallengeIntent(value: unknown, label: string): ValidationResult<OnlineChallengeIntent | undefined> {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (typeof value === "string" && CHALLENGE_INTENTS.has(value as OnlineChallengeIntent)) {
+    return { ok: true, value: value as OnlineChallengeIntent };
+  }
+  return bad(`${label} must be challenge or rematch.`);
 }
 
 function createEnvelope(
@@ -339,6 +352,8 @@ export function validateOnlineChallengeEvent(value: unknown): ValidationResult<O
     if (!isChallengeVisibility(value.visibility)) {
       return bad("event.visibility must be private or unlisted.");
     }
+    const intent = validateChallengeIntent(value.intent, "event.intent");
+    if (!intent.ok) return intent;
     const setup = validateOnlineGameSetup(value.setup);
     if (!setup.ok) return setup;
     if (!isIsoDateString(value.expiresAt)) {
@@ -357,6 +372,7 @@ export function validateOnlineChallengeEvent(value: unknown): ValidationResult<O
         challengedIdentity: challengedIdentity.value,
         challengerSeat: value.challengerSeat,
         visibility: value.visibility,
+        ...(intent.value ? { intent: intent.value } : {}),
         setup: setup.value,
         expiresAt: value.expiresAt,
       },
@@ -534,6 +550,7 @@ export function projectOnlineChallengeSummaries(
         challengedIdentity: event.challengedIdentity,
         challengerSeat: event.challengerSeat,
         visibility: event.visibility,
+        ...(event.intent ? { intent: event.intent } : {}),
         setup: event.setup,
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
@@ -675,6 +692,8 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
   if (!isChallengeVisibility(value.visibility)) {
     return bad("summary.visibility must be private or unlisted.");
   }
+  const intent = validateChallengeIntent(value.intent, "summary.intent");
+  if (!intent.ok) return intent;
   const setup = validateOnlineGameSetup(value.setup);
   if (!setup.ok) return setup;
   if (!isIsoDateString(value.createdAt)) {
@@ -725,6 +744,7 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
     challengedIdentity: challengedIdentity.value,
     challengerSeat: value.challengerSeat,
     visibility: value.visibility,
+    ...(intent.value ? { intent: intent.value } : {}),
     setup: setup.value,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,

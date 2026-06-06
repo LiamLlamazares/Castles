@@ -5,6 +5,7 @@ import {
   type OnlineAccountChallengeDirectoryResponse,
   type OnlineAccountChallengeDirectoryState,
   type OnlineAccountChallengeListItem,
+  type OnlineChallengeIntent,
   type OnlineChallengeSummary,
 } from "./challenges";
 import { validateOnlineGameSnapshot } from "./protocol";
@@ -1697,6 +1698,7 @@ export async function createOnlineChallenge(
   options: {
     challengerSeat?: "w" | "b" | "random";
     visibility?: "private" | "unlisted";
+    intent?: OnlineChallengeIntent;
     challengedDisplayName?: string;
     account?: OnlineAccountSessionParams;
   } = {},

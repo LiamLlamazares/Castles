@@ -5513,6 +5513,76 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("persists targeted account rematch intent in account challenge directories", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "samir",
+        intent: "rematch",
+      }),
+    });
+    const created = await createResponse.json();
+    const challengerDirectoryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges?state=all`,
+      { headers: bearer(liam.session.token) }
+    );
+    const challengedDirectoryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges?state=all`,
+      { headers: bearer(samir.session.token) }
+    );
+    const challengerDirectory = await challengerDirectoryResponse.json();
+    const challengedDirectory = await challengedDirectoryResponse.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(created.summary).toMatchObject({
+      challengeId: created.challengeId,
+      intent: "rematch",
+      challengerIdentity: redactedRegisteredIdentity(liam),
+      challengedIdentity: redactedRegisteredIdentity(samir),
+    });
+    expect(challengerDirectoryResponse.status).toBe(200);
+    expect(challengedDirectoryResponse.status).toBe(200);
+    expect(challengerDirectory.challenges).toEqual([
+      expect.objectContaining({
+        role: "challenger",
+        summary: expect.objectContaining({
+          challengeId: created.challengeId,
+          intent: "rematch",
+        }),
+      }),
+    ]);
+    expect(challengedDirectory.challenges).toEqual([
+      expect.objectContaining({
+        role: "challenged",
+        summary: expect.objectContaining({
+          challengeId: created.challengeId,
+          intent: "rematch",
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(challengerDirectory)).not.toContain(fragmentChallengeToken(created.challenged.url));
+    expect(JSON.stringify(challengedDirectory)).not.toContain(fragmentChallengeToken(created.challenger.url));
+  });
+
   it("rate limits repeat targeted account challenges while one is pending", async () => {
     let now = Date.parse("2026-06-01T12:00:00.000Z");
     const { server } = createOnlineHttpServer({
