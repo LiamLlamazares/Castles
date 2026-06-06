@@ -156,6 +156,7 @@ import {
 import {
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_REASONS,
+  ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_STATUSES,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
@@ -169,6 +170,7 @@ import {
   type OnlineAccountModerationReportStatusResponse,
   type OnlineAccountPublicRating,
   type OnlineAccountReportReason,
+  type OnlineAccountReportSummary,
   type OnlineAccountReportStatus,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardScope,
@@ -229,6 +231,12 @@ const PUBLIC_RATING_RESPONSE_KEYS = new Set([
   "provisional",
   "games",
   "updatedAt",
+]);
+const ACCOUNT_REPORT_SUMMARY_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "targetDisplayName",
+  "reason",
+  "createdAt",
 ]);
 const MODERATION_REPORT_DEFAULT_LIMIT = 50;
 const MODERATION_REPORT_MAX_LIMIT = 100;
@@ -1434,6 +1442,25 @@ function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRati
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: value.displayName,
     rating: validatePublicRatingResponseShape(value.rating),
+  };
+}
+
+function validateAccountReportSummaryResponseShape(value: unknown): OnlineAccountReportSummary {
+  if (!isResponseRecord(value)) throw new Error("Account report summary must be an object.");
+  assertAllowedResponseKeys(value, ACCOUNT_REPORT_SUMMARY_RESPONSE_KEYS, "Account report summary");
+  if (
+    value.schemaVersion !== ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION ||
+    !isModerationDisplayName(value.targetDisplayName) ||
+    !ONLINE_ACCOUNT_REPORT_REASONS.has(value.reason as OnlineAccountReportReason) ||
+    !isIsoTimestamp(value.createdAt)
+  ) {
+    throw new Error("Account report summary is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
+    targetDisplayName: value.targetDisplayName,
+    reason: value.reason as OnlineAccountReportReason,
+    createdAt: value.createdAt,
   };
 }
 
@@ -4011,10 +4038,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         res.status(failure.status).json({ error: failure.error });
         return;
       }
+      const report = validateAccountReportSummaryResponseShape(result.report);
       log({ event: "online.account.report", status: "accepted" });
       res.status(201).json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
-        report: result.report,
+        report,
       });
     } catch (error) {
       console.error("Failed to submit account report", error);

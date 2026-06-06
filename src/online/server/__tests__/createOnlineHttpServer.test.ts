@@ -1447,6 +1447,48 @@ describe("createOnlineHttpServer", () => {
     expect(queryable.reports).toHaveLength(1);
   });
 
+  it("fails closed when account report stores return unsupported internal response fields", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    await createAccountViaApi(port, "Samir");
+    vi.spyOn(accountStore, "submitAccountReport").mockResolvedValue({
+      status: "ok",
+      report: {
+        schemaVersion: 1,
+        targetDisplayName: "Samir",
+        reason: "abuse",
+        createdAt: "2026-06-03T12:05:00.000Z",
+        reportId: "report_private",
+        targetAccountId: "account_samir",
+        details: "private moderation details",
+        tokenHash: "account_session_hash",
+      } as any,
+    });
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({ reason: "abuse", details: "Hostile challenge message." }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      error: { code: "persistence_failed", message: "Account report could not be submitted." },
+    });
+    expect(JSON.stringify(body)).not.toContain("report_private");
+    expect(JSON.stringify(body)).not.toContain("account_samir");
+    expect(JSON.stringify(body)).not.toContain("private moderation details");
+    expect(JSON.stringify(body)).not.toContain("account_session_hash");
+    expect(JSON.stringify(body)).not.toContain("tokenHash");
+  });
+
   it("keeps the admin report queue hidden unless an admin bearer token is configured", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
