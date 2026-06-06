@@ -4510,6 +4510,62 @@ describe("createOnlineHttpServer", () => {
     await expect(listResponse.json()).resolves.toMatchObject({ seeks: [] });
   });
 
+  it("rejects token-bearing open seek owner query strings even with bearer auth", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+
+    const queryOnlyResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}?token=${created.creator.token}`
+    );
+    expect(queryOnlyResponse.status).toBe(404);
+
+    const refreshResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}?token=leaked-seek-token`,
+      { headers: bearer(created.creator.token) }
+    );
+    const refreshBody = await refreshResponse.json();
+    const cancelResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/cancel?token=leaked-seek-token`,
+      { method: "POST", headers: bearer(created.creator.token) }
+    );
+    const cancelBody = await cancelResponse.json();
+
+    expect(refreshResponse.status).toBe(400);
+    expect(refreshBody.error).toMatchObject({
+      code: "bad_request",
+      message: "Open seek action query is invalid.",
+    });
+    expect(cancelResponse.status).toBe(400);
+    expect(cancelBody.error).toMatchObject({
+      code: "bad_request",
+      message: "Open seek action query is invalid.",
+    });
+
+    const cleanRefreshResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}`,
+      { headers: bearer(created.creator.token) }
+    );
+    const cleanRefresh = await cleanRefreshResponse.json();
+    expect(cleanRefreshResponse.status).toBe(200);
+    expect(cleanRefresh.summary.status).toBe("open");
+  });
+
   it("rejects sensitive public seek directory queries and creator self-accept", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

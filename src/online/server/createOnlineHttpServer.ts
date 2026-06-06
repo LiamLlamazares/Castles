@@ -641,6 +641,15 @@ function validateGameActionQuery(originalUrl: string):
     : { ok: false, message: "Game action query is invalid." };
 }
 
+function validateOpenSeekActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Open seek action query is invalid." };
+}
+
 function parseAccountChallengeDirectoryOptions(
   originalUrl: string
 ): { ok: true; state: OnlineAccountChallengeDirectoryState } | { ok: false; message: string } {
@@ -4857,6 +4866,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         res.status(auth.status).json({ error: auth.error });
         return;
       }
+      const query = validateOpenSeekActionQuery(req.originalUrl);
+      if (!query.ok) {
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
+        return;
+      }
       const summary = await expireOpenSeekIfNeeded(auth.summary);
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -4887,6 +4901,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       const auth = await getAuthorizedOpenSeek(req);
       if (!auth.ok) {
         res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const query = validateOpenSeekActionQuery(req.originalUrl);
+      if (!query.ok) {
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
         return;
       }
       const cancelledAt = new Date(options.now?.() ?? Date.now()).toISOString();
