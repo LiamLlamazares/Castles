@@ -5173,6 +5173,45 @@ describe("OnlineGameBrowser", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Listed for accounts you follow.");
   });
 
+  it("lets signed-in players list the current setup for invited accounts only", async () => {
+    const onCreateSeek = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([
+          openSeek({
+            seekId: "seek_invited_samir",
+            visibility: "invited",
+            invitedDisplayNames: ["Samir"],
+          }),
+        ]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        onCreateSeek={onCreateSeek}
+      />
+    );
+
+    const inviteeInput = await screen.findByRole("textbox", { name: "Invite account to lobby listing" });
+    fireEvent.change(inviteeInput, { target: { value: " Samir " } });
+    const invitedButton = screen.getByRole("button", {
+      name: "Create invite-only lobby listing from current Play setup",
+    });
+    expect(invitedButton).toHaveTextContent("List for Invited Account");
+
+    fireEvent.click(invitedButton);
+
+    await waitFor(() => {
+      expect(onCreateSeek).toHaveBeenCalledWith("invited", { invitedDisplayNames: ["Samir"] });
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Listed for Samir.");
+    const listing = screen.getByRole("article", { name: /Lobby listing seek_invited_samir/i });
+    expect(listing).toHaveTextContent("Invite-only");
+    expect(listing).toHaveTextContent("Invited Samir");
+  });
+
   it("surfaces trusted server errors when listing the current setup fails", async () => {
     const onCreateSeek = vi.fn().mockRejectedValue(
       new OnlineRequestError(

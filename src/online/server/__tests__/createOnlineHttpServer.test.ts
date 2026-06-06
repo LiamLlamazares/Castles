@@ -856,7 +856,7 @@ describe("createOnlineHttpServer", () => {
     const seek = await createSeekResponse.json();
 
     expect(createSeekResponse.status).toBe(201);
-    expect(seek.summary.creatorIdentity).toEqual(account.account.identity);
+    expect(seek.summary.creatorIdentity).toEqual(redactedRegisteredIdentity(account));
   });
 
   it("requires account passwords and signs in from a second device", async () => {
@@ -3921,7 +3921,7 @@ describe("createOnlineHttpServer", () => {
     expect(followedResponse.status).toBe(201);
     expect(followedSeek.summary).toMatchObject({
       visibility: "followed",
-      creatorIdentity: liam.account.identity,
+      creatorIdentity: redactedRegisteredIdentity(liam),
     });
 
     const anonymousList = await fetch(`http://127.0.0.1:${port}/api/online/seeks?limit=1`);
@@ -3991,6 +3991,120 @@ describe("createOnlineHttpServer", () => {
         visibility: "followed",
       },
     });
+  });
+
+  it("shows and accepts invited open seeks only for named invitees and the creator", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        visibility: "invited",
+        invitedDisplayNames: ["samir"],
+      }),
+    });
+    const created = await createResponse.json();
+
+    const anonymousList = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
+    const anonymousBody = await anonymousList.json();
+    const creatorList = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      headers: bearer(liam.session.token),
+    });
+    const creatorBody = await creatorList.json();
+    const inviteeList = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      headers: bearer(samir.session.token),
+    });
+    const inviteeBody = await inviteeList.json();
+    const unrelatedList = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      headers: bearer(dani.session.token),
+    });
+    const unrelatedBody = await unrelatedList.json();
+
+    const unrelatedAccept = await fetch(`http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(dani.session.token) },
+      body: JSON.stringify({}),
+    });
+    const inviteeAccept = await fetch(`http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+      body: JSON.stringify({}),
+    });
+    const accepted = await inviteeAccept.json();
+
+    expect(createResponse.status).toBe(201);
+    expect(created.summary).toMatchObject({
+      visibility: "invited",
+      invitedDisplayNames: ["Samir"],
+    });
+    expect(JSON.stringify(created)).not.toContain(samir.account.accountId);
+    expect(anonymousBody.seeks).toHaveLength(0);
+    expect(creatorBody.seeks.map((seek: OpenSeekSummary) => seek.seekId)).toContain(created.seekId);
+    expect(inviteeBody.seeks.map((seek: OpenSeekSummary) => seek.seekId)).toContain(created.seekId);
+    expect(unrelatedBody.seeks).toHaveLength(0);
+    expect(JSON.stringify(unrelatedBody)).not.toContain(created.seekId);
+    expect(unrelatedAccept.status).toBe(404);
+    expect(inviteeAccept.status).toBe(200);
+    expect(accepted).toMatchObject({
+      role: "acceptor",
+      summary: {
+        seekId: created.seekId,
+        status: "accepted",
+        visibility: "invited",
+        invitedDisplayNames: ["Samir"],
+      },
+    });
+    expect(JSON.stringify(accepted)).not.toContain(samir.account.accountId);
+  });
+
+  it("rejects invited open seeks from anonymous creators or unknown invitees", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const liam = await createAccountViaApi(port, "Liam");
+
+    const anonymousCreate = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        creatorSessionId: "session_creator",
+        visibility: "invited",
+        invitedDisplayNames: ["Samir"],
+      }),
+    });
+    const unknownInvitee = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "random",
+        visibility: "invited",
+        invitedDisplayNames: ["NoSuchPlayer"],
+      }),
+    });
+
+    expect(anonymousCreate.status).toBe(400);
+    expect((await anonymousCreate.json()).error.message).toContain("registered account");
+    expect(unknownInvitee.status).toBe(404);
+    expect((await unknownInvitee.json()).error.message).toContain("No invited account was found");
   });
 
   it("rejects followed-only open seeks from anonymous creators", async () => {

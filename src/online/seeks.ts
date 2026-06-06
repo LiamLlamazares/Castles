@@ -1,3 +1,7 @@
+import {
+  normalizeOnlineAccountDisplayName,
+  normalizeOnlineAccountDisplayNameKey,
+} from "./accounts";
 import { validateOnlineIdentity, type OnlineIdentity } from "./identity";
 import { containsDurableSecret, stringContainsDurableSecret } from "./secretSafety";
 import type { OnlineGameSetupDTO, OnlineRatingMode } from "./types";
@@ -8,10 +12,11 @@ export const ONLINE_SEEK_SUMMARY_SCHEMA_VERSION = 1;
 export const ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION = 1;
 export const ONLINE_SEEK_DIRECTORY_DEFAULT_LIMIT = 25;
 export const ONLINE_SEEK_DIRECTORY_MAX_LIMIT = 100;
+export const ONLINE_SEEK_INVITED_DISPLAY_NAMES_MAX = 8;
 
 export type OpenSeekSeat = "w" | "b" | "random";
 export type OpenSeekStatus = "open" | "accepted" | "cancelled" | "expired";
-export type OpenSeekVisibility = "public" | "followed";
+export type OpenSeekVisibility = "public" | "followed" | "invited";
 export type OpenSeekDirectoryState = "open";
 export type OpenSeekDirectoryClockFilter = "timed" | "casual";
 export type OpenSeekDirectoryVpFilter = "enabled" | "disabled";
@@ -31,6 +36,7 @@ export type OpenSeekEvent =
       creatorSeat: OpenSeekSeat;
       setup: OnlineGameSetupDTO;
       visibility?: OpenSeekVisibility;
+      invitedDisplayNames?: string[];
       expiresAt: string;
     })
   | (OpenSeekEventEnvelope & {
@@ -62,6 +68,7 @@ export interface OpenSeekSummary {
   creatorSeat: OpenSeekSeat;
   setup: OnlineGameSetupDTO;
   visibility?: OpenSeekVisibility;
+  invitedDisplayNames?: string[];
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
@@ -102,7 +109,7 @@ export interface OpenSeekDirectoryResponse {
 const MAX_ID_LENGTH = 128;
 const SEEK_SEATS = new Set<OpenSeekSeat>(["w", "b", "random"]);
 const SEEK_STATUSES = new Set<OpenSeekStatus>(["open", "accepted", "cancelled", "expired"]);
-const SEEK_VISIBILITIES = new Set<OpenSeekVisibility>(["public", "followed"]);
+const SEEK_VISIBILITIES = new Set<OpenSeekVisibility>(["public", "followed", "invited"]);
 export const OPEN_SEEK_DIRECTORY_STATES = new Set<OpenSeekDirectoryState>(["open"]);
 export const OPEN_SEEK_DIRECTORY_CLOCK_FILTERS = new Set<OpenSeekDirectoryClockFilter>([
   "timed",
@@ -146,6 +153,46 @@ function timestamp(value: string): number {
 
 function validateIdentityField(value: unknown, label: string): ValidationResult<OnlineIdentity> {
   return validateOnlineIdentity(value, label);
+}
+
+function validateInvitedDisplayNames(
+  value: unknown,
+  label: string
+): ValidationResult<string[] | undefined> {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!Array.isArray(value)) return bad(`${label} must be a list.`);
+  if (value.length === 0 || value.length > ONLINE_SEEK_INVITED_DISPLAY_NAMES_MAX) {
+    return bad(`${label} must include 1-${ONLINE_SEEK_INVITED_DISPLAY_NAMES_MAX} display names.`);
+  }
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const displayName = normalizeOnlineAccountDisplayName(entry);
+    if (!displayName.ok) return bad(`${label} contains an invalid display name.`);
+    const key = normalizeOnlineAccountDisplayNameKey(displayName.value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(displayName.value);
+  }
+  if (normalized.length === 0) {
+    return bad(`${label} must include at least one display name.`);
+  }
+  return { ok: true, value: normalized };
+}
+
+function validateInviteListForVisibility(
+  visibility: OpenSeekVisibility,
+  invitedDisplayNames: string[] | undefined,
+  label: string
+): ValidationResult<string[] | undefined> {
+  if (visibility === "invited") {
+    if (!invitedDisplayNames?.length) return bad(`${label} is required for invited open seeks.`);
+    return { ok: true, value: invitedDisplayNames };
+  }
+  if (invitedDisplayNames !== undefined) {
+    return bad(`${label} is only allowed for invited open seeks.`);
+  }
+  return { ok: true, value: undefined };
 }
 
 function createEnvelope(metadata: Partial<OpenSeekEventEnvelope> = {}): OpenSeekEventEnvelope {
@@ -247,8 +294,20 @@ export function validateOpenSeekEvent(value: unknown): ValidationResult<OpenSeek
     const setup = validateOnlineGameSetup(value.setup);
     if (!setup.ok) return setup;
     if (value.visibility !== undefined && !SEEK_VISIBILITIES.has(value.visibility as OpenSeekVisibility)) {
-      return bad("event.visibility must be public or followed.");
+      return bad("event.visibility must be public, followed, or invited.");
     }
+    const visibility = (value.visibility as OpenSeekVisibility | undefined) ?? "public";
+    const invitedDisplayNames = validateInvitedDisplayNames(
+      value.invitedDisplayNames,
+      "event.invitedDisplayNames"
+    );
+    if (!invitedDisplayNames.ok) return invitedDisplayNames;
+    const inviteList = validateInviteListForVisibility(
+      visibility,
+      invitedDisplayNames.value,
+      "event.invitedDisplayNames"
+    );
+    if (!inviteList.ok) return inviteList;
     if (!isIsoDateString(value.expiresAt)) return bad("event.expiresAt must be a valid timestamp.");
     if (timestamp(value.expiresAt) <= timestamp(envelope.value.createdAt)) {
       return bad("event.expiresAt must be later than event.createdAt.");
@@ -262,7 +321,8 @@ export function validateOpenSeekEvent(value: unknown): ValidationResult<OpenSeek
         creatorIdentity: creatorIdentity.value,
         creatorSeat: value.creatorSeat as OpenSeekSeat,
         setup: setup.value,
-        visibility: (value.visibility as OpenSeekVisibility | undefined) ?? "public",
+        visibility,
+        ...(inviteList.value ? { invitedDisplayNames: inviteList.value } : {}),
         expiresAt: value.expiresAt,
       },
     };
@@ -401,6 +461,7 @@ export function projectOpenSeekSummaries(events: OpenSeekEvent[]): OpenSeekSumma
         creatorSeat: event.creatorSeat,
         setup: event.setup,
         visibility: event.visibility ?? "public",
+        ...(event.invitedDisplayNames ? { invitedDisplayNames: event.invitedDisplayNames } : {}),
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
         expiresAt: event.expiresAt,
@@ -504,8 +565,19 @@ export function validateOpenSeekSummary(value: unknown): ValidationResult<OpenSe
   const visibility =
     value.visibility === undefined ? "public" : value.visibility;
   if (!SEEK_VISIBILITIES.has(visibility as OpenSeekVisibility)) {
-    return bad("summary.visibility must be public or followed.");
+    return bad("summary.visibility must be public, followed, or invited.");
   }
+  const invitedDisplayNames = validateInvitedDisplayNames(
+    value.invitedDisplayNames,
+    "summary.invitedDisplayNames"
+  );
+  if (!invitedDisplayNames.ok) return invitedDisplayNames;
+  const inviteList = validateInviteListForVisibility(
+    visibility as OpenSeekVisibility,
+    invitedDisplayNames.value,
+    "summary.invitedDisplayNames"
+  );
+  if (!inviteList.ok) return inviteList;
   if (!isIsoDateString(value.createdAt)) return bad("summary.createdAt must be a valid timestamp.");
   if (!isIsoDateString(value.updatedAt)) return bad("summary.updatedAt must be a valid timestamp.");
   if (!isIsoDateString(value.expiresAt)) return bad("summary.expiresAt must be a valid timestamp.");
@@ -552,6 +624,7 @@ export function validateOpenSeekSummary(value: unknown): ValidationResult<OpenSe
     creatorSeat: value.creatorSeat as OpenSeekSeat,
     setup: setup.value,
     visibility: visibility as OpenSeekVisibility,
+    ...(inviteList.value ? { invitedDisplayNames: inviteList.value } : {}),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     expiresAt: value.expiresAt,

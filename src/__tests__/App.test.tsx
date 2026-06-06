@@ -379,7 +379,10 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     initialTab?: string;
     activeTab?: "lobby" | "watch" | "archive";
     onTabChange?: (tab: "lobby" | "watch" | "archive") => void;
-    onCreateSeek?: (visibility?: "public" | "followed") => void;
+    onCreateSeek?: (
+      visibility?: "public" | "followed" | "invited",
+      options?: { invitedDisplayNames?: string[] }
+    ) => void;
     onAcceptSeek?: (seekId: string) => void;
     onCancelSeek?: (seekId: string) => void;
     onQuickMatch?: () => "matched" | "waiting" | void | Promise<"matched" | "waiting" | void>;

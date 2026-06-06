@@ -2408,6 +2408,57 @@ describe("online client helpers", () => {
     );
   });
 
+  it("sends invited open seek visibility with display-name invitees only in the POST body", async () => {
+    const setup = snapshot().setup;
+    const account = { token: "account-token" };
+    const invitedSummary = {
+      schemaVersion: 1,
+      seekId: "seek_invited",
+      creatorIdentity: { kind: "registered", id: "registered:liam", displayName: "Liam" },
+      creatorSeat: "random",
+      setup,
+      visibility: "invited",
+      invitedDisplayNames: ["Samir"],
+      createdAt: "2026-06-01T12:00:00.000Z",
+      updatedAt: "2026-06-01T12:00:00.000Z",
+      expiresAt: "2026-06-01T12:10:00.000Z",
+      status: "open",
+      lastEventId: "seek_evt_invited",
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        seekId: "seek_invited",
+        summary: invitedSummary,
+        creator: { token: "creator-token" },
+      }),
+    });
+
+    await createOpenSeek(
+      setup,
+      { creatorSeat: "random", visibility: "invited", invitedDisplayNames: ["Samir"], account },
+      fetchImpl as any
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/online/seeks",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer account-token",
+        },
+      })
+    );
+    const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).toMatchObject({
+      visibility: "invited",
+      invitedDisplayNames: ["Samir"],
+    });
+    expect(JSON.stringify(body)).not.toContain("account-token");
+  });
+
   it("starts quick match and validates matched and waiting outcomes", async () => {
     const setup = snapshot().setup;
     const baseSummary = {

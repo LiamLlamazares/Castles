@@ -73,6 +73,7 @@ import {
 } from "../readModel";
 import {
   ONLINE_SEEK_DIRECTORY_DEFAULT_LIMIT,
+  ONLINE_SEEK_INVITED_DISPLAY_NAMES_MAX,
   ONLINE_SEEK_DIRECTORY_MAX_LIMIT,
   ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
   OPEN_SEEK_DIRECTORY_CLOCK_FILTERS,
@@ -780,6 +781,24 @@ function redactAccountResponseGameDirectory(response: OnlineGameDirectoryRespons
   };
 }
 
+function redactOpenSeekSummary(summary: OpenSeekSummary): OpenSeekSummary {
+  return {
+    ...summary,
+    creatorIdentity: redactAccountResponseIdentity(summary.creatorIdentity),
+    ...(summary.acceptedBy ? { acceptedBy: redactAccountResponseIdentity(summary.acceptedBy) } : {}),
+    ...(summary.whiteIdentity ? { whiteIdentity: redactAccountResponseIdentity(summary.whiteIdentity) } : {}),
+    ...(summary.blackIdentity ? { blackIdentity: redactAccountResponseIdentity(summary.blackIdentity) } : {}),
+    ...(summary.cancelledBy ? { cancelledBy: redactAccountResponseIdentity(summary.cancelledBy) } : {}),
+  };
+}
+
+function redactOpenSeekDirectory(response: OpenSeekDirectoryResponse): OpenSeekDirectoryResponse {
+  return {
+    ...response,
+    seeks: response.seeks.map(redactOpenSeekSummary),
+  };
+}
+
 function validateDirectChallengeActionQuery(originalUrl: string):
   | { ok: true }
   | { ok: false; message: string } {
@@ -1363,7 +1382,47 @@ function normalizeOpenSeekSeat(value: unknown): "w" | "b" | "random" | null {
 
 function normalizeOpenSeekVisibility(value: unknown): OpenSeekVisibility | null {
   if (value === undefined) return "public";
-  return value === "public" || value === "followed" ? value : null;
+  return value === "public" || value === "followed" || value === "invited" ? value : null;
+}
+
+function normalizeOpenSeekInvitedDisplayNames(value: unknown):
+  | { ok: true; displayNames: string[] | undefined }
+  | { ok: false; error: OnlineReject } {
+  if (value === undefined) return { ok: true, displayNames: undefined };
+  if (!Array.isArray(value)) {
+    return {
+      ok: false,
+      error: { code: "bad_request", message: "Invited lobby listings require a display-name list." },
+    };
+  }
+  if (value.length === 0 || value.length > ONLINE_SEEK_INVITED_DISPLAY_NAMES_MAX) {
+    return {
+      ok: false,
+      error: {
+        code: "bad_request",
+        message: `Invited lobby listings require 1-${ONLINE_SEEK_INVITED_DISPLAY_NAMES_MAX} display names.`,
+      },
+    };
+  }
+  const displayNames: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const displayName = normalizeOnlineAccountDisplayName(entry);
+    if (!displayName.ok) {
+      return { ok: false, error: displayName.error };
+    }
+    const key = normalizeOnlineAccountDisplayNameKey(displayName.value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    displayNames.push(displayName.value);
+  }
+  if (displayNames.length === 0) {
+    return {
+      ok: false,
+      error: { code: "bad_request", message: "Invited lobby listings require at least one display name." },
+    };
+  }
+  return { ok: true, displayNames };
 }
 
 function normalizeDirectGameCreatorSeat(value: unknown): "w" | "b" | null {
@@ -1944,10 +2003,24 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     summary: OpenSeekSummary,
     viewerAccount: OnlineAccount | null
   ): Promise<boolean> => {
-    if ((summary.visibility ?? "public") === "public") return true;
+    const visibility = summary.visibility ?? "public";
+    if (visibility === "public") return true;
     if (summary.creatorIdentity.kind !== "registered") return false;
     if (!viewerAccount) return false;
     if (isSameOpenSeekIdentity(viewerAccount.identity, summary.creatorIdentity)) return true;
+    if (visibility === "invited") {
+      if (!summary.invitedDisplayNames?.length || !summary.creatorIdentity.displayName) return false;
+      const viewerDisplayNameKey = normalizeOnlineAccountDisplayNameKey(viewerAccount.displayName);
+      const invited = summary.invitedDisplayNames.some(
+        (displayName) => normalizeOnlineAccountDisplayNameKey(displayName) === viewerDisplayNameKey
+      );
+      if (!invited) return false;
+      const creatorProfile = await accountStore.getProfileForDisplayName(
+        viewerAccount.accountId,
+        summary.creatorIdentity.displayName
+      );
+      return creatorProfile !== null && creatorProfile.relationship.blocked !== true;
+    }
     if (!summary.creatorIdentity.displayName) return false;
     const creatorProfile = await accountStore.getProfileForDisplayName(
       viewerAccount.accountId,
@@ -1968,6 +2041,56 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
     }
     return visible;
+  };
+
+  const resolveOpenSeekInvitedDisplayNames = async (
+    creatorAccount: OnlineAccount | null,
+    requestedDisplayNames: string[] | undefined
+  ): Promise<
+    | { ok: true; displayNames: string[] | undefined }
+    | { ok: false; status: number; error: OnlineReject }
+  > => {
+    if (!requestedDisplayNames) return { ok: true, displayNames: undefined };
+    if (!creatorAccount) {
+      return {
+        ok: false,
+        status: 400,
+        error: {
+          code: "bad_request",
+          message: "Invited lobby listings require a registered account creator.",
+        },
+      };
+    }
+    const displayNames: string[] = [];
+    const seen = new Set<string>();
+    for (const requested of requestedDisplayNames) {
+      const profile = await accountStore.getProfileForDisplayName(creatorAccount.accountId, requested);
+      if (!profile || profile.relationship.self || profile.relationship.blocked) {
+        return {
+          ok: false,
+          status: 404,
+          error: {
+            code: "not_found",
+            message: "No invited account was found for that lobby listing.",
+          },
+        };
+      }
+      const key = normalizeOnlineAccountDisplayNameKey(profile.displayName);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      displayNames.push(profile.displayName);
+    }
+    if (displayNames.length === 0) {
+      return {
+        ok: false,
+        status: 400,
+        error: {
+          code: "bad_request",
+          message: "Invited lobby listings require at least one display name.",
+        },
+      };
+    }
+    return { ok: true, displayNames };
   };
 
   const parseProfileDisplayNameParam = (raw: unknown): string | null => {
@@ -2925,6 +3048,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     creatorSeat: OpenSeekSeat,
     creatorIdentity: PublicPlayerIdentity,
     visibility: OpenSeekVisibility,
+    invitedDisplayNames: string[] | undefined,
     expiresInMs: number,
     createdAt: string
   ): Promise<{ seekId: string; summary: OpenSeekSummary; token: string }> => {
@@ -2942,6 +3066,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         creatorSeat,
         setup,
         visibility,
+        ...(invitedDisplayNames ? { invitedDisplayNames } : {}),
         expiresAt,
       },
       { createdAt }
@@ -3241,7 +3366,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return {
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       role: "acceptor" as const,
-      summary: result.seekSummary,
+      summary: redactOpenSeekSummary(result.seekSummary),
       gameInvite: {
         gameId: acceptedGameId,
         seat: result.gameSeats.acceptor,
@@ -5307,7 +5432,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       const directory = await listPublicOpenSeekDirectory(parsed.options, accountSession.account);
-      res.json(directory);
+      res.json(redactOpenSeekDirectory(directory));
       log({ event: "online.seek.list", status: "accepted" });
     } catch (error) {
       log({ event: "online.seek.list", status: "failed", reason: "summary_load_failed" });
@@ -5350,7 +5475,30 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const visibility = normalizeOpenSeekVisibility(req.body?.visibility);
     if (!visibility) {
       res.status(400).json({
-        error: { code: "bad_request", message: "Open seek visibility must be public or followed." },
+        error: { code: "bad_request", message: "Open seek visibility must be public, followed, or invited." },
+      });
+      return;
+    }
+    const invitedDisplayNames = normalizeOpenSeekInvitedDisplayNames(req.body?.invitedDisplayNames);
+    if (!invitedDisplayNames.ok) {
+      res.status(400).json({ error: invitedDisplayNames.error });
+      return;
+    }
+    if (visibility !== "invited" && invitedDisplayNames.displayNames) {
+      res.status(400).json({
+        error: {
+          code: "bad_request",
+          message: "Invited display names are only allowed for invited lobby listings.",
+        },
+      });
+      return;
+    }
+    if (visibility === "invited" && !invitedDisplayNames.displayNames) {
+      res.status(400).json({
+        error: {
+          code: "bad_request",
+          message: "Invited lobby listings require at least one display name.",
+        },
       });
       return;
     }
@@ -5359,13 +5507,21 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(accountIdentity.status).json({ error: accountIdentity.error });
       return;
     }
-    if (visibility === "followed" && accountIdentity.identity?.kind !== "registered") {
+    if ((visibility === "followed" || visibility === "invited") && accountIdentity.identity?.kind !== "registered") {
       res.status(400).json({
         error: {
           code: "bad_request",
-          message: "Followed-only open seeks require a registered account creator.",
+          message: `${visibility === "invited" ? "Invited" : "Followed-only"} open seeks require a registered account creator.`,
         },
       });
+      return;
+    }
+    const invited = await resolveOpenSeekInvitedDisplayNames(
+      accountIdentity.account,
+      invitedDisplayNames.displayNames
+    );
+    if (!invited.ok) {
+      res.status(invited.status).json({ error: invited.error });
       return;
     }
     const creatorIdentity = accountIdentity.identity
@@ -5390,13 +5546,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         creatorSeat,
         creatorIdentity.identity,
         visibility,
+        invited.displayNames,
         expiry.value,
         createdAt
       );
       res.status(201).json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         seekId: created.seekId,
-        summary: created.summary,
+        summary: redactOpenSeekSummary(created.summary),
         creator: {
           token: created.token,
         },
@@ -5438,7 +5595,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         role: "creator",
-        summary,
+        summary: redactOpenSeekSummary(summary),
         gameInvite: gameInviteForOpenSeekCreator(summary, auth.credential, auth.token),
       });
     } catch (error) {
@@ -5496,7 +5653,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           { createdAt: cancelledAt }
         )
       );
-      res.json({ protocolVersion: ONLINE_PROTOCOL_VERSION, role: "creator", summary: cancelledSummary });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        role: "creator",
+        summary: redactOpenSeekSummary(cancelledSummary),
+      });
     } catch (error) {
       res.status(openSeekTerminalError(error) ? 409 : 503).json({
         error: openSeekTerminalError(error)
@@ -5676,6 +5837,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           "random",
           sessionIdentity.identity,
           "public",
+          undefined,
           expiry.value,
           createdAt
         );
@@ -5686,7 +5848,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             outcome: "waiting",
             role: "creator",
             seekId: created.seekId,
-            summary: created.summary,
+            summary: redactOpenSeekSummary(created.summary),
             creator: { token: created.token },
           },
         };

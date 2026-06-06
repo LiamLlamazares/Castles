@@ -718,6 +718,7 @@
 .online-browser-search input:focus-visible,
 .online-browser-account-form input:focus-visible,
 .online-browser-social-search input:focus-visible,
+.online-browser-invite-field input:focus-visible,
 .online-browser-follow-policy select:focus-visible,
 .online-browser-select select:focus-visible,
 .online-seek-owner-panel:focus-visible,
@@ -776,6 +777,7 @@
 }
 
 .online-browser-search input,
+.online-browser-invite-field input,
 .online-browser-select select {
   min-height: 42px;
   border-radius: 6px;
@@ -783,6 +785,18 @@
   padding: 9px 12px;
   font: inherit;
   min-width: 0;
+}
+
+.online-browser-invite-field {
+  display: grid;
+  gap: 5px;
+  color: #d9d0b8;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+
+.online-browser-invite-field span {
+  font-weight: 800;
 }
 
 .online-browser-status-line {

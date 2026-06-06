@@ -2020,6 +2020,7 @@ export async function createOpenSeek(
   options: {
     creatorSeat?: OpenSeekSeat;
     visibility?: OpenSeekVisibility;
+    invitedDisplayNames?: string[];
     creatorSessionId?: string;
     expiresInMs?: number;
     account?: OnlineAccountSessionParams;

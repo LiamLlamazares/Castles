@@ -1728,7 +1728,11 @@ function App() {
   const createOpenSeekFromSetup = async (
     setup: OnlineGameSetupDTO,
     visibility: OpenSeekVisibility = "public",
-    options: { rethrowTrustedError?: boolean; notifyOnError?: boolean } = {}
+    options: {
+      invitedDisplayNames?: string[];
+      rethrowTrustedError?: boolean;
+      notifyOnError?: boolean;
+    } = {}
   ) => {
     try {
       cancelPendingReplay();
@@ -1744,7 +1748,12 @@ function App() {
         forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
       }
       clearOpenSeekState();
-      const created = await createOpenSeek(setup, { creatorSeat: "random", visibility, account: onlineAccountAuth });
+      const created = await createOpenSeek(setup, {
+        creatorSeat: "random",
+        visibility,
+        ...(options.invitedDisplayNames ? { invitedDisplayNames: options.invitedDisplayNames } : {}),
+        account: onlineAccountAuth,
+      });
       const creator = {
         seekId: created.seekId,
         token: created.creator.token,
@@ -1804,12 +1813,16 @@ function App() {
     );
   };
 
-  const handleListCurrentSetupInLobby = async (visibility: OpenSeekVisibility = "public") => {
+  const handleListCurrentSetupInLobby = async (
+    visibility: OpenSeekVisibility = "public",
+    options: { invitedDisplayNames?: string[] } = {}
+  ) => {
     if (!onlineLobbySetup) {
       alert("Choose a Play setup before listing a lobby game.");
       return;
     }
     await createOpenSeekFromSetup(onlineLobbySetup, visibility, {
+      invitedDisplayNames: options.invitedDisplayNames,
       notifyOnError: false,
       rethrowTrustedError: true,
     });

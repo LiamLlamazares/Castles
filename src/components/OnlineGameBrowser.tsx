@@ -139,7 +139,10 @@ interface OnlineGameBrowserProps {
   onConfigureSetup?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
-  onCreateSeek?: (visibility?: OpenSeekVisibility) => void | Promise<void>;
+  onCreateSeek?: (
+    visibility?: OpenSeekVisibility,
+    options?: { invitedDisplayNames?: string[] }
+  ) => void | Promise<void>;
   onQuickMatch?: () => QuickMatchOutcome | Promise<QuickMatchOutcome>;
   quickMatchSetupSummary?: QuickMatchSetupSummary;
   onAcceptSeek?: (seekId: string) => void | Promise<void>;
@@ -909,6 +912,9 @@ function seekSearchText(summary: OpenSeekSummary): string {
     sideLabel,
     sideDetail,
     summary.status,
+    summary.visibility ?? "public",
+    ...(summary.invitedDisplayNames ?? []),
+    summary.invitedDisplayNames?.length ? `invited ${summary.invitedDisplayNames.join(" ")}` : "",
     summary.setup.board.config.nSquares,
     clock,
     summary.setup.timeControl ? `${summary.setup.timeControl.initial}+${summary.setup.timeControl.increment}` : "casual",
@@ -1095,6 +1101,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [seekActionMessage, setSeekActionMessage] = React.useState("");
   const [quickMatchStatus, setQuickMatchStatus] = React.useState<QuickMatchStatus>("idle");
   const [createSeekPending, setCreateSeekPending] = React.useState(false);
+  const [inviteDisplayName, setInviteDisplayName] = React.useState("");
   const [ownedSeekAction, setOwnedSeekAction] = React.useState<"refresh" | "join" | undefined>();
   const [lastSeekCheckedAt, setLastSeekCheckedAt] = React.useState("");
   const [isSeekLoadInFlight, setIsSeekLoadInFlight] = React.useState(false);
@@ -2337,6 +2344,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     hasActiveOwnedSeek ||
     seekStatus === "loading" ||
     isSeekLoadInFlight;
+  const normalizedInviteDisplayName = inviteDisplayName.replace(/\s+/g, " ").trim();
+  const createInvitedSeekDisabled = createSeekDisabled || !normalizedInviteDisplayName;
   const quickMatchMessage =
     quickMatchStatus === "pending"
       ? "Checking open lobby listings..."
@@ -2916,18 +2925,31 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   };
 
-  const runCreateSeek = async (visibility: OpenSeekVisibility = "public") => {
+  const runCreateSeek = async (
+    visibility: OpenSeekVisibility = "public",
+    options: { invitedDisplayNames?: string[] } = {}
+  ) => {
     if (!onCreateSeek || createSeekDisabled) return;
+    if (visibility === "invited" && !options.invitedDisplayNames?.length) return;
     setCreateSeekPending(true);
     setQuickMatchStatus("idle");
     setSeekActionMessage("");
     try {
-      await onCreateSeek(visibility);
+      if (options.invitedDisplayNames?.length) {
+        await onCreateSeek(visibility, options);
+      } else {
+        await onCreateSeek(visibility);
+      }
       setSeekActionMessage(
-        visibility === "followed"
+        visibility === "invited" && options.invitedDisplayNames?.length
+          ? `Listed for ${options.invitedDisplayNames.join(", ")}.`
+          : visibility === "followed"
           ? "Listed for accounts you follow."
           : "Listed in the public Lobby."
       );
+      if (visibility === "invited") {
+        setInviteDisplayName("");
+      }
     } catch (error) {
       console.error("[OnlineGameBrowser] Failed to list current setup", error);
       setSeekActionMessage(onlineRequestErrorMessage(error) ?? "Could not list the current setup.");
@@ -5097,15 +5119,39 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           {createSeekPending ? "Listing..." : "Create Lobby Listing"}
                         </button>
                         {account && (
-                          <button
-                            type="button"
-                            className="online-browser-button subtle online-browser-create-seek"
-                            onClick={() => void runCreateSeek("followed")}
-                            disabled={createSeekDisabled}
-                            aria-label="Create followed-player lobby listing from current Play setup"
-                          >
-                            {createSeekPending ? "Listing..." : "List for Followed Players"}
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="online-browser-button subtle online-browser-create-seek"
+                              onClick={() => void runCreateSeek("followed")}
+                              disabled={createSeekDisabled}
+                              aria-label="Create followed-player lobby listing from current Play setup"
+                            >
+                              {createSeekPending ? "Listing..." : "List for Followed Players"}
+                            </button>
+                            <label className="online-browser-invite-field">
+                              <span>Invite account</span>
+                              <input
+                                type="text"
+                                aria-label="Invite account to lobby listing"
+                                value={inviteDisplayName}
+                                onChange={(event) => setInviteDisplayName(event.currentTarget.value)}
+                                maxLength={32}
+                                disabled={createSeekPending || quickMatchBlocking}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              className="online-browser-button subtle online-browser-create-seek"
+                              onClick={() => void runCreateSeek("invited", {
+                                invitedDisplayNames: [normalizedInviteDisplayName],
+                              })}
+                              disabled={createInvitedSeekDisabled}
+                              aria-label="Create invite-only lobby listing from current Play setup"
+                            >
+                              {createSeekPending ? "Listing..." : "List for Invited Account"}
+                            </button>
+                          </>
                         )}
                       </>
                     )}
@@ -5280,6 +5326,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         </div>
                         <div className="online-game-meta">
                           <span className="online-game-pill active">Open</span>
+                          {seek.visibility === "followed" && <span>Followed only</span>}
+                          {seek.visibility === "invited" && <span>Invite-only</span>}
+                          {seek.visibility === "invited" && seek.invitedDisplayNames?.length ? (
+                            <span>Invited {seek.invitedDisplayNames.join(", ")}</span>
+                          ) : null}
                           <span>{creatorDisplayName ? `Creator ${creatorDisplayName}` : "Creator unregistered"}</span>
                           <span>{formatSeekSideDetail(seek, owned)}</span>
                           <span>Board Radius {radius}</span>

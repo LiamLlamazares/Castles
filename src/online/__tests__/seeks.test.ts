@@ -148,8 +148,11 @@ describe("open seek contract", () => {
     expect(JSON.stringify(event)).not.toContain("token");
   });
 
-  it("projects followed-only seek visibility while defaulting legacy seeks to public", () => {
+  it("projects non-public seek visibility and invite lists while defaulting legacy seeks to public", () => {
     const followed = projectOpenSeekSummaries([createdEvent({ visibility: "followed" })])[0];
+    const invited = projectOpenSeekSummaries([
+      createdEvent({ visibility: "invited", invitedDisplayNames: ["Samir", "Mira"] }),
+    ])[0];
     const legacy = projectOpenSeekSummaries([
       { ...createdEvent(), visibility: undefined },
     ])[0];
@@ -158,6 +161,14 @@ describe("open seek contract", () => {
     expect(validateOpenSeekSummary(followed)).toMatchObject({
       ok: true,
       value: { visibility: "followed" },
+    });
+    expect(invited).toMatchObject({
+      visibility: "invited",
+      invitedDisplayNames: ["Samir", "Mira"],
+    });
+    expect(validateOpenSeekSummary(invited)).toMatchObject({
+      ok: true,
+      value: { visibility: "invited", invitedDisplayNames: ["Samir", "Mira"] },
     });
     expect(legacy.visibility).toBe("public");
     expect(validateOpenSeekSummary({ ...legacy, visibility: undefined })).toMatchObject({
@@ -169,6 +180,22 @@ describe("open seek contract", () => {
   it("rejects invalid seek visibility values", () => {
     expect(validateOpenSeekEvent({ ...createdEvent(), visibility: "private" }).ok).toBe(false);
     expect(validateOpenSeekSummary({ ...pendingSummary(), visibility: "private" }).ok).toBe(false);
+  });
+
+  it("requires invite lists only for invited open seeks", () => {
+    expect(validateOpenSeekEvent({ ...createdEvent(), visibility: "invited", invitedDisplayNames: [] }).ok)
+      .toBe(false);
+    expect(validateOpenSeekEvent(createdEvent({ visibility: "invited", invitedDisplayNames: ["Samir"] })).ok)
+      .toBe(true);
+    expect(validateOpenSeekEvent({ ...createdEvent(), visibility: "public", invitedDisplayNames: ["Samir"] }).ok)
+      .toBe(false);
+    expect(validateOpenSeekSummary({ ...pendingSummary(), visibility: "invited", invitedDisplayNames: [] }).ok)
+      .toBe(false);
+    expect(validateOpenSeekSummary({
+      ...pendingSummary(),
+      visibility: "followed",
+      invitedDisplayNames: ["Samir"],
+    }).ok).toBe(false);
   });
 
   it("rejects durable token, credential, session secret, auth, cookie, and invite fields", () => {
