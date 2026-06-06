@@ -208,6 +208,29 @@ const SCENARIOS = [
     requiredTexts: () => ["Configure New Game", "Online Lobby", "Open Library", "Board Display"],
   },
   {
+    name: "save-dialog-overlay",
+    prepare: async (page) => {
+      await ensureGameBoard(page);
+      await clickButton(page, "Save Game");
+      await waitForDialog(page, "Save game");
+      await waitForText(page, "Name this game so you can find it later in Library.");
+      await waitForText(page, "Save name");
+      await waitForButton(page, "Cancel");
+      await waitForButton(page, "Save to Library");
+      await page.getByLabel("Save name", { exact: true }).fill("");
+      await clickButton(page, "Save to Library");
+      await waitForAlert(page, "Enter a name for this save.");
+    },
+    requiredTexts: () => [
+      "Save game",
+      "Name this game so you can find it later in Library.",
+      "Save name",
+      "Enter a name for this save.",
+      "Cancel",
+      "Save to Library",
+    ],
+  },
+  {
     name: "online-player-board",
     prepare: async (page, fixtures) => {
       await seedOnlineJoinSession(page, fixtures.liveGameId, "w", fixtures.playerToken);
@@ -803,6 +826,24 @@ async function waitForRegion(page, name) {
     state: "visible",
     timeout: browserTimeoutMs,
   });
+  await waitForPageQuiet(page);
+}
+
+async function waitForDialog(page, name) {
+  await page.getByRole("dialog", { name, exact: true }).waitFor({
+    state: "visible",
+    timeout: browserTimeoutMs,
+  });
+  await waitForPageQuiet(page);
+}
+
+async function waitForAlert(page, text) {
+  const alert = page.getByRole("alert", { name: text, exact: true });
+  if ((await alert.count()) > 0) {
+    await alert.first().waitFor({ state: "visible", timeout: browserTimeoutMs });
+  } else {
+    await waitForText(page, text);
+  }
   await waitForPageQuiet(page);
 }
 
