@@ -1381,6 +1381,47 @@
   gap: 8px;
 }
 
+.online-browser-account-friend-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.online-browser-account-friend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.online-browser-account-friend-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.online-browser-account-friend-main strong {
+  color: #f7f1d6;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-account-friend-main span {
+  color: #d9d0b8;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.online-browser-account-friend-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .online-browser-archive-detail {
   display: grid;
   gap: 12px;
@@ -1525,6 +1566,7 @@
   .online-browser-section-header,
   .online-browser-live-overview,
   .online-browser-watch-friend-row,
+  .online-browser-account-friend-row,
   .online-browser-watch-grid {
     grid-template-columns: 1fr;
   }
@@ -1696,6 +1738,7 @@
   .online-browser-social-actions,
   .online-browser-online-now-actions,
   .online-browser-watch-friend-actions,
+  .online-browser-account-friend-actions,
   .online-game-actions {
     display: grid;
     grid-template-columns: 1fr;

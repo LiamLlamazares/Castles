@@ -83,6 +83,13 @@ interface AccountHeadToHeadSummary {
   opponentWins: number;
   latestGame: OnlineGameSummary;
 }
+interface AccountFollowedOpponentSummary {
+  displayName: string;
+  gameCount: number;
+  activeCount: number;
+  completedCount: number;
+  latestGame: OnlineGameSummary;
+}
 type OpenSeekSideFilter = "all" | OpenSeekSummary["creatorSeat"];
 type OpenSeekClockFilter = "all" | "timed" | "casual";
 type OpenSeekVpFilter = "all" | "enabled" | "disabled";
@@ -123,6 +130,7 @@ const ACCOUNT_CHALLENGE_AUTO_REFRESH_MS = 1_000;
 const ACCOUNT_CHALLENGE_EXPIRING_SOON_MS = 5 * 60 * 1000;
 const FOLLOWING_AUTO_REFRESH_MS = 30_000;
 const WATCH_FOLLOWED_LIVE_LIMIT = 4;
+const ACCOUNT_FOLLOWED_OPPONENT_LIMIT = 4;
 const GAME_SEARCH_DEBOUNCE_MS = 300;
 const HEAD_TO_HEAD_HISTORY_PAGE_LIMIT = 5;
 const AUTO_REFRESH_PAUSED_MESSAGE = "Auto refresh paused after a rate limit. Use Refresh to check now.";
@@ -2077,6 +2085,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     () => new Set(followingProfiles.map((profile) => normalizeDisplayNameKey(profile.displayName))),
     [followingProfiles]
   );
+  const followingProfileByDisplayName = React.useMemo(() => {
+    const profiles = new Map<string, OnlineAccountPublicProfile>();
+    for (const profile of followingProfiles) {
+      profiles.set(normalizeDisplayNameKey(profile.displayName), profile);
+    }
+    return profiles;
+  }, [followingProfiles]);
   const sortedFollowingProfiles = React.useMemo(
     () => [...followingProfiles].sort((left, right) =>
       compareProfilesByPinnedPresence(pinnedFollowingDisplayNames, left, right)
@@ -2369,6 +2384,66 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       .sort(sort === "moves" ? compareMostMoves : compareNewest)
       .slice(0, 12);
   }, [accountGames, followedDisplayNames, friendFilterActive, publicGames, query, ratingFilter, resultFilter, sort, tab, timeFilter]);
+
+  const accountFollowedOpponentItems = React.useMemo<AccountFollowedOpponentSummary[]>(() => {
+    if (
+      tab !== "archive" ||
+      !account ||
+      !canUseAccountSocial ||
+      followingStatus !== "ready" ||
+      accountGamesStatus !== "ready"
+    ) {
+      return [];
+    }
+    const items = new Map<string, AccountFollowedOpponentSummary>();
+    for (const game of accountGames) {
+      for (const opponentDisplayName of accountOpponentProfileNames(game, account)) {
+        const key = normalizeDisplayNameKey(opponentDisplayName);
+        if (!followedDisplayNames.has(key)) continue;
+        const canonicalProfile = followingProfileByDisplayName.get(key);
+        const current = items.get(key);
+        const isActive = game.status === "active" && game.archiveState === "active";
+        const isCompleted = game.status === "complete" && game.archiveState === "archived";
+        if (!current) {
+          items.set(key, {
+            displayName: canonicalProfile?.displayName ?? opponentDisplayName,
+            gameCount: 1,
+            activeCount: isActive ? 1 : 0,
+            completedCount: isCompleted ? 1 : 0,
+            latestGame: game,
+          });
+          continue;
+        }
+        current.gameCount += 1;
+        current.activeCount += isActive ? 1 : 0;
+        current.completedCount += isCompleted ? 1 : 0;
+        if (compareNewest(game, current.latestGame) < 0) {
+          current.latestGame = game;
+        }
+      }
+    }
+    return [...items.values()]
+      .sort((left, right) => {
+        if (left.activeCount !== right.activeCount) return right.activeCount - left.activeCount;
+        if (left.gameCount !== right.gameCount) return right.gameCount - left.gameCount;
+        const latestComparison = compareNewest(left.latestGame, right.latestGame);
+        if (latestComparison !== 0) return latestComparison;
+        return left.displayName.localeCompare(right.displayName);
+      });
+  }, [
+    account,
+    accountGames,
+    accountGamesStatus,
+    canUseAccountSocial,
+    followedDisplayNames,
+    followingProfileByDisplayName,
+    followingStatus,
+    tab,
+  ]);
+  const visibleAccountFollowedOpponentItems = React.useMemo(
+    () => accountFollowedOpponentItems.slice(0, ACCOUNT_FOLLOWED_OPPONENT_LIMIT),
+    [accountFollowedOpponentItems]
+  );
 
   const accountHeadToHeadSummary = React.useMemo<AccountHeadToHeadSummary | null>(() => {
     const hasDedicatedHeadToHeadGames =
@@ -3064,6 +3139,77 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         <div className="online-browser-live-stat online-browser-live-stat-wide">
           <span>Last game</span>
           <strong>Last game {summary.latestGame.gameId}</strong>
+        </div>
+      </section>
+    );
+  };
+
+  const renderAccountFollowedOpponentStrip = () => {
+    if (visibleAccountFollowedOpponentItems.length === 0) return null;
+    return (
+      <section
+        className="online-browser-account-subsection online-browser-account-friends"
+        aria-label="Followed opponents in your account archive"
+      >
+        <div className="online-browser-side-list-header">
+          <div className="online-browser-side-list-heading">
+            <span className="online-browser-section-kicker">Following</span>
+            <strong>Followed opponents in your games</strong>
+          </div>
+          <span>
+            {formatCount(accountFollowedOpponentItems.length, "opponent")}
+            {accountFollowedOpponentItems.length > visibleAccountFollowedOpponentItems.length
+              ? `, +${accountFollowedOpponentItems.length - visibleAccountFollowedOpponentItems.length} more`
+              : ""}
+          </span>
+        </div>
+        <div className="online-browser-account-friend-rows">
+          {visibleAccountFollowedOpponentItems.map((item) => {
+            const profileKey = normalizeDisplayNameKey(item.displayName);
+            const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
+            const detailParts = [
+              formatCount(item.gameCount, "game"),
+              item.activeCount > 0 ? formatCount(item.activeCount, "live game") : null,
+              item.completedCount > 0 ? formatCount(item.completedCount, "replay") : null,
+              `Latest ${item.latestGame.gameId}`,
+            ].filter(Boolean);
+            return (
+              <article
+                key={profileKey}
+                className="online-browser-account-friend-row"
+                aria-label={`Followed opponent ${item.displayName} in account archive`}
+              >
+                <div className="online-browser-account-friend-main">
+                  <strong>{item.displayName}</strong>
+                  <span>{detailParts.join("; ")}</span>
+                </div>
+                <div className="online-browser-account-friend-actions">
+                  <button
+                    type="button"
+                    className="online-browser-button subtle"
+                    onClick={() => showVisiblePlayerHistory(item.displayName)}
+                    disabled={socialAction !== undefined}
+                    aria-label={`Show ${item.displayName} game history from followed account archive`}
+                  >
+                    History
+                  </button>
+                  {onChallengeAccount && !pendingChallenge ? (
+                    <button
+                      type="button"
+                      className="online-browser-button neutral"
+                      onClick={() => void runSocialChallengeAction(item.displayName)}
+                      disabled={socialAction !== undefined}
+                      aria-label={`Challenge ${item.displayName} from followed account archive`}
+                    >
+                      Challenge
+                    </button>
+                  ) : pendingChallenge ? (
+                    <span className="online-game-action-note">Challenge pending</span>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
     );
@@ -5828,6 +5974,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 <p>
                   Active and completed private, unlisted, and public games played as {account.displayName} appear here. Active games can return from this browser session or rejoin through your account when available.
                 </p>
+                {renderAccountFollowedOpponentStrip()}
                 {accountHeadToHeadSummary && renderAccountHeadToHeadSummary(accountHeadToHeadSummary)}
                 {accountHeadToHeadSummary && (
                   <section

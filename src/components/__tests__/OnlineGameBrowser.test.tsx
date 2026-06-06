@@ -3870,6 +3870,7 @@ describe("OnlineGameBrowser", () => {
   it("filters public and account archive rows by followed registered participants", async () => {
     const account = accountFixture("Liam");
     const socialProps = socialPropsWithFollowing([publicProfile("Samir", { following: true })]);
+    const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
     const publicFollowed = summary({
       gameId: "game_public_archive_samir",
       status: "complete",
@@ -3929,6 +3930,7 @@ describe("OnlineGameBrowser", () => {
         onBack={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
+        onChallengeAccount={onChallengeAccount}
         account={account}
         accountStatus="ready"
         {...socialProps}
@@ -3937,6 +3939,32 @@ describe("OnlineGameBrowser", () => {
 
     expect(await screen.findByText("game_public_archive_samir")).toBeInTheDocument();
     expect(await screen.findByText("game_account_archive_ben")).toBeInTheDocument();
+
+    const followedOpponents = await screen.findByRole("region", {
+      name: "Followed opponents in your account archive",
+    });
+    const followedOpponentRow = within(followedOpponents).getByRole("article", {
+      name: "Followed opponent Samir in account archive",
+    });
+    expect(followedOpponentRow).toHaveTextContent("1 game; 1 replay; Latest game_account_archive_samir");
+    expect(within(followedOpponents).queryByText("Ben")).not.toBeInTheDocument();
+
+    fireEvent.click(within(followedOpponents).getByRole("button", {
+      name: "Challenge Samir from followed account archive",
+    }));
+    await waitFor(() => expect(onChallengeAccount).toHaveBeenCalledWith("Samir"));
+    expect(await screen.findByText("Challenge created for Samir.")).toBeInTheDocument();
+
+    const search = screen.getByRole("searchbox", { name: "Search online archive" });
+    fireEvent.click(within(followedOpponents).getByRole("button", {
+      name: "Show Samir game history from followed account archive",
+    }));
+    await waitFor(() => expect(search).toHaveValue("Samir"));
+    expect(screen.getByRole("region", { name: "Archive player history filter" })).toHaveTextContent(
+      "Showing games with Samir."
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Clear game history filter for Samir" }));
+    await waitFor(() => expect(search).toHaveValue(""));
 
     const filter = screen.getByRole("combobox", { name: "Followed players filter" });
     await waitFor(() => expect(filter).toBeEnabled());
