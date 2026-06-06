@@ -623,6 +623,15 @@ function validateAccountGameActionQuery(originalUrl: string):
     : { ok: false, message: "Account game action query is invalid." };
 }
 
+function validateDirectChallengeActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Challenge action query is invalid." };
+}
+
 function parseAccountChallengeDirectoryOptions(
   originalUrl: string
 ): { ok: true; state: OnlineAccountChallengeDirectoryState } | { ok: false; message: string } {
@@ -5278,6 +5287,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         res.status(auth.status).json({ error: auth.error });
         return;
       }
+      const query = validateDirectChallengeActionQuery(req.originalUrl);
+      if (!query.ok) {
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
+        return;
+      }
       const summary = await expireChallengeIfNeeded(auth.summary);
       res.json({
         protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -5311,6 +5325,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       const auth = await getAuthorizedChallenge(req);
       if (!auth.ok) {
         res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const query = validateDirectChallengeActionQuery(req.originalUrl);
+      if (!query.ok) {
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
         return;
       }
       const summary = await expireChallengeIfNeeded(auth.summary);
@@ -5362,6 +5381,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       const auth = await getAuthorizedChallenge(req);
       if (!auth.ok) {
         res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const query = validateDirectChallengeActionQuery(req.originalUrl);
+      if (!query.ok) {
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
         return;
       }
       const declinedAt = new Date(options.now?.() ?? Date.now()).toISOString();
@@ -5418,6 +5442,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       const auth = await getAuthorizedChallenge(req);
       if (!auth.ok) {
         res.status(auth.status).json({ error: auth.error });
+        return;
+      }
+      const query = validateDirectChallengeActionQuery(req.originalUrl);
+      if (!query.ok) {
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
         return;
       }
       const cancelledAt = new Date(options.now?.() ?? Date.now()).toISOString();

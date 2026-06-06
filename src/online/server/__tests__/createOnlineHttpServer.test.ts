@@ -4665,6 +4665,89 @@ describe("createOnlineHttpServer", () => {
     expect(viewBody.gameInvite).toBeUndefined();
   });
 
+  it("rejects token-bearing direct challenge query strings even with bearer auth", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+
+    const createChallenge = async () => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          setup,
+          challengerSeat: "w",
+          visibility: "unlisted",
+        }),
+      });
+      const body = await response.json();
+      expect(response.status).toBe(201);
+      return {
+        challengeId: body.challengeId as string,
+        challengerToken: fragmentChallengeToken(body.challenger.url),
+        challengedToken: fragmentChallengeToken(body.challenged.url),
+      };
+    };
+
+    const viewChallenge = await createChallenge();
+    const acceptChallenge = await createChallenge();
+    const declineChallenge = await createChallenge();
+    const cancelChallenge = await createChallenge();
+
+    const attempts = [
+      {
+        method: "GET",
+        challengeId: viewChallenge.challengeId,
+        path: `/api/online/challenges/${viewChallenge.challengeId}?token=leaked-challenge-token`,
+        token: viewChallenge.challengedToken,
+      },
+      {
+        method: "POST",
+        challengeId: acceptChallenge.challengeId,
+        path: `/api/online/challenges/${acceptChallenge.challengeId}/accept?token=leaked-challenge-token`,
+        token: acceptChallenge.challengedToken,
+      },
+      {
+        method: "POST",
+        challengeId: declineChallenge.challengeId,
+        path: `/api/online/challenges/${declineChallenge.challengeId}/decline?token=leaked-challenge-token`,
+        token: declineChallenge.challengedToken,
+      },
+      {
+        method: "POST",
+        challengeId: cancelChallenge.challengeId,
+        path: `/api/online/challenges/${cancelChallenge.challengeId}/cancel?token=leaked-challenge-token`,
+        token: cancelChallenge.challengerToken,
+      },
+    ];
+
+    for (const attempt of attempts) {
+      const response = await fetch(`http://127.0.0.1:${port}${attempt.path}`, {
+        method: attempt.method,
+        headers: bearer(attempt.token),
+      });
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body.error).toMatchObject({
+        code: "bad_request",
+        message: "Challenge action query is invalid.",
+      });
+
+      const stillPendingResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/challenges/${attempt.challengeId}`,
+        { headers: bearer(attempt.token) }
+      );
+      const stillPending = await stillPendingResponse.json();
+      expect(stillPendingResponse.status).toBe(200);
+      expect(stillPending.summary.status).toBe("pending");
+    }
+  });
+
   it("creates targeted account challenge links when target challenge privacy allows it", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

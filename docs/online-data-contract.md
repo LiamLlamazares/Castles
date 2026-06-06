@@ -271,7 +271,7 @@ Challenge bearer credentials are stored separately from durable events in `onlin
 
 Accepting a challenge uses `acceptChallengeAndCreateGame`, a dedicated atomic store method. It locks the challenge and new game, verifies the challenged role, creates the online game event from the immutable challenge setup, derives white/black game credential hashes from the private challenge credential hashes, appends `challenge_accepted`, and refreshes both game and challenge summaries in one transaction. The original challenger/challenged challenge bearer tokens become the corresponding game bearer tokens after acceptance, which lets either side retrieve only its own game invite later without storing raw game tokens.
 
-Browser challenge links put bearer material in the URL fragment, not the query string: `onlineChallenge` and `challengeRole` are query parameters, while `challengeToken` is a fragment parameter captured into `sessionStorage` and stripped from the visible URL before API calls. Challenge API routes authenticate only with `Authorization: Bearer`; query-token authentication is rejected.
+Browser challenge links put bearer material in the URL fragment, not the query string: `onlineChallenge` and `challengeRole` are query parameters, while `challengeToken` is a fragment parameter captured into `sessionStorage` and stripped from the visible URL before API calls. Challenge API routes authenticate only with `Authorization: Bearer`; query-token authentication is rejected. Once a bearer challenge credential resolves, direct challenge view/action routes reject query strings instead of silently accepting leaked credential parameters or unsupported options.
 
 ## Visibility And Access
 
