@@ -386,6 +386,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onClearRecentOnlineGames,
     onlineNotificationCount = 0,
     onlineNotificationLabel,
+    onAccountChallengeNavigationActivityChange,
     backLabel = "Back to game",
   }: {
     onBack: () => void;
@@ -434,6 +435,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onClearRecentOnlineGames?: () => void;
     onlineNotificationCount?: number;
     onlineNotificationLabel?: string;
+    onAccountChallengeNavigationActivityChange?: (count: number) => void;
     backLabel?: string;
   }) => {
     const [quickMatchStatus, setQuickMatchStatus] = React.useState("");
@@ -446,6 +448,11 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       <div>
         Browser online notifications: {onlineNotificationCount} {onlineNotificationLabel ?? "none"}
       </div>
+      {onAccountChallengeNavigationActivityChange && (
+        <button type="button" onClick={() => onAccountChallengeNavigationActivityChange(0)}>
+          Mock Clear Browser Challenge Activity
+        </button>
+      )}
       <div>Owned seek ids: {ownedSeekIds.join(",") || "none"}</div>
       <div>Owned seek status: {ownedSeekResponse?.summary.status ?? "none"}</div>
       <div>
@@ -3516,6 +3523,76 @@ describe("App game setup lifecycle", () => {
       "/api/online/account/challenges?state=all",
       { headers: { authorization: "Bearer account-token" } }
     );
+  });
+
+  it("lets the Online browser synchronize count-only challenge navigation activity after inbox actions", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_nav_sync",
+      displayName: "Liam",
+      createdAt: "2026-06-06T12:00:00.000Z",
+      updatedAt: "2026-06-06T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_nav_sync", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: ONLINE_PROTOCOL_VERSION, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/challenges?state=all") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+              challenges: [
+                {
+                  role: "challenged",
+                  summary: appAccountChallengeSummary({
+                    challengeId: "challenge_samir_liam",
+                    challengerIdentity: { kind: "registered", id: "account_samir", displayName: "Samir" },
+                    challengedIdentity: account.identity,
+                    status: "pending",
+                  }),
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ schemaVersion: 1, games: [] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+
+    expect(await screen.findByText("Setup Ready")).toBeInTheDocument();
+    expect(await screen.findByText("Setup online notifications: 1 challenge activities")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Setup Online" }));
+
+    expect(await screen.findByText("Browser online notifications: 1 challenge activities")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Mock Clear Browser Challenge Activity" }));
+
+    expect(await screen.findByText("Browser online notifications: 0 challenge activities")).toBeInTheDocument();
+    expect(screen.queryByText("Samir")).not.toBeInTheDocument();
   });
 
   it("shows access denied for an invalid challenge link", async () => {

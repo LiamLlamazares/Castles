@@ -112,7 +112,7 @@ import {
   OnlineAccountReportInput,
 } from './online/client';
 import type { OnlineAccount } from './online/accounts';
-import type { OnlineAccountChallengeListItem } from './online/challenges';
+import { countOnlineAccountChallengeNavigationActivity } from './online/challenges';
 import type { OnlineGameSummary } from './online/readModel';
 import type { OpenSeekVisibility } from './online/seeks';
 import {
@@ -195,13 +195,6 @@ interface GameConfig {
   ratingMode?: OnlineRatingMode;
   isAnalysisMode?: boolean;
   opponentConfig?: AIOpponentConfig;
-}
-
-function countOnlineChallengeNavigationActivity(challenges: OnlineAccountChallengeListItem[]): number {
-  return challenges.filter((item) =>
-    (item.role === "challenged" && item.summary.status === "pending") ||
-    (item.summary.status === "accepted" && Boolean(item.summary.gameId))
-  ).length;
 }
 
 interface LoadGameData {
@@ -584,7 +577,7 @@ function App() {
         .then((directory) => {
           if (cancelled) return;
           setOnlineChallengeNavigationActivityCount(
-            countOnlineChallengeNavigationActivity(directory.challenges)
+            countOnlineAccountChallengeNavigationActivity(directory.challenges)
           );
         })
         .catch((error) => {
@@ -2965,6 +2958,7 @@ function App() {
           onOpenLibrary={handleOpenLibrary}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}
+          onAccountChallengeNavigationActivityChange={setOnlineChallengeNavigationActivityCount}
           onCreateSeek={onlineLobbySetup ? handleListCurrentSetupInLobby : undefined}
           onQuickMatch={onlineLobbySetup ? handleQuickMatch : undefined}
           quickMatchSetupSummary={quickMatchSetupSummary}

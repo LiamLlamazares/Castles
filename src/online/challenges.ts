@@ -125,6 +125,15 @@ export interface OnlineAccountChallengeDirectoryResponse {
   challenges: OnlineAccountChallengeListItem[];
 }
 
+export function countOnlineAccountChallengeNavigationActivity(
+  challenges: OnlineAccountChallengeListItem[]
+): number {
+  return challenges.filter((item) =>
+    (item.role === "challenged" && item.summary.status === "pending") ||
+    (item.summary.status === "accepted" && Boolean(item.summary.gameId))
+  ).length;
+}
+
 const MAX_ID_LENGTH = 128;
 const CHALLENGE_VISIBILITIES = new Set<OnlineChallengeVisibility>(["private", "unlisted"]);
 const CHALLENGE_SEATS = new Set<OnlineChallengeSeat>(["w", "b", "random"]);

@@ -38,6 +38,7 @@ import {
   OnlineRatingLeaderboardScope,
 } from "../online/social";
 import type { OnlineAccount, OnlineAccountOAuthProvidersResponse } from "../online/accounts";
+import { countOnlineAccountChallengeNavigationActivity } from "../online/challenges";
 import type {
   OnlineGameDirectoryResponse,
   OnlineGameSummaryBoardPreviewHex,
@@ -199,6 +200,7 @@ interface OnlineGameBrowserProps {
   onTabChange?: (tab: OnlineBrowserTab) => void;
   onlineNotificationCount?: number;
   onlineNotificationLabel?: string;
+  onAccountChallengeNavigationActivityChange?: (count: number) => void;
 }
 
 function participantName(
@@ -1104,6 +1106,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onTabChange,
   onlineNotificationCount = 0,
   onlineNotificationLabel,
+  onAccountChallengeNavigationActivityChange,
 }) => {
   const [uncontrolledTab, setUncontrolledTab] = React.useState<OnlineBrowserTab>(initialTab);
   const tab = activeTab ?? uncontrolledTab;
@@ -1207,6 +1210,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const followingAutoRefreshPausedUntilRef = React.useRef(0);
   const seekActionByIdRef = React.useRef(seekActionById);
   const accountChallengeActionByIdRef = React.useRef(accountChallengeActionById);
+  const accountChallengeShortcutItemsRef = React.useRef<OnlineAccountChallengeListItem[]>([]);
   const completedAccountChallengeIdsRef = React.useRef(new Set<string>());
   const knownAccountChallengeActivityKeysRef = React.useRef(new Set<string>());
   const accountChallengeActivityBaselineReadyRef = React.useRef(false);
@@ -1280,6 +1284,26 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   React.useEffect(() => {
     accountChallengeActionByIdRef.current = accountChallengeActionById;
   }, [accountChallengeActionById]);
+
+  const commitAccountChallengeShortcutItems = React.useCallback((
+    nextItems: OnlineAccountChallengeListItem[],
+    options: { notifyNavigation?: boolean } = {}
+  ) => {
+    accountChallengeShortcutItemsRef.current = nextItems;
+    setAccountChallengeShortcutItems(nextItems);
+    if (options.notifyNavigation) {
+      onAccountChallengeNavigationActivityChange?.(
+        countOnlineAccountChallengeNavigationActivity(nextItems)
+      );
+    }
+  }, [onAccountChallengeNavigationActivityChange]);
+
+  const updateAccountChallengeShortcutItems = React.useCallback((
+    updater: (current: OnlineAccountChallengeListItem[]) => OnlineAccountChallengeListItem[],
+    options: { notifyNavigation?: boolean } = {}
+  ) => {
+    commitAccountChallengeShortcutItems(updater(accountChallengeShortcutItemsRef.current), options);
+  }, [commitAccountChallengeShortcutItems]);
 
   const visibleOwnedSeekResponse = React.useMemo(() => {
     const status = ownedSeekResponse?.summary.status;
@@ -1394,10 +1418,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         reconcileAccountChallengeActivity(filteredChallenges);
       }
       setAccountChallenges(visibleAccountChallengesForFilter(filteredChallenges, accountChallengeFilter));
-      setAccountChallengeShortcutItems((current) =>
+      commitAccountChallengeShortcutItems(
         requestedFilter === "all"
           ? filteredChallenges.filter(isAccountChallengeShortcutItem)
-          : mergeAccountChallengeShortcutItems(current, filteredChallenges)
+          : mergeAccountChallengeShortcutItems(accountChallengeShortcutItemsRef.current, filteredChallenges),
+        { notifyNavigation: requestedFilter === "all" }
       );
       setAccountChallengesStatus("ready");
     } catch (error) {
@@ -1408,7 +1433,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (!background) {
         console.error("[OnlineGameBrowser] Failed to load account challenges", error);
         setAccountChallenges([]);
-        setAccountChallengeShortcutItems(pruneAccountChallengeShortcutItemsAfterLoadError);
+        updateAccountChallengeShortcutItems(pruneAccountChallengeShortcutItemsAfterLoadError);
         setAccountChallengesStatus("error");
       }
     } finally {
@@ -1416,7 +1441,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         accountChallengeLoadInFlightRef.current = false;
       }
     }
-  }, [account?.accountId, accountChallengeFilter, loadAccountChallenges, reconcileAccountChallengeActivity]);
+  }, [
+    account?.accountId,
+    accountChallengeFilter,
+    commitAccountChallengeShortcutItems,
+    loadAccountChallenges,
+    reconcileAccountChallengeActivity,
+    updateAccountChallengeShortcutItems,
+  ]);
 
   const runAccountChallengeAction = React.useCallback(async (
     item: OnlineAccountChallengeListItem,
@@ -1449,8 +1481,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             accountChallengeFilter === "all" || candidate.summary.status === "pending"
           )
       );
-      setAccountChallengeShortcutItems((current) =>
-        updateAccountChallengeShortcutItem(current, { role: response.role, summary: response.summary })
+      updateAccountChallengeShortcutItems(
+        (current) =>
+          updateAccountChallengeShortcutItem(current, { role: response.role, summary: response.summary }),
+        { notifyNavigation: true }
       );
       setAccountChallengesStatus("ready");
       setSocialMessage(
@@ -1477,7 +1511,14 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         return next;
       });
     }
-  }, [accountChallengeFilter, markAccountChallengeActivityKnown, onAcceptAccountChallenge, onCancelAccountChallenge, onDeclineAccountChallenge]);
+  }, [
+    accountChallengeFilter,
+    markAccountChallengeActivityKnown,
+    onAcceptAccountChallenge,
+    onCancelAccountChallenge,
+    onDeclineAccountChallenge,
+    updateAccountChallengeShortcutItems,
+  ]);
 
   const handleAccountChallengeFilterChange = React.useCallback((nextFilter: OnlineAccountChallengeFilter) => {
     if (nextFilter === accountChallengeFilter) return;
@@ -1675,6 +1716,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     knownAccountChallengeActivityKeysRef.current.clear();
     accountChallengeActivityBaselineReadyRef.current = false;
     setAccountChallenges([]);
+    accountChallengeShortcutItemsRef.current = [];
     setAccountChallengeShortcutItems([]);
     setAccountChallengeActionById({});
     setAccountChallengeFilter("all");
@@ -3374,8 +3416,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const keepChallenge = (item: OnlineAccountChallengeListItem) =>
       normalizeDisplayNameKey(challengeOpponentDisplayName(item) ?? "") !== opponentKey;
     setAccountChallenges((current) => current.filter(keepChallenge));
-    setAccountChallengeShortcutItems((current) => current.filter(keepChallenge));
-  }, []);
+    updateAccountChallengeShortcutItems((current) => current.filter(keepChallenge), { notifyNavigation: true });
+  }, [updateAccountChallengeShortcutItems]);
 
   const blockAccountChallengeOpponent = React.useCallback(async (displayName: string) => {
     const blocked = await runSocialProfileAction("block", displayName);

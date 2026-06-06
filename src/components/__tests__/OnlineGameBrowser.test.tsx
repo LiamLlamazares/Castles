@@ -2626,6 +2626,74 @@ describe("OnlineGameBrowser", () => {
     expect(within(people).queryByRole("region", { name: "Pending challenge notice" })).not.toBeInTheDocument();
   });
 
+  it("synchronizes the count-only Online navigation badge after declining an inbox challenge", async () => {
+    const account = accountFixture("Liam");
+    const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
+    const declinedSummary = {
+      ...pendingSummary,
+      updatedAt: "2026-06-03T12:02:00.000Z",
+      status: "declined" as const,
+      declinedAt: "2026-06-03T12:02:00.000Z",
+      declinedBy: account.identity,
+      lastEventId: "challenge_samir_liam_declined_evt",
+    };
+    const loadAccountChallenges = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      ...accountChallengeDirectory([{ role: "challenged", summary: pendingSummary }]),
+    });
+    const loadGames = vi.fn().mockResolvedValue(directory([]));
+    const loadOpenSeeks = vi.fn().mockResolvedValue(seekDirectory([]));
+    const onBack = vi.fn();
+    const onSpectate = vi.fn();
+    const onReplay = vi.fn();
+    const onDeclineAccountChallenge = vi.fn().mockResolvedValue({
+      role: "challenged",
+      summary: declinedSummary,
+    });
+    const BrowserWithParentNotificationState = () => {
+      const [onlineNotificationCount, setOnlineNotificationCount] = React.useState(1);
+      return (
+        <OnlineGameBrowser
+          initialTab="lobby"
+          loadGames={loadGames}
+          loadOpenSeeks={loadOpenSeeks}
+          onBack={onBack}
+          onSpectate={onSpectate}
+          onReplay={onReplay}
+          account={account}
+          accountStatus="ready"
+          {...socialPropsWithFollowing()}
+          loadAccountChallenges={loadAccountChallenges}
+          onDeclineAccountChallenge={onDeclineAccountChallenge}
+          onlineNotificationCount={onlineNotificationCount}
+          onlineNotificationLabel="challenge activities"
+          onAccountChallengeNavigationActivityChange={setOnlineNotificationCount}
+        />
+      );
+    };
+
+    render(<BrowserWithParentNotificationState />);
+
+    expect(await screen.findByRole("button", { name: "Online, 1 challenge activity" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    const row = await within(challenges).findByText("Samir");
+    const article = row.closest("article");
+    expect(article).not.toBeNull();
+
+    fireEvent.click(within(article as HTMLElement).getByRole("button", { name: "Decline challenge from Samir" }));
+
+    await waitFor(() => expect(onDeclineAccountChallenge).toHaveBeenCalledWith("challenge_samir_liam"));
+    expect(await within(challenges).findByText("No account challenges yet.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Online" })).toHaveAttribute("aria-current", "page")
+    );
+    expect(screen.queryByRole("button", { name: "Online, 1 challenge activity" })).not.toBeInTheDocument();
+  });
+
   it("offers block and report actions from registered account challenge rows", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
