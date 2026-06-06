@@ -632,6 +632,15 @@ function validateDirectChallengeActionQuery(originalUrl: string):
     : { ok: false, message: "Challenge action query is invalid." };
 }
 
+function validateGameActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Game action query is invalid." };
+}
+
 function parseAccountChallengeDirectoryOptions(
   originalUrl: string
 ): { ok: true; state: OnlineAccountChallengeDirectoryState } | { ok: false; message: string } {
@@ -5724,6 +5733,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
+      const query = validateGameActionQuery(req.originalUrl);
+      if (!query.ok) {
+        log({
+          event: "online.http.join",
+          gameId: gameId.value,
+          role: "player",
+          status: "rejected",
+          reason: "bad_query",
+        });
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
+        return;
+      }
+
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
         log({
@@ -5818,6 +5840,19 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             message: "No online game was found for that id and token.",
           },
         });
+        return;
+      }
+
+      const query = validateGameActionQuery(req.originalUrl);
+      if (!query.ok) {
+        log({
+          event: "online.game.visibility",
+          gameId: gameId.value,
+          role: "player",
+          status: "rejected",
+          reason: "bad_query",
+        });
+        res.status(400).json({ error: { code: "bad_request", message: query.message } });
         return;
       }
 

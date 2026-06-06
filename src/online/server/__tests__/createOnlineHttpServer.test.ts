@@ -5788,6 +5788,72 @@ describe("createOnlineHttpServer", () => {
     expect(snapshotResponse.headers.get("cache-control")).toContain("no-store");
   });
 
+  it("rejects token-bearing direct game query strings even with bearer auth", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_player_query_guard",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const appended: Array<Extract<OnlineGameEvent, { type: "visibility_changed" }>> = [];
+    let summary = summaryForGame("game_player_query_guard", "unlisted");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      appendGameVisibilityChanged: (event) => {
+        appended.push(event);
+        summary = {
+          ...summary,
+          visibility: event.visibility,
+          updatedAt: event.createdAt,
+          lastEventId: event.eventId,
+        };
+        return summary;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}?token=leaked-player-token`,
+      { headers: bearer(created.white.token) }
+    );
+    const snapshotBody = await snapshotResponse.json();
+    const visibilityResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}/visibility?token=leaked-player-token`,
+      {
+        method: "PATCH",
+        headers: {
+          ...bearer(created.white.token),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ visibility: "public" }),
+      }
+    );
+    const visibilityBody = await visibilityResponse.json();
+
+    expect(snapshotResponse.status).toBe(400);
+    expect(snapshotBody.error).toMatchObject({
+      code: "bad_request",
+      message: "Game action query is invalid.",
+    });
+    expect(visibilityResponse.status).toBe(400);
+    expect(visibilityBody.error).toMatchObject({
+      code: "bad_request",
+      message: "Game action query is invalid.",
+    });
+    expect(appended).toHaveLength(0);
+
+    const cleanSnapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${created.gameId}`,
+      { headers: bearer(created.white.token) }
+    );
+    const cleanSnapshot = await cleanSnapshotResponse.json();
+    expect(cleanSnapshotResponse.status).toBe(200);
+    expect(cleanSnapshot.snapshot.gameId).toBe("game_player_query_guard");
+  });
+
   it("serves read-only spectator snapshots without player tokens", async () => {
     const service = new OnlineGameService({
       idFactory: () => "game_spectator_rest",

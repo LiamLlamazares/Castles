@@ -283,6 +283,8 @@ Visibility values:
 
 Current created games project as `unlisted`. A player can publish or unlist a game through `PATCH /api/online/games/:gameId/visibility`, authorized by the same bearer player token used for snapshots. The route returns `protocolVersion: 1` and a token-free `OnlineGameSummary`; it fails closed if durable persistence is unavailable.
 
+Direct player snapshot and visibility routes are path-only bearer actions. Once a bearer player credential resolves, `GET /api/online/games/:gameId` and `PATCH /api/online/games/:gameId/visibility` reject query strings instead of silently accepting leaked player-token parameters or unsupported client-supplied options.
+
 Role names:
 
 - `white`
