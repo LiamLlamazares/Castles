@@ -858,7 +858,7 @@ OAuth deployment-smoke update on 2026-06-06: `scripts/deploy/check-online-smoke.
 
 API smoke default update on 2026-06-06: `scripts/deploy/check-online-smoke.mjs` now defaults no-argument runs to `https://castles.ls314.xyz`, ignores empty `BASE_URL`/`EXPECTED_COMMIT` environment overrides, and still lets explicit CLI arguments target preview hosts or reviewed commit SHAs. This keeps standalone smoke checks pointed at the current production host instead of the retired `.com` domain.
 
-Favicon update on 2026-06-05: the browser favicon, manifest SVG icon, service-worker core asset list, and `.ico` fallback now use an empty flat-top hexagonal board rendered with the same board background, alternating hex fills, and gray stroke colors as the app board. The visual preview artifact is `artifacts/favicon/favicon-preview.png`.
+Favicon update on 2026-06-05, tightened on 2026-06-06: the browser favicon, manifest SVG icon, service-worker core asset list, and `.ico` fallback now use an empty flat-top hexagonal board rendered from the app board viewBox, polygon point strings, terrain classes, high-ground shadow filter, and owned-castle stroke classes. The service-worker shell cache was bumped to refresh installed clients. The visual preview artifact is `artifacts/favicon/favicon-preview.png`.
 
 Watch scanability update on 2026-06-05: the desktop Watch selected-game panel is top-aligned instead of stretching to the height of the secondary game list. This keeps the selected game content visible in the first viewport while preserving the two-column desktop Watch layout. The regenerated audit artifact is `artifacts/ui-audit/phase6ai-local-layout/desktop-online-watch.png`.
 

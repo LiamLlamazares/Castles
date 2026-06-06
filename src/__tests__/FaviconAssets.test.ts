@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { emptyBoard } from "../ConstantImports";
+import { emptyBoard, getStartingLayout } from "../ConstantImports";
+import { getCastleOwnerClass, getHexVisualClass } from "../utils/HexRenderUtils";
 import { renderEmptyBoardFaviconSvg } from "../../scripts/assets/render-empty-board-favicon";
 
 function readText(path: string): string {
@@ -55,6 +56,20 @@ describe("favicon assets", () => {
     const faviconIco = readBytes("public/favicon.ico");
     const appIconSvg = readText("public/castles-icon.svg");
     const expectedSvg = renderEmptyBoardFaviconSvg();
+    const appLayout = getStartingLayout(emptyBoard);
+    const appViewBox = appLayout.calculateViewBox();
+    const sampleHex = emptyBoard.hexes.find((hex) => emptyBoard.highGroundHexSet.has(hex.getKey()));
+    const sampleCastle = emptyBoard.castles.find((castle) => castle.owner === "w");
+
+    expect(sampleHex).toBeDefined();
+    expect(sampleCastle).toBeDefined();
+    const appPolygonPoints = appLayout.hexCornerString[sampleHex!.reflect().getKey(true)];
+    const appPolygonClass = getHexVisualClass(sampleHex!, emptyBoard);
+    const appCastlePoints = appLayout.hexCornerString[sampleCastle!.hex.reflect().getKey(true)];
+    const appCastleClass = [
+      getHexVisualClass(sampleCastle!.hex, emptyBoard),
+      getCastleOwnerClass(sampleCastle!.hex, emptyBoard.castles),
+    ].join(" ");
 
     expect(index).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />');
     expect(index).toContain('<link rel="alternate icon" href="/favicon.ico" />');
@@ -65,7 +80,7 @@ describe("favicon assets", () => {
         expect.objectContaining({ src: "castles-icon.svg", type: "image/svg+xml", sizes: "any" }),
       ])
     );
-    expect(getServiceWorkerCacheVersion(serviceWorker)).toBeGreaterThanOrEqual(5);
+    expect(getServiceWorkerCacheVersion(serviceWorker)).toBeGreaterThanOrEqual(6);
     expect(serviceWorker).toContain("./favicon.svg");
     expect(serviceWorker).toContain("./favicon.ico");
     expect(getIcoPngSizes(faviconIco).sort((a, b) => a - b)).toEqual([16, 24, 32, 64]);
@@ -73,6 +88,13 @@ describe("favicon assets", () => {
     for (const svg of [faviconSvg, appIconSvg]) {
       expect(svg).toBe(expectedSvg);
       expect(svg.split("\n")[0]).toContain('width="512" height="512"');
+      expect(svg.split("\n")[0]).toContain(`viewBox="${appViewBox}"`);
+      expect(svg.split("\n")[0]).toContain('preserveAspectRatio="xMidYMid meet"');
+      expect(svg).toContain("<style>");
+      expect(svg).toContain(`points="${appPolygonPoints}" class="${appPolygonClass}"`);
+      expect(svg).toContain(`points="${appCastlePoints}" class="${appCastleClass}"`);
+      expect(svg).toContain(".castle-owned-white");
+      expect(svg).toContain(".castle-owned-black");
       expect(svg).toContain("rgb(209,139,71)");
       expect(svg).toContain("rgb(232,171,111)");
       expect(svg).toContain("rgb(255,206,158)");
