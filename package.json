@@ -25,6 +25,7 @@
     "online:smoke:local:browser": "node scripts/deploy/check-local-online-browser-smoke.mjs",
     "online:backup:postgres": "node scripts/deploy/postgres-online-backup.mjs",
     "online:deploy:metadata": "node scripts/deploy/deploy-metadata-env.mjs",
+    "online:deploy:production": "node scripts/deploy/deploy-production.mjs",
     "online:deploy:freshness": "node scripts/deploy/check-production-freshness.mjs",
     "online:smoke:browser": "node scripts/deploy/check-online-browser-smoke.mjs",
     "ui:audit:local": "node scripts/deploy/check-local-ui-layout-audit.mjs",
