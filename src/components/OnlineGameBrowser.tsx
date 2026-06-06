@@ -107,6 +107,7 @@ type OnlineAccountUiStatus =
 type QuickMatchStatus = "idle" | "pending" | "matched" | "waiting" | "error";
 type QuickMatchOutcome = "matched" | "waiting" | void;
 type FollowingNoteMap = Record<string, string>;
+type AccountChallengeUnreadActivity = { incomingPending: number; acceptedReady: number };
 
 interface QuickMatchSetupSummary {
   boardRadius: number;
@@ -524,6 +525,30 @@ function challengeOpponentDisplayName(item: OnlineAccountChallengeListItem): str
 
 function isAccountChallengeShortcutItem(item: OnlineAccountChallengeListItem): boolean {
   return item.summary.status === "pending" || (item.summary.status === "accepted" && Boolean(item.summary.gameId));
+}
+
+function visibleAccountChallengesForFilter(
+  items: OnlineAccountChallengeListItem[],
+  filter: OnlineAccountChallengeFilter
+): OnlineAccountChallengeListItem[] {
+  return filter === "pending"
+    ? items.filter((item) => item.summary.status === "pending")
+    : items;
+}
+
+function accountChallengeActivityKey(item: OnlineAccountChallengeListItem): string | null {
+  const summary = item.summary;
+  if (summary.status === "pending" && item.role === "challenged") {
+    return `incoming:${summary.challengeId}:${summary.updatedAt}`;
+  }
+  if (summary.status === "accepted" && summary.gameId) {
+    return `accepted:${summary.challengeId}:${summary.gameId}:${summary.updatedAt}`;
+  }
+  return null;
+}
+
+function emptyAccountChallengeUnreadActivity(): AccountChallengeUnreadActivity {
+  return { incomingPending: 0, acceptedReady: 0 };
 }
 
 function mergeAccountChallengeShortcutItems(
@@ -1125,6 +1150,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [accountChallengesStatus, setAccountChallengesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountChallengeActionById, setAccountChallengeActionById] = React.useState<Record<string, "accept" | "decline" | "cancel" | undefined>>({});
   const [accountChallengeFilter, setAccountChallengeFilter] = React.useState<OnlineAccountChallengeFilter>("all");
+  const [accountChallengeUnreadActivity, setAccountChallengeUnreadActivity] =
+    React.useState<AccountChallengeUnreadActivity>(() => emptyAccountChallengeUnreadActivity());
   const [socialLookupName, setSocialLookupName] = React.useState("");
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -1177,6 +1204,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const seekActionByIdRef = React.useRef(seekActionById);
   const accountChallengeActionByIdRef = React.useRef(accountChallengeActionById);
   const completedAccountChallengeIdsRef = React.useRef(new Set<string>());
+  const knownAccountChallengeActivityKeysRef = React.useRef(new Set<string>());
+  const accountChallengeActivityBaselineReadyRef = React.useRef(false);
   const queuedSeekLoadRef = React.useRef<"foreground" | "background" | undefined>();
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -1296,26 +1325,73 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, loadAccountSessions]);
 
-  const refreshAccountChallenges = React.useCallback(async (options: { background?: boolean } = {}) => {
+  const markAccountChallengeActivityKnown = React.useCallback((items: OnlineAccountChallengeListItem[]) => {
+    const nextKeys = new Set(knownAccountChallengeActivityKeysRef.current);
+    for (const item of items) {
+      const key = accountChallengeActivityKey(item);
+      if (key) nextKeys.add(key);
+    }
+    knownAccountChallengeActivityKeysRef.current = nextKeys;
+    if (items.length > 0) {
+      accountChallengeActivityBaselineReadyRef.current = true;
+    }
+  }, []);
+
+  const reconcileAccountChallengeActivity = React.useCallback((items: OnlineAccountChallengeListItem[]) => {
+    const previousKeys = knownAccountChallengeActivityKeysRef.current;
+    const nextKeys = new Set<string>();
+    let incomingPending = 0;
+    let acceptedReady = 0;
+    for (const item of items) {
+      const key = accountChallengeActivityKey(item);
+      if (!key) continue;
+      nextKeys.add(key);
+      if (accountChallengeActivityBaselineReadyRef.current && !previousKeys.has(key)) {
+        if (item.summary.status === "pending" && item.role === "challenged") {
+          incomingPending += 1;
+        } else if (item.summary.status === "accepted" && item.summary.gameId) {
+          acceptedReady += 1;
+        }
+      }
+    }
+    knownAccountChallengeActivityKeysRef.current = nextKeys;
+    accountChallengeActivityBaselineReadyRef.current = true;
+    if (incomingPending > 0 || acceptedReady > 0) {
+      setAccountChallengeUnreadActivity((current) => ({
+        incomingPending: current.incomingPending + incomingPending,
+        acceptedReady: current.acceptedReady + acceptedReady,
+      }));
+    }
+  }, []);
+
+  const clearAccountChallengeUnreadActivity = React.useCallback(() => {
+    setAccountChallengeUnreadActivity(emptyAccountChallengeUnreadActivity());
+  }, []);
+
+  const refreshAccountChallenges = React.useCallback(async (options: { background?: boolean; state?: OnlineAccountChallengeFilter } = {}) => {
     if (!account || !loadAccountChallenges) return;
     if (accountChallengeLoadInFlightRef.current) return;
     if (Object.values(accountChallengeActionByIdRef.current).some((action) => action !== undefined)) return;
     const background = options.background === true;
+    const requestedFilter = options.state ?? accountChallengeFilter;
     const requestId = ++accountChallengesRequestIdRef.current;
     accountChallengeLoadInFlightRef.current = true;
     if (!background) {
       setAccountChallengesStatus("loading");
     }
     try {
-      const response = await loadAccountChallenges({ state: accountChallengeFilter });
+      const response = await loadAccountChallenges({ state: requestedFilter });
       if (requestId !== accountChallengesRequestIdRef.current) return;
       const filteredChallenges = response.challenges.filter((item) =>
         item.summary.status !== "pending" ||
         !completedAccountChallengeIdsRef.current.has(item.summary.challengeId)
       );
-      setAccountChallenges(filteredChallenges);
+      if (requestedFilter === "all") {
+        reconcileAccountChallengeActivity(filteredChallenges);
+      }
+      setAccountChallenges(visibleAccountChallengesForFilter(filteredChallenges, accountChallengeFilter));
       setAccountChallengeShortcutItems((current) =>
-        accountChallengeFilter === "all"
+        requestedFilter === "all"
           ? filteredChallenges.filter(isAccountChallengeShortcutItem)
           : mergeAccountChallengeShortcutItems(current, filteredChallenges)
       );
@@ -1336,7 +1412,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         accountChallengeLoadInFlightRef.current = false;
       }
     }
-  }, [account?.accountId, accountChallengeFilter, loadAccountChallenges]);
+  }, [account?.accountId, accountChallengeFilter, loadAccountChallenges, reconcileAccountChallengeActivity]);
 
   const runAccountChallengeAction = React.useCallback(async (
     item: OnlineAccountChallengeListItem,
@@ -1357,6 +1433,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       if (response.summary.status !== "pending") {
         completedAccountChallengeIdsRef.current.add(challengeId);
       }
+      markAccountChallengeActivityKnown([{ role: response.role, summary: response.summary }]);
       setAccountChallenges((current) =>
         current
           .map((candidate) =>
@@ -1396,7 +1473,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         return next;
       });
     }
-  }, [accountChallengeFilter, onAcceptAccountChallenge, onCancelAccountChallenge, onDeclineAccountChallenge]);
+  }, [accountChallengeFilter, markAccountChallengeActivityKnown, onAcceptAccountChallenge, onCancelAccountChallenge, onDeclineAccountChallenge]);
 
   const handleAccountChallengeFilterChange = React.useCallback((nextFilter: OnlineAccountChallengeFilter) => {
     if (nextFilter === accountChallengeFilter) return;
@@ -1591,10 +1668,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     accountChallengeLoadInFlightRef.current = false;
     accountChallengeAutoRefreshPausedUntilRef.current = 0;
     completedAccountChallengeIdsRef.current.clear();
+    knownAccountChallengeActivityKeysRef.current.clear();
+    accountChallengeActivityBaselineReadyRef.current = false;
     setAccountChallenges([]);
     setAccountChallengeShortcutItems([]);
     setAccountChallengeActionById({});
     setAccountChallengeFilter("all");
+    setAccountChallengeUnreadActivity(emptyAccountChallengeUnreadActivity());
     setAccountChallengesStatus("idle");
   }, [account?.accountId, canUseAccountChallenges]);
 
@@ -1604,7 +1684,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const refreshIfVisible = () => {
       if (document.visibilityState !== "visible") return;
       if (Date.now() < accountChallengeAutoRefreshPausedUntilRef.current) return;
-      void refreshAccountChallenges({ background: true });
+      void refreshAccountChallenges({ background: true, state: "all" });
     };
     const interval = window.setInterval(refreshIfVisible, ACCOUNT_CHALLENGE_AUTO_REFRESH_MS);
     const handleVisibilityChange = () => {
@@ -1999,6 +2079,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     [accountChallenges]
   );
   const hasPendingChallengeNotice = pendingIncomingChallengeCount > 0 || pendingOutgoingChallengeCount > 0;
+  const unreadChallengeActivityCount =
+    accountChallengeUnreadActivity.incomingPending + accountChallengeUnreadActivity.acceptedReady;
+  const hasUnreadChallengeActivity = unreadChallengeActivityCount > 0;
+  const hasChallengeNotice = hasPendingChallengeNotice || hasUnreadChallengeActivity;
   const liveGameByFollowedDisplayName = React.useMemo(() => {
     const liveGames = new Map<string, OnlineGameSummary>();
     for (const game of publicActiveGames) {
@@ -3438,11 +3522,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const focusAccountChallenges = React.useCallback(() => {
     setSocialMessage("");
+    clearAccountChallengeUnreadActivity();
     if (accountChallengeFilter !== "pending") {
       handleAccountChallengeFilterChange("pending");
     }
     window.setTimeout(() => accountChallengesSectionRef.current?.focus(), 0);
-  }, [accountChallengeFilter, handleAccountChallengeFilterChange]);
+  }, [accountChallengeFilter, clearAccountChallengeUnreadActivity, handleAccountChallengeFilterChange]);
 
   const handleFollowPolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3635,6 +3720,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     pendingIncomingChallengeCount > 0
       ? `${formatCount(pendingIncomingChallengeCount, "incoming challenge")} awaiting your response`
       : `${formatCount(pendingOutgoingChallengeCount, "sent challenge")} awaiting response`;
+  const challengeNoticeTitle =
+    hasPendingChallengeNotice
+      ? pendingChallengeNoticeTitle
+      : `${formatCount(accountChallengeUnreadActivity.acceptedReady, "accepted challenge game")} ready`;
   const accountChipDisplayName = account?.displayName ?? "Guest";
   const accountChipActionLabel = account ? "Open account controls" : "Open account sign in";
   const accountNavSlot = (
@@ -3959,15 +4048,22 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             </form>
           )}
 
-          {canUseAccountChallenges && hasPendingChallengeNotice && (
-            <section className="online-browser-challenge-notice" aria-label="Pending challenge notice">
+          {canUseAccountChallenges && hasChallengeNotice && (
+            <section
+              className="online-browser-challenge-notice"
+              aria-label={hasPendingChallengeNotice ? "Pending challenge notice" : "Challenge activity notice"}
+            >
               <div>
                 <span className="online-browser-section-kicker">Challenges</span>
-                <strong>{pendingChallengeNoticeTitle}</strong>
+                <strong>{challengeNoticeTitle}</strong>
                 <div className="online-browser-social-badges">
+                  {hasUnreadChallengeActivity && <span>New activity</span>}
                   {pendingIncomingChallengeCount > 0 && <span>Incoming</span>}
                   {pendingOutgoingChallengeCount > 0 && (
                     <span>{formatCount(pendingOutgoingChallengeCount, "sent challenge")}</span>
+                  )}
+                  {accountChallengeUnreadActivity.acceptedReady > 0 && (
+                    <span>{formatCount(accountChallengeUnreadActivity.acceptedReady, "game ready")}</span>
                   )}
                 </div>
               </div>

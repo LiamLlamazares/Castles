@@ -2471,6 +2471,87 @@ describe("OnlineGameBrowser", () => {
     expect(within(challenges).getByText("Samir")).toBeInTheDocument();
   });
 
+  it("surfaces accepted challenge activity from background all-inbox polling while viewing pending", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const account = accountFixture("Liam");
+    const acceptedSummary = accountChallengeSummary({
+      challengeId: "challenge_ada_liam_ready",
+      challengerIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+      challengedIdentity: account.identity,
+      visibility: "unlisted",
+      updatedAt: "2026-06-03T12:04:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-03T12:04:00.000Z",
+      acceptedBy: account.identity,
+      gameId: "game_ada_liam_ready",
+      whiteIdentity: { kind: "registered", id: "account_ada", displayName: "Ada" },
+      blackIdentity: account.identity,
+      lastEventId: "challenge_ada_liam_ready_accepted_evt",
+    });
+    const loadAccountChallenges = vi.fn().mockImplementation((options?: { state?: "pending" | "all" }) =>
+      Promise.resolve({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        ...accountChallengeDirectory(
+          loadAccountChallenges.mock.calls.length >= 2 && options?.state === "all"
+            ? [{ role: "challenged" as const, summary: acceptedSummary }]
+            : []
+        ),
+      })
+    );
+    const onChallengeAccount = vi.fn();
+    const onRejoinAccountChallengeGame = vi.fn();
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        {...socialPropsWithFollowing([publicProfile("Ada", { following: true })])}
+        loadAccountChallenges={loadAccountChallenges}
+        onChallengeAccount={onChallengeAccount}
+        onRejoinAccountChallengeGame={onRejoinAccountChallengeGame}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const challenges = await within(people).findByRole("region", { name: "Account challenges" });
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenLastCalledWith({ state: "all" }));
+    fireEvent.click(within(challenges).getByRole("button", { name: "Show pending account challenges" }));
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenLastCalledWith({ state: "pending" }));
+    expect(await within(challenges).findByText("No pending account challenges.")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(loadAccountChallenges).toHaveBeenLastCalledWith({ state: "all" }));
+    expect(within(challenges).getByText("No pending account challenges.")).toBeInTheDocument();
+    const notice = within(people).getByRole("region", { name: "Challenge activity notice" });
+    expect(notice).toHaveTextContent("1 accepted challenge game ready");
+    expect(notice).toHaveTextContent("New activity");
+    const following = await within(people).findByRole("region", { name: "Followed players" });
+    const adaRow = (await within(following).findByText("Ada")).closest("article");
+    expect(adaRow).not.toBeNull();
+    expect(within(adaRow as HTMLElement).getByText("Game ready")).toBeInTheDocument();
+    const joinButton = within(adaRow as HTMLElement).getByRole("button", {
+      name: "Join accepted challenge game game_ada_liam_ready against Ada",
+    });
+    expect(within(adaRow as HTMLElement).queryByRole("button", { name: "Challenge Ada" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(notice).getByRole("button", { name: "View Challenges" }));
+    await waitFor(() => expect(challenges).toHaveFocus());
+    expect(within(people).queryByRole("region", { name: "Challenge activity notice" })).not.toBeInTheDocument();
+    fireEvent.click(joinButton);
+    expect(onRejoinAccountChallengeGame).toHaveBeenCalledWith("game_ada_liam_ready", "unlisted");
+    expect(onChallengeAccount).not.toHaveBeenCalled();
+  });
+
   it("lets signed-in players act on account challenges from the inbox", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
