@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import {
   assert,
   assertDefaultOnlineClock,
+  assertGoogleOAuthSmoke,
   assertProtocolVersionedBody,
   assertSpectatorSnapshot,
   buildWebSocketUrl,
@@ -37,6 +38,7 @@ async function main() {
       `Expected commit ${expectedCommit}, health reported ${healthBody.build?.commit}`
     );
   }
+  await assertGoogleOAuthSmoke(fetchWithTimeout, baseUrl);
 
   const createResponse = await fetchWithTimeout(`${baseUrl}/api/online/games`, {
     method: "POST",

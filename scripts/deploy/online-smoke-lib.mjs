@@ -66,6 +66,52 @@ export async function assertSpectatorSnapshot(
   assertDefaultOnlineClock(body.snapshot, "Spectator snapshot");
 }
 
+export async function assertGoogleOAuthSmoke(fetchWithTimeout, baseUrl) {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+  const providersResponse = await fetchWithTimeout(
+    `${normalizedBaseUrl}/api/online/account/oauth/providers`
+  );
+  const providersBody = await readJson(providersResponse);
+  assert(
+    providersResponse.status === 200,
+    `OAuth providers fetch failed with ${providersResponse.status}`
+  );
+  assertProtocolVersionedBody(providersBody, "OAuth providers response");
+  assert(Array.isArray(providersBody.providers), "OAuth providers response did not include providers");
+
+  const googleProvider = providersBody.providers.find((provider) => provider?.provider === "google");
+  assert(googleProvider?.enabled === true, "Google OAuth provider was not enabled");
+  assert(
+    googleProvider.startUrl === "/api/online/account/oauth/google/start",
+    "Google OAuth provider did not expose the expected start URL"
+  );
+
+  const startResponse = await fetchWithTimeout(`${normalizedBaseUrl}${googleProvider.startUrl}`, {
+    redirect: "manual",
+  });
+  assert(
+    startResponse.status >= 300 && startResponse.status < 400,
+    `Google OAuth start did not redirect; got ${startResponse.status}`
+  );
+  const location = startResponse.headers.get("location");
+  assert(location, "Google OAuth start did not include a Location header");
+
+  const redirect = new URL(location);
+  assert(redirect.origin === "https://accounts.google.com", "Google OAuth start did not redirect to Google");
+  assert(redirect.pathname === "/o/oauth2/v2/auth", "Google OAuth start used an unexpected Google path");
+  assert(redirect.searchParams.get("response_type") === "code", "Google OAuth response_type was not code");
+  assert(redirect.searchParams.get("client_id"), "Google OAuth client_id was missing");
+  const scopes = new Set((redirect.searchParams.get("scope") ?? "").split(/\s+/).filter(Boolean));
+  for (const scope of ["openid", "email", "profile"]) {
+    assert(scopes.has(scope), `Google OAuth scope ${scope} was missing`);
+  }
+  assert(
+    redirect.searchParams.get("redirect_uri") ===
+      `${normalizedBaseUrl}/api/online/account/oauth/google/callback`,
+    "Google OAuth redirect_uri did not match production callback"
+  );
+}
+
 export function assertDefaultOnlineClock(snapshot, description = "Snapshot") {
   assert(snapshot?.setup?.timeControl?.initial === 20, `${description} did not use 20 minute initial time`);
   assert(snapshot?.setup?.timeControl?.increment === 20, `${description} did not use 20 second increment`);
