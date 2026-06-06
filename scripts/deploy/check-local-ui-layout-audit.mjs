@@ -281,6 +281,31 @@ const SCENARIOS = [
     requiredTexts: () => ["Castles", "Configure New Game", "Online Lobby", "Open Library", "Board Display"],
   },
   {
+    name: "online-player-lobby-back-link",
+    prepare: async (page, fixtures) => {
+      await openOnlineLobbyFromPlayerBoard(page, fixtures);
+    },
+    requiredTexts: (fixtures) => [
+      "Back to game",
+      "Quick Match",
+      "Open listings",
+      fixtures.openSeekId,
+      "Current games",
+      fixtures.liveGameId,
+    ],
+  },
+  {
+    name: "online-player-lobby-return",
+    prepare: async (page, fixtures) => {
+      await openOnlineLobbyFromPlayerBoard(page, fixtures);
+      await clickButton(page, "Back to game");
+      await waitForText(page, "Online White");
+      await waitForButton(page, "Copy Spectator Link");
+      await assertOnlineGameUrlHasNoToken(page, fixtures.liveGameId);
+    },
+    requiredTexts: () => ["Online White", "Copy Spectator Link", "PASS", "RESIGN"],
+  },
+  {
     name: "online-spectator-board",
     prepare: async (page, fixtures) => {
       await page.goto(fixtures.spectatorUrl, { waitUntil: "domcontentloaded", timeout: browserTimeoutMs });
@@ -308,6 +333,40 @@ async function seedOnlineJoinSession(page, gameId, seat, token) {
     },
     { gameId, seat, token }
   );
+}
+
+async function openOnlineLobbyFromPlayerBoard(page, fixtures) {
+  await seedOnlineJoinSession(page, fixtures.liveGameId, "w", fixtures.playerToken);
+  await page.goto(fixtures.playerUrl, { waitUntil: "domcontentloaded", timeout: browserTimeoutMs });
+  await waitForText(page, "Online White");
+  await assertOnlineGameUrlHasNoToken(page, fixtures.liveGameId);
+  await clickButton(page, "Menu");
+  await waitForDialog(page, "Castles menu");
+  await clickButton(page, "Online Lobby");
+  await waitForButton(page, "Back to game");
+  await waitForText(page, "Open listings");
+  await waitForText(page, fixtures.openSeekId);
+  await waitForText(page, fixtures.liveGameId);
+  await assertOnlineGameUrlHasNoToken(page, fixtures.liveGameId);
+}
+
+async function assertOnlineGameUrlHasNoToken(page, expectedGameId) {
+  const urlState = await page.evaluate(() => {
+    const url = new URL(window.location.href);
+    return {
+      onlineGame: url.searchParams.get("onlineGame"),
+      token: url.searchParams.get("token"),
+      challengeToken: url.searchParams.get("challengeToken"),
+      hash: url.hash,
+    };
+  });
+  assert(
+    urlState.onlineGame === expectedGameId,
+    `Expected onlineGame ${expectedGameId} in browser URL, got ${urlState.onlineGame}`
+  );
+  assert(!urlState.token, "Online player browser URL still contains a player token");
+  assert(!urlState.challengeToken, "Online player browser URL still contains a challenge token");
+  assert(!urlState.hash.includes("token="), "Online player browser URL hash still contains a token");
 }
 
 async function requireLocalInputs() {
@@ -1662,7 +1721,7 @@ async function collectRequiredTextViolations(page, requiredTexts) {
 
     function isElementRenderable(element) {
       if (!(element instanceof HTMLElement)) return false;
-      if (element.closest("[aria-hidden='true'], [inert]")) return false;
+      if (element.closest("[inert]")) return false;
       const rect = element.getBoundingClientRect();
       const style = window.getComputedStyle(element);
       return (
