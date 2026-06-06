@@ -975,6 +975,15 @@ async function verifyBrowserChallengeFlow(driver) {
   const gameId = new URL(await challenger.url()).searchParams.get("onlineGame");
   assert(gameId, "Challenger URL did not include an online game after challenge accept");
   await fetchSpectatorSnapshot(gameId, 0);
+  await challenged.clickButton("Resign");
+  await waitUntil("browser challenge flow cleanup resignation result", async () => {
+    const snapshot = await fetchSpectatorSnapshot(gameId);
+    return snapshot.result?.winner === "w" && snapshot.result?.reason === "resignation"
+      ? snapshot
+      : null;
+  });
+  await challenger.waitForText("White wins by resignation");
+  await challenged.waitForText("White wins by resignation");
   return gameId;
 }
 
