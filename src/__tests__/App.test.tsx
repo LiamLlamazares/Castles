@@ -3401,6 +3401,136 @@ describe("App game setup lifecycle", () => {
     expect(screen.getByRole("button", { name: "Decline Challenge" })).toBeInTheDocument();
   });
 
+  it("offers signed-in report and block actions from registered direct challenge links", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_samir&challengeRole=challenged#challengeToken=challenge-token"
+    );
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: 1, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/challenges/challenge_samir") {
+        expect(init?.headers).toEqual({ authorization: "Bearer challenge-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              role: "challenged",
+              summary: {
+                schemaVersion: 1,
+                challengeId: "challenge_samir",
+                challengerIdentity: { kind: "registered", id: "registered:samir-public", displayName: "Samir" },
+                challengedIdentity: account.identity,
+                challengerSeat: "w",
+                visibility: "unlisted",
+                setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
+                createdAt: "2026-06-01T12:00:00.000Z",
+                updatedAt: "2026-06-01T12:00:00.000Z",
+                expiresAt: "2026-06-02T12:00:00.000Z",
+                status: "pending",
+                lastEventId: "challenge_evt_created",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/reports/Samir") {
+        expect(init?.method).toBe("POST");
+        expect(init?.headers).toEqual({
+          "content-type": "application/json",
+          authorization: "Bearer account-token",
+        });
+        expect(JSON.parse(String(init?.body))).toEqual({
+          reason: "abuse",
+          details: "Direct challenge spam.",
+        });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              report: {
+                schemaVersion: 1,
+                targetDisplayName: "Samir",
+                reason: "abuse",
+                createdAt: "2026-06-06T12:00:00.000Z",
+              },
+            }),
+            { status: 201, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/blocks/Samir") {
+        expect(init?.method).toBe("PUT");
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              profile: {
+                schemaVersion: 1,
+                displayName: "Samir",
+                relationship: { following: false, followedBy: false, blocked: true, self: false },
+                presence: { visibility: "hidden", status: null },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const accountActions = await screen.findByRole("region", { name: "Challenge account actions for Samir" });
+    fireEvent.click(within(accountActions).getByRole("button", { name: "Report Samir from challenge link" }));
+
+    const reportForm = await within(accountActions).findByRole("form", { name: "Report Samir" });
+    fireEvent.change(within(reportForm).getByRole("textbox", { name: "Details" }), {
+      target: { value: "Direct challenge spam." },
+    });
+    fireEvent.click(within(reportForm).getByRole("button", { name: "Submit Report" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/online/account/reports/Samir",
+      expect.objectContaining({ method: "POST" })
+    ));
+    expect(await within(accountActions).findByText("Report submitted for Samir.")).toBeInTheDocument();
+
+    fireEvent.click(within(accountActions).getByRole("button", { name: "Block Samir from challenge link" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/online/account/blocks/Samir",
+      expect.objectContaining({ method: "PUT" })
+    ));
+    expect(await within(accountActions).findByText("Blocked Samir. Challenge actions are hidden for this link.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Accept Challenge" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Decline Challenge" })).not.toBeInTheDocument();
+  });
+
   it("shows challengers refresh and cancel actions", async () => {
     window.history.replaceState(
       {},

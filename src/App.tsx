@@ -114,6 +114,10 @@ import {
 import type { OnlineAccount } from './online/accounts';
 import type { OnlineGameSummary } from './online/readModel';
 import type { OpenSeekVisibility } from './online/seeks';
+import {
+  ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH,
+  type OnlineAccountReportReason,
+} from './online/social';
 import type { OnlineClientSession, OnlineGameSetupDTO, OnlineGameSnapshotDTO, OnlineRatingMode } from './online/types';
 import {
   clearRecentOnlineGames,
@@ -161,6 +165,13 @@ const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
 const FIRST_RUN_INTRO_STORAGE_KEY = "castles_first_run_intro_seen";
 const QUICK_START_STORAGE_KEY = "hasSeenQuickStart";
+const ONLINE_CHALLENGE_REPORT_REASON_OPTIONS: Array<{ value: OnlineAccountReportReason; label: string }> = [
+  { value: "abuse", label: "Abuse" },
+  { value: "cheating", label: "Cheating" },
+  { value: "spam", label: "Spam" },
+  { value: "impersonation", label: "Impersonation" },
+  { value: "other", label: "Other" },
+];
 
 interface GameConfig {
   board?: Board;
@@ -419,6 +430,12 @@ function App() {
   const [onlineChallengeShareMessage, setOnlineChallengeShareMessage] = useState("");
   const [onlineChallengeStatus, setOnlineChallengeStatus] = useState<"idle" | "loading" | "acting" | "error">("idle");
   const [onlineChallengeError, setOnlineChallengeError] = useState<string | null>(null);
+  const [onlineChallengeAccountAction, setOnlineChallengeAccountAction] = useState<"report" | "block" | undefined>();
+  const [onlineChallengeAccountMessage, setOnlineChallengeAccountMessage] = useState("");
+  const [onlineChallengeReportOpen, setOnlineChallengeReportOpen] = useState(false);
+  const [onlineChallengeReportReason, setOnlineChallengeReportReason] = useState<OnlineAccountReportReason>("abuse");
+  const [onlineChallengeReportDetails, setOnlineChallengeReportDetails] = useState("");
+  const [onlineChallengeBlockedOpponentKey, setOnlineChallengeBlockedOpponentKey] = useState<string | null>(null);
   const [openSeekCreator, setOpenSeekCreator] = useState<OpenSeekCreatorParams | null>(() =>
     listOpenSeekCreatorParams()[0] ?? null
   );
@@ -450,6 +467,35 @@ function App() {
     () => onlineAccountSession ? { token: onlineAccountSession.token } : undefined,
     [onlineAccountSession?.token]
   );
+  const onlineChallengeOpponentDisplayName = useMemo(() => {
+    if (!onlineChallengeResponse) return null;
+    const identity =
+      onlineChallengeResponse.role === "challenged"
+        ? onlineChallengeResponse.summary.challengerIdentity
+        : onlineChallengeResponse.summary.challengedIdentity;
+    return identity.kind === "registered" && identity.displayName ? identity.displayName : null;
+  }, [onlineChallengeResponse]);
+  const onlineChallengeOpponentKey = onlineChallengeOpponentDisplayName
+    ? onlineChallengeOpponentDisplayName.trim().toLowerCase()
+    : "";
+  const onlineChallengeOpponentIsSelf = Boolean(
+    onlineChallengeOpponentKey &&
+      onlineAccount?.displayName &&
+      onlineChallengeOpponentKey === onlineAccount.displayName.trim().toLowerCase()
+  );
+  const onlineChallengeOpponentBlocked =
+    onlineChallengeBlockedOpponentKey !== null &&
+    onlineChallengeBlockedOpponentKey === onlineChallengeOpponentKey;
+  const canUseOnlineChallengeAccountActions = Boolean(
+    onlineAccountSession &&
+      onlineAccount &&
+      onlineAccountStatus === "ready" &&
+      onlineChallengeOpponentDisplayName &&
+      !onlineChallengeOpponentIsSelf
+  );
+  const canShowOnlineChallengeGameplayActions = !onlineChallengeOpponentBlocked;
+  const onlineChallengeReportDetailsRemaining =
+    ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH - onlineChallengeReportDetails.length;
 
   useEffect(() => {
     const handleOnlineAccountStorageChange = (event: StorageEvent) => {
@@ -1832,6 +1878,79 @@ function App() {
     }
   }, [onlineChallengeShareUrl]);
 
+  const handleOpenOnlineChallengeReport = useCallback(() => {
+    if (!onlineChallengeOpponentDisplayName) return;
+    setOnlineChallengeReportOpen(true);
+    setOnlineChallengeReportReason("abuse");
+    setOnlineChallengeReportDetails("");
+    setOnlineChallengeAccountMessage("");
+  }, [onlineChallengeOpponentDisplayName]);
+
+  const handleCancelOnlineChallengeReport = useCallback(() => {
+    setOnlineChallengeReportOpen(false);
+    setOnlineChallengeReportReason("abuse");
+    setOnlineChallengeReportDetails("");
+  }, []);
+
+  const handleSubmitOnlineChallengeReport = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onlineChallengeOpponentDisplayName || !onlineAccountSession) return;
+    const targetDisplayName = onlineChallengeOpponentDisplayName;
+    setOnlineChallengeAccountAction("report");
+    setOnlineChallengeAccountMessage("");
+    try {
+      const response = await handleReportOnlineAccount(targetDisplayName, {
+        reason: onlineChallengeReportReason,
+        details: onlineChallengeReportDetails,
+      });
+      setOnlineChallengeAccountMessage(`Report submitted for ${response.report.targetDisplayName}.`);
+      setOnlineChallengeReportOpen(false);
+      setOnlineChallengeReportReason("abuse");
+      setOnlineChallengeReportDetails("");
+    } catch (error) {
+      console.error("Failed to report online challenge opponent", error);
+      setOnlineChallengeAccountMessage(`Could not submit a report for ${targetDisplayName}.`);
+    } finally {
+      setOnlineChallengeAccountAction(undefined);
+    }
+  }, [
+    handleReportOnlineAccount,
+    onlineAccountSession,
+    onlineChallengeOpponentDisplayName,
+    onlineChallengeReportDetails,
+    onlineChallengeReportReason,
+  ]);
+
+  const handleBlockOnlineChallengeOpponent = useCallback(async () => {
+    if (!onlineChallengeOpponentDisplayName || !onlineAccountSession) return;
+    const targetDisplayName = onlineChallengeOpponentDisplayName;
+    setOnlineChallengeAccountAction("block");
+    setOnlineChallengeAccountMessage("");
+    try {
+      const response = await handleBlockOnlineAccount(targetDisplayName);
+      const blockedDisplayName = response.profile.displayName;
+      setOnlineChallengeBlockedOpponentKey(blockedDisplayName.trim().toLowerCase());
+      if (onlineChallenge) {
+        forgetOnlineChallengeStorage(onlineChallenge);
+      }
+      setOnlineChallengeReportOpen(false);
+      setOnlineChallengeReportReason("abuse");
+      setOnlineChallengeReportDetails("");
+      setOnlineChallengeAccountMessage(`Blocked ${blockedDisplayName}. Challenge actions are hidden for this link.`);
+    } catch (error) {
+      console.error("Failed to block online challenge opponent", error);
+      setOnlineChallengeAccountMessage(`Could not block ${targetDisplayName}.`);
+    } finally {
+      setOnlineChallengeAccountAction(undefined);
+    }
+  }, [
+    forgetOnlineChallengeStorage,
+    handleBlockOnlineAccount,
+    onlineAccountSession,
+    onlineChallenge,
+    onlineChallengeOpponentDisplayName,
+  ]);
+
   const handleRefreshOwnedOpenSeek = async () => {
     if (!openSeekCreator) return;
     const response = await fetchOpenSeek(openSeekCreator);
@@ -2364,6 +2483,15 @@ function App() {
     { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
   ], [handleOnlineStateTutorial, handleOnlineStateLibrary, handleOnlineStateOnline]);
 
+  useEffect(() => {
+    setOnlineChallengeAccountAction(undefined);
+    setOnlineChallengeAccountMessage("");
+    setOnlineChallengeReportOpen(false);
+    setOnlineChallengeReportReason("abuse");
+    setOnlineChallengeReportDetails("");
+    setOnlineChallengeBlockedOpponentKey(null);
+  }, [onlineAccount?.accountId, onlineChallenge?.challengeId, onlineChallengeOpponentKey]);
+
   // Editor handlers
   const handleEditPosition = (board?: Board, pieces?: Piece[], sanctuaries?: Sanctuary[]) => {
     cancelPendingReplay();
@@ -2470,7 +2598,102 @@ function App() {
                 </div>
               </section>
             )}
-            {onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenged" && (
+            {canUseOnlineChallengeAccountActions && onlineChallengeOpponentDisplayName && (
+              <section
+                className="online-state-field"
+                aria-label={`Challenge account actions for ${onlineChallengeOpponentDisplayName}`}
+              >
+                <div className="online-state-field-heading">
+                  Opponent account: {onlineChallengeOpponentDisplayName}
+                </div>
+                <div className="online-state-actions">
+                  {!onlineChallengeOpponentBlocked && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleOpenOnlineChallengeReport}
+                        disabled={onlineChallengeAccountAction !== undefined}
+                        className="online-state-button neutral"
+                        aria-label={`Report ${onlineChallengeOpponentDisplayName} from challenge link`}
+                      >
+                        Report
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBlockOnlineChallengeOpponent}
+                        disabled={onlineChallengeAccountAction !== undefined}
+                        className="online-state-button danger"
+                        aria-label={`Block ${onlineChallengeOpponentDisplayName} from challenge link`}
+                      >
+                        {onlineChallengeAccountAction === "block" ? "Blocking" : "Block"}
+                      </button>
+                    </>
+                  )}
+                </div>
+                {onlineChallengeReportOpen && !onlineChallengeOpponentBlocked && (
+                  <form
+                    className="online-state-report-form"
+                    aria-label={`Report ${onlineChallengeOpponentDisplayName}`}
+                    onSubmit={handleSubmitOnlineChallengeReport}
+                  >
+                    <label>
+                      <span>Reason</span>
+                      <select
+                        className="online-state-input"
+                        value={onlineChallengeReportReason}
+                        onChange={(event) => setOnlineChallengeReportReason(event.currentTarget.value as OnlineAccountReportReason)}
+                        disabled={onlineChallengeAccountAction !== undefined}
+                      >
+                        {ONLINE_CHALLENGE_REPORT_REASON_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Details</span>
+                      <textarea
+                        className="online-state-input online-state-report-details"
+                        value={onlineChallengeReportDetails}
+                        onChange={(event) => setOnlineChallengeReportDetails(event.currentTarget.value)}
+                        maxLength={ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH}
+                        rows={3}
+                        disabled={onlineChallengeAccountAction !== undefined}
+                      />
+                    </label>
+                    <div className="online-state-report-actions">
+                      <span>{onlineChallengeReportDetailsRemaining} left</span>
+                      <button
+                        type="submit"
+                        className="online-state-button primary"
+                        disabled={onlineChallengeAccountAction !== undefined}
+                      >
+                        {onlineChallengeAccountAction === "report" ? "Submitting" : "Submit Report"}
+                      </button>
+                      <button
+                        type="button"
+                        className="online-state-button neutral"
+                        onClick={handleCancelOnlineChallengeReport}
+                        disabled={onlineChallengeAccountAction !== undefined}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+                <div
+                  className="online-state-inline-status"
+                  role="status"
+                  aria-label="Challenge account action status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {onlineChallengeAccountMessage}
+                </div>
+              </section>
+            )}
+            {canShowOnlineChallengeGameplayActions && onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenged" && (
               <div className="online-state-actions">
                 <button
                   type="button"
@@ -2490,7 +2713,7 @@ function App() {
                 </button>
               </div>
             )}
-            {onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenger" && (
+            {canShowOnlineChallengeGameplayActions && onlineChallengeResponse?.summary.status === "pending" && onlineChallengeResponse.role === "challenger" && (
               <div className="online-state-actions">
                 <button
                   type="button"
@@ -2510,7 +2733,7 @@ function App() {
                 </button>
               </div>
             )}
-            {onlineChallengeResponse?.gameInvite && (
+            {canShowOnlineChallengeGameplayActions && onlineChallengeResponse?.gameInvite && (
               <button
                 type="button"
                 onClick={() => onlineChallengeResponse.gameInvite && enterOnlineGameFromInvite(onlineChallengeResponse.gameInvite)}

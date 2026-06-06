@@ -880,8 +880,41 @@ body {
   font: inherit;
 }
 
+.online-state-report-form {
+  display: grid;
+  gap: 10px;
+}
+
+.online-state-report-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.online-state-report-form label > span {
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.online-state-report-details {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.online-state-report-actions {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(140px, auto) minmax(110px, auto);
+  gap: 10px;
+  align-items: center;
+}
+
+.online-state-report-actions span {
+  color: #f7f1d6;
+  font-weight: 800;
+}
+
 @media (max-width: 760px) {
-  .online-state-share-row {
+  .online-state-share-row,
+  .online-state-report-actions {
     grid-template-columns: minmax(0, 1fr);
   }
 }
