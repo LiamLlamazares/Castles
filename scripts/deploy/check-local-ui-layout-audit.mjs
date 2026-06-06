@@ -111,6 +111,33 @@ const SCENARIOS = [
     ],
   },
   {
+    name: "online-lobby-row-actions",
+    prepare: async (page, fixtures) => {
+      await openOnlineFromSetup(page);
+      await waitForRegion(page, "Open lobby listings");
+      await waitForRegion(page, "Current public games");
+      await waitForText(page, fixtures.openSeekId);
+      await waitForText(page, fixtures.liveGameId);
+      await waitForButton(page, `Accept lobby listing ${fixtures.openSeekId}`);
+      await waitForButton(page, `Spectate White vs Black, ${fixtures.liveGameId}`);
+    },
+    requiredTexts: (fixtures) => [
+      "Lobby listing",
+      fixtures.openSeekId,
+      "Creator unregistered",
+      "Creator plays White; you play Black",
+      "Board Radius 3",
+      "Clock Timed 20+20",
+      "Scoring Castle control",
+      "Rating Casual",
+      "Accept",
+      "Current games",
+      fixtures.liveGameId,
+      "White vs Black",
+      "Spectate",
+    ],
+  },
+  {
     name: "online-watch",
     prepare: async (page, fixtures) => {
       await openOnlineFromSetup(page);
