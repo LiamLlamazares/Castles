@@ -462,13 +462,21 @@ function parsePersonalDirectoryOptions(
     return { ok: false, message: "Personal history query is invalid." };
   }
 
-  for (const name of ["state", "limit", "cursor"]) {
+  for (const name of ["state", "limit", "cursor", "clock", "rating", "result", "q"]) {
     if (url.searchParams.getAll(name).length > 1) {
       return { ok: false, message: "Personal history query is invalid." };
     }
   }
   for (const name of url.searchParams.keys()) {
-    if (name !== "state" && name !== "limit" && name !== "cursor") {
+    if (
+      name !== "state" &&
+      name !== "limit" &&
+      name !== "cursor" &&
+      name !== "clock" &&
+      name !== "rating" &&
+      name !== "result" &&
+      name !== "q"
+    ) {
       return { ok: false, message: "Personal history query is invalid." };
     }
   }
@@ -497,6 +505,46 @@ function parsePersonalDirectoryOptions(
     }
   }
 
+  const rawClock = getSingleSearchParam(url.searchParams, "clock");
+  if (
+    rawClock !== null &&
+    !ONLINE_GAME_DIRECTORY_CLOCK_FILTERS.has(rawClock as OnlineGameDirectoryClockFilter)
+  ) {
+    return { ok: false, message: "Personal history clock filter is invalid." };
+  }
+  const clock = rawClock ?? undefined;
+
+  const rawRating = getSingleSearchParam(url.searchParams, "rating");
+  if (
+    rawRating !== null &&
+    !ONLINE_GAME_DIRECTORY_RATING_FILTERS.has(rawRating as OnlineGameDirectoryRatingFilter)
+  ) {
+    return { ok: false, message: "Personal history rating filter is invalid." };
+  }
+  const rating = rawRating ?? undefined;
+
+  const rawResult = getSingleSearchParam(url.searchParams, "result");
+  if (
+    rawResult !== null &&
+    !ONLINE_GAME_DIRECTORY_RESULT_FILTERS.has(rawResult as OnlineGameDirectoryResultFilter)
+  ) {
+    return { ok: false, message: "Personal history result filter is invalid." };
+  }
+  const result = rawResult ?? undefined;
+
+  const rawQuery = getSingleSearchParam(url.searchParams, "q");
+  let query: string | undefined;
+  if (rawQuery !== null) {
+    const normalizedQuery = normalizeOnlineGameDirectorySearchQuery(rawQuery);
+    if (!normalizedQuery) {
+      return {
+        ok: false,
+        message: `Personal history search must be 1-${ONLINE_GAME_DIRECTORY_SEARCH_MAX_LENGTH} visible characters.`,
+      };
+    }
+    query = normalizedQuery;
+  }
+
   return {
     ok: true,
     options: {
@@ -504,6 +552,10 @@ function parsePersonalDirectoryOptions(
       state: state as OnlinePersonalGameDirectoryListOptions["state"],
       limit,
       cursor,
+      clock: clock as OnlineGameDirectoryClockFilter | undefined,
+      rating: rating as OnlinePersonalGameDirectoryListOptions["rating"],
+      result: result as OnlineGameDirectoryResultFilter | undefined,
+      query,
     },
   };
 }

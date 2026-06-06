@@ -9,6 +9,7 @@ import {
   formatOnlineGameResult,
   OnlineRequestError,
   type FetchOnlineAccountGamesOptions,
+  type FetchOnlineAccountHeadToHeadGamesOptions,
   type FetchOnlineAccountChallengesOptions,
   type OnlineAccountChallengeDirectoryResponse,
   type OnlineAccountChallengeListItem,
@@ -170,7 +171,7 @@ interface OnlineGameBrowserProps {
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   loadAccountHeadToHeadGames?: (
     displayName: string,
-    options?: Omit<FetchOnlineAccountGamesOptions, "state">
+    options?: FetchOnlineAccountHeadToHeadGamesOptions
   ) => Promise<OnlineGameDirectoryResponse>;
   loadAccountChallenges?: (options?: FetchOnlineAccountChallengesOptions) => Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>;
   onAcceptAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
@@ -1676,6 +1677,15 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     ...(debouncedGameQuery !== "" && tab !== "lobby" ? { query: debouncedGameQuery } : {}),
   }), [debouncedGameQuery, directoryState, ratingFilter, resultFilter, tab, timeFilter]);
 
+  const accountGameDirectoryOptions = React.useMemo<FetchOnlineAccountGamesOptions>(() => ({
+    state: "all",
+    limit: 50,
+    ...(timeFilter !== "all" ? { clock: timeFilter } : {}),
+    ...(ratingFilter !== "all" ? { rating: ratingFilter } : {}),
+    ...(resultFilter !== "all" ? { result: resultFilter } : {}),
+    ...(debouncedGameQuery !== "" ? { query: debouncedGameQuery } : {}),
+  }), [debouncedGameQuery, ratingFilter, resultFilter, timeFilter]);
+
   const loadPage = React.useCallback(async (
     mode: "replace" | "append",
     cursor?: string,
@@ -2074,7 +2084,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
     const requestId = ++accountGamesRequestIdRef.current;
     setAccountGamesStatus("loading");
-    loadAccountGames({ state: "all", limit: 50 })
+    loadAccountGames(accountGameDirectoryOptions)
       .then((response) => {
         if (requestId !== accountGamesRequestIdRef.current) return;
         setAccountGames(response.games);
@@ -2088,7 +2098,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     return () => {
       accountGamesRequestIdRef.current += 1;
     };
-  }, [account?.accountId, loadAccountGames, tab]);
+  }, [account?.accountId, accountGameDirectoryOptions, loadAccountGames, tab]);
 
   const loadHeadToHeadPage = React.useCallback(async (mode: "replace" | "append", cursor?: string) => {
     if (!account || !loadAccountHeadToHeadGames || !activeHeadToHeadDisplayName) return;
@@ -5425,7 +5435,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     onClick={() => {
                       const requestId = ++accountGamesRequestIdRef.current;
                       setAccountGamesStatus("loading");
-                      loadAccountGames?.({ state: "all", limit: 50 })
+                      loadAccountGames?.(accountGameDirectoryOptions)
                         .then((response) => {
                           if (requestId !== accountGamesRequestIdRef.current) return;
                           setAccountGames(response.games);

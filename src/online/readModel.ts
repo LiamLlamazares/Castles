@@ -147,6 +147,10 @@ export interface OnlinePersonalGameDirectoryListOptions {
   state: OnlineGameDirectoryState;
   limit: number;
   cursor?: string;
+  clock?: OnlineGameDirectoryClockFilter;
+  rating?: OnlineGameDirectoryRatingFilter;
+  result?: OnlineGameDirectoryResultFilter;
+  query?: string;
   opponentDisplayNameKey?: string;
 }
 
@@ -381,16 +385,39 @@ export function onlineGameSummaryMatchesPersonalDirectoryFilters(
     isSameOnlineIdentity(participant.identity, options.identity)
   );
   if (!accountParticipant) return false;
-  if (!options.opponentDisplayNameKey) return true;
-  return summary.participants.some((participant) => {
-    if (participant.seat === accountParticipant.seat) return false;
-    const identity = participant.identity;
-    return (
-      identity.kind === "registered" &&
-      typeof identity.displayName === "string" &&
-      normalizeOnlineAccountDisplayNameKey(identity.displayName) === options.opponentDisplayNameKey
-    );
-  });
+  if (options.clock === "timed" && !summary.hasTimeControl) return false;
+  if (options.clock === "casual" && summary.hasTimeControl) return false;
+  if (options.rating && (summary.ratingMode ?? "casual") !== options.rating) return false;
+  if (options.result) {
+    if (!summary.result) return false;
+    if (options.result === "white" && summary.result.winner !== "w") return false;
+    if (options.result === "black" && summary.result.winner !== "b") return false;
+    if (
+      options.result !== "white" &&
+      options.result !== "black" &&
+      summary.result.reason !== options.result
+    ) {
+      return false;
+    }
+  }
+  if (
+    options.query &&
+    !onlineGameSummaryDirectorySearchText(summary).includes(options.query.toLowerCase())
+  ) {
+    return false;
+  }
+  if (options.opponentDisplayNameKey) {
+    return summary.participants.some((participant) => {
+      if (participant.seat === accountParticipant.seat) return false;
+      const identity = participant.identity;
+      return (
+        identity.kind === "registered" &&
+        typeof identity.displayName === "string" &&
+        normalizeOnlineAccountDisplayNameKey(identity.displayName) === options.opponentDisplayNameKey
+      );
+    });
+  }
+  return true;
 }
 
 export function normalizeOnlineGameDirectorySearchQuery(value: string): string | null {

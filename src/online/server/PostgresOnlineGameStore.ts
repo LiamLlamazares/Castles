@@ -344,6 +344,72 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       where.push("status = 'complete'");
       where.push("archive_state = 'archived'");
     }
+    if (options.clock === "timed") {
+      const clockParam = values.length + 1;
+      values.push({ hasTimeControl: true });
+      where.push(`payload @> $${clockParam}::jsonb`);
+    } else if (options.clock === "casual") {
+      const clockParam = values.length + 1;
+      values.push({ hasTimeControl: false });
+      where.push(`payload @> $${clockParam}::jsonb`);
+    }
+    if (options.rating) {
+      const ratingParam = values.length + 1;
+      values.push(options.rating);
+      where.push(`COALESCE(payload->>'ratingMode', 'casual') = $${ratingParam}`);
+    }
+    if (options.result) {
+      const resultParam = values.length + 1;
+      const resultFilter =
+        options.result === "white"
+          ? { result: { winner: "w" } }
+          : options.result === "black"
+            ? { result: { winner: "b" } }
+            : { result: { reason: options.result } };
+      values.push(resultFilter);
+      where.push(`payload @> $${resultParam}::jsonb`);
+    }
+    if (options.query) {
+      const searchParam = values.length + 1;
+      values.push(`%${escapePostgresLike(options.query.toLowerCase())}%`);
+      where.push(`(
+        LOWER(game_id) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(status) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(archive_state) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'result'->>'reason', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(REPLACE(COALESCE(payload->'result'->>'reason', ''), '_', ' ')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'result'->>'winner', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(CASE payload->'result'->>'winner' WHEN 'w' THEN 'white' WHEN 'b' THEN 'black' ELSE '' END, '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(
+          CONCAT(
+            COALESCE(CASE payload->'result'->>'winner' WHEN 'w' THEN 'white' WHEN 'b' THEN 'black' ELSE '' END, ''),
+            ' wins by ',
+            REPLACE(COALESCE(payload->'result'->>'reason', ''), '_', ' ')
+          )
+        ) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(
+          CONCAT(
+            COALESCE(CASE payload->'result'->>'winner' WHEN 'w' THEN 'white' WHEN 'b' THEN 'black' ELSE '' END, ''),
+            ' wins ',
+            CASE payload->'result'->>'reason'
+              WHEN 'timeout' THEN 'on time'
+              ELSE CONCAT('by ', REPLACE(COALESCE(payload->'result'->>'reason', ''), '_', ' '))
+            END
+          )
+        ) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'livePreview'->>'sideToMove', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(CASE payload->'livePreview'->>'sideToMove' WHEN 'w' THEN 'white to move' WHEN 'b' THEN 'black to move' ELSE '' END, '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'livePreview'->>'turnPhase', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'livePreview'->'lastMove'->>'notation', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(CASE WHEN (payload->>'hasTimeControl')::boolean THEN 'timed clock timed' ELSE 'casual no clock' END) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->>'ratingMode', 'casual')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(CASE COALESCE(payload->>'ratingMode', 'casual') WHEN 'rated' THEN 'rated game' ELSE 'casual game' END) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->0->>'role', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->1->>'role', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->0->'identity'->>'displayName', '')) LIKE $${searchParam} ESCAPE '\\'
+        OR LOWER(COALESCE(payload->'participants'->1->'identity'->>'displayName', '')) LIKE $${searchParam} ESCAPE '\\'
+      )`);
+    }
 
     if (options.cursor) {
       const cursor = decodeOnlineGameDirectoryCursor(options.cursor);

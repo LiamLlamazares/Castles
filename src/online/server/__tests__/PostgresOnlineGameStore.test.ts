@@ -496,10 +496,56 @@ class FakePostgresClient {
         if (/archive_state\s*=\s*'archived'/i.test(text)) {
           rows = rows.filter((row) => (row.payload as { archiveState?: string }).archiveState === "archived");
         }
+        const clockFilter = values?.find((value) => {
+          const candidate = value as { hasTimeControl?: boolean } | undefined;
+          return typeof candidate?.hasTimeControl === "boolean";
+        }) as { hasTimeControl?: boolean } | undefined;
+        if (clockFilter) {
+          rows = rows.filter(
+            (row) =>
+              (row.payload as { hasTimeControl?: boolean }).hasTimeControl ===
+              clockFilter.hasTimeControl
+          );
+        }
+        if (/coalesce\(payload->>'ratingMode',\s*'casual'\)\s*=\s*\$\d+/i.test(text)) {
+          const rating = values?.find((value) => value === "casual" || value === "rated");
+          rows = rows.filter((row) => {
+            const payload = row.payload as { ratingMode?: string };
+            return (payload.ratingMode ?? "casual") === rating;
+          });
+        }
+        const resultFilter = values?.find((value) => {
+          const candidate = value as { result?: { winner?: string; reason?: string } } | undefined;
+          return !!candidate?.result && (candidate.result.winner !== undefined || candidate.result.reason !== undefined);
+        }) as { result?: { winner?: string; reason?: string } } | undefined;
+        if (resultFilter) {
+          rows = rows.filter((row) => {
+            const payload = row.payload as { result?: { winner?: string; reason?: string } };
+            if (resultFilter.result?.winner) {
+              return payload.result?.winner === resultFilter.result.winner;
+            }
+            if (resultFilter.result?.reason) {
+              return payload.result?.reason === resultFilter.result.reason;
+            }
+            return true;
+          });
+        }
+        if (/lower\(game_id\)\s+like/i.test(text)) {
+          const rawPattern = values?.find((value) => typeof value === "string" && value.startsWith("%"));
+          const query = typeof rawPattern === "string" ? rawPattern.slice(1, -1).toLowerCase() : "";
+          rows = rows.filter((row) =>
+            onlineGameSummaryDirectorySearchText(row.payload as OnlineGameSummary).includes(query)
+          );
+        }
         if (/updated_at\s*</i.test(text)) {
-          const cursorStartIndex = /jsonb_array_elements/i.test(text) ? 3 : 1;
-          const cursorUpdatedAt = values?.[cursorStartIndex] as string;
-          const cursorGameId = values?.[cursorStartIndex + 1] as string;
+          const cursorIndex =
+            values?.findIndex(
+              (value) =>
+                typeof value === "string" &&
+                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+            ) ?? -1;
+          const cursorUpdatedAt = values?.[cursorIndex] as string;
+          const cursorGameId = values?.[cursorIndex + 1] as string;
           rows = rows.filter((row) => {
             const payload = row.payload as { updatedAt?: string; gameId?: string };
             return (
@@ -2759,6 +2805,91 @@ describe("PostgresOnlineGameStore", () => {
           })
       )
     ).toBe(true);
+  });
+
+  it("filters personal game summaries by archive controls before pagination", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const identity = { kind: "registered", id: "user_me", displayName: "Me" } as const;
+    const samir = { kind: "registered", id: "user_samir", displayName: "Samir" } as const;
+    const other = { kind: "registered", id: "user_other", displayName: "Other" } as const;
+    const participantSet = [
+      { seat: "w" as const, role: "white" as const, identity },
+      { seat: "b" as const, role: "black" as const, identity: samir },
+    ];
+    client.summaryRows = [
+      {
+        payload: createSummary("game_newer_wrong_clock", {
+          status: "complete",
+          archiveState: "archived",
+          hasTimeControl: true,
+          ratingMode: "rated",
+          endedAt: "2026-05-31T12:05:00.000Z",
+          updatedAt: "2026-05-31T12:05:00.000Z",
+          result: { winner: "b", reason: "timeout" },
+          participants: participantSet,
+        }),
+      },
+      {
+        payload: createSummary("game_middle_wrong_rating", {
+          status: "complete",
+          archiveState: "archived",
+          hasTimeControl: false,
+          ratingMode: "casual",
+          endedAt: "2026-05-31T12:04:00.000Z",
+          updatedAt: "2026-05-31T12:04:00.000Z",
+          result: { winner: "b", reason: "timeout" },
+          participants: participantSet,
+        }),
+      },
+      {
+        payload: createSummary("game_older_matching_samir", {
+          status: "complete",
+          archiveState: "archived",
+          hasTimeControl: false,
+          ratingMode: "rated",
+          endedAt: "2026-05-31T12:03:00.000Z",
+          updatedAt: "2026-05-31T12:03:00.000Z",
+          result: { winner: "b", reason: "timeout" },
+          participants: participantSet,
+        }),
+      },
+      {
+        payload: createSummary("game_oldest_wrong_search", {
+          status: "complete",
+          archiveState: "archived",
+          hasTimeControl: false,
+          ratingMode: "rated",
+          endedAt: "2026-05-31T12:02:00.000Z",
+          updatedAt: "2026-05-31T12:02:00.000Z",
+          result: { winner: "b", reason: "timeout" },
+          participants: [
+            { seat: "w" as const, role: "white" as const, identity },
+            { seat: "b" as const, role: "black" as const, identity: other },
+          ],
+        }),
+      },
+    ];
+
+    const page = await store.listPersonalGameSummaries({
+      identity,
+      state: "archived",
+      limit: 1,
+      clock: "casual",
+      rating: "rated",
+      result: "timeout",
+      query: "samir",
+    });
+
+    expect(page.games.map((summary) => summary.gameId)).toEqual(["game_older_matching_samir"]);
+    expect(page.nextCursor).toBeUndefined();
+    const query = client.queries.find((candidate) => /from\s+online_game_summaries/i.test(candidate.text));
+    expect(query?.text).toMatch(/COALESCE\(payload->>'ratingMode', 'casual'\)/);
+    expect(query?.text).toMatch(/LOWER\(game_id\)\s+LIKE/i);
+    expect(query?.values).toContainEqual({ hasTimeControl: false });
+    expect(query?.values).toContain("rated");
+    expect(query?.values).toContainEqual({ result: { reason: "timeout" } });
+    expect(query?.values).toContain("%samir%");
   });
 
   it("paginates personal game summaries after filtering by identity and lifecycle state", async () => {

@@ -2616,15 +2616,26 @@ describe("createOnlineHttpServer", () => {
 
   it("lists account game history from the authenticated account identity", async () => {
     const listPersonalGameSummaries = vi.fn((options: OnlinePersonalGameDirectoryListOptions): OnlineGameDirectoryResponse => {
-      const summary = summaryForGame("game_private_history", "private");
+      const summary = summaryForGame("game_private_history_samir", "private");
       return {
         schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
         games: [
           {
             ...summary,
+            status: "complete",
+            archiveState: "archived",
+            endedAt: "2026-05-31T12:00:00.000Z",
+            hasTimeControl: false,
+            ratingMode: "rated",
+            result: { winner: "b", reason: "timeout" },
+            livePreview: withoutPreviewClock(summary.livePreview),
             participants: [
               { seat: "w" as const, role: "white" as const, identity: options.identity },
-              { seat: "b" as const, role: "black" as const, identity: { kind: "anonymous" as const, id: "anon_b" } },
+              {
+                seat: "b" as const,
+                role: "black" as const,
+                identity: { kind: "registered" as const, id: "account_samir_opponent", displayName: "Samir" },
+              },
             ],
           },
         ],
@@ -2644,9 +2655,12 @@ describe("createOnlineHttpServer", () => {
       body: JSON.stringify({ displayName: "Samir", password: "account-password" }),
     });
     const account = await accountResponse.json();
-    const historyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/games?state=all&limit=5`, {
-      headers: bearer(account.session.token),
-    });
+    const historyResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games?state=all&limit=5&clock=casual&rating=rated&result=timeout&q=Samir`,
+      {
+        headers: bearer(account.session.token),
+      }
+    );
     const history = await historyResponse.json();
 
     expect(historyResponse.status).toBe(200);
@@ -2655,10 +2669,14 @@ describe("createOnlineHttpServer", () => {
       state: "all",
       limit: 5,
       cursor: undefined,
+      clock: "casual",
+      rating: "rated",
+      result: "timeout",
+      query: "samir",
     });
     expect(history.games).toHaveLength(1);
     expect(history.games[0]).toMatchObject({
-      gameId: "game_private_history",
+      gameId: "game_private_history_samir",
       visibility: "private",
     });
     expect(history.games[0].participants).toContainEqual(

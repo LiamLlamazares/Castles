@@ -3900,6 +3900,80 @@ describe("OnlineGameBrowser", () => {
     });
   });
 
+  it("requests account game filters from the server for signed-in archive rows", async () => {
+    const account = accountFixture("Liam");
+    const loadAccountGames = vi.fn().mockResolvedValue(directory([]));
+    render(
+      <OnlineGameBrowser
+        initialTab="archive"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={account}
+        accountStatus="ready"
+        loadAccountGames={loadAccountGames}
+      />
+    );
+
+    await waitFor(() => expect(loadAccountGames).toHaveBeenLastCalledWith({ state: "all", limit: 50 }));
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Time control filter" }), {
+      target: { value: "casual" },
+    });
+
+    await waitFor(() => {
+      expect(loadAccountGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "all",
+        limit: 50,
+        clock: "casual",
+      });
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Rating filter" }), {
+      target: { value: "rated" },
+    });
+
+    await waitFor(() => {
+      expect(loadAccountGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "all",
+        limit: 50,
+        clock: "casual",
+        rating: "rated",
+      });
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Result filter" }), {
+      target: { value: "timeout" },
+    });
+
+    await waitFor(() => {
+      expect(loadAccountGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "all",
+        limit: 50,
+        clock: "casual",
+        rating: "rated",
+        result: "timeout",
+      });
+    });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search online archive" }), {
+      target: { value: "Samir" },
+    });
+
+    await waitFor(() => {
+      expect(loadAccountGames.mock.calls.at(-1)?.[0]).toEqual({
+        state: "all",
+        limit: 50,
+        clock: "casual",
+        rating: "rated",
+        result: "timeout",
+        query: "samir",
+      });
+    });
+  });
+
   it("lets signed-in players follow and rematch registered opponents from completed account game rows", async () => {
     const account = accountFixture("Liam");
     const followedProfile = publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" });

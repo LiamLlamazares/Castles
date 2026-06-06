@@ -2190,6 +2190,15 @@ export interface FetchOnlineAccountGamesOptions {
   state?: OnlineGameDirectoryState;
   limit?: number;
   cursor?: string;
+  clock?: OnlineGameDirectoryClockFilter;
+  rating?: OnlineRatingMode;
+  result?: OnlineGameDirectoryResultFilter;
+  query?: string;
+}
+
+export interface FetchOnlineAccountHeadToHeadGamesOptions {
+  limit?: number;
+  cursor?: string;
 }
 
 function buildOnlineAccountGamesPath(options: FetchOnlineAccountGamesOptions = {}): string {
@@ -2197,6 +2206,10 @@ function buildOnlineAccountGamesPath(options: FetchOnlineAccountGamesOptions = {
   if (options.state) params.set("state", options.state);
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   if (options.cursor) params.set("cursor", options.cursor);
+  if (options.clock) params.set("clock", options.clock);
+  if (options.rating) params.set("rating", options.rating);
+  if (options.result) params.set("result", options.result);
+  if (options.query?.trim()) params.set("q", options.query.trim());
   const query = params.toString();
   return query ? `/api/online/account/games?${query}` : "/api/online/account/games";
 }
@@ -2224,7 +2237,7 @@ export async function fetchOnlineAccountGames(
 
 function buildOnlineAccountHeadToHeadGamesPath(
   displayName: string,
-  options: Omit<FetchOnlineAccountGamesOptions, "state"> = {}
+  options: FetchOnlineAccountHeadToHeadGamesOptions = {}
 ): string {
   const params = new URLSearchParams();
   if (options.limit !== undefined) params.set("limit", String(options.limit));
@@ -2237,7 +2250,7 @@ function buildOnlineAccountHeadToHeadGamesPath(
 export async function fetchOnlineAccountHeadToHeadGames(
   account: OnlineAccountSessionParams,
   displayName: string,
-  options: Omit<FetchOnlineAccountGamesOptions, "state"> = {},
+  options: FetchOnlineAccountHeadToHeadGamesOptions = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<OnlineGameDirectoryResponse> {
   const response = await fetchImpl(buildOnlineAccountHeadToHeadGamesPath(displayName, options), {

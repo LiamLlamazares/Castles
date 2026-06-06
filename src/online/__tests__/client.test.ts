@@ -747,7 +747,15 @@ describe("online client helpers", () => {
     await expect(
       fetchOnlineAccountGames(
         { token: "account-token" },
-        { state: "archived", limit: 10, cursor: "cursor_123" },
+        {
+          state: "archived",
+          limit: 10,
+          cursor: "cursor_123",
+          clock: "casual",
+          rating: "rated",
+          result: "timeout",
+          query: "Samir",
+        },
         fetchImpl as any
       )
     ).resolves.toMatchObject({
@@ -796,7 +804,7 @@ describe("online client helpers", () => {
     });
     expect(fetchImpl).toHaveBeenNthCalledWith(
       3,
-      "/api/online/account/games?state=archived&limit=10&cursor=cursor_123",
+      "/api/online/account/games?state=archived&limit=10&cursor=cursor_123&clock=casual&rating=rated&result=timeout&q=Samir",
       { headers: { authorization: "Bearer account-token" } }
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(

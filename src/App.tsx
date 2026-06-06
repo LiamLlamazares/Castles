@@ -106,6 +106,7 @@ import {
   StoredOnlineAccountSession,
   FetchOnlineAccountChallengesOptions,
   FetchOnlineAccountGamesOptions,
+  FetchOnlineAccountHeadToHeadGamesOptions,
   FetchOpenSeekDirectoryOptions,
   OnlineAccountPrivacyPatch,
   OnlineAccountReportInput,
@@ -1321,7 +1322,7 @@ function App() {
 
   const handleLoadOnlineAccountHeadToHeadGames = useCallback((
     displayName: string,
-    options?: Omit<FetchOnlineAccountGamesOptions, "state">
+    options?: FetchOnlineAccountHeadToHeadGamesOptions
   ) => {
     if (!onlineAccountSession) {
       throw new Error("No online account session is available.");
