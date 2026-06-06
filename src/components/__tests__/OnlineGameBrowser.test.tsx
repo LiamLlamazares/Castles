@@ -4218,7 +4218,7 @@ describe("OnlineGameBrowser", () => {
     });
   });
 
-  it("lets signed-in players follow and rematch registered opponents from completed account game rows", async () => {
+  it("lets signed-in players inspect, follow, and rematch registered opponents from account game rows", async () => {
     const account = accountFixture("Liam");
     const followedProfile = publicProfile("Samir", { following: true }, { visibility: "visible", status: "online" });
     let currentFollowing = false;
@@ -4234,6 +4234,7 @@ describe("OnlineGameBrowser", () => {
       });
     });
     const onChallengeAccount = vi.fn().mockResolvedValue(undefined);
+    const loadAccountHeadToHeadGames = vi.fn().mockResolvedValue(directory([]));
     const accountArchive = summary({
       gameId: "game_account_archive_samir",
       status: "complete",
@@ -4278,6 +4279,7 @@ describe("OnlineGameBrowser", () => {
         {...socialPropsWithFollowing()}
         loadAccountFollowing={loadAccountFollowing}
         loadAccountGames={vi.fn().mockResolvedValue(directory([activeAccount, accountArchive]))}
+        loadAccountHeadToHeadGames={loadAccountHeadToHeadGames}
         onFollowAccount={onFollowAccount}
         onChallengeAccount={onChallengeAccount}
       />
@@ -4286,6 +4288,9 @@ describe("OnlineGameBrowser", () => {
     const activeGames = await screen.findByRole("region", { name: "Active account games" });
     const activeRow = (await within(activeGames).findByText("game_active_account_samir")).closest("article");
     expect(activeRow).not.toBeNull();
+    expect(within(activeRow as HTMLElement).getByRole("button", {
+      name: "Show Samir game history from game_active_account_samir",
+    })).toBeInTheDocument();
     expect(within(activeRow as HTMLElement).getByRole("button", {
       name: "Follow Samir from game_active_account_samir",
     })).toBeInTheDocument();
@@ -4297,6 +4302,9 @@ describe("OnlineGameBrowser", () => {
     const accountReplayRow = (await within(completedGames).findByText("game_account_archive_samir")).closest("article");
     expect(accountReplayRow).not.toBeNull();
     expect(within(accountReplayRow as HTMLElement).getByRole("button", {
+      name: "Show Samir game history from game_account_archive_samir",
+    })).toBeInTheDocument();
+    expect(within(accountReplayRow as HTMLElement).getByRole("button", {
       name: "Follow Samir from game_account_archive_samir",
     })).toBeInTheDocument();
     expect(within(accountReplayRow as HTMLElement).getByRole("button", {
@@ -4305,6 +4313,9 @@ describe("OnlineGameBrowser", () => {
 
     const publicReplayRow = (await screen.findByText("game_public_archive_samir_only")).closest("article");
     expect(publicReplayRow).not.toBeNull();
+    expect(within(publicReplayRow as HTMLElement).queryByRole("button", {
+      name: "Show Samir game history from game_public_archive_samir_only",
+    })).not.toBeInTheDocument();
     expect(within(publicReplayRow as HTMLElement).queryByRole("button", {
       name: "Follow Samir from game_public_archive_samir_only",
     })).not.toBeInTheDocument();
@@ -4328,6 +4339,15 @@ describe("OnlineGameBrowser", () => {
       sourceGameId: "game_account_archive_samir",
     }));
     expect(await screen.findByText("Rematch challenge created for Samir.")).toBeInTheDocument();
+
+    fireEvent.click(within(activeRow as HTMLElement).getByRole("button", {
+      name: "Show Samir game history from game_active_account_samir",
+    }));
+    await waitFor(() =>
+      expect(screen.getByRole("searchbox", { name: "Search online archive" })).toHaveValue("Samir")
+    );
+    await waitFor(() => expect(loadAccountHeadToHeadGames).toHaveBeenCalledWith("Samir", { limit: 5 }));
+    expect(screen.getByText("Showing visible games with Samir.")).toBeInTheDocument();
   });
 
   it("does not show device replay fallback while signed-in account archive is still loading", async () => {

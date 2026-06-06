@@ -1013,6 +1013,7 @@ This section is the working queue for the current `online-action-log` branch. Fu
    - Done: existing navigation Online badge direct-link auto-refresh coverage proves accepted-game readiness discovered from a signed-in direct challenge link updates the same count-only badge without waiting for the next 30-second `App` all-inbox poll. The update remains count-only; push/email notifications, private messages, and opponent-identifying out-of-panel payloads remain deferred.
 
 4. Lobby, Watch, Archive, and account-history scanability.
+   - Done: account-game row history affordances now add authorized opponent `History` actions to active and completed account-history rows, reusing the existing Archive/head-to-head lookup from the row itself. Public archive rows remain public-only, and direct challenge/rematch semantics are unchanged. Verification passed `npx vitest run src/components/__tests__/OnlineGameBrowser.test.tsx -t "inspect, follow, and rematch"`, full `npx vitest run src/components/__tests__/OnlineGameBrowser.test.tsx`, `npm run build`, `npm run server:build`, `git diff --check`, and local code/privacy review.
    - Continue list-first desktop design: quiet dense rows, stable filters, clear current-setup actions, no marketing layout.
    - Improve friend-aware discovery where it helps play: friends filters for Watch/Archive/account history, compact friends-playing-now, and richer authorized head-to-head/history links.
    - Add archive detail/search read models only when the current `OnlineGameSummary` payload stops being enough for replay/detail pages.
@@ -1034,7 +1035,7 @@ This section is the working queue for the current `online-action-log` branch. Fu
 
 ### Current Slice Selection Rule
 
-- Pick the first non-Done slice from `Next Ordered Slices`; the next planned slice is item 4, Lobby, Watch, Archive, and account-history scanability.
+- Pick the first non-Done slice from `Next Ordered Slices`; the next planned slice remains item 4, Lobby, Watch, Archive, and account-history scanability. Select a concrete item 4 sub-slice before implementation and record it here first.
 - Before implementation, state which numbered item the slice advances.
 - If a new issue is discovered while working, add it to this section before implementing it unless it is an emergency fix.
 - After the slice, update this section with status, commit/deploy evidence if applicable, and any remaining follow-up.

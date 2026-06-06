@@ -2510,7 +2510,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   const renderGameRowSocialActions = (
     game: OnlineGameSummary,
-    options: { allowChallenge?: boolean; challengeIntent?: OnlineAccountChallengeIntent } = {}
+    options: {
+      allowChallenge?: boolean;
+      allowHistory?: boolean;
+      challengeIntent?: OnlineAccountChallengeIntent;
+    } = {}
   ) => {
     if (!canUseAccountSocial) return null;
     const opponentProfileNames = accountOpponentProfileNames(game, account);
@@ -2523,6 +2527,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       const pendingChallenge = accountChallengeByOpponentDisplayName.get(profileKey);
       return (
         <React.Fragment key={`${game.gameId}:${profileKey}`}>
+          {options.allowHistory && (
+            <button
+              type="button"
+              className="online-browser-button subtle"
+              onClick={() => showVisiblePlayerHistory(profileName)}
+              disabled={socialAction !== undefined}
+              aria-label={`Show ${profileName} game history from ${game.gameId}`}
+            >
+              History
+            </button>
+          )}
           {!isFollowed && onFollowAccount && (
             <button
               type="button"
@@ -2662,6 +2677,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       featured?: boolean;
       context?: "watch" | "archive";
       featuredReason?: "moves" | "watchers";
+      showOpponentHistoryActions?: boolean;
       showOpponentSocialActions?: boolean;
     } = {}
   ) => {
@@ -2839,6 +2855,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           )}
           {options.showOpponentSocialActions && renderGameRowSocialActions(game, {
             allowChallenge: isArchivedGame,
+            allowHistory: options.showOpponentHistoryActions,
             challengeIntent: isArchivedGame ? "rematch" : "challenge",
           })}
         </div>
@@ -2952,7 +2969,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           ) : (
             <span className="online-game-action-note">Open from original browser session or invite link</span>
           )}
-          {renderGameRowSocialActions(game)}
+          {renderGameRowSocialActions(game, { allowHistory: true })}
         </div>
       </article>
     );
@@ -5807,7 +5824,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                           <span>{formatCount(accountArchivedGames.length, "replay")}</span>
                         </div>
                         {accountArchivedGames.map((game) =>
-                          renderPublicGameRow(game, { context: "archive", showOpponentSocialActions: true })
+                          renderPublicGameRow(game, {
+                            context: "archive",
+                            showOpponentHistoryActions: true,
+                            showOpponentSocialActions: true,
+                          })
                         )}
                       </section>
                     )}
