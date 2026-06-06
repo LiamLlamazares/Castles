@@ -2054,6 +2054,121 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(logs)).not.toContain(samir.session.token);
   });
 
+  it("rejects token-bearing social and privacy query strings even with bearer auth", async () => {
+    const adminToken = "admin-token-with-enough-length";
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      adminBearerToken: adminToken,
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    const expectBadQuery = async (response: Response) => {
+      const body = await response.json();
+      expect(response.status).toBe(400);
+      expect(body.error).toMatchObject({
+        code: "bad_request",
+        message: "Account social action query is invalid.",
+      });
+    };
+
+    const queryOnlyProfileResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Samir?token=${liam.session.token}`
+    );
+
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir?token=leaked-account-token`, {
+        headers: bearer(liam.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/follows?token=leaked-account-token`, {
+        headers: bearer(liam.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir?token=leaked-account-token`, {
+        method: "PUT",
+        headers: bearer(liam.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Samir?token=leaked-account-token`, {
+        method: "DELETE",
+        headers: bearer(liam.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Samir?token=leaked-account-token`, {
+        method: "PUT",
+        headers: bearer(liam.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/blocks/Samir?token=leaked-account-token`, {
+        method: "DELETE",
+        headers: bearer(liam.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/reports/Samir?token=leaked-account-token`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+        body: JSON.stringify({ reason: "abuse", details: "Hostile challenge message." }),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/privacy?token=leaked-account-token`, {
+        headers: bearer(samir.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/privacy?token=leaked-account-token`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", ...bearer(samir.session.token) },
+        body: JSON.stringify({ followPolicy: "nobody", presencePolicy: "nobody" }),
+      })
+    );
+
+    const profileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`, {
+      headers: bearer(liam.session.token),
+    });
+    const profile = await profileResponse.json();
+    const followingResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/follows`, {
+      headers: bearer(liam.session.token),
+    });
+    const following = await followingResponse.json();
+    const privacyResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/privacy`, {
+      headers: bearer(samir.session.token),
+    });
+    const privacy = await privacyResponse.json();
+    const reportsResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+      headers: bearer(adminToken),
+    });
+    const reports = await reportsResponse.json();
+
+    expect(queryOnlyProfileResponse.status).toBe(401);
+    expect(profileResponse.status).toBe(200);
+    expect(profile.profile).toMatchObject({
+      displayName: "Samir",
+      relationship: { self: false, following: false, followedBy: false, blocked: false },
+    });
+    expect(followingResponse.status).toBe(200);
+    expect(following.following).toEqual([]);
+    expect(privacyResponse.status).toBe(200);
+    expect(privacy.privacy).toMatchObject({
+      followPolicy: "everyone",
+      presencePolicy: "followed",
+      challengePolicy: "followed",
+      updatedAt: null,
+    });
+    expect(reportsResponse.status).toBe(200);
+    expect(reports.reports).toEqual([]);
+  });
+
   it("reports when followed accounts follow the viewer back", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

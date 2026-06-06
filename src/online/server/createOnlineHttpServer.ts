@@ -641,6 +641,15 @@ function validateAccountChallengeActionQuery(originalUrl: string):
     : { ok: false, message: "Account challenge action query is invalid." };
 }
 
+function validateAccountSocialActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Account social action query is invalid." };
+}
+
 function validateDirectChallengeActionQuery(originalUrl: string):
   | { ok: true }
   | { ok: false; message: string } {
@@ -3423,6 +3432,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.profile.lookup", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     const displayName = parseProfileDisplayNameParam(req.params.displayName);
     if (!displayName) {
       res.status(400).json({
@@ -3466,6 +3481,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.follows.list", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     try {
       const following = await accountStore.listFollowingProfiles(auth.account.accountId, auth.usedAt);
       log({ event: "online.account.follows.list", status: "accepted" });
@@ -3493,6 +3514,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!auth.ok) {
       log({ event: "online.account.follow", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.follow", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
     const displayName = parseProfileDisplayNameParam(req.params.displayName);
@@ -3538,6 +3565,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.unfollow", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     const displayName = parseProfileDisplayNameParam(req.params.displayName);
     if (!displayName) {
       res.status(400).json({
@@ -3578,6 +3611,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!auth.ok) {
       log({ event: "online.account.block", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.block", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
     const displayName = parseProfileDisplayNameParam(req.params.displayName);
@@ -3629,6 +3668,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.unblock", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     const displayName = parseProfileDisplayNameParam(req.params.displayName);
     if (!displayName) {
       res.status(400).json({
@@ -3669,6 +3714,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!auth.ok) {
       log({ event: "online.account.report", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.report", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
     const displayName = parseProfileDisplayNameParam(req.params.displayName);
@@ -3931,6 +3982,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.privacy.get", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     try {
       const privacy = await accountStore.getPrivacySettings(auth.account.accountId);
       log({ event: "online.account.privacy.get", status: "accepted" });
@@ -3958,6 +4015,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!auth.ok) {
       log({ event: "online.account.privacy.update", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSocialActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.privacy.update", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
     const patch = parseOnlineAccountPrivacyPatch(req.body);
