@@ -4026,6 +4026,126 @@ describe("App game setup lifecycle", () => {
     );
   });
 
+  it("syncs count-only Online navigation activity when direct challenge auto-refresh finds an accepted game", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_direct_auto",
+      displayName: "Liam",
+      createdAt: "2026-06-06T12:00:00.000Z",
+      updatedAt: "2026-06-06T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_direct_auto", displayName: "Liam" },
+    };
+    const samirIdentity = { kind: "registered" as const, id: "registered:samir-public", displayName: "Samir" };
+    const pendingSummary = appAccountChallengeSummary({
+      challengeId: "challenge_auto",
+      challengerIdentity: account.identity,
+      challengedIdentity: samirIdentity,
+      status: "pending",
+    });
+    const acceptedSummary = appAccountChallengeSummary({
+      ...pendingSummary,
+      updatedAt: "2026-06-06T12:04:00.000Z",
+      status: "accepted",
+      acceptedAt: "2026-06-06T12:04:00.000Z",
+      acceptedBy: samirIdentity,
+      gameId: "game_from_challenge_auto",
+      whiteIdentity: account.identity,
+      blackIdentity: samirIdentity,
+      lastEventId: "challenge_auto_accepted_evt",
+    });
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineChallenge=challenge_auto&challengeRole=challenger#challengeToken=challenge-token"
+    );
+    let directChallengeFetches = 0;
+    let directChallengeAccepted = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: ONLINE_PROTOCOL_VERSION, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/challenges/challenge_auto") {
+        expect(init?.headers).toEqual({ authorization: "Bearer challenge-token" });
+        directChallengeFetches += 1;
+        if (directChallengeFetches >= 2) {
+          directChallengeAccepted = true;
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                protocolVersion: ONLINE_PROTOCOL_VERSION,
+                role: "challenger",
+                summary: acceptedSummary,
+                gameInvite: {
+                  gameId: "game_from_challenge_auto",
+                  seat: "w",
+                  token: "join-token",
+                  url: "https://castles.example/?onlineGame=game_from_challenge_auto&seat=w",
+                },
+              }),
+              { status: 200, headers: { "content-type": "application/json" } }
+            )
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              role: "challenger",
+              summary: pendingSummary,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/challenges?state=all") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+              challenges: directChallengeAccepted
+                ? [{ role: "challenger", summary: acceptedSummary }]
+                : [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Refresh Challenge" });
+    expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
+
+    await waitFor(
+      () => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/online/challenges/challenge_auto",
+          { headers: { authorization: "Bearer challenge-token" } }
+        );
+        expect(screen.getByRole("button", { name: "Join Game" })).toBeInTheDocument();
+        const onlineDestination = screen.getByRole("button", { name: "Online, 1 challenge activity" });
+        expect(onlineDestination).not.toHaveTextContent("Samir");
+      },
+      { timeout: 2500 }
+    );
+  });
+
   it("restores the challenger share link after a tokenless challenge reload", async () => {
     const challenge = {
       challengeId: "challenge_restore",
