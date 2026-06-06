@@ -7,16 +7,21 @@ function readScript() {
 }
 
 describe("local PostgreSQL challenge smoke script", () => {
-  it("exercises registered account challenge creation, inbox, accept, and history through PostgreSQL", () => {
+  it("exercises registered account challenge creation, inbox, accept, history, and rejoin through PostgreSQL", () => {
     const script = readScript();
 
     expect(script).toContain("PostgresOnlineAccountStore.js");
     expect(script).toContain("new PostgresOnlineAccountStore");
     expect(script).toMatch(/createOnlineHttpServer\(\{[\s\S]*accountStore,/);
+    expect(script).toContain("makeSmokeSetup");
+    expect(script).toContain("appendGameSeatCredential");
     expect(script).toContain("/api/online/accounts");
     expect(script).toContain("/api/online/account/follows/");
     expect(script).toContain("challengedDisplayName");
     expect(script).toContain("/api/online/account/challenges?state=all");
     expect(script).toContain("/api/online/account/games?state=all");
+    expect(script).toContain("/api/online/account/games/");
+    expect(script).toContain("/rejoin");
+    expect(script).toContain("Account rejoin");
   });
 });

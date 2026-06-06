@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   assert,
   assertProtocolVersionedBody,
+  makeSmokeSetup,
   readJson,
 } from "./online-smoke-lib.mjs";
 import { checkLocalPostgresPrereqs } from "./local-postgres-prereqs.mjs";
@@ -54,13 +55,7 @@ async function requireLocalInputs() {
 
 function createSmokeSetup() {
   return {
-    board: { config: { nSquares: 6 }, castles: [] },
-    pieces: [],
-    sanctuaries: [],
-    sanctuarySettings: { unlockTurn: 0, cooldown: 10 },
-    gameRules: { vpModeEnabled: false },
-    initialPoolTypes: [],
-    pieceTheme: "Castles",
+    ...makeSmokeSetup(),
     timeControl: { initial: 20, increment: 20 },
   };
 }
@@ -163,6 +158,31 @@ async function loadAccountGames(baseUrl, token, query, label) {
   return body;
 }
 
+async function rejoinAccountGame(baseUrl, token, gameId, expectedSeat, label) {
+  const response = await fetch(
+    `${baseUrl}/api/online/account/games/${encodeURIComponent(gameId)}/rejoin`,
+    { method: "POST", headers: bearer(token) }
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `${label} account rejoin failed with ${response.status}`);
+  assertProtocolVersionedBody(body, `${label} Account rejoin`);
+  assert(body.gameInvite?.gameId === gameId, `${label} account rejoin returned the wrong game`);
+  assert(body.gameInvite?.seat === expectedSeat, `${label} account rejoin returned the wrong seat`);
+  assert(body.gameInvite?.token, `${label} account rejoin did not return a fresh player token`);
+  assert(typeof body.gameInvite?.url === "string", `${label} account rejoin did not return a game URL`);
+  assert(!body.gameInvite.url.includes("token="), `${label} account rejoin URL leaked a query token`);
+  assert(JSON.stringify(body).includes(token) === false, `${label} account rejoin leaked its bearer token`);
+
+  const joinResponse = await fetch(`${baseUrl}/api/online/games/${encodeURIComponent(gameId)}`, {
+    headers: bearer(body.gameInvite.token),
+  });
+  const joined = await readJson(joinResponse);
+  assert(joinResponse.status === 200, `${label} rejoined token game fetch failed with ${joinResponse.status}`);
+  assertProtocolVersionedBody(joined, `${label} rejoined token game fetch`);
+  assert(joined.color === expectedSeat, `${label} rejoined token returned the wrong color`);
+  return body;
+}
+
 async function smokeTargetedAccountChallenge(baseUrl) {
   const cleanupTokens = [];
   const challenger = await createAccount(baseUrl, uniqueDisplayName("SmkA"));
@@ -259,6 +279,33 @@ async function smokeTargetedAccountChallenge(baseUrl) {
       challengedHistory.games.some((game) => game.gameId === gameId),
       "Challenged account history did not include the targeted challenge game"
     );
+
+    const challengerRejoin = await rejoinAccountGame(
+      baseUrl,
+      challenger.session.token,
+      gameId,
+      "w",
+      "Challenger"
+    );
+    const challengedRejoin = await rejoinAccountGame(
+      baseUrl,
+      challenged.session.token,
+      gameId,
+      "b",
+      "Challenged"
+    );
+    assert(
+      challengedRejoin.gameInvite.token !== accountAccepted.gameInvite.token,
+      "Challenged account rejoin did not mint a fresh player token"
+    );
+    assert(
+      challengerRejoin.gameInvite.token !== challengedRejoin.gameInvite.token,
+      "Account rejoin returned the same token for both seats"
+    );
+    return {
+      challengeId: created.challengeId,
+      gameId,
+    };
   } finally {
     for (const token of cleanupTokens.reverse()) {
       await deleteAccount(baseUrl, token).catch((error) => {
@@ -303,6 +350,8 @@ async function main() {
       applyGameAction: (input) => store.applyGameAction(input),
       adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),
       loadGameSummaries: () => store.loadSummaries(),
+      appendGameSeatCredential: (gameId, seat, credential) =>
+        store.appendGameSeatCredential(gameId, seat, credential),
       accountStore,
     });
     server = createdServer.server;
@@ -378,9 +427,11 @@ async function main() {
     assert(whiteJoin.color === "w", "White join returned the wrong color");
     assert(blackJoin.color === "b", "Black join returned the wrong color");
 
-    await smokeTargetedAccountChallenge(baseUrl);
+    const accountChallenge = await smokeTargetedAccountChallenge(baseUrl);
 
-    console.log(`Local PostgreSQL challenge HTTP smoke passed using challenge ${created.challengeId} and game ${gameId}`);
+    console.log(
+      `Local PostgreSQL challenge HTTP smoke passed using anonymous challenge ${created.challengeId} / game ${gameId}; account challenge ${accountChallenge.challengeId} / game ${accountChallenge.gameId}`
+    );
   } finally {
     if (server) {
       await closeServer(server);
