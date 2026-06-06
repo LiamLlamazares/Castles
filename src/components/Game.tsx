@@ -525,6 +525,10 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const canOpenAnalysisBoard =
     !isAnalysisMode &&
     (!onlineSession || onlineSession.role === "spectator" || !!onlineSession.result);
+  const canEditPosition =
+    !onlineSession ||
+    onlineSession.role === "spectator" ||
+    !!onlineSession.result;
   const canOpenOnlineAnalysis =
     !isAnalysisMode &&
     !!onlineSession &&
@@ -941,7 +945,11 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onlineNotificationLabel={onlineNotificationLabel}
           onReturnFromAnalysis={onReturnFromAnalysis}
           analysisReturnLabel={analysisReturnLabel}
-          onEditPosition={onEditPosition ? () => onEditPosition(initialBoard, pieces, sanctuaries) : undefined}
+          onEditPosition={
+            canEditPosition && onEditPosition
+              ? () => onEditPosition(initialBoard, pieces, sanctuaries)
+              : undefined
+          }
           onTutorial={onTutorial}
           onOpenChange={setNavigationMenuOpen}
           isAnalysisMode={isAnalysisMode}

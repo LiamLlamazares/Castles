@@ -553,30 +553,34 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
               )}
             </section>
 
-            <div className="menu-divider" />
-            <section className="menu-section" aria-labelledby="menu-section-tools">
-            <div id="menu-section-tools" className="menu-section-label">Tools</div>
+            {((onEnableAnalysis && !isAnalysisMode) || onEditPosition) && (
+              <>
+                <div className="menu-divider" />
+                <section className="menu-section" aria-labelledby="menu-section-tools">
+                  <div id="menu-section-tools" className="menu-section-label">Tools</div>
 
-            {onEnableAnalysis && !isAnalysisMode && (
-              <button
-                className="menu-item"
-                onClick={() => handleMenuItemClick(onEnableAnalysis)}
-              >
-                {renderImageIcon(swordsIcon)}
-                <span>Analysis Board</span>
-              </button>
-            )}
+                  {onEnableAnalysis && !isAnalysisMode && (
+                    <button
+                      className="menu-item"
+                      onClick={() => handleMenuItemClick(onEnableAnalysis)}
+                    >
+                      {renderImageIcon(swordsIcon)}
+                      <span>Analysis Board</span>
+                    </button>
+                  )}
 
-            {onEditPosition && (
-              <button
-                className="menu-item"
-                onClick={() => handleMenuItemClick(onEditPosition)}
-              >
-                {renderImageIcon(shieldIcon)}
-                <span>Edit Position</span>
-              </button>
+                  {onEditPosition && (
+                    <button
+                      className="menu-item"
+                      onClick={() => handleMenuItemClick(onEditPosition)}
+                    >
+                      {renderImageIcon(shieldIcon)}
+                      <span>Edit Position</span>
+                    </button>
+                  )}
+                </section>
+              </>
             )}
-            </section>
           </div>
         </div>
       )}

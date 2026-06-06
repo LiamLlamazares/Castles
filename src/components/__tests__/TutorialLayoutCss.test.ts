@@ -65,12 +65,16 @@ describe("Tutorial mobile layout CSS", () => {
 
     const openContainerRule = css.match(/\.hamburger-container\.open\s*\{[^}]+}/)?.[0] ?? "";
     const drawerRule = css.match(/\.hamburger-menu\s*\{[^}]+}/)?.[0] ?? "";
+    const menuItemsRule = css.match(/\.menu-items\s*\{[^}]+}/)?.[0] ?? "";
     const backdropRule = css.match(/\.menu-backdrop\s*\{[^}]+}/)?.[0] ?? "";
     const iconFrameRule = css.match(/\.menu-item-icon-frame\s*\{[^}]+}/)?.[0] ?? "";
     const iconRule = css.match(/\.menu-item-icon,\s*\.menu-item > img\s*\{[^}]+}/)?.[0] ?? "";
 
     expect(openContainerRule).toContain("z-index: 4000;");
     expect(drawerRule).toContain("z-index: 4002;");
+    expect(menuItemsRule).toContain("flex: 1 1 auto;");
+    expect(menuItemsRule).toContain("min-height: 0;");
+    expect(menuItemsRule).toContain("overflow-y: auto;");
     expect(backdropRule).toContain("z-index: 4001;");
     expect(iconFrameRule).toContain("background: rgba(255, 255, 255, 0.08);");
     expect(iconFrameRule).toContain("border: 1px solid rgba(255, 255, 255, 0.1);");
@@ -195,7 +199,7 @@ describe("Tutorial mobile layout CSS", () => {
 
     expect(boardCss).toMatch(/\.online-state-share-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(170px,\s*auto\);/s);
     expect(boardCss).toMatch(/\.online-state-link-preview\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word;/s);
-    expect(boardCss).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.online-state-share-row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
+    expect(boardCss).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.online-state-share-row,\s*\.online-state-report-actions\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/s);
   });
 
   it("keeps install prompts below dialogs and victory points full-width on mobile", () => {

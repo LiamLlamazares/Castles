@@ -78,6 +78,7 @@ const AUDITED_SCROLL_SELECTORS = [
   ".game-sidebar",
   ".game-side-panel",
   ".hamburger-menu.open",
+  ".menu-items",
 ];
 
 const SCENARIOS = [
@@ -269,6 +270,17 @@ const SCENARIOS = [
     requiredTexts: () => ["Online White", "Copy Spectator Link", "PASS", "RESIGN"],
   },
   {
+    name: "online-player-drawer",
+    prepare: async (page, fixtures) => {
+      await seedOnlineJoinSession(page, fixtures.liveGameId, "w", fixtures.playerToken);
+      await page.goto(fixtures.playerUrl, { waitUntil: "domcontentloaded", timeout: browserTimeoutMs });
+      await waitForText(page, "Online White");
+      await clickButton(page, "Menu");
+      await waitForDialog(page, "Castles menu");
+    },
+    requiredTexts: () => ["Castles", "Configure New Game", "Online Lobby", "Open Library", "Board Display"],
+  },
+  {
     name: "online-spectator-board",
     prepare: async (page, fixtures) => {
       await page.goto(fixtures.spectatorUrl, { waitUntil: "domcontentloaded", timeout: browserTimeoutMs });
@@ -276,6 +288,16 @@ const SCENARIOS = [
       await page.locator(".hamburger-button").waitFor({ state: "visible", timeout: browserTimeoutMs });
     },
     requiredTexts: () => ["Spectating", "Copy Spectator Link"],
+  },
+  {
+    name: "online-spectator-drawer",
+    prepare: async (page, fixtures) => {
+      await page.goto(fixtures.spectatorUrl, { waitUntil: "domcontentloaded", timeout: browserTimeoutMs });
+      await waitForText(page, "Spectating");
+      await clickButton(page, "Menu");
+      await waitForDialog(page, "Castles menu");
+    },
+    requiredTexts: () => ["Castles", "Configure New Game", "Online Lobby", "Open Library", "Analysis Board", "Board Display"],
   },
 ];
 
@@ -1240,6 +1262,41 @@ async function collectLayoutMetrics(page, viewport, scenario) {
         };
       };
 
+      const intersectRects = (left, right) => {
+        const intersection = {
+          left: Math.max(left.left, right.left),
+          top: Math.max(left.top, right.top),
+          right: Math.min(left.right, right.right),
+          bottom: Math.min(left.bottom, right.bottom),
+        };
+        return {
+          ...intersection,
+          width: Math.max(0, intersection.right - intersection.left),
+          height: Math.max(0, intersection.bottom - intersection.top),
+        };
+      };
+
+      const visibleRectFromElement = (element, rect) => {
+        let visibleRect = intersectRects(rect, viewportRect);
+        let ancestor = element.parentElement;
+        while (ancestor && visibleRect.width > 0 && visibleRect.height > 0) {
+          const style = window.getComputedStyle(ancestor);
+          const clipsHorizontally = ["auto", "hidden", "scroll", "clip"].includes(style.overflowX);
+          const clipsVertically = ["auto", "hidden", "scroll", "clip"].includes(style.overflowY);
+          if (clipsHorizontally || clipsVertically) {
+            const ancestorRect = ancestor.getBoundingClientRect();
+            visibleRect = intersectRects(visibleRect, {
+              left: clipsHorizontally ? ancestorRect.left : visibleRect.left,
+              right: clipsHorizontally ? ancestorRect.right : visibleRect.right,
+              top: clipsVertically ? ancestorRect.top : visibleRect.top,
+              bottom: clipsVertically ? ancestorRect.bottom : visibleRect.bottom,
+            });
+          }
+          ancestor = ancestor.parentElement;
+        }
+        return visibleRect;
+      };
+
       const documentWidth = Math.max(
         document.documentElement.scrollWidth,
         document.body?.scrollWidth ?? 0
@@ -1255,18 +1312,20 @@ async function collectLayoutMetrics(page, viewport, scenario) {
         .filter((element) => element instanceof HTMLElement)
         .map((element) => {
           const rect = rectFromElement(element);
+          const visibleRect = visibleRectFromElement(element, rect);
           return {
             element,
             rect,
+            visibleRect,
             name: accessibleName(element),
             tag: element.tagName.toLowerCase(),
             classes: element.className ? String(element.className).replace(/\s+/g, ".") : "",
             disabled: element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true",
           };
         })
-        .filter(({ element, rect }) => isElementVisible(element, rect));
+        .filter(({ element, visibleRect }) => isElementVisible(element, visibleRect));
 
-      const visibleInViewport = elements.filter(({ rect }) => intersectsViewport(rect));
+      const visibleInViewport = elements.filter(({ visibleRect }) => intersectsViewport(visibleRect));
 
       for (const item of elements) {
         const { element, rect } = item;
@@ -1319,12 +1378,17 @@ async function collectLayoutMetrics(page, viewport, scenario) {
             continue;
           }
           const overlapWidth =
-            Math.min(left.rect.right, right.rect.right) - Math.max(left.rect.left, right.rect.left);
+            Math.min(left.visibleRect.right, right.visibleRect.right) -
+            Math.max(left.visibleRect.left, right.visibleRect.left);
           const overlapHeight =
-            Math.min(left.rect.bottom, right.rect.bottom) - Math.max(left.rect.top, right.rect.top);
+            Math.min(left.visibleRect.bottom, right.visibleRect.bottom) -
+            Math.max(left.visibleRect.top, right.visibleRect.top);
           if (overlapWidth <= 0 || overlapHeight <= 0) continue;
           const overlapArea = overlapWidth * overlapHeight;
-          const minArea = Math.min(left.rect.width * left.rect.height, right.rect.width * right.rect.height);
+          const minArea = Math.min(
+            left.visibleRect.width * left.visibleRect.height,
+            right.visibleRect.width * right.visibleRect.height
+          );
           if (overlapArea > 96 && overlapArea / Math.max(1, minArea) > 0.08) {
             violations.push({
               type: "interactive-overlap",

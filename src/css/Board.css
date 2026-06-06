@@ -1306,7 +1306,9 @@ body {
   padding-bottom: calc(28px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 4px;
+  min-height: 0;
   overflow-y: auto;
 }
 

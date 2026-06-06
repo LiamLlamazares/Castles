@@ -870,8 +870,9 @@ describe("Game ability integration", () => {
     expect(screen.getByText("Online Black · Your turn · Movement")).toBeInTheDocument();
   });
 
-  test("active online players do not get a drawer analysis escape hatch", () => {
+  test("active online players do not get drawer analysis or position-edit escape hatches", () => {
     const onLoadGame = vi.fn();
+    const onEditPosition = vi.fn();
 
     render(
       <ThemeProvider>
@@ -886,6 +887,7 @@ describe("Game ability integration", () => {
             submitAction: vi.fn(),
           }}
           onLoadGame={onLoadGame}
+          onEditPosition={onEditPosition}
         />
       </ThemeProvider>
     );
@@ -893,6 +895,8 @@ describe("Game ability integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
 
     expect(screen.queryByRole("button", { name: "Analysis Board" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit Position" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Tools")).not.toBeInTheDocument();
   });
 
   test("online spectator analysis opens from current state without PGN round trip", () => {
