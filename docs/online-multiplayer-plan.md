@@ -960,7 +960,7 @@ This section is the working queue for the current `online-action-log` branch. Fu
 - Done: local and production smoke cleanup now resigns or cancels smoke games/challenges/seeks so repeated rehearsals do not leave ordinary active rows behind.
 - Done: account recovery smoke now exercises disposable registered accounts, targeted challenge directories, account-history rejoin, fresh seat-token recovery, game cleanup, and account cleanup.
 - Done: query-secret hardening now covers path-only account game snapshot/rejoin routes, direct challenge view/action routes, direct player snapshot/visibility routes, creator-owned open-seek refresh/cancel routes, and account session lookup/list/revoke/delete routes. The production commit is `b640ab0`.
-- Done: account-token challenge accept/decline/cancel routes now reject query strings after valid account bearer auth. Red/green regression, account-challenge neighborhood tests, full HTTP server tests, `server:build`, and app build passed locally. Item 1 remains open for the remaining bearer/admin route-surface audit.
+- Done: account-token challenge accept/decline/cancel routes now reject query strings after valid account bearer auth. Red/green regression, account-challenge neighborhood tests, full HTTP server tests, `server:build`, and app build passed locally. The production commit is `64cb1db569968c8d40b3d1c9ac0198a8150d60c4`; deploy freshness, API smoke, browser smoke, and a targeted live account-challenge query-guard probe passed. Item 1 remains open for the remaining bearer/admin route-surface audit.
 
 ### Next Ordered Slices
 
