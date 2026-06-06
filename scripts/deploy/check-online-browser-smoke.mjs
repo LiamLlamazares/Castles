@@ -134,6 +134,24 @@ async function verifyHealth() {
   }
 }
 
+async function googleOAuthProviderEnabled() {
+  try {
+    const response = await fetchWithTimeout(`${baseUrl}/api/online/account/oauth/providers`);
+    const body = await readJson(response);
+    assert(response.status === 200, `OAuth providers fetch failed with ${response.status}`);
+    assertProtocolVersionedBody(body, "Browser smoke OAuth providers response");
+    const googleProvider = Array.isArray(body.providers)
+      ? body.providers.find((provider) => provider?.provider === "google")
+      : null;
+    return googleProvider?.enabled === true && googleProvider.startUrl === "/api/online/account/oauth/google/start";
+  } catch (error) {
+    if (!isLocalBaseUrl()) {
+      throw error;
+    }
+    return false;
+  }
+}
+
 async function fetchSpectatorSnapshot(gameId, expectedVersion) {
   const response = await fetchWithTimeout(
     `${baseUrl}/api/online/games/${encodeURIComponent(gameId)}/spectator`
@@ -149,6 +167,43 @@ async function fetchSpectatorSnapshot(gameId, expectedVersion) {
     );
   }
   return body.snapshot;
+}
+
+async function verifyBoardAccountGoogleOAuthUi(page) {
+  if (!(await googleOAuthProviderEnabled())) return;
+
+  const currentUrl = await page.url();
+  const expectedReturnToUrl = new URL(currentUrl);
+  const expectedReturnTo = `${expectedReturnToUrl.pathname}${expectedReturnToUrl.search}`;
+  assert(
+    !expectedReturnTo.includes("token") && !expectedReturnToUrl.hash,
+    `Browser smoke OAuth return path was not token-free: ${currentUrl}`
+  );
+
+  await page.clickButton("Guest human player. Open account sign in");
+  await page.waitForText("Online account");
+  const href = await waitUntil("board account Google OAuth link", () =>
+    page.evaluate(`
+      (() => {
+        const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+        const link = dialog?.querySelector('a[aria-label="Continue with Google"]');
+        return link?.getAttribute("href") ?? null;
+      })()
+    `)
+  );
+  const linkUrl = new URL(href, baseUrl);
+  assert(
+    linkUrl.pathname === "/api/online/account/oauth/google/start",
+    `Board account Google link used unexpected path ${linkUrl.pathname}`
+  );
+  assert(
+    linkUrl.searchParams.get("returnTo") === expectedReturnTo,
+    `Board account Google link returnTo was ${linkUrl.searchParams.get("returnTo")}, expected ${expectedReturnTo}`
+  );
+  await page.clickButton("Close account dialog");
+  await waitUntil("board account dialog to close", async () =>
+    page.evaluate(`!document.querySelector('[role="dialog"][aria-modal="true"]')`)
+  );
 }
 
 async function verifyStaleActionContract(setup) {
@@ -1052,6 +1107,7 @@ async function runFlow(driver) {
   const spectator = await driver.newPage();
 
   const { gameId, opponentInvite, spectatorUrl } = await createOnlineGameFromApi(white);
+  await verifyBoardAccountGoogleOAuthUi(white);
   const initialSnapshot = await fetchSpectatorSnapshot(gameId, 0);
   await verifyAccessDeniedRecovery(driver, gameId);
   await verifyStaleActionContract(initialSnapshot.setup);
