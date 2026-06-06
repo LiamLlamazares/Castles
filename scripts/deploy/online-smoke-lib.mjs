@@ -68,6 +68,7 @@ export async function assertSpectatorSnapshot(
 
 export async function assertGoogleOAuthSmoke(fetchWithTimeout, baseUrl) {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+  const smokeReturnTo = "/?onlineGame=game_return&seat=w&view=spectator";
   const providersResponse = await fetchWithTimeout(
     `${normalizedBaseUrl}/api/online/account/oauth/providers`
   );
@@ -86,9 +87,9 @@ export async function assertGoogleOAuthSmoke(fetchWithTimeout, baseUrl) {
     "Google OAuth provider did not expose the expected start URL"
   );
 
-  const startResponse = await fetchWithTimeout(`${normalizedBaseUrl}${googleProvider.startUrl}`, {
-    redirect: "manual",
-  });
+  const startUrl = new URL(`${normalizedBaseUrl}${googleProvider.startUrl}`);
+  startUrl.searchParams.set("returnTo", smokeReturnTo);
+  const startResponse = await fetchWithTimeout(startUrl.toString(), { redirect: "manual" });
   assert(
     startResponse.status >= 300 && startResponse.status < 400,
     `Google OAuth start did not redirect; got ${startResponse.status}`
@@ -101,6 +102,7 @@ export async function assertGoogleOAuthSmoke(fetchWithTimeout, baseUrl) {
   assert(redirect.pathname === "/o/oauth2/v2/auth", "Google OAuth start used an unexpected Google path");
   assert(redirect.searchParams.get("response_type") === "code", "Google OAuth response_type was not code");
   assert(redirect.searchParams.get("client_id"), "Google OAuth client_id was missing");
+  assertGoogleOAuthStateReturnTo(redirect.searchParams.get("state"), smokeReturnTo);
   const scopes = new Set((redirect.searchParams.get("scope") ?? "").split(/\s+/).filter(Boolean));
   for (const scope of ["openid", "email", "profile"]) {
     assert(scopes.has(scope), `Google OAuth scope ${scope} was missing`);
@@ -109,6 +111,22 @@ export async function assertGoogleOAuthSmoke(fetchWithTimeout, baseUrl) {
     redirect.searchParams.get("redirect_uri") ===
       `${normalizedBaseUrl}/api/online/account/oauth/google/callback`,
     "Google OAuth redirect_uri did not match production callback"
+  );
+}
+
+function assertGoogleOAuthStateReturnTo(state, expectedReturnTo) {
+  assert(state, "Google OAuth state was missing");
+  const [encodedPayload, signature, extra] = state.split(".");
+  assert(encodedPayload && signature && extra === undefined, "Google OAuth state had an unexpected shape");
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("Google OAuth state payload was not valid JSON");
+  }
+  assert(
+    payload?.returnTo === expectedReturnTo,
+    `Google OAuth state returnTo was ${payload?.returnTo ?? "<missing>"}, expected ${expectedReturnTo}`
   );
 }
 
