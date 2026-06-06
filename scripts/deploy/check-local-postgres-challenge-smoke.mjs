@@ -183,7 +183,35 @@ async function rejoinAccountGame(baseUrl, token, gameId, expectedSeat, label) {
   return body;
 }
 
-async function smokeTargetedAccountChallenge(baseUrl) {
+async function cleanupChallengeGame(store, { gameId, token, clientActionId, baseVersion }) {
+  const result = await store.applyGameAction({
+    gameId,
+    token,
+    clientActionId,
+    action: { type: "RESIGN", baseVersion },
+    now: () => Date.now(),
+  });
+  assert(result.ok, `Challenge smoke cleanup ${clientActionId} failed: ${result.error?.message}`);
+  assert(
+    result.snapshot.version === baseVersion + 1,
+    `Challenge smoke cleanup ${clientActionId} produced version ${result.snapshot.version}, expected ${baseVersion + 1}`
+  );
+  assert(
+    result.snapshot.result?.reason === "resignation",
+    `Challenge smoke cleanup ${clientActionId} result reason was ${result.snapshot.result?.reason}, expected resignation`
+  );
+
+  const summaries = await store.loadSummaries();
+  const summary = summaries.find((candidate) => candidate.gameId === gameId);
+  assert(summary, `Challenge smoke cleanup ${clientActionId} did not write a summary`);
+  assert(summary.status === "complete", `Challenge smoke cleanup ${clientActionId} left summary ${summary.status}`);
+  assert(
+    summary.archiveState === "archived",
+    `Challenge smoke cleanup ${clientActionId} left archive state ${summary.archiveState}`
+  );
+}
+
+async function smokeTargetedAccountChallenge(baseUrl, store) {
   const cleanupTokens = [];
   const challenger = await createAccount(baseUrl, uniqueDisplayName("SmkA"));
   cleanupTokens.push(challenger.session.token);
@@ -302,6 +330,12 @@ async function smokeTargetedAccountChallenge(baseUrl) {
       challengerRejoin.gameInvite.token !== challengedRejoin.gameInvite.token,
       "Account rejoin returned the same token for both seats"
     );
+    await cleanupChallengeGame(store, {
+      gameId,
+      token: accountAccepted.gameInvite.token,
+      clientActionId: "local-account-challenge-smoke-cleanup",
+      baseVersion: 0,
+    });
     return {
       challengeId: created.challengeId,
       gameId,
@@ -426,8 +460,14 @@ async function main() {
     assertProtocolVersionedBody(blackJoin, "Black challenge game join");
     assert(whiteJoin.color === "w", "White join returned the wrong color");
     assert(blackJoin.color === "b", "Black join returned the wrong color");
+    await cleanupChallengeGame(store, {
+      gameId,
+      token: challengedToken,
+      clientActionId: "local-challenge-smoke-cleanup",
+      baseVersion: 0,
+    });
 
-    const accountChallenge = await smokeTargetedAccountChallenge(baseUrl);
+    const accountChallenge = await smokeTargetedAccountChallenge(baseUrl, store);
 
     console.log(
       `Local PostgreSQL challenge HTTP smoke passed using anonymous challenge ${created.challengeId} / game ${gameId}; account challenge ${accountChallenge.challengeId} / game ${accountChallenge.gameId}`

@@ -24,4 +24,16 @@ describe("local PostgreSQL challenge smoke script", () => {
     expect(script).toContain("/rejoin");
     expect(script).toContain("Account rejoin");
   });
+
+  it("cleans up accepted anonymous and account challenge games after verification", () => {
+    const script = readScript();
+
+    expect(script).toContain("cleanupChallengeGame");
+    expect(script).toContain("local-challenge-smoke-cleanup");
+    expect(script).toContain("local-account-challenge-smoke-cleanup");
+    expect(script).toContain("RESIGN");
+    expect(script).toContain("archiveState");
+    expect(script).toMatch(/cleanupChallengeGame\([\s\S]*challengedToken[\s\S]*baseVersion:\s*0/);
+    expect(script).toMatch(/cleanupChallengeGame\([\s\S]*accountAccepted\.gameInvite\.token[\s\S]*baseVersion:\s*0/);
+  });
 });
