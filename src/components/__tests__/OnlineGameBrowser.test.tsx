@@ -470,6 +470,11 @@ describe("OnlineGameBrowser", () => {
   });
 
   it("opens account sign-in from a single Online navigation identity chip when Google is enabled", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?onlineGame=game_return&seat=w&token=secret-seat-token&view=spectator#challengeToken=fragment-secret"
+    );
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -502,7 +507,10 @@ describe("OnlineGameBrowser", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Online account" });
     const link = within(dialog).getByRole("link", { name: "Continue with Google" });
-    expect(link).toHaveAttribute("href", "/api/online/account/oauth/google/start");
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/online/account/oauth/google/start?returnTo=%2F%3FonlineGame%3Dgame_return%26seat%3Dw%26view%3Dspectator"
+    );
     expect(within(dialog).getByRole("button", { name: "Create Account" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Sign In" })).toBeInTheDocument();
 

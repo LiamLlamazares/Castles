@@ -105,6 +105,29 @@ function isActionErrorMessage(message: string): boolean {
   return message !== "" && message !== "Online account created." && message !== "Signed in.";
 }
 
+const OAUTH_RETURN_TO_REMOVED_PARAMS = [
+  "token",
+  "challengeToken",
+  "pgn",
+  "game",
+];
+
+function currentSafeOAuthReturnTo(): string {
+  const url = new URL(window.location.href);
+  url.hash = "";
+  for (const key of OAUTH_RETURN_TO_REMOVED_PARAMS) {
+    url.searchParams.delete(key);
+  }
+  const returnTo = `${url.pathname}${url.search}`;
+  return returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/";
+}
+
+function accountOAuthStartUrl(startUrl: string): string {
+  const url = new URL(startUrl, window.location.origin);
+  url.searchParams.set("returnTo", currentSafeOAuthReturnTo());
+  return `${url.pathname}${url.search}`;
+}
+
 export function OnlineAccountDialog({
   isOpen,
   onClose,
@@ -306,7 +329,7 @@ export function OnlineAccountDialog({
             {googleProvider?.startUrl ? (
               <a
                 className="online-account-google-link online-account-oauth-button"
-                href={googleProvider.startUrl}
+                href={accountOAuthStartUrl(googleProvider.startUrl)}
                 aria-label="Continue with Google"
               >
                 Continue with Google
