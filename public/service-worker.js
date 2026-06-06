@@ -1,4 +1,4 @@
-const CACHE_NAME = "castles-shell-v4";
+const CACHE_NAME = "castles-shell-v5";
 const CORE_ASSETS = ["./index.html", "./manifest.json", "./favicon.svg", "./favicon.ico", "./castles-icon.svg"];
 
 function shouldBypassCacheForRequest(request) {

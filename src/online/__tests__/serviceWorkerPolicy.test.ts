@@ -27,6 +27,13 @@ function loadServiceWorkerPolicy() {
   };
 }
 
+function getCurrentCacheName(): string {
+  const script = readFileSync(resolve(process.cwd(), "public", "service-worker.js"), "utf8");
+  const match = script.match(/const CACHE_NAME = "(castles-shell-v\d+)";/);
+  expect(match).not.toBeNull();
+  return match![1];
+}
+
 describe("service worker cache policy", () => {
   it("bypasses online, API, websocket, service-worker, and token-bearing same-origin GET requests", () => {
     const context = loadServiceWorkerPolicy();
@@ -89,12 +96,13 @@ describe("service worker cache policy", () => {
 
   it("deletes old cache versions during activation", async () => {
     const context = loadServiceWorkerPolicy();
+    const currentCacheName = getCurrentCacheName();
     const activateHandler = context.self.addEventListener.mock.calls.find(
       ([eventName]) => eventName === "activate"
     )?.[1];
     expect(typeof activateHandler).toBe("function");
 
-    context.caches.keys.mockResolvedValue(["castles-shell-v3", "castles-shell-v4"]);
+    context.caches.keys.mockResolvedValue(["castles-shell-v3", "castles-shell-v4", currentCacheName]);
     let activationPromise: Promise<unknown> | undefined;
     activateHandler({
       waitUntil: (promise: Promise<unknown>) => {
@@ -105,6 +113,7 @@ describe("service worker cache policy", () => {
     await activationPromise;
 
     expect(context.caches.delete).toHaveBeenCalledWith("castles-shell-v3");
-    expect(context.caches.delete).not.toHaveBeenCalledWith("castles-shell-v4");
+    expect(context.caches.delete).toHaveBeenCalledWith("castles-shell-v4");
+    expect(context.caches.delete).not.toHaveBeenCalledWith(currentCacheName);
   });
 });

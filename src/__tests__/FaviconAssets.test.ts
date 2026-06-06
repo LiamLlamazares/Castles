@@ -8,6 +8,42 @@ function readText(path: string): string {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
+function readBytes(path: string): Buffer {
+  return readFileSync(resolve(process.cwd(), path));
+}
+
+function getIcoPngSizes(bytes: Buffer): number[] {
+  expect(bytes.readUInt16LE(0)).toBe(0);
+  expect(bytes.readUInt16LE(2)).toBe(1);
+
+  const count = bytes.readUInt16LE(4);
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const sizes: number[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    const entryOffset = 6 + index * 16;
+    const width = bytes.readUInt8(entryOffset) || 256;
+    const height = bytes.readUInt8(entryOffset + 1) || 256;
+    const bitCount = bytes.readUInt16LE(entryOffset + 6);
+    const imageSize = bytes.readUInt32LE(entryOffset + 8);
+    const imageOffset = bytes.readUInt32LE(entryOffset + 12);
+
+    expect(height).toBe(width);
+    expect(bitCount).toBe(32);
+    expect(imageOffset + imageSize).toBeLessThanOrEqual(bytes.length);
+    expect(bytes.subarray(imageOffset, imageOffset + pngSignature.length)).toEqual(pngSignature);
+    sizes.push(width);
+  }
+
+  return sizes;
+}
+
+function getServiceWorkerCacheVersion(serviceWorker: string): number {
+  const match = serviceWorker.match(/const CACHE_NAME = "castles-shell-v(\d+)";/);
+  expect(match).not.toBeNull();
+  return Number(match![1]);
+}
+
 describe("favicon assets", () => {
   it("uses the empty app-board favicon across html, manifest, and service worker assets", () => {
     const index = readText("index.html");
@@ -16,6 +52,7 @@ describe("favicon assets", () => {
     };
     const serviceWorker = readText("public/service-worker.js");
     const faviconSvg = readText("public/favicon.svg");
+    const faviconIco = readBytes("public/favicon.ico");
     const appIconSvg = readText("public/castles-icon.svg");
     const expectedSvg = renderEmptyBoardFaviconSvg();
 
@@ -24,10 +61,14 @@ describe("favicon assets", () => {
     expect(manifest.icons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ src: "favicon.svg", type: "image/svg+xml", sizes: "any" }),
+        expect.objectContaining({ src: "favicon.ico", type: "image/x-icon", sizes: "64x64 32x32 24x24 16x16" }),
         expect.objectContaining({ src: "castles-icon.svg", type: "image/svg+xml", sizes: "any" }),
       ])
     );
+    expect(getServiceWorkerCacheVersion(serviceWorker)).toBeGreaterThanOrEqual(5);
     expect(serviceWorker).toContain("./favicon.svg");
+    expect(serviceWorker).toContain("./favicon.ico");
+    expect(getIcoPngSizes(faviconIco).sort((a, b) => a - b)).toEqual([16, 24, 32, 64]);
 
     for (const svg of [faviconSvg, appIconSvg]) {
       expect(svg).toBe(expectedSvg);
