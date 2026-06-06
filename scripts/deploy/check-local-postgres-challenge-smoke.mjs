@@ -20,6 +20,14 @@ const storeModulePath = path.join(
   "server",
   "PostgresOnlineGameStore.js"
 );
+const accountStoreModulePath = path.join(
+  repoRoot,
+  "server-build",
+  "src",
+  "online",
+  "server",
+  "PostgresOnlineAccountStore.js"
+);
 const httpModulePath = path.join(
   repoRoot,
   "server-build",
@@ -87,14 +95,189 @@ function bearer(token) {
   return { authorization: `Bearer ${token}` };
 }
 
+function jsonHeaders(token) {
+  return { "content-type": "application/json", ...bearer(token) };
+}
+
+function uniqueDisplayName(prefix) {
+  return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+}
+
+async function createAccount(baseUrl, displayName) {
+  const response = await fetch(`${baseUrl}/api/online/accounts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      displayName,
+      password: `smoke-password-${displayName}`,
+    }),
+  });
+  const body = await readJson(response);
+  assert(response.status === 201, `Account create for ${displayName} failed with ${response.status}`);
+  assertProtocolVersionedBody(body, `Account create for ${displayName}`);
+  assert(body.account?.displayName === displayName, `Account create returned wrong display name for ${displayName}`);
+  assert(body.session?.token, `Account create did not return a session token for ${displayName}`);
+  assert(JSON.stringify(body.account).includes(body.session.token) === false, "Account payload leaked its session token");
+  return body;
+}
+
+async function deleteAccount(baseUrl, token) {
+  const response = await fetch(`${baseUrl}/api/online/account`, {
+    method: "DELETE",
+    headers: bearer(token),
+  });
+  if (response.status === 401 || response.status === 404) return;
+  const body = await readJson(response);
+  assert(response.status === 200, `Account cleanup failed with ${response.status}`);
+  assertProtocolVersionedBody(body, "Account cleanup");
+}
+
+function challengeEntry(directory, challengeId, role) {
+  return directory.challenges?.find(
+    (entry) => entry.role === role && entry.summary?.challengeId === challengeId
+  );
+}
+
+async function loadAccountChallenges(baseUrl, token, label) {
+  const response = await fetch(`${baseUrl}/api/online/account/challenges?state=all`, {
+    headers: bearer(token),
+  });
+  const body = await readJson(response);
+  assert(response.status === 200, `${label} account challenge directory failed with ${response.status}`);
+  assertProtocolVersionedBody(body, `${label} account challenge directory`);
+  assert(Array.isArray(body.challenges), `${label} account challenge directory did not return challenges`);
+  assert(JSON.stringify(body).includes(token) === false, `${label} account challenge directory leaked its bearer token`);
+  return body;
+}
+
+async function loadAccountGames(baseUrl, token, query, label) {
+  const response = await fetch(
+    `${baseUrl}/api/online/account/games?state=all&q=${encodeURIComponent(query)}`,
+    { headers: bearer(token) }
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `${label} account game history failed with ${response.status}`);
+  assert(Number.isInteger(body.schemaVersion), `${label} account game history did not report a schema version`);
+  assert(Array.isArray(body.games), `${label} account game history did not return games`);
+  assert(JSON.stringify(body).includes(token) === false, `${label} account game history leaked its bearer token`);
+  return body;
+}
+
+async function smokeTargetedAccountChallenge(baseUrl) {
+  const cleanupTokens = [];
+  const challenger = await createAccount(baseUrl, uniqueDisplayName("SmkA"));
+  cleanupTokens.push(challenger.session.token);
+  const challenged = await createAccount(baseUrl, uniqueDisplayName("SmkB"));
+  cleanupTokens.push(challenged.session.token);
+
+  try {
+    const followResponse = await fetch(
+      `${baseUrl}/api/online/account/follows/${encodeURIComponent(challenger.account.displayName)}`,
+      { method: "PUT", headers: bearer(challenged.session.token) }
+    );
+    const follow = await readJson(followResponse);
+    assert(followResponse.status === 200, `Account follow failed with ${followResponse.status}`);
+    assertProtocolVersionedBody(follow, "Account follow");
+    assert(follow.profile?.displayName === challenger.account.displayName, "Follow returned the wrong profile");
+
+    const createResponse = await fetch(`${baseUrl}/api/online/challenges`, {
+      method: "POST",
+      headers: jsonHeaders(challenger.session.token),
+      body: JSON.stringify({
+        setup: createSmokeSetup(),
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: challenged.account.displayName,
+      }),
+    });
+    const created = await readJson(createResponse);
+    assert(createResponse.status === 201, `Targeted account challenge create failed with ${createResponse.status}`);
+    assert(created.summary?.status === "pending", "Targeted account challenge was not pending");
+    assert(
+      created.summary?.challengerIdentity?.displayName === challenger.account.displayName,
+      "Targeted challenge returned the wrong challenger identity"
+    );
+    assert(
+      created.summary?.challengedIdentity?.displayName === challenged.account.displayName,
+      "Targeted challenge returned the wrong challenged identity"
+    );
+    assert(JSON.stringify(created).includes(challenger.session.token) === false, "Challenge create leaked challenger account token");
+    assert(JSON.stringify(created).includes(challenged.session.token) === false, "Challenge create leaked challenged account token");
+
+    const challengerDirectory = await loadAccountChallenges(baseUrl, challenger.session.token, "Challenger");
+    const challengedDirectory = await loadAccountChallenges(baseUrl, challenged.session.token, "Challenged");
+    assert(
+      challengeEntry(challengerDirectory, created.challengeId, "challenger")?.summary?.status === "pending",
+      "Challenger account directory did not include the pending targeted challenge"
+    );
+    assert(
+      challengeEntry(challengedDirectory, created.challengeId, "challenged")?.summary?.status === "pending",
+      "Challenged account directory did not include the pending targeted challenge"
+    );
+
+    const accountAcceptResponse = await fetch(
+      `${baseUrl}/api/online/account/challenges/${encodeURIComponent(created.challengeId)}/accept`,
+      { method: "POST", headers: bearer(challenged.session.token) }
+    );
+    const accountAccepted = await readJson(accountAcceptResponse);
+    assert(accountAcceptResponse.status === 200, `Account challenge accept failed with ${accountAcceptResponse.status}`);
+    assertProtocolVersionedBody(accountAccepted, "Account challenge accept");
+    assert(accountAccepted.summary?.status === "accepted", "Account challenge accept did not return accepted");
+    assert(accountAccepted.gameInvite?.seat === "b", "Account challenge accept did not return black invite");
+    assert(accountAccepted.gameInvite?.token, "Account challenge accept did not return a game invite token");
+    assert(JSON.stringify(accountAccepted).includes(challenged.session.token) === false, "Account accept leaked challenged account token");
+
+    const gameId = accountAccepted.gameInvite.gameId;
+    const postAcceptChallengerDirectory = await loadAccountChallenges(baseUrl, challenger.session.token, "Challenger accepted");
+    const postAcceptChallengedDirectory = await loadAccountChallenges(baseUrl, challenged.session.token, "Challenged accepted");
+    assert(
+      challengeEntry(postAcceptChallengerDirectory, created.challengeId, "challenger")?.summary?.status === "accepted",
+      "Challenger account directory did not show the accepted targeted challenge"
+    );
+    assert(
+      challengeEntry(postAcceptChallengedDirectory, created.challengeId, "challenged")?.summary?.status === "accepted",
+      "Challenged account directory did not show the accepted targeted challenge"
+    );
+
+    const challengerHistory = await loadAccountGames(
+      baseUrl,
+      challenger.session.token,
+      challenged.account.displayName,
+      "Challenger"
+    );
+    const challengedHistory = await loadAccountGames(
+      baseUrl,
+      challenged.session.token,
+      challenger.account.displayName,
+      "Challenged"
+    );
+    assert(
+      challengerHistory.games.some((game) => game.gameId === gameId),
+      "Challenger account history did not include the targeted challenge game"
+    );
+    assert(
+      challengedHistory.games.some((game) => game.gameId === gameId),
+      "Challenged account history did not include the targeted challenge game"
+    );
+  } finally {
+    for (const token of cleanupTokens.reverse()) {
+      await deleteAccount(baseUrl, token).catch((error) => {
+        console.error("Account cleanup failed after smoke", error);
+      });
+    }
+  }
+}
+
 async function main() {
   await requireLocalInputs();
   const { PostgresOnlineGameStore } = require(storeModulePath);
+  const { PostgresOnlineAccountStore } = require(accountStoreModulePath);
   const { createOnlineHttpServer } = require(httpModulePath);
   const { OnlineGameService } = require(serviceModulePath);
   const { hashOnlineToken, verifyOnlineToken } = require(credentialsModulePath);
 
   const store = new PostgresOnlineGameStore({ connectionString: process.env.DATABASE_URL });
+  const accountStore = new PostgresOnlineAccountStore({ connectionString: process.env.DATABASE_URL });
   let server;
 
   try {
@@ -120,6 +303,7 @@ async function main() {
       applyGameAction: (input) => store.applyGameAction(input),
       adjudicateGameTimeout: (input) => store.adjudicateGameTimeout(input),
       loadGameSummaries: () => store.loadSummaries(),
+      accountStore,
     });
     server = createdServer.server;
     const port = await listen(server);
@@ -194,11 +378,14 @@ async function main() {
     assert(whiteJoin.color === "w", "White join returned the wrong color");
     assert(blackJoin.color === "b", "Black join returned the wrong color");
 
+    await smokeTargetedAccountChallenge(baseUrl);
+
     console.log(`Local PostgreSQL challenge HTTP smoke passed using challenge ${created.challengeId} and game ${gameId}`);
   } finally {
     if (server) {
       await closeServer(server);
     }
+    await accountStore.close();
     await store.close();
   }
 }

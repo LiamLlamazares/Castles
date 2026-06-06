@@ -872,6 +872,8 @@ JSON backup validation update on 2026-06-06: `scripts/deploy/postgres-online-bac
 
 Deploy freshness default update on 2026-06-06: `npm run online:deploy:freshness` now defaults to the local Git `HEAD`, default production domain, tracked upstream branch, and deploy SSH host, so the common no-argument diagnostic catches stale live builds instead of reporting `Commit: not checked`. Empty freshness environment overrides are ignored rather than silently disabling the pinned commit or SSH checks.
 
+Registered challenge smoke update on 2026-06-06: `npm run online:smoke:local:challenges` now wires the local built HTTP server to `PostgresOnlineAccountStore` and exercises a registered friend-style targeted challenge path: create two disposable accounts, have the challenged account follow the challenger, create the targeted challenge, verify both account challenge directories, accept through the account route, and confirm both account histories include the created game.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.
