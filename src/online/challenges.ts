@@ -119,6 +119,33 @@ const CHALLENGE_STATUSES = new Set<OnlineChallengeStatus>([
   "cancelled",
   "expired",
 ]);
+const CHALLENGE_SUMMARY_KEYS = new Set([
+  "schemaVersion",
+  "challengeId",
+  "challengerIdentity",
+  "challengedIdentity",
+  "challengerSeat",
+  "visibility",
+  "setup",
+  "createdAt",
+  "updatedAt",
+  "expiresAt",
+  "status",
+  "lastEventId",
+  "acceptedAt",
+  "acceptedBy",
+  "gameId",
+  "whiteIdentity",
+  "blackIdentity",
+  "declinedAt",
+  "declinedBy",
+  "cancelledAt",
+  "cancelledBy",
+  "expiredAt",
+  "expiredBy",
+]);
+const ACCOUNT_CHALLENGE_DIRECTORY_KEYS = new Set(["protocolVersion", "schemaVersion", "challenges"]);
+const ACCOUNT_CHALLENGE_LIST_ITEM_KEYS = new Set(["role", "summary"]);
 let nextChallengeEventSequence = 0;
 
 function bad(message: string): ValidationResult<never> {
@@ -133,6 +160,19 @@ function bad(message: string): ValidationResult<never> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateAllowedKeys(
+  value: Record<string, unknown>,
+  allowedKeys: ReadonlySet<string>,
+  label: string
+): ValidationResult<void> {
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      return bad(`${label} contains unsupported data.`);
+    }
+  }
+  return { ok: true, value: undefined };
 }
 
 function isBoundedString(value: unknown, maxLength: number): value is string {
@@ -605,6 +645,8 @@ function validateSummaryExpiredAtOrAfterExpiry(
 
 export function validateOnlineChallengeSummary(value: unknown): ValidationResult<OnlineChallengeSummary> {
   if (!isRecord(value)) return bad("summary must be an object.");
+  const allowedKeys = validateAllowedKeys(value, CHALLENGE_SUMMARY_KEYS, "summary");
+  if (!allowedKeys.ok) return allowedKeys;
   if (containsDurableSecret(value)) {
     return bad("summary must not contain token, credential, session, auth, cookie, or invite fields.");
   }
@@ -822,6 +864,12 @@ export function validateOnlineAccountChallengeDirectoryResponse(
   value: unknown
 ): ValidationResult<OnlineAccountChallengeDirectoryResponse> {
   if (!isRecord(value)) return bad("accountChallengeDirectory must be an object.");
+  const directoryKeys = validateAllowedKeys(
+    value,
+    ACCOUNT_CHALLENGE_DIRECTORY_KEYS,
+    "accountChallengeDirectory"
+  );
+  if (!directoryKeys.ok) return directoryKeys;
   if (containsDurableSecret(value)) {
     return bad("accountChallengeDirectory must not contain token, credential, session, auth, cookie, or invite fields.");
   }
@@ -839,6 +887,12 @@ export function validateOnlineAccountChallengeDirectoryResponse(
     if (!isRecord(rawItem)) {
       return bad(`accountChallengeDirectory.challenges[${index}] must be an object.`);
     }
+    const itemKeys = validateAllowedKeys(
+      rawItem,
+      ACCOUNT_CHALLENGE_LIST_ITEM_KEYS,
+      `accountChallengeDirectory.challenges[${index}]`
+    );
+    if (!itemKeys.ok) return itemKeys;
     if (rawItem.role !== "challenger" && rawItem.role !== "challenged") {
       return bad(`accountChallengeDirectory.challenges[${index}].role is invalid.`);
     }

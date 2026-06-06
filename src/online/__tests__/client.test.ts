@@ -912,6 +912,59 @@ describe("online client helpers", () => {
     });
   });
 
+  it("rejects account challenge directory responses with unsupported internal fields", async () => {
+    const validChallengeSummary = {
+      schemaVersion: ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      challengeId: "challenge_samir_liam",
+      challengerIdentity: { kind: "registered", id: "registered:samir", displayName: "Samir" },
+      challengedIdentity: { kind: "registered", id: "registered:liam", displayName: "Liam" },
+      challengerSeat: "random",
+      setup: { board: { config: { nSquares: 7 }, castles: [] }, pieces: [], sanctuaries: [] },
+      createdAt: "2026-06-03T12:00:00.000Z",
+      updatedAt: "2026-06-03T12:01:00.000Z",
+      expiresAt: "2026-06-03T12:11:00.000Z",
+      status: "pending",
+      visibility: "unlisted",
+      lastEventId: "challenge_samir_liam_evt",
+    };
+    const directoryResponse = (entry: unknown) => ({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+        challenges: [entry],
+      }),
+    });
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(directoryResponse({
+        role: "challenged",
+        databaseKey: "online_challenge_credentials.account_id",
+        summary: validChallengeSummary,
+      }))
+      .mockResolvedValueOnce(directoryResponse({
+        role: "challenged",
+        summary: {
+          ...validChallengeSummary,
+          accountId: "account_samir",
+        },
+      }));
+
+    await expect(
+      fetchOnlineAccountChallenges(
+        { token: "account-token" },
+        { state: "all" },
+        fetchImpl as any
+      )
+    ).rejects.toThrow("Online account challenges response was malformed");
+    await expect(
+      fetchOnlineAccountChallenges(
+        { token: "account-token" },
+        { state: "all" },
+        fetchImpl as any
+      )
+    ).rejects.toThrow("Online account challenges response was malformed");
+  });
+
   it("loads Google OAuth provider availability", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string, init?: RequestInit) => {
