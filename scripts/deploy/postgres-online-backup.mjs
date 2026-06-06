@@ -82,6 +82,11 @@ export function parseBackupArgs(argv) {
       if (!outputPath) throw new Error("--out requires a file path.");
       args.outputPath = outputPath;
       index += 1;
+    } else if (arg === "--validate") {
+      const validatePath = argv[index + 1];
+      if (!validatePath) throw new Error("--validate requires a backup file path.");
+      args.validatePath = validatePath;
+      index += 1;
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
     } else if (!arg.startsWith("-") && !args.outputPath) {
@@ -201,11 +206,107 @@ export async function backupOnlinePostgresTables({
   };
 }
 
+function assertBackupFile(condition, message) {
+  if (!condition) {
+    throw new Error(`Invalid PostgreSQL online backup: ${message}`);
+  }
+}
+
+function assertSafeDatabaseDescription(database) {
+  assertBackupFile(typeof database === "string" && database.length > 0, "database metadata is missing");
+  const userInfoMatch = /^[a-z]+:\/\/([^/@]+)@/i.exec(database);
+  if (!userInfoMatch) return;
+  const userInfo = userInfoMatch[1];
+  let decodedUserInfo = userInfo;
+  try {
+    decodedUserInfo = decodeURIComponent(userInfo);
+  } catch {
+    // Keep validating the raw text if the metadata is not URL-encoded cleanly.
+  }
+  assertBackupFile(
+    !userInfo.includes(":") && !decodedUserInfo.includes(":"),
+    "database credential metadata must not include a password"
+  );
+}
+
+export async function validateOnlinePostgresBackupFile(backupPath, { tables = ONLINE_BACKUP_TABLES } = {}) {
+  const allowedTables = new Set(tables.map((table) => validateTableSpec(table).name));
+  let backup;
+  try {
+    backup = JSON.parse(await readFile(backupPath, "utf8"));
+  } catch (error) {
+    throw new Error(
+      `Invalid PostgreSQL online backup: could not parse JSON (${error instanceof Error ? error.message : error})`
+    );
+  }
+
+  assertBackupFile(backup?.format === "castles-postgres-online-backup-v1", "format is not supported");
+  assertBackupFile(
+    typeof backup.createdAt === "string" && !Number.isNaN(Date.parse(backup.createdAt)),
+    "createdAt is invalid"
+  );
+  assertSafeDatabaseDescription(backup.database);
+  assertBackupFile(Number.isInteger(backup.tableCount) && backup.tableCount >= 0, "tableCount is invalid");
+  assertBackupFile(Number.isInteger(backup.rowCount) && backup.rowCount >= 0, "rowCount is invalid");
+  assertBackupFile(Array.isArray(backup.tables), "tables must be an array");
+  assertBackupFile(backup.tableCount === backup.tables.length, "tableCount does not match tables length");
+
+  const seenTables = new Set();
+  let computedRowCount = 0;
+  for (const table of backup.tables) {
+    assertBackupFile(table && typeof table === "object", "table entry must be an object");
+    assertBackupFile(
+      typeof table.name === "string" && allowedTables.has(table.name),
+      `unknown or unsafe table ${String(table.name)}`
+    );
+    assertBackupFile(!seenTables.has(table.name), `duplicate table ${table.name}`);
+    seenTables.add(table.name);
+    assertBackupFile(Array.isArray(table.columns), `columns for ${table.name} must be an array`);
+    for (const column of table.columns) {
+      assertBackupFile(
+        typeof column === "string" && SQL_IDENTIFIER.test(column),
+        `unsafe column ${String(column)} in ${table.name}`
+      );
+    }
+    assertBackupFile(
+      Number.isInteger(table.rowCount) && table.rowCount >= 0,
+      `rowCount for ${table.name} is invalid`
+    );
+    assertBackupFile(Array.isArray(table.rows), `rows for ${table.name} must be an array`);
+    assertBackupFile(
+      table.rowCount === table.rows.length,
+      `rowCount for ${table.name} does not match rows length`
+    );
+    for (const row of table.rows) {
+      assertBackupFile(
+        row && typeof row === "object" && !Array.isArray(row),
+        `row for ${table.name} must be an object`
+      );
+    }
+    computedRowCount += table.rowCount;
+  }
+  assertBackupFile(backup.rowCount === computedRowCount, "rowCount does not match table row counts");
+
+  return {
+    path: backupPath,
+    rowCount: backup.rowCount,
+    tableCount: backup.tableCount,
+  };
+}
+
 async function main() {
   const args = parseBackupArgs(process.argv.slice(2));
   if (args.help) {
     console.log(
-      "Usage: node scripts/deploy/postgres-online-backup.mjs --out <backup.json> [--castles-env-file <file>]"
+      "Usage: node scripts/deploy/postgres-online-backup.mjs --out <backup.json> [--castles-env-file <file>]\n" +
+        "       node scripts/deploy/postgres-online-backup.mjs --validate <backup.json>"
+    );
+    return;
+  }
+  if (args.validatePath) {
+    const result = await validateOnlinePostgresBackupFile(args.validatePath);
+    console.log(
+      `Validated PostgreSQL online backup ${result.path}: ${result.rowCount} rows from ${result.tableCount} tables`
     );
     return;
   }

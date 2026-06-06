@@ -446,6 +446,7 @@ NODE
       echo "PostgreSQL JSON backup is empty or failed."
       exit 1
     }
+    node scripts/deploy/postgres-online-backup.mjs --validate "$backup/postgres-online-backup.json"
   fi
 fi
 

@@ -7,6 +7,7 @@ import {
   backupOnlinePostgresTables,
   loadBackupEnvironment,
   parseBackupArgs,
+  validateOnlinePostgresBackupFile,
 } from "../postgres-online-backup.mjs";
 
 function fakeClient({ existingTables, tableRows }) {
@@ -140,6 +141,70 @@ describe("PostgreSQL online backup helper", () => {
       });
       expect(client.queries.map((query) => query.text)).toContain("end");
       expect(client.queries.some((query) => /unrelated_table/i.test(query.text))).toBe(false);
+      await expect(validateOnlinePostgresBackupFile(outputPath)).resolves.toEqual({
+        path: outputPath,
+        rowCount: 2,
+        tableCount: 2,
+      });
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed JSON backup files before they are trusted for rollback", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "castles-postgres-backup-invalid-"));
+    const outputPath = path.join(repoRoot, "invalid.json");
+    await writeFile(
+      outputPath,
+      JSON.stringify(
+        {
+          format: "castles-postgres-online-backup-v1",
+          createdAt: "2026-06-06T00:10:00.000Z",
+          database: "postgresql://<user>@db.example/castles",
+          tableCount: 1,
+          rowCount: 2,
+          tables: [
+            {
+              name: "online_game_events; drop table online_accounts",
+              columns: ["id"],
+              rowCount: 1,
+              rows: [{ id: "1" }],
+            },
+          ],
+        },
+        null,
+        2
+      )
+    );
+
+    try {
+      await expect(validateOnlinePostgresBackupFile(outputPath)).rejects.toThrow(/unknown or unsafe table/);
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects backup metadata that contains database credentials", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "castles-postgres-backup-secret-"));
+    const outputPath = path.join(repoRoot, "secret.json");
+    await writeFile(
+      outputPath,
+      JSON.stringify(
+        {
+          format: "castles-postgres-online-backup-v1",
+          createdAt: "2026-06-06T00:10:00.000Z",
+          database: "postgresql://castles%3Asecret@db.example/castles",
+          tableCount: 0,
+          rowCount: 0,
+          tables: [],
+        },
+        null,
+        2
+      )
+    );
+
+    try {
+      await expect(validateOnlinePostgresBackupFile(outputPath)).rejects.toThrow(/database credential/);
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }
@@ -180,6 +245,9 @@ describe("PostgreSQL online backup helper", () => {
       outputPath: "backup.json",
     });
     expect(parseBackupArgs(["backup.json"]).outputPath).toBe("backup.json");
+    expect(parseBackupArgs(["--validate", "backup.json"])).toEqual({
+      validatePath: "backup.json",
+    });
   });
 
   it("rejects unsafe table specs before interpolating SQL", async () => {
