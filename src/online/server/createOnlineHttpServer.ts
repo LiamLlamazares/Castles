@@ -614,6 +614,15 @@ function parseAccountHeadToHeadDirectoryOptions(
   };
 }
 
+function validateAccountGameActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Account game action query is invalid." };
+}
+
 function parseAccountChallengeDirectoryOptions(
   originalUrl: string
 ): { ok: true; state: OnlineAccountChallengeDirectoryState } | { ok: false; message: string } {
@@ -4407,6 +4416,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
+    const query = validateAccountGameActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: query.message },
+      });
+      return;
+    }
+
     const gameId = validateOnlineGameId(req.params.gameId, "account.snapshot.gameId");
     if (!gameId.ok) {
       res.status(400).json({ error: gameId.error });
@@ -4480,6 +4497,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!accountReadLimiter.take(getClientKey(req))) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+
+    const query = validateAccountGameActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: query.message },
       });
       return;
     }

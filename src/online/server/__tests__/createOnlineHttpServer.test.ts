@@ -2855,6 +2855,72 @@ describe("createOnlineHttpServer", () => {
     expect(spectatorResponse.status).toBe(404);
   });
 
+  it("rejects token-bearing account game snapshot and rejoin query strings", async () => {
+    const gameId = "game_account_query_secret";
+    const service = OnlineGameService.fromRecords(
+      [
+        {
+          gameId,
+          whiteCredential: hashOnlineToken("old-w-token"),
+          blackCredential: hashOnlineToken("old-b-token"),
+          setup: createClockedSetup(),
+          acceptedActions: [],
+        },
+      ],
+      {
+        tokenFactory: (seat) => `fresh-${seat}-token`,
+        credentialFactory: hashOnlineToken,
+        verifyToken: verifyOnlineToken,
+      }
+    );
+    let registeredIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const loadGameSummary = vi.fn((targetGameId: string) => {
+      if (targetGameId !== gameId || !registeredIdentity) return null;
+      return {
+        ...summaryForGame(gameId, "private"),
+        participants: [
+          { seat: "w", role: "white", identity: registeredIdentity },
+          { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_black" } },
+        ],
+      };
+    });
+    const appendGameSeatCredential = vi.fn();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      loadGameSummary,
+      appendGameSeatCredential,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Liam");
+    registeredIdentity = account.account.identity;
+
+    const snapshotResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/snapshot?token=leaked-player-token`,
+      { headers: bearer(account.session.token) }
+    );
+    const rejoinResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/rejoin?token=leaked-player-token`,
+      { method: "POST", headers: bearer(account.session.token) }
+    );
+    const snapshotBody = await snapshotResponse.json();
+    const rejoinBody = await rejoinResponse.json();
+
+    expect(snapshotResponse.status).toBe(400);
+    expect(snapshotBody.error).toMatchObject({
+      code: "bad_request",
+      message: "Account game action query is invalid.",
+    });
+    expect(rejoinResponse.status).toBe(400);
+    expect(rejoinBody.error).toMatchObject({
+      code: "bad_request",
+      message: "Account game action query is invalid.",
+    });
+    expect(loadGameSummary).not.toHaveBeenCalled();
+    expect(appendGameSeatCredential).not.toHaveBeenCalled();
+  });
+
   it("mints a fresh player token when a registered participant rejoins an active account game", async () => {
     const gameId = "game_account_rejoin_route";
     const record = {
