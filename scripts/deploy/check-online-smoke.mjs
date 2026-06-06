@@ -392,6 +392,17 @@ async function main() {
   assert(readBody.snapshot?.version === 1, "Snapshot fetch did not return persisted version 1");
   assertDefaultOnlineClock(readBody.snapshot, "Persisted snapshot");
   await assertSpectatorSnapshot(fetchWithTimeout, baseUrl, created.gameId, 1);
+  const directCleanup = await submitOnlineAction(
+    WebSocket,
+    created.gameId,
+    created.black.token,
+    `direct-smoke-cleanup-resign-${Date.now().toString(36)}`,
+    { type: "RESIGN", baseVersion: 1 }
+  );
+  assert(
+    directCleanup.result?.winner === "w" && directCleanup.result?.reason === "resignation",
+    "Direct smoke cleanup resignation did not end the game"
+  );
   const accountChallenge = await smokeAccountChallengeRecovery(WebSocket);
 
   console.log(

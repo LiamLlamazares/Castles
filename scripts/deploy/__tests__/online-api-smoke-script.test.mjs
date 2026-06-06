@@ -22,4 +22,13 @@ describe("production online API smoke script", () => {
     expect(script).toContain("RESIGN");
     expect(script).toContain("/api/online/account");
   });
+
+  it("ends the direct-created smoke game before reporting production healthy", () => {
+    const script = readScript();
+
+    expect(script).toContain("direct-smoke-cleanup-resign");
+    expect(script).toContain("created.black.token");
+    expect(script).toContain("Direct smoke cleanup");
+    expect(script).toMatch(/RESIGN[\s\S]*baseVersion:\s*1/);
+  });
 });

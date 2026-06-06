@@ -878,6 +878,8 @@ Registered challenge smoke update on 2026-06-06: `npm run online:smoke:local:cha
 
 Production account recovery smoke update on 2026-06-06: `scripts/deploy/check-online-smoke.mjs` now creates two disposable production accounts, follows the challenger from the challenged account, creates a targeted unlisted challenge, verifies both account challenge directories and account histories, accepts through the account route, rejoins the accepted game from both account sessions, ends the smoke game by resignation with the fresh player-seat token, and deletes both disposable accounts before reporting production healthy.
 
+Production smoke cleanup update on 2026-06-06: the same API smoke now resigns its direct-created game after the persisted player/spectator snapshot checks pass, so repeated deploy gates do not leave active anonymous smoke games in production persistence.
+
 Recommended shape:
 
 - Start with a Lichess-style one-way follow/favorite model rather than mandatory mutual friend requests. It is simpler, supports quick spectating/challenges, and avoids blocking real play on acceptance workflows.
