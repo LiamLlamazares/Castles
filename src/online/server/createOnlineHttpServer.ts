@@ -5746,6 +5746,20 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       });
       return;
     }
+    const sourceGameId =
+      req.body?.sourceGameId === undefined
+        ? null
+        : validateOnlineGameId(req.body.sourceGameId, "challenge.sourceGameId");
+    if (sourceGameId && !sourceGameId.ok) {
+      res.status(400).json({ error: sourceGameId.error });
+      return;
+    }
+    if (sourceGameId && intent !== "rematch") {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Challenge sourceGameId is only allowed for rematches." },
+      });
+      return;
+    }
     const expiry = parseChallengeExpiry(req.body?.expiresInMs);
     if (!expiry.ok) {
       res.status(400).json({ error: expiry.error });
@@ -5758,6 +5772,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         : normalizeOnlineAccountDisplayName(req.body.challengedDisplayName);
     if (challengedDisplayName && !challengedDisplayName.ok) {
       res.status(400).json({ error: challengedDisplayName.error });
+      return;
+    }
+    if (sourceGameId && !challengedDisplayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Challenge sourceGameId requires a targeted rematch." },
+      });
       return;
     }
 
@@ -5816,6 +5836,27 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       resolvedChallengerIdentity ?? { kind: "session" as const, id: `${challengeId}_challenger` };
     const challengedIdentity =
       resolvedChallengedIdentity ?? { kind: "session" as const, id: `${challengeId}_challenged` };
+    let authorizedSourceGameId: string | undefined;
+    if (sourceGameId) {
+      const lookup = await loadValidatedSummaryForGame(sourceGameId.value);
+      if (!lookup.ok) {
+        res.status(503).json({
+          error: { code: "persistence_failed", message: "The rematch source game could not be checked." },
+        });
+        return;
+      }
+      if (
+        !lookup.summary ||
+        !seatForGameIdentity(lookup.summary, challengerIdentity) ||
+        !seatForGameIdentity(lookup.summary, challengedIdentity)
+      ) {
+        res.status(404).json({
+          error: { code: "not_found", message: "No source game was found for that rematch." },
+        });
+        return;
+      }
+      authorizedSourceGameId = sourceGameId.value;
+    }
 
     try {
       const createChallenge = async (): Promise<{ status: number; body: unknown }> => {
@@ -5844,6 +5885,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             challengerSeat,
             visibility,
             ...(intent === "rematch" ? { intent } : {}),
+            ...(authorizedSourceGameId ? { sourceGameId: authorizedSourceGameId } : {}),
             setup: normalizedSetup,
             expiresAt,
           },

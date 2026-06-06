@@ -221,13 +221,17 @@ describe("online challenge event validation", () => {
     expect(validateOnlineChallengeEvent(event).ok).toBe(true);
   });
 
-  it("projects rematch intent from creation events into challenge summaries", () => {
-    const event = createdEvent({ intent: "rematch" } as unknown as Partial<Extract<OnlineChallengeEvent, { type: "challenge_created" }>>);
+  it("projects rematch intent and source game ids from creation events into challenge summaries", () => {
+    const event = createdEvent({
+      intent: "rematch",
+      sourceGameId: "game_source_rematch",
+    } as unknown as Partial<Extract<OnlineChallengeEvent, { type: "challenge_created" }>>);
 
     expect(validateOnlineChallengeEvent(event)).toMatchObject({
       ok: true,
       value: {
         intent: "rematch",
+        sourceGameId: "game_source_rematch",
       },
     });
     const [summary] = projectOnlineChallengeSummaries([event]);
@@ -235,6 +239,7 @@ describe("online challenge event validation", () => {
     expect(summary).toMatchObject({
       challengeId: "challenge_test",
       intent: "rematch",
+      sourceGameId: "game_source_rematch",
     });
     expect(validateOnlineChallengeSummary(summary).ok).toBe(true);
   });

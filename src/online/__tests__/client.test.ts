@@ -2118,6 +2118,7 @@ describe("online client helpers", () => {
       challengerSeat: "w",
       visibility: "unlisted",
       intent: "rematch",
+      sourceGameId: "game_source_rematch",
       setup,
       createdAt: "2026-06-03T12:00:00.000Z",
       updatedAt: "2026-06-03T12:00:00.000Z",
@@ -2143,6 +2144,7 @@ describe("online client helpers", () => {
           visibility: "unlisted",
           challengedDisplayName: "Samir",
           intent: "rematch",
+          sourceGameId: "game_source_rematch",
           account: { token: "account-token" },
         } as Parameters<typeof createOnlineChallenge>[1],
         fetchImpl as any
@@ -2151,11 +2153,13 @@ describe("online client helpers", () => {
       summary: {
         challengeId: "challenge_rematch_123",
         intent: "rematch",
+        sourceGameId: "game_source_rematch",
       },
     });
     expect(JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string)).toMatchObject({
       challengedDisplayName: "Samir",
       intent: "rematch",
+      sourceGameId: "game_source_rematch",
     });
   });
 

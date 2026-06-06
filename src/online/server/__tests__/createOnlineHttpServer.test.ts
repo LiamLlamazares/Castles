@@ -5514,20 +5514,68 @@ describe("createOnlineHttpServer", () => {
   });
 
   it("persists targeted account rematch intent in account challenge directories", async () => {
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    let samirIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    let daniIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const sourceSummary = (
+      gameId: string,
+      whiteIdentity: OnlineGameSummary["participants"][number]["identity"],
+      blackIdentity: OnlineGameSummary["participants"][number]["identity"]
+    ): OnlineGameSummary => ({
+      ...summaryForGame(gameId, "private"),
+      updatedAt: "2026-06-01T12:30:00.000Z",
+      endedAt: "2026-06-01T12:30:00.000Z",
+      version: 12,
+      status: "complete",
+      archiveState: "archived",
+      participants: [
+        { seat: "w", role: "white", identity: whiteIdentity },
+        { seat: "b", role: "black", identity: blackIdentity },
+      ],
+      result: { winner: "w", reason: "resignation" },
+      lastEventId: `${gameId}_terminal_evt`,
+    });
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
       now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      loadGameSummary: (gameId) => {
+        if (gameId === "game_liam_samir_source" && liamIdentity && samirIdentity) {
+          return sourceSummary(gameId, liamIdentity, samirIdentity);
+        }
+        if (gameId === "game_liam_dani_source" && liamIdentity && daniIdentity) {
+          return sourceSummary(gameId, liamIdentity, daniIdentity);
+        }
+        return null;
+      },
     });
     servers.push(server);
     const port = await listen(server);
     const setup = createSetup();
     const liam = await createAccountViaApi(port, "Liam");
     const samir = await createAccountViaApi(port, "Samir");
+    const dani = await createAccountViaApi(port, "Dani");
+    liamIdentity = liam.account.identity;
+    samirIdentity = samir.account.identity;
+    daniIdentity = dani.account.identity;
 
     await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
       method: "PUT",
       headers: bearer(samir.session.token),
     });
+
+    const unauthorizedSourceResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "samir",
+        intent: "rematch",
+        sourceGameId: "game_liam_dani_source",
+      }),
+    });
+    const unauthorizedSource = await unauthorizedSourceResponse.json();
 
     const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
       method: "POST",
@@ -5538,6 +5586,7 @@ describe("createOnlineHttpServer", () => {
         visibility: "unlisted",
         challengedDisplayName: "samir",
         intent: "rematch",
+        sourceGameId: "game_liam_samir_source",
       }),
     });
     const created = await createResponse.json();
@@ -5552,10 +5601,18 @@ describe("createOnlineHttpServer", () => {
     const challengerDirectory = await challengerDirectoryResponse.json();
     const challengedDirectory = await challengedDirectoryResponse.json();
 
+    expect(unauthorizedSourceResponse.status).toBe(404);
+    expect(unauthorizedSource).toMatchObject({
+      error: {
+        code: "not_found",
+        message: "No source game was found for that rematch.",
+      },
+    });
     expect(createResponse.status).toBe(201);
     expect(created.summary).toMatchObject({
       challengeId: created.challengeId,
       intent: "rematch",
+      sourceGameId: "game_liam_samir_source",
       challengerIdentity: redactedRegisteredIdentity(liam),
       challengedIdentity: redactedRegisteredIdentity(samir),
     });
@@ -5567,6 +5624,7 @@ describe("createOnlineHttpServer", () => {
         summary: expect.objectContaining({
           challengeId: created.challengeId,
           intent: "rematch",
+          sourceGameId: "game_liam_samir_source",
         }),
       }),
     ]);
@@ -5576,6 +5634,7 @@ describe("createOnlineHttpServer", () => {
         summary: expect.objectContaining({
           challengeId: created.challengeId,
           intent: "rematch",
+          sourceGameId: "game_liam_samir_source",
         }),
       }),
     ]);

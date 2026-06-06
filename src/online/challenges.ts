@@ -4,6 +4,7 @@ import {
 } from "./identity";
 import { containsDurableSecret } from "./secretSafety";
 import {
+  validateOnlineGameId,
   validateOnlineGameSetup,
   type ValidationResult,
 } from "./validation";
@@ -40,6 +41,7 @@ export type OnlineChallengeEvent =
       challengerSeat: OnlineChallengeSeat;
       visibility: OnlineChallengeVisibility;
       intent?: OnlineChallengeIntent;
+      sourceGameId?: string;
       setup: OnlineGameSetupDTO;
       expiresAt: string;
     })
@@ -79,6 +81,7 @@ export interface OnlineChallengeSummary {
   challengerSeat: OnlineChallengeSeat;
   visibility: OnlineChallengeVisibility;
   intent?: OnlineChallengeIntent;
+  sourceGameId?: string;
   setup: OnlineGameSetupDTO;
   createdAt: string;
   updatedAt: string;
@@ -131,6 +134,7 @@ const CHALLENGE_SUMMARY_KEYS = new Set([
   "challengerSeat",
   "visibility",
   "intent",
+  "sourceGameId",
   "setup",
   "createdAt",
   "updatedAt",
@@ -209,6 +213,13 @@ function validateChallengeIntent(value: unknown, label: string): ValidationResul
     return { ok: true, value: value as OnlineChallengeIntent };
   }
   return bad(`${label} must be challenge or rematch.`);
+}
+
+function validateOptionalSourceGameId(value: unknown, label: string): ValidationResult<string | undefined> {
+  if (value === undefined) return { ok: true, value: undefined };
+  const gameId = validateOnlineGameId(value, label);
+  if (!gameId.ok) return gameId;
+  return { ok: true, value: gameId.value };
 }
 
 function createEnvelope(
@@ -354,6 +365,11 @@ export function validateOnlineChallengeEvent(value: unknown): ValidationResult<O
     }
     const intent = validateChallengeIntent(value.intent, "event.intent");
     if (!intent.ok) return intent;
+    const sourceGameId = validateOptionalSourceGameId(value.sourceGameId, "event.sourceGameId");
+    if (!sourceGameId.ok) return sourceGameId;
+    if (sourceGameId.value && intent.value !== "rematch") {
+      return bad("event.sourceGameId is only allowed for rematch challenges.");
+    }
     const setup = validateOnlineGameSetup(value.setup);
     if (!setup.ok) return setup;
     if (!isIsoDateString(value.expiresAt)) {
@@ -373,6 +389,7 @@ export function validateOnlineChallengeEvent(value: unknown): ValidationResult<O
         challengerSeat: value.challengerSeat,
         visibility: value.visibility,
         ...(intent.value ? { intent: intent.value } : {}),
+        ...(sourceGameId.value ? { sourceGameId: sourceGameId.value } : {}),
         setup: setup.value,
         expiresAt: value.expiresAt,
       },
@@ -551,6 +568,7 @@ export function projectOnlineChallengeSummaries(
         challengerSeat: event.challengerSeat,
         visibility: event.visibility,
         ...(event.intent ? { intent: event.intent } : {}),
+        ...(event.sourceGameId ? { sourceGameId: event.sourceGameId } : {}),
         setup: event.setup,
         createdAt: event.createdAt,
         updatedAt: event.createdAt,
@@ -694,6 +712,11 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
   }
   const intent = validateChallengeIntent(value.intent, "summary.intent");
   if (!intent.ok) return intent;
+  const sourceGameId = validateOptionalSourceGameId(value.sourceGameId, "summary.sourceGameId");
+  if (!sourceGameId.ok) return sourceGameId;
+  if (sourceGameId.value && intent.value !== "rematch") {
+    return bad("summary.sourceGameId is only allowed for rematch challenges.");
+  }
   const setup = validateOnlineGameSetup(value.setup);
   if (!setup.ok) return setup;
   if (!isIsoDateString(value.createdAt)) {
@@ -745,6 +768,7 @@ export function validateOnlineChallengeSummary(value: unknown): ValidationResult
     challengerSeat: value.challengerSeat,
     visibility: value.visibility,
     ...(intent.value ? { intent: intent.value } : {}),
+    ...(sourceGameId.value ? { sourceGameId: sourceGameId.value } : {}),
     setup: setup.value,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,

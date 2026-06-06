@@ -1560,7 +1560,11 @@ function App() {
 
   const createChallengeFromSetup = async (
     setup: OnlineGameSetupDTO,
-    options: { challengedDisplayName?: string; intent?: AccountChallengeOptions["intent"] } = {}
+    options: {
+      challengedDisplayName?: string;
+      intent?: AccountChallengeOptions["intent"];
+      sourceGameId?: string;
+    } = {}
   ): Promise<CreatedChallengeFromSetup | null> => {
     try {
       cancelPendingReplay();
@@ -1574,6 +1578,7 @@ function App() {
           visibility: "unlisted",
           account: onlineAccountAuth,
           ...(options.intent ? { intent: options.intent } : {}),
+          ...(options.sourceGameId ? { sourceGameId: options.sourceGameId } : {}),
           ...(options.challengedDisplayName
             ? { challengedDisplayName: options.challengedDisplayName }
             : {}),
@@ -1678,6 +1683,7 @@ function App() {
     const created = await createChallengeFromSetup(setup, {
       challengedDisplayName: displayName,
       intent: options.intent,
+      sourceGameId: options.sourceGameId,
     });
     if (!created) {
       throw new Error("Targeted online challenge was not created.");
@@ -1710,6 +1716,7 @@ function App() {
     const created = await createChallengeFromSetup(target.setup, {
       challengedDisplayName: target.displayName,
       intent: "rematch",
+      sourceGameId: target.gameId,
     });
     if (!created) {
       throw new Error("Rematch challenge was not created.");

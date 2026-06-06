@@ -1699,6 +1699,7 @@ export async function createOnlineChallenge(
     challengerSeat?: "w" | "b" | "random";
     visibility?: "private" | "unlisted";
     intent?: OnlineChallengeIntent;
+    sourceGameId?: string;
     challengedDisplayName?: string;
     account?: OnlineAccountSessionParams;
   } = {},

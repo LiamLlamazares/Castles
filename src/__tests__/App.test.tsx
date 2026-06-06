@@ -2694,9 +2694,13 @@ describe("App game setup lifecycle", () => {
       if (path === "/api/online/challenges") {
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           challengedDisplayName?: string;
+          intent?: string;
+          sourceGameId?: string;
           setup?: { board?: { config?: { nSquares?: number } } };
         };
         expect(body.challengedDisplayName).toBe("Samir");
+        expect(body.intent).toBe("rematch");
+        expect(body.sourceGameId).toBe("game_account_rematch");
         expect(body.setup?.board?.config?.nSquares).toBe(6);
         expect(init?.headers).toEqual({
           "content-type": "application/json",
@@ -2720,6 +2724,8 @@ describe("App game setup lifecycle", () => {
                 challengedIdentity: samirIdentity,
                 challengerSeat: "w",
                 visibility: "unlisted",
+                intent: "rematch",
+                sourceGameId: "game_account_rematch",
                 setup: { board: { config: { nSquares: 6 }, castles: [] }, pieces: [], sanctuaries: [] },
                 createdAt: "2026-06-04T12:10:00.000Z",
                 updatedAt: "2026-06-04T12:10:00.000Z",
@@ -2779,7 +2785,12 @@ describe("App game setup lifecycle", () => {
       token: "account-token",
       account,
     });
-    const postedBodies: Array<{ challengedDisplayName?: string; setup?: { board?: { config?: { nSquares?: number } } } }> = [];
+    const postedBodies: Array<{
+      challengedDisplayName?: string;
+      intent?: string;
+      sourceGameId?: string;
+      setup?: { board?: { config?: { nSquares?: number } } };
+    }> = [];
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
       if (path === "/api/online/account/me") {
@@ -2801,6 +2812,8 @@ describe("App game setup lifecycle", () => {
       if (path === "/api/online/challenges") {
         const body = JSON.parse(String(init?.body ?? "{}")) as {
           challengedDisplayName?: string;
+          intent?: string;
+          sourceGameId?: string;
           setup?: { board?: { config?: { nSquares?: number } } };
         };
         postedBodies.push(body);
@@ -2822,6 +2835,8 @@ describe("App game setup lifecycle", () => {
                 challengedIdentity: { kind: "registered", id: "account_archive_rematch_samir", displayName: "Samir" },
                 challengerSeat: "w",
                 visibility: "unlisted",
+                intent: "rematch",
+                sourceGameId: "game_archive_private",
                 setup: sourceSnapshot.setup,
                 createdAt: "2026-06-04T12:10:00.000Z",
                 updatedAt: "2026-06-04T12:10:00.000Z",
@@ -2850,6 +2865,8 @@ describe("App game setup lifecycle", () => {
       );
       expect(postedBodies[0]).toMatchObject({
         challengedDisplayName: "Samir",
+        intent: "rematch",
+        sourceGameId: "game_archive_private",
         setup: { board: { config: { nSquares: 5 } } },
       });
     });
