@@ -241,6 +241,7 @@ if [ -f "$service_unit" ]; then
 fi
 sudo /usr/bin/node scripts/deploy/postgres-online-backup.mjs --out "$backup_dir/online-postgres.json" --castles-env-file "$env_file"
 sudo chown -R "$(id -u):$(id -g)" "$backup_dir"
+/usr/bin/node scripts/deploy/postgres-online-backup.mjs --validate "$backup_dir/online-postgres.json"
 if command -v sha256sum >/dev/null 2>&1; then
   (cd "$backup_dir" && find . -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
 fi

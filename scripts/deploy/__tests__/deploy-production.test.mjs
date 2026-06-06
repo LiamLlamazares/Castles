@@ -64,6 +64,7 @@ describe("production deploy workflow", () => {
     expect(script).toContain("git fetch --prune");
     expect(script).toContain("git checkout --detach");
     expect(script).toContain("scripts/deploy/postgres-online-backup.mjs");
+    expect(script).toContain('scripts/deploy/postgres-online-backup.mjs --validate "$backup_dir/online-postgres.json"');
     expect(script).toContain("scripts/deploy/deploy-metadata-env.mjs");
     expect(script).toContain("npm run build");
     expect(script).toContain("npm run server:build");
@@ -72,6 +73,15 @@ describe("production deploy workflow", () => {
     expect(script).toContain(COMMIT);
     expect(script).not.toContain("DATABASE_URL=");
     expect(script).not.toContain("GOOGLE_OAUTH_CLIENT_SECRET");
+    expect(script.indexOf('sudo chown -R "$(id -u):$(id -g)" "$backup_dir"')).toBeLessThan(
+      script.indexOf('scripts/deploy/postgres-online-backup.mjs --validate "$backup_dir/online-postgres.json"')
+    );
+    expect(script.indexOf('scripts/deploy/postgres-online-backup.mjs --validate "$backup_dir/online-postgres.json"')).toBeLessThan(
+      script.indexOf("sha256sum > SHA256SUMS")
+    );
+    expect(script.indexOf('scripts/deploy/postgres-online-backup.mjs --validate "$backup_dir/online-postgres.json"')).toBeLessThan(
+      script.indexOf('git checkout --detach "$expected_commit"')
+    );
   });
 
   it("plans remote deploy, freshness, API smoke, and browser smoke in order", () => {
