@@ -623,6 +623,15 @@ function validateAccountGameActionQuery(originalUrl: string):
     : { ok: false, message: "Account game action query is invalid." };
 }
 
+function validateAccountSessionActionQuery(originalUrl: string):
+  | { ok: true }
+  | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  return Array.from(url.searchParams.keys()).length === 0
+    ? { ok: true }
+    : { ok: false, message: "Account session action query is invalid." };
+}
+
 function validateDirectChallengeActionQuery(originalUrl: string):
   | { ok: true }
   | { ok: false; message: string } {
@@ -3338,6 +3347,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSessionActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
     res.json({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       account: auth.account,
@@ -4212,6 +4226,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSessionActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.sessions.list", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
 
     try {
       const sessions = await accountStore.listSessionsForAccount(auth.account.accountId);
@@ -4246,6 +4266,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!auth.ok) {
       log({ event: "online.account.session.revoke", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSessionActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.session.revoke", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
 
@@ -4298,6 +4324,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       res.status(auth.status).json({ error: auth.error });
       return;
     }
+    const query = validateAccountSessionActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.sessions.revoke", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
 
     try {
       const revokedSessions = await accountStore.revokeSessionsForAccount(auth.account.accountId);
@@ -4337,6 +4369,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     if (!auth.ok) {
       log({ event: "online.account.delete", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSessionActionQuery(req.originalUrl);
+    if (!query.ok) {
+      log({ event: "online.account.delete", status: "rejected", reason: "bad_query" });
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
       return;
     }
 

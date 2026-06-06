@@ -2381,6 +2381,79 @@ describe("createOnlineHttpServer", () => {
     }
   });
 
+  it("rejects token-bearing account session query strings even with bearer auth", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const readAccount = await createAccountViaApi(port, "ReadGuard");
+    const revokeCurrentAccount = await createAccountViaApi(port, "RevokeCurrentGuard");
+    const revokeAllAccount = await createAccountViaApi(port, "RevokeAllGuard");
+    const deleteAccount = await createAccountViaApi(port, "DeleteGuard");
+
+    const expectBadQuery = async (response: Response) => {
+      const body = await response.json();
+      expect(response.status).toBe(400);
+      expect(body.error).toMatchObject({
+        code: "bad_request",
+        message: "Account session action query is invalid.",
+      });
+    };
+    const expectSessionStillActive = async (token: string) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/online/account/me`, {
+        headers: bearer(token),
+      });
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.account).toEqual(expect.any(Object));
+    };
+
+    const queryOnlyResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/me?token=${readAccount.session.token}`
+    );
+    expect(queryOnlyResponse.status).toBe(401);
+
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account/me?token=leaked-account-token`, {
+        headers: bearer(readAccount.session.token),
+      })
+    );
+    await expectBadQuery(
+      await fetch(
+        `http://127.0.0.1:${port}/api/online/account/sessions?token=leaked-account-token`,
+        { headers: bearer(readAccount.session.token) }
+      )
+    );
+    await expectSessionStillActive(readAccount.session.token);
+
+    await expectBadQuery(
+      await fetch(
+        `http://127.0.0.1:${port}/api/online/account/session?token=leaked-account-token`,
+        { method: "DELETE", headers: bearer(revokeCurrentAccount.session.token) }
+      )
+    );
+    await expectSessionStillActive(revokeCurrentAccount.session.token);
+
+    await expectBadQuery(
+      await fetch(
+        `http://127.0.0.1:${port}/api/online/account/sessions?token=leaked-account-token`,
+        { method: "DELETE", headers: bearer(revokeAllAccount.session.token) }
+      )
+    );
+    await expectSessionStillActive(revokeAllAccount.session.token);
+
+    await expectBadQuery(
+      await fetch(`http://127.0.0.1:${port}/api/online/account?token=leaked-account-token`, {
+        method: "DELETE",
+        headers: bearer(deleteAccount.session.token),
+      })
+    );
+    await expectSessionStillActive(deleteAccount.session.token);
+  });
+
   it("does not return success when account session revoke-all races after authentication", async () => {
     const accountStore = new MemoryOnlineAccountStore();
     vi.spyOn(accountStore, "revokeSessionsForAccount").mockResolvedValue(0);
