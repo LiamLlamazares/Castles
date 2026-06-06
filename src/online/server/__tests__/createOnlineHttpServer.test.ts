@@ -2874,7 +2874,7 @@ describe("createOnlineHttpServer", () => {
       }
     );
     let registeredIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
-    const loadGameSummary = vi.fn((targetGameId: string) => {
+    const loadGameSummary = vi.fn((targetGameId: string): OnlineGameSummary | null => {
       if (targetGameId !== gameId || !registeredIdentity) return null;
       return {
         ...summaryForGame(gameId, "private"),
