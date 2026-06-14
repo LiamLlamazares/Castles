@@ -135,6 +135,7 @@ describe("GameSetup", () => {
     const onTutorial = vi.fn();
     const onOpenLibrary = vi.fn();
     const onOpenOnlineBrowser = vi.fn();
+    const onOpenProfile = vi.fn();
 
     render(
       <GameSetup
@@ -144,6 +145,7 @@ describe("GameSetup", () => {
         onTutorial={onTutorial}
         onOpenLibrary={onOpenLibrary}
         onOpenOnlineBrowser={onOpenOnlineBrowser}
+        onOpenProfile={onOpenProfile}
       />
     );
 
@@ -151,11 +153,12 @@ describe("GameSetup", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toContainElement(screen.getByRole("button", { name: "Back to current game" }));
-    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Profile", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
 
     fireEvent.click(screen.getByRole("button", { name: "Back to current game" }));
     fireEvent.click(screen.getByRole("button", { name: "Tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Profile" }));
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
     fireEvent.click(screen.getByRole("button", { name: "Online" }));
 
@@ -165,6 +168,7 @@ describe("GameSetup", () => {
     expect(screen.getByRole("button", { name: "Play Local" })).toBeInTheDocument();
     expect(onBack).toHaveBeenCalledOnce();
     expect(onTutorial).toHaveBeenCalledOnce();
+    expect(onOpenProfile).toHaveBeenCalledOnce();
     expect(onOpenLibrary).toHaveBeenCalledOnce();
     expect(onOpenOnlineBrowser).toHaveBeenCalledOnce();
   });

@@ -14,6 +14,7 @@ interface GameLibraryProps {
   backLabel?: string;
   onTutorial?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onOpenProfile?: () => void;
   onlineNotificationCount?: number;
   onlineNotificationLabel?: string;
   onLoadGame: (record: SavedGameRecord) => void;
@@ -31,6 +32,7 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
   backLabel = "Back to game",
   onTutorial,
   onOpenOnlineBrowser,
+  onOpenProfile,
   onlineNotificationCount = 0,
   onlineNotificationLabel,
   onLoadGame,
@@ -299,6 +301,7 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
       notificationSingularLabel: "challenge activity",
       notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
     }] : []),
+    ...(onOpenProfile ? [{ id: "profile" as const, label: "Profile", onClick: onOpenProfile }] : []),
     { id: "library", label: "Library" },
   ];
 

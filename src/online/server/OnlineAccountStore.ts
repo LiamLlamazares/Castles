@@ -165,7 +165,7 @@ export interface OnlineAccountStore {
   deleteAccount(accountId: string): Promise<boolean>;
   listRatingLeaderboard(limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
   listFollowingRatingLeaderboard(accountId: string, limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
-  getProfileForDisplayName(viewerAccountId: string, displayName: string, viewedAt?: string): Promise<OnlineAccountPublicProfile | null>;
+  getProfileForDisplayName(viewerAccountId: string | null, displayName: string, viewedAt?: string): Promise<OnlineAccountPublicProfile | null>;
   listFollowingProfiles(accountId: string, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
   followAccount(followerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
   unfollowAccount(followerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
@@ -443,13 +443,13 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   }
 
   async getProfileForDisplayName(
-    viewerAccountId: string,
+    viewerAccountId: string | null,
     displayName: string,
     viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountPublicProfile | null> {
     const target = this.getAccountByDisplayName(displayName);
     if (!target) return null;
-    if (target.accountId !== viewerAccountId && this.hasBlock(target.accountId, viewerAccountId)) {
+    if (viewerAccountId !== null && target.accountId !== viewerAccountId && this.hasBlock(target.accountId, viewerAccountId)) {
       return null;
     }
     return this.createProfile(viewerAccountId, target, viewedAt);
@@ -775,7 +775,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   }
 
   private async createProfile(
-    viewerAccountId: string,
+    viewerAccountId: string | null,
     target: OnlineAccount,
     viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountPublicProfile> {
@@ -784,28 +784,29 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       displayName: target.displayName,
       presence: await this.createPresence(viewerAccountId, target, viewedAt),
       relationship: {
-        self: target.accountId === viewerAccountId,
-        following: this.hasFollow(viewerAccountId, target.accountId),
-        followedBy: target.accountId !== viewerAccountId && this.hasFollow(target.accountId, viewerAccountId),
-        blocked: this.hasBlock(viewerAccountId, target.accountId),
+        self: viewerAccountId !== null && target.accountId === viewerAccountId,
+        following: viewerAccountId !== null && this.hasFollow(viewerAccountId, target.accountId),
+        followedBy: viewerAccountId !== null && target.accountId !== viewerAccountId && this.hasFollow(target.accountId, viewerAccountId),
+        blocked: viewerAccountId !== null && this.hasBlock(viewerAccountId, target.accountId),
       },
     };
   }
 
   private async createPresence(
-    viewerAccountId: string,
+    viewerAccountId: string | null,
     target: OnlineAccount,
     viewedAt: string
   ): Promise<OnlineAccountPublicProfile["presence"]> {
-    const isSelf = viewerAccountId === target.accountId;
+    const isSelf = viewerAccountId !== null && viewerAccountId === target.accountId;
     const blockedEitherWay =
-      this.hasBlock(viewerAccountId, target.accountId) || this.hasBlock(target.accountId, viewerAccountId);
+      viewerAccountId !== null &&
+      (this.hasBlock(viewerAccountId, target.accountId) || this.hasBlock(target.accountId, viewerAccountId));
     const privacy = await this.getPrivacySettings(target.accountId);
     const canView =
       !blockedEitherWay &&
       (isSelf ||
         privacy.presencePolicy === "everyone" ||
-        (privacy.presencePolicy === "followed" && this.hasFollow(target.accountId, viewerAccountId)));
+        (viewerAccountId !== null && privacy.presencePolicy === "followed" && this.hasFollow(target.accountId, viewerAccountId)));
     if (!canView) {
       return { visibility: "hidden", status: null };
     }

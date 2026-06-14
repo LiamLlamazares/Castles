@@ -81,6 +81,7 @@ vi.mock("../components/Game", () => ({
     onRematch?: () => void | Promise<void>;
     onlineAccountDisplayName?: string | null;
     onOpenOnlineAccount?: () => void;
+    onOpenProfile?: () => void;
     onlineNotificationCount?: number;
     onlineNotificationLabel?: string;
     onSaveGameToLibrary?: (pgn: string, status: "ongoing" | "complete" | "analysis") => Promise<unknown> | unknown;
@@ -174,6 +175,11 @@ vi.mock("../components/Game", () => ({
       {props.onOpenOnlineAccount && (
         <button type="button" onClick={props.onOpenOnlineAccount}>
           Mock Open Account
+        </button>
+      )}
+      {props.onOpenProfile && (
+        <button type="button" onClick={props.onOpenProfile}>
+          Profile
         </button>
       )}
       {props.onSaveGameToLibrary && (
@@ -357,6 +363,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onConfigureSetup,
     onTutorial,
     onOpenLibrary,
+    onOpenProfile,
     onReplay,
     onSpectate,
     initialTab,
@@ -394,6 +401,7 @@ vi.mock("../components/OnlineGameBrowser", () => ({
     onConfigureSetup?: () => void;
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
+    onOpenProfile?: () => void;
     onReplay: (gameId: string) => void;
     onSpectate: (gameId: string) => void;
     initialTab?: string;
@@ -508,6 +516,11 @@ vi.mock("../components/OnlineGameBrowser", () => ({
       {onClearRecentOnlineGames && (
         <button type="button" onClick={onClearRecentOnlineGames}>
           Clear recent online replays
+        </button>
+      )}
+      {onOpenProfile && (
+        <button type="button" onClick={onOpenProfile}>
+          Online Profile
         </button>
       )}
       {quickMatchStatus && <div>Mock quick match status: {quickMatchStatus}</div>}
@@ -990,7 +1003,7 @@ describe("App game setup lifecycle", () => {
     const dialog = await screen.findByRole("dialog", { name: "Online account" });
     expect(dialog).toHaveTextContent("Continue as Guest");
     expect(screen.getByLabelText("Display name")).toHaveFocus();
-    expect(screen.getByText("Google sign-in is not configured on this server.")).toBeInTheDocument();
+    expect(screen.getByText("Google sign-in is unavailable right now.")).toBeInTheDocument();
   });
 
   it("supports keyboard dismissal and focus wrapping in the first-run introduction", async () => {
@@ -2237,7 +2250,7 @@ describe("App game setup lifecycle", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Profile", "Library"]);
     expect(screen.getByRole("button", { name: "Play" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online" })).toBeInTheDocument();
@@ -3429,6 +3442,228 @@ describe("App game setup lifecycle", () => {
         { headers: { authorization: "Bearer account-token" } }
       );
     });
+  });
+
+  it("opens a signed-in account profile dashboard from the game account entry point", async () => {
+    const account = {
+      schemaVersion: 1 as const,
+      accountId: "account_profile_liam",
+      displayName: "Liam",
+      createdAt: "2026-06-14T12:00:00.000Z",
+      updatedAt: "2026-06-14T12:00:00.000Z",
+      identity: { kind: "registered" as const, id: "account_profile_liam", displayName: "Liam" },
+    };
+    rememberOnlineAccountSession({
+      sessionId: "account-session",
+      token: "account-token",
+      account,
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/account/me") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: ONLINE_PROTOCOL_VERSION, account }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/profiles/Liam") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              profile: {
+                schemaVersion: 1,
+                displayName: "Liam",
+                rating: {
+                  schemaVersion: 1,
+                  rating: 1620,
+                  display: "1620?",
+                  provisional: true,
+                  games: 4,
+                  updatedAt: "2026-06-14T12:00:00.000Z",
+                },
+                presence: { visibility: "visible", status: "online" },
+                relationship: { self: true, following: false, followedBy: false, blocked: false },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/games?state=active&limit=3" || path === "/api/online/account/games?state=archived&limit=5") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION, games: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/challenges?state=all") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              schemaVersion: ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
+              challenges: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/follows") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ protocolVersion: ONLINE_PROTOCOL_VERSION, following: [] }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/privacy") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              privacy: {
+                schemaVersion: 1,
+                followPolicy: "everyone",
+                presencePolicy: "followed",
+                challengePolicy: "followed",
+                updatedAt: null,
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/account/sessions") {
+        expect(init?.headers).toEqual({ authorization: "Bearer account-token" });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              sessions: [
+                {
+                  sessionId: "account-session",
+                  createdAt: "2026-06-14T12:00:00.000Z",
+                  lastUsedAt: "2026-06-14T12:00:00.000Z",
+                  current: true,
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ schemaVersion: 1, games: [] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByText("Game account: Liam")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mock Open Account" }));
+    fireEvent.click(await screen.findByRole("button", { name: "My Profile" }));
+
+    expect(await screen.findByRole("heading", { name: "Liam" })).toBeInTheDocument();
+    expect(screen.getByText("Profile Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Rating 1620?")).toBeInTheDocument();
+    expect(window.location.href).not.toContain("account-token");
+    expect(window.location.href).not.toContain("challengeToken");
+    expect(window.location.href).not.toContain("onlineGame=");
+    expect(window.location.search).toBe("?profile=Liam");
+
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+
+    expect(screen.getByText("Library Ready")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("profile=");
+  });
+
+  it("routes signed-out Profile access to the online account sign-in dialog", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/online/account/oauth/providers") {
+        return new Response(
+          JSON.stringify({
+            protocolVersion: ONLINE_PROTOCOL_VERSION,
+            providers: [{ provider: "google", enabled: false }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Profile" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Online account" });
+    expect(dialog).toHaveTextContent("Continue as Guest");
+    expect(screen.queryByRole("heading", { name: "Profile Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("opens a shareable public profile URL without account credentials or private dashboard state", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?profile=Samir&onlineGame=game_secret&seat=w&token=account-token&onlineChallenge=challenge_secret&challengeRole=challenged&challengeToken=query-secret#challengeToken=fragment-secret"
+    );
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === "/api/online/profiles/Samir") {
+        expect(init?.headers).toBeUndefined();
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              profile: {
+                schemaVersion: 1,
+                displayName: "Samir",
+                rating: {
+                  schemaVersion: 1,
+                  rating: 1510,
+                  display: "1510",
+                  provisional: false,
+                  games: 18,
+                  updatedAt: "2026-06-14T12:00:00.000Z",
+                },
+                presence: { visibility: "hidden", status: null },
+                relationship: { self: false, following: false, followedBy: false, blocked: false },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      return Promise.resolve(new Response("not found", { status: 404 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Samir" })).toBeInTheDocument();
+    expect(screen.getByText("Public Profile")).toBeInTheDocument();
+    expect(screen.getByText("Rating 1510")).toBeInTheDocument();
+    expect(screen.queryByText("Private note")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign Out Everywhere")).not.toBeInTheDocument();
+    expect(screen.queryByText("account_samir")).not.toBeInTheDocument();
+    expect(window.location.href).not.toContain("account-token");
+    expect(window.location.href).not.toContain("token=");
+    expect(window.location.href).not.toContain("challengeToken");
+    expect(window.location.href).not.toContain("onlineGame=");
+    expect(window.location.search).toBe("?profile=Samir");
   });
 
   it("polls signed-in account challenges into count-only Online navigation activity", async () => {

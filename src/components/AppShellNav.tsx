@@ -5,8 +5,9 @@ import flagIcon from "../Assets/Images/misc/flag.svg";
 import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
 import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
+import crownIcon from "../Assets/Images/misc/crown.svg";
 
-export type AppDestinationId = "play" | "learn" | "library" | "online" | "tools";
+export type AppDestinationId = "play" | "learn" | "library" | "online" | "profile" | "tools";
 
 export interface AppShellDestination {
   id: AppDestinationId;
@@ -34,6 +35,7 @@ const destinationIcons: Record<AppDestinationId, string> = {
   learn: lightbulbIcon,
   online: castleIcon,
   library: scrollsIcon,
+  profile: crownIcon,
   tools: shieldIcon,
 };
 

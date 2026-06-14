@@ -1081,6 +1081,17 @@ export async function fetchOnlineAccountProfile(
   return validateProfileResponse(await response.json(), "Online profile");
 }
 
+export async function fetchOnlinePublicProfile(
+  displayName: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountProfileResponse> {
+  const response = await fetchImpl(`/api/online/profiles/${encodeURIComponent(displayName)}`);
+  if (!response.ok) {
+    throw new Error(`Could not load online profile (${response.status})`);
+  }
+  return validateProfileResponse(await response.json(), "Online public profile");
+}
+
 export async function fetchOnlineAccountFollowing(
   account: OnlineAccountSessionParams,
   fetchImpl: typeof fetch = fetch

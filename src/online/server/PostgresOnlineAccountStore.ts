@@ -497,14 +497,14 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
   }
 
   async getProfileForDisplayName(
-    viewerAccountId: string,
+    viewerAccountId: string | null,
     displayName: string,
     viewedAt = new Date().toISOString()
   ): Promise<OnlineAccountPublicProfile | null> {
     await this.ensureSchema();
     const target = await this.loadAccountByDisplayName(displayName);
     if (!target) return null;
-    if (target.accountId !== viewerAccountId && await this.hasBlock(target.accountId, viewerAccountId)) {
+    if (viewerAccountId !== null && target.accountId !== viewerAccountId && await this.hasBlock(target.accountId, viewerAccountId)) {
       return null;
     }
     return this.createProfile(viewerAccountId, target, this.queryable, viewedAt);
@@ -1413,7 +1413,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
   }
 
   private async createProfile(
-    viewerAccountId: string,
+    viewerAccountId: string | null,
     target: OnlineAccount,
     queryable: PostgresQueryable = this.queryable,
     viewedAt = new Date().toISOString()
@@ -1424,11 +1424,13 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       ...(await this.createPublicRating(target.accountId, queryable)),
       presence: await this.createPresence(viewerAccountId, target, queryable, viewedAt),
       relationship: {
-        self: viewerAccountId === target.accountId,
-        following: await this.hasFollow(viewerAccountId, target.accountId, queryable),
+        self: viewerAccountId !== null && viewerAccountId === target.accountId,
+        following: viewerAccountId !== null && await this.hasFollow(viewerAccountId, target.accountId, queryable),
         followedBy:
-          viewerAccountId !== target.accountId && await this.hasFollow(target.accountId, viewerAccountId, queryable),
-        blocked: await this.hasBlock(viewerAccountId, target.accountId, queryable),
+          viewerAccountId !== null &&
+          viewerAccountId !== target.accountId &&
+          await this.hasFollow(target.accountId, viewerAccountId, queryable),
+        blocked: viewerAccountId !== null && await this.hasBlock(viewerAccountId, target.accountId, queryable),
       },
     };
   }
@@ -1447,21 +1449,23 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
   }
 
   private async createPresence(
-    viewerAccountId: string,
+    viewerAccountId: string | null,
     target: OnlineAccount,
     queryable: PostgresQueryable,
     viewedAt: string
   ): Promise<OnlineAccountPublicProfile["presence"]> {
-    const isSelf = viewerAccountId === target.accountId;
+    const isSelf = viewerAccountId !== null && viewerAccountId === target.accountId;
     const blockedEitherWay =
-      await this.hasBlock(viewerAccountId, target.accountId, queryable) ||
-      await this.hasBlock(target.accountId, viewerAccountId, queryable);
+      viewerAccountId !== null &&
+      (await this.hasBlock(viewerAccountId, target.accountId, queryable) ||
+        await this.hasBlock(target.accountId, viewerAccountId, queryable));
     const privacy = await this.getPrivacySettingsForAccount(target.accountId, queryable);
     const canView =
       !blockedEitherWay &&
       (isSelf ||
         privacy.presencePolicy === "everyone" ||
-        (privacy.presencePolicy === "followed" &&
+        (viewerAccountId !== null &&
+          privacy.presencePolicy === "followed" &&
           await this.hasFollow(target.accountId, viewerAccountId, queryable)));
     if (!canView) {
       return { visibility: "hidden", status: null };

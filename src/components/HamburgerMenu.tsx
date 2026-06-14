@@ -11,6 +11,7 @@ import scrollsIcon from "../Assets/Images/misc/scroll2.svg";
 import flagIcon from "../Assets/Images/misc/flag.svg";
 import lightbulbIcon from "../Assets/Images/misc/lightbulb.svg";
 import castleIcon from "../Assets/Images/misc/wcastle.svg";
+import crownIcon from "../Assets/Images/misc/crown.svg";
 import hexTilesIcon from "../Assets/Images/misc/hex-tiles.svg";
 import shieldIcon from "../Assets/Images/Board/shield.svg";
 import starIcon from "../Assets/Images/misc/star.svg";
@@ -27,6 +28,7 @@ interface HamburgerMenuProps {
   onSaveGameToLibrary?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onOpenProfile?: () => void;
   onlineNotificationCount?: number;
   onlineNotificationLabel?: string;
   onReturnFromAnalysis?: () => void;
@@ -58,6 +60,7 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onSaveGameToLibrary,
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onOpenProfile,
   onlineNotificationCount = 0,
   onlineNotificationLabel = "notifications",
   onReturnFromAnalysis,
@@ -399,6 +402,20 @@ const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
                       {onlineLobbyBadge}
                     </span>
                   )}
+                </button>
+              </section>
+            )}
+
+            {onOpenProfile && (
+              <section className="menu-section" aria-labelledby="menu-section-profile">
+                <div id="menu-section-profile" className="menu-section-label">Profile</div>
+                <p className="menu-section-note">Account dashboard</p>
+                <button
+                  className="menu-item"
+                  onClick={() => handleMenuItemClick(onOpenProfile)}
+                >
+                  {renderImageIcon(crownIcon)}
+                  <span>Profile</span>
                 </button>
               </section>
             )}

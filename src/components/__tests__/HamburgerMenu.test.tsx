@@ -14,6 +14,7 @@ const renderMenu = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu
     onNewGame: vi.fn(),
       onOpenLibrary: vi.fn(),
       onOpenOnlineBrowser: vi.fn(),
+      onOpenProfile: vi.fn(),
       onSaveGameToLibrary: vi.fn(),
       onTutorial: vi.fn(),
       onOpenChange: vi.fn(),
@@ -38,6 +39,7 @@ const menuProps = (overrides: Partial<React.ComponentProps<typeof HamburgerMenu>
   onNewGame: vi.fn(),
   onOpenLibrary: vi.fn(),
   onOpenOnlineBrowser: vi.fn(),
+  onOpenProfile: vi.fn(),
   onSaveGameToLibrary: vi.fn(),
   onTutorial: vi.fn(),
   onOpenChange: vi.fn(),
@@ -56,10 +58,12 @@ describe("HamburgerMenu", () => {
     expect(screen.getByRole("button", { name: "Save to Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Online Lobby" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Profile" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tutorial" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Learn" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Play" })).toContainElement(screen.getByRole("button", { name: "Configure New Game" }));
     expect(screen.getByRole("region", { name: "Online" })).toContainElement(screen.getByRole("button", { name: "Online Lobby" }));
+    expect(screen.getByRole("region", { name: "Profile" })).toContainElement(screen.getByRole("button", { name: "Profile" }));
     expect(screen.getByRole("region", { name: "Library" })).toContainElement(screen.getByRole("button", { name: "Open Library" }));
     expect(screen.getByRole("region", { name: "Tutorial" })).toContainElement(screen.getByRole("button", { name: "Tutorial" }));
 
@@ -81,10 +85,11 @@ describe("HamburgerMenu", () => {
     const sectionLabels = Array.from(document.querySelectorAll(".menu-section-label"))
       .map((element) => element.textContent?.trim());
 
-    expect(sectionLabels.slice(0, 6)).toEqual([
+    expect(sectionLabels.slice(0, 7)).toEqual([
       "Play",
       "Tutorial",
       "Online",
+      "Profile",
       "Library",
       "Board",
       "Tools",
@@ -172,8 +177,8 @@ describe("HamburgerMenu", () => {
       .filter(Boolean);
     expect(iconText).toEqual([]);
     expect(container.querySelectorAll(".menu-item-marker")).toHaveLength(0);
-    expect(container.querySelectorAll(".menu-item-icon-frame")).toHaveLength(13);
-    expect(container.querySelectorAll(".menu-item-icon")).toHaveLength(13);
+    expect(container.querySelectorAll(".menu-item-icon-frame")).toHaveLength(14);
+    expect(container.querySelectorAll(".menu-item-icon")).toHaveLength(14);
     for (const icon of Array.from(container.querySelectorAll<HTMLElement>(".menu-item-icon"))) {
       expect(icon.tagName.toLowerCase()).toBe("img");
       expect(icon).toHaveAttribute("alt", "");

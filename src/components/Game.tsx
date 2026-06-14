@@ -101,6 +101,7 @@ interface GameBoardProps {
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onOpenProfile?: () => void;
   onReturnFromAnalysis?: () => void;
   analysisReturnLabel?: string;
   onSaveGameToLibrary?: (pgn: string, status: SavedGameStatus) => Promise<SaveGameToLibraryResult> | SaveGameToLibraryResult;
@@ -161,6 +162,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
   onTutorial,
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onOpenProfile,
   onReturnFromAnalysis,
   analysisReturnLabel,
   onSaveGameToLibrary,
@@ -941,6 +943,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
           onSaveGameToLibrary={onSaveGameToLibrary ? handleSaveGameToLibrary : undefined}
           onOpenLibrary={onOpenLibrary}
           onOpenOnlineBrowser={onOpenOnlineBrowser}
+          onOpenProfile={onOpenProfile}
           onlineNotificationCount={onlineNotificationCount}
           onlineNotificationLabel={onlineNotificationLabel}
           onReturnFromAnalysis={onReturnFromAnalysis}

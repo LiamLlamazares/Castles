@@ -226,7 +226,8 @@
 @media (max-width: 520px) {
   .app-shell-back-button {
     position: relative;
-    width: 36px;
+    width: 44px;
+    min-height: 44px;
     padding-inline: 7px;
     overflow: hidden;
     color: transparent;
@@ -257,7 +258,8 @@
   }
 
   .app-shell-destination {
-    width: 36px;
+    width: 44px;
+    min-height: 44px;
     padding-inline: 7px;
     position: relative;
   }

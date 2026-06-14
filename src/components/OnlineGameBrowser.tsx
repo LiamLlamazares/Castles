@@ -150,6 +150,7 @@ interface OnlineGameBrowserProps {
   onConfigureSetup?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
+  onOpenProfile?: () => void;
   onCreateSeek?: (
     visibility?: OpenSeekVisibility,
     options?: { invitedDisplayNames?: string[] }
@@ -1062,6 +1063,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onConfigureSetup,
   onTutorial,
   onOpenLibrary,
+  onOpenProfile,
   onCreateSeek,
   onQuickMatch,
   quickMatchSetupSummary,
@@ -3449,6 +3451,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     await handleSocialLookupByName(displayName);
   }, [handleSocialLookupByName, socialLookupName]);
 
+  const openSignedInAccountProfile = React.useCallback(() => {
+    if (!account) return;
+    setIsAccountDialogOpen(false);
+    if (onOpenProfile) {
+      onOpenProfile();
+      return;
+    }
+    if (!canUseAccountSocial) return;
+    void handleSocialLookupByName(account.displayName, { focus: true });
+  }, [account, canUseAccountSocial, handleSocialLookupByName, onOpenProfile]);
+
   const removePinnedFollowingProfile = React.useCallback((displayName: string) => {
     const accountId = account?.accountId;
     const key = normalizeDisplayNameKey(displayName);
@@ -3912,6 +3925,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       notificationSingularLabel: "challenge activity",
       notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
     },
+    ...(onOpenProfile ? [{ id: "profile" as const, label: "Profile", onClick: onOpenProfile }] : []),
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
   const accountStatusMessage = (() => {
@@ -4043,6 +4057,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         onCreateAccount={onCreateAccount}
         onSignInAccount={onSignInAccount}
         loadAccountOAuthProviders={loadAccountOAuthProviders}
+        onViewProfile={account && (onOpenProfile || canUseAccountSocial) ? openSignedInAccountProfile : undefined}
         onSignOutAccount={onSignOutAccount}
       />
 
@@ -4065,6 +4080,17 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             )}
           </div>
           <div className="online-browser-account-actions">
+            {(onOpenProfile || canUseAccountSocial) && (
+              <button
+                type="button"
+                className="online-browser-button primary"
+                onClick={openSignedInAccountProfile}
+                disabled={!onOpenProfile && socialLookupStatus === "loading"}
+                aria-label={`Open ${account.displayName} profile`}
+              >
+                {!onOpenProfile && socialLookupStatus === "loading" ? "Opening Profile" : "My Profile"}
+              </button>
+            )}
             <button
               type="button"
               className="online-browser-button subtle"

@@ -75,6 +75,7 @@ interface OnlineAccountDialogProps {
   onCreateAccount?: (displayName: string, password: string) => void | Promise<void>;
   onSignInAccount?: (displayName: string, password: string) => void | Promise<void>;
   loadAccountOAuthProviders?: () => Promise<OnlineAccountOAuthProvidersResponse>;
+  onViewProfile?: () => void;
   onSignOutAccount?: () => void | Promise<void>;
 }
 
@@ -137,6 +138,7 @@ export function OnlineAccountDialog({
   onCreateAccount,
   onSignInAccount,
   loadAccountOAuthProviders,
+  onViewProfile,
   onSignOutAccount,
 }: OnlineAccountDialogProps) {
   const [displayName, setDisplayName] = React.useState("");
@@ -201,7 +203,7 @@ export function OnlineAccountDialog({
     oauthStatus === "loading"
       ? "Checking Google sign-in..."
       : oauthStatus === "ready" && googleProviderSummary && !googleProvider
-        ? "Google sign-in is not configured on this server."
+        ? "Google sign-in is unavailable right now."
         : oauthStatus === "error"
           ? "Could not check Google sign-in availability."
           : "";
@@ -310,7 +312,16 @@ export function OnlineAccountDialog({
                 {statusMessage}
               </p>
             )}
-            <div className="online-account-dialog-actions single">
+            <div className="online-account-dialog-actions">
+              {onViewProfile && (
+                <button
+                  type="button"
+                  className="online-account-dialog-button primary"
+                  onClick={onViewProfile}
+                >
+                  My Profile
+                </button>
+              )}
               <button
                 type="button"
                 className="online-account-dialog-button subtle"

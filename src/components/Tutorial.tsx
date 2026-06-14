@@ -25,6 +25,7 @@ interface TutorialProps {
   backLabel?: string;
   onOpenLibrary?: () => void;
   onOpenOnlineBrowser?: () => void;
+  onOpenProfile?: () => void;
   onlineNotificationCount?: number;
   onlineNotificationLabel?: string;
 }
@@ -304,6 +305,7 @@ const Tutorial: React.FC<TutorialProps> = ({
   backLabel = "Back to game",
   onOpenLibrary,
   onOpenOnlineBrowser,
+  onOpenProfile,
   onlineNotificationCount = 0,
   onlineNotificationLabel,
 }) => {
@@ -530,6 +532,7 @@ const Tutorial: React.FC<TutorialProps> = ({
       notificationSingularLabel: "challenge activity",
       notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
     }] : []),
+    ...(onOpenProfile ? [{ id: "profile" as const, label: "Profile", onClick: onOpenProfile }] : []),
     ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
   ];
   const lessonProgressLabel = `Lesson ${currentLessonIndex + 1} of ${lessons.length}`;

@@ -3946,7 +3946,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       });
       return;
     }
-    const auth = await resolveAccountBearer(req);
+    const auth =
+      req.headers.authorization === undefined
+        ? { ok: true as const, account: null, usedAt: new Date(options.now?.() ?? Date.now()).toISOString() }
+        : await resolveAccountBearer(req);
     if (!auth.ok) {
       log({ event: "online.account.profile.lookup", status: "rejected", reason: auth.reason });
       res.status(auth.status).json({ error: auth.error });
@@ -3966,7 +3969,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
     try {
-      const profile = await accountStore.getProfileForDisplayName(auth.account.accountId, displayName, auth.usedAt);
+      const profile = await accountStore.getProfileForDisplayName(auth.account?.accountId ?? null, displayName, auth.usedAt);
       if (!profile) {
         log({ event: "online.account.profile.lookup", status: "rejected", reason: "not_found" });
         res.status(404).json({

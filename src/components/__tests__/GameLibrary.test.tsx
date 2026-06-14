@@ -35,7 +35,7 @@ describe("GameLibrary", () => {
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
   });
 
-  it("keeps primary destinations in the shared Play Tutorial Online Library order", async () => {
+  it("keeps primary destinations in the shared Play Tutorial Online Profile Library order", async () => {
     render(
       <GameLibrary
         repository={createRepository()}
@@ -43,6 +43,7 @@ describe("GameLibrary", () => {
         onOpenGame={vi.fn()}
         onTutorial={vi.fn()}
         onOpenOnlineBrowser={vi.fn()}
+        onOpenProfile={vi.fn()}
         onLoadGame={vi.fn()}
         onImportPGN={vi.fn()}
       />
@@ -53,7 +54,7 @@ describe("GameLibrary", () => {
       .map((element) => element.textContent?.trim());
 
     expect(await screen.findByText(/No named saves yet/i)).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Profile", "Library"]);
   });
 
   it("uses the provided back label", async () => {

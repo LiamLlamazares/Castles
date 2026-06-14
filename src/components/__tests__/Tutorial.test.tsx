@@ -36,13 +36,13 @@ describe("Tutorial", () => {
   });
 
   it("uses a tutorial shell and opens to a course overview", () => {
-    renderTutorial({ onOpenLibrary: vi.fn(), onOpenOnlineBrowser: vi.fn() });
+    renderTutorial({ onOpenLibrary: vi.fn(), onOpenOnlineBrowser: vi.fn(), onOpenProfile: vi.fn() });
 
     expect(screen.getByRole("navigation", { name: "Tutorial navigation" })).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Tutorial navigation" });
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
-    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Profile", "Library"]);
     expect(screen.getByRole("button", { name: "Tutorial" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Castles tutorial" })).toBeInTheDocument();

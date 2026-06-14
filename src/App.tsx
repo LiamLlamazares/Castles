@@ -6,6 +6,7 @@ import BoardEditor from './components/BoardEditor';
 import Tutorial from './components/Tutorial';
 import GameLibrary from './components/GameLibrary';
 import OnlineGameBrowser from './components/OnlineGameBrowser';
+import OnlineProfileDashboard from './components/OnlineProfileDashboard';
 import { OnlineAccountDialog } from './components/OnlineAccountControls';
 import InstallAppHint from './components/InstallAppHint';
 import RulesManualPage from './components/RulesManualPage';
@@ -55,6 +56,7 @@ import {
   fetchOnlineAccountOAuthProviders,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
+  fetchOnlinePublicProfile,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
   fetchOnlineGameSummaries,
@@ -139,7 +141,7 @@ import { loadPGNText } from './Classes/Services/PGNLoadService';
 import { PGNService } from './Classes/Services/PGNService';
 import type { PhoenixRecord } from './Classes/Core/GameState';
 
-type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online';
+type ViewState = 'menu' | 'setup' | 'game' | 'editor' | 'tutorial' | 'library' | 'challenge' | 'online' | 'profile';
 type OnlineBrowserInitialTab = 'lobby' | 'watch' | 'archive';
 type OnlineAccountUiStatus =
   | "signed-out"
@@ -151,6 +153,17 @@ type OnlineAccountUiStatus =
   | "deleting"
   | "ready"
   | "error";
+const PRIVATE_PROFILE_URL_PARAMS = [
+  "onlineGame",
+  "seat",
+  "token",
+  "onlineChallenge",
+  "challengeRole",
+  "challengeToken",
+  "view",
+  "pgn",
+  "game",
+] as const;
 
 interface CreatedChallengeFromSetup {
   challengedUrl: string;
@@ -390,9 +403,30 @@ function createReplayGameConfigFromOnlineSnapshot(snapshot: OnlineGameSnapshotDT
   return hydratedConfig;
 }
 
+function parseProfileDisplayNameFromUrl(href: string): string | null {
+  const value = new URL(href).searchParams.get("profile")?.trim();
+  return value && value.length >= 2 ? value : null;
+}
+
+function buildSanitizedProfilePath(href: string, displayName: string): string {
+  const url = new URL(href);
+  for (const param of PRIVATE_PROFILE_URL_PARAMS) {
+    url.searchParams.delete(param);
+  }
+  url.searchParams.set("profile", displayName);
+  url.hash = "";
+  const search = url.searchParams.toString();
+  return `${url.pathname}${search ? `?${search}` : ""}`;
+}
+
 function App() {
   const isRulesPage = window.location.pathname === '/rules';
-  const [view, setView] = useState<ViewState>('game');
+  const initialProfileDisplayName = parseProfileDisplayNameFromUrl(window.location.href);
+  const initialOnlineJoin = initialProfileDisplayName ? null : resolveOnlineJoinParams(window.location.href);
+  const initialOnlineSpectator = initialProfileDisplayName ? null : parseOnlineSpectatorParams(window.location.href);
+  const initialOnlineChallenge = initialProfileDisplayName ? null : resolveOnlineChallengeParams(window.location.href);
+  const [view, setView] = useState<ViewState>(initialProfileDisplayName ? 'profile' : 'game');
+  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(initialProfileDisplayName);
   const [gameConfig, setGameConfig] = useState<GameConfig>({});
   const [editorConfig, setEditorConfig] = useState<EditorConfig>({});
   const [viewStack, setViewStack] = useState<ViewState[]>([]);
@@ -406,12 +440,8 @@ function App() {
   const activeSaveDialogRequestRef = useRef<SaveGameDialogState | null>(null);
   const firstRunIntroDialogRef = useRef<HTMLElement>(null);
   const firstRunIntroPrimaryButtonRef = useRef<HTMLButtonElement>(null);
-  const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(() =>
-    resolveOnlineJoinParams(window.location.href)
-  );
-  const [onlineSpectator, setOnlineSpectator] = useState<OnlineSpectatorParams | null>(() =>
-    parseOnlineSpectatorParams(window.location.href)
-  );
+  const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(initialOnlineJoin);
+  const [onlineSpectator, setOnlineSpectator] = useState<OnlineSpectatorParams | null>(initialOnlineSpectator);
   const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
   const [recentOnlineGames, setRecentOnlineGames] = useState<RecentOnlineGameRecord[]>(() =>
     loadRecentOnlineGames()
@@ -420,9 +450,7 @@ function App() {
     onlineJoin?.seat === "w" ? resolveOnlineOpponentInviteUrl(onlineJoin.gameId) : null
   );
   const [onlineVisibilityByGameId, setOnlineVisibilityByGameId] = useState<Record<string, OnlineGameVisibility>>({});
-  const [onlineChallenge, setOnlineChallenge] = useState<OnlineChallengeParams | null>(() =>
-    resolveOnlineChallengeParams(window.location.href)
-  );
+  const [onlineChallenge, setOnlineChallenge] = useState<OnlineChallengeParams | null>(initialOnlineChallenge);
   const [onlineChallengeResponse, setOnlineChallengeResponse] = useState<OnlineChallengeResponse | null>(null);
   const [onlineChallengeShareUrl, setOnlineChallengeShareUrl] = useState<string | null>(() =>
     onlineChallenge?.role === "challenger"
@@ -707,9 +735,27 @@ function App() {
     url.searchParams.delete("view");
     url.searchParams.delete("pgn");
     url.searchParams.delete("game");
+    url.searchParams.delete("profile");
     url.hash = "";
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   };
+
+  const clearProfileUrl = () => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("profile") && !url.hash) return;
+    url.searchParams.delete("profile");
+    url.hash = "";
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  };
+
+  useEffect(() => {
+    if (!profileDisplayName) return;
+    const sanitizedPath = buildSanitizedProfilePath(window.location.href, profileDisplayName);
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentPath !== sanitizedPath) {
+      window.history.replaceState({}, "", sanitizedPath);
+    }
+  }, [profileDisplayName]);
 
   const clearOnlineTokenFromUrl = () => {
     if (!window.location.search.includes("token=")) return;
@@ -945,12 +991,20 @@ function App() {
   const pushView = (nextView: ViewState) => {
     cancelPendingReplay();
     if (view === nextView) return;
-    setViewStack(prev => [...prev, view]);
+    if (view === "profile") {
+      setProfileDisplayName(null);
+      clearProfileUrl();
+    }
+    setViewStack(prev => view === "profile" ? prev : [...prev, view]);
     setView(nextView);
   };
 
   const enterGameView = () => {
     cancelPendingReplay();
+    if (view === "profile") {
+      setProfileDisplayName(null);
+      clearProfileUrl();
+    }
     setViewStack([]);
     setView('game');
   };
@@ -1006,6 +1060,10 @@ function App() {
     cancelPendingReplay();
     const next = [...viewStack];
     const target = next.pop() ?? 'game';
+    if (view === "profile" && target !== "profile") {
+      setProfileDisplayName(null);
+      clearProfileUrl();
+    }
     setViewStack(next);
     setView(target);
   };
@@ -1516,6 +1574,17 @@ function App() {
     return fetchOnlineAccountProfile({ token: onlineAccountSession.token }, displayName);
   }, [onlineAccountSession?.token]);
 
+  const handleLoadProfileDashboardProfile = useCallback((displayName: string) => {
+    const isSelfProfile =
+      !!onlineAccountSession &&
+      !!onlineAccount &&
+      onlineAccount.displayName.trim().toLowerCase() === displayName.trim().toLowerCase();
+    if (isSelfProfile) {
+      return fetchOnlineAccountProfile({ token: onlineAccountSession.token }, displayName);
+    }
+    return fetchOnlinePublicProfile(displayName);
+  }, [onlineAccount?.displayName, onlineAccountSession?.token]);
+
   const handleLoadOnlineAccountFollowing = useCallback(() => {
     if (!onlineAccountSession) {
       throw new Error("No online account session is available.");
@@ -1589,6 +1658,31 @@ function App() {
     }
     return fetchOnlineAccountSessions({ token: onlineAccountSession.token });
   }, [onlineAccountSession?.token]);
+
+  const handleOpenProfile = useCallback((displayName?: string) => {
+    const requestedDisplayName = typeof displayName === "string" ? displayName.trim() : "";
+    const targetDisplayName = requestedDisplayName || onlineAccount?.displayName?.trim();
+    if (!targetDisplayName) {
+      setOnlineAccountDialogOpen(true);
+      return;
+    }
+
+    cancelPendingReplay();
+    clearAnalysisReturn();
+    forgetOnlineChallengeStorage(onlineChallenge);
+    window.history.pushState({}, "", buildSanitizedProfilePath(window.location.href, targetDisplayName));
+    setOnlineJoin(null);
+    setOnlineSpectator(null);
+    setOnlineChallenge(null);
+    setOnlineChallengeResponse(null);
+    setOnlineChallengeShareUrl(null);
+    setOnlineSnapshot(null);
+    setOnlineOpponentInviteUrl(null);
+    setProfileDisplayName(targetDisplayName);
+    setOnlineAccountDialogOpen(false);
+    setViewStack((previous) => (view === "profile" ? previous : [...previous, view]));
+    setView("profile");
+  }, [onlineAccount?.displayName, onlineChallenge, view]);
 
   const resolveAccountGameJoin = useCallback((game: OnlineGameSummary, seat: "w" | "b") => {
     return resolveStoredOnlineJoinParams(game.gameId, seat);
@@ -2611,11 +2705,13 @@ function App() {
       notificationSingularLabel: "challenge activity",
       notificationPluralLabel: onlineNavigationNotificationLabel,
     },
+    { id: "profile", label: "Profile", onClick: handleOpenProfile },
     { id: "library", label: "Library", onClick: handleOnlineStateLibrary },
   ], [
     handleOnlineStateTutorial,
     handleOnlineStateLibrary,
     handleOnlineStateOnline,
+    handleOpenProfile,
     onlineChallengeNavigationActivityCount,
     onlineNavigationNotificationLabel,
   ]);
@@ -2685,6 +2781,7 @@ function App() {
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}
         />
@@ -2947,6 +3044,7 @@ function App() {
               onTutorial={handleTutorialClick}
               onOpenLibrary={handleOpenLibrary}
               onOpenOnlineBrowser={handleOpenOnlineBrowser}
+              onOpenProfile={handleOpenProfile}
               onReturnFromAnalysis={analysisReturn ? handleReturnFromAnalysis : undefined}
               analysisReturnLabel={analysisReturn?.label}
               onSaveGameToLibrary={handleSaveGameToLibrary}
@@ -2970,6 +3068,7 @@ function App() {
           backLabel={currentBackLabel}
           onTutorial={handleTutorialClick}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}
           onLoadGame={handleLoadSavedGame}
@@ -2994,6 +3093,7 @@ function App() {
           backLabel={currentBackLabel}
           onOpenLibrary={handleOpenLibrary}
           onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}
         />
@@ -3010,6 +3110,7 @@ function App() {
           onTabChange={setOnlineBrowserTab}
           onTutorial={handleTutorialClick}
           onOpenLibrary={handleOpenLibrary}
+          onOpenProfile={handleOpenProfile}
           onlineNotificationCount={onlineChallengeNavigationActivityCount}
           onlineNotificationLabel={onlineNavigationNotificationLabel}
           onAccountChallengeNavigationActivityChange={setOnlineChallengeNavigationActivityCount}
@@ -3064,6 +3165,28 @@ function App() {
         />
       )}
 
+      {view === 'profile' && profileDisplayName && (
+        <OnlineProfileDashboard
+          displayName={profileDisplayName}
+          account={onlineAccount}
+          loadProfile={handleLoadProfileDashboardProfile}
+          loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
+          loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
+          loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
+          loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}
+          loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}
+          onBack={returnToPreviousView}
+          backLabel={currentBackLabel}
+          onOpenGame={handleOpenGame}
+          onTutorial={handleTutorialClick}
+          onOpenOnlineBrowser={handleOpenOnlineBrowser}
+          onOpenLibrary={handleOpenLibrary}
+          onOpenAccountControls={() => setOnlineAccountDialogOpen(true)}
+          onlineNotificationCount={onlineChallengeNavigationActivityCount}
+          onlineNotificationLabel={onlineNavigationNotificationLabel}
+        />
+      )}
+
       <OnlineAccountDialog
         isOpen={isOnlineAccountDialogOpen}
         onClose={() => setOnlineAccountDialogOpen(false)}
@@ -3073,6 +3196,7 @@ function App() {
         onCreateAccount={handleCreateOnlineAccount}
         onSignInAccount={handleSignInOnlineAccount}
         loadAccountOAuthProviders={fetchOnlineAccountOAuthProviders}
+        onViewProfile={onlineAccount ? () => handleOpenProfile(onlineAccount.displayName) : undefined}
         onSignOutAccount={handleSignOutOnlineAccount}
       />
 

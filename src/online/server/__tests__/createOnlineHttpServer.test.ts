@@ -2119,7 +2119,8 @@ describe("createOnlineHttpServer", () => {
     const samir = await createAccountViaApi(port, "Samir");
     const dani = await createAccountViaApi(port, "Dani");
 
-    const unauthProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`);
+    const publicProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir`);
+    const publicProfile = await publicProfileResponse.json();
     const profileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/samir`, {
       headers: bearer(liam.session.token),
     });
@@ -2223,7 +2224,18 @@ describe("createOnlineHttpServer", () => {
       headers: bearer(liam.session.token),
     });
 
-    expect(unauthProfileResponse.status).toBe(401);
+    expect(publicProfileResponse.status).toBe(200);
+    expect(publicProfile).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: {
+        schemaVersion: 1,
+        displayName: "Samir",
+        presence: { visibility: "hidden", status: null },
+        relationship: { self: false, following: false, followedBy: false, blocked: false },
+      },
+    });
+    expect(JSON.stringify(publicProfile)).not.toContain(samir.account.accountId);
+    expect(JSON.stringify(publicProfile)).not.toContain(liam.account.accountId);
     expect(profileResponse.status).toBe(200);
     expect(profile).toEqual({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -2418,6 +2430,7 @@ describe("createOnlineHttpServer", () => {
     const queryOnlyProfileResponse = await fetch(
       `http://127.0.0.1:${port}/api/online/profiles/Samir?token=${liam.session.token}`
     );
+    await expectBadQuery(queryOnlyProfileResponse);
 
     await expectBadQuery(
       await fetch(`http://127.0.0.1:${port}/api/online/profiles/Samir?token=leaked-account-token`, {
@@ -2490,7 +2503,6 @@ describe("createOnlineHttpServer", () => {
     });
     const reports = await reportsResponse.json();
 
-    expect(queryOnlyProfileResponse.status).toBe(401);
     expect(profileResponse.status).toBe(200);
     expect(profile.profile).toMatchObject({
       displayName: "Samir",

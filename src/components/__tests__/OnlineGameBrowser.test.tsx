@@ -564,7 +564,7 @@ describe("OnlineGameBrowser", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Online account" });
     expect(within(dialog).queryByRole("link", { name: "Continue with Google" })).not.toBeInTheDocument();
-    expect(within(dialog).getByText("Google sign-in is not configured on this server.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Google sign-in is unavailable right now.")).toBeInTheDocument();
   });
 
   it("shows account session status and signs out everywhere", async () => {
@@ -6730,6 +6730,7 @@ describe("OnlineGameBrowser", () => {
         onOpenGame={vi.fn()}
         onTutorial={vi.fn()}
         onOpenLibrary={vi.fn()}
+        onOpenProfile={vi.fn()}
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
       />
@@ -6740,7 +6741,7 @@ describe("OnlineGameBrowser", () => {
     const destinations = Array.from(nav.querySelectorAll(".app-shell-destination"))
       .map((element) => element.textContent?.trim());
     expect(nav).toBeInTheDocument();
-    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Library"]);
+    expect(destinations).toEqual(["Play", "Tutorial", "Online", "Profile", "Library"]);
     expect(screen.getByRole("button", { name: "Online" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByText("No public games in progress.")).toBeInTheDocument();
     expect(screen.getByText(/Private and unlisted games stay off this page/i)).toBeInTheDocument();

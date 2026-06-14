@@ -62,6 +62,7 @@ interface GameSetupProps {
     onTutorial?: () => void;
     onOpenLibrary?: () => void;
     onOpenOnlineBrowser?: () => void;
+    onOpenProfile?: () => void;
     onlineNotificationCount?: number;
     onlineNotificationLabel?: string;
 }
@@ -133,6 +134,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
     onTutorial,
     onOpenLibrary,
     onOpenOnlineBrowser,
+    onOpenProfile,
     onlineNotificationCount = 0,
     onlineNotificationLabel
 }) => {
@@ -338,6 +340,7 @@ const GameSetup: React.FC<GameSetupProps> = ({
             notificationSingularLabel: "challenge activity",
             notificationPluralLabel: onlineNotificationLabel ?? "challenge activities",
         }] : []),
+        ...(onOpenProfile ? [{ id: "profile" as const, label: "Profile", onClick: onOpenProfile }] : []),
         ...(onOpenLibrary ? [{ id: "library" as const, label: "Library", onClick: onOpenLibrary }] : []),
     ];
 

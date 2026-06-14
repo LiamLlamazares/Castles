@@ -250,7 +250,7 @@
 
 .online-account-dialog-button:disabled {
   cursor: not-allowed;
-  opacity: 0.52;
+  opacity: 0.68;
 }
 
 @media (max-width: 520px) {
