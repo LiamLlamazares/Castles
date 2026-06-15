@@ -3,6 +3,17 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runProductionMonitoringCommand } from "../check-production-monitoring.mjs";
 
+const SINGLE_NODE_DEPLOYMENT = {
+  mode: "single-node",
+  multiInstanceReady: false,
+  websocketFanout: "process-local",
+  spectatorPresence: "process-local",
+  accountPresence: "session-store",
+  roomState: "process-local",
+  queueGuards: "process-local",
+  routing: "single-node",
+};
+
 function okResult() {
   return {
     baseUrl: "https://castles.ls314.xyz",
@@ -12,6 +23,7 @@ function okResult() {
       buildId: "20260615-180000",
       commit: "expected-sha",
       eventSchemaVersion: 2,
+      deployment: SINGLE_NODE_DEPLOYMENT,
       storeBackend: "postgres",
     },
     commit: { status: "match" },

@@ -190,6 +190,7 @@ export async function checkProductionFreshness(options) {
     buildId: healthBody?.build?.buildId,
     commit: healthBody?.build?.commit,
     eventSchemaVersion: healthBody?.online?.eventSchemaVersion,
+    deployment: healthBody?.online?.deployment,
     storeBackend: healthBody?.online?.store?.backend,
   };
   const commit = expectedCommit
@@ -226,12 +227,26 @@ export async function checkProductionFreshness(options) {
     ssh,
     ok:
       health.ok === true &&
+      isSingleNodeDeploymentHealth(health.deployment) &&
       health.storeBackend === "postgres" &&
       commit.status !== "mismatch" &&
       ssh.status !== "unreachable",
   };
   if (git) result.git = git;
   return result;
+}
+
+function isSingleNodeDeploymentHealth(deployment) {
+  return (
+    deployment?.mode === "single-node" &&
+    deployment?.multiInstanceReady === false &&
+    deployment?.websocketFanout === "process-local" &&
+    deployment?.spectatorPresence === "process-local" &&
+    deployment?.accountPresence === "session-store" &&
+    deployment?.roomState === "process-local" &&
+    deployment?.queueGuards === "process-local" &&
+    deployment?.routing === "single-node"
+  );
 }
 
 export function classifyProductionFreshnessAlerts(result) {
@@ -258,6 +273,15 @@ export function classifyProductionFreshnessAlerts(result) {
       severity: "critical",
       message: `Production health reported store=${result.health?.storeBackend ?? "unknown"} instead of postgres.`,
       action: "Fix ONLINE_STORE_BACKEND/DATABASE_URL and rerun server:check-config before accepting the deploy.",
+    });
+  }
+  if (!isSingleNodeDeploymentHealth(result.health?.deployment)) {
+    alerts.push({
+      code: "deployment_not_single_node",
+      severity: "critical",
+      message: "Production health did not report the supported single-node deployment guardrails.",
+      action:
+        "Keep CASTLES_DEPLOYMENT_MODE=single-node and one Node app instance until shared presence, WebSocket fanout, cache invalidation, and queue guards are implemented.",
     });
   }
   if (result.ssh?.status === "unreachable") {
@@ -374,7 +398,9 @@ export function formatProductionFreshnessResult(result) {
     `Production: ${result.baseUrl}`,
     `Health: ok=${result.health.ok} buildId=${result.health.buildId ?? "unknown"} commit=${
       result.health.commit ?? "unknown"
-    } store=${result.health.storeBackend ?? "unknown"} schema=${result.health.eventSchemaVersion ?? "unknown"}`,
+    } store=${result.health.storeBackend ?? "unknown"} deployment=${
+      result.health.deployment?.mode ?? "unknown"
+    } schema=${result.health.eventSchemaVersion ?? "unknown"}`,
   ];
   if (result.commit.status === "match") {
     lines.push(`Commit: match ${result.expectedCommit}`);

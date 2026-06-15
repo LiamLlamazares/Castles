@@ -10,6 +10,17 @@ import {
   resolveProductionFreshnessCliOptions,
 } from "../production-freshness.mjs";
 
+const SINGLE_NODE_DEPLOYMENT = {
+  mode: "single-node",
+  multiInstanceReady: false,
+  websocketFanout: "process-local",
+  spectatorPresence: "process-local",
+  accountPresence: "session-store",
+  roomState: "process-local",
+  queueGuards: "process-local",
+  routing: "single-node",
+};
+
 function okHealth(commit = "expected-sha") {
   return {
     ok: true,
@@ -19,6 +30,7 @@ function okHealth(commit = "expected-sha") {
     },
     online: {
       eventSchemaVersion: 2,
+      deployment: SINGLE_NODE_DEPLOYMENT,
       store: { ok: true, backend: "postgres" },
     },
   };
@@ -92,6 +104,7 @@ describe("production freshness diagnostics", () => {
         buildId: "20260605-120000",
         commit: "expected-sha",
         eventSchemaVersion: 2,
+        deployment: SINGLE_NODE_DEPLOYMENT,
         storeBackend: "postgres",
       },
       commit: { status: "match" },
@@ -197,6 +210,48 @@ describe("production freshness diagnostics", () => {
     expect(formatProductionFreshnessResult(result)).toContain("Alerts: none");
   });
 
+  it("classifies missing or unsafe deployment metadata as a production readiness alert", async () => {
+    const missingMetadata = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () => ({
+        ...okHealth("expected-sha"),
+        online: {
+          eventSchemaVersion: 2,
+          store: { ok: true, backend: "postgres" },
+        },
+      }),
+    });
+    const unsafeMode = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () => ({
+        ...okHealth("expected-sha"),
+        online: {
+          eventSchemaVersion: 2,
+          deployment: {
+            ...SINGLE_NODE_DEPLOYMENT,
+            mode: "multi-instance",
+            multiInstanceReady: true,
+          },
+          store: { ok: true, backend: "postgres" },
+        },
+      }),
+    });
+
+    expect(missingMetadata.ok).toBe(false);
+    expect(unsafeMode.ok).toBe(false);
+    expect(classifyProductionFreshnessAlerts(missingMetadata)).toEqual([
+      expect.objectContaining({ code: "deployment_not_single_node", severity: "critical" }),
+    ]);
+    expect(classifyProductionFreshnessAlerts(unsafeMode)).toEqual([
+      expect.objectContaining({ code: "deployment_not_single_node", severity: "critical" }),
+    ]);
+    expect(formatProductionFreshnessResult(missingMetadata)).toContain(
+      "Alert: deployment_not_single_node severity=critical"
+    );
+  });
+
   it("classifies stale deploys, unhealthy health, and SSH reachability as separate operator alerts", async () => {
     const result = await checkProductionFreshness({
       baseUrl: "https://castles.ls314.xyz",
@@ -227,6 +282,7 @@ describe("production freshness diagnostics", () => {
         ...okHealth("expected-sha"),
         online: {
           eventSchemaVersion: 2,
+          deployment: SINGLE_NODE_DEPLOYMENT,
           store: { ok: true, backend: "memory" },
         },
       }),
@@ -283,6 +339,7 @@ describe("production freshness diagnostics", () => {
           buildId: "20260605-120000",
           commit: "old-sha",
           eventSchemaVersion: 2,
+          deployment: SINGLE_NODE_DEPLOYMENT,
           storeBackend: "postgres",
         },
         commit: { status: "mismatch", expected: "expected-sha", actual: "old-sha" },

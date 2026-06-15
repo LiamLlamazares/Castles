@@ -78,6 +78,7 @@ Only run that reset after the first command shows `castles_local` on localhost. 
 $env:DATABASE_URL="postgresql://castles_local:castles_local_dev@localhost:5432/castles_local"
 $env:ONLINE_STORE_BACKEND="postgres"
 $env:PUBLIC_BASE_URL="http://127.0.0.1:3000"
+$env:CASTLES_DEPLOYMENT_MODE="single-node"
 $env:POSTGRES_POOL_MAX_PER_STORE="5"
 $env:CASTLES_REQUIRE_STATIC_DIR="1"
 $env:NODE_ENV="production"
@@ -133,6 +134,7 @@ Restore drill target: postgresql://<user>@localhost:5432/castles_restore
 What this checks:
 
 - the preflight confirms the built client/server artifacts exist, `DATABASE_URL` is local or explicitly marked disposable, `psql` is installed or configured with `PSQL_PATH` or `PGCLIENT_BIN`, and the database identity is safe for local smoke;
+- `server:check-config` reports `onlineDeployment.mode` as `single-node`, `multiInstanceReady` as `false`, process-local WebSocket fanout/spectator presence/room-state/queue-guard metadata, and account presence as session-store-backed before the local server starts;
 - starts the built Node server on a private local port,
 - confirms `/api/health` reports PostgreSQL,
 - creates an online game,

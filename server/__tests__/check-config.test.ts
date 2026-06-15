@@ -91,4 +91,18 @@ describe("server/check-config", () => {
     expect(result.stderr).toContain("CASTLES_ADMIN_BEARER_TOKEN");
     expect(result.stderr).not.toContain("short-secret");
   });
+
+  it("rejects multi-instance deployment mode before store readiness checks", () => {
+    const result = runCheckConfig({
+      CASTLES_DEPLOYMENT_MODE: "multi-instance",
+      DATABASE_URL: "postgresql://castles:secret@127.0.0.1:1/castles",
+      CASTLES_STATIC_DIR: process.cwd(),
+      CASTLES_REQUIRE_STATIC_DIR: "0",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("CASTLES_DEPLOYMENT_MODE=multi-instance is not supported");
+    expect(result.stderr).not.toContain("ECONNREFUSED");
+    expect(result.stdout).not.toContain("\"ok\": true");
+  });
 });
