@@ -691,6 +691,12 @@ For smoke failures:
 
 Before any public-scale traffic, archive the freshness output, API smoke output, browser smoke output, local load-smoke output, and backup path together with the deployed commit SHA.
 
+For a non-mutating production deploy preview, use the dedicated script so npm cannot consume the dry-run flag:
+
+```bash
+npm run online:deploy:production:dry-run -- <reviewed-commit-sha> <build-id>
+```
+
 ## 5. Emergency Disable
 
 Use this when the app is causing harm and the fastest safe action is to take it offline before a full rollback:
