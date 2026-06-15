@@ -86,6 +86,9 @@ npm run online:smoke:local:preflight
 $env:NODE_ENV="test"
 npm run online:smoke:local
 npm run online:smoke:local:concurrency
+$env:SMOKE_LOAD_GAMES="4"
+npm run online:smoke:local:load
+Remove-Item Env:\SMOKE_LOAD_GAMES
 npm run online:smoke:local:challenges
 npm run online:smoke:local:browser
 ```
@@ -103,6 +106,7 @@ Expected result:
 ```text
 Local restart smoke passed on http://127.0.0.1:<port> using game <game-id>
 Local PostgreSQL concurrency smoke passed using game <game-id>
+Local PostgreSQL load smoke passed: games=4 completed=4 acceptedActions=8 staleRejections=4 aggregateGameDurationMs=<duration> maxGameDurationMs=<duration>
 Local PostgreSQL challenge HTTP smoke passed using challenge <challenge-id> and game <game-id>
 Local built-server browser smoke passed on http://127.0.0.1:<port>
 ```
@@ -128,6 +132,13 @@ The concurrency smoke additionally:
 - submits the same base-version action concurrently from both stores,
 - confirms exactly one action is accepted and the other returns a stale-action snapshot at the committed version,
 - submits a follow-up action from the second store and confirms the event log and summary reach version 2.
+
+The load smoke additionally:
+
+- creates several disposable games in parallel using the built PostgreSQL store modules,
+- repeats the same concurrent stale-action race per game,
+- completes every game by resignation so the local database does not retain active load-smoke games,
+- prints only aggregate metrics: game count, completed games, accepted actions, stale rejections, summed per-game duration, and max per-game duration.
 
 The browser smoke additionally:
 
