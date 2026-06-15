@@ -210,6 +210,56 @@ describe("PostgreSQL online backup helper", () => {
     }
   });
 
+  it("can require every whitelisted table before trusting a JSON backup for restore readiness", async () => {
+    const repoRoot = await mkdtemp(path.join(os.tmpdir(), "castles-postgres-backup-strict-"));
+    const outputPath = path.join(repoRoot, "partial.json");
+    await writeFile(
+      outputPath,
+      JSON.stringify(
+        {
+          format: "castles-postgres-online-backup-v1",
+          createdAt: "2026-06-06T00:10:00.000Z",
+          database: "postgresql://<user>@db.example/castles",
+          tableCount: 1,
+          rowCount: 0,
+          tables: [
+            {
+              name: "online_accounts",
+              columns: ["account_id"],
+              rowCount: 0,
+              rows: [],
+            },
+          ],
+        },
+        null,
+        2
+      )
+    );
+
+    try {
+      await expect(validateOnlinePostgresBackupFile(outputPath)).resolves.toEqual({
+        path: outputPath,
+        rowCount: 0,
+        tableCount: 1,
+      });
+      await expect(
+        validateOnlinePostgresBackupFile(outputPath, { requireAllTables: true })
+      ).rejects.toThrow(/missing required table online_account_display_names/);
+      await expect(
+        validateOnlinePostgresBackupFile(outputPath, {
+          requireAllTables: true,
+          tables: [{ name: "online_accounts", orderBy: "account_id ASC" }],
+        })
+      ).resolves.toEqual({
+        path: outputPath,
+        rowCount: 0,
+        tableCount: 1,
+      });
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("loads DATABASE_URL from an env file without replacing explicit process env", async () => {
     const repoRoot = await mkdtemp(path.join(os.tmpdir(), "castles-postgres-backup-env-"));
     const envFile = path.join(repoRoot, "castles.env");
@@ -247,6 +297,10 @@ describe("PostgreSQL online backup helper", () => {
     expect(parseBackupArgs(["backup.json"]).outputPath).toBe("backup.json");
     expect(parseBackupArgs(["--validate", "backup.json"])).toEqual({
       validatePath: "backup.json",
+    });
+    expect(parseBackupArgs(["--validate", "backup.json", "--require-all-tables"])).toEqual({
+      validatePath: "backup.json",
+      requireAllTables: true,
     });
   });
 
