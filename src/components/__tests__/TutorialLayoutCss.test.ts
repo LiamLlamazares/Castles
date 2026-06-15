@@ -152,6 +152,7 @@ describe("Tutorial mobile layout CSS", () => {
     expect(indexCss).toContain("font-family: \"Inter\", system-ui");
     expect(libraryCss).toContain("font-family: \"Inter\", system-ui");
     expect(onlineCss).toContain("font-family: \"Inter\", system-ui");
+    expect(libraryCss).toMatch(/\.library-button\s*\{[^}]*font:\s*inherit;/s);
   });
 
   it("lets the online lobby filter toolbar wrap without fixed-column crowding", () => {
@@ -167,7 +168,7 @@ describe("Tutorial mobile layout CSS", () => {
     expect(onlineCss).toContain(".online-browser-section-header-compact");
     expect(onlineCss).toContain(".online-browser-lobby-listings + .online-browser-live-section");
     expect(onlineCss).toMatch(/\.online-browser-quick-match-panel\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.035\);/s);
-    expect(onlineCss).toMatch(/\.online-browser-select select:focus-visible,\s*\.online-seek-owner-panel:focus-visible,\s*\.online-browser-closed-listing:focus-visible\s*\{[^}]*outline:\s*3px solid #91d6c5;/s);
+    expect(onlineCss).toMatch(/\.online-browser-select select:focus-visible,\s*\.online-seek-owner-panel:focus-visible,\s*\.online-browser-closed-listing:focus-visible\s*\{[^}]*outline:\s*3px solid #bf811d;/s);
   });
 
   it("gives Watch a featured live-game layout that collapses on mobile", () => {
@@ -218,10 +219,47 @@ describe("Tutorial mobile layout CSS", () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
     const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
 
-    expect(boardCss).toMatch(/\.game-panel\s*\{[^}]*background:\s*rgba\(246,\s*241,\s*209,\s*0\.78\);[^}]*border-left:\s*1px solid rgba\(31,\s*36,\s*35,\s*0\.12\);/s);
+    expect(boardCss).toMatch(/\.game-panel\s*\{[^}]*background:\s*#1f1e1b;[^}]*border-left:\s*1px solid #3d3a34;/s);
     expect(boardCss).toMatch(/\.control-section-header\s*\{[^}]*justify-content:\s*space-between;[^}]*min-width:\s*0;/s);
     expect(boardCss).toMatch(/\.save-status-chip\s*\{[^}]*white-space:\s*nowrap;/s);
     expect(boardCss).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.save-status-chip\s*\{[^}]*font-size:\s*0\.62rem;/s);
+  });
+
+  it("keeps the main game chrome light when the light theme is active", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(boardCss).toMatch(/\[data-theme="light"\]\s*\{[^}]*--backgroundColor:\s*#f0f0f0;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\] \.game-panel\s*\{[^}]*background:\s*#f0f0f0;[^}]*border-left:\s*1px solid #d9d9d9;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\] \.player-identity-badge\s*\{[^}]*background:\s*#ffffff;[^}]*color:\s*#1f1f1f;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\] \.save-status-chip\s*\{[^}]*background:\s*#ffffff;[^}]*color:\s*#555555;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\] \.control-button\.share,[\s\S]*\[data-theme="light"\] \.control-button\.analysis-return\s*\{[^}]*background:\s*#ffffff;[^}]*color:\s*#1f1f1f;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\] \.history-table-container\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.72\) !important;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\] \.mobile-move-history summary\s*\{[^}]*background:\s*#ffffff;[^}]*color:\s*#1f1f1f;/s);
+  });
+
+  it("keeps light tutorial chrome on the shared neutral app palette", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+    const lightThemeBlock = boardCss.match(/\[data-theme="light"\]\s*\{[^}]*\}/)?.[0] ?? "";
+
+    expect(boardCss).toMatch(/\[data-theme="light"\]\s*\{[^}]*--accent-color:\s*#bf811d;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\]\s*\{[^}]*--tutorial-button-active:\s*#629924;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\]\s*\{[^}]*--tutorial-title-color:\s*#1f1f1f;/s);
+    expect(boardCss).toMatch(/\[data-theme="light"\]\s*\{[^}]*--hint-banner-bg:\s*#262421;/s);
+    expect(boardCss).toMatch(/\.tutorial-course-card\.current\s*\{[^}]*border-color:\s*rgba\(98,\s*153,\s*36,\s*0\.58\);[^}]*background:\s*rgba\(98,\s*153,\s*36,\s*0\.1\);/s);
+    expect(boardCss).toMatch(/\.tutorial-course-card-status\.current\s*\{[^}]*background:\s*#629924;[^}]*color:\s*#102018;/s);
+    expect(lightThemeBlock).not.toContain("#702cf0");
+    expect(lightThemeBlock).not.toContain("#3498db");
+    expect(lightThemeBlock).not.toContain("#2980b9");
+  });
+
+  it("uses app typography in the game shell instead of browser serif defaults", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const boardCss = readFileSync(resolve(testDir, "../../css/Board.css"), "utf8");
+
+    expect(boardCss).toMatch(/\.game-shell\s*\{[^}]*font-family:\s*"Inter", system-ui/s);
+    expect(boardCss).toMatch(/\.tutorial-container\.tutorial-container-course\s*\{[^}]*font-family:\s*"Inter", system-ui/s);
   });
 
   it("keeps tutorial objectives readable when objective text is long", () => {

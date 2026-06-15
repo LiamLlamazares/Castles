@@ -15,12 +15,12 @@
 }
 
 .quickstart-modal {
-  background: var(--modal-bg);
+  background: #262421;
   border-radius: 8px;
   padding: 0;
   max-width: 480px;
   width: 90%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   border: 1px solid var(--panel-border);
   overflow: hidden;
@@ -40,7 +40,8 @@
 
 /* Header */
 .quickstart-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1f1e1b;
+  border-bottom: 1px solid #3d3a34;
   padding: 24px 28px;
   display: flex;
   justify-content: space-between;
@@ -51,14 +52,14 @@
   margin: 0;
   font-size: 1.6rem;
   font-weight: 700;
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  color: #d4d4d4;
+  text-shadow: none;
 }
 
 .quickstart-close {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
+  background: #3c3934;
+  border: 1px solid #4b4740;
+  color: #d4d4d4;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -71,7 +72,7 @@
 }
 
 .quickstart-close:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: #4b4740;
   transform: scale(1.1);
 }
 
@@ -95,10 +96,10 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 165, 0, 0.1));
+  background: rgba(255, 255, 255, 0.055);
   padding: 16px 20px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid #4b4740;
 }
 
 .goal-icon {
@@ -112,7 +113,7 @@
 }
 
 .goal-text strong {
-  color: var(--accent-color);
+  color: #bf811d;
   font-weight: 700;
 }
 
@@ -147,8 +148,9 @@
 }
 
 .phase-num {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
+  background: #3c3934;
+  color: #d4d4d4;
+  border: 1px solid #4b4740;
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -226,30 +228,29 @@
 }
 
 .quickstart-learn-btn {
-  background: linear-gradient(135deg, #2d7dd2, #3a9be8);
-  color: white;
-  box-shadow: 0 4px 15px rgba(45, 125, 210, 0.35);
+  background: #629924;
+  color: #102018;
+  box-shadow: none;
 }
 
 .quickstart-learn-btn:hover {
-  background: linear-gradient(135deg, #3a9be8, #2d7dd2);
+  background: #74ad31;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(45, 125, 210, 0.45);
 }
 
 .quickstart-play-btn {
-  background: linear-gradient(135deg, #27ae60, #2ecc71);
-  color: white;
-  box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);
+  background: #3c3934;
+  color: #d4d4d4;
+  border: 1px solid #4b4740;
+  box-shadow: none;
 }
 
 .quickstart-play-btn:hover {
-  background: linear-gradient(135deg, #2ecc71, #27ae60);
+  background: #4b4740;
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(39, 174, 96, 0.5);
 }
 
 .quickstart-hint {
-  color: #666;
+  color: #8f8f8f;
   font-size: 0.8rem;
 }
