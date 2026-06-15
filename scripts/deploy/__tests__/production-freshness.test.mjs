@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   checkProductionFreshness,
+  classifyProductionFreshnessAlerts,
   formatProductionFreshnessResult,
   normalizeProductionBaseUrl,
   resolveProductionFreshnessCliOptions,
@@ -178,5 +179,60 @@ describe("production freshness diagnostics", () => {
     expect(formatProductionFreshnessResult(result)).toContain(
       "Diagnosis: expected commit is pushed to the tracked upstream, but production health is still serving old-sha (34 commits behind upstream).",
     );
+  });
+
+  it("classifies a healthy fresh deployment with no operator alerts", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      sshHost: "ls314.xyz",
+      fetchHealth: async () => okHealth("expected-sha"),
+      checkTcpPort: async () => ({ ok: true }),
+    });
+
+    expect(classifyProductionFreshnessAlerts(result)).toEqual([]);
+    expect(formatProductionFreshnessResult(result)).toContain("Alerts: none");
+  });
+
+  it("classifies stale deploys, unhealthy health, and SSH reachability as separate operator alerts", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      sshHost: "ls314.xyz",
+      fetchHealth: async () => ({
+        ...okHealth("old-sha"),
+        ok: false,
+      }),
+      checkTcpPort: async () => ({ ok: false, error: "connect timed out" }),
+    });
+
+    expect(classifyProductionFreshnessAlerts(result)).toEqual([
+      expect.objectContaining({ code: "health_not_ok", severity: "critical" }),
+      expect.objectContaining({ code: "stale_deploy", severity: "critical" }),
+      expect.objectContaining({ code: "ssh_unreachable", severity: "warning" }),
+    ]);
+    expect(formatProductionFreshnessResult(result)).toContain("Alert: health_not_ok severity=critical");
+    expect(formatProductionFreshnessResult(result)).toContain("Alert: stale_deploy severity=critical");
+    expect(formatProductionFreshnessResult(result)).toContain("Alert: ssh_unreachable severity=warning");
+  });
+
+  it("classifies a non-PostgreSQL health store as a production readiness alert", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () => ({
+        ...okHealth("expected-sha"),
+        online: {
+          eventSchemaVersion: 2,
+          store: { ok: true, backend: "memory" },
+        },
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(classifyProductionFreshnessAlerts(result)).toEqual([
+      expect.objectContaining({ code: "store_not_postgres", severity: "critical" }),
+    ]);
+    expect(formatProductionFreshnessResult(result)).toContain("Alert: store_not_postgres severity=critical");
   });
 });

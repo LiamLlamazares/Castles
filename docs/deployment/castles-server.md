@@ -674,6 +674,23 @@ psql -c "select count(*) from online_game_credentials;"
 psql -c "select count(*) from online_game_additional_credentials;"
 ```
 
+## 4A. Operational Alerts And Incidents
+
+`npm run online:deploy:freshness` prints explicit alert lines before the final freshness status. Treat these as the private-beta incident checklist:
+
+- `Alert: health_not_ok severity=critical`: do not run mutating smoke checks yet. Check `sudo systemctl status castles-node.service --no-pager`, `sudo journalctl -u castles-node.service -n 120 --no-pager`, `curl -sS http://127.0.0.1:3000/api/health`, and `sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env`. If this started during a deploy and the previous backup exists, prepare rollback before further changes.
+- `Alert: stale_deploy severity=critical`: production is not serving the reviewed commit. Confirm the commit is pushed to `origin/online-action-log`, rerun `npm run online:deploy:freshness -- https://<domain> "$sha" <ssh-host>`, inspect `/etc/castles/castles.env` for `GIT_COMMIT`, and restart `castles-node.service` only after `server:check-config` passes.
+- `Alert: store_not_postgres severity=critical`: production health is not reporting the PostgreSQL backend. Check `ONLINE_STORE_BACKEND`, `DATABASE_URL`, database connectivity, and `server:check-config` before accepting the deploy or running player-facing smoke.
+- `Alert: ssh_unreachable severity=warning`: the app may still be healthy, but deploy control is degraded. Confirm the SSH host resolves to the intended server, check firewall/provider status, and do not rely on a remote deploy script until SSH reachability is restored or an alternate console path is available.
+
+For smoke failures:
+
+- API smoke failure after fresh health: stop and inspect the exact failed endpoint or WebSocket step; do not continue to browser smoke until the API smoke passes. Check `journalctl` for matching `online.* failed` log lines and confirm the smoke did not leak bearer tokens in output.
+- Browser smoke failure after API smoke passes: capture the Playwright screenshot/video artifacts if available, hard-refresh once to exclude stale app-shell caching, rerun the browser smoke, and only then classify it as a UI regression.
+- Local load-smoke failure: rerun `npm run online:smoke:local:preflight`, confirm `DATABASE_URL` points to the disposable local database, then rerun `$env:SMOKE_LOAD_GAMES="4"; npm run online:smoke:local:load`. If stale-action counts differ, treat it as a PostgreSQL transaction/advisory-lock regression.
+
+Before any public-scale traffic, archive the freshness output, API smoke output, browser smoke output, local load-smoke output, and backup path together with the deployed commit SHA.
+
 ## 5. Emergency Disable
 
 Use this when the app is causing harm and the fastest safe action is to take it offline before a full rollback:

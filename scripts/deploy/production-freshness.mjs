@@ -224,10 +224,51 @@ export async function checkProductionFreshness(options) {
     health,
     commit,
     ssh,
-    ok: health.ok === true && commit.status !== "mismatch" && ssh.status !== "unreachable",
+    ok:
+      health.ok === true &&
+      health.storeBackend === "postgres" &&
+      commit.status !== "mismatch" &&
+      ssh.status !== "unreachable",
   };
   if (git) result.git = git;
   return result;
+}
+
+export function classifyProductionFreshnessAlerts(result) {
+  const alerts = [];
+  if (result.health?.ok !== true) {
+    alerts.push({
+      code: "health_not_ok",
+      severity: "critical",
+      message: "/api/health did not report ok=true.",
+      action: "Check systemd status, recent service logs, and server:check-config before rerunning smoke.",
+    });
+  }
+  if (result.commit?.status === "mismatch") {
+    alerts.push({
+      code: "stale_deploy",
+      severity: "critical",
+      message: `Production health reported ${result.commit.actual ?? "unknown"} instead of ${result.commit.expected}.`,
+      action: "Verify the reviewed commit is pushed, rerun the deploy freshness gate, and inspect restart metadata.",
+    });
+  }
+  if (result.health?.storeBackend !== "postgres") {
+    alerts.push({
+      code: "store_not_postgres",
+      severity: "critical",
+      message: `Production health reported store=${result.health?.storeBackend ?? "unknown"} instead of postgres.`,
+      action: "Fix ONLINE_STORE_BACKEND/DATABASE_URL and rerun server:check-config before accepting the deploy.",
+    });
+  }
+  if (result.ssh?.status === "unreachable") {
+    alerts.push({
+      code: "ssh_unreachable",
+      severity: "warning",
+      message: `SSH reachability failed for ${result.ssh.host}:${result.ssh.port}.`,
+      action: "Confirm the deploy SSH host, DNS, firewall, and server availability before treating app health alone as sufficient.",
+    });
+  }
+  return alerts;
 }
 
 export function formatProductionFreshnessResult(result) {
@@ -299,6 +340,14 @@ export function formatProductionFreshnessResult(result) {
     );
   } else if (result.commit.status === "mismatch" && result.git?.status === "upstream_missing_expected") {
     lines.push("Diagnosis: expected commit is not on the tracked upstream; check push target or branch selection.");
+  }
+  const alerts = classifyProductionFreshnessAlerts(result);
+  if (alerts.length === 0) {
+    lines.push("Alerts: none");
+  } else {
+    for (const alert of alerts) {
+      lines.push(`Alert: ${alert.code} severity=${alert.severity} ${alert.message} Action: ${alert.action}`);
+    }
   }
   lines.push(`Freshness: ${result.ok ? "ok" : "failed"}`);
   return lines.join("\n");
