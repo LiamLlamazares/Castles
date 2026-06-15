@@ -74,6 +74,7 @@ Only run that reset after the first command shows `castles_local` on localhost. 
 $env:DATABASE_URL="postgresql://castles_local:castles_local_dev@localhost:5432/castles_local"
 $env:ONLINE_STORE_BACKEND="postgres"
 $env:PUBLIC_BASE_URL="http://127.0.0.1:3000"
+$env:POSTGRES_POOL_MAX_PER_STORE="5"
 $env:CASTLES_REQUIRE_STATIC_DIR="1"
 $env:NODE_ENV="production"
 $env:BUILD_ID="local-rehearsal"

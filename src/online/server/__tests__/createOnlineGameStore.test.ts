@@ -1,9 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { createOnlineGameStoreFromEnv } from "../createOnlineGameStore";
 
+const postgresPoolOptions = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+
+vi.mock("pg", () => ({
+  Pool: vi.fn(function MockPool(options: Record<string, unknown>) {
+    postgresPoolOptions.push(options);
+    return {
+      connect: vi.fn(),
+      end: vi.fn(),
+      query: vi.fn(),
+    };
+  }),
+}));
+
 describe("createOnlineGameStoreFromEnv", () => {
+  beforeEach(() => {
+    postgresPoolOptions.length = 0;
+  });
+
   it("creates a PostgreSQL store without exposing the database URL in health metadata", () => {
     const configured = createOnlineGameStoreFromEnv({
       ONLINE_STORE_BACKEND: "postgres",
@@ -12,8 +29,56 @@ describe("createOnlineGameStoreFromEnv", () => {
 
     expect(configured.backend).toBe("postgres");
     expect(configured.healthStorePath).toBe("postgres");
+    expect(configured.postgresPoolMaxPerStore).toBe(5);
     expect(configured.store).toBeInstanceOf(PostgresOnlineGameStore);
     expect(configured.accountStore).toBeInstanceOf(PostgresOnlineAccountStore);
+  });
+
+  it("uses the bounded default pool max when PostgreSQL stores are constructed directly", () => {
+    const connectionString = "postgresql://castles:secret@localhost:5432/castles";
+
+    const gameStore = new PostgresOnlineGameStore({ connectionString });
+    const accountStore = new PostgresOnlineAccountStore({ connectionString });
+
+    expect(gameStore).toBeInstanceOf(PostgresOnlineGameStore);
+    expect(accountStore).toBeInstanceOf(PostgresOnlineAccountStore);
+    expect(postgresPoolOptions).toHaveLength(2);
+    expect(postgresPoolOptions.map((options) => options.max)).toEqual([5, 5]);
+  });
+
+  it("rejects unsafe direct PostgreSQL store pool max values", () => {
+    const connectionString = "postgresql://castles:secret@localhost:5432/castles";
+
+    for (const poolMaxPerStore of [0, 51, 1.5, Number.NaN]) {
+      expect(() => new PostgresOnlineGameStore({ connectionString, poolMaxPerStore })).toThrow(
+        /poolMaxPerStore/
+      );
+      expect(() => new PostgresOnlineAccountStore({ connectionString, poolMaxPerStore })).toThrow(
+        /poolMaxPerStore/
+      );
+    }
+  });
+
+  it("accepts a bounded PostgreSQL pool max per store", () => {
+    const configured = createOnlineGameStoreFromEnv({
+      ONLINE_STORE_BACKEND: "postgres",
+      DATABASE_URL: "postgresql://castles:secret@localhost:5432/castles",
+      POSTGRES_POOL_MAX_PER_STORE: "7",
+    });
+
+    expect(configured.postgresPoolMaxPerStore).toBe(7);
+  });
+
+  it("rejects unsafe PostgreSQL pool max values before creating stores", () => {
+    for (const value of ["0", "51", "1.5", "abc"]) {
+      expect(() =>
+        createOnlineGameStoreFromEnv({
+          ONLINE_STORE_BACKEND: "postgres",
+          DATABASE_URL: "postgresql://castles:secret@localhost:5432/castles",
+          POSTGRES_POOL_MAX_PER_STORE: value,
+        })
+      ).toThrow(/POSTGRES_POOL_MAX_PER_STORE/);
+    }
   });
 
   it("requires DATABASE_URL when PostgreSQL persistence is selected", () => {

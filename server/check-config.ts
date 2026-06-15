@@ -23,7 +23,7 @@ async function main() {
   const config = parseServerRuntimeConfig(env, process.cwd());
   assertServerRuntimeFiles(config);
 
-  const { backend, healthStorePath, store, accountStore } = createOnlineGameStoreFromEnv(env);
+  const { backend, healthStorePath, postgresPoolMaxPerStore, store, accountStore } = createOnlineGameStoreFromEnv(env);
   let replayedRooms = 0;
   try {
     await store.checkReady();
@@ -63,6 +63,7 @@ async function main() {
         onlineStore: {
           backend,
           path: healthStorePath,
+          postgresPoolMaxPerStore,
           replayChecked: true,
           replayedRooms,
         },
