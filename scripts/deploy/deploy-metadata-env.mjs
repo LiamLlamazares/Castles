@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { constants } from "node:fs";
 import { access, chmod, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
