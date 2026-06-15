@@ -28,6 +28,8 @@ const startupTimeoutMs = Number(process.env.SMOKE_STARTUP_TIMEOUT_MS ?? 20_000);
 const browserTimeoutMs = Number(process.env.SMOKE_BROWSER_TIMEOUT_MS ?? 20_000);
 const socketTimeoutMs = Number(process.env.SMOKE_SOCKET_TIMEOUT_MS ?? 10_000);
 const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
+const LONG_ONLINE_STATUS_AUDIT_MESSAGE =
+  "Access denied: This trusted local layout-audit message is intentionally long so the online recovery panel has to wrap across several lines while keeping the primary recovery action reachable on narrow screens without exposing any private invite credential or URL.";
 const localShutdownToken = `local-ui-audit-${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2)}`;
@@ -333,6 +335,26 @@ const SCENARIOS = [
       "Configure New Game",
     ],
   },
+  scenarioWithSteps({
+    name: "online-connection-long-status",
+    steps: [
+      {
+        action: "openMissingOnlineInvite",
+        gameId: "game_ui_audit_long_status_recovery_0123456789abcdefghijklmnopqrstuvwxyz",
+        seat: "w",
+        token: "ui_audit_long_status_token_0123456789abcdefghijklmnopqrstuvwxyz",
+      },
+      { action: "waitForRegion", text: "Online game connection" },
+      { action: "setOnlineStateStatus", text: LONG_ONLINE_STATUS_AUDIT_MESSAGE },
+      { action: "waitForText", text: LONG_ONLINE_STATUS_AUDIT_MESSAGE },
+      { action: "waitForButton", text: "Configure New Game" },
+    ],
+    requiredTexts: () => [
+      "Online Game",
+      LONG_ONLINE_STATUS_AUDIT_MESSAGE,
+      "Configure New Game",
+    ],
+  }),
   {
     name: "online-player-board",
     prepare: async (page, fixtures) => {
@@ -418,19 +440,48 @@ async function runAuditSteps(page, steps, fixtures) {
       case "ensureSetupPage":
         await ensureSetupPage(page);
         break;
+      case "openMissingOnlineInvite":
+        await openMissingOnlineInvite(page, step);
+        break;
       case "clickButton":
         await clickButton(page, text);
         break;
       case "waitForText":
         await waitForText(page, text);
         break;
+      case "waitForRegion":
+        await waitForRegion(page, text);
+        break;
       case "waitForButton":
         await waitForButton(page, text);
+        break;
+      case "setOnlineStateStatus":
+        await setOnlineStateStatus(page, text);
         break;
       default:
         throw new Error(`Unknown UI audit step action: ${step.action}`);
     }
   }
+}
+
+async function openMissingOnlineInvite(page, step) {
+  const missingInviteUrl = new URL("/", page.url());
+  missingInviteUrl.searchParams.set("onlineGame", step.gameId);
+  missingInviteUrl.searchParams.set("seat", step.seat);
+  missingInviteUrl.searchParams.set("token", step.token);
+  await page.goto(missingInviteUrl.toString(), {
+    waitUntil: "domcontentloaded",
+    timeout: browserTimeoutMs,
+  });
+  await waitForPageQuiet(page);
+}
+
+async function setOnlineStateStatus(page, text) {
+  const connectionRegion = page.getByRole("region", { name: "Online game connection", exact: true });
+  await connectionRegion.locator(".online-state-status").first().evaluate((element, value) => {
+    element.textContent = value;
+  }, text);
+  await waitForPageQuiet(page);
 }
 
 async function seedOnlineJoinSession(page, gameId, seat, token) {
@@ -1975,6 +2026,7 @@ async function main() {
 }
 
 export {
+  LONG_ONLINE_STATUS_AUDIT_MESSAGE,
   SCENARIOS,
   TUTORIAL_PROGRESS_KEY,
   installAuditDefaults,

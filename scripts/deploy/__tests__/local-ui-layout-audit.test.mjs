@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  LONG_ONLINE_STATUS_AUDIT_MESSAGE,
   SCENARIOS,
   TUTORIAL_PROGRESS_KEY,
   installTutorialAuditDefaults,
@@ -63,5 +64,23 @@ describe("local UI layout audit script", () => {
     expect(localStorage.getItem("castles_first_run_intro_seen")).toBeNull();
     expect(localStorage.getItem("hasSeenQuickStart")).toBe("true");
     expect(localStorage.getItem("hasSeenTooltipHint")).toBe("true");
+  });
+
+  it("captures a long trusted online status message and its recovery action", () => {
+    const scenario = SCENARIOS.find((candidate) => candidate.name === "online-connection-long-status");
+
+    expect(scenario).toBeTruthy();
+    expect(scenario.steps).toEqual([
+      { action: "openMissingOnlineInvite", gameId: expect.stringMatching(/^game_ui_audit_long_status_/), seat: "w", token: expect.stringMatching(/^ui_audit_long_status_token_/) },
+      { action: "waitForRegion", text: "Online game connection" },
+      { action: "setOnlineStateStatus", text: LONG_ONLINE_STATUS_AUDIT_MESSAGE },
+      { action: "waitForText", text: LONG_ONLINE_STATUS_AUDIT_MESSAGE },
+      { action: "waitForButton", text: "Configure New Game" },
+    ]);
+    expect(scenario.requiredTexts()).toEqual([
+      "Online Game",
+      LONG_ONLINE_STATUS_AUDIT_MESSAGE,
+      "Configure New Game",
+    ]);
   });
 });
