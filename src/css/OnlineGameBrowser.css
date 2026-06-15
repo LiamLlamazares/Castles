@@ -7,12 +7,11 @@
   background:
     linear-gradient(180deg, rgba(28, 28, 26, 0.98), rgba(15, 15, 14, 0.99)),
     var(--backgroundColor);
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-
 .online-browser-page .app-shell-header {
-  color: #f7f1d6;
+  color: #d4d4d4;
 }
 
 .online-browser-account-topbar {
@@ -25,7 +24,7 @@
 }
 
 .online-browser-account-topbar-label {
-  color: #9ed0c2;
+  color: #8f8f8f;
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -35,7 +34,7 @@
 .online-browser-account-topbar-name {
   max-width: 150px;
   overflow: hidden;
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-size: 0.84rem;
   font-weight: 850;
   text-overflow: ellipsis;
@@ -51,7 +50,7 @@
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
-  color: #f7f1d6;
+  color: #d4d4d4;
   cursor: pointer;
   font: inherit;
   font-size: 0.82rem;
@@ -63,8 +62,8 @@
 
 .online-browser-account-topbar-button.primary,
 .online-browser-account-topbar-oauth {
-  border-color: rgba(112, 214, 161, 0.88);
-  background: #70d6a1;
+  border-color: rgba(98, 153, 36, 0.88);
+  background: #629924;
   color: #102018;
 }
 
@@ -74,7 +73,7 @@
 
 .online-browser-account-topbar-button.primary:hover:not(:disabled),
 .online-browser-account-topbar-oauth:hover {
-  background: #83e2b1;
+  background: #75a832;
 }
 
 .online-browser-account-topbar-button:disabled {
@@ -114,7 +113,7 @@
   align-items: center;
   margin-bottom: 14px;
   padding: 12px 14px;
-  border: 1px solid rgba(158, 208, 194, 0.16);
+  border: 1px solid rgba(75, 71, 64, 0.16);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.025);
 }
@@ -151,19 +150,19 @@
 .online-browser-account-copy strong {
   display: block;
   margin-top: 2px;
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-size: 1rem;
   overflow-wrap: anywhere;
 }
 
 .online-browser-account-copy p {
   margin: 4px 0 0;
-  color: #d9d0b8;
+  color: #bababa;
   line-height: 1.35;
 }
 
 .online-browser-account-message {
-  color: #9ed0c2 !important;
+  color: #8f8f8f !important;
   font-weight: 800;
 }
 
@@ -204,7 +203,7 @@
 .online-browser-account-form label {
   display: grid;
   gap: 6px;
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.9rem;
   min-width: 0;
 }
@@ -229,13 +228,13 @@
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px 16px;
-  border: 1px solid rgba(158, 208, 194, 0.14);
+  border: 1px solid rgba(75, 71, 64, 0.14);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.035);
 }
 
 .online-browser-social-header {
-  border-bottom-color: rgba(158, 208, 194, 0.14);
+  border-bottom-color: rgba(75, 71, 64, 0.14);
 }
 
 .online-browser-social-grid {
@@ -258,7 +257,7 @@
 .online-browser-follow-policy label {
   display: grid;
   gap: 6px;
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.9rem;
   min-width: 0;
 }
@@ -292,7 +291,7 @@
 
 .online-browser-social-message {
   margin: 0;
-  color: #9ed0c2;
+  color: #8f8f8f;
   font-weight: 800;
 }
 
@@ -322,7 +321,7 @@
 }
 
 .online-browser-report-fields label > span {
-  color: #f4ebce;
+  color: #d4d4d4;
   font-size: 0.86rem;
   font-weight: 800;
 }
@@ -353,7 +352,7 @@
 
 .online-browser-report-actions span {
   margin-right: auto;
-  color: #e1d7bd;
+  color: #bababa;
   font-size: 0.82rem;
   font-weight: 800;
 }
@@ -376,7 +375,7 @@
 
 .online-browser-challenge-notice strong {
   display: block;
-  color: #fff4c8;
+  color: #d4d4d4;
   overflow-wrap: anywhere;
 }
 
@@ -431,7 +430,7 @@
 
 .online-browser-online-now-card strong {
   display: block;
-  color: #f7f1d6;
+  color: #d4d4d4;
   overflow-wrap: anywhere;
 }
 
@@ -457,7 +456,7 @@
 .online-browser-profile-main strong,
 .online-browser-following-row strong {
   display: block;
-  color: #f7f1d6;
+  color: #d4d4d4;
   overflow-wrap: anywhere;
 }
 
@@ -472,7 +471,7 @@
 .online-browser-following-list-heading span,
 .online-browser-following-row span {
   border-radius: 999px;
-  background: rgba(158, 208, 194, 0.12);
+  background: rgba(75, 71, 64, 0.12);
   color: #c7dfd7;
   padding: 3px 8px;
   font-size: 0.82rem;
@@ -488,7 +487,7 @@
 .online-browser-social-badges span.presence-recent,
 .online-browser-following-row span.presence-recent {
   background: rgba(215, 183, 101, 0.2);
-  color: #f6df9c;
+  color: #d59120;
 }
 
 .online-browser-social-badges span.presence-away,
@@ -570,7 +569,7 @@
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
-  color: #f4ebce;
+  color: #d4d4d4;
   cursor: pointer;
   font: inherit;
   font-size: 0.82rem;
@@ -610,7 +609,7 @@
 
 .online-browser-following-list p {
   margin: 0;
-  color: #d9d0b8;
+  color: #bababa;
 }
 
 .online-browser-private-note {
@@ -622,7 +621,7 @@
   border-left: 3px solid rgba(215, 183, 101, 0.58);
   border-radius: 4px;
   background: rgba(70, 51, 20, 0.25);
-  color: #efe3bd;
+  color: #bababa;
   overflow-wrap: anywhere;
 }
 
@@ -652,7 +651,7 @@
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: #f4ebce;
+  color: #d4d4d4;
   font-size: 0.86rem;
   font-weight: 800;
 }
@@ -710,6 +709,7 @@
   padding: 10px 14px;
   min-height: 40px;
   cursor: pointer;
+  font: inherit;
   font-weight: 800;
   letter-spacing: 0;
 }
@@ -723,20 +723,20 @@
 .online-browser-select select:focus-visible,
 .online-seek-owner-panel:focus-visible,
 .online-browser-closed-listing:focus-visible {
-  outline: 3px solid #91d6c5;
+  outline: 3px solid #bf811d;
   outline-offset: 3px;
   box-shadow: 0 0 0 2px rgba(10, 16, 18, 0.9);
 }
 
 .online-browser-tabs button {
   background: rgba(255, 255, 255, 0.055);
-  color: #d8d3bf;
+  color: #bababa;
   border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .online-browser-tabs button.active {
   background: rgba(215, 183, 101, 0.18);
-  color: #f7f1d6;
+  color: #d4d4d4;
   border-color: rgba(215, 183, 101, 0.72);
 }
 
@@ -749,12 +749,12 @@
 .online-browser-filter-panel {
   display: grid;
   gap: 6px;
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.9rem;
 }
 
 .online-browser-control-title {
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-size: 0.78rem;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -771,7 +771,7 @@
 .online-browser-select {
   display: grid;
   gap: 6px;
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.9rem;
   min-width: 0;
 }
@@ -790,7 +790,7 @@
 .online-browser-invite-field {
   display: grid;
   gap: 5px;
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.85rem;
   min-width: 0;
 }
@@ -802,7 +802,7 @@
 .online-browser-status-line {
   min-height: 24px;
   margin-bottom: 12px;
-  color: #d9d0b8;
+  color: #bababa;
 }
 
 .online-browser-filter-note {
@@ -823,11 +823,11 @@
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  border: 1px solid rgba(158, 208, 194, 0.32);
+  border: 1px solid rgba(75, 71, 64, 0.32);
   border-radius: 6px;
   padding: 10px 12px;
-  background: rgba(158, 208, 194, 0.08);
-  color: #e8dec4;
+  background: rgba(75, 71, 64, 0.08);
+  color: #bababa;
   font-size: 0.9rem;
   font-weight: 700;
 }
@@ -894,16 +894,16 @@
 }
 
 .online-game-board-preview-cells circle {
-  fill: rgba(247, 241, 214, 0.2);
+  fill: rgba(212, 212, 212, 0.14);
 }
 
 .online-game-board-preview-castles rect {
-  stroke: rgba(247, 241, 214, 0.38);
+  stroke: rgba(212, 212, 212, 0.28);
   stroke-width: 0.35;
 }
 
 .online-game-board-preview-castles .owner-w {
-  fill: rgba(222, 207, 161, 0.72);
+  fill: rgba(186, 186, 186, 0.72);
 }
 
 .online-game-board-preview-castles .owner-b {
@@ -916,12 +916,12 @@
 }
 
 .online-game-board-preview-pieces .piece-w circle {
-  fill: #f1ead2;
+  fill: #d4d4d4;
 }
 
 .online-game-board-preview-pieces .piece-b circle {
   fill: #151918;
-  stroke: rgba(247, 241, 214, 0.62);
+  stroke: rgba(212, 212, 212, 0.52);
 }
 
 .online-game-board-preview-pieces text {
@@ -934,7 +934,7 @@
 .online-game-board-preview-summary {
   display: grid;
   gap: 2px;
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.66rem;
   line-height: 1.12;
   text-align: center;
@@ -966,7 +966,7 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #f7f1d6;
+  color: #d4d4d4;
   cursor: pointer;
   font: inherit;
   font-weight: inherit;
@@ -1005,7 +1005,7 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.9rem;
 }
 
@@ -1038,7 +1038,7 @@
 
 .online-game-result {
   margin-top: 8px;
-  color: #f4d287;
+  color: #bf811d;
   font-weight: 800;
 }
 
@@ -1050,18 +1050,19 @@
 }
 
 .online-browser-button.primary {
-  background: #74c797;
+  background: #629924;
   color: #101815;
 }
 
 .online-browser-button.neutral {
-  background: #d7b765;
-  color: #161511;
+  border: 1px solid #4b4740;
+  background: #3c3934;
+  color: #d4d4d4;
 }
 
 .online-browser-button.subtle {
   background: rgba(255, 255, 255, 0.08);
-  color: #f7f1d6;
+  color: #d4d4d4;
   border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
@@ -1077,8 +1078,8 @@
 }
 
 .online-browser-quick-match-panel.setup-needed {
-  background: rgba(158, 208, 194, 0.045);
-  border-color: rgba(158, 208, 194, 0.16);
+  background: rgba(75, 71, 64, 0.045);
+  border-color: rgba(75, 71, 64, 0.16);
 }
 
 .online-browser-quick-match-copy {
@@ -1093,7 +1094,7 @@
 
 .online-browser-quick-match-copy p {
   margin: 4px 0 0;
-  color: #d9d0b8;
+  color: #bababa;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -1108,7 +1109,7 @@
 .online-browser-quick-match-summary span {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
-  color: #f7f1d6;
+  color: #d4d4d4;
   padding: 4px 9px;
   font-weight: 800;
   white-space: nowrap;
@@ -1144,7 +1145,7 @@
 .online-browser-section-kicker,
 .online-game-kicker {
   display: block;
-  color: #9ed0c2;
+  color: #8f8f8f;
   font-size: 0.78rem;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -1158,7 +1159,7 @@
 
 .online-browser-section-header p {
   margin: 3px 0 0;
-  color: #d9d0b8;
+  color: #bababa;
   line-height: 1.35;
 }
 
@@ -1190,7 +1191,7 @@
 
 .online-browser-live-stat span {
   display: block;
-  color: #9ed0c2;
+  color: #8f8f8f;
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -1200,7 +1201,7 @@
 .online-browser-live-stat strong {
   display: block;
   margin-top: 4px;
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-size: 0.95rem;
   overflow-wrap: anywhere;
 }
@@ -1268,12 +1269,12 @@
 }
 
 .online-browser-watch-friend-main strong {
-  color: #f7f1d6;
+  color: #d4d4d4;
   overflow-wrap: anywhere;
 }
 
 .online-browser-watch-friend-main span {
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.82rem;
   overflow-wrap: anywhere;
 }
@@ -1325,12 +1326,12 @@
   justify-content: space-between;
   gap: 10px;
   align-items: end;
-  color: #d9d0b8;
+  color: #bababa;
   padding: 2px 2px 0;
 }
 
 .online-browser-side-list-header strong {
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-size: 0.92rem;
   text-align: right;
 }
@@ -1349,8 +1350,8 @@
 }
 
 .online-game-row-featured {
-  border-color: rgba(158, 208, 194, 0.28);
-  background: rgba(158, 208, 194, 0.07);
+  border-color: rgba(75, 71, 64, 0.28);
+  background: rgba(75, 71, 64, 0.07);
 }
 
 .online-game-row-compact {
@@ -1375,16 +1376,16 @@
   display: grid;
   gap: 8px;
   padding: 14px;
-  border: 1px solid rgba(158, 208, 194, 0.2);
+  border: 1px solid rgba(75, 71, 64, 0.2);
   border-radius: 6px;
-  background: rgba(158, 208, 194, 0.055);
+  background: rgba(75, 71, 64, 0.055);
 }
 
 .online-browser-account-games p,
 .online-browser-recent-games p,
 .online-browser-public-archive p {
   margin: 0 2px 4px;
-  color: #d9d0b8;
+  color: #bababa;
   line-height: 1.35;
 }
 
@@ -1417,12 +1418,12 @@
 }
 
 .online-browser-account-friend-main strong {
-  color: #f7f1d6;
+  color: #d4d4d4;
   overflow-wrap: anywhere;
 }
 
 .online-browser-account-friend-main span {
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.82rem;
   overflow-wrap: anywhere;
 }
@@ -1463,13 +1464,13 @@
 }
 
 .online-browser-archive-detail-title strong {
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-size: 1.05rem;
   overflow-wrap: anywhere;
 }
 
 .online-browser-archive-detail-title span:last-child {
-  color: #d9d0b8;
+  color: #bababa;
   overflow-wrap: anywhere;
 }
 
@@ -1492,11 +1493,11 @@
   gap: 3px;
   min-width: 0;
   padding-top: 8px;
-  border-top: 1px solid rgba(247, 241, 214, 0.12);
+  border-top: 1px solid rgba(212, 212, 212, 0.12);
 }
 
 .online-browser-archive-detail-grid dt {
-  color: #9ed0c2;
+  color: #8f8f8f;
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -1505,7 +1506,7 @@
 
 .online-browser-archive-detail-grid dd {
   margin: 0;
-  color: #f7f1d6;
+  color: #d4d4d4;
   font-size: 0.9rem;
   font-weight: 800;
   overflow-wrap: anywhere;
@@ -1517,7 +1518,7 @@
 }
 
 .online-game-action-note {
-  color: #d9d0b8;
+  color: #bababa;
   font-size: 0.88rem;
   font-weight: 800;
   max-width: 220px;
@@ -1553,7 +1554,7 @@
 
 .online-browser-empty p {
   margin: 0;
-  color: #d9d0b8;
+  color: #bababa;
 }
 
 @media (max-width: 900px) {
@@ -1783,4 +1784,87 @@
   .online-browser-archive-detail-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Final light-theme overrides must come after component-specific dark rules. */
+[data-theme="light"] .online-browser-page {
+  background: #f0f0f0;
+  color: #1f1f1f;
+}
+
+[data-theme="light"] .online-browser-page .app-shell-header {
+  color: #1f1f1f;
+}
+
+[data-theme="light"] .online-browser-page :where(h1, h2, h3, h4, p, strong, span, dt, dd, label) {
+  color: inherit;
+}
+
+[data-theme="light"] .online-browser-page :where(
+  .online-browser-account-topbar-label,
+  .online-browser-account-topbar-status,
+  .online-browser-account-copy p,
+  .online-browser-account-form label,
+  .online-browser-social-search label,
+  .online-browser-follow-policy label,
+  .online-browser-section-header p,
+  .online-browser-control-title,
+  .online-browser-section-kicker,
+  .online-game-kicker,
+  .online-browser-status-line,
+  .online-game-meta,
+  .online-game-players span,
+  .online-browser-live-stat span,
+  .online-browser-side-list-header,
+  .online-browser-filter-note,
+  .online-browser-field-hint
+) {
+  color: #555555;
+}
+
+[data-theme="light"] .online-browser-page :where(
+  .online-browser-account-panel,
+  .online-browser-social-panel,
+  .online-browser-profile-card,
+  .online-browser-following-list,
+  .online-browser-following-row,
+  .online-browser-online-now,
+  .online-browser-online-now-card,
+  .online-browser-toolbar,
+  .online-browser-quick-match-panel,
+  .online-browser-live-stat,
+  .online-browser-watch-friends,
+  .online-game-row,
+  .online-seek-owner-panel,
+  .online-browser-closed-listing,
+  .online-browser-empty,
+  .online-browser-account-games,
+  .online-browser-recent-games,
+  .online-browser-public-archive,
+  .online-browser-archive-detail,
+  .online-browser-watch-friend-row,
+  .online-browser-account-friend-row
+) {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
+  box-shadow: none;
+}
+
+[data-theme="light"] .online-browser-page :where(.online-browser-tabs button, .online-browser-button.neutral, .online-browser-button.subtle) {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
+}
+
+[data-theme="light"] .online-browser-page .online-browser-tabs button.active {
+  border-color: rgba(98, 153, 36, 0.72);
+  background: #629924;
+  color: #102018;
+}
+
+[data-theme="light"] .online-browser-page :where(input, select, textarea) {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
 }

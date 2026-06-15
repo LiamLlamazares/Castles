@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="57.66917293233081 1.6398098959931744 884.6616541353383 996.7203802080137" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Empty Castles hex board">
   <style>
     svg {
-      --backgroundColor: rgb(246,241,209);
+      --backgroundColor: #161512;
       --river-color: rgb(56,175,205);
       --high-ground-dark: rgb(139,69,19);
       --high-ground-mid: rgb(157,78,21);

@@ -7,11 +7,11 @@
   min-height: 36px;
   max-width: 190px;
   padding: 7px 11px;
-  border: 1px solid rgba(31, 36, 35, 0.18);
+  border: 1px solid #4b4740;
   border-radius: 6px;
-  background: rgba(255, 248, 223, 0.9);
-  color: #1f2423;
-  box-shadow: 0 8px 20px rgba(31, 36, 35, 0.12);
+  background: #3c3934;
+  color: #d4d4d4;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
   cursor: pointer;
   font: inherit;
   font-size: 0.86rem;
@@ -19,10 +19,9 @@
   letter-spacing: 0;
   line-height: 1;
 }
-
 .online-account-chip:hover {
-  background: #fff7cf;
-  border-color: rgba(31, 36, 35, 0.3);
+  background: #302e2a;
+  border-color: #5a554c;
 }
 
 .online-account-chip-name {
@@ -98,19 +97,20 @@
   z-index: 3200;
   display: grid;
   place-items: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.56);
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.64);
 }
 
 .online-account-dialog {
   box-sizing: border-box;
-  width: min(460px, 100%);
-  padding: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: rgba(28, 30, 30, 0.98);
-  color: #f7f1d6;
-  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.4);
+  width: min(390px, calc(100vw - 32px));
+  padding: 18px;
+  border: 1px solid #3d3a34;
+  border-radius: 6px;
+  background: #262421;
+  color: #bababa;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .online-account-dialog-header {
@@ -123,7 +123,7 @@
 .online-account-dialog-kicker {
   display: block;
   margin-bottom: 5px;
-  color: #9ed0c2;
+  color: #8f8f8f;
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0;
@@ -132,125 +132,159 @@
 
 .online-account-dialog h2 {
   margin: 0;
-  color: #f7f1d6;
-  font-size: 1.32rem;
+  color: #d4d4d4;
+  font-size: 1.15rem;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
 .online-account-dialog-close {
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f7f1d6;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #4b4740;
+  border-radius: 4px;
+  background: #302e2a;
+  color: #d4d4d4;
   cursor: pointer;
   font-size: 1rem;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
+}
+
+.online-account-dialog-close:hover {
+  background: #3c3934;
 }
 
 .online-account-dialog-description,
 .online-account-dialog-signed-in p {
   margin: 12px 0 0;
-  color: #d9d0b8;
+  color: #bababa;
   line-height: 1.4;
 }
 
 .online-account-dialog-signed-in strong {
   display: block;
   margin-top: 6px;
-  color: #f7f1d6;
-  font-size: 1.15rem;
+  color: #d4d4d4;
+  font-size: 1rem;
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
 .online-account-google-link {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
+  width: 100%;
+  max-width: 340px;
+  min-height: 38px;
   margin-top: 14px;
-  padding: 9px 12px;
-  border-radius: 6px;
-  background: #f7f1d6;
-  color: #141414;
-  font-weight: 850;
+  padding: 8px 12px;
+  border: 1px solid #4b4740;
+  border-radius: 4px;
+  background: #3c3934;
+  color: #d4d4d4;
+  font-weight: 700;
   text-decoration: none;
 }
 
 .online-account-dialog-oauth-message,
 .online-account-dialog-message {
   margin: 12px 0 0;
-  color: #9ed0c2;
-  font-weight: 800;
+  color: #8f8f8f;
+  font-weight: 700;
   line-height: 1.35;
 }
 
 .online-account-dialog-oauth-message.error,
 .online-account-dialog-message.error {
-  color: #ffcf8a;
+  color: #d59120;
 }
 
 .online-account-dialog-form {
   display: grid;
   gap: 12px;
+  width: 100%;
+  max-width: 340px;
   margin-top: 14px;
 }
 
 .online-account-dialog-form label {
   display: grid;
   gap: 6px;
-  color: #d9d0b8;
-  font-size: 0.9rem;
-  font-weight: 800;
+  color: #a6a6a6;
+  font-size: 0.84rem;
+  font-weight: 600;
 }
 
 .online-account-dialog-form input {
-  min-height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
-  padding: 9px 11px;
-  background: #fff;
-  color: #111;
+  min-height: 38px;
+  border: 1px solid #4b4740;
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: #3c3934;
+  color: #d4d4d4;
   font: inherit;
 }
 
+.online-account-dialog-form input:focus-visible,
+.online-account-dialog-button:focus-visible,
+.online-account-dialog-close:focus-visible,
+.online-account-google-link:focus-visible {
+  outline: 2px solid rgba(191, 129, 29, 0.68);
+  outline-offset: 2px;
+}
+
 .online-account-dialog-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .online-account-dialog-actions.single {
-  grid-template-columns: minmax(0, 1fr);
   margin-top: 16px;
 }
 
 .online-account-dialog-button {
-  min-height: 42px;
+  min-height: 38px;
   border: 0;
-  border-radius: 6px;
-  padding: 10px 12px;
+  border-radius: 4px;
+  padding: 8px 14px;
   cursor: pointer;
-  font-weight: 850;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
 .online-account-dialog-button.primary {
-  background: #70d6a1;
+  background: #629924;
   color: #102018;
 }
 
 .online-account-dialog-button.subtle {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  color: #f7f1d6;
+  border: 1px solid #4b4740;
+  background: #3c3934;
+  color: #d4d4d4;
+}
+
+.online-account-dialog-button:hover:not(:disabled),
+.online-account-google-link:hover {
+  filter: brightness(1.08);
 }
 
 .online-account-dialog-button:disabled {
   cursor: not-allowed;
   opacity: 0.68;
+}
+
+@media (max-width: 420px) {
+  .online-account-dialog-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 520px) {
@@ -266,4 +300,52 @@
   .online-browser-account-chip .online-account-chip-name {
     display: none;
   }
+}
+
+/* Final light-theme overrides must come after component-specific dark rules. */
+[data-theme="light"] .online-account-chip {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .online-account-chip:hover {
+  background: #f5f5f5;
+  border-color: #bdbdbd;
+}
+
+[data-theme="light"] .online-account-dialog {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .online-account-dialog h2,
+[data-theme="light"] .online-account-dialog-signed-in strong {
+  color: #1f1f1f;
+}
+
+[data-theme="light"] .online-account-dialog-kicker,
+[data-theme="light"] .online-account-dialog-description,
+[data-theme="light"] .online-account-dialog-signed-in p,
+[data-theme="light"] .online-account-dialog-form label,
+[data-theme="light"] .online-account-dialog-oauth-message,
+[data-theme="light"] .online-account-dialog-message {
+  color: #555555;
+}
+
+[data-theme="light"] .online-account-dialog-close,
+[data-theme="light"] .online-account-google-link,
+[data-theme="light"] .online-account-dialog-button.subtle {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
+}
+
+[data-theme="light"] .online-account-dialog-form input {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
 }
