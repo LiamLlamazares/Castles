@@ -24,9 +24,19 @@ import {
   type OnlineAccountDeleteResponse,
 } from "./accounts";
 import {
+  ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH,
+  ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_REPORT_STATUSES,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+  type OnlineAccountModerationAuditEntry,
+  type OnlineAccountModerationAuditListResponse,
+  type OnlineAccountModerationReport,
+  type OnlineAccountModerationReportQueueResponse,
+  type OnlineAccountModerationReportStatusPatch,
+  type OnlineAccountModerationReportStatusResponse,
   type OnlineAccountFollowingResponse,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacyResponse,
@@ -37,6 +47,7 @@ import {
   type OnlineAccountReportInput,
   type OnlineAccountReportReason,
   type OnlineAccountReportResponse,
+  type OnlineAccountReportStatus,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardResponse,
   type OnlineRatingLeaderboardScope,
@@ -103,6 +114,48 @@ const MAX_ONLINE_ERROR_MESSAGE_LENGTH = 240;
 const ONLINE_ACCOUNT_PROFILE_RESPONSE_KEYS = new Set(["protocolVersion", "profile"]);
 const ONLINE_ACCOUNT_FOLLOWING_RESPONSE_KEYS = new Set(["protocolVersion", "following"]);
 const ONLINE_ACCOUNT_PRIVACY_RESPONSE_KEYS = new Set(["protocolVersion", "privacy"]);
+const ONLINE_ACCOUNT_MODERATION_QUEUE_RESPONSE_KEYS = new Set([
+  "protocolVersion",
+  "schemaVersion",
+  "reports",
+  "nextCursor",
+]);
+const ONLINE_ACCOUNT_MODERATION_STATUS_RESPONSE_KEYS = new Set([
+  "protocolVersion",
+  "schemaVersion",
+  "report",
+  "audit",
+]);
+const ONLINE_ACCOUNT_MODERATION_AUDIT_LIST_RESPONSE_KEYS = new Set([
+  "protocolVersion",
+  "schemaVersion",
+  "reportId",
+  "audits",
+]);
+const ONLINE_ACCOUNT_MODERATION_REPORT_KEYS = new Set([
+  "schemaVersion",
+  "reportId",
+  "reporterDisplayName",
+  "targetDisplayName",
+  "reason",
+  "details",
+  "status",
+  "moderatorNote",
+  "createdAt",
+  "updatedAt",
+  "reviewedAt",
+]);
+const ONLINE_ACCOUNT_MODERATION_AUDIT_KEYS = new Set([
+  "schemaVersion",
+  "auditId",
+  "reportId",
+  "action",
+  "actor",
+  "previousStatus",
+  "nextStatus",
+  "note",
+  "createdAt",
+]);
 const ONLINE_ACCOUNT_PRIVACY_SETTINGS_KEYS = new Set([
   "schemaVersion",
   "followPolicy",
@@ -1195,6 +1248,340 @@ export async function fetchOnlineRatingLeaderboard(
     throw new Error(`Could not load online rating leaderboard (${response.status})`);
   }
   return validateOnlineRatingLeaderboardResponse(await response.json(), "Online rating leaderboard");
+}
+
+export interface FetchOnlineAccountModerationReportsOptions {
+  status?: OnlineAccountReportStatus;
+  reason?: OnlineAccountReportReason;
+  reporter?: string;
+  target?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface FetchOnlineAccountModerationReportAuditsOptions {
+  limit?: number;
+}
+
+export type OnlineAccountModerationReportStatusUpdate = Pick<
+  OnlineAccountModerationReportStatusPatch,
+  "status"
+> &
+  Partial<Pick<OnlineAccountModerationReportStatusPatch, "note">>;
+
+function adminAuthorizationHeader(adminToken: string): Record<string, string> {
+  return { authorization: `Bearer ${adminToken}` };
+}
+
+function buildOnlineAccountModerationReportsPath(
+  options: FetchOnlineAccountModerationReportsOptions = {}
+): string {
+  const params = new URLSearchParams();
+  if (options.status !== undefined) params.set("status", options.status);
+  if (options.reason !== undefined) params.set("reason", options.reason);
+  if (options.reporter !== undefined) params.set("reporter", options.reporter);
+  if (options.target !== undefined) params.set("target", options.target);
+  if (options.cursor !== undefined) params.set("cursor", options.cursor);
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const query = params.toString();
+  return query ? `/api/online/admin/reports?${query}` : "/api/online/admin/reports";
+}
+
+function buildOnlineAccountModerationAuditPath(
+  reportId: string,
+  options: FetchOnlineAccountModerationReportAuditsOptions = {}
+): string {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const query = params.toString();
+  const path = `/api/online/admin/reports/${encodeURIComponent(reportId)}/audits`;
+  return query ? `${path}?${query}` : path;
+}
+
+function validateOnlineAccountModerationSchema(record: Record<string, unknown>, label: string): void {
+  if (record.schemaVersion !== ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION) {
+    throw new Error(`${label} schemaVersion is invalid.`);
+  }
+}
+
+function validateOnlineAccountModerationText(
+  value: unknown,
+  label: string,
+  maxLength: number
+): string {
+  if (
+    typeof value !== "string" ||
+    value.length > maxLength ||
+    stringContainsDurableSecret(value)
+  ) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
+function validateOnlineAccountModerationDisplayName(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || stringContainsDurableSecret(value)) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
+function validateOnlineAccountModerationId(value: unknown, prefix: string, label: string): string {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith(prefix) ||
+    (prefix === "report_" && value.startsWith("report_audit_")) ||
+    value.length <= prefix.length ||
+    value.length > 160 ||
+    stringContainsDurableSecret(value)
+  ) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
+function validateOnlineAccountModerationTimestamp(value: unknown, label: string): string {
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
+function validateOnlineAccountModerationNullableTimestamp(value: unknown, label: string): string | null {
+  if (value === null) return null;
+  return validateOnlineAccountModerationTimestamp(value, label);
+}
+
+function validateOnlineAccountReportStatus(value: unknown, label: string): OnlineAccountReportStatus {
+  if (typeof value !== "string" || !ONLINE_ACCOUNT_REPORT_STATUSES.has(value as OnlineAccountReportStatus)) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value as OnlineAccountReportStatus;
+}
+
+function validateOnlineAccountModerationReport(
+  value: unknown,
+  label: string
+): OnlineAccountModerationReport {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_MODERATION_REPORT_KEYS,
+    `${label} contains unsupported data.`
+  );
+  validateOnlineAccountModerationSchema(record, label);
+  return {
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    reportId: validateOnlineAccountModerationId(record.reportId, "report_", `${label} reportId`),
+    reporterDisplayName: validateOnlineAccountModerationDisplayName(
+      record.reporterDisplayName,
+      `${label} reporterDisplayName`
+    ),
+    targetDisplayName: validateOnlineAccountModerationDisplayName(
+      record.targetDisplayName,
+      `${label} targetDisplayName`
+    ),
+    reason: validateOnlineAccountReportReason(record.reason, `${label} reason`),
+    details: validateOnlineAccountModerationText(
+      record.details,
+      `${label} details`,
+      ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH
+    ),
+    status: validateOnlineAccountReportStatus(record.status, `${label} status`),
+    moderatorNote: validateOnlineAccountModerationText(
+      record.moderatorNote,
+      `${label} moderatorNote`,
+      ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH
+    ),
+    createdAt: validateOnlineAccountModerationTimestamp(record.createdAt, `${label} createdAt`),
+    updatedAt: validateOnlineAccountModerationTimestamp(record.updatedAt, `${label} updatedAt`),
+    reviewedAt: validateOnlineAccountModerationNullableTimestamp(record.reviewedAt, `${label} reviewedAt`),
+  };
+}
+
+function validateOnlineAccountModerationAudit(
+  value: unknown,
+  label: string
+): OnlineAccountModerationAuditEntry {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_MODERATION_AUDIT_KEYS,
+    `${label} contains unsupported data.`
+  );
+  validateOnlineAccountModerationSchema(record, label);
+  if (record.action !== "status_changed") {
+    throw new Error(`${label} action is invalid.`);
+  }
+  if (record.actor !== "admin") {
+    throw new Error(`${label} actor is invalid.`);
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    auditId: validateOnlineAccountModerationId(record.auditId, "report_audit_", `${label} auditId`),
+    reportId: validateOnlineAccountModerationId(record.reportId, "report_", `${label} reportId`),
+    action: "status_changed",
+    actor: "admin",
+    previousStatus: validateOnlineAccountReportStatus(record.previousStatus, `${label} previousStatus`),
+    nextStatus: validateOnlineAccountReportStatus(record.nextStatus, `${label} nextStatus`),
+    note: validateOnlineAccountModerationText(
+      record.note,
+      `${label} note`,
+      ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH
+    ),
+    createdAt: validateOnlineAccountModerationTimestamp(record.createdAt, `${label} createdAt`),
+  };
+}
+
+function validateOnlineAccountModerationReportQueueResponse(
+  body: unknown,
+  label: string
+): OnlineAccountModerationReportQueueResponse {
+  const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_MODERATION_QUEUE_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
+  validateOnlineAccountModerationSchema(record, `${label} response`);
+  if (!Array.isArray(record.reports)) {
+    throw new Error(`${label} response was malformed: reports is invalid.`);
+  }
+  if (record.nextCursor !== undefined && typeof record.nextCursor !== "string") {
+    throw new Error(`${label} response was malformed: nextCursor is invalid.`);
+  }
+  const reports = record.reports.map((report, index) =>
+    validateOnlineAccountModerationReport(report, `${label}.reports[${index}] report`)
+  );
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    reports,
+    ...(record.nextCursor === undefined ? {} : { nextCursor: record.nextCursor }),
+  };
+}
+
+function validateOnlineAccountModerationReportStatusResponse(
+  body: unknown,
+  label: string
+): OnlineAccountModerationReportStatusResponse {
+  const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_MODERATION_STATUS_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
+  validateOnlineAccountModerationSchema(record, `${label} response`);
+  const report = validateOnlineAccountModerationReport(record.report, `${label} report`);
+  const audit = validateOnlineAccountModerationAudit(record.audit, `${label} audit`);
+  if (audit.reportId !== report.reportId) {
+    throw new Error(`${label} response was malformed: audit reportId does not match report.`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    report,
+    audit,
+  };
+}
+
+function validateOnlineAccountModerationAuditListResponse(
+  body: unknown,
+  label: string
+): OnlineAccountModerationAuditListResponse {
+  const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_MODERATION_AUDIT_LIST_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
+  validateOnlineAccountModerationSchema(record, `${label} response`);
+  const reportId = validateOnlineAccountModerationId(record.reportId, "report_", `${label} reportId`);
+  if (!Array.isArray(record.audits)) {
+    throw new Error(`${label} response was malformed: audits is invalid.`);
+  }
+  const audits = record.audits.map((audit, index) =>
+    validateOnlineAccountModerationAudit(audit, `${label}.audits[${index}] audit`)
+  );
+  if (audits.some((audit) => audit.reportId !== reportId)) {
+    throw new Error(`${label} response was malformed: audit reportId does not match report.`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    schemaVersion: ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+    reportId,
+    audits,
+  };
+}
+
+export async function fetchOnlineAccountModerationReports(
+  adminToken: string,
+  options: FetchOnlineAccountModerationReportsOptions = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountModerationReportQueueResponse> {
+  const response = await fetchImpl(buildOnlineAccountModerationReportsPath(options), {
+    headers: adminAuthorizationHeader(adminToken),
+  });
+  if (!response.ok) {
+    throw await createOnlineRequestError(
+      response,
+      `Could not load online admin reports (${response.status})`
+    );
+  }
+  return validateOnlineAccountModerationReportQueueResponse(
+    await response.json(),
+    "Online account moderation reports"
+  );
+}
+
+export async function updateOnlineAccountModerationReportStatus(
+  adminToken: string,
+  reportId: string,
+  patch: OnlineAccountModerationReportStatusUpdate,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountModerationReportStatusResponse> {
+  const response = await fetchImpl(`/api/online/admin/reports/${encodeURIComponent(reportId)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", ...adminAuthorizationHeader(adminToken) },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw await createOnlineRequestError(
+      response,
+      `Could not update online admin report (${response.status})`
+    );
+  }
+  return validateOnlineAccountModerationReportStatusResponse(
+    await response.json(),
+    "Online account moderation status update"
+  );
+}
+
+export async function fetchOnlineAccountModerationReportAudits(
+  adminToken: string,
+  reportId: string,
+  options: FetchOnlineAccountModerationReportAuditsOptions = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountModerationAuditListResponse> {
+  const response = await fetchImpl(buildOnlineAccountModerationAuditPath(reportId, options), {
+    headers: adminAuthorizationHeader(adminToken),
+  });
+  if (!response.ok) {
+    throw await createOnlineRequestError(
+      response,
+      `Could not load online admin report audits (${response.status})`
+    );
+  }
+  return validateOnlineAccountModerationAuditListResponse(
+    await response.json(),
+    "Online account moderation report audits"
+  );
 }
 
 async function putOrDeleteOnlineAccountRelationship(
