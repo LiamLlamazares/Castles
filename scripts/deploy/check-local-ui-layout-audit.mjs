@@ -18,7 +18,8 @@ import {
 } from "./online-smoke-lib.mjs";
 
 const require = createRequire(import.meta.url);
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const scriptPath = fileURLToPath(import.meta.url);
+const scriptDir = path.dirname(scriptPath);
 const repoRoot = path.resolve(scriptDir, "../..");
 const serverEntry = path.join(repoRoot, "server-build", "server", "index.js");
 const outputDir = path.join(repoRoot, "artifacts", "ui-audit", "phase6ai-local-layout");
@@ -26,6 +27,7 @@ const requestTimeoutMs = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS ?? 15_000);
 const startupTimeoutMs = Number(process.env.SMOKE_STARTUP_TIMEOUT_MS ?? 20_000);
 const browserTimeoutMs = Number(process.env.SMOKE_BROWSER_TIMEOUT_MS ?? 20_000);
 const socketTimeoutMs = Number(process.env.SMOKE_SOCKET_TIMEOUT_MS ?? 10_000);
+const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
 const localShutdownToken = `local-ui-audit-${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2)}`;
@@ -88,6 +90,29 @@ const SCENARIOS = [
     waitText: "Welcome to Castles",
     requiredTexts: () => ["Welcome to Castles", "Start Tutorial", "Set Up Game"],
   },
+  scenarioWithSteps({
+    name: "first-run-start-tutorial",
+    useFirstRunState: true,
+    waitText: "Welcome to Castles",
+    steps: [
+      { action: "clickButton", text: "Start Tutorial" },
+      { action: "waitForText", text: "Castles tutorial" },
+      { action: "waitForText", text: "Progress saved" },
+      { action: "waitForButton", text: "Start Tutorial" },
+    ],
+    requiredTexts: () => ["Castles tutorial", "Tutorial progress", "Progress saved", "Start Tutorial"],
+  }),
+  scenarioWithSteps({
+    name: "first-run-set-up-game",
+    useFirstRunState: true,
+    waitText: "Welcome to Castles",
+    steps: [
+      { action: "clickButton", text: "Set Up Game" },
+      { action: "waitForButton", text: "Play Local" },
+      { action: "waitForText", text: "Invite Friend" },
+    ],
+    requiredTexts: () => ["Play Local", "Invite Friend", "List in Lobby"],
+  }),
   {
     name: "play-setup",
     prepare: async (page) => {
@@ -187,25 +212,47 @@ const SCENARIOS = [
       "Clear History Filter",
     ],
   },
-  {
+  scenarioWithSteps({
     name: "tutorial-overview",
-    prepare: async (page) => {
-      await ensureSetupPage(page);
-      await clickButton(page, "Tutorial");
-      await waitForText(page, "Castles tutorial");
-    },
-    requiredTexts: () => ["Tutorial progress", "Advanced units", "Start Tutorial"],
-  },
-  {
+    steps: [
+      { action: "ensureSetupPage" },
+      { action: "clickButton", text: "Tutorial" },
+      { action: "waitForText", text: "Castles tutorial" },
+      { action: "waitForText", text: "Progress saved" },
+    ],
+    requiredTexts: () => ["Tutorial progress", "0 / 36 lessons completed", "Advanced units", "Progress saved", "Start Tutorial"],
+  }),
+  scenarioWithSteps({
     name: "tutorial-lesson",
-    prepare: async (page) => {
-      await ensureSetupPage(page);
-      await clickButton(page, "Tutorial");
-      await clickButton(page, "Start Tutorial");
-      await waitForText(page, "Lesson 1 of");
-    },
-    requiredTexts: () => ["Lesson 1 of", "Movement", "Tutorial overview", "Next lesson"],
-  },
+    steps: [
+      { action: "ensureSetupPage" },
+      { action: "clickButton", text: "Tutorial" },
+      { action: "clickButton", text: "Start Tutorial" },
+      { action: "waitForText", text: "Lesson 1 of" },
+      { action: "waitForText", text: "Progress saved" },
+      { action: "waitForButton", text: "Next lesson" },
+    ],
+    requiredTexts: () => ["Lesson 1 of", "Movement", "Progress saved", "Tutorial overview", "Next lesson"],
+  }),
+  scenarioWithSteps({
+    name: "tutorial-progress-return",
+    steps: [
+      { action: "ensureSetupPage" },
+      { action: "clickButton", text: "Tutorial" },
+      { action: "waitForText", text: "Castles tutorial" },
+      { action: "waitForText", text: "Progress saved" },
+      { action: "clickButton", text: "Start Tutorial" },
+      { action: "waitForText", text: "Lesson 1 of" },
+      { action: "clickButton", text: "Next lesson" },
+      { action: "waitForText", text: "Lesson 2 of" },
+      { action: "waitForText", text: "Progress saved" },
+      { action: "clickButton", text: "Tutorial overview" },
+      { action: "waitForText", text: "Castles tutorial" },
+      { action: "waitForText", text: "1 / 36 lessons completed" },
+      { action: "waitForButton", text: "Continue Tutorial" },
+    ],
+    requiredTexts: () => ["Continue Tutorial", "Progress saved", "1 / 36 lessons completed"],
+  }),
   {
     name: "library-empty",
     prepare: async (page) => {
@@ -352,6 +399,39 @@ const SCENARIOS = [
     requiredTexts: () => ["Castles", "Configure New Game", "Online Lobby", "Open Library", "Analysis Board", "Board Display"],
   },
 ];
+
+function scenarioWithSteps(config) {
+  const { steps, ...scenario } = config;
+  return {
+    ...scenario,
+    steps,
+    prepare: async (page, fixtures) => {
+      await runAuditSteps(page, steps, fixtures);
+    },
+  };
+}
+
+async function runAuditSteps(page, steps, fixtures) {
+  for (const step of steps) {
+    const text = typeof step.text === "function" ? step.text(fixtures) : step.text;
+    switch (step.action) {
+      case "ensureSetupPage":
+        await ensureSetupPage(page);
+        break;
+      case "clickButton":
+        await clickButton(page, text);
+        break;
+      case "waitForText":
+        await waitForText(page, text);
+        break;
+      case "waitForButton":
+        await waitForButton(page, text);
+        break;
+      default:
+        throw new Error(`Unknown UI audit step action: ${step.action}`);
+    }
+  }
+}
 
 async function seedOnlineJoinSession(page, gameId, seat, token) {
   await page.evaluate(
@@ -1111,21 +1191,28 @@ function screenshotName(viewport, scenario) {
   return `${viewport.name}-${scenario.name}.png`;
 }
 
-async function installAuditDefaults(context) {
-  await context.addInitScript(() => {
+async function installTutorialAuditDefaults(context, options = {}) {
+  await context.addInitScript((auditOptions) => {
+    const TUTORIAL_PROGRESS_KEY = auditOptions.tutorialProgressKey;
     window.localStorage.clear();
-    window.localStorage.setItem("castles_first_run_intro_seen", "true");
+    window.localStorage.removeItem(TUTORIAL_PROGRESS_KEY);
+    if (!auditOptions.showFirstRunIntro) {
+      window.localStorage.setItem("castles_first_run_intro_seen", "true");
+    }
     window.localStorage.setItem("hasSeenQuickStart", "true");
     window.localStorage.setItem("hasSeenTooltipHint", "true");
+  }, {
+    showFirstRunIntro: options.showFirstRunIntro === true,
+    tutorialProgressKey: TUTORIAL_PROGRESS_KEY,
   });
 }
 
+async function installAuditDefaults(context) {
+  await installTutorialAuditDefaults(context);
+}
+
 async function installFirstRunAuditDefaults(context) {
-  await context.addInitScript(() => {
-    window.localStorage.clear();
-    window.localStorage.setItem("hasSeenQuickStart", "true");
-    window.localStorage.setItem("hasSeenTooltipHint", "true");
-  });
+  await installTutorialAuditDefaults(context, { showFirstRunIntro: true });
 }
 
 async function installAccountSession(context, session) {
@@ -1887,7 +1974,20 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(formatErrorForLog(error));
-  process.exitCode = 1;
-});
+export {
+  SCENARIOS,
+  TUTORIAL_PROGRESS_KEY,
+  installAuditDefaults,
+  installFirstRunAuditDefaults,
+  installTutorialAuditDefaults,
+  runAuditSteps,
+};
+
+const isCliEntry = process.argv[1] ? path.resolve(process.argv[1]) === scriptPath : false;
+
+if (isCliEntry) {
+  main().catch((error) => {
+    console.error(formatErrorForLog(error));
+    process.exitCode = 1;
+  });
+}
