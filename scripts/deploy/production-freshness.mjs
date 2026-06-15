@@ -271,6 +271,104 @@ export function classifyProductionFreshnessAlerts(result) {
   return alerts;
 }
 
+const MONITORING_SEVERITY_RANK = {
+  none: 0,
+  warning: 1,
+  critical: 2,
+};
+
+function highestAlertSeverity(alerts) {
+  let severity = "none";
+  for (const alert of alerts) {
+    if ((MONITORING_SEVERITY_RANK[alert.severity] ?? 0) > MONITORING_SEVERITY_RANK[severity]) {
+      severity = alert.severity;
+    }
+  }
+  return severity;
+}
+
+function monitoringSummary(alerts) {
+  if (alerts.length === 0) return "Castles production checks are healthy.";
+  const codes = alerts.map((alert) => alert.code).join(", ");
+  return `Castles production has ${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"}: ${codes}.`;
+}
+
+export function createProductionMonitoringSnapshot(result, options = {}) {
+  const alerts = classifyProductionFreshnessAlerts(result);
+  const severity = highestAlertSeverity(alerts);
+  return {
+    schemaVersion: 1,
+    service: options.service ?? "castles-online",
+    generatedAt: options.generatedAt ?? new Date().toISOString(),
+    baseUrl: result.baseUrl,
+    ok: alerts.length === 0 && result.ok === true,
+    severity,
+    pager: {
+      shouldPage: severity === "critical",
+      shouldWarn: severity !== "none",
+      route: severity === "critical" ? "page" : severity === "warning" ? "warn" : "none",
+      summary: monitoringSummary(alerts),
+    },
+    alerts,
+    checks: {
+      health: result.health,
+      commit: result.commit,
+      ssh: result.ssh,
+      ...(result.git ? { git: result.git } : {}),
+    },
+  };
+}
+
+export function createProductionMonitoringFailureSnapshot({
+  baseUrl,
+  generatedAt = new Date().toISOString(),
+  message,
+  service = "castles-online",
+} = {}) {
+  const normalizedBaseUrl = (() => {
+    try {
+      return normalizeProductionBaseUrl(baseUrl);
+    } catch {
+      return String(baseUrl ?? "unknown");
+    }
+  })();
+  const alert = {
+    code: "health_not_ok",
+    severity: "critical",
+    message: `Production monitoring could not complete health checks: ${message ?? "unknown error"}.`,
+    action: "Check DNS/connectivity, production /api/health, systemd status, and service logs before rerunning smoke.",
+  };
+  return {
+    schemaVersion: 1,
+    service,
+    generatedAt,
+    baseUrl: normalizedBaseUrl,
+    ok: false,
+    severity: "critical",
+    pager: {
+      shouldPage: true,
+      shouldWarn: true,
+      route: "page",
+      summary: "Castles production monitoring could not complete health checks.",
+    },
+    alerts: [alert],
+    checks: {
+      health: {
+        ok: false,
+        error: message ?? "unknown error",
+      },
+      commit: { status: "not_checked" },
+      ssh: { status: "not_checked" },
+    },
+  };
+}
+
+export function productionMonitoringExitCode(snapshot) {
+  if (snapshot.severity === "critical") return 2;
+  if (snapshot.severity === "warning") return 1;
+  return 0;
+}
+
 export function formatProductionFreshnessResult(result) {
   const lines = [
     `Production: ${result.baseUrl}`,

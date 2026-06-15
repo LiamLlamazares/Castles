@@ -683,6 +683,14 @@ psql -c "select count(*) from online_game_additional_credentials;"
 - `Alert: store_not_postgres severity=critical`: production health is not reporting the PostgreSQL backend. Check `ONLINE_STORE_BACKEND`, `DATABASE_URL`, database connectivity, and `server:check-config` before accepting the deploy or running player-facing smoke.
 - `Alert: ssh_unreachable severity=warning`: the app may still be healthy, but deploy control is degraded. Confirm the SSH host resolves to the intended server, check firewall/provider status, and do not rely on a remote deploy script until SSH reachability is restored or an alternate console path is available.
 
+For machine-readable monitoring or a scheduled private-beta check, use the non-mutating JSON snapshot command. Pin the expected commit to the currently reviewed deployed SHA; if you omit it, the command defaults to the checkout's local `HEAD`, which is useful during deploy verification but can intentionally report a stale deploy after newer commits have been pushed.
+
+```bash
+npm run online:monitor:production -- https://castles.ls314.xyz "$sha" contabo.ls314.xyz > "$backup/production-monitoring.json"
+```
+
+The JSON includes `severity`, `alerts`, `checks`, and a `pager` block. Exit codes are `0` for healthy, `1` for warning-only alerts such as SSH reachability degradation, and `2` for critical page-worthy alerts such as unhealthy health, stale deploys, or a non-PostgreSQL backend. If health fetching fails before normal checks complete, the command still writes a critical JSON snapshot with a `health_not_ok` alert to stdout and writes a short error line to stderr, so the archived JSON file remains parseable. This is a provider-neutral pager contract; wire it to cron, systemd timers, or an external pager only after confirming where output and exit codes are archived.
+
 For smoke failures:
 
 - API smoke failure after fresh health: stop and inspect the exact failed endpoint or WebSocket step; do not continue to browser smoke until the API smoke passes. Check `journalctl` for matching `online.* failed` log lines and confirm the smoke did not leak bearer tokens in output.

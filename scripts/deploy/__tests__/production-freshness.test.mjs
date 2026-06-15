@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   checkProductionFreshness,
+  createProductionMonitoringFailureSnapshot,
   classifyProductionFreshnessAlerts,
+  createProductionMonitoringSnapshot,
   formatProductionFreshnessResult,
   normalizeProductionBaseUrl,
+  productionMonitoringExitCode,
   resolveProductionFreshnessCliOptions,
 } from "../production-freshness.mjs";
 
@@ -234,5 +237,159 @@ describe("production freshness diagnostics", () => {
       expect.objectContaining({ code: "store_not_postgres", severity: "critical" }),
     ]);
     expect(formatProductionFreshnessResult(result)).toContain("Alert: store_not_postgres severity=critical");
+  });
+
+  it("creates a machine-readable monitoring snapshot for pager routing", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      sshHost: "contabo.ls314.xyz",
+      fetchHealth: async () => okHealth("old-sha"),
+      checkTcpPort: async () => ({ ok: false, error: "connect timed out" }),
+      getGitDeployStatus: async () => ({
+        status: "upstream_contains_expected",
+        branch: "online-action-log",
+        headCommit: "expected-sha",
+        upstream: "origin/online-action-log",
+        upstreamCommit: "expected-sha",
+      }),
+    });
+
+    const snapshot = createProductionMonitoringSnapshot(result, {
+      generatedAt: "2026-06-15T18:00:00.000Z",
+      service: "castles-online-test",
+    });
+
+    expect(snapshot).toEqual({
+      schemaVersion: 1,
+      service: "castles-online-test",
+      generatedAt: "2026-06-15T18:00:00.000Z",
+      baseUrl: "https://castles.ls314.xyz",
+      ok: false,
+      severity: "critical",
+      pager: {
+        shouldPage: true,
+        shouldWarn: true,
+        route: "page",
+        summary: "Castles production has 2 alerts: stale_deploy, ssh_unreachable.",
+      },
+      alerts: [
+        expect.objectContaining({ code: "stale_deploy", severity: "critical" }),
+        expect.objectContaining({ code: "ssh_unreachable", severity: "warning" }),
+      ],
+      checks: {
+        health: {
+          ok: true,
+          buildId: "20260605-120000",
+          commit: "old-sha",
+          eventSchemaVersion: 2,
+          storeBackend: "postgres",
+        },
+        commit: { status: "mismatch", expected: "expected-sha", actual: "old-sha" },
+        ssh: {
+          status: "unreachable",
+          host: "contabo.ls314.xyz",
+          port: 22,
+          error: "connect timed out",
+        },
+        git: {
+          status: "upstream_contains_expected",
+          branch: "online-action-log",
+          headCommit: "expected-sha",
+          upstream: "origin/online-action-log",
+          upstreamCommit: "expected-sha",
+        },
+      },
+    });
+    expect(productionMonitoringExitCode(snapshot)).toBe(2);
+  });
+
+  it("keeps warning-only monitoring snapshots below the pager threshold", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      sshHost: "contabo.ls314.xyz",
+      fetchHealth: async () => okHealth("expected-sha"),
+      checkTcpPort: async () => ({ ok: false, error: "connect timed out" }),
+    });
+
+    const snapshot = createProductionMonitoringSnapshot(result, {
+      generatedAt: "2026-06-15T18:05:00.000Z",
+    });
+
+    expect(snapshot.severity).toBe("warning");
+    expect(snapshot.pager).toMatchObject({
+      shouldPage: false,
+      shouldWarn: true,
+      route: "warn",
+    });
+    expect(productionMonitoringExitCode(snapshot)).toBe(1);
+  });
+
+  it("keeps healthy monitoring snapshots quiet", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      sshHost: "contabo.ls314.xyz",
+      fetchHealth: async () => okHealth("expected-sha"),
+      checkTcpPort: async () => ({ ok: true }),
+    });
+
+    const snapshot = createProductionMonitoringSnapshot(result, {
+      generatedAt: "2026-06-15T18:10:00.000Z",
+    });
+
+    expect(snapshot).toMatchObject({
+      ok: true,
+      severity: "none",
+      pager: {
+        shouldPage: false,
+        shouldWarn: false,
+        route: "none",
+        summary: "Castles production checks are healthy.",
+      },
+      alerts: [],
+    });
+    expect(productionMonitoringExitCode(snapshot)).toBe(0);
+  });
+
+  it("creates a critical monitoring snapshot for pre-result health failures", () => {
+    const snapshot = createProductionMonitoringFailureSnapshot({
+      baseUrl: "https://castles.ls314.xyz/",
+      generatedAt: "2026-06-15T18:15:00.000Z",
+      message: "Health returned HTTP 502.",
+    });
+
+    expect(snapshot).toEqual({
+      schemaVersion: 1,
+      service: "castles-online",
+      generatedAt: "2026-06-15T18:15:00.000Z",
+      baseUrl: "https://castles.ls314.xyz",
+      ok: false,
+      severity: "critical",
+      pager: {
+        shouldPage: true,
+        shouldWarn: true,
+        route: "page",
+        summary: "Castles production monitoring could not complete health checks.",
+      },
+      alerts: [
+        {
+          code: "health_not_ok",
+          severity: "critical",
+          message: "Production monitoring could not complete health checks: Health returned HTTP 502..",
+          action: "Check DNS/connectivity, production /api/health, systemd status, and service logs before rerunning smoke.",
+        },
+      ],
+      checks: {
+        health: {
+          ok: false,
+          error: "Health returned HTTP 502.",
+        },
+        commit: { status: "not_checked" },
+        ssh: { status: "not_checked" },
+      },
+    });
+    expect(productionMonitoringExitCode(snapshot)).toBe(2);
   });
 });
