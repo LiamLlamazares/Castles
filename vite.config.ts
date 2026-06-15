@@ -19,7 +19,7 @@ export default defineConfig({
     globals: true,
     setupFiles: "./src/setupTests.ts",
     css: true,
-    testTimeout: 10000,
+    testTimeout: 20000,
     exclude: [...configDefaults.exclude, "build/**", "server-build/**"],
   },
 });

@@ -25,6 +25,7 @@
     "online:smoke:local:challenges": "node scripts/deploy/check-local-postgres-challenge-smoke.mjs",
     "online:smoke:local:browser": "node scripts/deploy/check-local-online-browser-smoke.mjs",
     "online:backup:postgres": "node scripts/deploy/postgres-online-backup.mjs",
+    "online:restore:postgres:drill": "node scripts/deploy/postgres-online-restore-drill.mjs",
     "online:deploy:metadata": "node scripts/deploy/deploy-metadata-env.mjs",
     "online:deploy:production": "node scripts/deploy/deploy-production.mjs",
     "online:deploy:production:dry-run": "node scripts/deploy/deploy-production.mjs --dry-run",

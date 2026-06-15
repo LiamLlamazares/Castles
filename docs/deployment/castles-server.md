@@ -689,7 +689,16 @@ For smoke failures:
 - Browser smoke failure after API smoke passes: capture the Playwright screenshot/video artifacts if available, hard-refresh once to exclude stale app-shell caching, rerun the browser smoke, and only then classify it as a UI regression.
 - Local load-smoke failure: rerun `npm run online:smoke:local:preflight`, confirm `DATABASE_URL` points to the disposable local database, then rerun `$env:SMOKE_LOAD_GAMES="4"; npm run online:smoke:local:load`. If stale-action counts differ, treat it as a PostgreSQL transaction/advisory-lock regression.
 
-Before any public-scale traffic, archive the freshness output, API smoke output, browser smoke output, local load-smoke output, and backup path together with the deployed commit SHA.
+For JSON backup restore readiness, run the restore drill only against a disposable restore target. The command creates the current online schema in the target, truncates only the known Castles `online_*` tables there, restores rows from the JSON backup, resets serial sequences where needed, and verifies per-table row counts. Do not point `RESTORE_DATABASE_URL` at the live database or the normal local rehearsal database:
+
+```bash
+RESTORE_DATABASE_URL="postgresql://<restore-user>:<restore-password>@localhost:5432/castles_restore" \
+  npm run online:restore:postgres:drill -- "$backup/postgres-online-backup.json"
+```
+
+For a non-local disposable restore target, set `CASTLES_ALLOW_DISPOSABLE_RESTORE_DB=1` only after confirming the target is not production. This override only relaxes the host check; the target database name must still contain `restore`, `drill`, `smoke`, `test`, `tmp`, or `disposable`.
+
+Before any public-scale traffic, archive the freshness output, API smoke output, browser smoke output, local load-smoke output, restore-drill output, and backup path together with the deployed commit SHA.
 
 For a non-mutating production deploy preview, use the dedicated script so npm cannot consume the dry-run flag:
 

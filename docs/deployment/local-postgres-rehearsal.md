@@ -47,7 +47,10 @@ END;
 `$`$;
 SELECT 'CREATE DATABASE castles_local OWNER castles_local'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'castles_local')\gexec
+SELECT 'CREATE DATABASE castles_restore OWNER castles_local'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'castles_restore')\gexec
 GRANT ALL PRIVILEGES ON DATABASE castles_local TO castles_local;
+GRANT ALL PRIVILEGES ON DATABASE castles_restore TO castles_local;
 "@ | & $psql -U postgres -h localhost -d postgres -v ON_ERROR_STOP=1
 ```
 
@@ -56,6 +59,7 @@ Check the app user can connect:
 ```powershell
 $env:PGPASSWORD="castles_local_dev"
 & $psql -U castles_local -h localhost -d castles_local -c "select 1;"
+& $psql -U castles_local -h localhost -d castles_restore -c "select 1;"
 Remove-Item Env:\PGPASSWORD
 ```
 
@@ -93,6 +97,19 @@ npm run online:smoke:local:challenges
 npm run online:smoke:local:browser
 ```
 
+New before public-scale traffic: run a JSON backup restore drill against the disposable
+`castles_restore` database. This command truncates only the known `online_*` tables in the
+restore target after creating the current online schema there, then restores the JSON rows and
+compares per-table counts. Do not point `RESTORE_DATABASE_URL` at `castles_local` or production.
+
+```powershell
+New-Item -ItemType Directory -Force artifacts/local-postgres | Out-Null
+npm run online:backup:postgres -- artifacts/local-postgres/online-postgres.json
+$env:RESTORE_DATABASE_URL="postgresql://castles_local:castles_local_dev@localhost:5432/castles_restore"
+npm run online:restore:postgres:drill -- artifacts/local-postgres/online-postgres.json
+Remove-Item Env:\RESTORE_DATABASE_URL
+```
+
 The smoke scripts refuse non-local database hosts by default, and the preflight verifies that `DATABASE_URL` connects to database `castles_local` as user `castles_local`. This protects against accidentally running destructive local smoke games through a localhost SSH tunnel to a live database. Do not point `DATABASE_URL` at the live server database. If you intentionally use a disposable remote or custom local test database, set:
 
 ```powershell
@@ -109,6 +126,8 @@ Local PostgreSQL concurrency smoke passed using game <game-id>
 Local PostgreSQL load smoke passed: games=4 completed=4 acceptedActions=8 staleRejections=4 aggregateGameDurationMs=<duration> maxGameDurationMs=<duration>
 Local PostgreSQL challenge HTTP smoke passed using challenge <challenge-id> and game <game-id>
 Local built-server browser smoke passed on http://127.0.0.1:<port>
+PostgreSQL restore drill restored <row-count> rows from 24 tables.
+Restore drill target: postgresql://<user>@localhost:5432/castles_restore
 ```
 
 What this checks:
@@ -139,6 +158,16 @@ The load smoke additionally:
 - repeats the same concurrent stale-action race per game,
 - completes every game by resignation so the local database does not retain active load-smoke games,
 - prints only aggregate metrics: game count, completed games, accepted actions, stale rejections, summed per-game duration, and max per-game duration.
+
+The restore drill additionally:
+
+- validates the JSON backup with the full-table restore-readiness gate,
+- refuses non-local targets unless `CASTLES_ALLOW_DISPOSABLE_RESTORE_DB=1` is set for an explicitly disposable non-production database,
+- refuses ordinary app database names such as `castles_local` by default,
+- keeps the disposable database-name guard active even when the non-local host override is set,
+- creates the current online PostgreSQL schema in the restore target through the built store modules,
+- truncates only the known Castles online tables in the restore target,
+- restores every backed-up row, resets serial sequences where needed, and verifies restored row counts match the backup.
 
 The browser smoke additionally:
 

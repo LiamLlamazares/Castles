@@ -1056,9 +1056,15 @@ This section is the working queue for the current `online-action-log` branch. Fu
    - Add restore drills, pool-limit checks, load tests, metrics/alerts, and incident runbooks before attempting public-scale traffic.
    - Defer multi-instance work until the single-node service has clear observability and rollback evidence.
 
+8. Phase 8 disposable PostgreSQL restore drill.
+   - Done on 2026-06-15: `npm run online:restore:postgres:drill` now validates a JSON PostgreSQL online backup, refuses ordinary app/live database names, requires local targets unless `CASTLES_ALLOW_DISPOSABLE_RESTORE_DB=1` is explicitly set, keeps the disposable database-name guard active even with that non-local override, initializes the current online schema in the restore target, truncates only the known Castles `online_*` tables there, restores every backed-up row, resets serial sequences where needed, and compares restored row counts against the backup. Local and production runbooks now use positional npm backup paths so npm flag forwarding cannot consume restore arguments. Verification passed the red/green restore-target safety regression, `node --check scripts/deploy/postgres-online-restore-drill.mjs`, `npx vitest run scripts/deploy/__tests__/postgres-online-restore-drill.test.mjs scripts/deploy/__tests__/postgres-online-backup.test.mjs`, full `npx vitest run` (121 files passed, 1 skipped; 1452 tests passed, 3 skipped), `npm run build`, `npm run server:build`, `npm run audit`, `git diff --check`, a real local restore drill into disposable `castles_restore` (`2683 rows from 24 tables`), and `$env:DATABASE_URL='postgresql://castles_local:castles_local_dev@localhost:5432/castles_local'; npm run ui:audit:local` (162 screenshots across 72 scenarios). Review accepted and fixed the blocking finding that the non-local restore override originally bypassed the database-name guard. Scope remains restore-readiness rehearsal only; production rollback execution, external monitoring/pager automation, multi-instance/shared presence, and public capacity claims remain separate future slices.
+
+9. Phase 8 external monitoring and pager readiness.
+   - Active next slice: turn the existing production freshness alerts, smoke outputs, and runbook triage into an operator-facing monitoring/pager readiness path before public-scale traffic. Start with non-invasive checks, documented thresholds, and alert payloads; do not add paid-provider integration or broad public capacity claims unless the plan is updated first.
+
 ### Current Slice Selection Rule
 
-- Pick the first non-Done slice from `Next Ordered Slices`; items 5 and 6 are closed in the clean continuation worktree, and the next active planned slice is item 7, operational readiness before public load.
+- Pick the first non-Done slice from `Next Ordered Slices`; items 1 through 8 are closed in the clean continuation worktree, and the next active planned slice is item 9, external monitoring and pager readiness before public-scale traffic.
 - Before implementation, state which numbered item the slice advances.
 - If a new issue is discovered while working, add it to this section before implementing it unless it is an emergency fix.
 - After the slice, update this section with status, commit/deploy evidence if applicable, and any remaining follow-up.
