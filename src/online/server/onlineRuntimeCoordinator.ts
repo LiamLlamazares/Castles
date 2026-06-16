@@ -20,6 +20,16 @@ export interface OnlineRuntimeGameSnapshotChangedEvent {
   createdAt: string;
 }
 
+export interface OnlineRuntimeStoredGameSnapshotChangedEvent
+  extends OnlineRuntimeGameSnapshotChangedEvent {
+  id: number;
+}
+
+export interface OnlineRuntimeEventPollResult {
+  afterId: number;
+  published: number;
+}
+
 export interface OnlineRuntimeSpectatorRegistration {
   connectionId: string;
 }
@@ -49,12 +59,21 @@ export interface OnlineRuntimeEventStore {
     lastEventId?: string;
     reason: OnlineRuntimeSnapshotReason;
   }): Promise<unknown>;
+  listGameSnapshotChangedEventsAfter(input: {
+    afterId: number;
+    limit: number;
+    excludeNodeId?: string;
+  }): Promise<{
+    events: OnlineRuntimeStoredGameSnapshotChangedEvent[];
+    nextAfterId: number;
+  }>;
 }
 
 export interface OnlineRuntimeCoordinator {
   readonly nodeId: string;
   readonly capabilities: OnlineRuntimeCoordinatorCapabilities;
   publishGameSnapshotChanged(event: OnlineRuntimeGameSnapshotChangedEvent): Promise<void>;
+  pollRemoteGameSnapshotChangedEvents(input?: { limit?: number }): Promise<OnlineRuntimeEventPollResult>;
   subscribeGameSnapshotChanged(
     handler: (event: OnlineRuntimeGameSnapshotChangedEvent) => void | Promise<void>
   ): () => void;
@@ -70,6 +89,8 @@ export interface OnlineRuntimeCoordinator {
 }
 
 const NODE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const DEFAULT_RUNTIME_EVENT_POLL_LIMIT = 100;
+const MAX_RUNTIME_EVENT_POLL_LIMIT = 500;
 
 export function normalizeRuntimeNodeId(raw: string): string {
   const value = raw.trim();
@@ -83,6 +104,28 @@ export function normalizeRuntimeNodeId(raw: string): string {
 
 export function createGeneratedRuntimeNodeId(): string {
   return `node_${randomBytes(6).toString("base64url")}`;
+}
+
+function normalizeRuntimeEventPollLimit(limit: number | undefined): number {
+  const value = limit ?? DEFAULT_RUNTIME_EVENT_POLL_LIMIT;
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_RUNTIME_EVENT_POLL_LIMIT) {
+    throw new Error("Runtime event poll limit must be an integer from 1 through 500.");
+  }
+  return value;
+}
+
+function stripRuntimeEventCursor(
+  event: OnlineRuntimeStoredGameSnapshotChangedEvent
+): OnlineRuntimeGameSnapshotChangedEvent {
+  return {
+    type: event.type,
+    gameId: event.gameId,
+    roomVersion: event.roomVersion,
+    lastEventId: event.lastEventId,
+    reason: event.reason,
+    nodeId: event.nodeId,
+    createdAt: event.createdAt,
+  };
 }
 
 export function createSingleNodeOnlineRuntimeCoordinator(options: {
@@ -113,6 +156,9 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       for (const handler of Array.from(handlers)) {
         await handler(event);
       }
+    },
+    async pollRemoteGameSnapshotChangedEvents() {
+      return { afterId: 0, published: 0 };
     },
     subscribeGameSnapshotChanged(handler) {
       handlers.add(handler);
@@ -196,6 +242,21 @@ export function createPostgresRuntimeEventCoordinator(options: {
   runtimeEventStore: OnlineRuntimeEventStore;
 }): OnlineRuntimeCoordinator {
   const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+  let runtimeEventCursor = 0;
+  let runtimeEventPollInFlight: Promise<OnlineRuntimeEventPollResult> | null = null;
+
+  const pollRemoteEventsOnce = async (limit: number): Promise<OnlineRuntimeEventPollResult> => {
+    const result = await options.runtimeEventStore.listGameSnapshotChangedEventsAfter({
+      afterId: runtimeEventCursor,
+      limit,
+      excludeNodeId: local.nodeId,
+    });
+    for (const event of result.events) {
+      await local.publishGameSnapshotChanged(stripRuntimeEventCursor(event));
+    }
+    runtimeEventCursor = result.nextAfterId;
+    return { afterId: runtimeEventCursor, published: result.events.length };
+  };
 
   return {
     ...local,
@@ -207,6 +268,21 @@ export function createPostgresRuntimeEventCoordinator(options: {
         reason: event.reason,
       });
       await local.publishGameSnapshotChanged(event);
+    },
+    async pollRemoteGameSnapshotChangedEvents(input = {}) {
+      const limit = normalizeRuntimeEventPollLimit(input.limit);
+      if (runtimeEventPollInFlight) {
+        return runtimeEventPollInFlight;
+      }
+      const poll = pollRemoteEventsOnce(limit);
+      runtimeEventPollInFlight = poll;
+      try {
+        return await poll;
+      } finally {
+        if (runtimeEventPollInFlight === poll) {
+          runtimeEventPollInFlight = null;
+        }
+      }
     },
   };
 }

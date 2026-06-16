@@ -56,8 +56,37 @@ class FakeRuntimeEventStore {
     lastEventId?: string;
     reason: OnlineRuntimeSnapshotReason;
   }> = [];
+  readonly storedEvents: Array<{
+    id: number;
+    type: "game_snapshot_changed";
+    gameId: string;
+    roomVersion: number;
+    lastEventId?: string;
+    reason: OnlineRuntimeSnapshotReason;
+    nodeId: string;
+    createdAt: string;
+  }> = [];
+  readonly listCalls: Array<{ afterId: number; limit: number; excludeNodeId?: string }> = [];
 
   constructor(private readonly onRecord?: () => void) {}
+
+  onList?: (input: { afterId: number; limit: number; excludeNodeId?: string }) => void | Promise<void>;
+
+  seedStoredEvent(event: {
+    id: number;
+    gameId: string;
+    roomVersion: number;
+    lastEventId?: string;
+    reason: OnlineRuntimeSnapshotReason;
+    nodeId: string;
+    createdAt?: string;
+  }) {
+    this.storedEvents.push({
+      type: "game_snapshot_changed",
+      createdAt: "2026-06-16T00:00:00.000Z",
+      ...event,
+    });
+  }
 
   async recordGameSnapshotChanged(event: {
     gameId: string;
@@ -73,6 +102,25 @@ class FakeRuntimeEventStore {
       ...event,
       nodeId: "node-a",
       createdAt: "2026-06-16T00:00:00.000Z",
+    };
+  }
+
+  async listGameSnapshotChangedEventsAfter(input: {
+    afterId: number;
+    limit: number;
+    excludeNodeId?: string;
+  }) {
+    this.listCalls.push(input);
+    await this.onList?.(input);
+    const allEvents = this.storedEvents
+      .filter((event) => event.id > input.afterId)
+      .sort((a, b) => a.id - b.id)
+      .slice(0, input.limit);
+    return {
+      events: input.excludeNodeId
+        ? allEvents.filter((event) => event.nodeId !== input.excludeNodeId)
+        : allEvents,
+      nextAfterId: allEvents.at(-1)?.id ?? input.afterId,
     };
   }
 }
@@ -309,5 +357,211 @@ describe("createPostgresRuntimeEventCoordinator", () => {
       spectatorPresence: "process-local",
       operationGates: "process-local",
     });
+  });
+
+  it("polls remote runtime event outbox rows into local subscribers without re-recording them", async () => {
+    const runtimeEventStore = new FakeRuntimeEventStore();
+    runtimeEventStore.seedStoredEvent({
+      id: 1,
+      gameId: "game_remote_1",
+      roomVersion: 2,
+      lastEventId: "event_remote_1",
+      reason: "action",
+      nodeId: "node-a",
+    });
+    runtimeEventStore.seedStoredEvent({
+      id: 2,
+      gameId: "game_own",
+      roomVersion: 3,
+      lastEventId: "event_own",
+      reason: "timeout",
+      nodeId: "node-b",
+    });
+    runtimeEventStore.seedStoredEvent({
+      id: 3,
+      gameId: "game_remote_2",
+      roomVersion: 4,
+      reason: "visibility",
+      nodeId: "node-c",
+      createdAt: "2026-06-16T00:00:03.000Z",
+    });
+    const coordinator = createPostgresRuntimeEventCoordinator({
+      nodeId: "node-b",
+      runtimeEventStore,
+    });
+    const seen: unknown[] = [];
+    coordinator.subscribeGameSnapshotChanged((event) => {
+      seen.push(event);
+    });
+
+    await expect(coordinator.pollRemoteGameSnapshotChangedEvents({ limit: 10 })).resolves.toEqual({
+      afterId: 3,
+      published: 2,
+    });
+
+    expect(runtimeEventStore.listCalls).toEqual([
+      { afterId: 0, limit: 10, excludeNodeId: "node-b" },
+    ]);
+    expect(runtimeEventStore.events).toEqual([]);
+    expect(seen).toEqual([
+      {
+        type: "game_snapshot_changed",
+        gameId: "game_remote_1",
+        roomVersion: 2,
+        lastEventId: "event_remote_1",
+        reason: "action",
+        nodeId: "node-a",
+        createdAt: "2026-06-16T00:00:00.000Z",
+      },
+      {
+        type: "game_snapshot_changed",
+        gameId: "game_remote_2",
+        roomVersion: 4,
+        reason: "visibility",
+        nodeId: "node-c",
+        createdAt: "2026-06-16T00:00:03.000Z",
+      },
+    ]);
+  });
+
+  it("advances the remote runtime event cursor past own-node rows", async () => {
+    const runtimeEventStore = new FakeRuntimeEventStore();
+    runtimeEventStore.seedStoredEvent({
+      id: 2,
+      gameId: "game_own",
+      roomVersion: 3,
+      lastEventId: "event_own",
+      reason: "action",
+      nodeId: "node-b",
+    });
+    const coordinator = createPostgresRuntimeEventCoordinator({
+      nodeId: "node-b",
+      runtimeEventStore,
+    });
+    const seen: unknown[] = [];
+    coordinator.subscribeGameSnapshotChanged((event) => {
+      seen.push(event);
+    });
+
+    await expect(coordinator.pollRemoteGameSnapshotChangedEvents()).resolves.toEqual({
+      afterId: 2,
+      published: 0,
+    });
+    await expect(coordinator.pollRemoteGameSnapshotChangedEvents()).resolves.toEqual({
+      afterId: 2,
+      published: 0,
+    });
+
+    expect(seen).toEqual([]);
+    expect(runtimeEventStore.listCalls).toEqual([
+      { afterId: 0, limit: 100, excludeNodeId: "node-b" },
+      { afterId: 2, limit: 100, excludeNodeId: "node-b" },
+    ]);
+  });
+
+  it("keeps the remote runtime event cursor retryable when local fanout fails", async () => {
+    const runtimeEventStore = new FakeRuntimeEventStore();
+    runtimeEventStore.seedStoredEvent({
+      id: 5,
+      gameId: "game_remote",
+      roomVersion: 6,
+      lastEventId: "event_remote",
+      reason: "timeout",
+      nodeId: "node-a",
+    });
+    const coordinator = createPostgresRuntimeEventCoordinator({
+      nodeId: "node-b",
+      runtimeEventStore,
+    });
+    const unsubscribe = coordinator.subscribeGameSnapshotChanged(() => {
+      throw new Error("local fanout unavailable");
+    });
+
+    await expect(coordinator.pollRemoteGameSnapshotChangedEvents()).rejects.toThrow(
+      /local fanout unavailable/
+    );
+
+    unsubscribe();
+    const seen: unknown[] = [];
+    coordinator.subscribeGameSnapshotChanged((event) => {
+      seen.push(event);
+    });
+    await expect(coordinator.pollRemoteGameSnapshotChangedEvents()).resolves.toEqual({
+      afterId: 5,
+      published: 1,
+    });
+
+    expect(runtimeEventStore.listCalls).toEqual([
+      { afterId: 0, limit: 100, excludeNodeId: "node-b" },
+      { afterId: 0, limit: 100, excludeNodeId: "node-b" },
+    ]);
+    expect(seen).toEqual([
+      {
+        type: "game_snapshot_changed",
+        gameId: "game_remote",
+        roomVersion: 6,
+        lastEventId: "event_remote",
+        reason: "timeout",
+        nodeId: "node-a",
+        createdAt: "2026-06-16T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("coalesces overlapping remote runtime event polls without duplicate fanout", async () => {
+    const runtimeEventStore = new FakeRuntimeEventStore();
+    runtimeEventStore.seedStoredEvent({
+      id: 7,
+      gameId: "game_remote",
+      roomVersion: 8,
+      lastEventId: "event_remote",
+      reason: "action",
+      nodeId: "node-a",
+    });
+    let holdFirstList = true;
+    let releaseFirstList!: () => void;
+    const firstListReleased = new Promise<void>((resolve) => {
+      releaseFirstList = resolve;
+    });
+    const firstListStarted = new Promise<void>((resolve) => {
+      runtimeEventStore.onList = async () => {
+        if (!holdFirstList) return;
+        holdFirstList = false;
+        resolve();
+        await firstListReleased;
+      };
+    });
+    const coordinator = createPostgresRuntimeEventCoordinator({
+      nodeId: "node-b",
+      runtimeEventStore,
+    });
+    const seen: unknown[] = [];
+    coordinator.subscribeGameSnapshotChanged((event) => {
+      seen.push(event);
+    });
+
+    const firstPoll = coordinator.pollRemoteGameSnapshotChangedEvents();
+    await firstListStarted;
+    const secondPoll = coordinator.pollRemoteGameSnapshotChangedEvents();
+    releaseFirstList();
+
+    await expect(Promise.all([firstPoll, secondPoll])).resolves.toEqual([
+      { afterId: 7, published: 1 },
+      { afterId: 7, published: 1 },
+    ]);
+    expect(runtimeEventStore.listCalls).toEqual([
+      { afterId: 0, limit: 100, excludeNodeId: "node-b" },
+    ]);
+    expect(seen).toEqual([
+      {
+        type: "game_snapshot_changed",
+        gameId: "game_remote",
+        roomVersion: 8,
+        lastEventId: "event_remote",
+        reason: "action",
+        nodeId: "node-a",
+        createdAt: "2026-06-16T00:00:00.000Z",
+      },
+    ]);
   });
 });
