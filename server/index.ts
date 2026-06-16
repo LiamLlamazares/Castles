@@ -18,6 +18,15 @@ import {
   verifyOnlineToken,
 } from "../src/online/server/onlineTokenCredentials";
 import { runOnlineStartupMaintenance } from "./startupMaintenance";
+import {
+  startRuntimeEventPolling,
+  type RuntimeEventPoller,
+} from "./runtimeEventPolling";
+
+const RUNTIME_EVENT_POLL_INTERVAL_MS = 1_000;
+const RUNTIME_EVENT_POLL_MAX_BACKOFF_MS = 15_000;
+const RUNTIME_EVENT_POLL_LIMIT = 100;
+const RUNTIME_EVENT_POLL_FAILURE_READINESS_THRESHOLD = 3;
 
 function resolveOnce<T>(settle: (resolve: (value: T) => void, reject: (error: unknown) => void) => void): Promise<T> {
   let settled = false;
@@ -100,6 +109,7 @@ async function main() {
 
   let startupComplete = false;
   let runtimeCoordinator: OnlineRuntimeCoordinator | undefined;
+  let runtimeEventPoller: RuntimeEventPoller | undefined;
   try {
     const records = await store.load({
       onEventError: (line, error) => {
@@ -190,6 +200,8 @@ async function main() {
         deployment: config.deployment,
         storePath: healthStorePath,
         storeBackend,
+        checkRuntimeReady: async () => runtimeEventPoller?.getStatus().ready ?? true,
+        getRuntimeEventPollingStatus: () => runtimeEventPoller?.getStatus(),
         checkStoreReady: async () => {
           const gameStoreReady = await store.checkReady();
           const accountStoreReady = accountStore.checkReady
@@ -197,6 +209,23 @@ async function main() {
             : true;
           return gameStoreReady && accountStoreReady;
         },
+      },
+    });
+
+    runtimeEventPoller = startRuntimeEventPolling({
+      runtimeCoordinator,
+      intervalMs: RUNTIME_EVENT_POLL_INTERVAL_MS,
+      maxBackoffMs: RUNTIME_EVENT_POLL_MAX_BACKOFF_MS,
+      pollLimit: RUNTIME_EVENT_POLL_LIMIT,
+      failureReadinessThreshold: RUNTIME_EVENT_POLL_FAILURE_READINESS_THRESHOLD,
+      onError: (_error, status) => {
+        console.log(
+          formatOnlineServerLogEvent({
+            event: "online.runtime.poll",
+            status: "failed",
+            reason: status.lastError ?? "Runtime event polling failed.",
+          })
+        );
       },
     });
 
@@ -213,6 +242,7 @@ async function main() {
         console.error("Failed to mark online runtime coordinator draining", error);
         process.exitCode = 1;
       }
+      await runtimeEventPoller?.stop();
 
       const results = await Promise.allSettled([
         closeWebSocketServer(wss),
@@ -333,6 +363,7 @@ async function main() {
     startupComplete = true;
   } catch (error) {
     if (!startupComplete) {
+      await runtimeEventPoller?.stop();
       try {
         await runtimeCoordinator?.close();
       } catch (closeError) {

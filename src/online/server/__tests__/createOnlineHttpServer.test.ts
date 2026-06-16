@@ -8191,6 +8191,52 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("reports runtime event polling readiness in health checks", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      health: {
+        storeBackend: "postgres",
+        storePath: "postgres",
+        checkStoreReady: async () => true,
+        checkRuntimeReady: async () => false,
+        getRuntimeEventPollingStatus: () => ({
+          running: true,
+          ready: false,
+          consecutiveFailures: 3,
+          lastPollAt: "2026-06-16T12:00:00.000Z",
+          lastFailureAt: "2026-06-16T12:00:01.000Z",
+          lastError: "temporary outbox failure",
+        }),
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      ok: false,
+      online: {
+        runtime: {
+          draining: false,
+          eventPolling: {
+            running: true,
+            ready: false,
+            consecutiveFailures: 3,
+            lastPollAt: "2026-06-16T12:00:00.000Z",
+            lastFailureAt: "2026-06-16T12:00:01.000Z",
+            lastError: "temporary outbox failure",
+          },
+        },
+        store: {
+          ok: true,
+        },
+      },
+    });
+  });
+
   it("sanitizes store readiness errors in public health checks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",

@@ -194,7 +194,7 @@ function parseDeploymentConfig(env: NodeJS.ProcessEnv): ServerDeploymentConfig {
   if (!raw || raw === "single-node") return createSingleNodeDeploymentConfig();
   if (raw === "multi-instance") {
     throw new Error(
-      "CASTLES_DEPLOYMENT_MODE=multi-instance is not supported yet; WebSocket fanout, warm room cache invalidation, runtime event polling readiness, full queue coverage, and two-instance validation are incomplete."
+      "CASTLES_DEPLOYMENT_MODE=multi-instance is not supported yet; WebSocket fanout, warm room cache invalidation/readiness, full queue coverage, rolling drain, and two-instance validation are incomplete."
     );
   }
   throw new Error("CASTLES_DEPLOYMENT_MODE must be single-node or unset.");

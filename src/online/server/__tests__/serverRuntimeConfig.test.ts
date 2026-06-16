@@ -92,6 +92,15 @@ describe("parseServerRuntimeConfig", () => {
         "/srv/castles"
       )
     ).toThrow(/multi-instance.*not supported/i);
+    expect(() =>
+      parseServerRuntimeConfig(
+        {
+          CASTLES_DEPLOYMENT_MODE: "multi-instance",
+          PUBLIC_BASE_URL: "http://127.0.0.1:3000",
+        },
+        "/srv/castles"
+      )
+    ).not.toThrow(/runtime event polling readiness/i);
   });
 
   it("rejects unknown deployment modes before startup", () => {

@@ -229,6 +229,20 @@ export type OnlineServerLogEvent = {
   reason?: string;
 };
 
+export interface OnlineRuntimeEventPollingHealth {
+  running: boolean;
+  ready: boolean;
+  consecutiveFailures: number;
+  lastPollAt?: string;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+  lastResult?: {
+    afterId: number;
+    published: number;
+  };
+  lastError?: string;
+}
+
 const DEFAULT_ONLINE_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const DEFAULT_HEALTH_READINESS_TIMEOUT_MS = 1_500;
 const DEFAULT_CHALLENGE_EXPIRES_IN_MS = 24 * 60 * 60 * 1000;
@@ -383,12 +397,14 @@ export interface CreateOnlineHttpServerOptions {
     storeBackend?: string;
     readinessTimeoutMs?: number;
     checkStoreReady?: () => boolean | Promise<boolean>;
+    checkRuntimeReady?: () => boolean | Promise<boolean>;
+    getRuntimeEventPollingStatus?: () => OnlineRuntimeEventPollingHealth | undefined;
   };
 }
 
-class StoreReadinessTimeoutError extends Error {
+class ReadinessTimeoutError extends Error {
   constructor() {
-    super("Store readiness check timed out.");
+    super("Readiness check timed out.");
   }
 }
 
@@ -1869,16 +1885,16 @@ function openSeekTerminalError(error: unknown): boolean {
   return /already terminal|no longer open|own open seek|must be before expiry|expired|expiry/i.test(message);
 }
 
-async function checkStoreReadyWithTimeout(
-  checkStoreReady: () => boolean | Promise<boolean>,
+async function checkReadyWithTimeout(
+  checkReady: () => boolean | Promise<boolean>,
   timeoutMs: number
 ): Promise<boolean> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      Promise.resolve().then(checkStoreReady),
+      Promise.resolve().then(checkReady),
       new Promise<never>((_resolve, reject) => {
-        timeoutId = setTimeout(() => reject(new StoreReadinessTimeoutError()), timeoutMs);
+        timeoutId = setTimeout(() => reject(new ReadinessTimeoutError()), timeoutMs);
       }),
     ]);
   } finally {
@@ -3735,7 +3751,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     let storeError: string | undefined;
     try {
       storeOk = options.health?.checkStoreReady
-        ? await checkStoreReadyWithTimeout(
+        ? await checkReadyWithTimeout(
             options.health.checkStoreReady,
             options.health.readinessTimeoutMs ?? DEFAULT_HEALTH_READINESS_TIMEOUT_MS
           )
@@ -3743,13 +3759,31 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     } catch (error) {
       storeOk = false;
       storeError =
-        error instanceof StoreReadinessTimeoutError
+        error instanceof ReadinessTimeoutError
           ? "Store readiness check timed out."
           : "Store readiness check failed.";
     }
 
+    let runtimeOk = true;
+    let runtimeError: string | undefined;
+    try {
+      runtimeOk = options.health?.checkRuntimeReady
+        ? await checkReadyWithTimeout(
+            options.health.checkRuntimeReady,
+            options.health.readinessTimeoutMs ?? DEFAULT_HEALTH_READINESS_TIMEOUT_MS
+          )
+        : true;
+    } catch (error) {
+      runtimeOk = false;
+      runtimeError =
+        error instanceof ReadinessTimeoutError
+          ? "Runtime readiness check timed out."
+          : "Runtime readiness check failed.";
+    }
+
     const drainState = await runtimeCoordinator.getDrainState();
-    const ready = storeOk && !drainState.draining;
+    const runtimeEventPolling = options.health?.getRuntimeEventPollingStatus?.();
+    const ready = storeOk && runtimeOk && !drainState.draining;
     const deployment = {
       ...(options.health?.deployment ?? createSingleNodeDeploymentConfig()),
       spectatorPresence: runtimeCoordinator.capabilities.spectatorPresence,
@@ -3768,6 +3802,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         runtime: {
           draining: drainState.draining,
           drainStartedAt: drainState.startedAt,
+          readiness: {
+            ok: runtimeOk,
+            error: runtimeError,
+          },
+          eventPolling: runtimeEventPolling,
         },
         store: {
           ok: storeOk,
