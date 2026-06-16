@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PostgresOnlineOperationGateStore } from "../PostgresOnlineOperationGateStore";
 
+const HASHED_ACCOUNT_CHALLENGE_PAIR_KEY =
+  "account_challenge_pair:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
 class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
   releaseCount = 0;
@@ -70,6 +73,57 @@ describe("PostgresOnlineOperationGateStore", () => {
       "quick_match_session",
       "session:player-a",
     ]);
+  });
+
+  it("holds a row lock for account challenge pair gates using the account_challenge_pair scope", async () => {
+    const schemaQueryable = new FakePostgresClient();
+    const transactionClient = new FakePostgresClient();
+    const store = new PostgresOnlineOperationGateStore({
+      queryable: schemaQueryable,
+      transactionClientFactory: async () => transactionClient,
+    });
+
+    const result = await store.withOperationGate(
+      {
+        scope: "account_challenge_pair",
+        key: HASHED_ACCOUNT_CHALLENGE_PAIR_KEY,
+      },
+      async () => "created"
+    );
+
+    expect(result).toBe("created");
+    expect(transactionClient.releaseCount).toBe(1);
+    expect(transactionClient.queries.map((query) => compactSql(query.text))).toEqual([
+      "BEGIN",
+      "INSERT INTO online_operation_locks (scope, lock_key, updated_at) VALUES ($1, $2, now()) ON CONFLICT (scope, lock_key) DO UPDATE SET updated_at = now()",
+      "SELECT scope, lock_key FROM online_operation_locks WHERE scope = $1 AND lock_key = $2 FOR UPDATE",
+      "COMMIT",
+    ]);
+    expect(transactionClient.queries[1]?.values).toEqual([
+      "account_challenge_pair",
+      HASHED_ACCOUNT_CHALLENGE_PAIR_KEY,
+    ]);
+    expect(transactionClient.queries[2]?.values).toEqual([
+      "account_challenge_pair",
+      HASHED_ACCOUNT_CHALLENGE_PAIR_KEY,
+    ]);
+  });
+
+  it("rejects raw account challenge pair keys before persistence", async () => {
+    const queryable = new FakePostgresClient();
+    const store = new PostgresOnlineOperationGateStore({ queryable });
+
+    await expect(
+      store.withOperationGate(
+        {
+          scope: "account_challenge_pair",
+          key: "account_challenge_pair:liam-to-samir",
+        },
+        async () => undefined
+      )
+    ).rejects.toThrow(/account challenge pair key must be a hashed operation key/);
+
+    expect(queryable.queries).toEqual([]);
   });
 
   it("rolls back and releases the transaction client when the operation fails", async () => {

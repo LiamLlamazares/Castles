@@ -24,8 +24,10 @@ export interface PostgresOnlineOperationGateStoreOptions {
 
 const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
 const OPERATION_GATE_SCOPES = new Set<OnlineRuntimeOperationGateScope>([
+  "account_challenge_pair",
   "quick_match_session",
 ]);
+const ACCOUNT_CHALLENGE_PAIR_GATE_KEY_PATTERN = /^account_challenge_pair:[A-Za-z0-9_-]{43}$/;
 
 function normalizeOperationGateScope(scope: OnlineRuntimeOperationGateScope): OnlineRuntimeOperationGateScope {
   if (!OPERATION_GATE_SCOPES.has(scope)) {
@@ -34,7 +36,10 @@ function normalizeOperationGateScope(scope: OnlineRuntimeOperationGateScope): On
   return scope;
 }
 
-function normalizeOperationGateKey(key: string): string {
+function normalizeOperationGateKey(
+  scope: OnlineRuntimeOperationGateScope,
+  key: string
+): string {
   const value = key.trim();
   if (!value) {
     throw new Error("PostgreSQL operation gate key must be non-empty.");
@@ -44,6 +49,11 @@ function normalizeOperationGateKey(key: string): string {
   }
   if (stringContainsDurableSecret(value)) {
     throw new Error("PostgreSQL operation gate key must not contain secrets.");
+  }
+  if (scope === "account_challenge_pair" && !ACCOUNT_CHALLENGE_PAIR_GATE_KEY_PATTERN.test(value)) {
+    throw new Error(
+      "PostgreSQL account challenge pair key must be a hashed operation key."
+    );
   }
   return value;
 }
@@ -91,7 +101,7 @@ export class PostgresOnlineOperationGateStore implements OnlineRuntimeOperationG
     operation: () => Promise<T>
   ): Promise<T> {
     const scope = normalizeOperationGateScope(input.scope);
-    const key = normalizeOperationGateKey(input.key);
+    const key = normalizeOperationGateKey(scope, input.key);
     await this.ensureSchema();
 
     const client = await this.transactionClientFactory?.();

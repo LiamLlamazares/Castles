@@ -38,10 +38,12 @@ export interface OnlineRuntimeCoordinatorCapabilities {
   mode: OnlineRuntimeMode;
   websocketFanout: "process-local";
   spectatorPresence: "process-local" | "postgres-live-presence";
-  operationGates: "process-local" | "postgres-quick-match-session";
+  operationGates: "process-local" | "postgres-selected-shared-gates";
 }
 
-export type OnlineRuntimeOperationGateScope = "quick_match_session";
+export type OnlineRuntimeOperationGateScope =
+  | "quick_match_session"
+  | "account_challenge_pair";
 
 export interface OnlineRuntimeOperationGateStore {
   withOperationGate<T>(
@@ -95,6 +97,7 @@ export interface OnlineRuntimeCoordinator {
   countSpectators(gameId: string): Promise<number>;
   withGameOperationGate<T>(gameId: string, operation: () => Promise<T>): Promise<T>;
   withQuickMatchSessionGate<T>(sessionKey: string, operation: () => Promise<T>): Promise<T>;
+  withAccountChallengePairGate<T>(pairKey: string, operation: () => Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
 
@@ -148,6 +151,7 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
   const spectatorConnections = new Map<string, Set<string>>();
   const gameGates = new Map<string, Promise<void>>();
   const quickMatchSessionGates = new Map<string, Promise<void>>();
+  const accountChallengePairGates = new Map<string, Promise<void>>();
 
   const runQueuedOperation = async <T>(
     gates: Map<string, Promise<void>>,
@@ -230,11 +234,19 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
         operation
       );
     },
+    async withAccountChallengePairGate(pairKey, operation) {
+      return runQueuedOperation(
+        accountChallengePairGates,
+        validateGateKey(pairKey, "Account challenge pair"),
+        operation
+      );
+    },
     async close() {
       handlers.clear();
       spectatorConnections.clear();
       gameGates.clear();
       quickMatchSessionGates.clear();
+      accountChallengePairGates.clear();
     },
   };
 }
@@ -330,11 +342,17 @@ export function createPostgresOperationGateRuntimeCoordinator(options: {
     ...local,
     capabilities: {
       ...local.capabilities,
-      operationGates: "postgres-quick-match-session",
+      operationGates: "postgres-selected-shared-gates",
     },
     async withQuickMatchSessionGate(sessionKey, operation) {
       return options.operationGateStore.withOperationGate(
         { scope: "quick_match_session", key: sessionKey },
+        operation
+      );
+    },
+    async withAccountChallengePairGate(pairKey, operation) {
+      return options.operationGateStore.withOperationGate(
+        { scope: "account_challenge_pair", key: pairKey },
         operation
       );
     },

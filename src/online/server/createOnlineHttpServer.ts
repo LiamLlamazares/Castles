@@ -1910,7 +1910,6 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const publicDirectoryLimiter = new FixedWindowRateLimiter(240, 10_000);
   const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
   const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const accountChallengePairQueues = new Map<string, Promise<void>>();
   const memoryChallengeEvents: OnlineChallengeEvent[] = [];
   const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
   const memoryOpenSeekEvents: OpenSeekEvent[] = [];
@@ -2202,36 +2201,17 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
-  const accountChallengePairQueueKey = (
+  const accountChallengePairGateKey = (
     challengerIdentity: OnlineIdentity,
     challengedIdentity: OnlineIdentity
   ): string => {
-    return [
+    const pairKeyPayload = JSON.stringify([
       publicPlayerIdentityQueueKey(challengerIdentity),
       publicPlayerIdentityQueueKey(challengedIdentity),
-    ].join("\u0000");
-  };
-
-  const runAccountChallengePairTask = async <T>(
-    pairKey: string,
-    task: () => Promise<T>
-  ): Promise<T> => {
-    const previous = accountChallengePairQueues.get(pairKey) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const queued = previous.catch(() => undefined).then(() => gate);
-    accountChallengePairQueues.set(pairKey, queued);
-    await previous.catch(() => undefined);
-    try {
-      return await task();
-    } finally {
-      release();
-      if (accountChallengePairQueues.get(pairKey) === queued) {
-        accountChallengePairQueues.delete(pairKey);
-      }
-    }
+    ]);
+    return `account_challenge_pair:${createHash("sha256")
+      .update(pairKeyPayload, "utf8")
+      .digest("base64url")}`;
   };
 
   const releaseSpectatorPresence = (connection: OnlineConnection | undefined): void => {
@@ -6253,8 +6233,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         };
       };
       const response = challengedDisplayName
-        ? await runAccountChallengePairTask(
-            accountChallengePairQueueKey(challengerIdentity, challengedIdentity),
+        ? await runtimeCoordinator.withAccountChallengePairGate(
+            accountChallengePairGateKey(challengerIdentity, challengedIdentity),
             createChallenge
           )
         : await createChallenge();

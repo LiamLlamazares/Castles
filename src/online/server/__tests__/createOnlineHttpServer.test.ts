@@ -6053,6 +6053,94 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("account challenge pair shared gate wraps targeted account challenge restriction and creation", async () => {
+    const setup = createSetup();
+    const challengeEvents: OnlineChallengeEvent[] = [];
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalPairGate = runtimeCoordinator.withAccountChallengePairGate.bind(runtimeCoordinator);
+    const pairGate = vi
+      .spyOn(runtimeCoordinator, "withAccountChallengePairGate")
+      .mockImplementation(async (pairKey, operation) => {
+        order.push(`gate:${pairKey}`);
+        return originalPairGate(pairKey, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const loadChallengeSummaries = vi.fn(async () => {
+      order.push("load-challenge-summaries");
+      return projectOnlineChallengeSummaries(challengeEvents);
+    });
+    const appendChallengeCreated = vi.fn(async (event: OnlineChallengeEvent) => {
+      order.push("append-challenge");
+      challengeEvents.push(event);
+      const summary = projectOnlineChallengeSummaries(challengeEvents).find(
+        (candidate) => candidate.challengeId === event.challengeId
+      );
+      if (!summary) throw new Error("Missing projected challenge summary.");
+      return summary;
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      loadChallengeSummaries,
+      appendChallengeCreated,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    order.length = 0;
+    loadChallengeSummaries.mockClear();
+    appendChallengeCreated.mockClear();
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({
+      summary: {
+        challengerIdentity: { displayName: "Liam" },
+        challengedIdentity: { displayName: "Samir" },
+      },
+    });
+    expect(pairGate).toHaveBeenCalledOnce();
+    const pairKey = pairGate.mock.calls[0][0];
+    expect(pairKey).toMatch(/^account_challenge_pair:/);
+    expect(pairKey).not.toContain(liam.account.accountId);
+    expect(pairKey).not.toContain(samir.account.accountId);
+    expect(pairKey).not.toContain("Liam");
+    expect(pairKey).not.toContain("Samir");
+    const gateIndex = order.findIndex((entry) => /^gate:account_challenge_pair:/.test(entry));
+    const insideGateIndex = order.indexOf("inside-gate");
+    const restrictionLoadIndex = order.findIndex(
+      (entry, index) => entry === "load-challenge-summaries" && index > insideGateIndex
+    );
+    expect(gateIndex).toBeGreaterThanOrEqual(0);
+    expect(insideGateIndex).toBeGreaterThan(gateIndex);
+    expect(restrictionLoadIndex).toBeGreaterThan(insideGateIndex);
+    expect(order.indexOf("append-challenge")).toBeGreaterThan(insideGateIndex);
+    expect(loadChallengeSummaries).toHaveBeenCalled();
+    expect(appendChallengeCreated).toHaveBeenCalledOnce();
+  });
+
   it.each(["declined", "cancelled", "expired"] as const)(
     "rate limits repeat targeted account challenges shortly after one is %s",
     async (terminalStatus) => {
