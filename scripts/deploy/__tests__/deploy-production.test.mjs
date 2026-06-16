@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import {
   buildProductionDeploySteps,
   buildRemoteProductionDeployScript,
@@ -168,5 +170,15 @@ describe("production deploy workflow", () => {
         }),
       })
     ).rejects.toThrow(/old-commit/);
+  });
+
+  it("exposes a dedicated npm dry-run script instead of relying on npm to forward --dry-run", async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.resolve(process.cwd(), "package.json"), "utf8")
+    );
+
+    expect(packageJson.scripts["online:deploy:production:dry-run"]).toBe(
+      "node scripts/deploy/deploy-production.mjs --dry-run"
+    );
   });
 });

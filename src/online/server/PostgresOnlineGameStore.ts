@@ -80,6 +80,7 @@ import type {
 } from "./OnlineGameStore";
 import { OnlineGameSeatCredentialTerminalError } from "./OnlineGameStore";
 import { isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
+import { resolvePostgresPoolMaxPerStore } from "./postgresPoolConfig";
 
 interface PostgresQueryable {
   query(text: string, values?: unknown[]): Promise<{ rows: any[] }>;
@@ -104,6 +105,7 @@ function escapePostgresLike(value: string): string {
 
 export interface PostgresOnlineGameStoreOptions {
   connectionString?: string;
+  poolMaxPerStore?: number;
   queryable?: PostgresQueryable;
   transactionClientFactory?: () => Promise<PostgresTransactionClient>;
   close?: () => Promise<void>;
@@ -132,6 +134,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
 
     const pool = new Pool({
       connectionString: options.connectionString,
+      max: resolvePostgresPoolMaxPerStore(options.poolMaxPerStore),
       connectionTimeoutMillis: DEFAULT_POSTGRES_TIMEOUT_MS,
       query_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
       statement_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,

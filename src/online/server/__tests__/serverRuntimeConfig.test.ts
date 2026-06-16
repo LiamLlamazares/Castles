@@ -15,6 +15,7 @@ describe("parseServerRuntimeConfig", () => {
         CASTLES_REQUIRE_STATIC_DIR: "1",
         CASTLES_ENABLE_LOCAL_SHUTDOWN: "1",
         CASTLES_LOCAL_SHUTDOWN_TOKEN: "shutdown-token",
+        CASTLES_DEPLOYMENT_MODE: "single-node",
         BUILD_ID: "20260601-010203",
         GIT_COMMIT: "0123456789abcdef0123456789abcdef01234567",
       },
@@ -29,6 +30,16 @@ describe("parseServerRuntimeConfig", () => {
       requireStaticDir: true,
       localShutdownEnabled: true,
       localShutdownToken: "shutdown-token",
+      deployment: {
+        mode: "single-node",
+        multiInstanceReady: false,
+        websocketFanout: "process-local",
+        spectatorPresence: "process-local",
+        accountPresence: "session-store",
+        roomState: "process-local",
+        queueGuards: "process-local",
+        routing: "single-node",
+      },
       buildId: "20260601-010203",
       commit: "0123456789abcdef0123456789abcdef01234567",
     });
@@ -42,6 +53,40 @@ describe("parseServerRuntimeConfig", () => {
     expect(config.publicBaseUrl).toBe("http://localhost:3000");
     expect(config.staticDir).toBe("C:/repo/Castles/build");
     expect(config.requireStaticDir).toBe(false);
+    expect(config.deployment).toMatchObject({
+      mode: "single-node",
+      multiInstanceReady: false,
+      websocketFanout: "process-local",
+      spectatorPresence: "process-local",
+      accountPresence: "session-store",
+      roomState: "process-local",
+      queueGuards: "process-local",
+      routing: "single-node",
+    });
+  });
+
+  it("rejects multi-instance deployment mode until shared presence and fanout exist", () => {
+    expect(() =>
+      parseServerRuntimeConfig(
+        {
+          CASTLES_DEPLOYMENT_MODE: "multi-instance",
+          PUBLIC_BASE_URL: "http://127.0.0.1:3000",
+        },
+        "/srv/castles"
+      )
+    ).toThrow(/multi-instance.*not supported/i);
+  });
+
+  it("rejects unknown deployment modes before startup", () => {
+    expect(() =>
+      parseServerRuntimeConfig(
+        {
+          CASTLES_DEPLOYMENT_MODE: "cluster",
+          PUBLIC_BASE_URL: "http://127.0.0.1:3000",
+        },
+        "/srv/castles"
+      )
+    ).toThrow(/CASTLES_DEPLOYMENT_MODE/);
   });
 
   it("rejects an invalid port before the server starts listening", () => {

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { execFile, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -431,6 +430,7 @@ function usage() {
     "",
     "For npm run on Windows, prefer positional args or env flags, for example:",
     "  npm run online:deploy:production -- <commit> <build-id>",
+    "  npm run online:deploy:production:dry-run -- <commit> <build-id>",
     "  $env:DEPLOY_DRY_RUN='1'; npm run online:deploy:production -- <commit> <build-id>",
   ].join("\n");
 }

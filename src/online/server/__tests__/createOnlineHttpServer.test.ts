@@ -7185,6 +7185,16 @@ describe("createOnlineHttpServer", () => {
       },
       online: {
         eventSchemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
+        deployment: {
+          mode: "single-node",
+          multiInstanceReady: false,
+          websocketFanout: "process-local",
+          spectatorPresence: "process-local",
+          accountPresence: "session-store",
+          roomState: "process-local",
+          queueGuards: "process-local",
+          routing: "single-node",
+        },
         store: {
           ok: true,
           backend: "postgres",

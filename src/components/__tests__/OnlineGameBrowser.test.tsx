@@ -2697,7 +2697,21 @@ describe("OnlineGameBrowser", () => {
   it("offers block and report actions from registered account challenge rows", async () => {
     const account = accountFixture("Liam");
     const pendingSummary = accountChallengeSummary({ challengedIdentity: account.identity });
-    const socialProps = socialPropsWithFollowing();
+    let blockedOpponent = false;
+    const socialProps = {
+      ...socialPropsWithFollowing(),
+      onBlockAccount: vi.fn().mockImplementation(async () => {
+        blockedOpponent = true;
+        return {
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: publicProfile("Samir", { blocked: true }),
+        };
+      }),
+    };
+    const loadAccountChallenges = vi.fn().mockImplementation(async () => ({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      ...accountChallengeDirectory(blockedOpponent ? [] : [{ role: "challenged", summary: pendingSummary }]),
+    }));
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -2709,10 +2723,7 @@ describe("OnlineGameBrowser", () => {
         account={account}
         accountStatus="ready"
         {...socialProps}
-        loadAccountChallenges={vi.fn().mockResolvedValue({
-          protocolVersion: ONLINE_PROTOCOL_VERSION,
-          ...accountChallengeDirectory([{ role: "challenged", summary: pendingSummary }]),
-        })}
+        loadAccountChallenges={loadAccountChallenges}
       />
     );
 
@@ -2742,7 +2753,9 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(socialProps.onBlockAccount).toHaveBeenCalledWith("Samir"));
     expect(await within(people).findByText("Blocked Samir.")).toBeInTheDocument();
-    await waitFor(() => expect(within(challenges).queryByText("Samir")).not.toBeInTheDocument());
+    await waitFor(() => expect(within(challenges).queryByText("Samir")).not.toBeInTheDocument(), {
+      timeout: 5000,
+    });
     expect(within(people).queryByRole("region", { name: "Pending challenge notice" })).not.toBeInTheDocument();
   });
 

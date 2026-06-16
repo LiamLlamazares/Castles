@@ -167,6 +167,7 @@ async function main() {
       health: {
         buildId: config.buildId,
         commit: config.commit,
+        deployment: config.deployment,
         storePath: healthStorePath,
         storeBackend,
         checkStoreReady: async () => {

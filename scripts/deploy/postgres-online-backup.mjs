@@ -87,6 +87,8 @@ export function parseBackupArgs(argv) {
       if (!validatePath) throw new Error("--validate requires a backup file path.");
       args.validatePath = validatePath;
       index += 1;
+    } else if (arg === "--require-all-tables") {
+      args.requireAllTables = true;
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
     } else if (!arg.startsWith("-") && !args.outputPath) {
@@ -229,8 +231,12 @@ function assertSafeDatabaseDescription(database) {
   );
 }
 
-export async function validateOnlinePostgresBackupFile(backupPath, { tables = ONLINE_BACKUP_TABLES } = {}) {
-  const allowedTables = new Set(tables.map((table) => validateTableSpec(table).name));
+export async function validateOnlinePostgresBackupFile(
+  backupPath,
+  { requireAllTables = false, tables = ONLINE_BACKUP_TABLES } = {}
+) {
+  const safeTables = tables.map(validateTableSpec);
+  const allowedTables = new Set(safeTables.map((table) => table.name));
   let backup;
   try {
     backup = JSON.parse(await readFile(backupPath, "utf8"));
@@ -286,6 +292,11 @@ export async function validateOnlinePostgresBackupFile(backupPath, { tables = ON
     computedRowCount += table.rowCount;
   }
   assertBackupFile(backup.rowCount === computedRowCount, "rowCount does not match table row counts");
+  if (requireAllTables) {
+    for (const table of safeTables) {
+      assertBackupFile(seenTables.has(table.name), `missing required table ${table.name}`);
+    }
+  }
 
   return {
     path: backupPath,
@@ -299,12 +310,14 @@ async function main() {
   if (args.help) {
     console.log(
       "Usage: node scripts/deploy/postgres-online-backup.mjs --out <backup.json> [--castles-env-file <file>]\n" +
-        "       node scripts/deploy/postgres-online-backup.mjs --validate <backup.json>"
+        "       node scripts/deploy/postgres-online-backup.mjs --validate <backup.json> [--require-all-tables]"
     );
     return;
   }
   if (args.validatePath) {
-    const result = await validateOnlinePostgresBackupFile(args.validatePath);
+    const result = await validateOnlinePostgresBackupFile(args.validatePath, {
+      requireAllTables: args.requireAllTables === true,
+    });
     console.log(
       `Validated PostgreSQL online backup ${result.path}: ${result.rowCount} rows from ${result.tableCount} tables`
     );

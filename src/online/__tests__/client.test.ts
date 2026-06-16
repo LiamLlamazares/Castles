@@ -23,6 +23,8 @@ import {
   fetchOnlineAccountFollowing,
   fetchOnlineAccountGames,
   fetchOnlineAccountMe,
+  fetchOnlineAccountModerationReportAudits,
+  fetchOnlineAccountModerationReports,
   fetchOnlineAccountOAuthProviders,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
@@ -76,6 +78,7 @@ import {
   unfollowOnlineAccount,
   unblockOnlineAccount,
   updateOnlineAccountPrivacy,
+  updateOnlineAccountModerationReportStatus,
   OnlineRequestError,
 } from "../client";
 import { ONLINE_PROTOCOL_VERSION } from "../protocolVersion";
@@ -1473,6 +1476,268 @@ describe("online client helpers", () => {
     await expect(
       reportOnlineAccount({ token: "account-token" }, "Samir", { reason: "abuse", details: "" }, fetchImpl as any)
     ).rejects.toThrow("Online account report response was malformed");
+  });
+
+  it("loads admin moderation reports, status updates, and audits with bearer auth", async () => {
+    const moderationReport = {
+      schemaVersion: 2,
+      reportId: "report_queue123456",
+      reporterDisplayName: "Liam",
+      targetDisplayName: "Samir",
+      reason: "abuse",
+      details: "Hostile challenge message.",
+      status: "open",
+      moderatorNote: "",
+      createdAt: "2026-06-04T12:00:00.000Z",
+      updatedAt: "2026-06-04T12:00:00.000Z",
+      reviewedAt: null,
+    };
+    const resolvedReport = {
+      ...moderationReport,
+      status: "resolved",
+      moderatorNote: "Reviewed.",
+      updatedAt: "2026-06-04T12:05:00.000Z",
+      reviewedAt: "2026-06-04T12:05:00.000Z",
+    };
+    const audit = {
+      schemaVersion: 2,
+      auditId: "report_audit_queue123456",
+      reportId: moderationReport.reportId,
+      action: "status_changed",
+      actor: "admin",
+      previousStatus: "open",
+      nextStatus: "resolved",
+      note: "Reviewed.",
+      createdAt: "2026-06-04T12:05:00.000Z",
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 2,
+          reports: [moderationReport],
+          nextCursor: "cursor_123",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 2,
+          report: resolvedReport,
+          audit,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 2,
+          reportId: moderationReport.reportId,
+          audits: [audit],
+        }),
+      });
+
+    await expect(
+      fetchOnlineAccountModerationReports(
+        "admin-token",
+        { status: "open", reason: "abuse", reporter: "Liam", target: "Samir", cursor: "cursor_0", limit: 10 },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 2,
+      reports: [moderationReport],
+      nextCursor: "cursor_123",
+    });
+    await expect(
+      updateOnlineAccountModerationReportStatus(
+        "admin-token",
+        moderationReport.reportId,
+        { status: "resolved", note: "Reviewed." },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 2,
+      report: resolvedReport,
+      audit,
+    });
+    await expect(
+      fetchOnlineAccountModerationReportAudits(
+        "admin-token",
+        moderationReport.reportId,
+        { limit: 5 },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 2,
+      reportId: moderationReport.reportId,
+      audits: [audit],
+    });
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      "/api/online/admin/reports?status=open&reason=abuse&reporter=Liam&target=Samir&cursor=cursor_0&limit=10",
+      { headers: { authorization: "Bearer admin-token" } }
+    );
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "/api/online/admin/reports/report_queue123456", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", authorization: "Bearer admin-token" },
+      body: JSON.stringify({ status: "resolved", note: "Reviewed." }),
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "/api/online/admin/reports/report_queue123456/audits?limit=5", {
+      headers: { authorization: "Bearer admin-token" },
+    });
+  });
+
+  it("rejects admin moderation responses with unsupported internal fields", async () => {
+    const moderationReport = {
+      schemaVersion: 2,
+      reportId: "report_queue123456",
+      reporterDisplayName: "Liam",
+      targetDisplayName: "Samir",
+      reason: "abuse",
+      details: "Hostile challenge message.",
+      status: "open",
+      moderatorNote: "",
+      createdAt: "2026-06-04T12:00:00.000Z",
+      updatedAt: "2026-06-04T12:00:00.000Z",
+      reviewedAt: null,
+    };
+    const audit = {
+      schemaVersion: 2,
+      auditId: "report_audit_queue123456",
+      reportId: moderationReport.reportId,
+      action: "status_changed",
+      actor: "admin",
+      previousStatus: "open",
+      nextStatus: "resolved",
+      note: "Reviewed.",
+      createdAt: "2026-06-04T12:05:00.000Z",
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 2,
+          reports: [
+            {
+              ...moderationReport,
+              accountId: "account_samir",
+            },
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 2,
+          report: moderationReport,
+          audit: {
+            ...audit,
+            tokenHash: "account_session_hash",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 2,
+          reportId: moderationReport.reportId,
+          audits: [
+            {
+              ...audit,
+              databaseKey: "online_account_report_audits.account_id",
+            },
+          ],
+        }),
+      });
+
+    await expect(
+      fetchOnlineAccountModerationReports("admin-token", {}, fetchImpl as any)
+    ).rejects.toThrow(/report contains unsupported data/);
+    await expect(
+      updateOnlineAccountModerationReportStatus(
+        "admin-token",
+        moderationReport.reportId,
+        { status: "resolved", note: "Reviewed." },
+        fetchImpl as any
+      )
+    ).rejects.toThrow(/audit contains unsupported data/);
+    await expect(
+      fetchOnlineAccountModerationReportAudits("admin-token", moderationReport.reportId, {}, fetchImpl as any)
+    ).rejects.toThrow(/audit contains unsupported data/);
+  });
+
+  it("rejects admin moderation report ids that use the audit id namespace", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 2,
+        reports: [
+          {
+            schemaVersion: 2,
+            reportId: "report_audit_queue123456",
+            reporterDisplayName: "Liam",
+            targetDisplayName: "Samir",
+            reason: "abuse",
+            details: "Hostile challenge message.",
+            status: "open",
+            moderatorNote: "",
+            createdAt: "2026-06-04T12:00:00.000Z",
+            updatedAt: "2026-06-04T12:00:00.000Z",
+            reviewedAt: null,
+          },
+        ],
+      }),
+    });
+
+    await expect(
+      fetchOnlineAccountModerationReports("admin-token", {}, fetchImpl as any)
+    ).rejects.toThrow(/reportId is invalid/);
+  });
+
+  it("preserves trusted admin moderation rejections without trusting raw identifiers", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({
+          error: {
+            code: "not_found",
+            message: "No online admin resource was found.",
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({
+          error: {
+            code: "persistence_failed",
+            message: "Report report_secret123 could not be loaded.",
+          },
+        }),
+      });
+
+    await expect(
+      fetchOnlineAccountModerationReports("admin-token", {}, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 404,
+      code: "not_found",
+      message: "No online admin resource was found.",
+    });
+    await expect(
+      fetchOnlineAccountModerationReports("admin-token", {}, fetchImpl as any)
+    ).rejects.toThrow("Could not load online admin reports (503)");
   });
 
   it("loads public rating leaderboards without accepting account ids or engine internals", async () => {

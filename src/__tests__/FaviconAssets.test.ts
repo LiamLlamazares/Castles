@@ -6,7 +6,7 @@ import { getCastleOwnerClass, getHexVisualClass } from "../utils/HexRenderUtils"
 import { renderEmptyBoardFaviconSvg } from "../../scripts/assets/render-empty-board-favicon";
 
 function readText(path: string): string {
-  return readFileSync(resolve(process.cwd(), path), "utf8");
+  return readFileSync(resolve(process.cwd(), path), "utf8").replace(/\r\n?/g, "\n");
 }
 
 function readBytes(path: string): Buffer {

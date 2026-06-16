@@ -3,6 +3,7 @@ import {
   assertServerRuntimeFiles,
   parseServerRuntimeConfig,
 } from "../src/online/server/serverRuntimeConfig";
+import { createServerConfigurationReport } from "./configReport";
 import { loadServerEnvironmentFile } from "./envFile";
 
 function parseArgs(argv: string[]): { envFile?: string } {
@@ -23,7 +24,7 @@ async function main() {
   const config = parseServerRuntimeConfig(env, process.cwd());
   assertServerRuntimeFiles(config);
 
-  const { backend, healthStorePath, store, accountStore } = createOnlineGameStoreFromEnv(env);
+  const { backend, healthStorePath, postgresPoolMaxPerStore, store, accountStore } = createOnlineGameStoreFromEnv(env);
   let replayedRooms = 0;
   try {
     await store.checkReady();
@@ -42,35 +43,15 @@ async function main() {
 
   console.log(
     JSON.stringify(
-      {
-        ok: true,
-        port: config.port,
-        bindHost: config.bindHost,
-        publicBaseUrl: config.publicBaseUrl,
-        oauth: {
-          google: {
-            enabled: Boolean(config.googleOAuth),
-            redirectUri:
-              config.googleOAuth?.redirectUri ??
-              `${config.publicBaseUrl}/api/online/account/oauth/google/callback`,
-          },
-        },
-        moderation: {
-          adminReportsEnabled: Boolean(config.adminBearerToken),
-        },
-        staticDir: config.staticDir,
-        staticDirRequired: config.requireStaticDir,
+      createServerConfigurationReport({
+        config,
         onlineStore: {
           backend,
           path: healthStorePath,
-          replayChecked: true,
-          replayedRooms,
+          postgresPoolMaxPerStore,
         },
-        build: {
-          buildId: config.buildId ?? "development",
-          commit: config.commit ?? "unknown",
-        },
-      },
+        replayedRooms,
+      }),
       null,
       2
     )

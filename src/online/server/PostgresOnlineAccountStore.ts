@@ -48,6 +48,7 @@ import {
   isOnlineAccountPasswordCredentialHash,
   verifyOnlineAccountPassword,
 } from "./onlinePasswordCredentials";
+import { resolvePostgresPoolMaxPerStore } from "./postgresPoolConfig";
 
 interface PostgresQueryable {
   query(text: string, values?: unknown[]): Promise<{ rows: any[] }>;
@@ -59,6 +60,7 @@ interface PostgresTransactionClient extends PostgresQueryable {
 
 export interface PostgresOnlineAccountStoreOptions {
   connectionString?: string;
+  poolMaxPerStore?: number;
   queryable?: PostgresQueryable;
   transactionClientFactory?: () => Promise<PostgresTransactionClient>;
   close?: () => Promise<void>;
@@ -118,6 +120,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
 
     const pool = new Pool({
       connectionString: options.connectionString,
+      max: resolvePostgresPoolMaxPerStore(options.poolMaxPerStore),
       connectionTimeoutMillis: DEFAULT_POSTGRES_TIMEOUT_MS,
       query_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
       statement_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,

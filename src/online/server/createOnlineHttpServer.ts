@@ -203,6 +203,10 @@ import {
   verifyGoogleIdToken,
   type GoogleOAuthProviderConfig,
 } from "./googleOAuth";
+import {
+  createSingleNodeDeploymentConfig,
+  type ServerDeploymentConfig,
+} from "./serverRuntimeConfig";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
@@ -364,6 +368,7 @@ export interface CreateOnlineHttpServerOptions {
   health?: {
     buildId?: string;
     commit?: string;
+    deployment?: ServerDeploymentConfig;
     storePath?: string;
     storeBackend?: string;
     readinessTimeoutMs?: number;
@@ -3584,6 +3589,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       online: {
         eventSchemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
         rulesetVersion: ONLINE_RULESET_VERSION,
+        deployment: options.health?.deployment ?? createSingleNodeDeploymentConfig(),
         store: {
           ok: storeOk,
           backend: options.health?.storeBackend ?? "unknown",

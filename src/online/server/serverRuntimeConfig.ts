@@ -15,8 +15,22 @@ export interface ServerRuntimeConfig {
   requireStaticDir: boolean;
   localShutdownEnabled: boolean;
   localShutdownToken?: string;
+  deployment: ServerDeploymentConfig;
   buildId?: string;
   commit?: string;
+}
+
+export type ServerDeploymentMode = "single-node";
+
+export interface ServerDeploymentConfig {
+  mode: ServerDeploymentMode;
+  multiInstanceReady: false;
+  websocketFanout: "process-local";
+  spectatorPresence: "process-local";
+  accountPresence: "session-store";
+  roomState: "process-local";
+  queueGuards: "process-local";
+  routing: "single-node";
 }
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
@@ -27,6 +41,19 @@ const PLACEHOLDER_COMMITS = new Set([
   "unknown",
   "replace-with-deployed-sha",
 ]);
+
+export function createSingleNodeDeploymentConfig(): ServerDeploymentConfig {
+  return {
+    mode: "single-node",
+    multiInstanceReady: false,
+    websocketFanout: "process-local",
+    spectatorPresence: "process-local",
+    accountPresence: "session-store",
+    roomState: "process-local",
+    queueGuards: "process-local",
+    routing: "single-node",
+  };
+}
 
 function normalizePath(value: string): string {
   return value.replace(/\\/g, "/");
@@ -157,6 +184,17 @@ function parseAdminBearerToken(env: NodeJS.ProcessEnv): string | undefined {
   return token;
 }
 
+function parseDeploymentConfig(env: NodeJS.ProcessEnv): ServerDeploymentConfig {
+  const raw = env.CASTLES_DEPLOYMENT_MODE?.trim();
+  if (!raw || raw === "single-node") return createSingleNodeDeploymentConfig();
+  if (raw === "multi-instance") {
+    throw new Error(
+      "CASTLES_DEPLOYMENT_MODE=multi-instance is not supported yet; WebSocket fanout, live spectator presence, room state caches, and in-process queue guards are still process-local."
+    );
+  }
+  throw new Error("CASTLES_DEPLOYMENT_MODE must be single-node or unset.");
+}
+
 function requireProductionMetadata(env: NodeJS.ProcessEnv): void {
   if (env.NODE_ENV !== "production") return;
 
@@ -183,6 +221,7 @@ export function parseServerRuntimeConfig(
   const publicBaseUrl = normalizePublicBaseUrl(env, port);
   const googleOAuth = parseGoogleOAuthConfig(env);
   const adminBearerToken = parseAdminBearerToken(env);
+  const deployment = parseDeploymentConfig(env);
   requireProductionMetadata(env);
   const staticDir = env.CASTLES_STATIC_DIR?.trim()
     ? env.CASTLES_STATIC_DIR.trim()
@@ -213,6 +252,7 @@ export function parseServerRuntimeConfig(
     requireStaticDir,
     localShutdownEnabled,
     localShutdownToken,
+    deployment,
     buildId: env.BUILD_ID?.trim() || undefined,
     commit: env.GIT_COMMIT?.trim() || undefined,
   };

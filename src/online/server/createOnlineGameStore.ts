@@ -2,12 +2,16 @@ import type { OnlineGameStore } from "./OnlineGameStore";
 import type { OnlineAccountStore } from "./OnlineAccountStore";
 import { PostgresOnlineAccountStore } from "./PostgresOnlineAccountStore";
 import { PostgresOnlineGameStore } from "./PostgresOnlineGameStore";
+import { parsePostgresPoolMaxPerStore } from "./postgresPoolConfig";
+
+export { DEFAULT_POSTGRES_POOL_MAX_PER_STORE } from "./postgresPoolConfig";
 
 export type OnlineStoreBackend = "postgres";
 
 export interface ConfiguredOnlineGameStore {
   backend: OnlineStoreBackend;
   healthStorePath: string;
+  postgresPoolMaxPerStore: number;
   store: OnlineGameStore;
   accountStore: OnlineAccountStore;
 }
@@ -46,11 +50,13 @@ export function createOnlineGameStoreFromEnv(
       throw new Error("DATABASE_URL is required when ONLINE_STORE_BACKEND=postgres.");
     }
     const connectionString = validatePostgresConnectionString(env.DATABASE_URL);
+    const postgresPoolMaxPerStore = parsePostgresPoolMaxPerStore(env);
     return {
       backend,
       healthStorePath: "postgres",
-      store: new PostgresOnlineGameStore({ connectionString }),
-      accountStore: new PostgresOnlineAccountStore({ connectionString }),
+      postgresPoolMaxPerStore,
+      store: new PostgresOnlineGameStore({ connectionString, poolMaxPerStore: postgresPoolMaxPerStore }),
+      accountStore: new PostgresOnlineAccountStore({ connectionString, poolMaxPerStore: postgresPoolMaxPerStore }),
     };
   }
 

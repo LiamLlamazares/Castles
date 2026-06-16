@@ -190,6 +190,7 @@ export async function checkProductionFreshness(options) {
     buildId: healthBody?.build?.buildId,
     commit: healthBody?.build?.commit,
     eventSchemaVersion: healthBody?.online?.eventSchemaVersion,
+    deployment: healthBody?.online?.deployment,
     storeBackend: healthBody?.online?.store?.backend,
   };
   const commit = expectedCommit
@@ -224,10 +225,172 @@ export async function checkProductionFreshness(options) {
     health,
     commit,
     ssh,
-    ok: health.ok === true && commit.status !== "mismatch" && ssh.status !== "unreachable",
+    ok:
+      health.ok === true &&
+      isSingleNodeDeploymentHealth(health.deployment) &&
+      health.storeBackend === "postgres" &&
+      commit.status !== "mismatch" &&
+      ssh.status !== "unreachable",
   };
   if (git) result.git = git;
   return result;
+}
+
+function isSingleNodeDeploymentHealth(deployment) {
+  return (
+    deployment?.mode === "single-node" &&
+    deployment?.multiInstanceReady === false &&
+    deployment?.websocketFanout === "process-local" &&
+    deployment?.spectatorPresence === "process-local" &&
+    deployment?.accountPresence === "session-store" &&
+    deployment?.roomState === "process-local" &&
+    deployment?.queueGuards === "process-local" &&
+    deployment?.routing === "single-node"
+  );
+}
+
+export function classifyProductionFreshnessAlerts(result) {
+  const alerts = [];
+  if (result.health?.ok !== true) {
+    alerts.push({
+      code: "health_not_ok",
+      severity: "critical",
+      message: "/api/health did not report ok=true.",
+      action: "Check systemd status, recent service logs, and server:check-config before rerunning smoke.",
+    });
+  }
+  if (result.commit?.status === "mismatch") {
+    alerts.push({
+      code: "stale_deploy",
+      severity: "critical",
+      message: `Production health reported ${result.commit.actual ?? "unknown"} instead of ${result.commit.expected}.`,
+      action: "Verify the reviewed commit is pushed, rerun the deploy freshness gate, and inspect restart metadata.",
+    });
+  }
+  if (result.health?.storeBackend !== "postgres") {
+    alerts.push({
+      code: "store_not_postgres",
+      severity: "critical",
+      message: `Production health reported store=${result.health?.storeBackend ?? "unknown"} instead of postgres.`,
+      action: "Fix ONLINE_STORE_BACKEND/DATABASE_URL and rerun server:check-config before accepting the deploy.",
+    });
+  }
+  if (!isSingleNodeDeploymentHealth(result.health?.deployment)) {
+    alerts.push({
+      code: "deployment_not_single_node",
+      severity: "critical",
+      message: "Production health did not report the supported single-node deployment guardrails.",
+      action:
+        "Keep CASTLES_DEPLOYMENT_MODE=single-node and one Node app instance until shared presence, WebSocket fanout, cache invalidation, and queue guards are implemented.",
+    });
+  }
+  if (result.ssh?.status === "unreachable") {
+    alerts.push({
+      code: "ssh_unreachable",
+      severity: "warning",
+      message: `SSH reachability failed for ${result.ssh.host}:${result.ssh.port}.`,
+      action: "Confirm the deploy SSH host, DNS, firewall, and server availability before treating app health alone as sufficient.",
+    });
+  }
+  return alerts;
+}
+
+const MONITORING_SEVERITY_RANK = {
+  none: 0,
+  warning: 1,
+  critical: 2,
+};
+
+function highestAlertSeverity(alerts) {
+  let severity = "none";
+  for (const alert of alerts) {
+    if ((MONITORING_SEVERITY_RANK[alert.severity] ?? 0) > MONITORING_SEVERITY_RANK[severity]) {
+      severity = alert.severity;
+    }
+  }
+  return severity;
+}
+
+function monitoringSummary(alerts) {
+  if (alerts.length === 0) return "Castles production checks are healthy.";
+  const codes = alerts.map((alert) => alert.code).join(", ");
+  return `Castles production has ${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"}: ${codes}.`;
+}
+
+export function createProductionMonitoringSnapshot(result, options = {}) {
+  const alerts = classifyProductionFreshnessAlerts(result);
+  const severity = highestAlertSeverity(alerts);
+  return {
+    schemaVersion: 1,
+    service: options.service ?? "castles-online",
+    generatedAt: options.generatedAt ?? new Date().toISOString(),
+    baseUrl: result.baseUrl,
+    ok: alerts.length === 0 && result.ok === true,
+    severity,
+    pager: {
+      shouldPage: severity === "critical",
+      shouldWarn: severity !== "none",
+      route: severity === "critical" ? "page" : severity === "warning" ? "warn" : "none",
+      summary: monitoringSummary(alerts),
+    },
+    alerts,
+    checks: {
+      health: result.health,
+      commit: result.commit,
+      ssh: result.ssh,
+      ...(result.git ? { git: result.git } : {}),
+    },
+  };
+}
+
+export function createProductionMonitoringFailureSnapshot({
+  baseUrl,
+  generatedAt = new Date().toISOString(),
+  message,
+  service = "castles-online",
+} = {}) {
+  const normalizedBaseUrl = (() => {
+    try {
+      return normalizeProductionBaseUrl(baseUrl);
+    } catch {
+      return String(baseUrl ?? "unknown");
+    }
+  })();
+  const alert = {
+    code: "health_not_ok",
+    severity: "critical",
+    message: `Production monitoring could not complete health checks: ${message ?? "unknown error"}.`,
+    action: "Check DNS/connectivity, production /api/health, systemd status, and service logs before rerunning smoke.",
+  };
+  return {
+    schemaVersion: 1,
+    service,
+    generatedAt,
+    baseUrl: normalizedBaseUrl,
+    ok: false,
+    severity: "critical",
+    pager: {
+      shouldPage: true,
+      shouldWarn: true,
+      route: "page",
+      summary: "Castles production monitoring could not complete health checks.",
+    },
+    alerts: [alert],
+    checks: {
+      health: {
+        ok: false,
+        error: message ?? "unknown error",
+      },
+      commit: { status: "not_checked" },
+      ssh: { status: "not_checked" },
+    },
+  };
+}
+
+export function productionMonitoringExitCode(snapshot) {
+  if (snapshot.severity === "critical") return 2;
+  if (snapshot.severity === "warning") return 1;
+  return 0;
 }
 
 export function formatProductionFreshnessResult(result) {
@@ -235,7 +398,9 @@ export function formatProductionFreshnessResult(result) {
     `Production: ${result.baseUrl}`,
     `Health: ok=${result.health.ok} buildId=${result.health.buildId ?? "unknown"} commit=${
       result.health.commit ?? "unknown"
-    } store=${result.health.storeBackend ?? "unknown"} schema=${result.health.eventSchemaVersion ?? "unknown"}`,
+    } store=${result.health.storeBackend ?? "unknown"} deployment=${
+      result.health.deployment?.mode ?? "unknown"
+    } schema=${result.health.eventSchemaVersion ?? "unknown"}`,
   ];
   if (result.commit.status === "match") {
     lines.push(`Commit: match ${result.expectedCommit}`);
@@ -299,6 +464,14 @@ export function formatProductionFreshnessResult(result) {
     );
   } else if (result.commit.status === "mismatch" && result.git?.status === "upstream_missing_expected") {
     lines.push("Diagnosis: expected commit is not on the tracked upstream; check push target or branch selection.");
+  }
+  const alerts = classifyProductionFreshnessAlerts(result);
+  if (alerts.length === 0) {
+    lines.push("Alerts: none");
+  } else {
+    for (const alert of alerts) {
+      lines.push(`Alert: ${alert.code} severity=${alert.severity} ${alert.message} Action: ${alert.action}`);
+    }
   }
   lines.push(`Freshness: ${result.ok ? "ok" : "failed"}`);
   return lines.join("\n");

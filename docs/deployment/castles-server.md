@@ -28,6 +28,8 @@ Public firewall ports are `80` and `443` for nginx plus `22` for SSH administrat
 
 By default the Node service binds to `127.0.0.1`, so nginx can reach it locally but public clients cannot connect directly to port `3000`. Keep `CASTLES_BIND_HOST=127.0.0.1` for the normal nginx-backed deployment.
 
+The current online service is single-node only. Keep `CASTLES_DEPLOYMENT_MODE=single-node` or leave it unset. The server deliberately refuses `CASTLES_DEPLOYMENT_MODE=multi-instance` because WebSocket fanout, live spectator presence, in-process action queues, challenge/open-seek queues, and the warm room cache are process-local. Do not run nginx load balancing, PM2 cluster mode, Node cluster workers, or multiple systemd app instances for the same database, even with sticky routing. PostgreSQL locks protect mutation correctness; they do not provide cross-instance WebSocket fanout, live spectator presence, warm room cache invalidation, or queue serialization. Before running multiple Node workers or app instances, add shared presence/pub-sub or an equivalent fanout path, durable queue/lock coverage for every process-local gate, rolling-drain behavior for WebSockets, and multi-instance tests.
+
 ## Quick Path: Existing nginx, Remote PostgreSQL
 
 Use this when DNS and nginx are already serving HTTPS and proxying to `127.0.0.1:3000`, and the only missing piece is the Node app service. This is the smallest path for a server "lift" to a new domain.
@@ -91,8 +93,10 @@ NODE_ENV=production
 PORT=3000
 CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://${app_domain}
+CASTLES_DEPLOYMENT_MODE=single-node
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://<user>:<url-encoded-password>@<postgres-host>:5432/<database>
+POSTGRES_POOL_MAX_PER_STORE=5
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=
@@ -147,7 +151,7 @@ npm run online:smoke:browser -- "https://${app_domain}" "$sha"
 `online:deploy:freshness` is a fast diagnostic before the mutating smoke checks. With no arguments, it checks the default production domain against the local Git `HEAD`, verifies that commit against the tracked upstream branch, reports when the production health commit is a known ancestor behind upstream, and checks TCP reachability to the default deploy host on port 22. Pass `npm run online:deploy:freshness -- "https://${app_domain}" "$sha" "${ssh_host:-$app_domain}"` when verifying a different app domain or reviewed SHA. If the expected SHA is already on the upstream branch but health is stale, the push target is not the likely failure mode; focus on the deploy/restart path. An SSH failure means the chosen deploy host is unavailable; confirm the SSH host resolves to the same server as the app domain before treating it as a service outage.
 `check-online-smoke.mjs` also verifies that Google OAuth is enabled, that the OAuth start route redirects to Google, and that the redirect callback URL matches the deployed app domain. For intentionally OAuth-free staging hosts, add a separate staging smoke rather than weakening the production gate.
 
-If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If `server:check-config` fails, fix the PostgreSQL URL, permissions, or schema-readiness error before restarting. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.
+If localhost health works but public health fails, the remaining problem is nginx, SSL, DNS, or firewall routing rather than the Node app. If `server:check-config` fails, fix the PostgreSQL URL, permissions, schema-readiness error, or deployment-mode guard before restarting. `server:check-config` reports `onlineDeployment.mode: "single-node"` and `/api/health` reports `online.deployment.mode: "single-node"` with `multiInstanceReady: false`; do not reinterpret that as a capacity or autoscaling signal. If health works but the browser shows old UI, verify the health commit, hard-refresh once, and rerun the browser smoke; the current app is designed to bypass stale app-shell caching after deploys.
 
 ## 0. Fresh Server Reinstall From Zero
 
@@ -218,8 +222,10 @@ NODE_ENV=production
 PORT=3000
 CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://<domain>
+CASTLES_DEPLOYMENT_MODE=single-node
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://<user>:<password>@<postgres-host>:5432/<database>
+POSTGRES_POOL_MAX_PER_STORE=5
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_OAUTH_REDIRECT_URI=
@@ -446,6 +452,7 @@ NODE
       echo "PostgreSQL JSON backup is empty or failed."
       exit 1
     }
+    node scripts/deploy/postgres-online-backup.mjs --validate "$backup/postgres-online-backup.json" --require-all-tables
   fi
 fi
 
@@ -498,6 +505,7 @@ fi
 sudo cp -a /etc/castles/castles.env "$backup/castles.env.predeploy"
 sudo grep -qx "NODE_ENV=production" /etc/castles/castles.env || sudo sh -c 'printf "\nNODE_ENV=production\n" >> /etc/castles/castles.env'
 sudo grep -q "^CASTLES_BIND_HOST=" /etc/castles/castles.env || sudo sh -c 'printf "\nCASTLES_BIND_HOST=127.0.0.1\n" >> /etc/castles/castles.env'
+sudo grep -q "^CASTLES_DEPLOYMENT_MODE=" /etc/castles/castles.env || sudo sh -c 'printf "\nCASTLES_DEPLOYMENT_MODE=single-node\n" >> /etc/castles/castles.env'
 sudo grep -qx "CASTLES_REQUIRE_STATIC_DIR=1" /etc/castles/castles.env || sudo sh -c 'printf "\nCASTLES_REQUIRE_STATIC_DIR=1\n" >> /etc/castles/castles.env'
 sudo sed -i "s/GIT_COMMIT=.*/GIT_COMMIT=$sha/" /etc/castles/castles.env
 sudo sed -i "s/BUILD_ID=.*/BUILD_ID=$(date -u +%Y%m%d-%H%M%S)/" /etc/castles/castles.env
@@ -519,8 +527,10 @@ NODE_ENV=production
 PORT=3000
 CASTLES_BIND_HOST=127.0.0.1
 PUBLIC_BASE_URL=https://castles.ls314.com
+CASTLES_DEPLOYMENT_MODE=single-node
 ONLINE_STORE_BACKEND=postgres
 DATABASE_URL=postgresql://castles:<url-encoded-password>@<postgres-host>:5432/castles
+POSTGRES_POOL_MAX_PER_STORE=5
 CASTLES_ADMIN_BEARER_TOKEN=
 CASTLES_STATIC_DIR=/home/lukasz/Castles/build
 CASTLES_REQUIRE_STATIC_DIR=1
@@ -668,6 +678,47 @@ load_castles_db_env
 psql -c "select count(*) from online_game_events;"
 psql -c "select count(*) from online_game_credentials;"
 psql -c "select count(*) from online_game_additional_credentials;"
+```
+
+## 4A. Operational Alerts And Incidents
+
+`npm run online:deploy:freshness` prints explicit alert lines before the final freshness status. Treat these as the private-beta incident checklist:
+
+- `Alert: health_not_ok severity=critical`: do not run mutating smoke checks yet. Check `sudo systemctl status castles-node.service --no-pager`, `sudo journalctl -u castles-node.service -n 120 --no-pager`, `curl -sS http://127.0.0.1:3000/api/health`, and `sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env`. If this started during a deploy and the previous backup exists, prepare rollback before further changes.
+- `Alert: stale_deploy severity=critical`: production is not serving the reviewed commit. Confirm the commit is pushed to `origin/online-action-log`, rerun `npm run online:deploy:freshness -- https://<domain> "$sha" <ssh-host>`, inspect `/etc/castles/castles.env` for `GIT_COMMIT`, and restart `castles-node.service` only after `server:check-config` passes.
+- `Alert: store_not_postgres severity=critical`: production health is not reporting the PostgreSQL backend. Check `ONLINE_STORE_BACKEND`, `DATABASE_URL`, database connectivity, and `server:check-config` before accepting the deploy or running player-facing smoke.
+- `Alert: deployment_not_single_node severity=critical`: production health is missing the supported single-node guardrail or is advertising unsupported multi-instance readiness. Check `CASTLES_DEPLOYMENT_MODE`, ensure only one Node app instance is serving the database, and do not enable load-balanced app workers until shared presence/fanout/cache invalidation and queue guards exist.
+- `Alert: ssh_unreachable severity=warning`: the app may still be healthy, but deploy control is degraded. Confirm the SSH host resolves to the intended server, check firewall/provider status, and do not rely on a remote deploy script until SSH reachability is restored or an alternate console path is available.
+
+For machine-readable monitoring or a scheduled private-beta check, use the non-mutating JSON snapshot command. Pin the expected commit to the currently reviewed deployed SHA; if you omit it, the command defaults to the checkout's local `HEAD`, which is useful during deploy verification but can intentionally report a stale deploy after newer commits have been pushed.
+
+```bash
+npm run online:monitor:production -- https://castles.ls314.xyz "$sha" contabo.ls314.xyz > "$backup/production-monitoring.json"
+```
+
+The JSON includes `severity`, `alerts`, `checks`, and a `pager` block. Exit codes are `0` for healthy, `1` for warning-only alerts such as SSH reachability degradation, and `2` for critical page-worthy alerts such as unhealthy health, stale deploys, or a non-PostgreSQL backend. If health fetching fails before normal checks complete, the command still writes a critical JSON snapshot with a `health_not_ok` alert to stdout and writes a short error line to stderr, so the archived JSON file remains parseable. This is a provider-neutral pager contract; wire it to cron, systemd timers, or an external pager only after confirming where output and exit codes are archived.
+
+For smoke failures:
+
+- API smoke failure after fresh health: stop and inspect the exact failed endpoint or WebSocket step; do not continue to browser smoke until the API smoke passes. Check `journalctl` for matching `online.* failed` log lines and confirm the smoke did not leak bearer tokens in output.
+- Browser smoke failure after API smoke passes: capture the Playwright screenshot/video artifacts if available, hard-refresh once to exclude stale app-shell caching, rerun the browser smoke, and only then classify it as a UI regression.
+- Local load-smoke failure: rerun `npm run online:smoke:local:preflight`, confirm `DATABASE_URL` points to the disposable local database, then rerun `$env:SMOKE_LOAD_GAMES="4"; npm run online:smoke:local:load`. If stale-action counts differ, treat it as a PostgreSQL transaction/advisory-lock regression.
+
+For JSON backup restore readiness, run the restore drill only against a disposable restore target. The command creates the current online schema in the target, truncates only the known Castles `online_*` tables there, restores rows from the JSON backup, resets serial sequences where needed, and verifies per-table row counts. Do not point `RESTORE_DATABASE_URL` at the live database or the normal local rehearsal database:
+
+```bash
+RESTORE_DATABASE_URL="postgresql://<restore-user>:<restore-password>@localhost:5432/castles_restore" \
+  npm run online:restore:postgres:drill -- "$backup/postgres-online-backup.json"
+```
+
+For a non-local disposable restore target, set `CASTLES_ALLOW_DISPOSABLE_RESTORE_DB=1` only after confirming the target is not production. This override only relaxes the host check; the target database name must still contain `restore`, `drill`, `smoke`, `test`, `tmp`, or `disposable`.
+
+Before any public-scale traffic, archive the freshness output, API smoke output, browser smoke output, local load-smoke output, restore-drill output, and backup path together with the deployed commit SHA.
+
+For a non-mutating production deploy preview, use the dedicated script so npm cannot consume the dry-run flag:
+
+```bash
+npm run online:deploy:production:dry-run -- <reviewed-commit-sha> <build-id>
 ```
 
 ## 5. Emergency Disable
