@@ -212,6 +212,7 @@ import {
   createSingleNodeOnlineRuntimeCoordinator,
   type OnlineRuntimeCoordinator,
   type OnlineRuntimeGameSnapshotChangedEvent,
+  type OnlineRuntimeRateLimitScope,
   type OnlineRuntimeSnapshotReason,
 } from "./onlineRuntimeCoordinator";
 
@@ -388,29 +389,6 @@ export interface CreateOnlineHttpServerOptions {
 class StoreReadinessTimeoutError extends Error {
   constructor() {
     super("Store readiness check timed out.");
-  }
-}
-
-class FixedWindowRateLimiter {
-  private readonly entries = new Map<string, { count: number; resetAt: number }>();
-
-  constructor(
-    private readonly limit: number,
-    private readonly windowMs: number
-  ) {}
-
-  take(key: string): boolean {
-    const now = Date.now();
-    const entry = this.entries.get(key);
-    if (!entry || entry.resetAt <= now) {
-      this.entries.set(key, { count: 1, resetAt: now + this.windowMs });
-      return true;
-    }
-    if (entry.count >= this.limit) {
-      return false;
-    }
-    entry.count += 1;
-    return true;
   }
 }
 
@@ -1238,6 +1216,29 @@ function getSocketClientKey(req: http.IncomingMessage): string {
   return getTrustedForwardedClient(req.headers, req.socket.remoteAddress) ?? req.socket.remoteAddress ?? "unknown";
 }
 
+const RATE_LIMIT_CLIENT_KEY_MAX_LENGTH = 128;
+const SAFE_RATE_LIMIT_CLIENT_KEY_PATTERN = /^[A-Za-z0-9:._-]+$/;
+const RAW_ONLINE_ENTITY_RATE_LIMIT_KEY_PATTERN =
+  /^(account_session|account|challenge|game|seek|report_audit|report)[_-][A-Za-z0-9_-]+$/i;
+
+function fingerprintRateLimitClientKey(value: string): string {
+  return `client:${createHash("sha256").update(value).digest("base64url")}`;
+}
+
+function normalizeRateLimitClientKey(key: string): string {
+  const value = key.trim() || "unknown";
+  if (
+    value.length <= RATE_LIMIT_CLIENT_KEY_MAX_LENGTH &&
+    SAFE_RATE_LIMIT_CLIENT_KEY_PATTERN.test(value) &&
+    !isSecretLikeKey(value) &&
+    !RAW_ONLINE_ENTITY_RATE_LIMIT_KEY_PATTERN.test(value) &&
+    !stringContainsDurableSecret(value)
+  ) {
+    return value;
+  }
+  return fingerprintRateLimitClientKey(value);
+}
+
 function getBearerToken(header: unknown): string | null {
   if (typeof header !== "string") return null;
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -1905,19 +1906,37 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     createSingleNodeOnlineRuntimeCoordinator({ nodeId: createGeneratedRuntimeNodeId() });
   const connections = new Map<WebSocket, OnlineConnection>();
   const disconnectedSockets = new WeakSet<WebSocket>();
-  const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const accountCreateLimiter = new FixedWindowRateLimiter(10, 60_000);
-  const accountAuthLimiter = new FixedWindowRateLimiter(30, 60_000);
-  const accountReadLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const adminReadLimiter = new FixedWindowRateLimiter(60, 10_000);
-  const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const createOpenSeekLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const quickMatchLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const challengeActionLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const openSeekActionLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const publicDirectoryLimiter = new FixedWindowRateLimiter(240, 10_000);
-  const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
+  const rateLimitConfig = {
+    account_auth: { limit: 30, windowMs: 60_000 },
+    account_create: { limit: 10, windowMs: 60_000 },
+    account_read: { limit: 120, windowMs: 10_000 },
+    admin_read: { limit: 60, windowMs: 10_000 },
+    challenge_action: { limit: 120, windowMs: 10_000 },
+    create_challenge: { limit: 20, windowMs: 60_000 },
+    create_game: { limit: 20, windowMs: 60_000 },
+    create_open_seek: { limit: 20, windowMs: 60_000 },
+    open_seek_action: { limit: 120, windowMs: 10_000 },
+    public_directory: { limit: 240, windowMs: 10_000 },
+    quick_match: { limit: 20, windowMs: 60_000 },
+    socket_message: { limit: 120, windowMs: 10_000 },
+    spectator_snapshot: { limit: 120, windowMs: 10_000 },
+  } satisfies Record<OnlineRuntimeRateLimitScope, { limit: number; windowMs: number }>;
+  const consumeClientRateLimit = (
+    scope: OnlineRuntimeRateLimitScope,
+    key: string
+  ): Promise<boolean> => {
+    const config = rateLimitConfig[scope];
+    return runtimeCoordinator.consumeRateLimit({
+      scope,
+      key: normalizeRateLimitClientKey(key),
+      limit: config.limit,
+      windowMs: config.windowMs,
+    });
+  };
+  const consumeRequestRateLimit = (
+    scope: OnlineRuntimeRateLimitScope,
+    req: Request
+  ): Promise<boolean> => consumeClientRateLimit(scope, getClientKey(req));
   const memoryChallengeEvents: OnlineChallengeEvent[] = [];
   const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
   const memoryOpenSeekEvents: OpenSeekEvent[] = [];
@@ -3761,8 +3780,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     next();
   });
 
-  app.get("/api/online/account/oauth/providers", (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+  app.get("/api/online/account/oauth/providers", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -3781,8 +3800,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
   });
 
-  app.get("/api/online/account/oauth/google/start", (req, res) => {
-    if (!accountAuthLimiter.take(getClientKey(req))) {
+  app.get("/api/online/account/oauth/google/start", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
       });
@@ -3812,7 +3831,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
   app.get("/api/online/account/oauth/google/callback", async (req, res) => {
     clearGoogleOAuthStateCookie(res, googleOAuthCookieSecure);
-    if (!accountAuthLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
       });
@@ -3904,7 +3923,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/accounts", async (req, res) => {
-    if (!accountCreateLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_create", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -3970,7 +3989,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/session", async (req, res) => {
-    if (!accountAuthLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
       });
@@ -4035,7 +4054,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/me", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4058,7 +4077,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/ratings/leaderboard", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many public rating requests were sent too quickly." },
       });
@@ -4102,7 +4121,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/profiles/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4155,7 +4174,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/follows", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4191,7 +4210,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.put("/api/online/account/follows/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4241,7 +4260,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/follows/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4290,7 +4309,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.put("/api/online/account/blocks/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4346,7 +4365,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/blocks/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4395,7 +4414,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/reports/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4464,7 +4483,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.get("/api/online/admin/reports", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);
-    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    const rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
     if (!authorized) {
       log({
         event: "online.admin.reports",
@@ -4523,7 +4542,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.patch("/api/online/admin/reports/:reportId", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);
-    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    const rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
     if (!authorized) {
       log({
         event: "online.admin.report.update",
@@ -4617,7 +4636,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.get("/api/online/admin/reports/:reportId/audits", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);
-    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    const rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
     if (!authorized) {
       log({
         event: "online.admin.report.audits",
@@ -4683,7 +4702,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/privacy", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4719,7 +4738,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.patch("/api/online/account/privacy", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4768,7 +4787,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/challenges", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4806,7 +4825,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/challenges/:challengeId/accept", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
       });
@@ -4881,7 +4900,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/challenges/:challengeId/decline", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
       });
@@ -4952,7 +4971,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/challenges/:challengeId/cancel", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
       });
@@ -5023,7 +5042,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/sessions", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5064,7 +5083,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/session", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5120,7 +5139,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/sessions", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5167,7 +5186,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5214,7 +5233,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/games", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5243,7 +5262,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/games/head-to-head/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5283,7 +5302,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/games/:gameId/snapshot", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5377,7 +5396,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/games/:gameId/rejoin", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5591,7 +5610,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   };
 
   app.get("/api/online/seeks", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5627,7 +5646,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/seeks", async (req, res) => {
-    if (!createOpenSeekLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("create_open_seek", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5753,7 +5772,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/seeks/:seekId", async (req, res) => {
-    if (!openSeekActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("open_seek_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5790,7 +5809,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/seeks/:seekId/cancel", async (req, res) => {
-    if (!openSeekActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("open_seek_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5851,7 +5870,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/seeks/:seekId/accept", async (req, res) => {
-    if (!openSeekActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("open_seek_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5926,7 +5945,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/matchmaking/quick", async (req, res) => {
-    if (!quickMatchLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("quick_match", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6052,7 +6071,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges", async (req, res) => {
-    if (!createChallengeLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("create_challenge", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6292,7 +6311,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/challenges/:challengeId", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6332,7 +6351,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges/:challengeId/accept", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6388,7 +6407,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges/:challengeId/decline", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6453,7 +6472,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges/:challengeId/cancel", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6518,7 +6537,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/games", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6556,7 +6575,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/games/:gameId/summary", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6620,7 +6639,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/games", async (req, res) => {
-    if (!createGameLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("create_game", req)) {
       log({ event: "online.game.create", status: "rejected", reason: "rate_limited" });
       res.status(429).json({
         error: {
@@ -6979,7 +6998,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
-    if (!spectatorSnapshotLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("spectator_snapshot", req)) {
       log({
         event: "online.http.spectate",
         gameId: gameId.value,
@@ -7237,7 +7256,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     data: RawData,
     clientKey: string
   ): Promise<void> => {
-    if (!socketMessageLimiter.take(clientKey)) {
+    if (!await consumeClientRateLimit("socket_message", clientKey)) {
       log({ event: "online.socket.message", status: "rejected", reason: "rate_limited" });
       sendSocketError(socket, {
         code: "rate_limited",

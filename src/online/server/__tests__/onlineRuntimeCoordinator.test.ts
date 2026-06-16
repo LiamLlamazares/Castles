@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   createPostgresOperationGateRuntimeCoordinator,
+  createPostgresRateLimitRuntimeCoordinator,
   createPostgresRuntimeEventCoordinator,
   createPostgresStartupMaintenanceRuntimeCoordinator,
   createPostgresSpectatorPresenceRuntimeCoordinator,
   createSingleNodeOnlineRuntimeCoordinator,
   normalizeRuntimeNodeId,
   type OnlineRuntimeOperationGateScope,
+  type OnlineRuntimeRateLimitInput,
+  type OnlineRuntimeRateLimitScope,
   type OnlineRuntimeSnapshotReason,
   type OnlineRuntimeStartupMaintenanceResult,
 } from "../onlineRuntimeCoordinator";
@@ -172,6 +175,16 @@ class FakeStartupMaintenanceStore {
   }
 }
 
+class FakeRateLimitStore {
+  readonly calls: OnlineRuntimeRateLimitInput[] = [];
+  nextAllowed = true;
+
+  async consumeRateLimit(input: OnlineRuntimeRateLimitInput): Promise<boolean> {
+    this.calls.push(input);
+    return this.nextAllowed;
+  }
+}
+
 describe("normalizeRuntimeNodeId", () => {
   it("accepts short visible operator node ids", () => {
     expect(normalizeRuntimeNodeId(" node-a_01 ")).toBe("node-a_01");
@@ -195,6 +208,7 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "process-local",
+      rateLimits: "process-local",
       startupMaintenance: "process-local",
     });
   });
@@ -449,6 +463,51 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
     expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
   });
 
+  it("enforces process-local fixed-window rate limits per scope and key", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const base = {
+      key: "198.51.100.20",
+      limit: 2,
+      windowMs: 60_000,
+    };
+
+    await expect(
+      coordinator.consumeRateLimit({ ...base, scope: "quick_match" })
+    ).resolves.toBe(true);
+    await expect(
+      coordinator.consumeRateLimit({ ...base, scope: "quick_match" })
+    ).resolves.toBe(true);
+    await expect(
+      coordinator.consumeRateLimit({ ...base, scope: "quick_match" })
+    ).resolves.toBe(false);
+    await expect(
+      coordinator.consumeRateLimit({ ...base, scope: "create_challenge" })
+    ).resolves.toBe(true);
+    await expect(
+      coordinator.consumeRateLimit({ ...base, key: "198.51.100.21", scope: "quick_match" })
+    ).resolves.toBe(true);
+  });
+
+  it("rejects invalid process-local rate-limit parameters", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const valid = {
+      scope: "quick_match" as OnlineRuntimeRateLimitScope,
+      key: "198.51.100.20",
+      limit: 2,
+      windowMs: 60_000,
+    };
+
+    await expect(coordinator.consumeRateLimit({ ...valid, key: "" })).rejects.toThrow(
+      /Rate-limit key/
+    );
+    await expect(coordinator.consumeRateLimit({ ...valid, limit: 0 })).rejects.toThrow(
+      /Rate-limit limit/
+    );
+    await expect(coordinator.consumeRateLimit({ ...valid, windowMs: 0 })).rejects.toThrow(
+      /Rate-limit window/
+    );
+  });
+
   it("serializes same startup maintenance task locally while still executing each local call", async () => {
     const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
     const order: string[] = [];
@@ -562,6 +621,58 @@ describe("createPostgresOperationGateRuntimeCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "postgres-selected-shared-gates",
+      rateLimits: "process-local",
+      startupMaintenance: "process-local",
+    });
+  });
+});
+
+describe("createPostgresRateLimitRuntimeCoordinator", () => {
+  it("delegates selected shared rate limits to a shared rate-limit store", async () => {
+    const rateLimitStore = new FakeRateLimitStore();
+    const coordinator = createPostgresRateLimitRuntimeCoordinator({
+      nodeId: "node-a",
+      rateLimitStore,
+    });
+
+    await expect(
+      coordinator.consumeRateLimit({
+        scope: "quick_match",
+        key: "198.51.100.20",
+        limit: 20,
+        windowMs: 60_000,
+      })
+    ).resolves.toBe(true);
+    rateLimitStore.nextAllowed = false;
+    await expect(
+      coordinator.consumeRateLimit({
+        scope: "challenge_action",
+        key: "198.51.100.20",
+        limit: 120,
+        windowMs: 10_000,
+      })
+    ).resolves.toBe(false);
+
+    expect(rateLimitStore.calls).toEqual([
+      {
+        scope: "quick_match",
+        key: "198.51.100.20",
+        limit: 20,
+        windowMs: 60_000,
+      },
+      {
+        scope: "challenge_action",
+        key: "198.51.100.20",
+        limit: 120,
+        windowMs: 10_000,
+      },
+    ]);
+    expect(coordinator.capabilities).toEqual({
+      mode: "single-node",
+      websocketFanout: "process-local",
+      spectatorPresence: "process-local",
+      operationGates: "process-local",
+      rateLimits: "postgres-shared-fixed-window",
       startupMaintenance: "process-local",
     });
   });
@@ -597,6 +708,7 @@ describe("createPostgresStartupMaintenanceRuntimeCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "process-local",
+      rateLimits: "process-local",
       startupMaintenance: "postgres-once-per-run",
     });
   });
@@ -647,6 +759,7 @@ describe("createPostgresSpectatorPresenceRuntimeCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "postgres-live-presence",
       operationGates: "process-local",
+      rateLimits: "process-local",
       startupMaintenance: "process-local",
     });
     expect(await nodeA.countSpectators("game_123")).toBe(2);
@@ -755,6 +868,7 @@ describe("createPostgresRuntimeEventCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "process-local",
+      rateLimits: "process-local",
       startupMaintenance: "process-local",
     });
   });

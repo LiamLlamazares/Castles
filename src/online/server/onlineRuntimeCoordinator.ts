@@ -50,7 +50,34 @@ export interface OnlineRuntimeCoordinatorCapabilities {
   websocketFanout: "process-local";
   spectatorPresence: "process-local" | "postgres-live-presence";
   operationGates: "process-local" | "postgres-selected-shared-gates";
+  rateLimits: "process-local" | "postgres-shared-fixed-window";
   startupMaintenance: "process-local" | "postgres-once-per-run";
+}
+
+export type OnlineRuntimeRateLimitScope =
+  | "account_auth"
+  | "account_create"
+  | "account_read"
+  | "admin_read"
+  | "challenge_action"
+  | "create_challenge"
+  | "create_game"
+  | "create_open_seek"
+  | "open_seek_action"
+  | "public_directory"
+  | "quick_match"
+  | "socket_message"
+  | "spectator_snapshot";
+
+export interface OnlineRuntimeRateLimitInput {
+  scope: OnlineRuntimeRateLimitScope;
+  key: string;
+  limit: number;
+  windowMs: number;
+}
+
+export interface OnlineRuntimeRateLimitStore {
+  consumeRateLimit(input: OnlineRuntimeRateLimitInput): Promise<boolean>;
 }
 
 export type OnlineRuntimeOperationGateScope =
@@ -127,6 +154,7 @@ export interface OnlineRuntimeCoordinator {
   withAccountChallengePairGate<T>(pairKey: string, operation: () => Promise<T>): Promise<T>;
   withOpenSeekLifecycleGate<T>(seekKey: string, operation: () => Promise<T>): Promise<T>;
   withChallengeLifecycleGate<T>(challengeKey: string, operation: () => Promise<T>): Promise<T>;
+  consumeRateLimit(input: OnlineRuntimeRateLimitInput): Promise<boolean>;
   runStartupMaintenance<T>(
     input: { taskKey: string; runKey: string },
     operation: () => Promise<T>
@@ -188,6 +216,7 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
   const openSeekLifecycleGates = new Map<string, Promise<void>>();
   const challengeLifecycleGates = new Map<string, Promise<void>>();
   const startupMaintenanceGates = new Map<string, Promise<void>>();
+  const rateLimitEntries = new Map<string, { count: number; resetAt: number }>();
   let drainState: OnlineRuntimeDrainState = { draining: false };
 
   const runQueuedOperation = async <T>(
@@ -218,6 +247,23 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
     return value;
   };
 
+  const validateRateLimitInput = (input: OnlineRuntimeRateLimitInput): OnlineRuntimeRateLimitInput => {
+    const key = input.key.trim();
+    if (!key || key.length > 256) {
+      throw new Error("Rate-limit key must be non-empty and at most 256 characters.");
+    }
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1) {
+      throw new Error("Rate-limit limit must be a positive integer.");
+    }
+    if (!Number.isSafeInteger(input.windowMs) || input.windowMs < 1) {
+      throw new Error("Rate-limit window must be a positive integer of milliseconds.");
+    }
+    return { ...input, key };
+  };
+
+  const rateLimitEntryKey = (input: OnlineRuntimeRateLimitInput): string =>
+    `${input.scope}\u0000${input.windowMs}\u0000${input.key}`;
+
   return {
     nodeId,
     capabilities: {
@@ -225,6 +271,7 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "process-local",
+      rateLimits: "process-local",
       startupMaintenance: "process-local",
     },
     async publishGameSnapshotChanged(event) {
@@ -306,6 +353,21 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
         operation
       );
     },
+    async consumeRateLimit(input) {
+      const normalized = validateRateLimitInput(input);
+      const key = rateLimitEntryKey(normalized);
+      const now = Date.now();
+      const entry = rateLimitEntries.get(key);
+      if (!entry || entry.resetAt <= now) {
+        rateLimitEntries.set(key, { count: 1, resetAt: now + normalized.windowMs });
+        return true;
+      }
+      if (entry.count >= normalized.limit) {
+        return false;
+      }
+      entry.count += 1;
+      return true;
+    },
     async runStartupMaintenance({ taskKey, runKey }, operation) {
       const gateKey = `${validateGateKey(taskKey, "Startup maintenance task")}\u0000${validateGateKey(
         runKey,
@@ -323,6 +385,7 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       openSeekLifecycleGates.clear();
       challengeLifecycleGates.clear();
       startupMaintenanceGates.clear();
+      rateLimitEntries.clear();
     },
   };
 }
@@ -443,6 +506,24 @@ export function createPostgresOperationGateRuntimeCoordinator(options: {
         { scope: "challenge_lifecycle", key: challengeKey },
         operation
       );
+    },
+  };
+}
+
+export function createPostgresRateLimitRuntimeCoordinator(options: {
+  nodeId: string;
+  rateLimitStore: OnlineRuntimeRateLimitStore;
+}): OnlineRuntimeCoordinator {
+  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+
+  return {
+    ...local,
+    capabilities: {
+      ...local.capabilities,
+      rateLimits: "postgres-shared-fixed-window",
+    },
+    async consumeRateLimit(input) {
+      return options.rateLimitStore.consumeRateLimit(input);
     },
   };
 }

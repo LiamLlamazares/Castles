@@ -5303,6 +5303,138 @@ describe("createOnlineHttpServer", () => {
     expect(publicList.status).toBe(200);
   });
 
+  it("routes HTTP fixed-window rate limits through the runtime coordinator", async () => {
+    const deniedScopes = new Set([
+      "account_auth",
+      "account_create",
+      "account_read",
+      "admin_read",
+      "challenge_action",
+      "create_challenge",
+      "create_game",
+      "create_open_seek",
+      "open_seek_action",
+      "public_directory",
+      "quick_match",
+      "spectator_snapshot",
+    ]);
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation(async (input) => !deniedScopes.has(input.scope));
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+      adminBearerToken: "admin-token",
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const headers = {
+      "content-type": "application/json",
+      "x-forwarded-for": "198.51.100.40, 203.0.113.40",
+    };
+
+    const requests: Array<Promise<Response>> = [
+      fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ displayName: "SharedRateUser", password: "pw" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ displayName: "SharedRateUser", password: "pw" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+        headers: { ...headers, ...bearer("admin-token") },
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/challenges/challenge_shared_rate/decline`, {
+        method: "POST",
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup, challengerSeat: "w", visibility: "private" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/games`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup, creatorSeat: "w", creatorSessionId: "session_creator" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/seeks/seek_shared_rate`, {
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/games?state=active`, {
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup, sessionId: "session_quick" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/games/game_shared_rate/spectator`, {
+        headers,
+      }),
+    ];
+
+    const responses = await Promise.all(requests);
+
+    expect(responses.map((response) => response.status)).toEqual(Array(12).fill(429));
+    expect(new Set(consumeRateLimit.mock.calls.map(([input]) => input.scope))).toEqual(
+      deniedScopes
+    );
+    expect(consumeRateLimit.mock.calls.every(([input]) => input.key === "203.0.113.40")).toBe(true);
+  });
+
+  it("bounds and sanitizes trusted forwarded HTTP rate-limit keys before the runtime coordinator", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalConsumeRateLimit = runtimeCoordinator.consumeRateLimit.bind(runtimeCoordinator);
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation((input) => originalConsumeRateLimit(input));
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const longForwardedValue = `203.0.113.${"7".repeat(300)}`;
+    const secretForwardedValue = "https://castles.example/play?token=shared-secret";
+    const entityForwardedValue = "account_session_forwarded_secret";
+
+    const longResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+      headers: { "x-forwarded-for": longForwardedValue },
+    });
+    const secretResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+      headers: { "x-forwarded-for": secretForwardedValue },
+    });
+    const entityResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+      headers: { "x-forwarded-for": entityForwardedValue },
+    });
+
+    expect(longResponse.status).toBe(200);
+    expect(secretResponse.status).toBe(200);
+    expect(entityResponse.status).toBe(200);
+    const keys = consumeRateLimit.mock.calls.map(([input]) => input.key);
+    expect(keys).toHaveLength(3);
+    expect(keys[0]?.length).toBeLessThanOrEqual(256);
+    expect(keys[0]).not.toContain(longForwardedValue);
+    expect(keys[1]).not.toContain("token");
+    expect(keys[1]).not.toContain("shared-secret");
+    expect(keys[2]).not.toContain("account_session");
+    expect(keys[2]).not.toContain("forwarded_secret");
+  });
+
   it("cancels creator-owned open seeks and keeps them off the public lobby", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
@@ -10943,6 +11075,102 @@ describe("createOnlineHttpServer", () => {
       sameRealClientSocket.close();
       otherClientSocket.close();
       spoofedOnlySocket.close();
+    }
+  });
+
+  it("routes websocket message rate limits through the runtime coordinator", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation(async (input) => input.scope !== "socket_message");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": "198.51.100.99, 203.0.113.22" },
+    });
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 1 })));
+
+      await expect(nextSocketMessage(socket, "runtime coordinator socket rate limit")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "rate_limited" },
+      });
+      expect(consumeRateLimit).toHaveBeenCalledWith({
+        scope: "socket_message",
+        key: "203.0.113.22",
+        limit: 120,
+        windowMs: 10_000,
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("bounds and sanitizes trusted forwarded websocket rate-limit keys before the runtime coordinator", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalConsumeRateLimit = runtimeCoordinator.consumeRateLimit.bind(runtimeCoordinator);
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation((input) => originalConsumeRateLimit(input));
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const longForwardedValue = `203.0.113.${"8".repeat(300)}`;
+    const secretForwardedValue = "https://castles.example/play?token=socket-secret";
+    const entityForwardedValue = "challenge_forwarded_secret";
+    const longSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": longForwardedValue },
+    });
+    const secretSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": secretForwardedValue },
+    });
+    const entitySocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": entityForwardedValue },
+    });
+
+    try {
+      await Promise.all([
+        waitForSocketOpen(longSocket),
+        waitForSocketOpen(secretSocket),
+        waitForSocketOpen(entitySocket),
+      ]);
+      longSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 41 })));
+      secretSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 42 })));
+      entitySocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 43 })));
+
+      await expect(nextSocketMessage(longSocket, "bounded forwarded websocket ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 41,
+      });
+      await expect(nextSocketMessage(secretSocket, "secret forwarded websocket ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 42,
+      });
+      await expect(nextSocketMessage(entitySocket, "entity forwarded websocket ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 43,
+      });
+      const keys = consumeRateLimit.mock.calls.map(([input]) => input.key);
+      expect(keys).toHaveLength(3);
+      expect(keys[0]?.length).toBeLessThanOrEqual(256);
+      expect(keys[0]).not.toContain(longForwardedValue);
+      expect(keys[1]).not.toContain("token");
+      expect(keys[1]).not.toContain("socket-secret");
+      expect(keys[2]).not.toContain("challenge");
+      expect(keys[2]).not.toContain("forwarded_secret");
+    } finally {
+      longSocket.close();
+      secretSocket.close();
+      entitySocket.close();
     }
   });
 
