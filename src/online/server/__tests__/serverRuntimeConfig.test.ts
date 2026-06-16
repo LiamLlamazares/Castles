@@ -16,6 +16,7 @@ describe("parseServerRuntimeConfig", () => {
         CASTLES_ENABLE_LOCAL_SHUTDOWN: "1",
         CASTLES_LOCAL_SHUTDOWN_TOKEN: "shutdown-token",
         CASTLES_DEPLOYMENT_MODE: "single-node",
+        CASTLES_NODE_ID: "prod-node-a",
         BUILD_ID: "20260601-010203",
         GIT_COMMIT: "0123456789abcdef0123456789abcdef01234567",
       },
@@ -30,6 +31,7 @@ describe("parseServerRuntimeConfig", () => {
       requireStaticDir: true,
       localShutdownEnabled: true,
       localShutdownToken: "shutdown-token",
+      runtimeNodeId: "prod-node-a",
       deployment: {
         mode: "single-node",
         multiInstanceReady: false,
@@ -63,6 +65,21 @@ describe("parseServerRuntimeConfig", () => {
       queueGuards: "process-local",
       routing: "single-node",
     });
+  });
+
+  it("generates a safe runtime node id outside explicit configuration", () => {
+    const config = parseServerRuntimeConfig({}, "C:/repo/Castles");
+
+    expect(config.runtimeNodeId).toMatch(/^node_[A-Za-z0-9_-]+$/);
+  });
+
+  it("rejects unsafe explicit runtime node ids", () => {
+    expect(() =>
+      parseServerRuntimeConfig({ CASTLES_NODE_ID: "node a" }, "/srv/castles")
+    ).toThrow(/CASTLES_NODE_ID/);
+    expect(() =>
+      parseServerRuntimeConfig({ CASTLES_NODE_ID: "https://node-a" }, "/srv/castles")
+    ).toThrow(/CASTLES_NODE_ID/);
   });
 
   it("rejects multi-instance deployment mode until shared presence and fanout exist", () => {

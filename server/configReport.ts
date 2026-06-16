@@ -35,6 +35,9 @@ export function createServerConfigurationReport({
     staticDir: config.staticDir,
     staticDirRequired: config.requireStaticDir,
     onlineDeployment: config.deployment,
+    runtime: {
+      nodeId: config.runtimeNodeId,
+    },
     onlineStore: {
       backend: onlineStore.backend,
       path: onlineStore.path,

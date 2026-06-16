@@ -1,5 +1,9 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
+import {
+  createGeneratedRuntimeNodeId,
+  normalizeRuntimeNodeId,
+} from "./onlineRuntimeCoordinator";
 
 export interface ServerRuntimeConfig {
   port: number;
@@ -15,6 +19,7 @@ export interface ServerRuntimeConfig {
   requireStaticDir: boolean;
   localShutdownEnabled: boolean;
   localShutdownToken?: string;
+  runtimeNodeId: string;
   deployment: ServerDeploymentConfig;
   buildId?: string;
   commit?: string;
@@ -195,6 +200,11 @@ function parseDeploymentConfig(env: NodeJS.ProcessEnv): ServerDeploymentConfig {
   throw new Error("CASTLES_DEPLOYMENT_MODE must be single-node or unset.");
 }
 
+function parseRuntimeNodeId(env: NodeJS.ProcessEnv): string {
+  const raw = env.CASTLES_NODE_ID?.trim();
+  return raw ? normalizeRuntimeNodeId(raw) : createGeneratedRuntimeNodeId();
+}
+
 function requireProductionMetadata(env: NodeJS.ProcessEnv): void {
   if (env.NODE_ENV !== "production") return;
 
@@ -222,6 +232,7 @@ export function parseServerRuntimeConfig(
   const googleOAuth = parseGoogleOAuthConfig(env);
   const adminBearerToken = parseAdminBearerToken(env);
   const deployment = parseDeploymentConfig(env);
+  const runtimeNodeId = parseRuntimeNodeId(env);
   requireProductionMetadata(env);
   const staticDir = env.CASTLES_STATIC_DIR?.trim()
     ? env.CASTLES_STATIC_DIR.trim()
@@ -252,6 +263,7 @@ export function parseServerRuntimeConfig(
     requireStaticDir,
     localShutdownEnabled,
     localShutdownToken,
+    runtimeNodeId,
     deployment,
     buildId: env.BUILD_ID?.trim() || undefined,
     commit: env.GIT_COMMIT?.trim() || undefined,
