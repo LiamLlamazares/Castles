@@ -216,6 +216,18 @@ export class PostgresOnlineRateLimitStore implements OnlineRuntimeRateLimitStore
     await this.closeConnection?.();
   }
 
+  async cleanupExpiredRateLimits(): Promise<number> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        DELETE FROM online_rate_limits
+        WHERE window_started_at + (window_ms * interval '1 millisecond') <= now()
+      `,
+      []
+    );
+    return result.rowCount ?? 0;
+  }
+
   private async createSchema(): Promise<void> {
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_rate_limits (

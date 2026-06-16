@@ -17,7 +17,10 @@ import {
   hashOnlineToken,
   verifyOnlineToken,
 } from "../src/online/server/onlineTokenCredentials";
-import { runOnlineStartupMaintenance } from "./startupMaintenance";
+import {
+  runOnlineRuntimeTableCleanup,
+  runOnlineStartupMaintenance,
+} from "./startupMaintenance";
 import {
   startRuntimeEventPolling,
   type RuntimeEventPoller,
@@ -135,6 +138,16 @@ async function main() {
       },
       onOpenSeekEventError: (line, error) => {
         console.error(`Invalid online seek event store entry ${line}`, error);
+      },
+    });
+    await runOnlineRuntimeTableCleanup({
+      config,
+      runtimeCoordinator,
+      stores: {
+        spectatorPresenceStore,
+        runtimeEventStore,
+        operationGateStore,
+        rateLimitStore,
       },
     });
     const service = OnlineGameService.fromRecords(records, {

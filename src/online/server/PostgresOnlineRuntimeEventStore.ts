@@ -71,6 +71,13 @@ function normalizeRuntimeEventLimit(limit: number): number {
   return limit;
 }
 
+function normalizeRuntimeEventRetentionMs(retentionMs: number): number {
+  if (!Number.isSafeInteger(retentionMs) || retentionMs < 1) {
+    throw new Error("PostgreSQL runtime event retention must be a positive integer of milliseconds.");
+  }
+  return retentionMs;
+}
+
 function normalizeOptionalText(value: string | undefined): string | null {
   if (value === undefined) return null;
   const trimmed = value.trim();
@@ -243,6 +250,19 @@ export class PostgresOnlineRuntimeEventStore {
         WHERE created_at < $1::timestamptz
       `,
       [cutoff.toISOString()]
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async cleanupRuntimeEventsOlderThan(retentionMs: number): Promise<number> {
+    const retention = normalizeRuntimeEventRetentionMs(retentionMs);
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        DELETE FROM online_runtime_events
+        WHERE created_at < now() - ($1::bigint * interval '1 millisecond')
+      `,
+      [retention]
     );
     return result.rowCount ?? 0;
   }

@@ -8,13 +8,14 @@ class FakePostgresClient {
   readonly queries: Array<{ text: string; values?: unknown[] }> = [];
   releaseCount = 0;
   rollbackFails = false;
+  nextRowCount = 0;
 
   async query(text: string, values?: unknown[]): Promise<{ rows: any[]; rowCount: number }> {
     this.queries.push({ text, values });
     if (/rollback/i.test(text) && this.rollbackFails) {
       throw new Error("rollback unavailable");
     }
-    return { rows: [], rowCount: 0 };
+    return { rows: [], rowCount: this.nextRowCount };
   }
 
   release(): void {
@@ -272,6 +273,60 @@ describe("PostgresOnlineOperationGateStore", () => {
       }, async () => undefined)
     ).rejects.toThrow(/must not contain secrets/);
 
+    expect(queryable.queries).toEqual([]);
+  });
+
+  it("deletes stale operation lock rows before a retention cutoff", async () => {
+    const queryable = new FakePostgresClient();
+    queryable.nextRowCount = 3;
+    const store = new PostgresOnlineOperationGateStore({ queryable });
+
+    await expect(
+      store.cleanupOperationLocksBefore("2026-06-16T12:00:00.000Z")
+    ).resolves.toBe(3);
+
+    const deleteQuery = queryable.queries.find((query) =>
+      /delete from online_operation_locks/i.test(query.text)
+    );
+    expect(compactSql(deleteQuery?.text ?? "")).toBe(
+      "DELETE FROM online_operation_locks WHERE updated_at < $1::timestamptz"
+    );
+    expect(deleteQuery?.values).toEqual(["2026-06-16T12:00:00.000Z"]);
+  });
+
+  it("rejects invalid operation lock cleanup cutoffs before querying", async () => {
+    const queryable = new FakePostgresClient();
+    const store = new PostgresOnlineOperationGateStore({ queryable });
+
+    await expect(store.cleanupOperationLocksBefore("not-a-date")).rejects.toThrow(
+      /operation lock cleanup cutoff/
+    );
+    expect(queryable.queries).toEqual([]);
+  });
+
+  it("deletes stale operation lock rows using PostgreSQL time for retention cutoffs", async () => {
+    const queryable = new FakePostgresClient();
+    queryable.nextRowCount = 5;
+    const store = new PostgresOnlineOperationGateStore({ queryable });
+
+    await expect(store.cleanupOperationLocksOlderThan(86_400_000)).resolves.toBe(5);
+
+    const deleteQuery = queryable.queries.find((query) =>
+      /delete from online_operation_locks/i.test(query.text)
+    );
+    expect(compactSql(deleteQuery?.text ?? "")).toBe(
+      "DELETE FROM online_operation_locks WHERE updated_at < now() - ($1::bigint * interval '1 millisecond')"
+    );
+    expect(deleteQuery?.values).toEqual([86_400_000]);
+  });
+
+  it("rejects invalid operation lock cleanup retention before querying", async () => {
+    const queryable = new FakePostgresClient();
+    const store = new PostgresOnlineOperationGateStore({ queryable });
+
+    await expect(store.cleanupOperationLocksOlderThan(0)).rejects.toThrow(
+      /operation lock retention/
+    );
     expect(queryable.queries).toEqual([]);
   });
 });

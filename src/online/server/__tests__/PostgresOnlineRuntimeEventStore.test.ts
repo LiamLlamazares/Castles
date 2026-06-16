@@ -68,6 +68,21 @@ class FakePostgresRuntimeEventQueryable {
       return { rows, rowCount: rows.length };
     }
 
+    if (
+      /^DELETE FROM online_runtime_events/i.test(normalized) &&
+      /created_at < now\(\) - \(\$1::bigint \* interval '1 millisecond'\)/i.test(normalized)
+    ) {
+      const [retentionMs] = values as [number];
+      const cutoffMs = this.databaseNowMs - retentionMs;
+      const before = this.events.length;
+      for (const row of [...this.events]) {
+        if (Date.parse(row.created_at) < cutoffMs) {
+          this.events.splice(this.events.indexOf(row), 1);
+        }
+      }
+      return { rows: [], rowCount: before - this.events.length };
+    }
+
     if (/^DELETE FROM online_runtime_events/i.test(normalized)) {
       const [cutoffIso] = values as [string];
       const before = this.events.length;
@@ -235,6 +250,43 @@ describe("PostgresOnlineRuntimeEventStore", () => {
 
     expect(await store.cleanupRuntimeEventsBefore("2026-06-16T00:00:00.000Z")).toBe(1);
     expect(queryable.events.map((row) => row.game_id)).toEqual(["game_new"]);
+  });
+
+  it("cleans old runtime events using PostgreSQL time for retention cutoffs", async () => {
+    const queryable = new FakePostgresRuntimeEventQueryable();
+    queryable.databaseNowMs = Date.parse("2026-06-16T12:00:00.000Z");
+    queryable.seed({
+      id: 1,
+      event_type: "game_snapshot_changed",
+      game_id: "game_old",
+      room_version: 1,
+      last_event_id: null,
+      reason: "action",
+      node_id: "node-a",
+      created_at: "2026-06-15T11:59:59.000Z",
+    });
+    queryable.seed({
+      id: 2,
+      event_type: "game_snapshot_changed",
+      game_id: "game_fresh",
+      room_version: 2,
+      last_event_id: null,
+      reason: "action",
+      node_id: "node-a",
+      created_at: "2026-06-15T12:00:01.000Z",
+    });
+    const store = new PostgresOnlineRuntimeEventStore({ nodeId: "node-a", queryable });
+
+    expect(await store.cleanupRuntimeEventsOlderThan(86_400_000)).toBe(1);
+
+    const deleteQuery = queryable.queries.find((query) =>
+      /delete from online_runtime_events/i.test(query.text)
+    );
+    expect(deleteQuery?.values).toEqual([86_400_000]);
+    expect(deleteQuery?.text.replace(/\s+/g, " ").trim()).toBe(
+      "DELETE FROM online_runtime_events WHERE created_at < now() - ($1::bigint * interval '1 millisecond')"
+    );
+    expect(queryable.events.map((row) => row.game_id)).toEqual(["game_fresh"]);
   });
 
   it("rejects unsafe node ids, unsupported reasons, invalid cursor limits, and malformed rows", async () => {

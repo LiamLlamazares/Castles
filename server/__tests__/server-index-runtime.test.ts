@@ -29,9 +29,11 @@ describe("server runtime coordinator wiring", () => {
     const rateLimitStoreIndex = source.indexOf("rateLimitStore,", coordinatorIndex);
     const startupStoreIndex = source.indexOf("startupMaintenanceStore,", coordinatorIndex);
     const maintenanceIndex = source.indexOf("runOnlineStartupMaintenance({");
+    const runtimeCleanupIndex = source.indexOf("runOnlineRuntimeTableCleanup({");
     const serviceIndex = source.indexOf("OnlineGameService.fromRecords(records");
     const directSummaryRebuildIndex = source.indexOf("await store.rebuildSummaries({");
 
+    expect(source).toContain("runOnlineRuntimeTableCleanup");
     expect(coordinatorIndex).toBeGreaterThan(-1);
     expect(spectatorStoreIndex).toBeGreaterThan(coordinatorIndex);
     expect(runtimeEventStoreIndex).toBeGreaterThan(coordinatorIndex);
@@ -40,6 +42,11 @@ describe("server runtime coordinator wiring", () => {
     expect(startupStoreIndex).toBeGreaterThan(coordinatorIndex);
     expect(maintenanceIndex).toBeGreaterThan(coordinatorIndex);
     expect(maintenanceIndex).toBeLessThan(serviceIndex);
+    expect(runtimeCleanupIndex).toBeGreaterThan(maintenanceIndex);
+    expect(runtimeCleanupIndex).toBeLessThan(serviceIndex);
+    expect(source).toMatch(
+      /runOnlineRuntimeTableCleanup\(\{[\s\S]*spectatorPresenceStore,[\s\S]*runtimeEventStore,[\s\S]*operationGateStore,[\s\S]*rateLimitStore,[\s\S]*\}\)/
+    );
     expect(directSummaryRebuildIndex).toBe(-1);
   });
 

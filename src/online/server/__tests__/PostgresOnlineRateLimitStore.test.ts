@@ -7,6 +7,7 @@ class FakePostgresRateLimitClient {
   rollbackFails = false;
   now = "2026-06-16T12:00:00.000Z";
   selectedRows: any[] = [];
+  nextRowCount = 0;
 
   async query(text: string, values?: unknown[]): Promise<{ rows: any[]; rowCount: number }> {
     this.queries.push({ text, values });
@@ -19,7 +20,7 @@ class FakePostgresRateLimitClient {
     if (/from online_rate_limits/i.test(text) && /for update/i.test(text)) {
       return { rows: this.selectedRows, rowCount: this.selectedRows.length };
     }
-    return { rows: [], rowCount: 0 };
+    return { rows: [], rowCount: this.nextRowCount };
   }
 
   release(): void {
@@ -236,5 +237,21 @@ describe("PostgresOnlineRateLimitStore", () => {
     ).rejects.toThrow(/transaction client factory/);
 
     expect(queryable.queries).toEqual([]);
+  });
+
+  it("deletes expired fixed-window rate-limit rows", async () => {
+    const queryable = new FakePostgresRateLimitClient();
+    queryable.nextRowCount = 4;
+    const store = new PostgresOnlineRateLimitStore({ queryable });
+
+    await expect(store.cleanupExpiredRateLimits()).resolves.toBe(4);
+
+    const deleteQuery = queryable.queries.find((query) =>
+      /delete from online_rate_limits/i.test(query.text)
+    );
+    expect(compactSql(deleteQuery?.text ?? "")).toBe(
+      "DELETE FROM online_rate_limits WHERE window_started_at + (window_ms * interval '1 millisecond') <= now()"
+    );
+    expect(deleteQuery?.values).toEqual([]);
   });
 });

@@ -72,6 +72,13 @@ function normalizeOperationGateKey(
   return value;
 }
 
+function normalizeOperationLockRetentionMs(retentionMs: number): number {
+  if (!Number.isSafeInteger(retentionMs) || retentionMs < 1) {
+    throw new Error("PostgreSQL operation lock retention must be a positive integer of milliseconds.");
+  }
+  return retentionMs;
+}
+
 export class PostgresOnlineOperationGateStore implements OnlineRuntimeOperationGateStore {
   private readonly queryable: PostgresQueryable;
   private readonly transactionClientFactory?: () => Promise<PostgresTransactionClient>;
@@ -160,6 +167,35 @@ export class PostgresOnlineOperationGateStore implements OnlineRuntimeOperationG
 
   async close(): Promise<void> {
     await this.closeConnection?.();
+  }
+
+  async cleanupOperationLocksBefore(cutoffIso: string): Promise<number> {
+    const cutoff = new Date(cutoffIso);
+    if (Number.isNaN(cutoff.getTime())) {
+      throw new Error("PostgreSQL operation lock cleanup cutoff must be an ISO timestamp.");
+    }
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        DELETE FROM online_operation_locks
+        WHERE updated_at < $1::timestamptz
+      `,
+      [cutoff.toISOString()]
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async cleanupOperationLocksOlderThan(retentionMs: number): Promise<number> {
+    const retention = normalizeOperationLockRetentionMs(retentionMs);
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        DELETE FROM online_operation_locks
+        WHERE updated_at < now() - ($1::bigint * interval '1 millisecond')
+      `,
+      [retention]
+    );
+    return result.rowCount ?? 0;
   }
 
   private async createSchema(): Promise<void> {
