@@ -207,10 +207,18 @@ import {
   createSingleNodeDeploymentConfig,
   type ServerDeploymentConfig,
 } from "./serverRuntimeConfig";
+import {
+  createGeneratedRuntimeNodeId,
+  createSingleNodeOnlineRuntimeCoordinator,
+  type OnlineRuntimeCoordinator,
+  type OnlineRuntimeGameSnapshotChangedEvent,
+  type OnlineRuntimeRateLimitScope,
+  type OnlineRuntimeSnapshotReason,
+} from "./onlineRuntimeCoordinator";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
-  | { role: "spectator"; gameId: string };
+  | { role: "spectator"; gameId: string; spectatorConnectionId?: string };
 
 export type OnlineServerLogEvent = {
   event: string;
@@ -354,10 +362,12 @@ export interface CreateOnlineHttpServerOptions {
   listGameSummaries?: (
     options: OnlineGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
+  runtimeCoordinator?: OnlineRuntimeCoordinator;
   listPersonalGameSummaries?: (
     options: OnlinePersonalGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
   loadGameSummary?: (gameId: string) => OnlineGameSummary | null | Promise<OnlineGameSummary | null>;
+  loadGameRoomRecord?: (gameId: string) => OnlineGameRoomRecord | null | Promise<OnlineGameRoomRecord | null>;
   accountStore?: OnlineAccountStore;
   adminBearerToken?: string;
   oauth?: {
@@ -379,29 +389,6 @@ export interface CreateOnlineHttpServerOptions {
 class StoreReadinessTimeoutError extends Error {
   constructor() {
     super("Store readiness check timed out.");
-  }
-}
-
-class FixedWindowRateLimiter {
-  private readonly entries = new Map<string, { count: number; resetAt: number }>();
-
-  constructor(
-    private readonly limit: number,
-    private readonly windowMs: number
-  ) {}
-
-  take(key: string): boolean {
-    const now = Date.now();
-    const entry = this.entries.get(key);
-    if (!entry || entry.resetAt <= now) {
-      this.entries.set(key, { count: 1, resetAt: now + this.windowMs });
-      return true;
-    }
-    if (entry.count >= this.limit) {
-      return false;
-    }
-    entry.count += 1;
-    return true;
   }
 }
 
@@ -1194,6 +1181,13 @@ function sendSocketError(socket: WebSocket, error: OnlineReject): void {
   });
 }
 
+function drainUnavailableError(): OnlineReject {
+  return {
+    code: "service_unavailable",
+    message: "This node is draining for a deploy. Reconnect shortly.",
+  };
+}
+
 function parseMessage(data: RawData): unknown {
   const text = typeof data === "string" ? data : data.toString("utf8");
   return JSON.parse(text);
@@ -1220,6 +1214,29 @@ function getClientKey(req: Request): string {
 
 function getSocketClientKey(req: http.IncomingMessage): string {
   return getTrustedForwardedClient(req.headers, req.socket.remoteAddress) ?? req.socket.remoteAddress ?? "unknown";
+}
+
+const RATE_LIMIT_CLIENT_KEY_MAX_LENGTH = 128;
+const SAFE_RATE_LIMIT_CLIENT_KEY_PATTERN = /^[A-Za-z0-9:._-]+$/;
+const RAW_ONLINE_ENTITY_RATE_LIMIT_KEY_PATTERN =
+  /^(account_session|account|challenge|game|seek|report_audit|report)[_-][A-Za-z0-9_-]+$/i;
+
+function fingerprintRateLimitClientKey(value: string): string {
+  return `client:${createHash("sha256").update(value).digest("base64url")}`;
+}
+
+function normalizeRateLimitClientKey(key: string): string {
+  const value = key.trim() || "unknown";
+  if (
+    value.length <= RATE_LIMIT_CLIENT_KEY_MAX_LENGTH &&
+    SAFE_RATE_LIMIT_CLIENT_KEY_PATTERN.test(value) &&
+    !isSecretLikeKey(value) &&
+    !RAW_ONLINE_ENTITY_RATE_LIMIT_KEY_PATTERN.test(value) &&
+    !stringContainsDurableSecret(value)
+  ) {
+    return value;
+  }
+  return fingerprintRateLimitClientKey(value);
 }
 
 function getBearerToken(header: unknown): string | null {
@@ -1254,6 +1271,7 @@ function httpStatusForOnlineError(error: OnlineReject): number {
       return 429;
     case "not_allowed":
       return 409;
+    case "service_unavailable":
     case "persistence_failed":
       return 503;
     default:
@@ -1883,28 +1901,46 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const accountStore = options.accountStore ?? new MemoryOnlineAccountStore();
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
+  const runtimeCoordinator =
+    options.runtimeCoordinator ??
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: createGeneratedRuntimeNodeId() });
   const connections = new Map<WebSocket, OnlineConnection>();
   const disconnectedSockets = new WeakSet<WebSocket>();
-  const actionQueues = new Map<string, Promise<void>>();
-  const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const accountCreateLimiter = new FixedWindowRateLimiter(10, 60_000);
-  const accountAuthLimiter = new FixedWindowRateLimiter(30, 60_000);
-  const accountReadLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const adminReadLimiter = new FixedWindowRateLimiter(60, 10_000);
-  const createChallengeLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const createOpenSeekLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const quickMatchLimiter = new FixedWindowRateLimiter(20, 60_000);
-  const challengeActionLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const openSeekActionLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const publicDirectoryLimiter = new FixedWindowRateLimiter(240, 10_000);
-  const spectatorSnapshotLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const socketMessageLimiter = new FixedWindowRateLimiter(120, 10_000);
-  const accountChallengePairQueues = new Map<string, Promise<void>>();
+  const rateLimitConfig = {
+    account_auth: { limit: 30, windowMs: 60_000 },
+    account_create: { limit: 10, windowMs: 60_000 },
+    account_read: { limit: 120, windowMs: 10_000 },
+    admin_read: { limit: 60, windowMs: 10_000 },
+    challenge_action: { limit: 120, windowMs: 10_000 },
+    create_challenge: { limit: 20, windowMs: 60_000 },
+    create_game: { limit: 20, windowMs: 60_000 },
+    create_open_seek: { limit: 20, windowMs: 60_000 },
+    open_seek_action: { limit: 120, windowMs: 10_000 },
+    public_directory: { limit: 240, windowMs: 10_000 },
+    quick_match: { limit: 20, windowMs: 60_000 },
+    socket_message: { limit: 120, windowMs: 10_000 },
+    spectator_snapshot: { limit: 120, windowMs: 10_000 },
+  } satisfies Record<OnlineRuntimeRateLimitScope, { limit: number; windowMs: number }>;
+  const consumeClientRateLimit = (
+    scope: OnlineRuntimeRateLimitScope,
+    key: string
+  ): Promise<boolean> => {
+    const config = rateLimitConfig[scope];
+    return runtimeCoordinator.consumeRateLimit({
+      scope,
+      key: normalizeRateLimitClientKey(key),
+      limit: config.limit,
+      windowMs: config.windowMs,
+    });
+  };
+  const consumeRequestRateLimit = (
+    scope: OnlineRuntimeRateLimitScope,
+    req: Request
+  ): Promise<boolean> => consumeClientRateLimit(scope, getClientKey(req));
   const memoryChallengeEvents: OnlineChallengeEvent[] = [];
   const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
   const memoryOpenSeekEvents: OpenSeekEvent[] = [];
   const memoryOpenSeekCredentials = new Map<string, OpenSeekCredentials>();
-  const quickMatchSessionQueues = new Map<string, Promise<void>>();
   const googleOAuthStateSecret = randomBytes(32).toString("base64url");
   const googleOAuthConfig = normalizeGoogleOAuthProviderConfig(
     options.oauth?.google,
@@ -2192,58 +2228,39 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
-  const runQuickMatchForSession = async <T>(
-    sessionId: string,
-    task: () => Promise<T>
-  ): Promise<T> => {
-    const previous = quickMatchSessionQueues.get(sessionId) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const queued = previous.catch(() => undefined).then(() => gate);
-    quickMatchSessionQueues.set(sessionId, queued);
-    await previous.catch(() => undefined);
-    try {
-      return await task();
-    } finally {
-      release();
-      if (quickMatchSessionQueues.get(sessionId) === queued) {
-        quickMatchSessionQueues.delete(sessionId);
-      }
-    }
-  };
-
-  const accountChallengePairQueueKey = (
+  const accountChallengePairGateKey = (
     challengerIdentity: OnlineIdentity,
     challengedIdentity: OnlineIdentity
   ): string => {
-    return [
+    const pairKeyPayload = JSON.stringify([
       publicPlayerIdentityQueueKey(challengerIdentity),
       publicPlayerIdentityQueueKey(challengedIdentity),
-    ].join("\u0000");
+    ]);
+    return `account_challenge_pair:${createHash("sha256")
+      .update(pairKeyPayload, "utf8")
+      .digest("base64url")}`;
   };
 
-  const runAccountChallengePairTask = async <T>(
-    pairKey: string,
-    task: () => Promise<T>
-  ): Promise<T> => {
-    const previous = accountChallengePairQueues.get(pairKey) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const queued = previous.catch(() => undefined).then(() => gate);
-    accountChallengePairQueues.set(pairKey, queued);
-    await previous.catch(() => undefined);
-    try {
-      return await task();
-    } finally {
-      release();
-      if (accountChallengePairQueues.get(pairKey) === queued) {
-        accountChallengePairQueues.delete(pairKey);
-      }
+  const challengeLifecycleGateKey = (challengeId: string): string =>
+    `challenge_lifecycle:${challengeId}`;
+
+  const openSeekLifecycleGateKey = (seekId: string): string =>
+    `open_seek_lifecycle:${seekId}`;
+
+  const releaseSpectatorPresence = (connection: OnlineConnection | undefined): void => {
+    if (connection?.role === "spectator" && connection.spectatorConnectionId) {
+      runtimeCoordinator
+        .removeSpectator({
+          gameId: connection.gameId,
+          connectionId: connection.spectatorConnectionId,
+        })
+        .catch(() => undefined);
     }
+  };
+
+  const setSocketConnection = (socket: WebSocket, connection: OnlineConnection): void => {
+    releaseSpectatorPresence(connections.get(socket));
+    connections.set(socket, connection);
   };
 
   const logSocketDisconnect = (socket: WebSocket, reason?: string): void => {
@@ -2258,6 +2275,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       reason,
     });
     connections.delete(socket);
+    releaseSpectatorPresence(connection);
   };
 
   const closeStalePlayerSocket = (socket: WebSocket, connection: Extract<OnlineConnection, { role: "player" }>): void => {
@@ -2289,27 +2307,152 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
-  const enqueueGameAction = (gameId: string, operation: () => Promise<void>): Promise<void> => {
-    const previous = actionQueues.get(gameId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(operation);
-    const settled = next.catch(() => undefined);
-    actionQueues.set(gameId, settled);
-    settled.finally(() => {
-      if (actionQueues.get(gameId) === settled) {
-        actionQueues.delete(gameId);
-      }
+  type RoomHydrationFailureReason =
+    | "missing_room_loader"
+    | "load_failed"
+    | "room_not_found"
+    | "mismatched_room_record"
+    | "refresh_failed";
+
+  const hydrateMissingRoomFromStore = async (
+    gameId: string,
+    reason: string
+  ): Promise<
+    | { ok: true; room: OnlineGameRoom; hydrated: boolean }
+    | { ok: false; reason: RoomHydrationFailureReason }
+  > => {
+    const existingRoom = service.getRoom(gameId);
+    if (existingRoom) return { ok: true, room: existingRoom, hydrated: false };
+
+    if (!options.loadGameRoomRecord) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "missing_room_loader",
+      });
+      return { ok: false, reason: "missing_room_loader" };
+    }
+
+    let record: OnlineGameRoomRecord | null;
+    try {
+      record = await options.loadGameRoomRecord(gameId);
+    } catch (error) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "load_failed",
+      });
+      console.error("Failed to load online room for hydration", error);
+      return { ok: false, reason: "load_failed" };
+    }
+
+    if (!record) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "room_not_found",
+      });
+      return { ok: false, reason: "room_not_found" };
+    }
+    if (record.gameId !== gameId) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "mismatched_room_record",
+      });
+      return { ok: false, reason: "mismatched_room_record" };
+    }
+
+    try {
+      service.replaceRoom(record);
+    } catch (error) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "refresh_failed",
+      });
+      console.error("Failed to hydrate online room from store", error);
+      return { ok: false, reason: "refresh_failed" };
+    }
+
+    const hydratedRoom = service.getRoom(gameId);
+    if (!hydratedRoom) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "refresh_failed",
+      });
+      return { ok: false, reason: "refresh_failed" };
+    }
+
+    log({
+      event: "online.room.hydrate",
+      gameId,
+      status: "accepted",
+      reason,
     });
-    return next;
+    return { ok: true, room: hydratedRoom, hydrated: true };
   };
 
-  const countConnectedSpectators = (gameId: string): number => {
-    let count = 0;
-    for (const connection of connections.values()) {
-      if (connection.role === "spectator" && connection.gameId === gameId) {
-        count += 1;
-      }
+  const hydrationFailureResponse = (
+    failure: RoomHydrationFailureReason,
+    notFoundMessage: string,
+    persistenceMessage: string
+  ): { status: number; error: OnlineReject } => {
+    if (failure === "load_failed" || failure === "refresh_failed") {
+      return {
+        status: 503,
+        error: { code: "persistence_failed", message: persistenceMessage },
+      };
     }
-    return count;
+    return {
+      status: 404,
+      error: { code: "not_found", message: notFoundMessage },
+    };
+  };
+
+  const sendSocketHydrationFailure = (
+    socket: WebSocket,
+    failure: RoomHydrationFailureReason,
+    notFoundMessage: string,
+    persistenceMessage: string
+  ): void => {
+    const response = hydrationFailureResponse(failure, notFoundMessage, persistenceMessage);
+    sendSocketError(socket, response.error);
+  };
+
+  const enqueueGameAction = (gameId: string, operation: () => Promise<void>): Promise<void> => {
+    return runtimeCoordinator.withGameOperationGate(gameId, operation);
+  };
+
+  const countConnectedSpectators = async (gameId: string): Promise<number> => {
+    return runtimeCoordinator.countSpectators(gameId);
+  };
+
+  const refreshSpectatorPresence = async (
+    socket: WebSocket,
+    connection: Extract<OnlineConnection, { role: "spectator" }>
+  ): Promise<void> => {
+    if (!connection.spectatorConnectionId) return;
+    const refreshed = await runtimeCoordinator.refreshSpectator({
+      gameId: connection.gameId,
+      connectionId: connection.spectatorConnectionId,
+    });
+    if (refreshed) return;
+
+    const spectatorPresence = await runtimeCoordinator.registerSpectator({
+      gameId: connection.gameId,
+    });
+    setSocketConnection(socket, {
+      ...connection,
+      spectatorConnectionId: spectatorPresence.connectionId,
+    });
   };
 
   const stripLiveResponseFields = (summary: OnlineGameSummary): OnlineGameSummary => {
@@ -2325,11 +2468,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return { ...summary, livePreview };
   };
 
-  const withLiveServerPresence = (summary: OnlineGameSummary): OnlineGameSummary => {
+  const withLiveServerPresence = async (summary: OnlineGameSummary): Promise<OnlineGameSummary> => {
     const base = stripLiveResponseFields(summary);
     if (base.status !== "active") return base;
 
-    const spectatorCount = countConnectedSpectators(base.gameId);
+    const spectatorCount = await countConnectedSpectators(base.gameId);
     const clock = base.livePreview.clock
       ? {
           ...base.livePreview.clock,
@@ -2348,11 +2491,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     };
   };
 
-  const withLiveServerPresenceDirectory = (
+  const withLiveServerPresenceDirectory = async (
     response: OnlineGameDirectoryResponse
-  ): OnlineGameDirectoryResponse => ({
+  ): Promise<OnlineGameDirectoryResponse> => ({
     ...response,
-    games: response.games.map(withLiveServerPresence),
+    games: await Promise.all(response.games.map(withLiveServerPresence)),
   });
 
   const loadValidatedSummaryForGame = async (
@@ -2375,7 +2518,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       if (!validation.ok) {
         return { ok: false, reason: "summary_invalid" };
       }
-      return { ok: true, summary: withLiveServerPresence(validation.value) };
+      return { ok: true, summary: await withLiveServerPresence(validation.value) };
     }
 
     if (!options.loadGameSummaries) return { ok: true, summary: null };
@@ -2394,7 +2537,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       if (!validation.ok) {
         return { ok: false, reason: "summary_invalid" };
       }
-      return { ok: true, summary: withLiveServerPresence(validation.value) };
+      return { ok: true, summary: await withLiveServerPresence(validation.value) };
     }
     return { ok: true, summary: null };
   };
@@ -2446,7 +2589,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       if (validation.value.games.some((summary) => !canListOnlineGameSummary(summary))) {
         throw new Error("Public directory returned a hidden game summary.");
       }
-      return withLiveServerPresenceDirectory(validation.value);
+      return await withLiveServerPresenceDirectory(validation.value);
     }
 
     const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
@@ -2459,7 +2602,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
       return validation.value;
     });
-    return withLiveServerPresenceDirectory(paginateDirectorySummaries(validated, directoryOptions));
+    return await withLiveServerPresenceDirectory(paginateDirectorySummaries(validated, directoryOptions));
   };
 
   const listPersonalGameDirectory = async (
@@ -2480,7 +2623,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       ) {
         throw new Error("Personal history returned a game for a different identity.");
       }
-      return withLiveServerPresenceDirectory(validation.value);
+      return await withLiveServerPresenceDirectory(validation.value);
     }
 
     const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
@@ -2493,7 +2636,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
       return validation.value;
     });
-    return withLiveServerPresenceDirectory(
+    return await withLiveServerPresenceDirectory(
       paginatePersonalDirectorySummaries(validated, directoryOptions)
     );
   };
@@ -2705,21 +2848,26 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       { type: "challenge_created" } | { type: "challenge_accepted" }
     >
   ): Promise<OnlineChallengeSummary> => {
-    if (options.appendChallengeEvent) {
-      return options.appendChallengeEvent(event);
-    }
-    const eventLength = memoryChallengeEvents.length;
-    try {
-      memoryChallengeEvents.push(event);
-      const summary = projectOnlineChallengeSummaries(memoryChallengeEvents).find(
-        (candidate) => candidate.challengeId === event.challengeId
-      );
-      if (!summary) throw new Error(`Online challenge summary was not refreshed for ${event.challengeId}.`);
-      return summary;
-    } catch (error) {
-      memoryChallengeEvents.splice(eventLength);
-      throw error;
-    }
+    return runtimeCoordinator.withChallengeLifecycleGate(
+      challengeLifecycleGateKey(event.challengeId),
+      async () => {
+        if (options.appendChallengeEvent) {
+          return options.appendChallengeEvent(event);
+        }
+        const eventLength = memoryChallengeEvents.length;
+        try {
+          memoryChallengeEvents.push(event);
+          const summary = projectOnlineChallengeSummaries(memoryChallengeEvents).find(
+            (candidate) => candidate.challengeId === event.challengeId
+          );
+          if (!summary) throw new Error(`Online challenge summary was not refreshed for ${event.challengeId}.`);
+          return summary;
+        } catch (error) {
+          memoryChallengeEvents.splice(eventLength);
+          throw error;
+        }
+      }
+    );
   };
 
   const resolveChallengeCredential = async (
@@ -2920,40 +3068,45 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     summary: OnlineChallengeSummary,
     acceptedBy: ResolvedOnlineChallengeCredential
   ): Promise<OnlineChallengeAcceptResult> => {
-    const challengerSeat =
-      summary.challengerSeat === "random"
-        ? randomBytes(1)[0] % 2 === 0
-          ? "w"
-          : "b"
-        : summary.challengerSeat;
-    const whiteIdentity = challengerSeat === "w" ? summary.challengerIdentity : summary.challengedIdentity;
-    const blackIdentity = challengerSeat === "w" ? summary.challengedIdentity : summary.challengerIdentity;
-    let gameId = `game_${randomBytes(9).toString("base64url")}`;
-    while (service.getRoom(gameId)) {
-      gameId = `game_${randomBytes(9).toString("base64url")}`;
-    }
-    const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
-    const clock = createInitialClockRecord(summary.setup, gameId);
-    const gameCreatedEvent = createOnlineGameCreatedEvent(
-      {
-        type: "game_created",
-        gameId,
-        setup: summary.setup,
-        clock,
-        initialVisibility: summary.visibility,
-        whiteIdentity,
-        blackIdentity,
-      },
-      { createdAt: acceptedAt }
+    return runtimeCoordinator.withChallengeLifecycleGate(
+      challengeLifecycleGateKey(summary.challengeId),
+      async () => {
+        const challengerSeat =
+          summary.challengerSeat === "random"
+            ? randomBytes(1)[0] % 2 === 0
+              ? "w"
+              : "b"
+            : summary.challengerSeat;
+        const whiteIdentity = challengerSeat === "w" ? summary.challengerIdentity : summary.challengedIdentity;
+        const blackIdentity = challengerSeat === "w" ? summary.challengedIdentity : summary.challengerIdentity;
+        let gameId = `game_${randomBytes(9).toString("base64url")}`;
+        while (service.getRoom(gameId)) {
+          gameId = `game_${randomBytes(9).toString("base64url")}`;
+        }
+        const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+        const clock = createInitialClockRecord(summary.setup, gameId);
+        const gameCreatedEvent = createOnlineGameCreatedEvent(
+          {
+            type: "game_created",
+            gameId,
+            setup: summary.setup,
+            clock,
+            initialVisibility: summary.visibility,
+            whiteIdentity,
+            blackIdentity,
+          },
+          { createdAt: acceptedAt }
+        );
+        return acceptChallengeAndCreateGame({
+          challengeId: summary.challengeId,
+          acceptedBy,
+          acceptedAt,
+          gameCreatedEvent,
+          whiteIdentity,
+          blackIdentity,
+        });
+      }
     );
-    return acceptChallengeAndCreateGame({
-      challengeId: summary.challengeId,
-      acceptedBy,
-      acceptedAt,
-      gameCreatedEvent,
-      whiteIdentity,
-      blackIdentity,
-    });
   };
 
   const loadOpenSeekSummaries = async (): Promise<OpenSeekSummary[]> => {
@@ -3086,21 +3239,26 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const appendOpenSeekLifecycleEvent = async (
     event: Exclude<OpenSeekEvent, { type: "seek_created" } | { type: "seek_accepted" }>
   ): Promise<OpenSeekSummary> => {
-    if (options.appendOpenSeekEvent) {
-      return options.appendOpenSeekEvent(event);
-    }
-    const eventLength = memoryOpenSeekEvents.length;
-    try {
-      memoryOpenSeekEvents.push(event);
-      const summary = projectOpenSeekSummaries(memoryOpenSeekEvents).find(
-        (candidate) => candidate.seekId === event.seekId
-      );
-      if (!summary) throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
-      return summary;
-    } catch (error) {
-      memoryOpenSeekEvents.splice(eventLength);
-      throw error;
-    }
+    return runtimeCoordinator.withOpenSeekLifecycleGate(
+      openSeekLifecycleGateKey(event.seekId),
+      async () => {
+        if (options.appendOpenSeekEvent) {
+          return options.appendOpenSeekEvent(event);
+        }
+        const eventLength = memoryOpenSeekEvents.length;
+        try {
+          memoryOpenSeekEvents.push(event);
+          const summary = projectOpenSeekSummaries(memoryOpenSeekEvents).find(
+            (candidate) => candidate.seekId === event.seekId
+          );
+          if (!summary) throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
+          return summary;
+        } catch (error) {
+          memoryOpenSeekEvents.splice(eventLength);
+          throw error;
+        }
+      }
+    );
   };
 
   const resolveOpenSeekCredential = async (
@@ -3322,67 +3480,72 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     acceptorIdentity: PublicPlayerIdentity,
     acceptedAt: string
   ) => {
-    if (
-      summary.status !== "open" ||
-      !canIdentityAcceptOpenSeek(summary, acceptorIdentity, acceptedAt)
-    ) {
-      throw new Error(`This open seek ${summary.seekId} is no longer open.`);
-    }
-    const creatorSeat =
-      summary.creatorSeat === "random"
-        ? randomBytes(1)[0] % 2 === 0
-          ? "w"
-          : "b"
-        : summary.creatorSeat;
-    const whiteIdentity = creatorSeat === "w" ? summary.creatorIdentity : acceptorIdentity;
-    const blackIdentity = creatorSeat === "w" ? acceptorIdentity : summary.creatorIdentity;
-    let gameId = `game_${randomBytes(9).toString("base64url")}`;
-    while (service.getRoom(gameId)) {
-      gameId = `game_${randomBytes(9).toString("base64url")}`;
-    }
-    const acceptorToken = defaultOpenSeekTokenFactory();
-    const clock = createInitialClockRecord(summary.setup, gameId);
-    const gameCreatedEvent = createOnlineGameCreatedEvent(
-      {
-        type: "game_created",
-        gameId,
-        setup: summary.setup,
-        clock,
-        initialVisibility: "public",
-        whiteIdentity,
-        blackIdentity,
-      },
-      { createdAt: acceptedAt }
+    return runtimeCoordinator.withOpenSeekLifecycleGate(
+      openSeekLifecycleGateKey(summary.seekId),
+      async () => {
+        if (
+          summary.status !== "open" ||
+          !canIdentityAcceptOpenSeek(summary, acceptorIdentity, acceptedAt)
+        ) {
+          throw new Error(`This open seek ${summary.seekId} is no longer open.`);
+        }
+        const creatorSeat =
+          summary.creatorSeat === "random"
+            ? randomBytes(1)[0] % 2 === 0
+              ? "w"
+              : "b"
+            : summary.creatorSeat;
+        const whiteIdentity = creatorSeat === "w" ? summary.creatorIdentity : acceptorIdentity;
+        const blackIdentity = creatorSeat === "w" ? acceptorIdentity : summary.creatorIdentity;
+        let gameId = `game_${randomBytes(9).toString("base64url")}`;
+        while (service.getRoom(gameId)) {
+          gameId = `game_${randomBytes(9).toString("base64url")}`;
+        }
+        const acceptorToken = defaultOpenSeekTokenFactory();
+        const clock = createInitialClockRecord(summary.setup, gameId);
+        const gameCreatedEvent = createOnlineGameCreatedEvent(
+          {
+            type: "game_created",
+            gameId,
+            setup: summary.setup,
+            clock,
+            initialVisibility: "public",
+            whiteIdentity,
+            blackIdentity,
+          },
+          { createdAt: acceptedAt }
+        );
+        const result = await acceptOpenSeekAndCreateGame({
+          seekId: summary.seekId,
+          acceptedBy: acceptorIdentity,
+          acceptedAt,
+          gameCreatedEvent,
+          whiteIdentity,
+          blackIdentity,
+          acceptorCredential: hashOnlineToken(acceptorToken),
+        });
+        service.replaceRoom(result.gameRecord);
+        const acceptedGameId = result.seekSummary.gameId;
+        if (!acceptedGameId) {
+          throw new Error(`Accepted open seek ${summary.seekId} did not include a game id.`);
+        }
+        return {
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "acceptor" as const,
+          summary: redactOpenSeekSummary(result.seekSummary),
+          gameInvite: {
+            gameId: acceptedGameId,
+            seat: result.gameSeats.acceptor,
+            token: acceptorToken,
+            url: buildTokenlessOnlineGameUrl(
+              options.publicBaseUrl,
+              acceptedGameId,
+              result.gameSeats.acceptor
+            ),
+          },
+        };
+      }
     );
-    const result = await acceptOpenSeekAndCreateGame({
-      seekId: summary.seekId,
-      acceptedBy: acceptorIdentity,
-      acceptedAt,
-      gameCreatedEvent,
-      whiteIdentity,
-      blackIdentity,
-      acceptorCredential: hashOnlineToken(acceptorToken),
-    });
-    service.replaceRoom(result.gameRecord);
-    const acceptedGameId = result.seekSummary.gameId;
-    if (!acceptedGameId) {
-      throw new Error(`Accepted open seek ${summary.seekId} did not include a game id.`);
-    }
-    return {
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      role: "acceptor" as const,
-      summary: redactOpenSeekSummary(result.seekSummary),
-      gameInvite: {
-        gameId: acceptedGameId,
-        seat: result.gameSeats.acceptor,
-        token: acceptorToken,
-        url: buildTokenlessOnlineGameUrl(
-          options.publicBaseUrl,
-          acceptedGameId,
-          result.gameSeats.acceptor
-        ),
-      },
-    };
   };
 
   const persistActionAccepted = async (
@@ -3393,9 +3556,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     action: Extract<OnlineGameEvent, { type: "action_accepted" }>["action"],
     playedAt: number,
     clock?: Extract<OnlineGameEvent, { type: "action_accepted" }>["clock"]
-  ) => {
-    await options.onGameEvent?.(
-      createOnlineActionAcceptedEvent({
+  ): Promise<Extract<OnlineGameEvent, { type: "action_accepted" }>> => {
+    const event = createOnlineActionAcceptedEvent({
         type: "action_accepted",
         gameId,
         playerColor,
@@ -3404,16 +3566,16 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         action,
         playedAt,
         clock,
-      })
-    );
+      });
+    await options.onGameEvent?.(event);
+    return event;
   };
 
   const persistTimeoutAdjudicated = async (
     gameId: string,
     timeout: AcceptedOnlineTimeoutRecord
-  ) => {
-    await options.onGameEvent?.(
-      createOnlineTimeoutAdjudicatedEvent({
+  ): Promise<Extract<OnlineGameEvent, { type: "timeout_adjudicated" }>> => {
+    const event = createOnlineTimeoutAdjudicatedEvent({
         type: "timeout_adjudicated",
         gameId,
         playerColor: timeout.playerColor,
@@ -3421,8 +3583,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         adjudicatedAt: timeout.adjudicatedAt,
         result: timeout.result,
         clock: timeout.clock,
-      })
-    );
+      });
+    await options.onGameEvent?.(event);
+    return event;
   };
 
   const adjudicateTimeoutForRoom = async (
@@ -3430,7 +3593,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     room: NonNullable<ReturnType<OnlineGameService["getRoom"]>>
   ):
     Promise<
-      | { ok: true; timeout: AcceptedOnlineTimeoutRecord | null }
+      | {
+          ok: true;
+          timeout: AcceptedOnlineTimeoutRecord | null;
+          snapshotChange?: Extract<OnlineGameEvent, { type: "timeout_adjudicated" }>;
+        }
       | { ok: false; error: OnlineReject; snapshot?: ReturnType<typeof room.getSnapshot> }
     > => {
     if (options.adjudicateGameTimeout) {
@@ -3468,6 +3635,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             result: transition.event.result,
             clock: transition.event.clock,
           },
+          snapshotChange: transition.event,
         };
       } catch (error) {
         log({
@@ -3503,7 +3671,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
 
     try {
-      await persistTimeoutAdjudicated(gameId, timeout);
+      const event = await persistTimeoutAdjudicated(gameId, timeout);
       log({
         event: "online.timeout",
         gameId,
@@ -3511,7 +3679,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         status: "expired",
         reason: timeout.playerColor,
       });
-      return { ok: true, timeout };
+      return { ok: true, timeout, snapshotChange: event };
     } catch (error) {
       service.replaceRoom(beforeTimeout);
       const restoredSnapshot = service.getRoom(gameId)?.getSnapshot() ?? room.getSnapshot();
@@ -3580,8 +3748,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           : "Store readiness check failed.";
     }
 
-    res.status(storeOk ? 200 : 503).json({
-      ok: storeOk,
+    const drainState = await runtimeCoordinator.getDrainState();
+    const ready = storeOk && !drainState.draining;
+
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
       build: {
         buildId: options.health?.buildId ?? "development",
         commit: options.health?.commit ?? "unknown",
@@ -3590,6 +3761,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         eventSchemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
         rulesetVersion: ONLINE_RULESET_VERSION,
         deployment: options.health?.deployment ?? createSingleNodeDeploymentConfig(),
+        runtime: {
+          draining: drainState.draining,
+          drainStartedAt: drainState.startedAt,
+        },
         store: {
           ok: storeOk,
           backend: options.health?.storeBackend ?? "unknown",
@@ -3605,8 +3780,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     next();
   });
 
-  app.get("/api/online/account/oauth/providers", (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+  app.get("/api/online/account/oauth/providers", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -3625,8 +3800,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
   });
 
-  app.get("/api/online/account/oauth/google/start", (req, res) => {
-    if (!accountAuthLimiter.take(getClientKey(req))) {
+  app.get("/api/online/account/oauth/google/start", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
       });
@@ -3656,7 +3831,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
   app.get("/api/online/account/oauth/google/callback", async (req, res) => {
     clearGoogleOAuthStateCookie(res, googleOAuthCookieSecure);
-    if (!accountAuthLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
       });
@@ -3748,7 +3923,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/accounts", async (req, res) => {
-    if (!accountCreateLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_create", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -3814,7 +3989,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/session", async (req, res) => {
-    if (!accountAuthLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many sign-in attempts were sent too quickly." },
       });
@@ -3879,7 +4054,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/me", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -3902,7 +4077,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/ratings/leaderboard", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many public rating requests were sent too quickly." },
       });
@@ -3946,7 +4121,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/profiles/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -3999,7 +4174,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/follows", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4035,7 +4210,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.put("/api/online/account/follows/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4085,7 +4260,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/follows/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4134,7 +4309,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.put("/api/online/account/blocks/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4190,7 +4365,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/blocks/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4239,7 +4414,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/reports/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4308,7 +4483,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.get("/api/online/admin/reports", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);
-    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    const rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
     if (!authorized) {
       log({
         event: "online.admin.reports",
@@ -4367,7 +4542,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.patch("/api/online/admin/reports/:reportId", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);
-    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    const rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
     if (!authorized) {
       log({
         event: "online.admin.report.update",
@@ -4461,7 +4636,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   app.get("/api/online/admin/reports/:reportId/audits", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);
-    const rateLimitAllowed = adminReadLimiter.take(getClientKey(req));
+    const rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
     if (!authorized) {
       log({
         event: "online.admin.report.audits",
@@ -4527,7 +4702,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/privacy", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4563,7 +4738,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.patch("/api/online/account/privacy", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4612,7 +4787,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/challenges", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4650,7 +4825,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/challenges/:challengeId/accept", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
       });
@@ -4725,7 +4900,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/challenges/:challengeId/decline", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
       });
@@ -4796,7 +4971,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/challenges/:challengeId/cancel", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many online challenge requests were sent too quickly." },
       });
@@ -4867,7 +5042,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/sessions", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4908,7 +5083,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/session", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -4964,7 +5139,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account/sessions", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5011,7 +5186,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.delete("/api/online/account", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5058,7 +5233,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/games", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5087,7 +5262,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/games/head-to-head/:displayName", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5127,7 +5302,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/account/games/:gameId/snapshot", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5181,14 +5356,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const room = service.getRoom(gameId.value);
-      if (!room) {
-        log({ event: "online.account.snapshot", gameId: gameId.value, status: "rejected", reason: "not_found" });
-        res.status(404).json({
-          error: { code: "not_found", message: "No account game was found." },
+      const hydrated = await hydrateMissingRoomFromStore(gameId.value, "account_snapshot");
+      if (!hydrated.ok) {
+        const response = hydrationFailureResponse(
+          hydrated.reason,
+          "No account game was found.",
+          "Account game snapshot could not be loaded."
+        );
+        log({
+          event: "online.account.snapshot",
+          gameId: gameId.value,
+          status: response.status === 503 ? "failed" : "rejected",
+          reason: hydrated.reason,
         });
+        res.status(response.status).json({ error: response.error });
         return;
       }
+      const room = hydrated.room;
 
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
@@ -5199,7 +5383,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
       }
 
       log({ event: "online.account.snapshot", gameId: gameId.value, role: "player", status: "accepted" });
@@ -5212,7 +5396,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/account/games/:gameId/rejoin", async (req, res) => {
-    if (!accountReadLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("account_read", req)) {
       res.status(429).json({
         error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
       });
@@ -5273,14 +5457,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const room = service.getRoom(gameId.value);
-      if (!room) {
-        log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "not_found" });
-        res.status(404).json({
-          error: { code: "not_found", message: "No active account game was found." },
+      const hydrated = await hydrateMissingRoomFromStore(gameId.value, "account_rejoin");
+      if (!hydrated.ok) {
+        const response = hydrationFailureResponse(
+          hydrated.reason,
+          "No active account game was found.",
+          "The account game could not be rejoined."
+        );
+        log({
+          event: "online.account.rejoin",
+          gameId: gameId.value,
+          status: response.status === 503 ? "failed" : "rejected",
+          reason: hydrated.reason,
         });
+        res.status(response.status).json({ error: response.error });
         return;
       }
+      const room = hydrated.room;
 
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
@@ -5291,7 +5484,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
         res.status(409).json({
           error: { code: "game_over", message: "This account game is already complete." },
           protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -5417,7 +5610,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   };
 
   app.get("/api/online/seeks", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5453,7 +5646,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/seeks", async (req, res) => {
-    if (!createOpenSeekLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("create_open_seek", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5579,7 +5772,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/seeks/:seekId", async (req, res) => {
-    if (!openSeekActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("open_seek_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5616,7 +5809,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/seeks/:seekId/cancel", async (req, res) => {
-    if (!openSeekActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("open_seek_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5677,7 +5870,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/seeks/:seekId/accept", async (req, res) => {
-    if (!openSeekActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("open_seek_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5752,7 +5945,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/matchmaking/quick", async (req, res) => {
-    if (!quickMatchLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("quick_match", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -5795,73 +5988,76 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const setupSignature = canonicalSetupSignature(normalizedSetup);
 
     try {
-      const response = await runQuickMatchForSession(publicPlayerIdentityQueueKey(sessionIdentity.identity), async () => {
-        const checkedAt = new Date(options.now?.() ?? Date.now()).toISOString();
-        if (await loadActiveSeekForSession(sessionIdentity.identity, checkedAt)) {
-          return {
-            status: 409,
-            body: {
-              error: {
-                code: "existing_open_seek",
-                message: "This session already has an active open seek.",
-              },
-            },
-          };
-        }
-
-        const candidates = await listQuickMatchOpenSeekCandidates(accountIdentity.account);
-        for (const candidate of candidates) {
-          if (isSameOpenSeekIdentity(candidate.creatorIdentity, sessionIdentity.identity)) continue;
-          if (canonicalSetupSignature(candidate.setup) !== setupSignature) continue;
-          const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
-          try {
-            const accepted = await acceptOpenSeekSummary(candidate, sessionIdentity.identity, acceptedAt);
+      const response = await runtimeCoordinator.withQuickMatchSessionGate(
+        publicPlayerIdentityQueueKey(sessionIdentity.identity),
+        async () => {
+          const checkedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+          if (await loadActiveSeekForSession(sessionIdentity.identity, checkedAt)) {
             return {
-              status: 200,
+              status: 409,
               body: {
-                ...accepted,
-                outcome: "matched",
+                error: {
+                  code: "existing_open_seek",
+                  message: "This session already has an active open seek.",
+                },
               },
             };
-          } catch (error) {
-            if (openSeekTerminalError(error)) continue;
-            throw error;
           }
-        }
 
-        const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
-        if (await loadActiveSeekForSession(sessionIdentity.identity, createdAt)) {
-          return {
-            status: 409,
-            body: {
-              error: {
-                code: "existing_open_seek",
-                message: "This session already has an active open seek.",
+          const candidates = await listQuickMatchOpenSeekCandidates(accountIdentity.account);
+          for (const candidate of candidates) {
+            if (isSameOpenSeekIdentity(candidate.creatorIdentity, sessionIdentity.identity)) continue;
+            if (canonicalSetupSignature(candidate.setup) !== setupSignature) continue;
+            const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+            try {
+              const accepted = await acceptOpenSeekSummary(candidate, sessionIdentity.identity, acceptedAt);
+              return {
+                status: 200,
+                body: {
+                  ...accepted,
+                  outcome: "matched",
+                },
+              };
+            } catch (error) {
+              if (openSeekTerminalError(error)) continue;
+              throw error;
+            }
+          }
+
+          const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+          if (await loadActiveSeekForSession(sessionIdentity.identity, createdAt)) {
+            return {
+              status: 409,
+              body: {
+                error: {
+                  code: "existing_open_seek",
+                  message: "This session already has an active open seek.",
+                },
               },
+            };
+          }
+          const created = await createOpenSeekForIdentity(
+            normalizedSetup,
+            "random",
+            sessionIdentity.identity,
+            "public",
+            undefined,
+            expiry.value,
+            createdAt
+          );
+          return {
+            status: 200,
+            body: {
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              outcome: "waiting",
+              role: "creator",
+              seekId: created.seekId,
+              summary: redactOpenSeekSummary(created.summary),
+              creator: { token: created.token },
             },
           };
         }
-        const created = await createOpenSeekForIdentity(
-          normalizedSetup,
-          "random",
-          sessionIdentity.identity,
-          "public",
-          undefined,
-          expiry.value,
-          createdAt
-        );
-        return {
-          status: 200,
-          body: {
-            protocolVersion: ONLINE_PROTOCOL_VERSION,
-            outcome: "waiting",
-            role: "creator",
-            seekId: created.seekId,
-            summary: redactOpenSeekSummary(created.summary),
-            creator: { token: created.token },
-          },
-        };
-      });
+      );
       res.status(response.status).json(response.body);
     } catch (error) {
       console.error("Failed to start quick match", error);
@@ -5875,7 +6071,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges", async (req, res) => {
-    if (!createChallengeLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("create_challenge", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6097,8 +6293,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         };
       };
       const response = challengedDisplayName
-        ? await runAccountChallengePairTask(
-            accountChallengePairQueueKey(challengerIdentity, challengedIdentity),
+        ? await runtimeCoordinator.withAccountChallengePairGate(
+            accountChallengePairGateKey(challengerIdentity, challengedIdentity),
             createChallenge
           )
         : await createChallenge();
@@ -6115,7 +6311,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/challenges/:challengeId", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6155,7 +6351,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges/:challengeId/accept", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6211,7 +6407,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges/:challengeId/decline", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6276,7 +6472,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/challenges/:challengeId/cancel", async (req, res) => {
-    if (!challengeActionLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("challenge_action", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6341,7 +6537,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/games", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6379,7 +6575,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.get("/api/online/games/:gameId/summary", async (req, res) => {
-    if (!publicDirectoryLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
         error: {
           code: "rate_limited",
@@ -6443,7 +6639,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   });
 
   app.post("/api/online/games", async (req, res) => {
-    if (!createGameLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("create_game", req)) {
       log({ event: "online.game.create", status: "rejected", reason: "rate_limited" });
       res.status(429).json({
         error: {
@@ -6565,7 +6761,27 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     await enqueueGameAction(gameId.value, async () => {
       const token = getBearerToken(req.headers.authorization) ?? "";
-      const room = service.getRoomForToken(gameId.value, token);
+      let room = service.getRoomForToken(gameId.value, token);
+      if (!room) {
+        const hydrated = await hydrateMissingRoomFromStore(gameId.value, "http_join");
+        if (!hydrated.ok) {
+          const response = hydrationFailureResponse(
+            hydrated.reason,
+            "No online game was found for that id and token.",
+            "The online game could not be loaded."
+          );
+          log({
+            event: "online.http.join",
+            gameId: gameId.value,
+            role: "player",
+            status: response.status === 503 ? "failed" : "rejected",
+            reason: hydrated.reason,
+          });
+          res.status(response.status).json({ error: response.error });
+          return;
+        }
+        room = service.getRoomForToken(gameId.value, token);
+      }
       if (!room) {
         log({
           event: "online.http.join",
@@ -6611,7 +6827,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
       }
       const currentRoom = service.getRoom(gameId.value) ?? room;
 
@@ -6724,20 +6940,25 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
 
       try {
-        const summary = await options.appendGameVisibilityChanged(
-          createOnlineGameVisibilityChangedEvent(
-            {
-              type: "visibility_changed",
-              gameId: gameId.value,
-              visibility,
-            },
-            { createdAt: new Date(options.now?.() ?? Date.now()).toISOString() }
-          )
+        const event = createOnlineGameVisibilityChangedEvent(
+          {
+            type: "visibility_changed",
+            gameId: gameId.value,
+            visibility,
+          },
+          { createdAt: new Date(options.now?.() ?? Date.now()).toISOString() }
         );
+        const summary = await options.appendGameVisibilityChanged(event);
         const validation = validateOnlineGameSummary(summary);
         if (!validation.ok) {
           throw new Error(validation.error.message);
         }
+        await publishRuntimeSnapshotChanged(
+          gameId.value,
+          "visibility",
+          event.eventId,
+          event.createdAt
+        );
 
         log({
           event: "online.game.visibility",
@@ -6777,7 +6998,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       return;
     }
 
-    if (!spectatorSnapshotLimiter.take(getClientKey(req))) {
+    if (!await consumeRequestRateLimit("spectator_snapshot", req)) {
       log({
         event: "online.http.spectate",
         gameId: gameId.value,
@@ -6808,23 +7029,24 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const room = service.getRoom(gameId.value);
-      if (!room) {
+      const hydrated = await hydrateMissingRoomFromStore(gameId.value, "http_spectate");
+      if (!hydrated.ok) {
+        const response = hydrationFailureResponse(
+          hydrated.reason,
+          "No online game was found for that id.",
+          "The spectator snapshot could not be loaded."
+        );
         log({
           event: "online.http.spectate",
           gameId: gameId.value,
           role: "spectator",
-          status: "rejected",
-          reason: "not_found",
+          status: response.status === 503 ? "failed" : "rejected",
+          reason: hydrated.reason,
         });
-        res.status(404).json({
-          error: {
-            code: "not_found",
-            message: "No online game was found for that id.",
-          },
-        });
+        res.status(response.status).json({ error: response.error });
         return;
       }
+      const room = hydrated.room;
 
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
@@ -6841,7 +7063,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
       }
       const currentRoom = service.getRoom(gameId.value) ?? room;
 
@@ -6871,12 +7093,170 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
+  const hasLocalConnectionForGame = (gameId: string): boolean => {
+    for (const connection of connections.values()) {
+      if (connection.gameId === gameId) return true;
+    }
+    return false;
+  };
+
+  const roomRecordVersion = (record: OnlineGameRoomRecord): number | null => {
+    if (record.timeout) return record.timeout.version;
+    if (record.acceptedActions.length === 0) return 0;
+    const version = record.acceptedActions.at(-1)?.version;
+    return typeof version === "number" ? version : null;
+  };
+
+  const publishRuntimeSnapshotChanged = async (
+    gameId: string,
+    reason: OnlineRuntimeSnapshotReason,
+    lastEventId?: string,
+    createdAt?: string
+  ): Promise<void> => {
+    const room = service.getRoom(gameId);
+    if (!room) return;
+    const snapshot = room.getSnapshot();
+    try {
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId,
+        roomVersion: snapshot.version,
+        lastEventId,
+        reason,
+        nodeId: runtimeCoordinator.nodeId,
+        createdAt: createdAt ?? new Date(options.now?.() ?? Date.now()).toISOString(),
+      });
+    } catch (error) {
+      log({
+        event: "online.runtime.publish",
+        gameId,
+        status: "failed",
+        reason,
+      });
+      console.error("Failed to publish online runtime snapshot event", error);
+    }
+  };
+
+  const publishAndBroadcastSnapshot = async (
+    gameId: string,
+    reason: OnlineRuntimeSnapshotReason,
+    lastEventId?: string,
+    createdAt?: string
+  ): Promise<void> => {
+    await publishRuntimeSnapshotChanged(gameId, reason, lastEventId, createdAt);
+    broadcastSnapshot(gameId);
+  };
+
+  const publishTimeoutAndBroadcastSnapshot = async (
+    gameId: string,
+    timeout: { snapshotChange?: Extract<OnlineGameEvent, { type: "timeout_adjudicated" }> }
+  ): Promise<void> => {
+    await publishAndBroadcastSnapshot(
+      gameId,
+      "timeout",
+      timeout.snapshotChange?.eventId,
+      timeout.snapshotChange?.createdAt
+    );
+  };
+
+  const refreshRoomFromRemoteSnapshotHint = async (
+    event: OnlineRuntimeGameSnapshotChangedEvent
+  ): Promise<void> => {
+    if (event.nodeId === runtimeCoordinator.nodeId) return;
+
+    await enqueueGameAction(event.gameId, async () => {
+      if (!hasLocalConnectionForGame(event.gameId)) return;
+
+      const localSnapshot = service.getRoom(event.gameId)?.getSnapshot();
+      if (localSnapshot && event.roomVersion <= localSnapshot.version) return;
+
+      if (!options.loadGameRoomRecord) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "missing_room_loader",
+        });
+        return;
+      }
+
+      let record: OnlineGameRoomRecord | null;
+      try {
+        record = await options.loadGameRoomRecord(event.gameId);
+      } catch (error) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "load_failed",
+        });
+        console.error("Failed to load online room after remote runtime snapshot event", error);
+        return;
+      }
+
+      if (!record) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "room_not_found",
+        });
+        return;
+      }
+      if (record.gameId !== event.gameId) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "mismatched_room_record",
+        });
+        return;
+      }
+
+      const loadedVersion = roomRecordVersion(record);
+      if (loadedVersion === null || loadedVersion < event.roomVersion) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: loadedVersion === null ? "invalid_room_record_version" : "stale_room_record",
+        });
+        return;
+      }
+
+      try {
+        service.replaceRoom(record);
+        broadcastSnapshot(event.gameId);
+      } catch (error) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "refresh_failed",
+        });
+        console.error("Failed to refresh online room after remote runtime snapshot event", error);
+        return;
+      }
+      log({
+        event: "online.runtime.remote_snapshot",
+        gameId: event.gameId,
+        status: "accepted",
+        reason: event.reason,
+      });
+    });
+  };
+
+  const unsubscribeRemoteSnapshotHints = runtimeCoordinator.subscribeGameSnapshotChanged(
+    refreshRoomFromRemoteSnapshotHint
+  );
+  server.on("close", unsubscribeRemoteSnapshotHints);
+
   const handleClientMessage = async (
     socket: WebSocket,
     data: RawData,
     clientKey: string
   ): Promise<void> => {
-    if (!socketMessageLimiter.take(clientKey)) {
+    if (!await consumeClientRateLimit("socket_message", clientKey)) {
       log({ event: "online.socket.message", status: "rejected", reason: "rate_limited" });
       sendSocketError(socket, {
         code: "rate_limited",
@@ -6939,7 +7319,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
         if (timeout.timeout) {
-          broadcastSnapshot(connection.gameId);
+          await publishTimeoutAndBroadcastSnapshot(connection.gameId, timeout);
+        }
+        if (connection.role === "spectator") {
+          await refreshSpectatorPresence(socket, connection);
         }
         sendJson(socket, {
           type: "pong",
@@ -6951,8 +7334,40 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
 
     if (message.type === "join") {
+      if ((await runtimeCoordinator.getDrainState()).draining) {
+        log({
+          event: "online.socket.join",
+          gameId: message.gameId,
+          role: "player",
+          status: "rejected",
+          reason: "draining",
+        });
+        sendSocketError(socket, drainUnavailableError());
+        return;
+      }
+
       await enqueueGameAction(message.gameId, async () => {
-        const room = service.getRoomForToken(message.gameId, message.token);
+        let room = service.getRoomForToken(message.gameId, message.token);
+        if (!room) {
+          const hydrated = await hydrateMissingRoomFromStore(message.gameId, "socket_join");
+          if (!hydrated.ok) {
+            log({
+              event: "online.socket.join",
+              gameId: message.gameId,
+              role: "player",
+              status: hydrated.reason === "load_failed" || hydrated.reason === "refresh_failed" ? "failed" : "rejected",
+              reason: hydrated.reason,
+            });
+            sendSocketHydrationFailure(
+              socket,
+              hydrated.reason,
+              "No online game was found for that id and token.",
+              "The online game could not be loaded."
+            );
+            return;
+          }
+          room = service.getRoomForToken(message.gameId, message.token);
+        }
         if (!room) {
           log({
             event: "online.socket.join",
@@ -7001,7 +7416,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
-        connections.set(socket, { role: "player", gameId: message.gameId, token: message.token });
+        setSocketConnection(socket, {
+          role: "player",
+          gameId: message.gameId,
+          token: message.token,
+        });
         log({
           event: "online.socket.join",
           gameId: message.gameId,
@@ -7014,13 +7433,25 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           snapshot: currentRoom.getSnapshot(),
         });
         if (timeout.timeout) {
-          broadcastSnapshot(message.gameId);
+          await publishTimeoutAndBroadcastSnapshot(message.gameId, timeout);
         }
       });
       return;
     }
 
     if (message.type === "spectate") {
+      if ((await runtimeCoordinator.getDrainState()).draining) {
+        log({
+          event: "online.socket.spectate",
+          gameId: message.gameId,
+          role: "spectator",
+          status: "rejected",
+          reason: "draining",
+        });
+        sendSocketError(socket, drainUnavailableError());
+        return;
+      }
+
       await enqueueGameAction(message.gameId, async () => {
         const access = await checkSpectatorAccess(message.gameId);
         if (!access.ok) {
@@ -7035,21 +7466,24 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
-        const room = service.getRoom(message.gameId);
-        if (!room) {
+        const hydrated = await hydrateMissingRoomFromStore(message.gameId, "socket_spectate");
+        if (!hydrated.ok) {
           log({
             event: "online.socket.spectate",
             gameId: message.gameId,
             role: "spectator",
-            status: "rejected",
-            reason: "not_found",
+            status: hydrated.reason === "load_failed" || hydrated.reason === "refresh_failed" ? "failed" : "rejected",
+            reason: hydrated.reason,
           });
-          sendSocketError(socket, {
-            code: "not_found",
-            message: "No online game was found for that id.",
-          });
+          sendSocketHydrationFailure(
+            socket,
+            hydrated.reason,
+            "No online game was found for that id.",
+            "The spectator snapshot could not be loaded."
+          );
           return;
         }
+        const room = hydrated.room;
 
         const timeout = await adjudicateTimeoutForRoom(message.gameId, room);
         if (!timeout.ok) {
@@ -7067,7 +7501,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
-        connections.set(socket, { role: "spectator", gameId: message.gameId });
+        const spectatorPresence = await runtimeCoordinator.registerSpectator({
+          gameId: message.gameId,
+        });
+        setSocketConnection(socket, {
+          role: "spectator",
+          gameId: message.gameId,
+          spectatorConnectionId: spectatorPresence.connectionId,
+        });
         log({
           event: "online.socket.spectate",
           gameId: message.gameId,
@@ -7080,7 +7521,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           snapshot: currentRoom.getSnapshot(),
         });
         if (timeout.timeout) {
-          broadcastSnapshot(message.gameId);
+          await publishTimeoutAndBroadcastSnapshot(message.gameId, timeout);
         }
       });
       return;
@@ -7205,7 +7646,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
                 sendSocketError(socket, transition.error);
               }
               if (transition.event?.type === "timeout_adjudicated") {
-                broadcastSnapshot(currentConnection.gameId);
+                await publishAndBroadcastSnapshot(
+                  currentConnection.gameId,
+                  "timeout",
+                  transition.event.eventId,
+                  transition.event.createdAt
+                );
               }
               return;
             }
@@ -7217,7 +7663,20 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
               action: transition.event.action.type,
               status: "accepted",
             });
-            broadcastSnapshot(currentConnection.gameId);
+            if (!("snapshotChange" in transition)) {
+              throw new Error("Store-backed accepted action result is missing snapshotChange.");
+            }
+            const snapshotChange = transition.snapshotChange;
+            if (snapshotChange) {
+              await publishAndBroadcastSnapshot(
+                currentConnection.gameId,
+                snapshotChange.type === "timeout_adjudicated" ? "timeout" : "action",
+                snapshotChange.eventId,
+                snapshotChange.createdAt
+              );
+            } else {
+              broadcastSnapshot(currentConnection.gameId);
+            }
           } catch (error) {
             log({
               event: "online.persistence",
@@ -7283,7 +7742,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
               action: existingAction!.action.type,
               status: "accepted",
             });
-            broadcastSnapshot(currentConnection.gameId);
+            await publishTimeoutAndBroadcastSnapshot(currentConnection.gameId, timeout);
             return;
           }
           const snapshot = (service.getRoom(currentConnection.gameId) ?? room).getSnapshot();
@@ -7304,7 +7763,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             },
             snapshot,
           });
-          broadcastSnapshot(currentConnection.gameId);
+          await publishTimeoutAndBroadcastSnapshot(currentConnection.gameId, timeout);
           return;
         }
 
@@ -7399,8 +7858,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             `Accepted online action for ${currentConnection.gameId} is missing clock.`
           );
         }
+        let event: Extract<OnlineGameEvent, { type: "action_accepted" }>;
         try {
-          await persistActionAccepted(
+          event = await persistActionAccepted(
             currentConnection.gameId,
             playerColor,
             acceptedAction.clientActionId,
@@ -7448,7 +7908,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           action: acceptedAction.action.type,
           status: "accepted",
         });
-        broadcastSnapshot(currentConnection.gameId);
+        await publishAndBroadcastSnapshot(
+          currentConnection.gameId,
+          "action",
+          event.eventId,
+          event.createdAt
+        );
       });
       return;
     }

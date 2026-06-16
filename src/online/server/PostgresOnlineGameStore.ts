@@ -157,6 +157,11 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  async loadGameRoomRecord(gameId: string): Promise<OnlineGameRoomRecord | null> {
+    await this.ensureSchema();
+    return this.loadRecordForGame(gameId, this.queryable);
+  }
+
   async loadSummaries(): Promise<OnlineGameSummary[]> {
     await this.ensureSchema();
     const result = await this.queryable.query(
@@ -1177,6 +1182,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
           return {
             ok: true,
             event: existingEvent,
+            snapshotChange: event,
             playerColor,
             room: room.toRecord(),
             snapshot: room.getSnapshot(),
@@ -1223,6 +1229,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         return {
           ok: true,
           event: existingEvent,
+          snapshotChange: null,
           playerColor,
           room: room.toRecord(),
           snapshot: room.getSnapshot(),
@@ -1266,6 +1273,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       return {
         ok: true,
         event,
+        snapshotChange: event,
         playerColor,
         room: roomRecord,
         snapshot: result.snapshot,

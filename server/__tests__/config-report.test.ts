@@ -11,6 +11,7 @@ describe("createServerConfigurationReport", () => {
         staticDir: "/srv/castles/build",
         requireStaticDir: true,
         localShutdownEnabled: false,
+        runtimeNodeId: "prod-node-a",
         deployment: {
           mode: "single-node",
           multiInstanceReady: false,
@@ -43,6 +44,9 @@ describe("createServerConfigurationReport", () => {
         roomState: "process-local",
         queueGuards: "process-local",
         routing: "single-node",
+      },
+      runtime: {
+        nodeId: "prod-node-a",
       },
       onlineStore: {
         backend: "postgres",

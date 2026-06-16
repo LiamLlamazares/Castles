@@ -6,15 +6,18 @@ import type { WebSocketServer } from "ws";
 import { createOnlineHttpServer } from "../src/online/server/createOnlineHttpServer";
 import { createOnlineGameStoreFromEnv } from "../src/online/server/createOnlineGameStore";
 import { formatOnlineServerLogEvent } from "../src/online/server/onlineServerLogging";
+import type { OnlineRuntimeCoordinator } from "../src/online/server/onlineRuntimeCoordinator";
 import {
   assertServerRuntimeFiles,
   parseServerRuntimeConfig,
 } from "../src/online/server/serverRuntimeConfig";
+import { createConfiguredRuntimeCoordinator } from "./runtimeCoordinator";
 import { OnlineGameService } from "../src/online/OnlineGameService";
 import {
   hashOnlineToken,
   verifyOnlineToken,
 } from "../src/online/server/onlineTokenCredentials";
+import { runOnlineStartupMaintenance } from "./startupMaintenance";
 
 function resolveOnce<T>(settle: (resolve: (value: T) => void, reject: (error: unknown) => void) => void): Promise<T> {
   let settled = false;
@@ -83,29 +86,34 @@ function isLoopbackAddress(address: string | undefined): boolean {
 async function main() {
   const config = parseServerRuntimeConfig(process.env, process.cwd());
   assertServerRuntimeFiles(config);
-  const { backend: storeBackend, healthStorePath, store, accountStore } = createOnlineGameStoreFromEnv(
-    process.env
-  );
+  const {
+    backend: storeBackend,
+    healthStorePath,
+    store,
+    accountStore,
+    startupMaintenanceStore,
+  } = createOnlineGameStoreFromEnv(process.env);
 
   let startupComplete = false;
+  let runtimeCoordinator: OnlineRuntimeCoordinator | undefined;
   try {
     const records = await store.load({
       onEventError: (line, error) => {
         console.error(`Invalid online event store entry ${line}`, error);
       },
     });
-    await store.rebuildSummaries({
-      onEventError: (line, error) => {
+    runtimeCoordinator = createConfiguredRuntimeCoordinator(config, { startupMaintenanceStore });
+    await runOnlineStartupMaintenance({
+      config,
+      runtimeCoordinator,
+      store,
+      onGameEventError: (line, error) => {
         console.error(`Invalid online event store entry ${line}`, error);
       },
-    });
-    await store.rebuildChallengeSummaries({
-      onEventError: (line, error) => {
+      onChallengeEventError: (line, error) => {
         console.error(`Invalid online challenge event store entry ${line}`, error);
       },
-    });
-    await store.rebuildOpenSeekSummaries({
-      onEventError: (line, error) => {
+      onOpenSeekEventError: (line, error) => {
         console.error(`Invalid online seek event store entry ${line}`, error);
       },
     });
@@ -116,6 +124,7 @@ async function main() {
     const { app, server, wss } = createOnlineHttpServer({
       publicBaseUrl: config.publicBaseUrl,
       service,
+      runtimeCoordinator,
       onGameCreated: (event, credentials) => store.appendGameCreated(event, credentials),
       onGameEvent: (event) => {
         if (event.type === "game_created") {
@@ -154,6 +163,7 @@ async function main() {
       listGameSummaries: (options) => store.listGameSummaries(options),
       listPersonalGameSummaries: (options) => store.listPersonalGameSummaries(options),
       loadGameSummary: (gameId) => store.loadGameSummary(gameId),
+      loadGameRoomRecord: (gameId) => store.loadGameRoomRecord(gameId),
       accountStore,
       adminBearerToken: config.adminBearerToken,
       oauth: config.googleOAuth
@@ -187,6 +197,13 @@ async function main() {
 
       console.log(`Received ${reason}; shutting down Castles online server.`);
 
+      try {
+        await runtimeCoordinator?.startDrain({ reason });
+      } catch (error) {
+        console.error("Failed to mark online runtime coordinator draining", error);
+        process.exitCode = 1;
+      }
+
       const results = await Promise.allSettled([
         closeWebSocketServer(wss),
         closeHttpServer(server),
@@ -198,6 +215,12 @@ async function main() {
       }
 
       try {
+        await runtimeCoordinator?.close();
+      } catch (error) {
+        console.error("Failed to close online runtime coordinator", error);
+        process.exitCode = 1;
+      }
+      try {
         await store.close();
       } catch (error) {
         console.error("Failed to close online game store", error);
@@ -207,6 +230,12 @@ async function main() {
         await accountStore.close?.();
       } catch (error) {
         console.error("Failed to close online account store", error);
+        process.exitCode = 1;
+      }
+      try {
+        await startupMaintenanceStore.close();
+      } catch (error) {
+        console.error("Failed to close online startup maintenance store", error);
         process.exitCode = 1;
       }
     };
@@ -279,6 +308,19 @@ async function main() {
         await accountStore.close?.();
       } catch (closeError) {
         console.error("Failed to close online account store after startup failure", closeError);
+      }
+      try {
+        await startupMaintenanceStore.close();
+      } catch (closeError) {
+        console.error(
+          "Failed to close online startup maintenance store after startup failure",
+          closeError
+        );
+      }
+      try {
+        await runtimeCoordinator?.close();
+      } catch (closeError) {
+        console.error("Failed to close online runtime coordinator after startup failure", closeError);
       }
     }
     throw error;

@@ -43,6 +43,7 @@ export interface OnlineGameStoreLoadOptions {
 
 export interface OnlineGameStore {
   load(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameRoomRecord[]>;
+  loadGameRoomRecord(gameId: string): Promise<OnlineGameRoomRecord | null>;
   loadSummaries(): Promise<OnlineGameSummary[]>;
   listGameSummaries(options: OnlineGameDirectoryListOptions): Promise<OnlineGameDirectoryResponse>;
   listPersonalGameSummaries(
@@ -213,10 +214,16 @@ export interface OnlineGameStoreActionInput {
   now?: () => number;
 }
 
+export type OnlineGameStoreSnapshotChangeEvent = Extract<
+  OnlineGameEvent,
+  { type: "action_accepted" | "timeout_adjudicated" }
+>;
+
 export type OnlineGameStoreActionResult =
   | {
       ok: true;
       event: Extract<OnlineGameEvent, { type: "action_accepted" }>;
+      snapshotChange: OnlineGameStoreSnapshotChangeEvent | null;
       playerColor: Extract<OnlineGameEvent, { type: "action_accepted" }>["playerColor"];
       room: OnlineGameRoomRecord;
       snapshot: OnlineGameSnapshotDTO;

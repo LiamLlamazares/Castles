@@ -5,7 +5,12 @@ import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
 import { ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS, OnlineGameRoom } from "../../OnlineGameRoom";
-import { ONLINE_EVENT_SCHEMA_VERSION, ONLINE_RULESET_VERSION, type OnlineGameEvent } from "../../events";
+import {
+  ONLINE_EVENT_SCHEMA_VERSION,
+  ONLINE_RULESET_VERSION,
+  createOnlineActionAcceptedEvent,
+  type OnlineGameEvent,
+} from "../../events";
 import {
   ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
   onlineGameSummaryDirectorySearchText,
@@ -1253,6 +1258,63 @@ describe("PostgresOnlineGameStore", () => {
     ]);
   });
 
+  it("loadGameRoomRecord loads one current game room record by id", async () => {
+    const client = new FakePostgresClient();
+    const store = new PostgresOnlineGameStore({ queryable: client });
+    const event = createGameCreatedEvent("game_load_room_record");
+    const otherEvent = createGameCreatedEvent("game_load_room_record_other");
+    const credentials = createGameCredentials();
+    const actionEvent = createOnlineActionAcceptedEvent(
+      {
+        type: "action_accepted",
+        gameId: event.gameId,
+        playerColor: "w",
+        clientActionId: "client-load-room-record-action",
+        version: 1,
+        playedAt: 1_700_000_000_000,
+        action: { type: "PASS", baseVersion: 0 },
+      },
+      {
+        eventId: "evt-load-room-record-action",
+        createdAt: "2026-06-16T12:00:01.000Z",
+      }
+    );
+    const additionalWhiteCredential = hashOnlineToken("additional-white-token");
+    client.eventRows.push({ payload: event }, { payload: actionEvent }, { payload: otherEvent });
+    client.credentialRows.push(
+      { gameId: event.gameId, seat: "w", tokenHash: credentials.whiteCredential },
+      { gameId: event.gameId, seat: "b", tokenHash: credentials.blackCredential },
+      { gameId: otherEvent.gameId, seat: "w", tokenHash: "hash:other-white" },
+      { gameId: otherEvent.gameId, seat: "b", tokenHash: "hash:other-black" }
+    );
+    client.additionalCredentialRows.push({
+      gameId: event.gameId,
+      seat: "w",
+      tokenHash: additionalWhiteCredential,
+    });
+
+    const record = await store.loadGameRoomRecord(event.gameId);
+
+    expect(record).toMatchObject({
+      gameId: event.gameId,
+      setup: event.setup,
+      whiteCredential: credentials.whiteCredential,
+      blackCredential: credentials.blackCredential,
+      additionalWhiteCredentials: [additionalWhiteCredential],
+      acceptedActions: [expect.objectContaining({ version: 1 })],
+    });
+    expect(OnlineGameRoom.create(record!).getSnapshot()).toMatchObject({
+      gameId: event.gameId,
+      version: 1,
+    });
+    await expect(store.loadGameRoomRecord("game_missing_room_record")).resolves.toBeNull();
+    expect(
+      client.queries.some((query) =>
+        /select\s+payload\s+from\s+online_game_events\s+where\s+game_id/i.test(query.text)
+      )
+    ).toBe(true);
+  });
+
   it("adds account rejoin seat credential aliases without replacing existing credentials", async () => {
     const client = new FakePostgresClient();
     const store = new PostgresOnlineGameStore({ queryable: client });
@@ -1851,6 +1913,11 @@ describe("PostgresOnlineGameStore", () => {
     expect(retry.ok).toBe(true);
     if (!first.ok || !retry.ok) throw new Error("expected duplicate retry to succeed");
     expect(retry.event).toEqual(first.event);
+    expect(retry.snapshotChange).toMatchObject({
+      type: "timeout_adjudicated",
+      gameId: "game_apply_duplicate_before_timeout",
+      version: 2,
+    });
     expect(retry).toMatchObject({
       snapshot: {
         version: 2,

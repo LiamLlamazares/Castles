@@ -2,6 +2,7 @@ import type { OnlineGameStore } from "./OnlineGameStore";
 import type { OnlineAccountStore } from "./OnlineAccountStore";
 import { PostgresOnlineAccountStore } from "./PostgresOnlineAccountStore";
 import { PostgresOnlineGameStore } from "./PostgresOnlineGameStore";
+import { PostgresOnlineStartupMaintenanceStore } from "./PostgresOnlineStartupMaintenanceStore";
 import { parsePostgresPoolMaxPerStore } from "./postgresPoolConfig";
 
 export { DEFAULT_POSTGRES_POOL_MAX_PER_STORE } from "./postgresPoolConfig";
@@ -14,6 +15,7 @@ export interface ConfiguredOnlineGameStore {
   postgresPoolMaxPerStore: number;
   store: OnlineGameStore;
   accountStore: OnlineAccountStore;
+  startupMaintenanceStore: PostgresOnlineStartupMaintenanceStore;
 }
 
 function validatePostgresConnectionString(connectionString: string): string {
@@ -57,6 +59,10 @@ export function createOnlineGameStoreFromEnv(
       postgresPoolMaxPerStore,
       store: new PostgresOnlineGameStore({ connectionString, poolMaxPerStore: postgresPoolMaxPerStore }),
       accountStore: new PostgresOnlineAccountStore({ connectionString, poolMaxPerStore: postgresPoolMaxPerStore }),
+      startupMaintenanceStore: new PostgresOnlineStartupMaintenanceStore({
+        connectionString,
+        poolMaxPerStore: postgresPoolMaxPerStore,
+      }),
     };
   }
 

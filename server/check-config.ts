@@ -6,6 +6,10 @@ import {
 import { createServerConfigurationReport } from "./configReport";
 import { loadServerEnvironmentFile } from "./envFile";
 
+interface CheckServerConfigurationOptions {
+  createStore?: typeof createOnlineGameStoreFromEnv;
+}
+
 function parseArgs(argv: string[]): { envFile?: string } {
   const envFileIndex = argv.indexOf("--env-file");
   if (envFileIndex === -1) return {};
@@ -16,15 +20,23 @@ function parseArgs(argv: string[]): { envFile?: string } {
   return { envFile };
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const env = args.envFile
-    ? { ...process.env, ...loadServerEnvironmentFile(args.envFile) }
-    : process.env;
-  const config = parseServerRuntimeConfig(env, process.cwd());
+export async function checkServerConfiguration(
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  options: CheckServerConfigurationOptions = {}
+) {
+  const config = parseServerRuntimeConfig(env, cwd);
   assertServerRuntimeFiles(config);
 
-  const { backend, healthStorePath, postgresPoolMaxPerStore, store, accountStore } = createOnlineGameStoreFromEnv(env);
+  const createStore = options.createStore ?? createOnlineGameStoreFromEnv;
+  const {
+    backend,
+    healthStorePath,
+    postgresPoolMaxPerStore,
+    store,
+    accountStore,
+    startupMaintenanceStore,
+  } = createStore(env);
   let replayedRooms = 0;
   try {
     await store.checkReady();
@@ -39,27 +51,32 @@ async function main() {
   } finally {
     await store.close();
     await accountStore.close?.();
+    await startupMaintenanceStore.close();
   }
 
-  console.log(
-    JSON.stringify(
-      createServerConfigurationReport({
-        config,
-        onlineStore: {
-          backend,
-          path: healthStorePath,
-          postgresPoolMaxPerStore,
-        },
-        replayedRooms,
-      }),
-      null,
-      2
-    )
-  );
+  return createServerConfigurationReport({
+    config,
+    onlineStore: {
+      backend,
+      path: healthStorePath,
+      postgresPoolMaxPerStore,
+    },
+    replayedRooms,
+  });
 }
 
-main().catch((error) => {
-  console.error("Castles server configuration check failed");
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const env = args.envFile
+    ? { ...process.env, ...loadServerEnvironmentFile(args.envFile) }
+    : process.env;
+  console.log(JSON.stringify(await checkServerConfiguration(env, process.cwd()), null, 2));
+}
+
+if (process.argv.some((arg) => /server[\\/]check-config\.ts$/.test(arg))) {
+  main().catch((error) => {
+    console.error("Castles server configuration check failed");
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

@@ -6,6 +6,7 @@ import type {
   OnlineReject,
   OnlineRejectCode,
 } from "./types";
+import { ONLINE_REJECT_CODES } from "./types";
 import type { ValidationResult } from "./validation";
 import {
   ONLINE_PROTOCOL_VERSION,
@@ -38,21 +39,7 @@ export type OnlineServerMessage =
   | (OnlineProtocolEnvelope & { type: "error"; error: OnlineReject; snapshot?: OnlineGameSnapshotDTO })
   | (OnlineProtocolEnvelope & { type: "pong"; clientTime?: unknown; serverTime?: number });
 
-const REJECT_CODES = new Set<OnlineRejectCode>([
-  "unauthorized",
-  "stale_action",
-  "wrong_player",
-  "illegal_action",
-  "duplicate_action",
-  "game_over",
-  "not_found",
-  "bad_request",
-  "bad_json",
-  "not_joined",
-  "unknown_message",
-  "rate_limited",
-  "persistence_failed",
-]);
+const REJECT_CODES = new Set<OnlineRejectCode>(ONLINE_REJECT_CODES);
 const TURN_PHASES = new Set<TurnPhase>(["Movement", "Attack", "Recruitment"]);
 const RESULT_REASONS = new Set<OnlineGameResultDTO["reason"]>([
   "monarch_captured",

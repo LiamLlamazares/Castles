@@ -74,6 +74,7 @@ import {
   type OpenSeekVisibility,
 } from "./seeks";
 import {
+  ONLINE_REJECT_CODES,
   OnlineConnectionStatus,
   OnlineGameResultDTO,
   OnlineGameSetupDTO,
@@ -94,22 +95,7 @@ export class OnlineRequestError extends Error {
   }
 }
 
-const ONLINE_REJECT_CODES = new Set<OnlineRejectCode>([
-  "unauthorized",
-  "stale_action",
-  "wrong_player",
-  "illegal_action",
-  "duplicate_action",
-  "game_over",
-  "not_found",
-  "bad_request",
-  "bad_json",
-  "not_joined",
-  "unknown_message",
-  "not_allowed",
-  "rate_limited",
-  "persistence_failed",
-]);
+const ONLINE_REJECT_CODE_SET = new Set<OnlineRejectCode>(ONLINE_REJECT_CODES);
 const MAX_ONLINE_ERROR_MESSAGE_LENGTH = 240;
 const ONLINE_ACCOUNT_PROFILE_RESPONSE_KEYS = new Set(["protocolVersion", "profile"]);
 const ONLINE_ACCOUNT_FOLLOWING_RESPONSE_KEYS = new Set(["protocolVersion", "following"]);
@@ -822,7 +808,7 @@ async function createOnlineRequestError(response: Response, fallbackMessage: str
     const message = (error as { message?: unknown }).message;
     if (
       typeof code === "string" &&
-      ONLINE_REJECT_CODES.has(code as OnlineRejectCode) &&
+      ONLINE_REJECT_CODE_SET.has(code as OnlineRejectCode) &&
       typeof message === "string" &&
       message.length > 0 &&
       message.length <= MAX_ONLINE_ERROR_MESSAGE_LENGTH &&

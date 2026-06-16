@@ -8,16 +8,22 @@ import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import {
   createOnlineActionAcceptedEvent,
+  createOnlineTimeoutAdjudicatedEvent,
   ONLINE_EVENT_SCHEMA_VERSION,
   type OnlineGameCredentials,
   OnlineGameEvent,
 } from "../../events";
-import { ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS, OnlineGameRoom } from "../../OnlineGameRoom";
+import {
+  ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS,
+  OnlineGameRoom,
+  type OnlineGameRoomRecord,
+} from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import { OnlineGameSeatCredentialTerminalError } from "../OnlineGameStore";
 import { MemoryOnlineAccountStore } from "../OnlineAccountStore";
 import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
+import { createSingleNodeOnlineRuntimeCoordinator } from "../onlineRuntimeCoordinator";
 import {
   createChallengeAcceptedEvent,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -41,6 +47,7 @@ import {
   ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
   createOpenSeekAcceptedEvent,
   encodeOpenSeekDirectoryCursor,
+  projectOpenSeekSummaries,
   type OpenSeekSummary,
 } from "../../seeks";
 import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
@@ -128,6 +135,34 @@ function nextSocketMessage(socket: WebSocket, description = "WebSocket message")
       } catch (error) {
         reject(error);
       }
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    socket.once("message", onMessage);
+    socket.once("error", onError);
+  });
+}
+
+function expectNoSocketMessage(
+  socket: WebSocket,
+  description = "unexpected WebSocket message",
+  timeoutMs = 75
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.off("message", onMessage);
+      socket.off("error", onError);
+    };
+    const onMessage = (data: WebSocket.RawData) => {
+      cleanup();
+      reject(new Error(`Received ${description}: ${data.toString("utf8")}`));
     };
     const onError = (error: Error) => {
       cleanup();
@@ -731,6 +766,20 @@ function withoutPreviewClock(
   return nextLivePreview;
 }
 
+function roomRecordForGame(
+  gameId: string,
+  overrides: Partial<OnlineGameRoomRecord> = {}
+): OnlineGameRoomRecord {
+  return {
+    gameId,
+    setup: createClockedSetup(),
+    whiteCredential: "white-token",
+    blackCredential: "black-token",
+    acceptedActions: [],
+    ...overrides,
+  };
+}
+
 function waitForSocketOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
 
@@ -810,6 +859,40 @@ afterEach(async () => {
 });
 
 describe("createOnlineHttpServer", () => {
+  it("reports drain health as not ready without exposing the drain reason", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    await runtimeCoordinator.startDrain({
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      runtimeCoordinator,
+      health: {
+        checkStoreReady: async () => true,
+        storeBackend: "postgres",
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      ok: false,
+      online: {
+        runtime: {
+          draining: true,
+          drainStartedAt: "2026-06-16T12:00:00.000Z",
+        },
+        store: { ok: true },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("rolling_deploy");
+  });
+
   it("creates accounts and uses server-resolved account identity for open seeks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
@@ -4894,6 +4977,18 @@ describe("createOnlineHttpServer", () => {
 
   it("quick match uses injected store listing and accept boundaries", async () => {
     const setup = createClockedSetup();
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`open-seek-gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-open-seek-gate");
+          return operation();
+        });
+      });
     const listed = openSeekSummary("seek_store_quick", {
       creatorSeat: "w",
       creatorIdentity: { kind: "session", id: "session_creator" },
@@ -4904,6 +4999,7 @@ describe("createOnlineHttpServer", () => {
       seeks: [listed],
     }));
     const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-open-seek");
       const seekEvent = createOpenSeekAcceptedEvent(
         {
           type: "seek_accepted",
@@ -4951,6 +5047,7 @@ describe("createOnlineHttpServer", () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
       now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
       loadOpenSeekSummaries: async () => [listed],
       listOpenSeekSummaries,
       acceptOpenSeekAndCreateGame,
@@ -4980,6 +5077,81 @@ describe("createOnlineHttpServer", () => {
       type: "game_created",
       initialVisibility: "public",
     });
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      "open_seek_lifecycle:seek_store_quick",
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-open-seek-gate")).toBeGreaterThan(
+      order.indexOf("open-seek-gate:open_seek_lifecycle:seek_store_quick")
+    );
+    expect(order.indexOf("accept-open-seek")).toBeGreaterThan(
+      order.indexOf("inside-open-seek-gate")
+    );
+  });
+
+  it("Quick Match shared session gate wraps active-seek checks and fallback creation", async () => {
+    const setup = createClockedSetup();
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalQuickMatchGate = runtimeCoordinator.withQuickMatchSessionGate.bind(runtimeCoordinator);
+    const quickMatchGate = vi
+      .spyOn(runtimeCoordinator, "withQuickMatchSessionGate")
+      .mockImplementation(async (sessionKey, operation) => {
+        order.push(`gate:${sessionKey}`);
+        return originalQuickMatchGate(sessionKey, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const loadOpenSeekSummaries = vi.fn(async () => {
+      order.push("load-active-seeks");
+      return [];
+    });
+    const listOpenSeekSummaries = vi.fn(async () => {
+      order.push("list-candidates");
+      return {
+        schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION as typeof ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+        seeks: [],
+      };
+    });
+    const appendOpenSeekCreated = vi.fn(async (event: any) => {
+      order.push("create-fallback-seek");
+      const [summary] = projectOpenSeekSummaries([event]);
+      if (!summary) throw new Error("Open seek summary was not projected.");
+      return summary;
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      loadOpenSeekSummaries,
+      listOpenSeekSummaries,
+      appendOpenSeekCreated,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_gate" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "waiting",
+      role: "creator",
+      summary: { status: "open" },
+    });
+    expect(quickMatchGate).toHaveBeenCalledWith("session:session_gate", expect.any(Function));
+    expect(order[0]).toBe("gate:session:session_gate");
+    expect(order.indexOf("inside-gate")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("load-active-seeks")).toBeGreaterThan(order.indexOf("inside-gate"));
+    expect(order.indexOf("create-fallback-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
+    expect(loadOpenSeekSummaries).toHaveBeenCalled();
+    expect(listOpenSeekSummaries).toHaveBeenCalled();
+    expect(appendOpenSeekCreated).toHaveBeenCalledOnce();
   });
 
   it("quick match scans later open-seek pages before creating a fallback", async () => {
@@ -5131,6 +5303,138 @@ describe("createOnlineHttpServer", () => {
     expect(publicList.status).toBe(200);
   });
 
+  it("routes HTTP fixed-window rate limits through the runtime coordinator", async () => {
+    const deniedScopes = new Set([
+      "account_auth",
+      "account_create",
+      "account_read",
+      "admin_read",
+      "challenge_action",
+      "create_challenge",
+      "create_game",
+      "create_open_seek",
+      "open_seek_action",
+      "public_directory",
+      "quick_match",
+      "spectator_snapshot",
+    ]);
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation(async (input) => !deniedScopes.has(input.scope));
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+      adminBearerToken: "admin-token",
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const setup = createSetup();
+    const headers = {
+      "content-type": "application/json",
+      "x-forwarded-for": "198.51.100.40, 203.0.113.40",
+    };
+
+    const requests: Array<Promise<Response>> = [
+      fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/accounts`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ displayName: "SharedRateUser", password: "pw" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ displayName: "SharedRateUser", password: "pw" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
+        headers: { ...headers, ...bearer("admin-token") },
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/challenges/challenge_shared_rate/decline`, {
+        method: "POST",
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup, challengerSeat: "w", visibility: "private" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/games`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup, creatorSeat: "w", creatorSessionId: "session_creator" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/seeks/seek_shared_rate`, {
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/games?state=active`, {
+        headers,
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ setup, sessionId: "session_quick" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/api/online/games/game_shared_rate/spectator`, {
+        headers,
+      }),
+    ];
+
+    const responses = await Promise.all(requests);
+
+    expect(responses.map((response) => response.status)).toEqual(Array(12).fill(429));
+    expect(new Set(consumeRateLimit.mock.calls.map(([input]) => input.scope))).toEqual(
+      deniedScopes
+    );
+    expect(consumeRateLimit.mock.calls.every(([input]) => input.key === "203.0.113.40")).toBe(true);
+  });
+
+  it("bounds and sanitizes trusted forwarded HTTP rate-limit keys before the runtime coordinator", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalConsumeRateLimit = runtimeCoordinator.consumeRateLimit.bind(runtimeCoordinator);
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation((input) => originalConsumeRateLimit(input));
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const longForwardedValue = `203.0.113.${"7".repeat(300)}`;
+    const secretForwardedValue = "https://castles.example/play?token=shared-secret";
+    const entityForwardedValue = "account_session_forwarded_secret";
+
+    const longResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+      headers: { "x-forwarded-for": longForwardedValue },
+    });
+    const secretResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+      headers: { "x-forwarded-for": secretForwardedValue },
+    });
+    const entityResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/oauth/providers`, {
+      headers: { "x-forwarded-for": entityForwardedValue },
+    });
+
+    expect(longResponse.status).toBe(200);
+    expect(secretResponse.status).toBe(200);
+    expect(entityResponse.status).toBe(200);
+    const keys = consumeRateLimit.mock.calls.map(([input]) => input.key);
+    expect(keys).toHaveLength(3);
+    expect(keys[0]?.length).toBeLessThanOrEqual(256);
+    expect(keys[0]).not.toContain(longForwardedValue);
+    expect(keys[1]).not.toContain("token");
+    expect(keys[1]).not.toContain("shared-secret");
+    expect(keys[2]).not.toContain("account_session");
+    expect(keys[2]).not.toContain("forwarded_secret");
+  });
+
   it("cancels creator-owned open seeks and keeps them off the public lobby", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
@@ -5163,6 +5467,233 @@ describe("createOnlineHttpServer", () => {
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
     await expect(listResponse.json()).resolves.toMatchObject({ seeks: [] });
+  });
+
+  it("wraps open seek cancel actions in the lifecycle gate", async () => {
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      appendOpenSeekEvent: (event) => {
+        order.push("append-open-seek");
+        return openSeekSummary(event.seekId, {
+          status: event.type === "seek_cancelled" ? "cancelled" : "expired",
+          updatedAt: event.createdAt,
+          lastEventId: event.eventId,
+          ...(event.type === "seek_cancelled"
+            ? { cancelledAt: event.cancelledAt, cancelledBy: event.cancelledBy }
+            : { expiredAt: event.expiredAt, expiredBy: event.expiredBy }),
+        });
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    lifecycleGate.mockClear();
+
+    const cancelResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/cancel`,
+      { method: "POST", headers: bearer(created.creator.token) }
+    );
+
+    expect(cancelResponse.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `open_seek_lifecycle:${created.seekId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:open_seek_lifecycle:${created.seekId}`)
+    );
+    expect(order.indexOf("append-open-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps open seek accept actions in the lifecycle gate", async () => {
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-open-seek");
+      const seekEvent = createOpenSeekAcceptedEvent(
+        {
+          type: "seek_accepted",
+          seekId: input.seekId,
+          acceptedBy: input.acceptedBy,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: `${input.seekId}_accepted`, createdAt: input.acceptedAt }
+      );
+      const seekSummary = openSeekSummary(input.seekId, {
+        status: "accepted",
+        updatedAt: seekEvent.createdAt,
+        acceptedAt: seekEvent.acceptedAt,
+        acceptedBy: seekEvent.acceptedBy,
+        gameId: seekEvent.gameId,
+        whiteIdentity: seekEvent.whiteIdentity,
+        blackIdentity: seekEvent.blackIdentity,
+        lastEventId: seekEvent.eventId,
+      });
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: input.acceptorCredential,
+        blackCredential: "creator-credential",
+      };
+      return {
+        seekEvent,
+        seekSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { creator: "b" as const, acceptor: "w" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      acceptOpenSeekAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    lifecycleGate.mockClear();
+
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acceptorSessionId: "session_acceptor" }),
+      }
+    );
+
+    expect(acceptResponse.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `open_seek_lifecycle:${created.seekId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:open_seek_lifecycle:${created.seekId}`)
+    );
+    expect(order.indexOf("accept-open-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps lazy open seek expiry during owner refresh in the lifecycle gate", async () => {
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => now,
+      runtimeCoordinator,
+      appendOpenSeekEvent: (event) => {
+        order.push("append-open-seek");
+        return openSeekSummary(event.seekId, {
+          status: event.type === "seek_cancelled" ? "cancelled" : "expired",
+          updatedAt: event.createdAt,
+          lastEventId: event.eventId,
+          ...(event.type === "seek_cancelled"
+            ? { cancelledAt: event.cancelledAt, cancelledBy: event.cancelledBy }
+            : { expiredAt: event.expiredAt, expiredBy: event.expiredBy }),
+        });
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+        expiresInMs: 300_000,
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    now += 301_000;
+    lifecycleGate.mockClear();
+
+    const refreshResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}`,
+      { headers: bearer(created.creator.token) }
+    );
+    const refreshed = await refreshResponse.json();
+
+    expect(refreshResponse.status).toBe(200);
+    expect(refreshed.summary).toMatchObject({ seekId: created.seekId, status: "expired" });
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `open_seek_lifecycle:${created.seekId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:open_seek_lifecycle:${created.seekId}`)
+    );
+    expect(order.indexOf("append-open-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
   });
 
   it("rejects token-bearing open seek owner query strings even with bearer auth", async () => {
@@ -5937,6 +6468,94 @@ describe("createOnlineHttpServer", () => {
     expect(results.find((result) => result.response.status === 429)?.body).toMatchObject({
       error: { code: "rate_limited" },
     });
+  });
+
+  it("account challenge pair shared gate wraps targeted account challenge restriction and creation", async () => {
+    const setup = createSetup();
+    const challengeEvents: OnlineChallengeEvent[] = [];
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalPairGate = runtimeCoordinator.withAccountChallengePairGate.bind(runtimeCoordinator);
+    const pairGate = vi
+      .spyOn(runtimeCoordinator, "withAccountChallengePairGate")
+      .mockImplementation(async (pairKey, operation) => {
+        order.push(`gate:${pairKey}`);
+        return originalPairGate(pairKey, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const loadChallengeSummaries = vi.fn(async () => {
+      order.push("load-challenge-summaries");
+      return projectOnlineChallengeSummaries(challengeEvents);
+    });
+    const appendChallengeCreated = vi.fn(async (event: OnlineChallengeEvent) => {
+      order.push("append-challenge");
+      challengeEvents.push(event);
+      const summary = projectOnlineChallengeSummaries(challengeEvents).find(
+        (candidate) => candidate.challengeId === event.challengeId
+      );
+      if (!summary) throw new Error("Missing projected challenge summary.");
+      return summary;
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      loadChallengeSummaries,
+      appendChallengeCreated,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    order.length = 0;
+    loadChallengeSummaries.mockClear();
+    appendChallengeCreated.mockClear();
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup,
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({
+      summary: {
+        challengerIdentity: { displayName: "Liam" },
+        challengedIdentity: { displayName: "Samir" },
+      },
+    });
+    expect(pairGate).toHaveBeenCalledOnce();
+    const pairKey = pairGate.mock.calls[0][0];
+    expect(pairKey).toMatch(/^account_challenge_pair:/);
+    expect(pairKey).not.toContain(liam.account.accountId);
+    expect(pairKey).not.toContain(samir.account.accountId);
+    expect(pairKey).not.toContain("Liam");
+    expect(pairKey).not.toContain("Samir");
+    const gateIndex = order.findIndex((entry) => /^gate:account_challenge_pair:/.test(entry));
+    const insideGateIndex = order.indexOf("inside-gate");
+    const restrictionLoadIndex = order.findIndex(
+      (entry, index) => entry === "load-challenge-summaries" && index > insideGateIndex
+    );
+    expect(gateIndex).toBeGreaterThanOrEqual(0);
+    expect(insideGateIndex).toBeGreaterThan(gateIndex);
+    expect(restrictionLoadIndex).toBeGreaterThan(insideGateIndex);
+    expect(order.indexOf("append-challenge")).toBeGreaterThan(insideGateIndex);
+    expect(loadChallengeSummaries).toHaveBeenCalled();
+    expect(appendChallengeCreated).toHaveBeenCalledOnce();
   });
 
   it.each(["declined", "cancelled", "expired"] as const)(
@@ -6861,6 +7480,339 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it.each([
+    ["accept", "challenged"],
+    ["decline", "challenged"],
+    ["cancel", "challenger"],
+  ] as const)("wraps direct challenge %s actions in the lifecycle gate", async (action, role) => {
+    const order: string[] = [];
+    let pendingChallenge: OnlineChallengeSummary | null = null;
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withChallengeLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withChallengeLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const acceptChallengeAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-challenge");
+      if (!pendingChallenge) {
+        throw new Error("challenge summary was not captured");
+      }
+      const challengeEvent = createChallengeAcceptedEvent(
+        {
+          type: "challenge_accepted",
+          challengeId: input.challengeId,
+          acceptedBy: input.acceptedBy.identity,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: `${input.challengeId}_accepted`, createdAt: input.acceptedAt }
+      );
+      const challengeSummary: OnlineChallengeSummary = {
+        ...pendingChallenge,
+        status: "accepted",
+        updatedAt: challengeEvent.createdAt,
+        acceptedAt: challengeEvent.acceptedAt,
+        acceptedBy: challengeEvent.acceptedBy,
+        gameId: challengeEvent.gameId,
+        whiteIdentity: challengeEvent.whiteIdentity,
+        blackIdentity: challengeEvent.blackIdentity,
+        lastEventId: challengeEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      if (!gameSummary) {
+        throw new Error("Accepted challenge game summary was not projected.");
+      }
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "challenger-credential",
+        blackCredential: "challenged-credential",
+      };
+      return {
+        challengeEvent,
+        challengeSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { challenger: "w" as const, challenged: "b" as const },
+      };
+    });
+    const appendChallengeEvent = vi.fn(async (event: OnlineChallengeEvent) => {
+      order.push("append-challenge");
+      if (!pendingChallenge) {
+        throw new Error("challenge summary was not captured");
+      }
+      if (event.type === "challenge_declined") {
+        pendingChallenge = {
+          ...pendingChallenge,
+          status: "declined",
+          updatedAt: event.createdAt,
+          declinedAt: event.declinedAt,
+          declinedBy: event.declinedBy,
+          lastEventId: event.eventId,
+        };
+        return pendingChallenge;
+      }
+      if (event.type === "challenge_cancelled") {
+        pendingChallenge = {
+          ...pendingChallenge,
+          status: "cancelled",
+          updatedAt: event.createdAt,
+          cancelledAt: event.cancelledAt,
+          cancelledBy: event.cancelledBy,
+          lastEventId: event.eventId,
+        };
+        return pendingChallenge;
+      }
+      throw new Error(`Unexpected ${event.type} event`);
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      acceptChallengeAndCreateGame,
+      appendChallengeEvent,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        challengerSeat: "w",
+        visibility: "private",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    pendingChallenge = created.summary;
+    const token =
+      role === "challenged"
+        ? fragmentChallengeToken(created.challenged.url)
+        : fragmentChallengeToken(created.challenger.url);
+    lifecycleGate.mockClear();
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}/${action}`,
+      { method: "POST", headers: bearer(token) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `challenge_lifecycle:${created.challengeId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:challenge_lifecycle:${created.challengeId}`)
+    );
+    const mutationMarker = action === "accept" ? "accept-challenge" : "append-challenge";
+    expect(order.indexOf(mutationMarker)).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps account challenge accept actions in the challenge lifecycle gate", async () => {
+    const order: string[] = [];
+    let pendingChallenge: OnlineChallengeSummary | null = null;
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withChallengeLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withChallengeLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const acceptChallengeAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-account-challenge");
+      if (!pendingChallenge) {
+        throw new Error("challenge summary was not captured");
+      }
+      const challengeEvent = createChallengeAcceptedEvent(
+        {
+          type: "challenge_accepted",
+          challengeId: input.challengeId,
+          acceptedBy: input.acceptedBy.identity,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: `${input.challengeId}_accepted`, createdAt: input.acceptedAt }
+      );
+      const challengeSummary: OnlineChallengeSummary = {
+        ...pendingChallenge,
+        status: "accepted",
+        updatedAt: challengeEvent.createdAt,
+        acceptedAt: challengeEvent.acceptedAt,
+        acceptedBy: challengeEvent.acceptedBy,
+        gameId: challengeEvent.gameId,
+        whiteIdentity: challengeEvent.whiteIdentity,
+        blackIdentity: challengeEvent.blackIdentity,
+        lastEventId: challengeEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      if (!gameSummary) {
+        throw new Error("Accepted account challenge game summary was not projected.");
+      }
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "challenger-credential",
+        blackCredential: "challenged-credential",
+      };
+      return {
+        challengeEvent,
+        challengeSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { challenger: "w" as const, challenged: "b" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      acceptChallengeAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup: createSetup(),
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    pendingChallenge = created.summary;
+    lifecycleGate.mockClear();
+
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${created.challengeId}/accept`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+
+    expect(acceptResponse.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `challenge_lifecycle:${created.challengeId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:challenge_lifecycle:${created.challengeId}`)
+    );
+    expect(order.indexOf("accept-account-challenge")).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps lazy direct challenge expiry during challenge refresh in the lifecycle gate", async () => {
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const order: string[] = [];
+    let pendingChallenge: OnlineChallengeSummary | null = null;
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withChallengeLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withChallengeLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => now,
+      runtimeCoordinator,
+      appendChallengeEvent: (event) => {
+        order.push("append-challenge");
+        if (!pendingChallenge) {
+          throw new Error("challenge summary was not captured");
+        }
+        if (event.type !== "challenge_expired") {
+          throw new Error(`Unexpected ${event.type} event`);
+        }
+        pendingChallenge = {
+          ...pendingChallenge,
+          status: "expired",
+          updatedAt: event.createdAt,
+          expiredAt: event.expiredAt,
+          expiredBy: event.expiredBy,
+          lastEventId: event.eventId,
+        };
+        return pendingChallenge;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        challengerSeat: "w",
+        visibility: "private",
+        expiresInMs: 300_000,
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    pendingChallenge = created.summary;
+    const challengedToken = fragmentChallengeToken(created.challenged.url);
+    now += 301_000;
+    lifecycleGate.mockClear();
+
+    const refreshResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}`,
+      { headers: bearer(challengedToken) }
+    );
+    const refreshed = await refreshResponse.json();
+
+    expect(refreshResponse.status).toBe(200);
+    expect(refreshed.summary).toMatchObject({ challengeId: created.challengeId, status: "expired" });
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `challenge_lifecycle:${created.challengeId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:challenge_lifecycle:${created.challengeId}`)
+    );
+    expect(order.indexOf("append-challenge")).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
   it("returns persistence failure when declining a pending challenge cannot be saved", async () => {
     const challengeId = "challenge_decline_persistence";
     const summary = pendingChallengeSummary(challengeId, {
@@ -7602,7 +8554,7 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(secretQueryBody)).not.toContain("value");
   });
 
-  it("decorates public game summaries with current connected spectator counts", async () => {
+  it("uses the runtime coordinator to decorate public game summaries with current connected spectator counts", async () => {
     const service = new OnlineGameService({
       idFactory: () => "game_watched_presence_http",
       tokenFactory: (seat) => `${seat}-token`,
@@ -7611,9 +8563,13 @@ describe("createOnlineHttpServer", () => {
       publicBaseUrl: "https://castles.example",
     });
     const publicSummary = summaryForGame(created.gameId, "public");
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const countSpectators = vi.spyOn(runtimeCoordinator, "countSpectators");
+    const refreshSpectator = vi.spyOn(runtimeCoordinator, "refreshSpectator");
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       service,
+      runtimeCoordinator,
       now: () => 12_345,
       loadGameSummaries: async () => [
         {
@@ -7666,8 +8622,66 @@ describe("createOnlineHttpServer", () => {
       expect(summaryResponse.status).toBe(200);
       expect(directoryBody.games[0].livePreview.spectatorCount).toBe(1);
       expect(summaryBody.summary.livePreview.spectatorCount).toBe(1);
+      expect(countSpectators).toHaveBeenCalledWith(created.gameId);
       expect(directoryBody.games[0].livePreview.clock.serverNow).toBe(12_345);
       expect(summaryBody.summary.livePreview.clock.serverNow).toBe(12_345);
+
+      const repeatedSpectating = nextSocketMessage(socket, "repeat spectator presence join");
+      socket.send(
+        JSON.stringify(versionedMessage({ type: "spectate", gameId: created.gameId }))
+      );
+      await expect(repeatedSpectating).resolves.toMatchObject({ type: "spectating" });
+
+      const repeatedSummaryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}/summary`
+      );
+      const repeatedSummaryBody = await repeatedSummaryResponse.json();
+
+      expect(repeatedSummaryResponse.status).toBe(200);
+      expect(repeatedSummaryBody.summary.livePreview.spectatorCount).toBe(1);
+
+      const heartbeat = nextSocketMessage(socket, "spectator heartbeat refresh");
+      socket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 456 })));
+      await expect(heartbeat).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 456,
+      });
+      expect(refreshSpectator).toHaveBeenCalledWith({
+        gameId: created.gameId,
+        connectionId: expect.stringMatching(/^spectator_/),
+      });
+
+      const joined = nextSocketMessage(socket, "spectator role change to player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", color: "w" });
+
+      const joinedSummaryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}/summary`
+      );
+      const joinedSummaryBody = await joinedSummaryResponse.json();
+
+      expect(joinedSummaryResponse.status).toBe(200);
+      expect(joinedSummaryBody.summary.livePreview.spectatorCount).toBeUndefined();
+
+      const closed = waitForSocketClose(socket);
+      socket.close();
+      await closed;
+
+      const closedSummaryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}/summary`
+      );
+      const closedSummaryBody = await closedSummaryResponse.json();
+
+      expect(closedSummaryResponse.status).toBe(200);
+      expect(closedSummaryBody.summary.livePreview.spectatorCount).toBeUndefined();
     } finally {
       socket.close();
     }
@@ -7722,11 +8736,19 @@ describe("createOnlineHttpServer", () => {
       tokenFactory: (seat) => `${seat}-token`,
     });
     const appended: Array<Extract<OnlineGameEvent, { type: "visibility_changed" }>> = [];
+    const published: unknown[] = [];
     const logs: unknown[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-visibility-publisher",
+    });
+    runtimeCoordinator.subscribeGameSnapshotChanged((event) => {
+      published.push(event);
+    });
     let summary = summaryForGame("game_publish_http", "unlisted");
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       service,
+      runtimeCoordinator,
       onLog: (event) => logs.push(event),
       appendGameVisibilityChanged: (event) => {
         appended.push(event);
@@ -7773,6 +8795,17 @@ describe("createOnlineHttpServer", () => {
       gameId: "game_publish_http",
       visibility: "public",
     });
+    expect(published).toEqual([
+      expect.objectContaining({
+        type: "game_snapshot_changed",
+        gameId: "game_publish_http",
+        roomVersion: 0,
+        lastEventId: appended[0].eventId,
+        reason: "visibility",
+        nodeId: "node-visibility-publisher",
+        createdAt: appended[0].createdAt,
+      }),
+    ]);
     expect(JSON.stringify(body)).not.toContain(created.white.token);
     expect(JSON.stringify(body)).not.toContain(created.black.token);
     expect(JSON.stringify(logs)).not.toContain(created.white.token);
@@ -8438,6 +9471,1309 @@ describe("createOnlineHttpServer", () => {
     expect(response.status).toBe(201);
   });
 
+  it("publishes accepted action snapshot changes through the runtime coordinator", async () => {
+    const published: unknown[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-action-publisher",
+    });
+    runtimeCoordinator.subscribeGameSnapshotChanged((event) => {
+      published.push(event);
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_publish_action",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => 1_700_000_000_000,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      now: () => 1_700_000_000_000,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-publish-action",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+      await expect(nextSocketMessage(socket, "accepted action snapshot")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+      expect(published).toEqual([
+        expect.objectContaining({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 1,
+          lastEventId: expect.stringMatching(/^evt_/),
+          reason: "action",
+          nodeId: "node-action-publisher",
+          createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        }),
+      ]);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("still broadcasts accepted local action snapshots when runtime publication fails", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-action-publisher",
+    });
+    vi.spyOn(runtimeCoordinator, "publishGameSnapshotChanged").mockRejectedValue(
+      new Error("runtime event outbox unavailable")
+    );
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_publish_failure",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-publish-failure",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "accepted action after publication failure")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("publishes timeout metadata when a store-backed duplicate retry adjudicates time", async () => {
+    const published: unknown[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-duplicate-timeout-publisher",
+    });
+    runtimeCoordinator.subscribeGameSnapshotChanged((event) => {
+      published.push(event);
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_duplicate_timeout",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => 1_000,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      applyGameAction: async (input) => {
+        const localRecord = service.getRoom(input.gameId)?.toRecord();
+        if (!localRecord) {
+          throw new Error("Expected local room record.");
+        }
+        const canonicalRoom = OnlineGameRoom.create({
+          ...localRecord,
+          now: () => 1_000,
+        });
+        const actionResult = canonicalRoom.submitAction(
+          input.token,
+          input.action,
+          input.clientActionId
+        );
+        if (!actionResult.ok) {
+          throw new Error(actionResult.error.message);
+        }
+        const accepted = canonicalRoom.toRecord().acceptedActions.at(-1)!;
+        const actionEvent = createOnlineActionAcceptedEvent(
+          {
+            type: "action_accepted",
+            gameId: input.gameId,
+            playerColor: accepted.playerColor,
+            clientActionId: accepted.clientActionId,
+            version: actionResult.snapshot.version,
+            playedAt: accepted.playedAt,
+            action: accepted.action,
+            clock: accepted.clock,
+          },
+          {
+            eventId: "evt-runtime-action",
+            createdAt: "2026-06-16T12:00:00.000Z",
+          }
+        );
+        const timeoutRoom = OnlineGameRoom.create({
+          ...canonicalRoom.toRecord(),
+          now: () => 120_000,
+        });
+        const timeout = timeoutRoom.adjudicateTimeout();
+        if (!timeout) {
+          throw new Error("Expected duplicate retry timeout.");
+        }
+        const timeoutEvent = createOnlineTimeoutAdjudicatedEvent(
+          {
+            type: "timeout_adjudicated",
+            gameId: input.gameId,
+            playerColor: timeout.playerColor,
+            version: timeout.version,
+            adjudicatedAt: timeout.adjudicatedAt,
+            result: timeout.result,
+            clock: timeout.clock,
+          },
+          {
+            eventId: "evt-runtime-timeout",
+            createdAt: "2026-06-16T12:00:01.000Z",
+          }
+        );
+        return {
+          ok: true,
+          event: actionEvent,
+          snapshotChange: timeoutEvent,
+          playerColor: accepted.playerColor,
+          room: timeoutRoom.toRecord(),
+          snapshot: timeoutRoom.getSnapshot(),
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-duplicate-timeout",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "duplicate retry timeout snapshot")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: {
+          version: 2,
+          result: { reason: "timeout" },
+        },
+      });
+      expect(published).toEqual([
+        expect.objectContaining({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 2,
+          lastEventId: "evt-runtime-timeout",
+          reason: "timeout",
+          nodeId: "node-duplicate-timeout-publisher",
+          createdAt: "2026-06-16T12:00:01.000Z",
+        }),
+      ]);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("rejects store-backed accepted action results that omit snapshotChange", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-missing-snapshot-change",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_snapshot_change_missing",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      applyGameAction: async (input) => {
+        const localRecord = service.getRoom(input.gameId)?.toRecord();
+        if (!localRecord) {
+          throw new Error("Expected local room record.");
+        }
+        const canonicalRoom = OnlineGameRoom.create(localRecord);
+        const actionResult = canonicalRoom.submitAction(
+          input.token,
+          input.action,
+          input.clientActionId
+        );
+        if (!actionResult.ok) {
+          throw new Error(actionResult.error.message);
+        }
+        const accepted = canonicalRoom.toRecord().acceptedActions.at(-1)!;
+        const event = createOnlineActionAcceptedEvent(
+          {
+            type: "action_accepted",
+            gameId: input.gameId,
+            playerColor: accepted.playerColor,
+            clientActionId: accepted.clientActionId,
+            version: actionResult.snapshot.version,
+            playedAt: accepted.playedAt,
+            action: accepted.action,
+            clock: accepted.clock,
+          },
+          {
+            eventId: "evt-runtime-legacy-action",
+            createdAt: "2026-06-16T12:00:02.000Z",
+          }
+        );
+        return {
+          ok: true,
+          event,
+          playerColor: accepted.playerColor,
+          room: canonicalRoom.toRecord(),
+          snapshot: actionResult.snapshot,
+        } as any;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-snapshot-change-missing",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "missing snapshotChange error")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "persistence_failed" },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("refreshes stale warm rooms from remote runtime snapshot hints before broadcasting", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-refresh-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_snapshot_refresh",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const localRecord = service.getRoom(created.gameId)?.toRecord();
+    if (!localRecord) {
+      throw new Error("Expected local room record.");
+    }
+    const remoteRoom = OnlineGameRoom.create(localRecord);
+    const remoteAction = remoteRoom.submitAction(
+      created.white.token,
+      { type: "PASS", baseVersion: 0 },
+      "client-remote-snapshot-refresh"
+    );
+    if (!remoteAction.ok) {
+      throw new Error(remoteAction.error.message);
+    }
+    const remoteRecord = remoteRoom.toRecord();
+    const loadGameRoomRecord = vi.fn(async (gameId: string) =>
+      gameId === created.gameId ? remoteRecord : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "remote refresh player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      const refreshed = nextSocketMessage(socket, "remote refreshed authoritative snapshot");
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: created.gameId,
+        roomVersion: 1,
+        lastEventId: "evt-remote-refresh",
+        reason: "action",
+        nodeId: "node-remote-refresh-source",
+        createdAt: "2026-06-16T12:30:00.000Z",
+      });
+
+      await expect(refreshed).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { gameId: created.gameId, version: 1 },
+      });
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(created.gameId);
+      expect(service.getRoom(created.gameId)?.getSnapshot().version).toBe(1);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("ignores equal-version remote runtime snapshot hints without loading or broadcasting", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-equal-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_snapshot_equal",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const loadGameRoomRecord = vi.fn();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "remote equal-version player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: created.gameId,
+        roomVersion: 0,
+        lastEventId: "evt-remote-equal",
+        reason: "snapshot",
+        nodeId: "node-remote-equal-source",
+        createdAt: "2026-06-16T12:31:00.000Z",
+      });
+
+      expect(loadGameRoomRecord).not.toHaveBeenCalled();
+      await expect(expectNoSocketMessage(socket, "equal-version remote snapshot")).resolves.toBeUndefined();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("logs loader failures for remote runtime snapshot hints without broadcasting stale local snapshots", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-load-failure-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_snapshot_load_failure",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const logs: unknown[] = [];
+    const loadGameRoomRecord = vi.fn(async () => {
+      throw new Error("store unavailable");
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord,
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "remote load-failure player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: created.gameId,
+        roomVersion: 1,
+        lastEventId: "evt-remote-load-failure",
+        reason: "action",
+        nodeId: "node-remote-load-failure-source",
+        createdAt: "2026-06-16T12:32:00.000Z",
+      });
+
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(created.gameId);
+      expect(logs).toContainEqual(
+        expect.objectContaining({
+          event: "online.runtime.remote_snapshot",
+          gameId: created.gameId,
+          status: "failed",
+          reason: "load_failed",
+        })
+      );
+      await expect(expectNoSocketMessage(socket, "stale local snapshot after load failure")).resolves.toBeUndefined();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("fails closed for unsafe remote runtime snapshot hint refresh branches", async () => {
+    const cases: Array<{
+      name: string;
+      expectedReason: string;
+      loadGameRoomRecord?: (gameId: string, localRecord: OnlineGameRoomRecord) => OnlineGameRoomRecord | null;
+    }> = [
+      {
+        name: "missing-loader",
+        expectedReason: "missing_room_loader",
+      },
+      {
+        name: "missing-record",
+        expectedReason: "room_not_found",
+        loadGameRoomRecord: () => null,
+      },
+      {
+        name: "mismatched-record",
+        expectedReason: "mismatched_room_record",
+        loadGameRoomRecord: (_gameId, localRecord) => ({
+          ...localRecord,
+          gameId: "game_remote_fail_closed_mismatched_other",
+        }),
+      },
+      {
+        name: "stale-record",
+        expectedReason: "stale_room_record",
+        loadGameRoomRecord: (_gameId, localRecord) => localRecord,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+        nodeId: `node-remote-fail-closed-${testCase.name}`,
+      });
+      const service = new OnlineGameService({
+        idFactory: () => `game_remote_fail_closed_${testCase.name.replace(/-/g, "_")}`,
+        tokenFactory: (seat) => `${seat}-token`,
+      });
+      const created = service.createGame(createClockedSetup(), {
+        publicBaseUrl: "https://castles.example",
+      });
+      const localRecord = service.getRoom(created.gameId)?.toRecord();
+      if (!localRecord) {
+        throw new Error("Expected local room record.");
+      }
+      const logs: unknown[] = [];
+      const loadGameRoomRecord = testCase.loadGameRoomRecord
+        ? vi.fn(async (gameId: string) => testCase.loadGameRoomRecord!(gameId, localRecord))
+        : undefined;
+      const { server } = createOnlineHttpServer({
+        publicBaseUrl: "https://castles.example",
+        service,
+        runtimeCoordinator,
+        ...(loadGameRoomRecord ? { loadGameRoomRecord } : {}),
+        onLog: (event) => logs.push(event),
+      });
+      servers.push(server);
+      const port = await listen(server);
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+      try {
+        await waitForSocketOpen(socket);
+        const joined = nextSocketMessage(socket, `${testCase.name} player join`);
+        socket.send(
+          JSON.stringify(
+            versionedMessage({
+              type: "join",
+              gameId: created.gameId,
+              token: created.white.token,
+            })
+          )
+        );
+        await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+        await runtimeCoordinator.publishGameSnapshotChanged({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 1,
+          lastEventId: `evt-remote-${testCase.name}`,
+          reason: "action",
+          nodeId: `node-remote-fail-closed-source-${testCase.name}`,
+          createdAt: "2026-06-16T12:33:00.000Z",
+        });
+
+        if (loadGameRoomRecord) {
+          expect(loadGameRoomRecord).toHaveBeenCalledWith(created.gameId);
+        }
+        expect(service.getRoom(created.gameId)?.getSnapshot().version).toBe(0);
+        expect(logs).toContainEqual(
+          expect.objectContaining({
+            event: "online.runtime.remote_snapshot",
+            gameId: created.gameId,
+            status: "failed",
+            reason: testCase.expectedReason,
+          })
+        );
+        await expect(expectNoSocketMessage(socket, `${testCase.name} stale local snapshot`)).resolves.toBeUndefined();
+      } finally {
+        socket.close();
+      }
+    }
+  });
+
+  it("ignores same-node and disconnected-game remote runtime snapshot hints without durable loads", async () => {
+    const sameNodeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-ignore-same",
+    });
+    const sameNodeService = new OnlineGameService({
+      idFactory: () => "game_remote_ignore_same_node",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const sameNodeCreated = sameNodeService.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const sameNodeLoad = vi.fn();
+    const { server: sameNodeServer } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service: sameNodeService,
+      runtimeCoordinator: sameNodeCoordinator,
+      loadGameRoomRecord: sameNodeLoad,
+    });
+    servers.push(sameNodeServer);
+    const sameNodePort = await listen(sameNodeServer);
+    const sameNodeSocket = new WebSocket(`ws://127.0.0.1:${sameNodePort}/ws`);
+
+    try {
+      await waitForSocketOpen(sameNodeSocket);
+      const joined = nextSocketMessage(sameNodeSocket, "same-node ignore player join");
+      sameNodeSocket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: sameNodeCreated.gameId,
+            token: sameNodeCreated.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await sameNodeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: sameNodeCreated.gameId,
+        roomVersion: 1,
+        lastEventId: "evt-same-node-ignore",
+        reason: "action",
+        nodeId: sameNodeCoordinator.nodeId,
+        createdAt: "2026-06-16T12:34:00.000Z",
+      });
+
+      expect(sameNodeLoad).not.toHaveBeenCalled();
+      expect(sameNodeService.getRoom(sameNodeCreated.gameId)?.getSnapshot().version).toBe(0);
+      await expect(expectNoSocketMessage(sameNodeSocket, "same-node remote hint")).resolves.toBeUndefined();
+    } finally {
+      sameNodeSocket.close();
+    }
+
+    const disconnectedCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-ignore-disconnected",
+    });
+    const disconnectedService = new OnlineGameService({
+      idFactory: () => "game_remote_ignore_disconnected",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const disconnectedCreated = disconnectedService.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const disconnectedLoad = vi.fn();
+    const { server: disconnectedServer } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service: disconnectedService,
+      runtimeCoordinator: disconnectedCoordinator,
+      loadGameRoomRecord: disconnectedLoad,
+    });
+    servers.push(disconnectedServer);
+
+    await disconnectedCoordinator.publishGameSnapshotChanged({
+      type: "game_snapshot_changed",
+      gameId: disconnectedCreated.gameId,
+      roomVersion: 1,
+      lastEventId: "evt-disconnected-ignore",
+      reason: "action",
+      nodeId: "node-remote-ignore-disconnected-source",
+      createdAt: "2026-06-16T12:35:00.000Z",
+    });
+
+    expect(disconnectedLoad).not.toHaveBeenCalled();
+    expect(disconnectedService.getRoom(disconnectedCreated.gameId)?.getSnapshot().version).toBe(0);
+  });
+
+  it("logs invalid remote room refresh records without rejecting runtime publication", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-invalid-record-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_invalid_record",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const localRecord = service.getRoom(created.gameId)?.toRecord();
+    if (!localRecord) {
+      throw new Error("Expected local room record.");
+    }
+    const invalidRecord = {
+      ...localRecord,
+      setup: undefined,
+      acceptedActions: [
+        {
+          playerColor: "w",
+          clientActionId: "client-invalid-remote-record",
+          action: { type: "PASS", baseVersion: 0 },
+          version: 1,
+          playedAt: 1_700_000_000_000,
+        },
+      ],
+    } as unknown as OnlineGameRoomRecord;
+    const logs: unknown[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord: async () => invalidRecord,
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "invalid-record player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await expect(
+        runtimeCoordinator.publishGameSnapshotChanged({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 1,
+          lastEventId: "evt-invalid-remote-record",
+          reason: "action",
+          nodeId: "node-remote-invalid-record-source",
+          createdAt: "2026-06-16T12:36:00.000Z",
+        })
+      ).resolves.toBeUndefined();
+
+      expect(service.getRoom(created.gameId)?.getSnapshot().version).toBe(0);
+      expect(logs).toContainEqual(
+        expect.objectContaining({
+          event: "online.runtime.remote_snapshot",
+          gameId: created.gameId,
+          status: "failed",
+          reason: "refresh_failed",
+        })
+      );
+      await expect(expectNoSocketMessage(socket, "invalid record stale local snapshot")).resolves.toBeUndefined();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("hydrates missing warm room for HTTP player snapshots", async () => {
+    const gameId = "game_missing_warm_room_http_join";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}`, {
+      headers: bearer("white-token"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      color: "w",
+      snapshot: { gameId, version: 0 },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+  });
+
+  it("hydrates missing warm room for HTTP spectator snapshots after access checks", async () => {
+    const gameId = "game_missing_warm_room_http_spectator";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId ? summaryForGame(gameId, "unlisted") : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}/spectator`);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "spectator",
+      snapshot: { gameId, version: 0 },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+  });
+
+  it("hydrates missing warm room for WebSocket player joins", async () => {
+    const gameId = "game_missing_warm_room_socket_join";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId,
+            token: "white-token",
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "missing warm room player join")).resolves.toMatchObject({
+        type: "joined",
+        color: "w",
+        snapshot: { gameId, version: 0 },
+      });
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+      expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("hydrates missing warm room for WebSocket spectators after access checks", async () => {
+    const gameId = "game_missing_warm_room_socket_spectator";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId ? summaryForGame(gameId, "unlisted") : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "spectate",
+            gameId,
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "missing warm room spectator join")).resolves.toMatchObject({
+        type: "spectating",
+        snapshot: { gameId, version: 0 },
+      });
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+      expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("hydrates missing warm room for account snapshots after participant checks", async () => {
+    const gameId = "game_missing_warm_room_account_snapshot";
+    const record = roomRecordForGame(gameId, {
+      whiteCredential: hashOnlineToken("account-white-token"),
+      blackCredential: hashOnlineToken("account-black-token"),
+    });
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const service = new OnlineGameService({
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+    });
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId && liamIdentity
+          ? {
+              ...summaryForGame(gameId, "private"),
+              participants: [
+                { seat: "w", role: "white", identity: liamIdentity },
+                { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_account_black" } },
+              ],
+            }
+          : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    liamIdentity = liam.account.identity;
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/snapshot`,
+      { headers: bearer(liam.session.token) }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "account",
+      snapshot: { gameId, version: 0 },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+  });
+
+  it("hydrates missing warm room for account rejoin before adding the fresh seat credential", async () => {
+    const gameId = "game_missing_warm_room_account_rejoin";
+    const record = roomRecordForGame(gameId, {
+      whiteCredential: hashOnlineToken("old-white-token"),
+      blackCredential: hashOnlineToken("old-black-token"),
+    });
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const service = new OnlineGameService({
+      tokenFactory: (seat) => `fresh-${seat}-token`,
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+    });
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const appendGameSeatCredential = vi.fn(async (
+      targetGameId: string,
+      seat: "w" | "b",
+      credential: string
+    ) => {
+      expect(service.getRoom(targetGameId)).not.toBeNull();
+      expect(targetGameId).toBe(gameId);
+      expect(seat).toBe("w");
+      return {
+        ...record,
+        additionalWhiteCredentials: [credential],
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      loadGameRoomRecord,
+      appendGameSeatCredential,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId && liamIdentity
+          ? {
+              ...summaryForGame(gameId, "private"),
+              participants: [
+                { seat: "w", role: "white", identity: liamIdentity },
+                { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_rejoin_black" } },
+              ],
+            }
+          : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    liamIdentity = liam.account.identity;
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/rejoin`,
+      { method: "POST", headers: bearer(liam.session.token) }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      gameInvite: {
+        gameId,
+        seat: "w",
+        token: "fresh-w-token",
+        url: "https://castles.example/play?onlineGame=game_missing_warm_room_account_rejoin&seat=w",
+      },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(appendGameSeatCredential).toHaveBeenCalledWith(
+      gameId,
+      "w",
+      hashOnlineToken("fresh-w-token")
+    );
+    expect(service.getRoom(gameId)?.authenticate("fresh-w-token")).toBe("w");
+  });
+
+  it("fails closed when missing warm room hydration cannot load a durable record", async () => {
+    const gameId = "game_missing_warm_room_load_failure";
+    const service = new OnlineGameService();
+    const logs: unknown[] = [];
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const loadGameRoomRecord = vi.fn(async () => {
+      throw new Error("room store unavailable");
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}`, {
+      headers: bearer("white-token"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toMatchObject({ code: "persistence_failed" });
+    expect(service.getRoom(gameId)).toBeNull();
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "load_failed",
+      })
+    );
+    expect(JSON.stringify(logs)).not.toContain("white-token");
+  });
+
+  it("does not hydrate missing warm rooms before spectator or account access checks pass", async () => {
+    const spectatorGameId = "game_missing_warm_room_private_spectator";
+    const accountGameId = "game_missing_warm_room_account_nonparticipant";
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async () => roomRecordForGame(spectatorGameId));
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) => {
+        if (targetGameId === spectatorGameId) return summaryForGame(spectatorGameId, "private");
+        if (targetGameId === accountGameId && liamIdentity) {
+          return {
+            ...summaryForGame(accountGameId, "private"),
+            participants: [
+              { seat: "w", role: "white", identity: { kind: "anonymous", id: "other_player" } },
+              { seat: "b", role: "black", identity: { kind: "anonymous", id: "other_black" } },
+            ],
+          };
+        }
+        return null;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    liamIdentity = liam.account.identity;
+
+    const spectatorResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${spectatorGameId}/spectator`
+    );
+    const accountResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${accountGameId}/snapshot`,
+      { headers: bearer(liam.session.token) }
+    );
+
+    expect(spectatorResponse.status).toBe(404);
+    expect(accountResponse.status).toBe(404);
+    expect(loadGameRoomRecord).not.toHaveBeenCalled();
+    expect(service.getRoom(spectatorGameId)).toBeNull();
+    expect(service.getRoom(accountGameId)).toBeNull();
+  });
+
+  it("rejects websocket player joins while draining", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_drain_ws_join",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    await runtimeCoordinator.startDrain({
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "draining player join")).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "service_unavailable" },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("rejects websocket spectators while draining without registering presence", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_drain_ws_spectate",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const registerSpectator = vi.spyOn(runtimeCoordinator, "registerSpectator");
+    await runtimeCoordinator.startDrain({
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(versionedMessage({ type: "spectate", gameId: created.gameId }))
+      );
+
+      await expect(nextSocketMessage(socket, "draining spectator join")).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "service_unavailable" },
+      });
+      expect(registerSpectator).not.toHaveBeenCalled();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("keeps websocket player pings alive after drain starts", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_drain_existing_ping",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
+      );
+      await expect(nextSocketMessage(socket, "pre-drain player join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      await runtimeCoordinator.startDrain({
+        reason: "rolling_deploy",
+        startedAt: "2026-06-16T12:00:00.000Z",
+      });
+      socket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 321 })));
+
+      await expect(nextSocketMessage(socket, "post-drain player ping")).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "pong",
+        clientTime: 321,
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
   it("supports websocket heartbeats for reconnect health checks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
@@ -8742,6 +11078,102 @@ describe("createOnlineHttpServer", () => {
     }
   });
 
+  it("routes websocket message rate limits through the runtime coordinator", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation(async (input) => input.scope !== "socket_message");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": "198.51.100.99, 203.0.113.22" },
+    });
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 1 })));
+
+      await expect(nextSocketMessage(socket, "runtime coordinator socket rate limit")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "rate_limited" },
+      });
+      expect(consumeRateLimit).toHaveBeenCalledWith({
+        scope: "socket_message",
+        key: "203.0.113.22",
+        limit: 120,
+        windowMs: 10_000,
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("bounds and sanitizes trusted forwarded websocket rate-limit keys before the runtime coordinator", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalConsumeRateLimit = runtimeCoordinator.consumeRateLimit.bind(runtimeCoordinator);
+    const consumeRateLimit = vi
+      .spyOn(runtimeCoordinator, "consumeRateLimit")
+      .mockImplementation((input) => originalConsumeRateLimit(input));
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const longForwardedValue = `203.0.113.${"8".repeat(300)}`;
+    const secretForwardedValue = "https://castles.example/play?token=socket-secret";
+    const entityForwardedValue = "challenge_forwarded_secret";
+    const longSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": longForwardedValue },
+    });
+    const secretSocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": secretForwardedValue },
+    });
+    const entitySocket = new WebSocket(`ws://127.0.0.1:${port}/ws`, {
+      headers: { "x-forwarded-for": entityForwardedValue },
+    });
+
+    try {
+      await Promise.all([
+        waitForSocketOpen(longSocket),
+        waitForSocketOpen(secretSocket),
+        waitForSocketOpen(entitySocket),
+      ]);
+      longSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 41 })));
+      secretSocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 42 })));
+      entitySocket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 43 })));
+
+      await expect(nextSocketMessage(longSocket, "bounded forwarded websocket ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 41,
+      });
+      await expect(nextSocketMessage(secretSocket, "secret forwarded websocket ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 42,
+      });
+      await expect(nextSocketMessage(entitySocket, "entity forwarded websocket ping")).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 43,
+      });
+      const keys = consumeRateLimit.mock.calls.map(([input]) => input.key);
+      expect(keys).toHaveLength(3);
+      expect(keys[0]?.length).toBeLessThanOrEqual(256);
+      expect(keys[0]).not.toContain(longForwardedValue);
+      expect(keys[1]).not.toContain("token");
+      expect(keys[1]).not.toContain("socket-secret");
+      expect(keys[2]).not.toContain("challenge");
+      expect(keys[2]).not.toContain("forwarded_secret");
+    } finally {
+      longSocket.close();
+      secretSocket.close();
+      entitySocket.close();
+    }
+  });
+
   it("rolls back an accepted websocket action when persistence fails", async () => {
     const service = new OnlineGameService({
       idFactory: () => "game_rollback",
@@ -8983,18 +11415,20 @@ describe("createOnlineHttpServer", () => {
           throw new Error(actionResult.error.message);
         }
         const accepted = canonicalRoom.toRecord().acceptedActions.at(-1)!;
+        const event = createOnlineActionAcceptedEvent({
+          type: "action_accepted",
+          gameId: input.gameId,
+          playerColor: accepted.playerColor,
+          clientActionId: accepted.clientActionId,
+          version: actionResult.snapshot.version,
+          playedAt: accepted.playedAt,
+          action: accepted.action,
+          clock: accepted.clock,
+        });
         return {
           ok: true,
-          event: createOnlineActionAcceptedEvent({
-            type: "action_accepted",
-            gameId: input.gameId,
-            playerColor: accepted.playerColor,
-            clientActionId: accepted.clientActionId,
-            version: actionResult.snapshot.version,
-            playedAt: accepted.playedAt,
-            action: accepted.action,
-            clock: accepted.clock,
-          }),
+          event,
+          snapshotChange: event,
           playerColor: accepted.playerColor,
           room: canonicalRoom.toRecord(),
           snapshot: actionResult.snapshot,
