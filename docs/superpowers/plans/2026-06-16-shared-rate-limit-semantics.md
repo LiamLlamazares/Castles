@@ -92,7 +92,7 @@ Non-goals:
   - `npm run server:build`
   - `npm run audit`
   - `git diff --check`
-- [ ] Commit and push the completed slice.
+- [x] Commit and push the completed slice.
 
 ## Execution Evidence
 
@@ -136,3 +136,4 @@ Accepted-fix evidence:
 - Final audit: `npm run audit` passed with 0 vulnerabilities.
 - Final diff check: `git diff --check` passed with CRLF conversion warnings only.
 - Legacy limiter cleanup: `rg -n "FixedWindowRateLimiter|accountReadLimiter|accountAuthLimiter|accountCreateLimiter|adminReadLimiter|createChallengeLimiter|createOpenSeekLimiter|quickMatchLimiter|challengeActionLimiter|openSeekActionLimiter|publicDirectoryLimiter|spectatorSnapshotLimiter|socketMessageLimiter|\\.take\\(" src/online/server/createOnlineHttpServer.ts src/online/server server` found no matches.
+- Push: code/docs slice commit `f7f4d15` was pushed to `origin/online-action-log`.
