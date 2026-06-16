@@ -176,6 +176,37 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
     });
   });
 
+  it("starts with process-local drain disabled", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+
+    await expect(coordinator.getDrainState()).resolves.toEqual({ draining: false });
+  });
+
+  it("starts process-local drain once and preserves the original start time", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+
+    await expect(
+      coordinator.startDrain({
+        reason: "rolling_deploy",
+        startedAt: "2026-06-16T12:00:00.000Z",
+      })
+    ).resolves.toEqual({
+      draining: true,
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+    await expect(
+      coordinator.startDrain({
+        reason: "manual_stop",
+        startedAt: "2026-06-16T12:01:00.000Z",
+      })
+    ).resolves.toEqual({
+      draining: true,
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+  });
+
   it("keeps snapshot subscriptions local to the process", async () => {
     const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
     const seen: unknown[] = [];

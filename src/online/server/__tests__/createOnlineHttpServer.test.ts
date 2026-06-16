@@ -859,6 +859,40 @@ afterEach(async () => {
 });
 
 describe("createOnlineHttpServer", () => {
+  it("reports drain health as not ready without exposing the drain reason", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    await runtimeCoordinator.startDrain({
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      runtimeCoordinator,
+      health: {
+        checkStoreReady: async () => true,
+        storeBackend: "postgres",
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      ok: false,
+      online: {
+        runtime: {
+          draining: true,
+          drainStartedAt: "2026-06-16T12:00:00.000Z",
+        },
+        store: { ok: true },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("rolling_deploy");
+  });
+
   it("creates accounts and uses server-resolved account identity for open seeks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
@@ -9896,6 +9930,132 @@ describe("createOnlineHttpServer", () => {
     expect(loadGameRoomRecord).not.toHaveBeenCalled();
     expect(service.getRoom(spectatorGameId)).toBeNull();
     expect(service.getRoom(accountGameId)).toBeNull();
+  });
+
+  it("rejects websocket player joins while draining", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_drain_ws_join",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    await runtimeCoordinator.startDrain({
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "draining player join")).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "service_unavailable" },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("rejects websocket spectators while draining without registering presence", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_drain_ws_spectate",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const registerSpectator = vi.spyOn(runtimeCoordinator, "registerSpectator");
+    await runtimeCoordinator.startDrain({
+      reason: "rolling_deploy",
+      startedAt: "2026-06-16T12:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(versionedMessage({ type: "spectate", gameId: created.gameId }))
+      );
+
+      await expect(nextSocketMessage(socket, "draining spectator join")).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "service_unavailable" },
+      });
+      expect(registerSpectator).not.toHaveBeenCalled();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("keeps websocket player pings alive after drain starts", async () => {
+    const service = new OnlineGameService({
+      idFactory: () => "game_drain_existing_ping",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({ type: "join", gameId: created.gameId, token: created.white.token })
+        )
+      );
+      await expect(nextSocketMessage(socket, "pre-drain player join")).resolves.toMatchObject({
+        type: "joined",
+        snapshot: { version: 0 },
+      });
+
+      await runtimeCoordinator.startDrain({
+        reason: "rolling_deploy",
+        startedAt: "2026-06-16T12:00:00.000Z",
+      });
+      socket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 321 })));
+
+      await expect(nextSocketMessage(socket, "post-drain player ping")).resolves.toMatchObject({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "pong",
+        clientTime: 321,
+      });
+    } finally {
+      socket.close();
+    }
   });
 
   it("supports websocket heartbeats for reconnect health checks", async () => {

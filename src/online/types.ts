@@ -13,21 +13,25 @@ import type {
   OnlinePlayerSettableGameVisibility,
 } from "./visibility";
 
-export type OnlineRejectCode =
-  | "unauthorized"
-  | "stale_action"
-  | "wrong_player"
-  | "illegal_action"
-  | "duplicate_action"
-  | "game_over"
-  | "not_found"
-  | "bad_request"
-  | "bad_json"
-  | "not_joined"
-  | "unknown_message"
-  | "not_allowed"
-  | "rate_limited"
-  | "persistence_failed";
+export const ONLINE_REJECT_CODES = [
+  "unauthorized",
+  "stale_action",
+  "wrong_player",
+  "illegal_action",
+  "duplicate_action",
+  "game_over",
+  "not_found",
+  "bad_request",
+  "bad_json",
+  "not_joined",
+  "unknown_message",
+  "not_allowed",
+  "rate_limited",
+  "service_unavailable",
+  "persistence_failed",
+] as const;
+
+export type OnlineRejectCode = (typeof ONLINE_REJECT_CODES)[number];
 
 export interface OnlineReject {
   code: OnlineRejectCode;

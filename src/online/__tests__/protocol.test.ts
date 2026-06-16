@@ -110,6 +110,13 @@ describe("online server protocol validation", () => {
         error: { code: "bad_request", message: "Nope." },
       }).ok
     ).toBe(true);
+    expect(
+      validateOnlineServerMessage({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        type: "error",
+        error: { code: "service_unavailable", message: "This node is draining." },
+      }).ok
+    ).toBe(true);
   });
 
   it("rejects unknown or malformed server messages", () => {

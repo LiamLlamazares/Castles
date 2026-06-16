@@ -2888,6 +2888,29 @@ describe("online client helpers", () => {
     ).rejects.toBeInstanceOf(OnlineRequestError);
   });
 
+  it("preserves trusted service unavailable rejection messages as request errors", async () => {
+    const setup = snapshot().setup;
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({
+        error: {
+          code: "service_unavailable",
+          message: "This node is draining for a deploy. Reconnect shortly.",
+        },
+      }),
+    });
+
+    await expect(
+      startQuickMatch(setup, { sessionId: "anon_match" }, fetchImpl as any)
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 503,
+      code: "service_unavailable",
+      message: "This node is draining for a deploy. Reconnect shortly.",
+    });
+  });
+
   it("rejects malformed quick match responses and token-bearing invite URLs", async () => {
     const setup = snapshot().setup;
     const summary = {

@@ -390,6 +390,74 @@ describe("useOnlineSpectatorConnection", () => {
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 
+  it("treats service unavailable spectator errors as reconnectable drain events", async () => {
+    vi.useFakeTimers();
+    let resolveResync!: (response: { ok: true; json: () => Promise<unknown> }) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, snapshot: snapshot(0) }),
+        })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveResync = resolve;
+            })
+        )
+    );
+    const { result } = renderHook(() => useOnlineSpectatorConnection("game_123", vi.fn()));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const socket = MockWebSocket.instances.at(-1)!;
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          type: "error",
+          error: {
+            code: "service_unavailable",
+            message: "This node is draining for a deploy. Reconnect shortly.",
+          },
+        }),
+      });
+    });
+    expect(result.current.status).toBe("connecting");
+    expect(result.current.lastError).toBe(
+      "This node is draining for a deploy. Reconnect shortly."
+    );
+
+    act(() => {
+      socket.onclose?.();
+    });
+    expect(result.current.status).toBe("disconnected");
+
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+    expect(result.current.status).toBe("resyncing");
+
+    await act(async () => {
+      resolveResync({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          snapshot: snapshot(1),
+        }),
+      });
+      await Promise.resolve();
+    });
+
+    expect(MockWebSocket.instances.length).toBeGreaterThan(1);
+    expect(result.current.status).toBe("connecting");
+  });
+
   it("does not let later snapshots clear protected spectator error states", async () => {
     const snapshots: Array<{ version: number }> = [];
     const { result } = renderHook(() =>

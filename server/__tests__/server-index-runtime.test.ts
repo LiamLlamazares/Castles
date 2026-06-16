@@ -14,4 +14,15 @@ describe("server runtime coordinator wiring", () => {
     expect(source).toMatch(/runtimeCoordinator\s*=\s*createConfiguredRuntimeCoordinator\(config\)/);
     expect(source).toMatch(/createOnlineHttpServer\(\{[\s\S]*runtimeCoordinator,/);
   });
+
+  it("marks the runtime coordinator draining before closing network listeners", () => {
+    const source = readServerIndex();
+    const drainIndex = source.indexOf("runtimeCoordinator?.startDrain({ reason })");
+    const closeWebSocketIndex = source.indexOf("closeWebSocketServer(wss)");
+    const closeHttpIndex = source.indexOf("closeHttpServer(server)");
+
+    expect(drainIndex).toBeGreaterThan(-1);
+    expect(drainIndex).toBeLessThan(closeWebSocketIndex);
+    expect(drainIndex).toBeLessThan(closeHttpIndex);
+  });
 });

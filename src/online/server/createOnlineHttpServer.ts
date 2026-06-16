@@ -1203,6 +1203,13 @@ function sendSocketError(socket: WebSocket, error: OnlineReject): void {
   });
 }
 
+function drainUnavailableError(): OnlineReject {
+  return {
+    code: "service_unavailable",
+    message: "This node is draining for a deploy. Reconnect shortly.",
+  };
+}
+
 function parseMessage(data: RawData): unknown {
   const text = typeof data === "string" ? data : data.toString("utf8");
   return JSON.parse(text);
@@ -1263,6 +1270,7 @@ function httpStatusForOnlineError(error: OnlineReject): number {
       return 429;
     case "not_allowed":
       return 409;
+    case "service_unavailable":
     case "persistence_failed":
       return 503;
     default:
@@ -3695,8 +3703,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           : "Store readiness check failed.";
     }
 
-    res.status(storeOk ? 200 : 503).json({
-      ok: storeOk,
+    const drainState = await runtimeCoordinator.getDrainState();
+    const ready = storeOk && !drainState.draining;
+
+    res.status(ready ? 200 : 503).json({
+      ok: ready,
       build: {
         buildId: options.health?.buildId ?? "development",
         commit: options.health?.commit ?? "unknown",
@@ -3705,6 +3716,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         eventSchemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
         rulesetVersion: ONLINE_RULESET_VERSION,
         deployment: options.health?.deployment ?? createSingleNodeDeploymentConfig(),
+        runtime: {
+          draining: drainState.draining,
+          drainStartedAt: drainState.startedAt,
+        },
         store: {
           ok: storeOk,
           backend: options.health?.storeBackend ?? "unknown",
@@ -7274,6 +7289,18 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
 
     if (message.type === "join") {
+      if ((await runtimeCoordinator.getDrainState()).draining) {
+        log({
+          event: "online.socket.join",
+          gameId: message.gameId,
+          role: "player",
+          status: "rejected",
+          reason: "draining",
+        });
+        sendSocketError(socket, drainUnavailableError());
+        return;
+      }
+
       await enqueueGameAction(message.gameId, async () => {
         let room = service.getRoomForToken(message.gameId, message.token);
         if (!room) {
@@ -7368,6 +7395,18 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
 
     if (message.type === "spectate") {
+      if ((await runtimeCoordinator.getDrainState()).draining) {
+        log({
+          event: "online.socket.spectate",
+          gameId: message.gameId,
+          role: "spectator",
+          status: "rejected",
+          reason: "draining",
+        });
+        sendSocketError(socket, drainUnavailableError());
+        return;
+      }
+
       await enqueueGameAction(message.gameId, async () => {
         const access = await checkSpectatorAccess(message.gameId);
         if (!access.ok) {

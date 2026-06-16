@@ -193,6 +193,13 @@ async function main() {
 
       console.log(`Received ${reason}; shutting down Castles online server.`);
 
+      try {
+        await runtimeCoordinator?.startDrain({ reason });
+      } catch (error) {
+        console.error("Failed to mark online runtime coordinator draining", error);
+        process.exitCode = 1;
+      }
+
       const results = await Promise.allSettled([
         closeWebSocketServer(wss),
         closeHttpServer(server),

@@ -49,6 +49,9 @@ export function useOnlineGameConnection(
   const isAccessDeniedError = (error: OnlineReject): boolean =>
     error.code === "unauthorized" || error.code === "not_found";
 
+  const isRetryableServiceUnavailableError = (error: OnlineReject): boolean =>
+    error.code === "service_unavailable";
+
   const isProtectedConnectionStatus = (nextStatus: OnlineConnectionStatus): boolean =>
     nextStatus === "access-denied" ||
     nextStatus === "protocol-error" ||
@@ -248,6 +251,10 @@ export function useOnlineGameConnection(
         if (serverMessage.type === "error") {
           clearPendingAction();
           setLastError(serverMessage.error.message);
+          if (isRetryableServiceUnavailableError(serverMessage.error)) {
+            socket.close();
+            return;
+          }
           if (serverMessage.snapshot) {
             if (applySnapshot(serverMessage.snapshot) !== "ignored") {
               setConnectionStatus(serverMessage.snapshot.result ? "terminal" : "server-error");

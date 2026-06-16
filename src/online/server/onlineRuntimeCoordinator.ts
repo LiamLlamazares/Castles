@@ -30,6 +30,17 @@ export interface OnlineRuntimeEventPollResult {
   published: number;
 }
 
+export interface OnlineRuntimeDrainState {
+  draining: boolean;
+  startedAt?: string;
+  reason?: string;
+}
+
+export interface OnlineRuntimeStartDrainInput {
+  startedAt?: string;
+  reason?: string;
+}
+
 export interface OnlineRuntimeSpectatorRegistration {
   connectionId: string;
 }
@@ -85,6 +96,8 @@ export interface OnlineRuntimeCoordinator {
   readonly capabilities: OnlineRuntimeCoordinatorCapabilities;
   publishGameSnapshotChanged(event: OnlineRuntimeGameSnapshotChangedEvent): Promise<void>;
   pollRemoteGameSnapshotChangedEvents(input?: { limit?: number }): Promise<OnlineRuntimeEventPollResult>;
+  getDrainState(): Promise<OnlineRuntimeDrainState>;
+  startDrain(input?: OnlineRuntimeStartDrainInput): Promise<OnlineRuntimeDrainState>;
   subscribeGameSnapshotChanged(
     handler: (event: OnlineRuntimeGameSnapshotChangedEvent) => void | Promise<void>
   ): () => void;
@@ -152,6 +165,7 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
   const gameGates = new Map<string, Promise<void>>();
   const quickMatchSessionGates = new Map<string, Promise<void>>();
   const accountChallengePairGates = new Map<string, Promise<void>>();
+  let drainState: OnlineRuntimeDrainState = { draining: false };
 
   const runQueuedOperation = async <T>(
     gates: Map<string, Promise<void>>,
@@ -196,6 +210,19 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
     },
     async pollRemoteGameSnapshotChangedEvents() {
       return { afterId: 0, published: 0 };
+    },
+    async getDrainState() {
+      return { ...drainState };
+    },
+    async startDrain(input = {}) {
+      if (!drainState.draining) {
+        drainState = {
+          draining: true,
+          startedAt: input.startedAt ?? new Date().toISOString(),
+          reason: input.reason,
+        };
+      }
+      return { ...drainState };
     },
     subscribeGameSnapshotChanged(handler) {
       handlers.add(handler);
