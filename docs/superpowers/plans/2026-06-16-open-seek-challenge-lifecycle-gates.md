@@ -75,7 +75,7 @@ Non-goals:
   - `npm run server:build`
   - `npm run audit`
   - `git diff --check`
-- [ ] Commit and push the completed slice.
+- [x] Commit and push the completed slice.
 
 ## Execution Evidence
 
@@ -106,3 +106,4 @@ Non-goals:
 - Full verification: `npm run audit` passed with 0 vulnerabilities.
 - Full verification: `git diff --check` exited 0 with CRLF conversion warnings only.
 - Ledger: appended `2026-06-16 - Castles Lifecycle Gate Test Illusion` to `C:\Users\liaml\Documents\GitHub\Personal\codex-research-skills\cognitive_ledger.md`.
+- Commit/push: implementation commit `ff8bd0a Add lifecycle operation gates` pushed to `origin/online-action-log`.
