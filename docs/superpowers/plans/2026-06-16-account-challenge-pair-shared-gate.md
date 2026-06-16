@@ -213,7 +213,7 @@ Evidence:
 
 Record the completed item 11 sub-slice in `docs/online-multiplayer-plan.md`, including exact commands, non-goals, and the next shared-runtime prerequisite.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 Run:
 
@@ -223,3 +223,5 @@ git add docs/online-multiplayer-plan.md docs/superpowers/plans/2026-06-16-accoun
 git commit -m "Add account challenge pair shared gate"
 git push origin HEAD:online-action-log
 ```
+
+Evidence: committed as `28ad510 Add account challenge pair shared gate` and pushed `HEAD` to `origin/online-action-log`.
