@@ -1177,6 +1177,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
           return {
             ok: true,
             event: existingEvent,
+            snapshotChange: event,
             playerColor,
             room: room.toRecord(),
             snapshot: room.getSnapshot(),
@@ -1223,6 +1224,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
         return {
           ok: true,
           event: existingEvent,
+          snapshotChange: null,
           playerColor,
           room: room.toRecord(),
           snapshot: room.getSnapshot(),
@@ -1266,6 +1268,7 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       return {
         ok: true,
         event,
+        snapshotChange: event,
         playerColor,
         room: roomRecord,
         snapshot: result.snapshot,

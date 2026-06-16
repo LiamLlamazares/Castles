@@ -211,6 +211,7 @@ import {
   createGeneratedRuntimeNodeId,
   createSingleNodeOnlineRuntimeCoordinator,
   type OnlineRuntimeCoordinator,
+  type OnlineRuntimeSnapshotReason,
 } from "./onlineRuntimeCoordinator";
 
 type OnlineConnection =
@@ -3423,9 +3424,8 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     action: Extract<OnlineGameEvent, { type: "action_accepted" }>["action"],
     playedAt: number,
     clock?: Extract<OnlineGameEvent, { type: "action_accepted" }>["clock"]
-  ) => {
-    await options.onGameEvent?.(
-      createOnlineActionAcceptedEvent({
+  ): Promise<Extract<OnlineGameEvent, { type: "action_accepted" }>> => {
+    const event = createOnlineActionAcceptedEvent({
         type: "action_accepted",
         gameId,
         playerColor,
@@ -3434,16 +3434,16 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         action,
         playedAt,
         clock,
-      })
-    );
+      });
+    await options.onGameEvent?.(event);
+    return event;
   };
 
   const persistTimeoutAdjudicated = async (
     gameId: string,
     timeout: AcceptedOnlineTimeoutRecord
-  ) => {
-    await options.onGameEvent?.(
-      createOnlineTimeoutAdjudicatedEvent({
+  ): Promise<Extract<OnlineGameEvent, { type: "timeout_adjudicated" }>> => {
+    const event = createOnlineTimeoutAdjudicatedEvent({
         type: "timeout_adjudicated",
         gameId,
         playerColor: timeout.playerColor,
@@ -3451,8 +3451,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         adjudicatedAt: timeout.adjudicatedAt,
         result: timeout.result,
         clock: timeout.clock,
-      })
-    );
+      });
+    await options.onGameEvent?.(event);
+    return event;
   };
 
   const adjudicateTimeoutForRoom = async (
@@ -3460,7 +3461,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     room: NonNullable<ReturnType<OnlineGameService["getRoom"]>>
   ):
     Promise<
-      | { ok: true; timeout: AcceptedOnlineTimeoutRecord | null }
+      | {
+          ok: true;
+          timeout: AcceptedOnlineTimeoutRecord | null;
+          snapshotChange?: Extract<OnlineGameEvent, { type: "timeout_adjudicated" }>;
+        }
       | { ok: false; error: OnlineReject; snapshot?: ReturnType<typeof room.getSnapshot> }
     > => {
     if (options.adjudicateGameTimeout) {
@@ -3498,6 +3503,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             result: transition.event.result,
             clock: transition.event.clock,
           },
+          snapshotChange: transition.event,
         };
       } catch (error) {
         log({
@@ -3533,7 +3539,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
 
     try {
-      await persistTimeoutAdjudicated(gameId, timeout);
+      const event = await persistTimeoutAdjudicated(gameId, timeout);
       log({
         event: "online.timeout",
         gameId,
@@ -3541,7 +3547,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         status: "expired",
         reason: timeout.playerColor,
       });
-      return { ok: true, timeout };
+      return { ok: true, timeout, snapshotChange: event };
     } catch (error) {
       service.replaceRoom(beforeTimeout);
       const restoredSnapshot = service.getRoom(gameId)?.getSnapshot() ?? room.getSnapshot();
@@ -5229,7 +5235,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
       }
 
       log({ event: "online.account.snapshot", gameId: gameId.value, role: "player", status: "accepted" });
@@ -5321,7 +5327,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
         res.status(409).json({
           error: { code: "game_over", message: "This account game is already complete." },
           protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -6641,7 +6647,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
       }
       const currentRoom = service.getRoom(gameId.value) ?? room;
 
@@ -6754,20 +6760,25 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
 
       try {
-        const summary = await options.appendGameVisibilityChanged(
-          createOnlineGameVisibilityChangedEvent(
-            {
-              type: "visibility_changed",
-              gameId: gameId.value,
-              visibility,
-            },
-            { createdAt: new Date(options.now?.() ?? Date.now()).toISOString() }
-          )
+        const event = createOnlineGameVisibilityChangedEvent(
+          {
+            type: "visibility_changed",
+            gameId: gameId.value,
+            visibility,
+          },
+          { createdAt: new Date(options.now?.() ?? Date.now()).toISOString() }
         );
+        const summary = await options.appendGameVisibilityChanged(event);
         const validation = validateOnlineGameSummary(summary);
         if (!validation.ok) {
           throw new Error(validation.error.message);
         }
+        await publishRuntimeSnapshotChanged(
+          gameId.value,
+          "visibility",
+          event.eventId,
+          event.createdAt
+        );
 
         log({
           event: "online.game.visibility",
@@ -6871,7 +6882,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
       if (timeout.timeout) {
-        broadcastSnapshot(gameId.value);
+        await publishTimeoutAndBroadcastSnapshot(gameId.value, timeout);
       }
       const currentRoom = service.getRoom(gameId.value) ?? room;
 
@@ -6899,6 +6910,58 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         sendJson(socket, { type: "snapshot", snapshot });
       }
     }
+  };
+
+  const publishRuntimeSnapshotChanged = async (
+    gameId: string,
+    reason: OnlineRuntimeSnapshotReason,
+    lastEventId?: string,
+    createdAt?: string
+  ): Promise<void> => {
+    const room = service.getRoom(gameId);
+    if (!room) return;
+    const snapshot = room.getSnapshot();
+    try {
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId,
+        roomVersion: snapshot.version,
+        lastEventId,
+        reason,
+        nodeId: runtimeCoordinator.nodeId,
+        createdAt: createdAt ?? new Date(options.now?.() ?? Date.now()).toISOString(),
+      });
+    } catch (error) {
+      log({
+        event: "online.runtime.publish",
+        gameId,
+        status: "failed",
+        reason,
+      });
+      console.error("Failed to publish online runtime snapshot event", error);
+    }
+  };
+
+  const publishAndBroadcastSnapshot = async (
+    gameId: string,
+    reason: OnlineRuntimeSnapshotReason,
+    lastEventId?: string,
+    createdAt?: string
+  ): Promise<void> => {
+    await publishRuntimeSnapshotChanged(gameId, reason, lastEventId, createdAt);
+    broadcastSnapshot(gameId);
+  };
+
+  const publishTimeoutAndBroadcastSnapshot = async (
+    gameId: string,
+    timeout: { snapshotChange?: Extract<OnlineGameEvent, { type: "timeout_adjudicated" }> }
+  ): Promise<void> => {
+    await publishAndBroadcastSnapshot(
+      gameId,
+      "timeout",
+      timeout.snapshotChange?.eventId,
+      timeout.snapshotChange?.createdAt
+    );
   };
 
   const handleClientMessage = async (
@@ -6969,7 +7032,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
         if (timeout.timeout) {
-          broadcastSnapshot(connection.gameId);
+          await publishTimeoutAndBroadcastSnapshot(connection.gameId, timeout);
         }
         if (connection.role === "spectator") {
           await refreshSpectatorPresence(socket, connection);
@@ -7051,7 +7114,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           snapshot: currentRoom.getSnapshot(),
         });
         if (timeout.timeout) {
-          broadcastSnapshot(message.gameId);
+          await publishTimeoutAndBroadcastSnapshot(message.gameId, timeout);
         }
       });
       return;
@@ -7124,7 +7187,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           snapshot: currentRoom.getSnapshot(),
         });
         if (timeout.timeout) {
-          broadcastSnapshot(message.gameId);
+          await publishTimeoutAndBroadcastSnapshot(message.gameId, timeout);
         }
       });
       return;
@@ -7249,7 +7312,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
                 sendSocketError(socket, transition.error);
               }
               if (transition.event?.type === "timeout_adjudicated") {
-                broadcastSnapshot(currentConnection.gameId);
+                await publishAndBroadcastSnapshot(
+                  currentConnection.gameId,
+                  "timeout",
+                  transition.event.eventId,
+                  transition.event.createdAt
+                );
               }
               return;
             }
@@ -7261,7 +7329,20 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
               action: transition.event.action.type,
               status: "accepted",
             });
-            broadcastSnapshot(currentConnection.gameId);
+            if (!("snapshotChange" in transition)) {
+              throw new Error("Store-backed accepted action result is missing snapshotChange.");
+            }
+            const snapshotChange = transition.snapshotChange;
+            if (snapshotChange) {
+              await publishAndBroadcastSnapshot(
+                currentConnection.gameId,
+                snapshotChange.type === "timeout_adjudicated" ? "timeout" : "action",
+                snapshotChange.eventId,
+                snapshotChange.createdAt
+              );
+            } else {
+              broadcastSnapshot(currentConnection.gameId);
+            }
           } catch (error) {
             log({
               event: "online.persistence",
@@ -7327,7 +7408,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
               action: existingAction!.action.type,
               status: "accepted",
             });
-            broadcastSnapshot(currentConnection.gameId);
+            await publishTimeoutAndBroadcastSnapshot(currentConnection.gameId, timeout);
             return;
           }
           const snapshot = (service.getRoom(currentConnection.gameId) ?? room).getSnapshot();
@@ -7348,7 +7429,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             },
             snapshot,
           });
-          broadcastSnapshot(currentConnection.gameId);
+          await publishTimeoutAndBroadcastSnapshot(currentConnection.gameId, timeout);
           return;
         }
 
@@ -7443,8 +7524,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             `Accepted online action for ${currentConnection.gameId} is missing clock.`
           );
         }
+        let event: Extract<OnlineGameEvent, { type: "action_accepted" }>;
         try {
-          await persistActionAccepted(
+          event = await persistActionAccepted(
             currentConnection.gameId,
             playerColor,
             acceptedAction.clientActionId,
@@ -7492,7 +7574,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           action: acceptedAction.action.type,
           status: "accepted",
         });
-        broadcastSnapshot(currentConnection.gameId);
+        await publishAndBroadcastSnapshot(
+          currentConnection.gameId,
+          "action",
+          event.eventId,
+          event.createdAt
+        );
       });
       return;
     }

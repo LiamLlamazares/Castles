@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPostgresRuntimeEventCoordinator,
   createPostgresSpectatorPresenceRuntimeCoordinator,
   createSingleNodeOnlineRuntimeCoordinator,
   normalizeRuntimeNodeId,
+  type OnlineRuntimeSnapshotReason,
 } from "../onlineRuntimeCoordinator";
 
 class FakeRuntimeSpectatorPresenceStore {
@@ -43,6 +45,34 @@ class FakeRuntimeSpectatorPresenceStore {
       countSpectators: async (gameId: string) =>
         Array.from(this.presence.values()).filter((row) => row.gameId === gameId).length,
       cleanupExpiredSpectators: async () => 0,
+    };
+  }
+}
+
+class FakeRuntimeEventStore {
+  readonly events: Array<{
+    gameId: string;
+    roomVersion: number;
+    lastEventId?: string;
+    reason: OnlineRuntimeSnapshotReason;
+  }> = [];
+
+  constructor(private readonly onRecord?: () => void) {}
+
+  async recordGameSnapshotChanged(event: {
+    gameId: string;
+    roomVersion: number;
+    lastEventId?: string;
+    reason: OnlineRuntimeSnapshotReason;
+  }) {
+    this.onRecord?.();
+    this.events.push(event);
+    return {
+      id: this.events.length,
+      type: "game_snapshot_changed" as const,
+      ...event,
+      nodeId: "node-a",
+      createdAt: "2026-06-16T00:00:00.000Z",
     };
   }
 }
@@ -226,5 +256,58 @@ describe("createPostgresSpectatorPresenceRuntimeCoordinator", () => {
         connectionId: registration.connectionId,
       })
     ).resolves.toBeNull();
+  });
+});
+
+describe("createPostgresRuntimeEventCoordinator", () => {
+  it("records snapshot-change hints before local fanout", async () => {
+    const order: string[] = [];
+    const runtimeEventStore = new FakeRuntimeEventStore(() => {
+      order.push("store");
+    });
+    const coordinator = createPostgresRuntimeEventCoordinator({
+      nodeId: "node-a",
+      runtimeEventStore,
+    });
+    const seen: unknown[] = [];
+    coordinator.subscribeGameSnapshotChanged((event) => {
+      order.push("handler");
+      seen.push(event);
+    });
+
+    await coordinator.publishGameSnapshotChanged({
+      type: "game_snapshot_changed",
+      gameId: "game_123",
+      roomVersion: 4,
+      lastEventId: "event_4",
+      reason: "action",
+      nodeId: "node-a",
+      createdAt: "2026-06-16T00:00:00.000Z",
+    });
+
+    expect(runtimeEventStore.events).toEqual([
+      {
+        gameId: "game_123",
+        roomVersion: 4,
+        lastEventId: "event_4",
+        reason: "action",
+      },
+    ]);
+    expect(seen).toHaveLength(1);
+    expect(order).toEqual(["store", "handler"]);
+  });
+
+  it("does not overclaim remote fanout or multi-instance readiness", () => {
+    const coordinator = createPostgresRuntimeEventCoordinator({
+      nodeId: "node-a",
+      runtimeEventStore: new FakeRuntimeEventStore(),
+    });
+
+    expect(coordinator.capabilities).toEqual({
+      mode: "single-node",
+      websocketFanout: "process-local",
+      spectatorPresence: "process-local",
+      operationGates: "process-local",
+    });
   });
 });

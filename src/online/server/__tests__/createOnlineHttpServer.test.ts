@@ -8,6 +8,7 @@ import { PieceType, SanctuaryType } from "../../../Constants";
 import { serializeOnlineGameSetup } from "../../serialization";
 import {
   createOnlineActionAcceptedEvent,
+  createOnlineTimeoutAdjudicatedEvent,
   ONLINE_EVENT_SCHEMA_VERSION,
   type OnlineGameCredentials,
   OnlineGameEvent,
@@ -7785,11 +7786,19 @@ describe("createOnlineHttpServer", () => {
       tokenFactory: (seat) => `${seat}-token`,
     });
     const appended: Array<Extract<OnlineGameEvent, { type: "visibility_changed" }>> = [];
+    const published: unknown[] = [];
     const logs: unknown[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-visibility-publisher",
+    });
+    runtimeCoordinator.subscribeGameSnapshotChanged((event) => {
+      published.push(event);
+    });
     let summary = summaryForGame("game_publish_http", "unlisted");
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       service,
+      runtimeCoordinator,
       onLog: (event) => logs.push(event),
       appendGameVisibilityChanged: (event) => {
         appended.push(event);
@@ -7836,6 +7845,17 @@ describe("createOnlineHttpServer", () => {
       gameId: "game_publish_http",
       visibility: "public",
     });
+    expect(published).toEqual([
+      expect.objectContaining({
+        type: "game_snapshot_changed",
+        gameId: "game_publish_http",
+        roomVersion: 0,
+        lastEventId: appended[0].eventId,
+        reason: "visibility",
+        nodeId: "node-visibility-publisher",
+        createdAt: appended[0].createdAt,
+      }),
+    ]);
     expect(JSON.stringify(body)).not.toContain(created.white.token);
     expect(JSON.stringify(body)).not.toContain(created.black.token);
     expect(JSON.stringify(logs)).not.toContain(created.white.token);
@@ -8501,6 +8521,377 @@ describe("createOnlineHttpServer", () => {
     expect(response.status).toBe(201);
   });
 
+  it("publishes accepted action snapshot changes through the runtime coordinator", async () => {
+    const published: unknown[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-action-publisher",
+    });
+    runtimeCoordinator.subscribeGameSnapshotChanged((event) => {
+      published.push(event);
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_publish_action",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => 1_700_000_000_000,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      now: () => 1_700_000_000_000,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-publish-action",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+      await expect(nextSocketMessage(socket, "accepted action snapshot")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+      expect(published).toEqual([
+        expect.objectContaining({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 1,
+          lastEventId: expect.stringMatching(/^evt_/),
+          reason: "action",
+          nodeId: "node-action-publisher",
+          createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        }),
+      ]);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("still broadcasts accepted local action snapshots when runtime publication fails", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-action-publisher",
+    });
+    vi.spyOn(runtimeCoordinator, "publishGameSnapshotChanged").mockRejectedValue(
+      new Error("runtime event outbox unavailable")
+    );
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_publish_failure",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-publish-failure",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "accepted action after publication failure")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { version: 1 },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("publishes timeout metadata when a store-backed duplicate retry adjudicates time", async () => {
+    const published: unknown[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-duplicate-timeout-publisher",
+    });
+    runtimeCoordinator.subscribeGameSnapshotChanged((event) => {
+      published.push(event);
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_duplicate_timeout",
+      tokenFactory: (seat) => `${seat}-token`,
+      now: () => 1_000,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      applyGameAction: async (input) => {
+        const localRecord = service.getRoom(input.gameId)?.toRecord();
+        if (!localRecord) {
+          throw new Error("Expected local room record.");
+        }
+        const canonicalRoom = OnlineGameRoom.create({
+          ...localRecord,
+          now: () => 1_000,
+        });
+        const actionResult = canonicalRoom.submitAction(
+          input.token,
+          input.action,
+          input.clientActionId
+        );
+        if (!actionResult.ok) {
+          throw new Error(actionResult.error.message);
+        }
+        const accepted = canonicalRoom.toRecord().acceptedActions.at(-1)!;
+        const actionEvent = createOnlineActionAcceptedEvent(
+          {
+            type: "action_accepted",
+            gameId: input.gameId,
+            playerColor: accepted.playerColor,
+            clientActionId: accepted.clientActionId,
+            version: actionResult.snapshot.version,
+            playedAt: accepted.playedAt,
+            action: accepted.action,
+            clock: accepted.clock,
+          },
+          {
+            eventId: "evt-runtime-action",
+            createdAt: "2026-06-16T12:00:00.000Z",
+          }
+        );
+        const timeoutRoom = OnlineGameRoom.create({
+          ...canonicalRoom.toRecord(),
+          now: () => 120_000,
+        });
+        const timeout = timeoutRoom.adjudicateTimeout();
+        if (!timeout) {
+          throw new Error("Expected duplicate retry timeout.");
+        }
+        const timeoutEvent = createOnlineTimeoutAdjudicatedEvent(
+          {
+            type: "timeout_adjudicated",
+            gameId: input.gameId,
+            playerColor: timeout.playerColor,
+            version: timeout.version,
+            adjudicatedAt: timeout.adjudicatedAt,
+            result: timeout.result,
+            clock: timeout.clock,
+          },
+          {
+            eventId: "evt-runtime-timeout",
+            createdAt: "2026-06-16T12:00:01.000Z",
+          }
+        );
+        return {
+          ok: true,
+          event: actionEvent,
+          snapshotChange: timeoutEvent,
+          playerColor: accepted.playerColor,
+          room: timeoutRoom.toRecord(),
+          snapshot: timeoutRoom.getSnapshot(),
+        };
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createClockedSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-duplicate-timeout",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "duplicate retry timeout snapshot")).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: {
+          version: 2,
+          result: { reason: "timeout" },
+        },
+      });
+      expect(published).toEqual([
+        expect.objectContaining({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 2,
+          lastEventId: "evt-runtime-timeout",
+          reason: "timeout",
+          nodeId: "node-duplicate-timeout-publisher",
+          createdAt: "2026-06-16T12:00:01.000Z",
+        }),
+      ]);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("rejects store-backed accepted action results that omit snapshotChange", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-missing-snapshot-change",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_runtime_snapshot_change_missing",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      applyGameAction: async (input) => {
+        const localRecord = service.getRoom(input.gameId)?.toRecord();
+        if (!localRecord) {
+          throw new Error("Expected local room record.");
+        }
+        const canonicalRoom = OnlineGameRoom.create(localRecord);
+        const actionResult = canonicalRoom.submitAction(
+          input.token,
+          input.action,
+          input.clientActionId
+        );
+        if (!actionResult.ok) {
+          throw new Error(actionResult.error.message);
+        }
+        const accepted = canonicalRoom.toRecord().acceptedActions.at(-1)!;
+        const event = createOnlineActionAcceptedEvent(
+          {
+            type: "action_accepted",
+            gameId: input.gameId,
+            playerColor: accepted.playerColor,
+            clientActionId: accepted.clientActionId,
+            version: actionResult.snapshot.version,
+            playedAt: accepted.playedAt,
+            action: accepted.action,
+            clock: accepted.clock,
+          },
+          {
+            eventId: "evt-runtime-legacy-action",
+            createdAt: "2026-06-16T12:00:02.000Z",
+          }
+        );
+        return {
+          ok: true,
+          event,
+          playerColor: accepted.playerColor,
+          room: canonicalRoom.toRecord(),
+          snapshot: actionResult.snapshot,
+        } as any;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/games`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup: createSetup() }),
+    });
+    const created = await createResponse.json();
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    const joined = nextSocketMessage(socket);
+
+    socket.on("open", () => {
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+    });
+
+    try {
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "action",
+            clientActionId: "client-runtime-snapshot-change-missing",
+            action: { type: "PASS", baseVersion: 0 },
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "missing snapshotChange error")).resolves.toMatchObject({
+        type: "error",
+        error: { code: "persistence_failed" },
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
   it("supports websocket heartbeats for reconnect health checks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
@@ -9046,18 +9437,20 @@ describe("createOnlineHttpServer", () => {
           throw new Error(actionResult.error.message);
         }
         const accepted = canonicalRoom.toRecord().acceptedActions.at(-1)!;
+        const event = createOnlineActionAcceptedEvent({
+          type: "action_accepted",
+          gameId: input.gameId,
+          playerColor: accepted.playerColor,
+          clientActionId: accepted.clientActionId,
+          version: actionResult.snapshot.version,
+          playedAt: accepted.playedAt,
+          action: accepted.action,
+          clock: accepted.clock,
+        });
         return {
           ok: true,
-          event: createOnlineActionAcceptedEvent({
-            type: "action_accepted",
-            gameId: input.gameId,
-            playerColor: accepted.playerColor,
-            clientActionId: accepted.clientActionId,
-            version: actionResult.snapshot.version,
-            playedAt: accepted.playedAt,
-            action: accepted.action,
-            clock: accepted.clock,
-          }),
+          event,
+          snapshotChange: event,
           playerColor: accepted.playerColor,
           room: canonicalRoom.toRecord(),
           snapshot: actionResult.snapshot,

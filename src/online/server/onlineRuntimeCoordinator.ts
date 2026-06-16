@@ -42,6 +42,15 @@ export interface OnlineRuntimeSpectatorPresenceStore {
   cleanupExpiredSpectators?(): Promise<number>;
 }
 
+export interface OnlineRuntimeEventStore {
+  recordGameSnapshotChanged(input: {
+    gameId: string;
+    roomVersion: number;
+    lastEventId?: string;
+    reason: OnlineRuntimeSnapshotReason;
+  }): Promise<unknown>;
+}
+
 export interface OnlineRuntimeCoordinator {
   readonly nodeId: string;
   readonly capabilities: OnlineRuntimeCoordinatorCapabilities;
@@ -178,6 +187,26 @@ export function createPostgresSpectatorPresenceRuntimeCoordinator(options: {
     async close() {
       await local.close();
       await options.spectatorPresenceStore.cleanupExpiredSpectators?.();
+    },
+  };
+}
+
+export function createPostgresRuntimeEventCoordinator(options: {
+  nodeId: string;
+  runtimeEventStore: OnlineRuntimeEventStore;
+}): OnlineRuntimeCoordinator {
+  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+
+  return {
+    ...local,
+    async publishGameSnapshotChanged(event) {
+      await options.runtimeEventStore.recordGameSnapshotChanged({
+        gameId: event.gameId,
+        roomVersion: event.roomVersion,
+        lastEventId: event.lastEventId,
+        reason: event.reason,
+      });
+      await local.publishGameSnapshotChanged(event);
     },
   };
 }

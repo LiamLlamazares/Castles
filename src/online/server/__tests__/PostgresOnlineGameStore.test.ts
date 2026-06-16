@@ -1851,6 +1851,11 @@ describe("PostgresOnlineGameStore", () => {
     expect(retry.ok).toBe(true);
     if (!first.ok || !retry.ok) throw new Error("expected duplicate retry to succeed");
     expect(retry.event).toEqual(first.event);
+    expect(retry.snapshotChange).toMatchObject({
+      type: "timeout_adjudicated",
+      gameId: "game_apply_duplicate_before_timeout",
+      version: 2,
+    });
     expect(retry).toMatchObject({
       snapshot: {
         version: 2,

@@ -213,10 +213,16 @@ export interface OnlineGameStoreActionInput {
   now?: () => number;
 }
 
+export type OnlineGameStoreSnapshotChangeEvent = Extract<
+  OnlineGameEvent,
+  { type: "action_accepted" | "timeout_adjudicated" }
+>;
+
 export type OnlineGameStoreActionResult =
   | {
       ok: true;
       event: Extract<OnlineGameEvent, { type: "action_accepted" }>;
+      snapshotChange: OnlineGameStoreSnapshotChangeEvent | null;
       playerColor: Extract<OnlineGameEvent, { type: "action_accepted" }>["playerColor"];
       room: OnlineGameRoomRecord;
       snapshot: OnlineGameSnapshotDTO;
