@@ -4977,6 +4977,18 @@ describe("createOnlineHttpServer", () => {
 
   it("quick match uses injected store listing and accept boundaries", async () => {
     const setup = createClockedSetup();
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`open-seek-gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-open-seek-gate");
+          return operation();
+        });
+      });
     const listed = openSeekSummary("seek_store_quick", {
       creatorSeat: "w",
       creatorIdentity: { kind: "session", id: "session_creator" },
@@ -4987,6 +4999,7 @@ describe("createOnlineHttpServer", () => {
       seeks: [listed],
     }));
     const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-open-seek");
       const seekEvent = createOpenSeekAcceptedEvent(
         {
           type: "seek_accepted",
@@ -5034,6 +5047,7 @@ describe("createOnlineHttpServer", () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",
       now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
       loadOpenSeekSummaries: async () => [listed],
       listOpenSeekSummaries,
       acceptOpenSeekAndCreateGame,
@@ -5063,6 +5077,16 @@ describe("createOnlineHttpServer", () => {
       type: "game_created",
       initialVisibility: "public",
     });
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      "open_seek_lifecycle:seek_store_quick",
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-open-seek-gate")).toBeGreaterThan(
+      order.indexOf("open-seek-gate:open_seek_lifecycle:seek_store_quick")
+    );
+    expect(order.indexOf("accept-open-seek")).toBeGreaterThan(
+      order.indexOf("inside-open-seek-gate")
+    );
   });
 
   it("Quick Match shared session gate wraps active-seek checks and fallback creation", async () => {
@@ -5311,6 +5335,233 @@ describe("createOnlineHttpServer", () => {
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`);
     await expect(listResponse.json()).resolves.toMatchObject({ seeks: [] });
+  });
+
+  it("wraps open seek cancel actions in the lifecycle gate", async () => {
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      appendOpenSeekEvent: (event) => {
+        order.push("append-open-seek");
+        return openSeekSummary(event.seekId, {
+          status: event.type === "seek_cancelled" ? "cancelled" : "expired",
+          updatedAt: event.createdAt,
+          lastEventId: event.eventId,
+          ...(event.type === "seek_cancelled"
+            ? { cancelledAt: event.cancelledAt, cancelledBy: event.cancelledBy }
+            : { expiredAt: event.expiredAt, expiredBy: event.expiredBy }),
+        });
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    lifecycleGate.mockClear();
+
+    const cancelResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/cancel`,
+      { method: "POST", headers: bearer(created.creator.token) }
+    );
+
+    expect(cancelResponse.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `open_seek_lifecycle:${created.seekId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:open_seek_lifecycle:${created.seekId}`)
+    );
+    expect(order.indexOf("append-open-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps open seek accept actions in the lifecycle gate", async () => {
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const acceptOpenSeekAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-open-seek");
+      const seekEvent = createOpenSeekAcceptedEvent(
+        {
+          type: "seek_accepted",
+          seekId: input.seekId,
+          acceptedBy: input.acceptedBy,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: `${input.seekId}_accepted`, createdAt: input.acceptedAt }
+      );
+      const seekSummary = openSeekSummary(input.seekId, {
+        status: "accepted",
+        updatedAt: seekEvent.createdAt,
+        acceptedAt: seekEvent.acceptedAt,
+        acceptedBy: seekEvent.acceptedBy,
+        gameId: seekEvent.gameId,
+        whiteIdentity: seekEvent.whiteIdentity,
+        blackIdentity: seekEvent.blackIdentity,
+        lastEventId: seekEvent.eventId,
+      });
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: input.acceptorCredential,
+        blackCredential: "creator-credential",
+      };
+      return {
+        seekEvent,
+        seekSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { creator: "b" as const, acceptor: "w" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      acceptOpenSeekAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    lifecycleGate.mockClear();
+
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}/accept`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acceptorSessionId: "session_acceptor" }),
+      }
+    );
+
+    expect(acceptResponse.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `open_seek_lifecycle:${created.seekId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:open_seek_lifecycle:${created.seekId}`)
+    );
+    expect(order.indexOf("accept-open-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps lazy open seek expiry during owner refresh in the lifecycle gate", async () => {
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withOpenSeekLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withOpenSeekLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => now,
+      runtimeCoordinator,
+      appendOpenSeekEvent: (event) => {
+        order.push("append-open-seek");
+        return openSeekSummary(event.seekId, {
+          status: event.type === "seek_cancelled" ? "cancelled" : "expired",
+          updatedAt: event.createdAt,
+          lastEventId: event.eventId,
+          ...(event.type === "seek_cancelled"
+            ? { cancelledAt: event.cancelledAt, cancelledBy: event.cancelledBy }
+            : { expiredAt: event.expiredAt, expiredBy: event.expiredBy }),
+        });
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/seeks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        creatorSeat: "b",
+        creatorSessionId: "session_creator",
+        expiresInMs: 300_000,
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    now += 301_000;
+    lifecycleGate.mockClear();
+
+    const refreshResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/seeks/${created.seekId}`,
+      { headers: bearer(created.creator.token) }
+    );
+    const refreshed = await refreshResponse.json();
+
+    expect(refreshResponse.status).toBe(200);
+    expect(refreshed.summary).toMatchObject({ seekId: created.seekId, status: "expired" });
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `open_seek_lifecycle:${created.seekId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:open_seek_lifecycle:${created.seekId}`)
+    );
+    expect(order.indexOf("append-open-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
   });
 
   it("rejects token-bearing open seek owner query strings even with bearer auth", async () => {
@@ -7095,6 +7346,339 @@ describe("createOnlineHttpServer", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "game_over" },
     });
+  });
+
+  it.each([
+    ["accept", "challenged"],
+    ["decline", "challenged"],
+    ["cancel", "challenger"],
+  ] as const)("wraps direct challenge %s actions in the lifecycle gate", async (action, role) => {
+    const order: string[] = [];
+    let pendingChallenge: OnlineChallengeSummary | null = null;
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withChallengeLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withChallengeLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const acceptChallengeAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-challenge");
+      if (!pendingChallenge) {
+        throw new Error("challenge summary was not captured");
+      }
+      const challengeEvent = createChallengeAcceptedEvent(
+        {
+          type: "challenge_accepted",
+          challengeId: input.challengeId,
+          acceptedBy: input.acceptedBy.identity,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: `${input.challengeId}_accepted`, createdAt: input.acceptedAt }
+      );
+      const challengeSummary: OnlineChallengeSummary = {
+        ...pendingChallenge,
+        status: "accepted",
+        updatedAt: challengeEvent.createdAt,
+        acceptedAt: challengeEvent.acceptedAt,
+        acceptedBy: challengeEvent.acceptedBy,
+        gameId: challengeEvent.gameId,
+        whiteIdentity: challengeEvent.whiteIdentity,
+        blackIdentity: challengeEvent.blackIdentity,
+        lastEventId: challengeEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      if (!gameSummary) {
+        throw new Error("Accepted challenge game summary was not projected.");
+      }
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "challenger-credential",
+        blackCredential: "challenged-credential",
+      };
+      return {
+        challengeEvent,
+        challengeSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { challenger: "w" as const, challenged: "b" as const },
+      };
+    });
+    const appendChallengeEvent = vi.fn(async (event: OnlineChallengeEvent) => {
+      order.push("append-challenge");
+      if (!pendingChallenge) {
+        throw new Error("challenge summary was not captured");
+      }
+      if (event.type === "challenge_declined") {
+        pendingChallenge = {
+          ...pendingChallenge,
+          status: "declined",
+          updatedAt: event.createdAt,
+          declinedAt: event.declinedAt,
+          declinedBy: event.declinedBy,
+          lastEventId: event.eventId,
+        };
+        return pendingChallenge;
+      }
+      if (event.type === "challenge_cancelled") {
+        pendingChallenge = {
+          ...pendingChallenge,
+          status: "cancelled",
+          updatedAt: event.createdAt,
+          cancelledAt: event.cancelledAt,
+          cancelledBy: event.cancelledBy,
+          lastEventId: event.eventId,
+        };
+        return pendingChallenge;
+      }
+      throw new Error(`Unexpected ${event.type} event`);
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      acceptChallengeAndCreateGame,
+      appendChallengeEvent,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        challengerSeat: "w",
+        visibility: "private",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    pendingChallenge = created.summary;
+    const token =
+      role === "challenged"
+        ? fragmentChallengeToken(created.challenged.url)
+        : fragmentChallengeToken(created.challenger.url);
+    lifecycleGate.mockClear();
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}/${action}`,
+      { method: "POST", headers: bearer(token) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `challenge_lifecycle:${created.challengeId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:challenge_lifecycle:${created.challengeId}`)
+    );
+    const mutationMarker = action === "accept" ? "accept-challenge" : "append-challenge";
+    expect(order.indexOf(mutationMarker)).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps account challenge accept actions in the challenge lifecycle gate", async () => {
+    const order: string[] = [];
+    let pendingChallenge: OnlineChallengeSummary | null = null;
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withChallengeLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withChallengeLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const acceptChallengeAndCreateGame = vi.fn(async (input: any) => {
+      order.push("accept-account-challenge");
+      if (!pendingChallenge) {
+        throw new Error("challenge summary was not captured");
+      }
+      const challengeEvent = createChallengeAcceptedEvent(
+        {
+          type: "challenge_accepted",
+          challengeId: input.challengeId,
+          acceptedBy: input.acceptedBy.identity,
+          acceptedAt: input.acceptedAt,
+          gameId: input.gameCreatedEvent.gameId,
+          whiteIdentity: input.whiteIdentity,
+          blackIdentity: input.blackIdentity,
+        },
+        { eventId: `${input.challengeId}_accepted`, createdAt: input.acceptedAt }
+      );
+      const challengeSummary: OnlineChallengeSummary = {
+        ...pendingChallenge,
+        status: "accepted",
+        updatedAt: challengeEvent.createdAt,
+        acceptedAt: challengeEvent.acceptedAt,
+        acceptedBy: challengeEvent.acceptedBy,
+        gameId: challengeEvent.gameId,
+        whiteIdentity: challengeEvent.whiteIdentity,
+        blackIdentity: challengeEvent.blackIdentity,
+        lastEventId: challengeEvent.eventId,
+      };
+      const [gameSummary] = projectOnlineGameSummaries([input.gameCreatedEvent]);
+      if (!gameSummary) {
+        throw new Error("Accepted account challenge game summary was not projected.");
+      }
+      const gameCredentials: OnlineGameCredentials = {
+        whiteCredential: "challenger-credential",
+        blackCredential: "challenged-credential",
+      };
+      return {
+        challengeEvent,
+        challengeSummary,
+        gameSummary,
+        gameCredentials,
+        gameRecord: {
+          gameId: input.gameCreatedEvent.gameId,
+          setup: input.gameCreatedEvent.setup,
+          whiteCredential: gameCredentials.whiteCredential,
+          blackCredential: gameCredentials.blackCredential,
+          clock: input.gameCreatedEvent.clock,
+          acceptedActions: [],
+        },
+        gameSeats: { challenger: "w" as const, challenged: "b" as const },
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      acceptChallengeAndCreateGame,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    const samir = await createAccountViaApi(port, "Samir");
+
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liam`, {
+      method: "PUT",
+      headers: bearer(samir.session.token),
+    });
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(liam.session.token) },
+      body: JSON.stringify({
+        setup: createSetup(),
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: "Samir",
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    pendingChallenge = created.summary;
+    lifecycleGate.mockClear();
+
+    const acceptResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/challenges/${created.challengeId}/accept`,
+      { method: "POST", headers: bearer(samir.session.token) }
+    );
+
+    expect(acceptResponse.status).toBe(200);
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `challenge_lifecycle:${created.challengeId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:challenge_lifecycle:${created.challengeId}`)
+    );
+    expect(order.indexOf("accept-account-challenge")).toBeGreaterThan(order.indexOf("inside-gate"));
+  });
+
+  it("wraps lazy direct challenge expiry during challenge refresh in the lifecycle gate", async () => {
+    let now = Date.parse("2026-06-01T12:00:00.000Z");
+    const order: string[] = [];
+    let pendingChallenge: OnlineChallengeSummary | null = null;
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalGate = runtimeCoordinator.withChallengeLifecycleGate.bind(runtimeCoordinator);
+    const lifecycleGate = vi
+      .spyOn(runtimeCoordinator, "withChallengeLifecycleGate")
+      .mockImplementation((key, operation) => {
+        order.push(`gate:${key}`);
+        return originalGate(key, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => now,
+      runtimeCoordinator,
+      appendChallengeEvent: (event) => {
+        order.push("append-challenge");
+        if (!pendingChallenge) {
+          throw new Error("challenge summary was not captured");
+        }
+        if (event.type !== "challenge_expired") {
+          throw new Error(`Unexpected ${event.type} event`);
+        }
+        pendingChallenge = {
+          ...pendingChallenge,
+          status: "expired",
+          updatedAt: event.createdAt,
+          expiredAt: event.expiredAt,
+          expiredBy: event.expiredBy,
+          lastEventId: event.eventId,
+        };
+        return pendingChallenge;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/online/challenges`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        setup: createSetup(),
+        challengerSeat: "w",
+        visibility: "private",
+        expiresInMs: 300_000,
+      }),
+    });
+    const created = await createResponse.json();
+    expect(createResponse.status).toBe(201);
+    pendingChallenge = created.summary;
+    const challengedToken = fragmentChallengeToken(created.challenged.url);
+    now += 301_000;
+    lifecycleGate.mockClear();
+
+    const refreshResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/challenges/${created.challengeId}`,
+      { headers: bearer(challengedToken) }
+    );
+    const refreshed = await refreshResponse.json();
+
+    expect(refreshResponse.status).toBe(200);
+    expect(refreshed.summary).toMatchObject({ challengeId: created.challengeId, status: "expired" });
+    expect(lifecycleGate).toHaveBeenCalledWith(
+      `challenge_lifecycle:${created.challengeId}`,
+      expect.any(Function)
+    );
+    expect(order.indexOf("inside-gate")).toBeGreaterThan(
+      order.indexOf(`gate:challenge_lifecycle:${created.challengeId}`)
+    );
+    expect(order.indexOf("append-challenge")).toBeGreaterThan(order.indexOf("inside-gate"));
   });
 
   it("returns persistence failure when declining a pending challenge cannot be saved", async () => {

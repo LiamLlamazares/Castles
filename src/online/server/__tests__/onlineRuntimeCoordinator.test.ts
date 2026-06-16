@@ -381,6 +381,74 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
     expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
   });
 
+  it("serializes same open seek lifecycle gate operations locally", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstStarted!: () => void;
+    const firstHasStarted = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+
+    const first = coordinator.withOpenSeekLifecycleGate("open_seek_lifecycle:seek_123", async () => {
+      order.push("first-start");
+      firstStarted();
+      await firstMayFinish;
+      order.push("first-end");
+      return "first";
+    });
+    await firstHasStarted;
+
+    const second = coordinator.withOpenSeekLifecycleGate("open_seek_lifecycle:seek_123", async () => {
+      order.push("second-start");
+      order.push("second-end");
+      return "second";
+    });
+    await Promise.resolve();
+
+    expect(order).toEqual(["first-start"]);
+    releaseFirst();
+    await expect(Promise.all([first, second])).resolves.toEqual(["first", "second"]);
+    expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
+  });
+
+  it("serializes same challenge lifecycle gate operations locally", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstStarted!: () => void;
+    const firstHasStarted = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+
+    const first = coordinator.withChallengeLifecycleGate("challenge_lifecycle:challenge_123", async () => {
+      order.push("first-start");
+      firstStarted();
+      await firstMayFinish;
+      order.push("first-end");
+      return "first";
+    });
+    await firstHasStarted;
+
+    const second = coordinator.withChallengeLifecycleGate("challenge_lifecycle:challenge_123", async () => {
+      order.push("second-start");
+      order.push("second-end");
+      return "second";
+    });
+    await Promise.resolve();
+
+    expect(order).toEqual(["first-start"]);
+    releaseFirst();
+    await expect(Promise.all([first, second])).resolves.toEqual(["first", "second"]);
+    expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
+  });
+
   it("serializes same startup maintenance task locally while still executing each local call", async () => {
     const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
     const order: string[] = [];
@@ -442,6 +510,18 @@ describe("createPostgresOperationGateRuntimeCoordinator", () => {
         async () => "created"
       )
     ).resolves.toBe("created");
+    await expect(
+      coordinator.withOpenSeekLifecycleGate(
+        "open_seek_lifecycle:seek_123",
+        async () => "cancelled"
+      )
+    ).resolves.toBe("cancelled");
+    await expect(
+      coordinator.withChallengeLifecycleGate(
+        "challenge_lifecycle:challenge_123",
+        async () => "declined"
+      )
+    ).resolves.toBe("declined");
 
     expect(operationGateStore.calls).toEqual([
       { phase: "start", scope: "quick_match_session", key: "account:acct_123" },
@@ -455,6 +535,26 @@ describe("createPostgresOperationGateRuntimeCoordinator", () => {
         phase: "end",
         scope: "account_challenge_pair",
         key: HASHED_ACCOUNT_CHALLENGE_PAIR_KEY,
+      },
+      {
+        phase: "start",
+        scope: "open_seek_lifecycle",
+        key: "open_seek_lifecycle:seek_123",
+      },
+      {
+        phase: "end",
+        scope: "open_seek_lifecycle",
+        key: "open_seek_lifecycle:seek_123",
+      },
+      {
+        phase: "start",
+        scope: "challenge_lifecycle",
+        key: "challenge_lifecycle:challenge_123",
+      },
+      {
+        phase: "end",
+        scope: "challenge_lifecycle",
+        key: "challenge_lifecycle:challenge_123",
       },
     ]);
     expect(coordinator.capabilities).toEqual({

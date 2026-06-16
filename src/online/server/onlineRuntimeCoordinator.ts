@@ -55,7 +55,9 @@ export interface OnlineRuntimeCoordinatorCapabilities {
 
 export type OnlineRuntimeOperationGateScope =
   | "quick_match_session"
-  | "account_challenge_pair";
+  | "account_challenge_pair"
+  | "open_seek_lifecycle"
+  | "challenge_lifecycle";
 
 export interface OnlineRuntimeOperationGateStore {
   withOperationGate<T>(
@@ -123,6 +125,8 @@ export interface OnlineRuntimeCoordinator {
   withGameOperationGate<T>(gameId: string, operation: () => Promise<T>): Promise<T>;
   withQuickMatchSessionGate<T>(sessionKey: string, operation: () => Promise<T>): Promise<T>;
   withAccountChallengePairGate<T>(pairKey: string, operation: () => Promise<T>): Promise<T>;
+  withOpenSeekLifecycleGate<T>(seekKey: string, operation: () => Promise<T>): Promise<T>;
+  withChallengeLifecycleGate<T>(challengeKey: string, operation: () => Promise<T>): Promise<T>;
   runStartupMaintenance<T>(
     input: { taskKey: string; runKey: string },
     operation: () => Promise<T>
@@ -181,6 +185,8 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
   const gameGates = new Map<string, Promise<void>>();
   const quickMatchSessionGates = new Map<string, Promise<void>>();
   const accountChallengePairGates = new Map<string, Promise<void>>();
+  const openSeekLifecycleGates = new Map<string, Promise<void>>();
+  const challengeLifecycleGates = new Map<string, Promise<void>>();
   const startupMaintenanceGates = new Map<string, Promise<void>>();
   let drainState: OnlineRuntimeDrainState = { draining: false };
 
@@ -286,6 +292,20 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
         operation
       );
     },
+    async withOpenSeekLifecycleGate(seekKey, operation) {
+      return runQueuedOperation(
+        openSeekLifecycleGates,
+        validateGateKey(seekKey, "Open seek lifecycle"),
+        operation
+      );
+    },
+    async withChallengeLifecycleGate(challengeKey, operation) {
+      return runQueuedOperation(
+        challengeLifecycleGates,
+        validateGateKey(challengeKey, "Challenge lifecycle"),
+        operation
+      );
+    },
     async runStartupMaintenance({ taskKey, runKey }, operation) {
       const gateKey = `${validateGateKey(taskKey, "Startup maintenance task")}\u0000${validateGateKey(
         runKey,
@@ -300,6 +320,8 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       gameGates.clear();
       quickMatchSessionGates.clear();
       accountChallengePairGates.clear();
+      openSeekLifecycleGates.clear();
+      challengeLifecycleGates.clear();
       startupMaintenanceGates.clear();
     },
   };
@@ -407,6 +429,18 @@ export function createPostgresOperationGateRuntimeCoordinator(options: {
     async withAccountChallengePairGate(pairKey, operation) {
       return options.operationGateStore.withOperationGate(
         { scope: "account_challenge_pair", key: pairKey },
+        operation
+      );
+    },
+    async withOpenSeekLifecycleGate(seekKey, operation) {
+      return options.operationGateStore.withOperationGate(
+        { scope: "open_seek_lifecycle", key: seekKey },
+        operation
+      );
+    },
+    async withChallengeLifecycleGate(challengeKey, operation) {
+      return options.operationGateStore.withOperationGate(
+        { scope: "challenge_lifecycle", key: challengeKey },
         operation
       );
     },

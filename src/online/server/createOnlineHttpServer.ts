@@ -2222,6 +2222,12 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       .digest("base64url")}`;
   };
 
+  const challengeLifecycleGateKey = (challengeId: string): string =>
+    `challenge_lifecycle:${challengeId}`;
+
+  const openSeekLifecycleGateKey = (seekId: string): string =>
+    `open_seek_lifecycle:${seekId}`;
+
   const releaseSpectatorPresence = (connection: OnlineConnection | undefined): void => {
     if (connection?.role === "spectator" && connection.spectatorConnectionId) {
       runtimeCoordinator
@@ -2823,21 +2829,26 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       { type: "challenge_created" } | { type: "challenge_accepted" }
     >
   ): Promise<OnlineChallengeSummary> => {
-    if (options.appendChallengeEvent) {
-      return options.appendChallengeEvent(event);
-    }
-    const eventLength = memoryChallengeEvents.length;
-    try {
-      memoryChallengeEvents.push(event);
-      const summary = projectOnlineChallengeSummaries(memoryChallengeEvents).find(
-        (candidate) => candidate.challengeId === event.challengeId
-      );
-      if (!summary) throw new Error(`Online challenge summary was not refreshed for ${event.challengeId}.`);
-      return summary;
-    } catch (error) {
-      memoryChallengeEvents.splice(eventLength);
-      throw error;
-    }
+    return runtimeCoordinator.withChallengeLifecycleGate(
+      challengeLifecycleGateKey(event.challengeId),
+      async () => {
+        if (options.appendChallengeEvent) {
+          return options.appendChallengeEvent(event);
+        }
+        const eventLength = memoryChallengeEvents.length;
+        try {
+          memoryChallengeEvents.push(event);
+          const summary = projectOnlineChallengeSummaries(memoryChallengeEvents).find(
+            (candidate) => candidate.challengeId === event.challengeId
+          );
+          if (!summary) throw new Error(`Online challenge summary was not refreshed for ${event.challengeId}.`);
+          return summary;
+        } catch (error) {
+          memoryChallengeEvents.splice(eventLength);
+          throw error;
+        }
+      }
+    );
   };
 
   const resolveChallengeCredential = async (
@@ -3038,40 +3049,45 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     summary: OnlineChallengeSummary,
     acceptedBy: ResolvedOnlineChallengeCredential
   ): Promise<OnlineChallengeAcceptResult> => {
-    const challengerSeat =
-      summary.challengerSeat === "random"
-        ? randomBytes(1)[0] % 2 === 0
-          ? "w"
-          : "b"
-        : summary.challengerSeat;
-    const whiteIdentity = challengerSeat === "w" ? summary.challengerIdentity : summary.challengedIdentity;
-    const blackIdentity = challengerSeat === "w" ? summary.challengedIdentity : summary.challengerIdentity;
-    let gameId = `game_${randomBytes(9).toString("base64url")}`;
-    while (service.getRoom(gameId)) {
-      gameId = `game_${randomBytes(9).toString("base64url")}`;
-    }
-    const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
-    const clock = createInitialClockRecord(summary.setup, gameId);
-    const gameCreatedEvent = createOnlineGameCreatedEvent(
-      {
-        type: "game_created",
-        gameId,
-        setup: summary.setup,
-        clock,
-        initialVisibility: summary.visibility,
-        whiteIdentity,
-        blackIdentity,
-      },
-      { createdAt: acceptedAt }
+    return runtimeCoordinator.withChallengeLifecycleGate(
+      challengeLifecycleGateKey(summary.challengeId),
+      async () => {
+        const challengerSeat =
+          summary.challengerSeat === "random"
+            ? randomBytes(1)[0] % 2 === 0
+              ? "w"
+              : "b"
+            : summary.challengerSeat;
+        const whiteIdentity = challengerSeat === "w" ? summary.challengerIdentity : summary.challengedIdentity;
+        const blackIdentity = challengerSeat === "w" ? summary.challengedIdentity : summary.challengerIdentity;
+        let gameId = `game_${randomBytes(9).toString("base64url")}`;
+        while (service.getRoom(gameId)) {
+          gameId = `game_${randomBytes(9).toString("base64url")}`;
+        }
+        const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+        const clock = createInitialClockRecord(summary.setup, gameId);
+        const gameCreatedEvent = createOnlineGameCreatedEvent(
+          {
+            type: "game_created",
+            gameId,
+            setup: summary.setup,
+            clock,
+            initialVisibility: summary.visibility,
+            whiteIdentity,
+            blackIdentity,
+          },
+          { createdAt: acceptedAt }
+        );
+        return acceptChallengeAndCreateGame({
+          challengeId: summary.challengeId,
+          acceptedBy,
+          acceptedAt,
+          gameCreatedEvent,
+          whiteIdentity,
+          blackIdentity,
+        });
+      }
     );
-    return acceptChallengeAndCreateGame({
-      challengeId: summary.challengeId,
-      acceptedBy,
-      acceptedAt,
-      gameCreatedEvent,
-      whiteIdentity,
-      blackIdentity,
-    });
   };
 
   const loadOpenSeekSummaries = async (): Promise<OpenSeekSummary[]> => {
@@ -3204,21 +3220,26 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const appendOpenSeekLifecycleEvent = async (
     event: Exclude<OpenSeekEvent, { type: "seek_created" } | { type: "seek_accepted" }>
   ): Promise<OpenSeekSummary> => {
-    if (options.appendOpenSeekEvent) {
-      return options.appendOpenSeekEvent(event);
-    }
-    const eventLength = memoryOpenSeekEvents.length;
-    try {
-      memoryOpenSeekEvents.push(event);
-      const summary = projectOpenSeekSummaries(memoryOpenSeekEvents).find(
-        (candidate) => candidate.seekId === event.seekId
-      );
-      if (!summary) throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
-      return summary;
-    } catch (error) {
-      memoryOpenSeekEvents.splice(eventLength);
-      throw error;
-    }
+    return runtimeCoordinator.withOpenSeekLifecycleGate(
+      openSeekLifecycleGateKey(event.seekId),
+      async () => {
+        if (options.appendOpenSeekEvent) {
+          return options.appendOpenSeekEvent(event);
+        }
+        const eventLength = memoryOpenSeekEvents.length;
+        try {
+          memoryOpenSeekEvents.push(event);
+          const summary = projectOpenSeekSummaries(memoryOpenSeekEvents).find(
+            (candidate) => candidate.seekId === event.seekId
+          );
+          if (!summary) throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
+          return summary;
+        } catch (error) {
+          memoryOpenSeekEvents.splice(eventLength);
+          throw error;
+        }
+      }
+    );
   };
 
   const resolveOpenSeekCredential = async (
@@ -3440,67 +3461,72 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     acceptorIdentity: PublicPlayerIdentity,
     acceptedAt: string
   ) => {
-    if (
-      summary.status !== "open" ||
-      !canIdentityAcceptOpenSeek(summary, acceptorIdentity, acceptedAt)
-    ) {
-      throw new Error(`This open seek ${summary.seekId} is no longer open.`);
-    }
-    const creatorSeat =
-      summary.creatorSeat === "random"
-        ? randomBytes(1)[0] % 2 === 0
-          ? "w"
-          : "b"
-        : summary.creatorSeat;
-    const whiteIdentity = creatorSeat === "w" ? summary.creatorIdentity : acceptorIdentity;
-    const blackIdentity = creatorSeat === "w" ? acceptorIdentity : summary.creatorIdentity;
-    let gameId = `game_${randomBytes(9).toString("base64url")}`;
-    while (service.getRoom(gameId)) {
-      gameId = `game_${randomBytes(9).toString("base64url")}`;
-    }
-    const acceptorToken = defaultOpenSeekTokenFactory();
-    const clock = createInitialClockRecord(summary.setup, gameId);
-    const gameCreatedEvent = createOnlineGameCreatedEvent(
-      {
-        type: "game_created",
-        gameId,
-        setup: summary.setup,
-        clock,
-        initialVisibility: "public",
-        whiteIdentity,
-        blackIdentity,
-      },
-      { createdAt: acceptedAt }
+    return runtimeCoordinator.withOpenSeekLifecycleGate(
+      openSeekLifecycleGateKey(summary.seekId),
+      async () => {
+        if (
+          summary.status !== "open" ||
+          !canIdentityAcceptOpenSeek(summary, acceptorIdentity, acceptedAt)
+        ) {
+          throw new Error(`This open seek ${summary.seekId} is no longer open.`);
+        }
+        const creatorSeat =
+          summary.creatorSeat === "random"
+            ? randomBytes(1)[0] % 2 === 0
+              ? "w"
+              : "b"
+            : summary.creatorSeat;
+        const whiteIdentity = creatorSeat === "w" ? summary.creatorIdentity : acceptorIdentity;
+        const blackIdentity = creatorSeat === "w" ? acceptorIdentity : summary.creatorIdentity;
+        let gameId = `game_${randomBytes(9).toString("base64url")}`;
+        while (service.getRoom(gameId)) {
+          gameId = `game_${randomBytes(9).toString("base64url")}`;
+        }
+        const acceptorToken = defaultOpenSeekTokenFactory();
+        const clock = createInitialClockRecord(summary.setup, gameId);
+        const gameCreatedEvent = createOnlineGameCreatedEvent(
+          {
+            type: "game_created",
+            gameId,
+            setup: summary.setup,
+            clock,
+            initialVisibility: "public",
+            whiteIdentity,
+            blackIdentity,
+          },
+          { createdAt: acceptedAt }
+        );
+        const result = await acceptOpenSeekAndCreateGame({
+          seekId: summary.seekId,
+          acceptedBy: acceptorIdentity,
+          acceptedAt,
+          gameCreatedEvent,
+          whiteIdentity,
+          blackIdentity,
+          acceptorCredential: hashOnlineToken(acceptorToken),
+        });
+        service.replaceRoom(result.gameRecord);
+        const acceptedGameId = result.seekSummary.gameId;
+        if (!acceptedGameId) {
+          throw new Error(`Accepted open seek ${summary.seekId} did not include a game id.`);
+        }
+        return {
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          role: "acceptor" as const,
+          summary: redactOpenSeekSummary(result.seekSummary),
+          gameInvite: {
+            gameId: acceptedGameId,
+            seat: result.gameSeats.acceptor,
+            token: acceptorToken,
+            url: buildTokenlessOnlineGameUrl(
+              options.publicBaseUrl,
+              acceptedGameId,
+              result.gameSeats.acceptor
+            ),
+          },
+        };
+      }
     );
-    const result = await acceptOpenSeekAndCreateGame({
-      seekId: summary.seekId,
-      acceptedBy: acceptorIdentity,
-      acceptedAt,
-      gameCreatedEvent,
-      whiteIdentity,
-      blackIdentity,
-      acceptorCredential: hashOnlineToken(acceptorToken),
-    });
-    service.replaceRoom(result.gameRecord);
-    const acceptedGameId = result.seekSummary.gameId;
-    if (!acceptedGameId) {
-      throw new Error(`Accepted open seek ${summary.seekId} did not include a game id.`);
-    }
-    return {
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      role: "acceptor" as const,
-      summary: redactOpenSeekSummary(result.seekSummary),
-      gameInvite: {
-        gameId: acceptedGameId,
-        seat: result.gameSeats.acceptor,
-        token: acceptorToken,
-        url: buildTokenlessOnlineGameUrl(
-          options.publicBaseUrl,
-          acceptedGameId,
-          result.gameSeats.acceptor
-        ),
-      },
-    };
   };
 
   const persistActionAccepted = async (

@@ -109,6 +109,94 @@ describe("PostgresOnlineOperationGateStore", () => {
     ]);
   });
 
+  it("holds row locks for open seek and challenge lifecycle gates using entity-scoped keys", async () => {
+    const schemaQueryable = new FakePostgresClient();
+    const transactionClient = new FakePostgresClient();
+    const store = new PostgresOnlineOperationGateStore({
+      queryable: schemaQueryable,
+      transactionClientFactory: async () => transactionClient,
+    });
+
+    await expect(
+      store.withOperationGate(
+        { scope: "open_seek_lifecycle", key: "open_seek_lifecycle:seek_123" },
+        async () => "cancelled"
+      )
+    ).resolves.toBe("cancelled");
+    await expect(
+      store.withOperationGate(
+        { scope: "challenge_lifecycle", key: "challenge_lifecycle:challenge_123" },
+        async () => "declined"
+      )
+    ).resolves.toBe("declined");
+
+    const lockValues = transactionClient.queries
+      .filter((query) => /online_operation_locks/i.test(query.text))
+      .map((query) => query.values);
+    expect(lockValues).toEqual([
+      ["open_seek_lifecycle", "open_seek_lifecycle:seek_123"],
+      ["open_seek_lifecycle", "open_seek_lifecycle:seek_123"],
+      ["challenge_lifecycle", "challenge_lifecycle:challenge_123"],
+      ["challenge_lifecycle", "challenge_lifecycle:challenge_123"],
+    ]);
+  });
+
+  it("rejects malformed lifecycle gate keys before persistence", async () => {
+    const queryable = new FakePostgresClient();
+    const store = new PostgresOnlineOperationGateStore({ queryable });
+
+    await expect(
+      store.withOperationGate(
+        { scope: "open_seek_lifecycle", key: "seek_123" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/open seek lifecycle key/);
+    await expect(
+      store.withOperationGate(
+        { scope: "open_seek_lifecycle", key: "open_seek_lifecycle:challenge_123" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/open seek lifecycle key/);
+    await expect(
+      store.withOperationGate(
+        { scope: "challenge_lifecycle", key: "challenge_123" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/challenge lifecycle key/);
+    await expect(
+      store.withOperationGate(
+        { scope: "challenge_lifecycle", key: "challenge_lifecycle:seek_123" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/challenge lifecycle key/);
+    await expect(
+      store.withOperationGate(
+        { scope: "open_seek_lifecycle", key: "open_seek_lifecycle:seek_123?token=secret" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/must not contain secrets/);
+    await expect(
+      store.withOperationGate(
+        { scope: "challenge_lifecycle", key: "challenge_lifecycle:challenge_123#challengeToken=secret" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/must not contain secrets/);
+    await expect(
+      store.withOperationGate(
+        { scope: "open_seek_lifecycle", key: "Authorization: Bearer open_seek_lifecycle_seek_123" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/must not contain secrets/);
+    await expect(
+      store.withOperationGate(
+        { scope: "challenge_lifecycle", key: "https://castles.example/?token=challenge_123" },
+        async () => undefined
+      )
+    ).rejects.toThrow(/must not contain secrets/);
+
+    expect(queryable.queries).toEqual([]);
+  });
+
   it("rejects raw account challenge pair keys before persistence", async () => {
     const queryable = new FakePostgresClient();
     const store = new PostgresOnlineOperationGateStore({ queryable });

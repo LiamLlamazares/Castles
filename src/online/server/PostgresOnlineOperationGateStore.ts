@@ -25,9 +25,13 @@ export interface PostgresOnlineOperationGateStoreOptions {
 const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
 const OPERATION_GATE_SCOPES = new Set<OnlineRuntimeOperationGateScope>([
   "account_challenge_pair",
+  "challenge_lifecycle",
+  "open_seek_lifecycle",
   "quick_match_session",
 ]);
 const ACCOUNT_CHALLENGE_PAIR_GATE_KEY_PATTERN = /^account_challenge_pair:[A-Za-z0-9_-]{43}$/;
+const OPEN_SEEK_LIFECYCLE_GATE_KEY_PATTERN = /^open_seek_lifecycle:seek_[A-Za-z0-9_-]{1,128}$/;
+const CHALLENGE_LIFECYCLE_GATE_KEY_PATTERN = /^challenge_lifecycle:challenge_[A-Za-z0-9_-]{1,128}$/;
 
 function normalizeOperationGateScope(scope: OnlineRuntimeOperationGateScope): OnlineRuntimeOperationGateScope {
   if (!OPERATION_GATE_SCOPES.has(scope)) {
@@ -53,6 +57,16 @@ function normalizeOperationGateKey(
   if (scope === "account_challenge_pair" && !ACCOUNT_CHALLENGE_PAIR_GATE_KEY_PATTERN.test(value)) {
     throw new Error(
       "PostgreSQL account challenge pair key must be a hashed operation key."
+    );
+  }
+  if (scope === "open_seek_lifecycle" && !OPEN_SEEK_LIFECYCLE_GATE_KEY_PATTERN.test(value)) {
+    throw new Error(
+      "PostgreSQL open seek lifecycle key must be scoped to an open seek id."
+    );
+  }
+  if (scope === "challenge_lifecycle" && !CHALLENGE_LIFECYCLE_GATE_KEY_PATTERN.test(value)) {
+    throw new Error(
+      "PostgreSQL challenge lifecycle key must be scoped to a challenge id."
     );
   }
   return value;
