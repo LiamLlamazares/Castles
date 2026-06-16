@@ -2317,6 +2317,126 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
+  type RoomHydrationFailureReason =
+    | "missing_room_loader"
+    | "load_failed"
+    | "room_not_found"
+    | "mismatched_room_record"
+    | "refresh_failed";
+
+  const hydrateMissingRoomFromStore = async (
+    gameId: string,
+    reason: string
+  ): Promise<
+    | { ok: true; room: OnlineGameRoom; hydrated: boolean }
+    | { ok: false; reason: RoomHydrationFailureReason }
+  > => {
+    const existingRoom = service.getRoom(gameId);
+    if (existingRoom) return { ok: true, room: existingRoom, hydrated: false };
+
+    if (!options.loadGameRoomRecord) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "missing_room_loader",
+      });
+      return { ok: false, reason: "missing_room_loader" };
+    }
+
+    let record: OnlineGameRoomRecord | null;
+    try {
+      record = await options.loadGameRoomRecord(gameId);
+    } catch (error) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "load_failed",
+      });
+      console.error("Failed to load online room for hydration", error);
+      return { ok: false, reason: "load_failed" };
+    }
+
+    if (!record) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "room_not_found",
+      });
+      return { ok: false, reason: "room_not_found" };
+    }
+    if (record.gameId !== gameId) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "mismatched_room_record",
+      });
+      return { ok: false, reason: "mismatched_room_record" };
+    }
+
+    try {
+      service.replaceRoom(record);
+    } catch (error) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "refresh_failed",
+      });
+      console.error("Failed to hydrate online room from store", error);
+      return { ok: false, reason: "refresh_failed" };
+    }
+
+    const hydratedRoom = service.getRoom(gameId);
+    if (!hydratedRoom) {
+      log({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "refresh_failed",
+      });
+      return { ok: false, reason: "refresh_failed" };
+    }
+
+    log({
+      event: "online.room.hydrate",
+      gameId,
+      status: "accepted",
+      reason,
+    });
+    return { ok: true, room: hydratedRoom, hydrated: true };
+  };
+
+  const hydrationFailureResponse = (
+    failure: RoomHydrationFailureReason,
+    notFoundMessage: string,
+    persistenceMessage: string
+  ): { status: number; error: OnlineReject } => {
+    if (failure === "load_failed" || failure === "refresh_failed") {
+      return {
+        status: 503,
+        error: { code: "persistence_failed", message: persistenceMessage },
+      };
+    }
+    return {
+      status: 404,
+      error: { code: "not_found", message: notFoundMessage },
+    };
+  };
+
+  const sendSocketHydrationFailure = (
+    socket: WebSocket,
+    failure: RoomHydrationFailureReason,
+    notFoundMessage: string,
+    persistenceMessage: string
+  ): void => {
+    const response = hydrationFailureResponse(failure, notFoundMessage, persistenceMessage);
+    sendSocketError(socket, response.error);
+  };
+
   const enqueueGameAction = (gameId: string, operation: () => Promise<void>): Promise<void> => {
     return runtimeCoordinator.withGameOperationGate(gameId, operation);
   };
@@ -5219,14 +5339,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const room = service.getRoom(gameId.value);
-      if (!room) {
-        log({ event: "online.account.snapshot", gameId: gameId.value, status: "rejected", reason: "not_found" });
-        res.status(404).json({
-          error: { code: "not_found", message: "No account game was found." },
+      const hydrated = await hydrateMissingRoomFromStore(gameId.value, "account_snapshot");
+      if (!hydrated.ok) {
+        const response = hydrationFailureResponse(
+          hydrated.reason,
+          "No account game was found.",
+          "Account game snapshot could not be loaded."
+        );
+        log({
+          event: "online.account.snapshot",
+          gameId: gameId.value,
+          status: response.status === 503 ? "failed" : "rejected",
+          reason: hydrated.reason,
         });
+        res.status(response.status).json({ error: response.error });
         return;
       }
+      const room = hydrated.room;
 
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
@@ -5311,14 +5440,23 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const room = service.getRoom(gameId.value);
-      if (!room) {
-        log({ event: "online.account.rejoin", gameId: gameId.value, status: "rejected", reason: "not_found" });
-        res.status(404).json({
-          error: { code: "not_found", message: "No active account game was found." },
+      const hydrated = await hydrateMissingRoomFromStore(gameId.value, "account_rejoin");
+      if (!hydrated.ok) {
+        const response = hydrationFailureResponse(
+          hydrated.reason,
+          "No active account game was found.",
+          "The account game could not be rejoined."
+        );
+        log({
+          event: "online.account.rejoin",
+          gameId: gameId.value,
+          status: response.status === 503 ? "failed" : "rejected",
+          reason: hydrated.reason,
         });
+        res.status(response.status).json({ error: response.error });
         return;
       }
+      const room = hydrated.room;
 
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
@@ -6603,7 +6741,27 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     await enqueueGameAction(gameId.value, async () => {
       const token = getBearerToken(req.headers.authorization) ?? "";
-      const room = service.getRoomForToken(gameId.value, token);
+      let room = service.getRoomForToken(gameId.value, token);
+      if (!room) {
+        const hydrated = await hydrateMissingRoomFromStore(gameId.value, "http_join");
+        if (!hydrated.ok) {
+          const response = hydrationFailureResponse(
+            hydrated.reason,
+            "No online game was found for that id and token.",
+            "The online game could not be loaded."
+          );
+          log({
+            event: "online.http.join",
+            gameId: gameId.value,
+            role: "player",
+            status: response.status === 503 ? "failed" : "rejected",
+            reason: hydrated.reason,
+          });
+          res.status(response.status).json({ error: response.error });
+          return;
+        }
+        room = service.getRoomForToken(gameId.value, token);
+      }
       if (!room) {
         log({
           event: "online.http.join",
@@ -6851,23 +7009,24 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         return;
       }
 
-      const room = service.getRoom(gameId.value);
-      if (!room) {
+      const hydrated = await hydrateMissingRoomFromStore(gameId.value, "http_spectate");
+      if (!hydrated.ok) {
+        const response = hydrationFailureResponse(
+          hydrated.reason,
+          "No online game was found for that id.",
+          "The spectator snapshot could not be loaded."
+        );
         log({
           event: "online.http.spectate",
           gameId: gameId.value,
           role: "spectator",
-          status: "rejected",
-          reason: "not_found",
+          status: response.status === 503 ? "failed" : "rejected",
+          reason: hydrated.reason,
         });
-        res.status(404).json({
-          error: {
-            code: "not_found",
-            message: "No online game was found for that id.",
-          },
-        });
+        res.status(response.status).json({ error: response.error });
         return;
       }
+      const room = hydrated.room;
 
       const timeout = await adjudicateTimeoutForRoom(gameId.value, room);
       if (!timeout.ok) {
@@ -7156,7 +7315,27 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     if (message.type === "join") {
       await enqueueGameAction(message.gameId, async () => {
-        const room = service.getRoomForToken(message.gameId, message.token);
+        let room = service.getRoomForToken(message.gameId, message.token);
+        if (!room) {
+          const hydrated = await hydrateMissingRoomFromStore(message.gameId, "socket_join");
+          if (!hydrated.ok) {
+            log({
+              event: "online.socket.join",
+              gameId: message.gameId,
+              role: "player",
+              status: hydrated.reason === "load_failed" || hydrated.reason === "refresh_failed" ? "failed" : "rejected",
+              reason: hydrated.reason,
+            });
+            sendSocketHydrationFailure(
+              socket,
+              hydrated.reason,
+              "No online game was found for that id and token.",
+              "The online game could not be loaded."
+            );
+            return;
+          }
+          room = service.getRoomForToken(message.gameId, message.token);
+        }
         if (!room) {
           log({
             event: "online.socket.join",
@@ -7243,21 +7422,24 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
-        const room = service.getRoom(message.gameId);
-        if (!room) {
+        const hydrated = await hydrateMissingRoomFromStore(message.gameId, "socket_spectate");
+        if (!hydrated.ok) {
           log({
             event: "online.socket.spectate",
             gameId: message.gameId,
             role: "spectator",
-            status: "rejected",
-            reason: "not_found",
+            status: hydrated.reason === "load_failed" || hydrated.reason === "refresh_failed" ? "failed" : "rejected",
+            reason: hydrated.reason,
           });
-          sendSocketError(socket, {
-            code: "not_found",
-            message: "No online game was found for that id.",
-          });
+          sendSocketHydrationFailure(
+            socket,
+            hydrated.reason,
+            "No online game was found for that id.",
+            "The spectator snapshot could not be loaded."
+          );
           return;
         }
+        const room = hydrated.room;
 
         const timeout = await adjudicateTimeoutForRoom(message.gameId, room);
         if (!timeout.ok) {

@@ -765,6 +765,20 @@ function withoutPreviewClock(
   return nextLivePreview;
 }
 
+function roomRecordForGame(
+  gameId: string,
+  overrides: Partial<OnlineGameRoomRecord> = {}
+): OnlineGameRoomRecord {
+  return {
+    gameId,
+    setup: createClockedSetup(),
+    whiteCredential: "white-token",
+    blackCredential: "black-token",
+    acceptedActions: [],
+    ...overrides,
+  };
+}
+
 function waitForSocketOpen(socket: WebSocket): Promise<void> {
   if (socket.readyState === WebSocket.OPEN) return Promise.resolve();
 
@@ -9384,6 +9398,350 @@ describe("createOnlineHttpServer", () => {
     } finally {
       socket.close();
     }
+  });
+
+  it("hydrates missing warm room for HTTP player snapshots", async () => {
+    const gameId = "game_missing_warm_room_http_join";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}`, {
+      headers: bearer("white-token"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      color: "w",
+      snapshot: { gameId, version: 0 },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+  });
+
+  it("hydrates missing warm room for HTTP spectator snapshots after access checks", async () => {
+    const gameId = "game_missing_warm_room_http_spectator";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId ? summaryForGame(gameId, "unlisted") : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}/spectator`);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "spectator",
+      snapshot: { gameId, version: 0 },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+  });
+
+  it("hydrates missing warm room for WebSocket player joins", async () => {
+    const gameId = "game_missing_warm_room_socket_join";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId,
+            token: "white-token",
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "missing warm room player join")).resolves.toMatchObject({
+        type: "joined",
+        color: "w",
+        snapshot: { gameId, version: 0 },
+      });
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+      expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("hydrates missing warm room for WebSocket spectators after access checks", async () => {
+    const gameId = "game_missing_warm_room_socket_spectator";
+    const record = roomRecordForGame(gameId);
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId ? summaryForGame(gameId, "unlisted") : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "spectate",
+            gameId,
+          })
+        )
+      );
+
+      await expect(nextSocketMessage(socket, "missing warm room spectator join")).resolves.toMatchObject({
+        type: "spectating",
+        snapshot: { gameId, version: 0 },
+      });
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+      expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("hydrates missing warm room for account snapshots after participant checks", async () => {
+    const gameId = "game_missing_warm_room_account_snapshot";
+    const record = roomRecordForGame(gameId, {
+      whiteCredential: hashOnlineToken("account-white-token"),
+      blackCredential: hashOnlineToken("account-black-token"),
+    });
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const service = new OnlineGameService({
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+    });
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId && liamIdentity
+          ? {
+              ...summaryForGame(gameId, "private"),
+              participants: [
+                { seat: "w", role: "white", identity: liamIdentity },
+                { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_account_black" } },
+              ],
+            }
+          : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    liamIdentity = liam.account.identity;
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/snapshot`,
+      { headers: bearer(liam.session.token) }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      role: "account",
+      snapshot: { gameId, version: 0 },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(service.getRoom(gameId)?.getSnapshot()).toMatchObject({ gameId, version: 0 });
+  });
+
+  it("hydrates missing warm room for account rejoin before adding the fresh seat credential", async () => {
+    const gameId = "game_missing_warm_room_account_rejoin";
+    const record = roomRecordForGame(gameId, {
+      whiteCredential: hashOnlineToken("old-white-token"),
+      blackCredential: hashOnlineToken("old-black-token"),
+    });
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const service = new OnlineGameService({
+      tokenFactory: (seat) => `fresh-${seat}-token`,
+      credentialFactory: hashOnlineToken,
+      verifyToken: verifyOnlineToken,
+    });
+    const loadGameRoomRecord = vi.fn(async (targetGameId: string) =>
+      targetGameId === gameId ? record : null
+    );
+    const appendGameSeatCredential = vi.fn(async (
+      targetGameId: string,
+      seat: "w" | "b",
+      credential: string
+    ) => {
+      expect(service.getRoom(targetGameId)).not.toBeNull();
+      expect(targetGameId).toBe(gameId);
+      expect(seat).toBe("w");
+      return {
+        ...record,
+        additionalWhiteCredentials: [credential],
+      };
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      service,
+      loadGameRoomRecord,
+      appendGameSeatCredential,
+      loadGameSummary: async (targetGameId: string) =>
+        targetGameId === gameId && liamIdentity
+          ? {
+              ...summaryForGame(gameId, "private"),
+              participants: [
+                { seat: "w", role: "white", identity: liamIdentity },
+                { seat: "b", role: "black", identity: { kind: "anonymous", id: "anon_rejoin_black" } },
+              ],
+            }
+          : null,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    liamIdentity = liam.account.identity;
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${gameId}/rejoin`,
+      { method: "POST", headers: bearer(liam.session.token) }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      gameInvite: {
+        gameId,
+        seat: "w",
+        token: "fresh-w-token",
+        url: "https://castles.example/play?onlineGame=game_missing_warm_room_account_rejoin&seat=w",
+      },
+    });
+    expect(loadGameRoomRecord).toHaveBeenCalledWith(gameId);
+    expect(appendGameSeatCredential).toHaveBeenCalledWith(
+      gameId,
+      "w",
+      hashOnlineToken("fresh-w-token")
+    );
+    expect(service.getRoom(gameId)?.authenticate("fresh-w-token")).toBe("w");
+  });
+
+  it("fails closed when missing warm room hydration cannot load a durable record", async () => {
+    const gameId = "game_missing_warm_room_load_failure";
+    const service = new OnlineGameService();
+    const logs: unknown[] = [];
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const loadGameRoomRecord = vi.fn(async () => {
+      throw new Error("room store unavailable");
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/games/${gameId}`, {
+      headers: bearer("white-token"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.error).toMatchObject({ code: "persistence_failed" });
+    expect(service.getRoom(gameId)).toBeNull();
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        event: "online.room.hydrate",
+        gameId,
+        status: "failed",
+        reason: "load_failed",
+      })
+    );
+    expect(JSON.stringify(logs)).not.toContain("white-token");
+  });
+
+  it("does not hydrate missing warm rooms before spectator or account access checks pass", async () => {
+    const spectatorGameId = "game_missing_warm_room_private_spectator";
+    const accountGameId = "game_missing_warm_room_account_nonparticipant";
+    const service = new OnlineGameService();
+    const loadGameRoomRecord = vi.fn(async () => roomRecordForGame(spectatorGameId));
+    let liamIdentity: OnlineGameSummary["participants"][number]["identity"] | null = null;
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      loadGameRoomRecord,
+      loadGameSummary: async (targetGameId: string) => {
+        if (targetGameId === spectatorGameId) return summaryForGame(spectatorGameId, "private");
+        if (targetGameId === accountGameId && liamIdentity) {
+          return {
+            ...summaryForGame(accountGameId, "private"),
+            participants: [
+              { seat: "w", role: "white", identity: { kind: "anonymous", id: "other_player" } },
+              { seat: "b", role: "black", identity: { kind: "anonymous", id: "other_black" } },
+            ],
+          };
+        }
+        return null;
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    liamIdentity = liam.account.identity;
+
+    const spectatorResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/games/${spectatorGameId}/spectator`
+    );
+    const accountResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/games/${accountGameId}/snapshot`,
+      { headers: bearer(liam.session.token) }
+    );
+
+    expect(spectatorResponse.status).toBe(404);
+    expect(accountResponse.status).toBe(404);
+    expect(loadGameRoomRecord).not.toHaveBeenCalled();
+    expect(service.getRoom(spectatorGameId)).toBeNull();
+    expect(service.getRoom(accountGameId)).toBeNull();
   });
 
   it("supports websocket heartbeats for reconnect health checks", async () => {
