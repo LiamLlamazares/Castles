@@ -211,6 +211,7 @@ import {
   createGeneratedRuntimeNodeId,
   createSingleNodeOnlineRuntimeCoordinator,
   type OnlineRuntimeCoordinator,
+  type OnlineRuntimeGameSnapshotChangedEvent,
   type OnlineRuntimeSnapshotReason,
 } from "./onlineRuntimeCoordinator";
 
@@ -365,6 +366,7 @@ export interface CreateOnlineHttpServerOptions {
     options: OnlinePersonalGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
   loadGameSummary?: (gameId: string) => OnlineGameSummary | null | Promise<OnlineGameSummary | null>;
+  loadGameRoomRecord?: (gameId: string) => OnlineGameRoomRecord | null | Promise<OnlineGameRoomRecord | null>;
   accountStore?: OnlineAccountStore;
   adminBearerToken?: string;
   oauth?: {
@@ -6912,6 +6914,20 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
+  const hasLocalConnectionForGame = (gameId: string): boolean => {
+    for (const connection of connections.values()) {
+      if (connection.gameId === gameId) return true;
+    }
+    return false;
+  };
+
+  const roomRecordVersion = (record: OnlineGameRoomRecord): number | null => {
+    if (record.timeout) return record.timeout.version;
+    if (record.acceptedActions.length === 0) return 0;
+    const version = record.acceptedActions.at(-1)?.version;
+    return typeof version === "number" ? version : null;
+  };
+
   const publishRuntimeSnapshotChanged = async (
     gameId: string,
     reason: OnlineRuntimeSnapshotReason,
@@ -6963,6 +6979,98 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       timeout.snapshotChange?.createdAt
     );
   };
+
+  const refreshRoomFromRemoteSnapshotHint = async (
+    event: OnlineRuntimeGameSnapshotChangedEvent
+  ): Promise<void> => {
+    if (event.nodeId === runtimeCoordinator.nodeId) return;
+
+    await enqueueGameAction(event.gameId, async () => {
+      if (!hasLocalConnectionForGame(event.gameId)) return;
+
+      const localSnapshot = service.getRoom(event.gameId)?.getSnapshot();
+      if (localSnapshot && event.roomVersion <= localSnapshot.version) return;
+
+      if (!options.loadGameRoomRecord) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "missing_room_loader",
+        });
+        return;
+      }
+
+      let record: OnlineGameRoomRecord | null;
+      try {
+        record = await options.loadGameRoomRecord(event.gameId);
+      } catch (error) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "load_failed",
+        });
+        console.error("Failed to load online room after remote runtime snapshot event", error);
+        return;
+      }
+
+      if (!record) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "room_not_found",
+        });
+        return;
+      }
+      if (record.gameId !== event.gameId) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "mismatched_room_record",
+        });
+        return;
+      }
+
+      const loadedVersion = roomRecordVersion(record);
+      if (loadedVersion === null || loadedVersion < event.roomVersion) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: loadedVersion === null ? "invalid_room_record_version" : "stale_room_record",
+        });
+        return;
+      }
+
+      try {
+        service.replaceRoom(record);
+        broadcastSnapshot(event.gameId);
+      } catch (error) {
+        log({
+          event: "online.runtime.remote_snapshot",
+          gameId: event.gameId,
+          status: "failed",
+          reason: "refresh_failed",
+        });
+        console.error("Failed to refresh online room after remote runtime snapshot event", error);
+        return;
+      }
+      log({
+        event: "online.runtime.remote_snapshot",
+        gameId: event.gameId,
+        status: "accepted",
+        reason: event.reason,
+      });
+    });
+  };
+
+  const unsubscribeRemoteSnapshotHints = runtimeCoordinator.subscribeGameSnapshotChanged(
+    refreshRoomFromRemoteSnapshotHint
+  );
+  server.on("close", unsubscribeRemoteSnapshotHints);
 
   const handleClientMessage = async (
     socket: WebSocket,

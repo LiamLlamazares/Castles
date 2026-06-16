@@ -159,6 +159,7 @@ async function main() {
       listGameSummaries: (options) => store.listGameSummaries(options),
       listPersonalGameSummaries: (options) => store.listPersonalGameSummaries(options),
       loadGameSummary: (gameId) => store.loadGameSummary(gameId),
+      loadGameRoomRecord: (gameId) => store.loadGameRoomRecord(gameId),
       accountStore,
       adminBearerToken: config.adminBearerToken,
       oauth: config.googleOAuth

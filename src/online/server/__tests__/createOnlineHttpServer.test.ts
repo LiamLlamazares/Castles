@@ -13,7 +13,11 @@ import {
   type OnlineGameCredentials,
   OnlineGameEvent,
 } from "../../events";
-import { ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS, OnlineGameRoom } from "../../OnlineGameRoom";
+import {
+  ONLINE_MAX_ADDITIONAL_SEAT_CREDENTIALS,
+  OnlineGameRoom,
+  type OnlineGameRoomRecord,
+} from "../../OnlineGameRoom";
 import { OnlineGameService } from "../../OnlineGameService";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import { OnlineGameSeatCredentialTerminalError } from "../OnlineGameStore";
@@ -130,6 +134,34 @@ function nextSocketMessage(socket: WebSocket, description = "WebSocket message")
       } catch (error) {
         reject(error);
       }
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    socket.once("message", onMessage);
+    socket.once("error", onError);
+  });
+}
+
+function expectNoSocketMessage(
+  socket: WebSocket,
+  description = "unexpected WebSocket message",
+  timeoutMs = 75
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.off("message", onMessage);
+      socket.off("error", onError);
+    };
+    const onMessage = (data: WebSocket.RawData) => {
+      cleanup();
+      reject(new Error(`Received ${description}: ${data.toString("utf8")}`));
     };
     const onError = (error: Error) => {
       cleanup();
@@ -8887,6 +8919,468 @@ describe("createOnlineHttpServer", () => {
         type: "error",
         error: { code: "persistence_failed" },
       });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("refreshes stale warm rooms from remote runtime snapshot hints before broadcasting", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-refresh-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_snapshot_refresh",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const localRecord = service.getRoom(created.gameId)?.toRecord();
+    if (!localRecord) {
+      throw new Error("Expected local room record.");
+    }
+    const remoteRoom = OnlineGameRoom.create(localRecord);
+    const remoteAction = remoteRoom.submitAction(
+      created.white.token,
+      { type: "PASS", baseVersion: 0 },
+      "client-remote-snapshot-refresh"
+    );
+    if (!remoteAction.ok) {
+      throw new Error(remoteAction.error.message);
+    }
+    const remoteRecord = remoteRoom.toRecord();
+    const loadGameRoomRecord = vi.fn(async (gameId: string) =>
+      gameId === created.gameId ? remoteRecord : null
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "remote refresh player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      const refreshed = nextSocketMessage(socket, "remote refreshed authoritative snapshot");
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: created.gameId,
+        roomVersion: 1,
+        lastEventId: "evt-remote-refresh",
+        reason: "action",
+        nodeId: "node-remote-refresh-source",
+        createdAt: "2026-06-16T12:30:00.000Z",
+      });
+
+      await expect(refreshed).resolves.toMatchObject({
+        type: "snapshot",
+        snapshot: { gameId: created.gameId, version: 1 },
+      });
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(created.gameId);
+      expect(service.getRoom(created.gameId)?.getSnapshot().version).toBe(1);
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("ignores equal-version remote runtime snapshot hints without loading or broadcasting", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-equal-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_snapshot_equal",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const loadGameRoomRecord = vi.fn();
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "remote equal-version player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: created.gameId,
+        roomVersion: 0,
+        lastEventId: "evt-remote-equal",
+        reason: "snapshot",
+        nodeId: "node-remote-equal-source",
+        createdAt: "2026-06-16T12:31:00.000Z",
+      });
+
+      expect(loadGameRoomRecord).not.toHaveBeenCalled();
+      await expect(expectNoSocketMessage(socket, "equal-version remote snapshot")).resolves.toBeUndefined();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("logs loader failures for remote runtime snapshot hints without broadcasting stale local snapshots", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-load-failure-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_snapshot_load_failure",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const logs: unknown[] = [];
+    const loadGameRoomRecord = vi.fn(async () => {
+      throw new Error("store unavailable");
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord,
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "remote load-failure player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await runtimeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: created.gameId,
+        roomVersion: 1,
+        lastEventId: "evt-remote-load-failure",
+        reason: "action",
+        nodeId: "node-remote-load-failure-source",
+        createdAt: "2026-06-16T12:32:00.000Z",
+      });
+
+      expect(loadGameRoomRecord).toHaveBeenCalledWith(created.gameId);
+      expect(logs).toContainEqual(
+        expect.objectContaining({
+          event: "online.runtime.remote_snapshot",
+          gameId: created.gameId,
+          status: "failed",
+          reason: "load_failed",
+        })
+      );
+      await expect(expectNoSocketMessage(socket, "stale local snapshot after load failure")).resolves.toBeUndefined();
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("fails closed for unsafe remote runtime snapshot hint refresh branches", async () => {
+    const cases: Array<{
+      name: string;
+      expectedReason: string;
+      loadGameRoomRecord?: (gameId: string, localRecord: OnlineGameRoomRecord) => OnlineGameRoomRecord | null;
+    }> = [
+      {
+        name: "missing-loader",
+        expectedReason: "missing_room_loader",
+      },
+      {
+        name: "missing-record",
+        expectedReason: "room_not_found",
+        loadGameRoomRecord: () => null,
+      },
+      {
+        name: "mismatched-record",
+        expectedReason: "mismatched_room_record",
+        loadGameRoomRecord: (_gameId, localRecord) => ({
+          ...localRecord,
+          gameId: "game_remote_fail_closed_mismatched_other",
+        }),
+      },
+      {
+        name: "stale-record",
+        expectedReason: "stale_room_record",
+        loadGameRoomRecord: (_gameId, localRecord) => localRecord,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+        nodeId: `node-remote-fail-closed-${testCase.name}`,
+      });
+      const service = new OnlineGameService({
+        idFactory: () => `game_remote_fail_closed_${testCase.name.replace(/-/g, "_")}`,
+        tokenFactory: (seat) => `${seat}-token`,
+      });
+      const created = service.createGame(createClockedSetup(), {
+        publicBaseUrl: "https://castles.example",
+      });
+      const localRecord = service.getRoom(created.gameId)?.toRecord();
+      if (!localRecord) {
+        throw new Error("Expected local room record.");
+      }
+      const logs: unknown[] = [];
+      const loadGameRoomRecord = testCase.loadGameRoomRecord
+        ? vi.fn(async (gameId: string) => testCase.loadGameRoomRecord!(gameId, localRecord))
+        : undefined;
+      const { server } = createOnlineHttpServer({
+        publicBaseUrl: "https://castles.example",
+        service,
+        runtimeCoordinator,
+        ...(loadGameRoomRecord ? { loadGameRoomRecord } : {}),
+        onLog: (event) => logs.push(event),
+      });
+      servers.push(server);
+      const port = await listen(server);
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+      try {
+        await waitForSocketOpen(socket);
+        const joined = nextSocketMessage(socket, `${testCase.name} player join`);
+        socket.send(
+          JSON.stringify(
+            versionedMessage({
+              type: "join",
+              gameId: created.gameId,
+              token: created.white.token,
+            })
+          )
+        );
+        await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+        await runtimeCoordinator.publishGameSnapshotChanged({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 1,
+          lastEventId: `evt-remote-${testCase.name}`,
+          reason: "action",
+          nodeId: `node-remote-fail-closed-source-${testCase.name}`,
+          createdAt: "2026-06-16T12:33:00.000Z",
+        });
+
+        if (loadGameRoomRecord) {
+          expect(loadGameRoomRecord).toHaveBeenCalledWith(created.gameId);
+        }
+        expect(service.getRoom(created.gameId)?.getSnapshot().version).toBe(0);
+        expect(logs).toContainEqual(
+          expect.objectContaining({
+            event: "online.runtime.remote_snapshot",
+            gameId: created.gameId,
+            status: "failed",
+            reason: testCase.expectedReason,
+          })
+        );
+        await expect(expectNoSocketMessage(socket, `${testCase.name} stale local snapshot`)).resolves.toBeUndefined();
+      } finally {
+        socket.close();
+      }
+    }
+  });
+
+  it("ignores same-node and disconnected-game remote runtime snapshot hints without durable loads", async () => {
+    const sameNodeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-ignore-same",
+    });
+    const sameNodeService = new OnlineGameService({
+      idFactory: () => "game_remote_ignore_same_node",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const sameNodeCreated = sameNodeService.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const sameNodeLoad = vi.fn();
+    const { server: sameNodeServer } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service: sameNodeService,
+      runtimeCoordinator: sameNodeCoordinator,
+      loadGameRoomRecord: sameNodeLoad,
+    });
+    servers.push(sameNodeServer);
+    const sameNodePort = await listen(sameNodeServer);
+    const sameNodeSocket = new WebSocket(`ws://127.0.0.1:${sameNodePort}/ws`);
+
+    try {
+      await waitForSocketOpen(sameNodeSocket);
+      const joined = nextSocketMessage(sameNodeSocket, "same-node ignore player join");
+      sameNodeSocket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: sameNodeCreated.gameId,
+            token: sameNodeCreated.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await sameNodeCoordinator.publishGameSnapshotChanged({
+        type: "game_snapshot_changed",
+        gameId: sameNodeCreated.gameId,
+        roomVersion: 1,
+        lastEventId: "evt-same-node-ignore",
+        reason: "action",
+        nodeId: sameNodeCoordinator.nodeId,
+        createdAt: "2026-06-16T12:34:00.000Z",
+      });
+
+      expect(sameNodeLoad).not.toHaveBeenCalled();
+      expect(sameNodeService.getRoom(sameNodeCreated.gameId)?.getSnapshot().version).toBe(0);
+      await expect(expectNoSocketMessage(sameNodeSocket, "same-node remote hint")).resolves.toBeUndefined();
+    } finally {
+      sameNodeSocket.close();
+    }
+
+    const disconnectedCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-ignore-disconnected",
+    });
+    const disconnectedService = new OnlineGameService({
+      idFactory: () => "game_remote_ignore_disconnected",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const disconnectedCreated = disconnectedService.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const disconnectedLoad = vi.fn();
+    const { server: disconnectedServer } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service: disconnectedService,
+      runtimeCoordinator: disconnectedCoordinator,
+      loadGameRoomRecord: disconnectedLoad,
+    });
+    servers.push(disconnectedServer);
+
+    await disconnectedCoordinator.publishGameSnapshotChanged({
+      type: "game_snapshot_changed",
+      gameId: disconnectedCreated.gameId,
+      roomVersion: 1,
+      lastEventId: "evt-disconnected-ignore",
+      reason: "action",
+      nodeId: "node-remote-ignore-disconnected-source",
+      createdAt: "2026-06-16T12:35:00.000Z",
+    });
+
+    expect(disconnectedLoad).not.toHaveBeenCalled();
+    expect(disconnectedService.getRoom(disconnectedCreated.gameId)?.getSnapshot().version).toBe(0);
+  });
+
+  it("logs invalid remote room refresh records without rejecting runtime publication", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({
+      nodeId: "node-remote-invalid-record-local",
+    });
+    const service = new OnlineGameService({
+      idFactory: () => "game_remote_invalid_record",
+      tokenFactory: (seat) => `${seat}-token`,
+    });
+    const created = service.createGame(createClockedSetup(), {
+      publicBaseUrl: "https://castles.example",
+    });
+    const localRecord = service.getRoom(created.gameId)?.toRecord();
+    if (!localRecord) {
+      throw new Error("Expected local room record.");
+    }
+    const invalidRecord = {
+      ...localRecord,
+      setup: undefined,
+      acceptedActions: [
+        {
+          playerColor: "w",
+          clientActionId: "client-invalid-remote-record",
+          action: { type: "PASS", baseVersion: 0 },
+          version: 1,
+          playedAt: 1_700_000_000_000,
+        },
+      ],
+    } as unknown as OnlineGameRoomRecord;
+    const logs: unknown[] = [];
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      service,
+      runtimeCoordinator,
+      loadGameRoomRecord: async () => invalidRecord,
+      onLog: (event) => logs.push(event),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+
+    try {
+      await waitForSocketOpen(socket);
+      const joined = nextSocketMessage(socket, "invalid-record player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", snapshot: { version: 0 } });
+
+      await expect(
+        runtimeCoordinator.publishGameSnapshotChanged({
+          type: "game_snapshot_changed",
+          gameId: created.gameId,
+          roomVersion: 1,
+          lastEventId: "evt-invalid-remote-record",
+          reason: "action",
+          nodeId: "node-remote-invalid-record-source",
+          createdAt: "2026-06-16T12:36:00.000Z",
+        })
+      ).resolves.toBeUndefined();
+
+      expect(service.getRoom(created.gameId)?.getSnapshot().version).toBe(0);
+      expect(logs).toContainEqual(
+        expect.objectContaining({
+          event: "online.runtime.remote_snapshot",
+          gameId: created.gameId,
+          status: "failed",
+          reason: "refresh_failed",
+        })
+      );
+      await expect(expectNoSocketMessage(socket, "invalid record stale local snapshot")).resolves.toBeUndefined();
     } finally {
       socket.close();
     }

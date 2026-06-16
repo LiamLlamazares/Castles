@@ -43,6 +43,7 @@ export interface OnlineGameStoreLoadOptions {
 
 export interface OnlineGameStore {
   load(options?: OnlineGameStoreLoadOptions): Promise<OnlineGameRoomRecord[]>;
+  loadGameRoomRecord(gameId: string): Promise<OnlineGameRoomRecord | null>;
   loadSummaries(): Promise<OnlineGameSummary[]>;
   listGameSummaries(options: OnlineGameDirectoryListOptions): Promise<OnlineGameDirectoryResponse>;
   listPersonalGameSummaries(

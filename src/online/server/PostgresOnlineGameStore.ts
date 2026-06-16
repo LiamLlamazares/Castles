@@ -157,6 +157,11 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     });
   }
 
+  async loadGameRoomRecord(gameId: string): Promise<OnlineGameRoomRecord | null> {
+    await this.ensureSchema();
+    return this.loadRecordForGame(gameId, this.queryable);
+  }
+
   async loadSummaries(): Promise<OnlineGameSummary[]> {
     await this.ensureSchema();
     const result = await this.queryable.query(
