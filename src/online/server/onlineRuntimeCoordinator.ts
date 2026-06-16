@@ -390,68 +390,65 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
   };
 }
 
-export function createPostgresSpectatorPresenceRuntimeCoordinator(options: {
-  nodeId: string;
-  spectatorPresenceStore: OnlineRuntimeSpectatorPresenceStore;
-}): OnlineRuntimeCoordinator {
-  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
-
+function withPostgresSpectatorPresenceRuntimeCoordinator(
+  base: OnlineRuntimeCoordinator,
+  spectatorPresenceStore: OnlineRuntimeSpectatorPresenceStore
+): OnlineRuntimeCoordinator {
   return {
-    ...local,
+    ...base,
     capabilities: {
-      ...local.capabilities,
+      ...base.capabilities,
       spectatorPresence: "postgres-live-presence",
     },
     async registerSpectator(input) {
-      return options.spectatorPresenceStore.registerSpectator(input);
+      return spectatorPresenceStore.registerSpectator(input);
     },
     async refreshSpectator(input) {
-      return options.spectatorPresenceStore.refreshSpectator(input);
+      return spectatorPresenceStore.refreshSpectator(input);
     },
     async removeSpectator(input) {
-      await options.spectatorPresenceStore.removeSpectator(input);
+      await spectatorPresenceStore.removeSpectator(input);
     },
     async countSpectators(gameId) {
-      return options.spectatorPresenceStore.countSpectators(gameId);
+      return spectatorPresenceStore.countSpectators(gameId);
     },
     async close() {
-      await local.close();
-      await options.spectatorPresenceStore.cleanupExpiredSpectators?.();
+      await base.close();
+      await spectatorPresenceStore.cleanupExpiredSpectators?.();
     },
   };
 }
 
-export function createPostgresRuntimeEventCoordinator(options: {
-  nodeId: string;
-  runtimeEventStore: OnlineRuntimeEventStore;
-}): OnlineRuntimeCoordinator {
-  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+function withPostgresRuntimeEventCoordinator(
+  base: OnlineRuntimeCoordinator,
+  runtimeEventStore: OnlineRuntimeEventStore
+): OnlineRuntimeCoordinator {
   let runtimeEventCursor = 0;
   let runtimeEventPollInFlight: Promise<OnlineRuntimeEventPollResult> | null = null;
 
   const pollRemoteEventsOnce = async (limit: number): Promise<OnlineRuntimeEventPollResult> => {
-    const result = await options.runtimeEventStore.listGameSnapshotChangedEventsAfter({
+    const result = await runtimeEventStore.listGameSnapshotChangedEventsAfter({
       afterId: runtimeEventCursor,
       limit,
-      excludeNodeId: local.nodeId,
+      excludeNodeId: base.nodeId,
     });
     for (const event of result.events) {
-      await local.publishGameSnapshotChanged(stripRuntimeEventCursor(event));
+      await base.publishGameSnapshotChanged(stripRuntimeEventCursor(event));
     }
     runtimeEventCursor = result.nextAfterId;
     return { afterId: runtimeEventCursor, published: result.events.length };
   };
 
   return {
-    ...local,
+    ...base,
     async publishGameSnapshotChanged(event) {
-      await options.runtimeEventStore.recordGameSnapshotChanged({
+      await runtimeEventStore.recordGameSnapshotChanged({
         gameId: event.gameId,
         roomVersion: event.roomVersion,
         lastEventId: event.lastEventId,
         reason: event.reason,
       });
-      await local.publishGameSnapshotChanged(event);
+      await base.publishGameSnapshotChanged(event);
     },
     async pollRemoteGameSnapshotChangedEvents(input = {}) {
       const limit = normalizeRuntimeEventPollLimit(input.limit);
@@ -471,38 +468,36 @@ export function createPostgresRuntimeEventCoordinator(options: {
   };
 }
 
-export function createPostgresOperationGateRuntimeCoordinator(options: {
-  nodeId: string;
-  operationGateStore: OnlineRuntimeOperationGateStore;
-}): OnlineRuntimeCoordinator {
-  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
-
+function withPostgresOperationGateRuntimeCoordinator(
+  base: OnlineRuntimeCoordinator,
+  operationGateStore: OnlineRuntimeOperationGateStore
+): OnlineRuntimeCoordinator {
   return {
-    ...local,
+    ...base,
     capabilities: {
-      ...local.capabilities,
+      ...base.capabilities,
       operationGates: "postgres-selected-shared-gates",
     },
     async withQuickMatchSessionGate(sessionKey, operation) {
-      return options.operationGateStore.withOperationGate(
+      return operationGateStore.withOperationGate(
         { scope: "quick_match_session", key: sessionKey },
         operation
       );
     },
     async withAccountChallengePairGate(pairKey, operation) {
-      return options.operationGateStore.withOperationGate(
+      return operationGateStore.withOperationGate(
         { scope: "account_challenge_pair", key: pairKey },
         operation
       );
     },
     async withOpenSeekLifecycleGate(seekKey, operation) {
-      return options.operationGateStore.withOperationGate(
+      return operationGateStore.withOperationGate(
         { scope: "open_seek_lifecycle", key: seekKey },
         operation
       );
     },
     async withChallengeLifecycleGate(challengeKey, operation) {
-      return options.operationGateStore.withOperationGate(
+      return operationGateStore.withOperationGate(
         { scope: "challenge_lifecycle", key: challengeKey },
         operation
       );
@@ -510,45 +505,127 @@ export function createPostgresOperationGateRuntimeCoordinator(options: {
   };
 }
 
+function withPostgresRateLimitRuntimeCoordinator(
+  base: OnlineRuntimeCoordinator,
+  rateLimitStore: OnlineRuntimeRateLimitStore
+): OnlineRuntimeCoordinator {
+  return {
+    ...base,
+    capabilities: {
+      ...base.capabilities,
+      rateLimits: "postgres-shared-fixed-window",
+    },
+    async consumeRateLimit(input) {
+      return rateLimitStore.consumeRateLimit(input);
+    },
+  };
+}
+
+function withPostgresStartupMaintenanceRuntimeCoordinator(
+  base: OnlineRuntimeCoordinator,
+  startupMaintenanceStore: OnlineRuntimeStartupMaintenanceStore
+): OnlineRuntimeCoordinator {
+  return {
+    ...base,
+    capabilities: {
+      ...base.capabilities,
+      startupMaintenance: "postgres-once-per-run",
+    },
+    async runStartupMaintenance(input, operation) {
+      return startupMaintenanceStore.runStartupMaintenance(
+        {
+          taskKey: input.taskKey,
+          runKey: input.runKey,
+          nodeId: base.nodeId,
+        },
+        operation
+      );
+    },
+  };
+}
+
+export function createPostgresSpectatorPresenceRuntimeCoordinator(options: {
+  nodeId: string;
+  spectatorPresenceStore: OnlineRuntimeSpectatorPresenceStore;
+}): OnlineRuntimeCoordinator {
+  return withPostgresSpectatorPresenceRuntimeCoordinator(
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId }),
+    options.spectatorPresenceStore
+  );
+}
+
+export function createPostgresRuntimeEventCoordinator(options: {
+  nodeId: string;
+  runtimeEventStore: OnlineRuntimeEventStore;
+}): OnlineRuntimeCoordinator {
+  return withPostgresRuntimeEventCoordinator(
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId }),
+    options.runtimeEventStore
+  );
+}
+
+export function createPostgresOperationGateRuntimeCoordinator(options: {
+  nodeId: string;
+  operationGateStore: OnlineRuntimeOperationGateStore;
+}): OnlineRuntimeCoordinator {
+  return withPostgresOperationGateRuntimeCoordinator(
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId }),
+    options.operationGateStore
+  );
+}
+
 export function createPostgresRateLimitRuntimeCoordinator(options: {
   nodeId: string;
   rateLimitStore: OnlineRuntimeRateLimitStore;
 }): OnlineRuntimeCoordinator {
-  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
-
-  return {
-    ...local,
-    capabilities: {
-      ...local.capabilities,
-      rateLimits: "postgres-shared-fixed-window",
-    },
-    async consumeRateLimit(input) {
-      return options.rateLimitStore.consumeRateLimit(input);
-    },
-  };
+  return withPostgresRateLimitRuntimeCoordinator(
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId }),
+    options.rateLimitStore
+  );
 }
 
 export function createPostgresStartupMaintenanceRuntimeCoordinator(options: {
   nodeId: string;
   startupMaintenanceStore: OnlineRuntimeStartupMaintenanceStore;
 }): OnlineRuntimeCoordinator {
-  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+  return withPostgresStartupMaintenanceRuntimeCoordinator(
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId }),
+    options.startupMaintenanceStore
+  );
+}
 
-  return {
-    ...local,
-    capabilities: {
-      ...local.capabilities,
-      startupMaintenance: "postgres-once-per-run",
-    },
-    async runStartupMaintenance(input, operation) {
-      return options.startupMaintenanceStore.runStartupMaintenance(
-        {
-          taskKey: input.taskKey,
-          runKey: input.runKey,
-          nodeId: local.nodeId,
-        },
-        operation
-      );
-    },
-  };
+export function createPostgresCompositeRuntimeCoordinator(options: {
+  nodeId: string;
+  spectatorPresenceStore?: OnlineRuntimeSpectatorPresenceStore;
+  runtimeEventStore?: OnlineRuntimeEventStore;
+  operationGateStore?: OnlineRuntimeOperationGateStore;
+  rateLimitStore?: OnlineRuntimeRateLimitStore;
+  startupMaintenanceStore?: OnlineRuntimeStartupMaintenanceStore;
+}): OnlineRuntimeCoordinator {
+  let coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+  if (options.runtimeEventStore) {
+    coordinator = withPostgresRuntimeEventCoordinator(coordinator, options.runtimeEventStore);
+  }
+  if (options.spectatorPresenceStore) {
+    coordinator = withPostgresSpectatorPresenceRuntimeCoordinator(
+      coordinator,
+      options.spectatorPresenceStore
+    );
+  }
+  if (options.operationGateStore) {
+    coordinator = withPostgresOperationGateRuntimeCoordinator(
+      coordinator,
+      options.operationGateStore
+    );
+  }
+  if (options.rateLimitStore) {
+    coordinator = withPostgresRateLimitRuntimeCoordinator(coordinator, options.rateLimitStore);
+  }
+  if (options.startupMaintenanceStore) {
+    coordinator = withPostgresStartupMaintenanceRuntimeCoordinator(
+      coordinator,
+      options.startupMaintenanceStore
+    );
+  }
+  return coordinator;
 }

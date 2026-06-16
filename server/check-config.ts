@@ -10,6 +10,27 @@ interface CheckServerConfigurationOptions {
   createStore?: typeof createOnlineGameStoreFromEnv;
 }
 
+async function closeAllStores(
+  stores: Array<{ label: string; close?: () => void | Promise<void> }>
+) {
+  const closeErrors: Array<{ label: string; error: unknown }> = [];
+  for (const store of stores) {
+    try {
+      await store.close?.();
+    } catch (error) {
+      closeErrors.push({ label: store.label, error });
+    }
+  }
+  if (closeErrors.length > 0) {
+    throw new AggregateError(
+      closeErrors.map((entry) => entry.error),
+      `Failed to close configured online stores: ${closeErrors
+        .map((entry) => entry.label)
+        .join(", ")}`
+    );
+  }
+}
+
 function parseArgs(argv: string[]): { envFile?: string } {
   const envFileIndex = argv.indexOf("--env-file");
   if (envFileIndex === -1) return {};
@@ -35,8 +56,12 @@ export async function checkServerConfiguration(
     postgresPoolMaxPerStore,
     store,
     accountStore,
+    spectatorPresenceStore,
+    runtimeEventStore,
+    operationGateStore,
+    rateLimitStore,
     startupMaintenanceStore,
-  } = createStore(env);
+  } = createStore(env, { runtimeNodeId: config.runtimeNodeId });
   let replayedRooms = 0;
   try {
     await store.checkReady();
@@ -49,13 +74,25 @@ export async function checkServerConfiguration(
       })
     ).length;
   } finally {
-    await store.close();
-    await accountStore.close?.();
-    await startupMaintenanceStore.close();
+    await closeAllStores([
+      { label: "game", close: () => store.close() },
+      { label: "account", close: accountStore.close?.bind(accountStore) },
+      { label: "spectator-presence", close: () => spectatorPresenceStore.close() },
+      { label: "runtime-event", close: () => runtimeEventStore.close() },
+      { label: "operation-gate", close: () => operationGateStore.close() },
+      { label: "rate-limit", close: () => rateLimitStore.close() },
+      { label: "startup-maintenance", close: () => startupMaintenanceStore.close() },
+    ]);
   }
 
   return createServerConfigurationReport({
-    config,
+    config: {
+      ...config,
+      deployment: {
+        ...config.deployment,
+        spectatorPresence: "postgres-live-presence",
+      },
+    },
     onlineStore: {
       backend,
       path: healthStorePath,

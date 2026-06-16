@@ -14,7 +14,7 @@ const SINGLE_NODE_DEPLOYMENT = {
   mode: "single-node",
   multiInstanceReady: false,
   websocketFanout: "process-local",
-  spectatorPresence: "process-local",
+  spectatorPresence: "postgres-live-presence",
   accountPresence: "session-store",
   roomState: "process-local",
   queueGuards: "process-local",

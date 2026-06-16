@@ -82,7 +82,7 @@ describe("parseServerRuntimeConfig", () => {
     ).toThrow(/CASTLES_NODE_ID/);
   });
 
-  it("rejects multi-instance deployment mode until shared presence and fanout exist", () => {
+  it("rejects multi-instance deployment mode until remaining runtime readiness exists", () => {
     expect(() =>
       parseServerRuntimeConfig(
         {

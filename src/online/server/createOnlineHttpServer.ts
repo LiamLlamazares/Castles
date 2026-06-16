@@ -3750,6 +3750,10 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     const drainState = await runtimeCoordinator.getDrainState();
     const ready = storeOk && !drainState.draining;
+    const deployment = {
+      ...(options.health?.deployment ?? createSingleNodeDeploymentConfig()),
+      spectatorPresence: runtimeCoordinator.capabilities.spectatorPresence,
+    };
 
     res.status(ready ? 200 : 503).json({
       ok: ready,
@@ -3760,7 +3764,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       online: {
         eventSchemaVersion: ONLINE_EVENT_SCHEMA_VERSION,
         rulesetVersion: ONLINE_RULESET_VERSION,
-        deployment: options.health?.deployment ?? createSingleNodeDeploymentConfig(),
+        deployment,
         runtime: {
           draining: drainState.draining,
           drainStartedAt: drainState.startedAt,

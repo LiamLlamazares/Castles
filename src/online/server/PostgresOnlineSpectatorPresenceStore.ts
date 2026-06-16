@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { Pool } from "pg";
 import { isSecretLikeKey } from "../secretSafety";
 import { normalizeRuntimeNodeId } from "./onlineRuntimeCoordinator";
+import { resolvePostgresPoolMaxPerStore } from "./postgresPoolConfig";
 
 interface PostgresQueryable {
   query(text: string, values?: unknown[]): Promise<{ rows: any[]; rowCount?: number }>;
@@ -8,7 +10,10 @@ interface PostgresQueryable {
 
 export interface PostgresOnlineSpectatorPresenceStoreOptions {
   nodeId: string;
-  queryable: PostgresQueryable;
+  connectionString?: string;
+  poolMaxPerStore?: number;
+  queryable?: PostgresQueryable;
+  close?: () => Promise<void>;
   presenceTtlMs?: number;
   connectionIdFactory?: () => string;
 }
@@ -21,6 +26,7 @@ export interface PostgresSpectatorPresenceRegistration {
 }
 
 const DEFAULT_SPECTATOR_PRESENCE_TTL_MS = 45_000;
+const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
 const SPECTATOR_CONNECTION_ID_PATTERN = /^spectator_[A-Za-z0-9_-]{12,64}$/;
 
 function normalizeSpectatorConnectionId(connectionId: string): string {
@@ -61,13 +67,32 @@ function rowToRegistration(row: any): PostgresSpectatorPresenceRegistration {
 export class PostgresOnlineSpectatorPresenceStore {
   private readonly nodeId: string;
   private readonly queryable: PostgresQueryable;
+  private readonly closeConnection?: () => Promise<void>;
   private readonly presenceTtlMs: number;
   private readonly connectionIdFactory: () => string;
   private schemaReady?: Promise<void>;
 
   constructor(options: PostgresOnlineSpectatorPresenceStoreOptions) {
     this.nodeId = normalizeRuntimeNodeId(options.nodeId);
-    this.queryable = options.queryable;
+    if (options.queryable) {
+      this.queryable = options.queryable;
+      this.closeConnection = options.close;
+    } else {
+      if (!options.connectionString) {
+        throw new Error(
+          "PostgresOnlineSpectatorPresenceStore requires a connectionString or queryable."
+        );
+      }
+      const pool = new Pool({
+        connectionString: options.connectionString,
+        max: resolvePostgresPoolMaxPerStore(options.poolMaxPerStore),
+        connectionTimeoutMillis: DEFAULT_POSTGRES_TIMEOUT_MS,
+        query_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
+        statement_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
+      });
+      this.queryable = pool;
+      this.closeConnection = () => pool.end();
+    }
     this.presenceTtlMs = options.presenceTtlMs ?? DEFAULT_SPECTATOR_PRESENCE_TTL_MS;
     this.connectionIdFactory =
       options.connectionIdFactory ??
@@ -75,6 +100,10 @@ export class PostgresOnlineSpectatorPresenceStore {
     if (!Number.isSafeInteger(this.presenceTtlMs) || this.presenceTtlMs < 1) {
       throw new Error("PostgreSQL spectator presence TTL must be a positive integer.");
     }
+  }
+
+  async close(): Promise<void> {
+    await this.closeConnection?.();
   }
 
   async ensureSchema(): Promise<void> {

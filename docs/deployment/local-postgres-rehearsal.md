@@ -134,7 +134,7 @@ Restore drill target: postgresql://<user>@localhost:5432/castles_restore
 What this checks:
 
 - the preflight confirms the built client/server artifacts exist, `DATABASE_URL` is local or explicitly marked disposable, `psql` is installed or configured with `PSQL_PATH` or `PGCLIENT_BIN`, and the database identity is safe for local smoke;
-- `server:check-config` reports `onlineDeployment.mode` as `single-node`, `multiInstanceReady` as `false`, process-local WebSocket fanout/spectator presence/room-state/queue-guard metadata, and account presence as session-store-backed before the local server starts;
+- `server:check-config` reports `onlineDeployment.mode` as `single-node`, `multiInstanceReady` as `false`, process-local WebSocket fanout/room-state/queue-guard metadata, PostgreSQL live spectator presence, and account presence as session-store-backed before the local server starts;
 - starts the built Node server on a private local port,
 - confirms `/api/health` reports PostgreSQL,
 - creates an online game,

@@ -8157,6 +8157,40 @@ describe("createOnlineHttpServer", () => {
     expect(body.online.rulesetVersion).toEqual(expect.any(String));
   });
 
+  it("reflects PostgreSQL spectator presence capability in health metadata without claiming multi-instance readiness", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example",
+      runtimeCoordinator: {
+        ...runtimeCoordinator,
+        capabilities: {
+          ...runtimeCoordinator.capabilities,
+          spectatorPresence: "postgres-live-presence",
+        },
+      },
+      health: {
+        storeBackend: "postgres",
+        storePath: "postgres",
+        checkStoreReady: async () => true,
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.online.deployment).toMatchObject({
+      mode: "single-node",
+      multiInstanceReady: false,
+      websocketFanout: "process-local",
+      spectatorPresence: "postgres-live-presence",
+      roomState: "process-local",
+      routing: "single-node",
+    });
+  });
+
   it("sanitizes store readiness errors in public health checks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",

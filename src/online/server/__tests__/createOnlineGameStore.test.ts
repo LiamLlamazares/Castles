@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
+import { PostgresOnlineOperationGateStore } from "../PostgresOnlineOperationGateStore";
+import { PostgresOnlineRateLimitStore } from "../PostgresOnlineRateLimitStore";
+import { PostgresOnlineRuntimeEventStore } from "../PostgresOnlineRuntimeEventStore";
+import { PostgresOnlineSpectatorPresenceStore } from "../PostgresOnlineSpectatorPresenceStore";
 import { PostgresOnlineStartupMaintenanceStore } from "../PostgresOnlineStartupMaintenanceStore";
 import { createOnlineGameStoreFromEnv } from "../createOnlineGameStore";
 
@@ -26,6 +30,8 @@ describe("createOnlineGameStoreFromEnv", () => {
     const configured = createOnlineGameStoreFromEnv({
       ONLINE_STORE_BACKEND: "postgres",
       DATABASE_URL: "postgresql://castles:secret@localhost:5432/castles",
+    }, {
+      runtimeNodeId: "prod-node-a",
     });
 
     expect(configured.backend).toBe("postgres");
@@ -33,6 +39,10 @@ describe("createOnlineGameStoreFromEnv", () => {
     expect(configured.postgresPoolMaxPerStore).toBe(5);
     expect(configured.store).toBeInstanceOf(PostgresOnlineGameStore);
     expect(configured.accountStore).toBeInstanceOf(PostgresOnlineAccountStore);
+    expect(configured.spectatorPresenceStore).toBeInstanceOf(PostgresOnlineSpectatorPresenceStore);
+    expect(configured.runtimeEventStore).toBeInstanceOf(PostgresOnlineRuntimeEventStore);
+    expect(configured.operationGateStore).toBeInstanceOf(PostgresOnlineOperationGateStore);
+    expect(configured.rateLimitStore).toBeInstanceOf(PostgresOnlineRateLimitStore);
     expect(configured.startupMaintenanceStore).toBeInstanceOf(PostgresOnlineStartupMaintenanceStore);
   });
 
@@ -41,13 +51,27 @@ describe("createOnlineGameStoreFromEnv", () => {
 
     const gameStore = new PostgresOnlineGameStore({ connectionString });
     const accountStore = new PostgresOnlineAccountStore({ connectionString });
+    const spectatorPresenceStore = new PostgresOnlineSpectatorPresenceStore({
+      connectionString,
+      nodeId: "prod-node-a",
+    });
+    const runtimeEventStore = new PostgresOnlineRuntimeEventStore({
+      connectionString,
+      nodeId: "prod-node-a",
+    });
+    const operationGateStore = new PostgresOnlineOperationGateStore({ connectionString });
+    const rateLimitStore = new PostgresOnlineRateLimitStore({ connectionString });
     const startupMaintenanceStore = new PostgresOnlineStartupMaintenanceStore({ connectionString });
 
     expect(gameStore).toBeInstanceOf(PostgresOnlineGameStore);
     expect(accountStore).toBeInstanceOf(PostgresOnlineAccountStore);
+    expect(spectatorPresenceStore).toBeInstanceOf(PostgresOnlineSpectatorPresenceStore);
+    expect(runtimeEventStore).toBeInstanceOf(PostgresOnlineRuntimeEventStore);
+    expect(operationGateStore).toBeInstanceOf(PostgresOnlineOperationGateStore);
+    expect(rateLimitStore).toBeInstanceOf(PostgresOnlineRateLimitStore);
     expect(startupMaintenanceStore).toBeInstanceOf(PostgresOnlineStartupMaintenanceStore);
-    expect(postgresPoolOptions).toHaveLength(3);
-    expect(postgresPoolOptions.map((options) => options.max)).toEqual([5, 5, 5]);
+    expect(postgresPoolOptions).toHaveLength(7);
+    expect(postgresPoolOptions.map((options) => options.max)).toEqual([5, 5, 5, 5, 5, 5, 5]);
   });
 
   it("rejects unsafe direct PostgreSQL store pool max values", () => {
@@ -61,6 +85,26 @@ describe("createOnlineGameStoreFromEnv", () => {
         /poolMaxPerStore/
       );
       expect(() =>
+        new PostgresOnlineSpectatorPresenceStore({
+          connectionString,
+          nodeId: "prod-node-a",
+          poolMaxPerStore,
+        })
+      ).toThrow(/poolMaxPerStore/);
+      expect(() =>
+        new PostgresOnlineRuntimeEventStore({
+          connectionString,
+          nodeId: "prod-node-a",
+          poolMaxPerStore,
+        })
+      ).toThrow(/poolMaxPerStore/);
+      expect(() =>
+        new PostgresOnlineOperationGateStore({ connectionString, poolMaxPerStore })
+      ).toThrow(/poolMaxPerStore/);
+      expect(() =>
+        new PostgresOnlineRateLimitStore({ connectionString, poolMaxPerStore })
+      ).toThrow(/poolMaxPerStore/);
+      expect(() =>
         new PostgresOnlineStartupMaintenanceStore({ connectionString, poolMaxPerStore })
       ).toThrow(/poolMaxPerStore/);
     }
@@ -71,10 +115,21 @@ describe("createOnlineGameStoreFromEnv", () => {
       ONLINE_STORE_BACKEND: "postgres",
       DATABASE_URL: "postgresql://castles:secret@localhost:5432/castles",
       POSTGRES_POOL_MAX_PER_STORE: "7",
+    }, {
+      runtimeNodeId: "prod-node-a",
     });
 
     expect(configured.postgresPoolMaxPerStore).toBe(7);
-    expect(postgresPoolOptions.map((options) => options.max)).toEqual([7, 7, 7]);
+    expect(postgresPoolOptions.map((options) => options.max)).toEqual([7, 7, 7, 7, 7, 7, 7]);
+  });
+
+  it("requires the configured runtime node id before creating runtime stores", () => {
+    expect(() =>
+      createOnlineGameStoreFromEnv({
+        ONLINE_STORE_BACKEND: "postgres",
+        DATABASE_URL: "postgresql://castles:secret@localhost:5432/castles",
+      })
+    ).toThrow(/runtimeNodeId/);
   });
 
   it("rejects unsafe PostgreSQL pool max values before creating stores", () => {

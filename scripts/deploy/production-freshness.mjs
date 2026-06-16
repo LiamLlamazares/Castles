@@ -241,7 +241,7 @@ function isSingleNodeDeploymentHealth(deployment) {
     deployment?.mode === "single-node" &&
     deployment?.multiInstanceReady === false &&
     deployment?.websocketFanout === "process-local" &&
-    deployment?.spectatorPresence === "process-local" &&
+    deployment?.spectatorPresence === "postgres-live-presence" &&
     deployment?.accountPresence === "session-store" &&
     deployment?.roomState === "process-local" &&
     deployment?.queueGuards === "process-local" &&
@@ -281,7 +281,7 @@ export function classifyProductionFreshnessAlerts(result) {
       severity: "critical",
       message: "Production health did not report the supported single-node deployment guardrails.",
       action:
-        "Keep CASTLES_DEPLOYMENT_MODE=single-node and one Node app instance until shared presence, WebSocket fanout, cache invalidation, and queue guards are implemented.",
+        "Keep CASTLES_DEPLOYMENT_MODE=single-node and one Node app instance until WebSocket fanout, cache invalidation, runtime-event polling readiness, and full queue coverage are implemented.",
     });
   }
   if (result.ssh?.status === "unreachable") {

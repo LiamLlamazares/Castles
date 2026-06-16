@@ -29,8 +29,9 @@ function runCheckConfig(extraEnv: NodeJS.ProcessEnv) {
 }
 
 describe("server/check-config", () => {
-  it("closes game, account, and startup-maintenance stores after successful checks", async () => {
+  it("passes the runtime node id and closes every configured store after successful checks", async () => {
     const closed: string[] = [];
+    let runtimeNodeId: string | undefined;
     const report = await checkServerConfiguration(
       {
         ONLINE_STORE_BACKEND: "postgres",
@@ -42,34 +43,74 @@ describe("server/check-config", () => {
       },
       process.cwd(),
       {
-        createStore: () => ({
-          backend: "postgres",
-          healthStorePath: "postgres",
-          postgresPoolMaxPerStore: 5,
-          store: {
-            checkReady: async () => true,
-            load: async () => [{ gameId: "game_1" }],
-            close: async () => {
-              closed.push("game");
+        createStore: (_env, options) => {
+          runtimeNodeId = options?.runtimeNodeId;
+          return {
+            backend: "postgres",
+            healthStorePath: "postgres",
+            postgresPoolMaxPerStore: 5,
+            store: {
+              checkReady: async () => true,
+              load: async () => [{ gameId: "game_1" }],
+              close: async () => {
+                closed.push("game");
+              },
             },
-          },
-          accountStore: {
-            checkReady: async () => true,
-            close: async () => {
-              closed.push("account");
+            accountStore: {
+              checkReady: async () => true,
+              close: async () => {
+                closed.push("account");
+              },
             },
-          },
-          startupMaintenanceStore: {
-            close: async () => {
-              closed.push("startup");
+            spectatorPresenceStore: {
+              close: async () => {
+                closed.push("spectator-presence");
+              },
             },
-          },
-        }),
+            runtimeEventStore: {
+              close: async () => {
+                closed.push("runtime-event");
+              },
+            },
+            operationGateStore: {
+              close: async () => {
+                closed.push("operation-gate");
+              },
+            },
+            rateLimitStore: {
+              close: async () => {
+                closed.push("rate-limit");
+              },
+            },
+            startupMaintenanceStore: {
+              close: async () => {
+                closed.push("startup");
+              },
+            },
+          };
+        },
       }
     );
 
     expect(report.onlineStore.replayedRooms).toBe(1);
-    expect(closed).toEqual(["game", "account", "startup"]);
+    expect(report.onlineDeployment).toMatchObject({
+      mode: "single-node",
+      multiInstanceReady: false,
+      websocketFanout: "process-local",
+      spectatorPresence: "postgres-live-presence",
+      roomState: "process-local",
+      routing: "single-node",
+    });
+    expect(runtimeNodeId).toBe("node-a");
+    expect(closed).toEqual([
+      "game",
+      "account",
+      "spectator-presence",
+      "runtime-event",
+      "operation-gate",
+      "rate-limit",
+      "startup",
+    ]);
   });
 
   it("fails when the store readiness check fails", () => {
@@ -82,7 +123,7 @@ describe("server/check-config", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Castles server configuration check failed");
     expect(result.stdout).not.toContain("\"ok\": true");
-  });
+  }, spawnTestTimeoutMs);
 
   it("can load an env file without sourcing it through a shell", () => {
     mkdirSync(tempDir, { recursive: true });
@@ -130,7 +171,7 @@ describe("server/check-config", () => {
       CASTLES_ADMIN_BEARER_TOKEN: "short-secret",
       CASTLES_STATIC_DIR: process.cwd(),
       CASTLES_REQUIRE_STATIC_DIR: "0",
-  }, spawnTestTimeoutMs);
+    });
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("CASTLES_ADMIN_BEARER_TOKEN");
@@ -143,7 +184,7 @@ describe("server/check-config", () => {
       DATABASE_URL: "postgresql://castles:secret@127.0.0.1:1/castles",
       CASTLES_STATIC_DIR: process.cwd(),
       CASTLES_REQUIRE_STATIC_DIR: "0",
-  }, spawnTestTimeoutMs);
+    });
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("CASTLES_DEPLOYMENT_MODE=multi-instance is not supported");

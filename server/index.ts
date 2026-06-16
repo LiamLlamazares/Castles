@@ -91,8 +91,12 @@ async function main() {
     healthStorePath,
     store,
     accountStore,
+    spectatorPresenceStore,
+    runtimeEventStore,
+    operationGateStore,
+    rateLimitStore,
     startupMaintenanceStore,
-  } = createOnlineGameStoreFromEnv(process.env);
+  } = createOnlineGameStoreFromEnv(process.env, { runtimeNodeId: config.runtimeNodeId });
 
   let startupComplete = false;
   let runtimeCoordinator: OnlineRuntimeCoordinator | undefined;
@@ -102,7 +106,13 @@ async function main() {
         console.error(`Invalid online event store entry ${line}`, error);
       },
     });
-    runtimeCoordinator = createConfiguredRuntimeCoordinator(config, { startupMaintenanceStore });
+    runtimeCoordinator = createConfiguredRuntimeCoordinator(config, {
+      spectatorPresenceStore,
+      runtimeEventStore,
+      operationGateStore,
+      rateLimitStore,
+      startupMaintenanceStore,
+    });
     await runOnlineStartupMaintenance({
       config,
       runtimeCoordinator,
@@ -233,6 +243,30 @@ async function main() {
         process.exitCode = 1;
       }
       try {
+        await spectatorPresenceStore.close();
+      } catch (error) {
+        console.error("Failed to close online spectator presence store", error);
+        process.exitCode = 1;
+      }
+      try {
+        await runtimeEventStore.close();
+      } catch (error) {
+        console.error("Failed to close online runtime event store", error);
+        process.exitCode = 1;
+      }
+      try {
+        await operationGateStore.close();
+      } catch (error) {
+        console.error("Failed to close online operation gate store", error);
+        process.exitCode = 1;
+      }
+      try {
+        await rateLimitStore.close();
+      } catch (error) {
+        console.error("Failed to close online rate-limit store", error);
+        process.exitCode = 1;
+      }
+      try {
         await startupMaintenanceStore.close();
       } catch (error) {
         console.error("Failed to close online startup maintenance store", error);
@@ -300,6 +334,11 @@ async function main() {
   } catch (error) {
     if (!startupComplete) {
       try {
+        await runtimeCoordinator?.close();
+      } catch (closeError) {
+        console.error("Failed to close online runtime coordinator after startup failure", closeError);
+      }
+      try {
         await store.close();
       } catch (closeError) {
         console.error("Failed to close online game store after startup failure", closeError);
@@ -310,17 +349,41 @@ async function main() {
         console.error("Failed to close online account store after startup failure", closeError);
       }
       try {
+        await spectatorPresenceStore.close();
+      } catch (closeError) {
+        console.error(
+          "Failed to close online spectator presence store after startup failure",
+          closeError
+        );
+      }
+      try {
+        await runtimeEventStore.close();
+      } catch (closeError) {
+        console.error(
+          "Failed to close online runtime event store after startup failure",
+          closeError
+        );
+      }
+      try {
+        await operationGateStore.close();
+      } catch (closeError) {
+        console.error(
+          "Failed to close online operation gate store after startup failure",
+          closeError
+        );
+      }
+      try {
+        await rateLimitStore.close();
+      } catch (closeError) {
+        console.error("Failed to close online rate-limit store after startup failure", closeError);
+      }
+      try {
         await startupMaintenanceStore.close();
       } catch (closeError) {
         console.error(
           "Failed to close online startup maintenance store after startup failure",
           closeError
         );
-      }
-      try {
-        await runtimeCoordinator?.close();
-      } catch (closeError) {
-        console.error("Failed to close online runtime coordinator after startup failure", closeError);
       }
     }
     throw error;

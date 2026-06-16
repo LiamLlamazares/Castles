@@ -31,7 +31,7 @@ export interface ServerDeploymentConfig {
   mode: ServerDeploymentMode;
   multiInstanceReady: false;
   websocketFanout: "process-local";
-  spectatorPresence: "process-local";
+  spectatorPresence: "process-local" | "postgres-live-presence";
   accountPresence: "session-store";
   roomState: "process-local";
   queueGuards: "process-local";
@@ -194,7 +194,7 @@ function parseDeploymentConfig(env: NodeJS.ProcessEnv): ServerDeploymentConfig {
   if (!raw || raw === "single-node") return createSingleNodeDeploymentConfig();
   if (raw === "multi-instance") {
     throw new Error(
-      "CASTLES_DEPLOYMENT_MODE=multi-instance is not supported yet; WebSocket fanout, live spectator presence, room state caches, and in-process queue guards are still process-local."
+      "CASTLES_DEPLOYMENT_MODE=multi-instance is not supported yet; WebSocket fanout, warm room cache invalidation, runtime event polling readiness, full queue coverage, and two-instance validation are incomplete."
     );
   }
   throw new Error("CASTLES_DEPLOYMENT_MODE must be single-node or unset.");

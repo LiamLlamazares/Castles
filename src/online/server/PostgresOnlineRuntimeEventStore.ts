@@ -1,6 +1,8 @@
+import { Pool } from "pg";
 import type { OnlineRuntimeSnapshotReason } from "./onlineRuntimeCoordinator";
 import { normalizeRuntimeNodeId } from "./onlineRuntimeCoordinator";
 import { stringContainsDurableSecret } from "../secretSafety";
+import { resolvePostgresPoolMaxPerStore } from "./postgresPoolConfig";
 
 interface PostgresQueryable {
   query(text: string, values?: unknown[]): Promise<{ rows: any[]; rowCount?: number }>;
@@ -8,7 +10,10 @@ interface PostgresQueryable {
 
 export interface PostgresOnlineRuntimeEventStoreOptions {
   nodeId: string;
-  queryable: PostgresQueryable;
+  connectionString?: string;
+  poolMaxPerStore?: number;
+  queryable?: PostgresQueryable;
+  close?: () => Promise<void>;
 }
 
 export interface PostgresRuntimeGameSnapshotEvent {
@@ -35,6 +40,7 @@ const RUNTIME_SNAPSHOT_REASONS = new Set<OnlineRuntimeSnapshotReason>([
   "open_seek",
   "snapshot",
 ]);
+const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
 
 function normalizeRuntimeSnapshotReason(reason: OnlineRuntimeSnapshotReason): OnlineRuntimeSnapshotReason {
   if (!RUNTIME_SNAPSHOT_REASONS.has(reason)) {
@@ -130,11 +136,32 @@ function rowToRuntimeGameSnapshotEvent(row: any): PostgresRuntimeGameSnapshotEve
 export class PostgresOnlineRuntimeEventStore {
   private readonly nodeId: string;
   private readonly queryable: PostgresQueryable;
+  private readonly closeConnection?: () => Promise<void>;
   private schemaReady?: Promise<void>;
 
   constructor(options: PostgresOnlineRuntimeEventStoreOptions) {
     this.nodeId = normalizeRuntimeNodeId(options.nodeId);
-    this.queryable = options.queryable;
+    if (options.queryable) {
+      this.queryable = options.queryable;
+      this.closeConnection = options.close;
+    } else {
+      if (!options.connectionString) {
+        throw new Error("PostgresOnlineRuntimeEventStore requires a connectionString or queryable.");
+      }
+      const pool = new Pool({
+        connectionString: options.connectionString,
+        max: resolvePostgresPoolMaxPerStore(options.poolMaxPerStore),
+        connectionTimeoutMillis: DEFAULT_POSTGRES_TIMEOUT_MS,
+        query_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
+        statement_timeout: DEFAULT_POSTGRES_TIMEOUT_MS,
+      });
+      this.queryable = pool;
+      this.closeConnection = () => pool.end();
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.closeConnection?.();
   }
 
   async ensureSchema(): Promise<void> {
