@@ -47,6 +47,7 @@ import {
   ONLINE_SEEK_SUMMARY_SCHEMA_VERSION,
   createOpenSeekAcceptedEvent,
   encodeOpenSeekDirectoryCursor,
+  projectOpenSeekSummaries,
   type OpenSeekSummary,
 } from "../../seeks";
 import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
@@ -5028,6 +5029,71 @@ describe("createOnlineHttpServer", () => {
       type: "game_created",
       initialVisibility: "public",
     });
+  });
+
+  it("Quick Match shared session gate wraps active-seek checks and fallback creation", async () => {
+    const setup = createClockedSetup();
+    const order: string[] = [];
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const originalQuickMatchGate = runtimeCoordinator.withQuickMatchSessionGate.bind(runtimeCoordinator);
+    const quickMatchGate = vi
+      .spyOn(runtimeCoordinator, "withQuickMatchSessionGate")
+      .mockImplementation(async (sessionKey, operation) => {
+        order.push(`gate:${sessionKey}`);
+        return originalQuickMatchGate(sessionKey, async () => {
+          order.push("inside-gate");
+          return operation();
+        });
+      });
+    const loadOpenSeekSummaries = vi.fn(async () => {
+      order.push("load-active-seeks");
+      return [];
+    });
+    const listOpenSeekSummaries = vi.fn(async () => {
+      order.push("list-candidates");
+      return {
+        schemaVersion: ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION as typeof ONLINE_SEEK_DIRECTORY_SCHEMA_VERSION,
+        seeks: [],
+      };
+    });
+    const appendOpenSeekCreated = vi.fn(async (event: any) => {
+      order.push("create-fallback-seek");
+      const [summary] = projectOpenSeekSummaries([event]);
+      if (!summary) throw new Error("Open seek summary was not projected.");
+      return summary;
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+      runtimeCoordinator,
+      loadOpenSeekSummaries,
+      listOpenSeekSummaries,
+      appendOpenSeekCreated,
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const quickResponse = await fetch(`http://127.0.0.1:${port}/api/online/matchmaking/quick`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ setup, sessionId: "session_gate" }),
+    });
+    const quick = await quickResponse.json();
+
+    expect(quickResponse.status).toBe(200);
+    expect(quick).toMatchObject({
+      outcome: "waiting",
+      role: "creator",
+      summary: { status: "open" },
+    });
+    expect(quickMatchGate).toHaveBeenCalledWith("session:session_gate", expect.any(Function));
+    expect(order[0]).toBe("gate:session:session_gate");
+    expect(order.indexOf("inside-gate")).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf("load-active-seeks")).toBeGreaterThan(order.indexOf("inside-gate"));
+    expect(order.indexOf("create-fallback-seek")).toBeGreaterThan(order.indexOf("inside-gate"));
+    expect(loadOpenSeekSummaries).toHaveBeenCalled();
+    expect(listOpenSeekSummaries).toHaveBeenCalled();
+    expect(appendOpenSeekCreated).toHaveBeenCalledOnce();
   });
 
   it("quick match scans later open-seek pages before creating a fallback", async () => {

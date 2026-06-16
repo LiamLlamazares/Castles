@@ -38,7 +38,16 @@ export interface OnlineRuntimeCoordinatorCapabilities {
   mode: OnlineRuntimeMode;
   websocketFanout: "process-local";
   spectatorPresence: "process-local" | "postgres-live-presence";
-  operationGates: "process-local";
+  operationGates: "process-local" | "postgres-quick-match-session";
+}
+
+export type OnlineRuntimeOperationGateScope = "quick_match_session";
+
+export interface OnlineRuntimeOperationGateStore {
+  withOperationGate<T>(
+    input: { scope: OnlineRuntimeOperationGateScope; key: string },
+    operation: () => Promise<T>
+  ): Promise<T>;
 }
 
 export interface OnlineRuntimeSpectatorPresenceStore {
@@ -85,6 +94,7 @@ export interface OnlineRuntimeCoordinator {
   removeSpectator(input: { gameId: string; connectionId: string }): Promise<void>;
   countSpectators(gameId: string): Promise<number>;
   withGameOperationGate<T>(gameId: string, operation: () => Promise<T>): Promise<T>;
+  withQuickMatchSessionGate<T>(sessionKey: string, operation: () => Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
 
@@ -136,12 +146,35 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
     (event: OnlineRuntimeGameSnapshotChangedEvent) => void | Promise<void>
   >();
   const spectatorConnections = new Map<string, Set<string>>();
-  const gates = new Map<string, Promise<void>>();
+  const gameGates = new Map<string, Promise<void>>();
+  const quickMatchSessionGates = new Map<string, Promise<void>>();
 
-  const removeGateIfCurrent = (gameId: string, current: Promise<void>): void => {
-    if (gates.get(gameId) === current) {
-      gates.delete(gameId);
+  const runQueuedOperation = async <T>(
+    gates: Map<string, Promise<void>>,
+    key: string,
+    operation: () => Promise<T>
+  ): Promise<T> => {
+    const previous = gates.get(key) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(operation);
+    const settled = next.then(
+      () => undefined,
+      () => undefined
+    );
+    gates.set(key, settled);
+    settled.finally(() => {
+      if (gates.get(key) === settled) {
+        gates.delete(key);
+      }
+    });
+    return next;
+  };
+
+  const validateGateKey = (key: string, label: string): string => {
+    const value = key.trim();
+    if (!value || value.length > 256) {
+      throw new Error(`${label} key must be non-empty and at most 256 characters.`);
     }
+    return value;
   };
 
   return {
@@ -188,20 +221,20 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       return spectatorConnections.get(gameId)?.size ?? 0;
     },
     async withGameOperationGate(gameId, operation) {
-      const previous = gates.get(gameId) ?? Promise.resolve();
-      const next = previous.catch(() => undefined).then(operation);
-      const settled = next.then(
-        () => undefined,
-        () => undefined
+      return runQueuedOperation(gameGates, validateGateKey(gameId, "Game operation"), operation);
+    },
+    async withQuickMatchSessionGate(sessionKey, operation) {
+      return runQueuedOperation(
+        quickMatchSessionGates,
+        validateGateKey(sessionKey, "Quick Match session"),
+        operation
       );
-      gates.set(gameId, settled);
-      settled.finally(() => removeGateIfCurrent(gameId, settled));
-      return next;
     },
     async close() {
       handlers.clear();
       spectatorConnections.clear();
-      gates.clear();
+      gameGates.clear();
+      quickMatchSessionGates.clear();
     },
   };
 }
@@ -283,6 +316,27 @@ export function createPostgresRuntimeEventCoordinator(options: {
           runtimeEventPollInFlight = null;
         }
       }
+    },
+  };
+}
+
+export function createPostgresOperationGateRuntimeCoordinator(options: {
+  nodeId: string;
+  operationGateStore: OnlineRuntimeOperationGateStore;
+}): OnlineRuntimeCoordinator {
+  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+
+  return {
+    ...local,
+    capabilities: {
+      ...local.capabilities,
+      operationGates: "postgres-quick-match-session",
+    },
+    async withQuickMatchSessionGate(sessionKey, operation) {
+      return options.operationGateStore.withOperationGate(
+        { scope: "quick_match_session", key: sessionKey },
+        operation
+      );
     },
   };
 }

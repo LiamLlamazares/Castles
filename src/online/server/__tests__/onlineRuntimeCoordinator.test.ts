@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPostgresOperationGateRuntimeCoordinator,
   createPostgresRuntimeEventCoordinator,
   createPostgresSpectatorPresenceRuntimeCoordinator,
   createSingleNodeOnlineRuntimeCoordinator,
   normalizeRuntimeNodeId,
+  type OnlineRuntimeOperationGateScope,
   type OnlineRuntimeSnapshotReason,
 } from "../onlineRuntimeCoordinator";
 
@@ -125,6 +127,26 @@ class FakeRuntimeEventStore {
   }
 }
 
+class FakeOperationGateStore {
+  readonly calls: Array<{
+    phase: "start" | "end";
+    scope: OnlineRuntimeOperationGateScope;
+    key: string;
+  }> = [];
+
+  async withOperationGate<T>(
+    input: { scope: OnlineRuntimeOperationGateScope; key: string },
+    operation: () => Promise<T>
+  ): Promise<T> {
+    this.calls.push({ phase: "start", ...input });
+    try {
+      return await operation();
+    } finally {
+      this.calls.push({ phase: "end", ...input });
+    }
+  }
+}
+
 describe("normalizeRuntimeNodeId", () => {
   it("accepts short visible operator node ids", () => {
     expect(normalizeRuntimeNodeId(" node-a_01 ")).toBe("node-a_01");
@@ -226,6 +248,65 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
     ]);
 
     expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
+  });
+
+  it("serializes same Quick Match session gate operations locally", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstStarted!: () => void;
+    const firstHasStarted = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+
+    const first = coordinator.withQuickMatchSessionGate("session:player-a", async () => {
+      order.push("first-start");
+      firstStarted();
+      await firstMayFinish;
+      order.push("first-end");
+      return "first";
+    });
+    await firstHasStarted;
+
+    const second = coordinator.withQuickMatchSessionGate("session:player-a", async () => {
+      order.push("second-start");
+      order.push("second-end");
+      return "second";
+    });
+    await Promise.resolve();
+
+    expect(order).toEqual(["first-start"]);
+    releaseFirst();
+    await expect(Promise.all([first, second])).resolves.toEqual(["first", "second"]);
+    expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
+  });
+});
+
+describe("createPostgresOperationGateRuntimeCoordinator", () => {
+  it("delegates Quick Match session gates to a shared operation gate store", async () => {
+    const operationGateStore = new FakeOperationGateStore();
+    const coordinator = createPostgresOperationGateRuntimeCoordinator({
+      nodeId: "node-a",
+      operationGateStore,
+    });
+
+    await expect(
+      coordinator.withQuickMatchSessionGate("account:acct_123", async () => "matched")
+    ).resolves.toBe("matched");
+
+    expect(operationGateStore.calls).toEqual([
+      { phase: "start", scope: "quick_match_session", key: "account:acct_123" },
+      { phase: "end", scope: "quick_match_session", key: "account:acct_123" },
+    ]);
+    expect(coordinator.capabilities).toEqual({
+      mode: "single-node",
+      websocketFanout: "process-local",
+      spectatorPresence: "process-local",
+      operationGates: "postgres-quick-match-session",
+    });
   });
 });
 

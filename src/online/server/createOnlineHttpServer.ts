@@ -1915,7 +1915,6 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const memoryChallengeCredentials = new Map<string, OnlineChallengeCredentials>();
   const memoryOpenSeekEvents: OpenSeekEvent[] = [];
   const memoryOpenSeekCredentials = new Map<string, OpenSeekCredentials>();
-  const quickMatchSessionQueues = new Map<string, Promise<void>>();
   const googleOAuthStateSecret = randomBytes(32).toString("base64url");
   const googleOAuthConfig = normalizeGoogleOAuthProviderConfig(
     options.oauth?.google,
@@ -2200,28 +2199,6 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           status: 500,
           error: { code: "persistence_failed", message: "Challenge target result was incomplete." },
         };
-    }
-  };
-
-  const runQuickMatchForSession = async <T>(
-    sessionId: string,
-    task: () => Promise<T>
-  ): Promise<T> => {
-    const previous = quickMatchSessionQueues.get(sessionId) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const queued = previous.catch(() => undefined).then(() => gate);
-    quickMatchSessionQueues.set(sessionId, queued);
-    await previous.catch(() => undefined);
-    try {
-      return await task();
-    } finally {
-      release();
-      if (quickMatchSessionQueues.get(sessionId) === queued) {
-        quickMatchSessionQueues.delete(sessionId);
-      }
     }
   };
 
@@ -5971,73 +5948,76 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     const setupSignature = canonicalSetupSignature(normalizedSetup);
 
     try {
-      const response = await runQuickMatchForSession(publicPlayerIdentityQueueKey(sessionIdentity.identity), async () => {
-        const checkedAt = new Date(options.now?.() ?? Date.now()).toISOString();
-        if (await loadActiveSeekForSession(sessionIdentity.identity, checkedAt)) {
-          return {
-            status: 409,
-            body: {
-              error: {
-                code: "existing_open_seek",
-                message: "This session already has an active open seek.",
-              },
-            },
-          };
-        }
-
-        const candidates = await listQuickMatchOpenSeekCandidates(accountIdentity.account);
-        for (const candidate of candidates) {
-          if (isSameOpenSeekIdentity(candidate.creatorIdentity, sessionIdentity.identity)) continue;
-          if (canonicalSetupSignature(candidate.setup) !== setupSignature) continue;
-          const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
-          try {
-            const accepted = await acceptOpenSeekSummary(candidate, sessionIdentity.identity, acceptedAt);
+      const response = await runtimeCoordinator.withQuickMatchSessionGate(
+        publicPlayerIdentityQueueKey(sessionIdentity.identity),
+        async () => {
+          const checkedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+          if (await loadActiveSeekForSession(sessionIdentity.identity, checkedAt)) {
             return {
-              status: 200,
+              status: 409,
               body: {
-                ...accepted,
-                outcome: "matched",
+                error: {
+                  code: "existing_open_seek",
+                  message: "This session already has an active open seek.",
+                },
               },
             };
-          } catch (error) {
-            if (openSeekTerminalError(error)) continue;
-            throw error;
           }
-        }
 
-        const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
-        if (await loadActiveSeekForSession(sessionIdentity.identity, createdAt)) {
-          return {
-            status: 409,
-            body: {
-              error: {
-                code: "existing_open_seek",
-                message: "This session already has an active open seek.",
+          const candidates = await listQuickMatchOpenSeekCandidates(accountIdentity.account);
+          for (const candidate of candidates) {
+            if (isSameOpenSeekIdentity(candidate.creatorIdentity, sessionIdentity.identity)) continue;
+            if (canonicalSetupSignature(candidate.setup) !== setupSignature) continue;
+            const acceptedAt = new Date(options.now?.() ?? Date.now()).toISOString();
+            try {
+              const accepted = await acceptOpenSeekSummary(candidate, sessionIdentity.identity, acceptedAt);
+              return {
+                status: 200,
+                body: {
+                  ...accepted,
+                  outcome: "matched",
+                },
+              };
+            } catch (error) {
+              if (openSeekTerminalError(error)) continue;
+              throw error;
+            }
+          }
+
+          const createdAt = new Date(options.now?.() ?? Date.now()).toISOString();
+          if (await loadActiveSeekForSession(sessionIdentity.identity, createdAt)) {
+            return {
+              status: 409,
+              body: {
+                error: {
+                  code: "existing_open_seek",
+                  message: "This session already has an active open seek.",
+                },
               },
+            };
+          }
+          const created = await createOpenSeekForIdentity(
+            normalizedSetup,
+            "random",
+            sessionIdentity.identity,
+            "public",
+            undefined,
+            expiry.value,
+            createdAt
+          );
+          return {
+            status: 200,
+            body: {
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              outcome: "waiting",
+              role: "creator",
+              seekId: created.seekId,
+              summary: redactOpenSeekSummary(created.summary),
+              creator: { token: created.token },
             },
           };
         }
-        const created = await createOpenSeekForIdentity(
-          normalizedSetup,
-          "random",
-          sessionIdentity.identity,
-          "public",
-          undefined,
-          expiry.value,
-          createdAt
-        );
-        return {
-          status: 200,
-          body: {
-            protocolVersion: ONLINE_PROTOCOL_VERSION,
-            outcome: "waiting",
-            role: "creator",
-            seekId: created.seekId,
-            summary: redactOpenSeekSummary(created.summary),
-            creator: { token: created.token },
-          },
-        };
-      });
+      );
       res.status(response.status).json(response.body);
     } catch (error) {
       console.error("Failed to start quick match", error);
