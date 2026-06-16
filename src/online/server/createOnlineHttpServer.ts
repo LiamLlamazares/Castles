@@ -207,10 +207,15 @@ import {
   createSingleNodeDeploymentConfig,
   type ServerDeploymentConfig,
 } from "./serverRuntimeConfig";
+import {
+  createGeneratedRuntimeNodeId,
+  createSingleNodeOnlineRuntimeCoordinator,
+  type OnlineRuntimeCoordinator,
+} from "./onlineRuntimeCoordinator";
 
 type OnlineConnection =
   | { role: "player"; gameId: string; token: string }
-  | { role: "spectator"; gameId: string };
+  | { role: "spectator"; gameId: string; spectatorConnectionId?: string };
 
 export type OnlineServerLogEvent = {
   event: string;
@@ -354,6 +359,7 @@ export interface CreateOnlineHttpServerOptions {
   listGameSummaries?: (
     options: OnlineGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
+  runtimeCoordinator?: OnlineRuntimeCoordinator;
   listPersonalGameSummaries?: (
     options: OnlinePersonalGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
@@ -1883,9 +1889,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   const accountStore = options.accountStore ?? new MemoryOnlineAccountStore();
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
+  const runtimeCoordinator =
+    options.runtimeCoordinator ??
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: createGeneratedRuntimeNodeId() });
   const connections = new Map<WebSocket, OnlineConnection>();
   const disconnectedSockets = new WeakSet<WebSocket>();
-  const actionQueues = new Map<string, Promise<void>>();
   const createGameLimiter = new FixedWindowRateLimiter(20, 60_000);
   const accountCreateLimiter = new FixedWindowRateLimiter(10, 60_000);
   const accountAuthLimiter = new FixedWindowRateLimiter(30, 60_000);
@@ -2258,6 +2266,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       reason,
     });
     connections.delete(socket);
+    if (connection?.role === "spectator" && connection.spectatorConnectionId) {
+      runtimeCoordinator
+        .removeSpectator({
+          gameId: connection.gameId,
+          connectionId: connection.spectatorConnectionId,
+        })
+        .catch(() => undefined);
+    }
   };
 
   const closeStalePlayerSocket = (socket: WebSocket, connection: Extract<OnlineConnection, { role: "player" }>): void => {
@@ -2290,26 +2306,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
   };
 
   const enqueueGameAction = (gameId: string, operation: () => Promise<void>): Promise<void> => {
-    const previous = actionQueues.get(gameId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(operation);
-    const settled = next.catch(() => undefined);
-    actionQueues.set(gameId, settled);
-    settled.finally(() => {
-      if (actionQueues.get(gameId) === settled) {
-        actionQueues.delete(gameId);
-      }
-    });
-    return next;
+    return runtimeCoordinator.withGameOperationGate(gameId, operation);
   };
 
-  const countConnectedSpectators = (gameId: string): number => {
-    let count = 0;
-    for (const connection of connections.values()) {
-      if (connection.role === "spectator" && connection.gameId === gameId) {
-        count += 1;
-      }
-    }
-    return count;
+  const countConnectedSpectators = async (gameId: string): Promise<number> => {
+    return runtimeCoordinator.countSpectators(gameId);
   };
 
   const stripLiveResponseFields = (summary: OnlineGameSummary): OnlineGameSummary => {
@@ -2325,11 +2326,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return { ...summary, livePreview };
   };
 
-  const withLiveServerPresence = (summary: OnlineGameSummary): OnlineGameSummary => {
+  const withLiveServerPresence = async (summary: OnlineGameSummary): Promise<OnlineGameSummary> => {
     const base = stripLiveResponseFields(summary);
     if (base.status !== "active") return base;
 
-    const spectatorCount = countConnectedSpectators(base.gameId);
+    const spectatorCount = await countConnectedSpectators(base.gameId);
     const clock = base.livePreview.clock
       ? {
           ...base.livePreview.clock,
@@ -2348,11 +2349,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     };
   };
 
-  const withLiveServerPresenceDirectory = (
+  const withLiveServerPresenceDirectory = async (
     response: OnlineGameDirectoryResponse
-  ): OnlineGameDirectoryResponse => ({
+  ): Promise<OnlineGameDirectoryResponse> => ({
     ...response,
-    games: response.games.map(withLiveServerPresence),
+    games: await Promise.all(response.games.map(withLiveServerPresence)),
   });
 
   const loadValidatedSummaryForGame = async (
@@ -2375,7 +2376,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       if (!validation.ok) {
         return { ok: false, reason: "summary_invalid" };
       }
-      return { ok: true, summary: withLiveServerPresence(validation.value) };
+      return { ok: true, summary: await withLiveServerPresence(validation.value) };
     }
 
     if (!options.loadGameSummaries) return { ok: true, summary: null };
@@ -2394,7 +2395,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       if (!validation.ok) {
         return { ok: false, reason: "summary_invalid" };
       }
-      return { ok: true, summary: withLiveServerPresence(validation.value) };
+      return { ok: true, summary: await withLiveServerPresence(validation.value) };
     }
     return { ok: true, summary: null };
   };
@@ -2446,7 +2447,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       if (validation.value.games.some((summary) => !canListOnlineGameSummary(summary))) {
         throw new Error("Public directory returned a hidden game summary.");
       }
-      return withLiveServerPresenceDirectory(validation.value);
+      return await withLiveServerPresenceDirectory(validation.value);
     }
 
     const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
@@ -2459,7 +2460,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
       return validation.value;
     });
-    return withLiveServerPresenceDirectory(paginateDirectorySummaries(validated, directoryOptions));
+    return await withLiveServerPresenceDirectory(paginateDirectorySummaries(validated, directoryOptions));
   };
 
   const listPersonalGameDirectory = async (
@@ -2480,7 +2481,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       ) {
         throw new Error("Personal history returned a game for a different identity.");
       }
-      return withLiveServerPresenceDirectory(validation.value);
+      return await withLiveServerPresenceDirectory(validation.value);
     }
 
     const summaries = options.loadGameSummaries ? await options.loadGameSummaries() : [];
@@ -2493,7 +2494,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       }
       return validation.value;
     });
-    return withLiveServerPresenceDirectory(
+    return await withLiveServerPresenceDirectory(
       paginatePersonalDirectorySummaries(validated, directoryOptions)
     );
   };
@@ -7067,7 +7068,14 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
-        connections.set(socket, { role: "spectator", gameId: message.gameId });
+        const spectatorPresence = await runtimeCoordinator.registerSpectator({
+          gameId: message.gameId,
+        });
+        connections.set(socket, {
+          role: "spectator",
+          gameId: message.gameId,
+          spectatorConnectionId: spectatorPresence.connectionId,
+        });
         log({
           event: "online.socket.spectate",
           gameId: message.gameId,

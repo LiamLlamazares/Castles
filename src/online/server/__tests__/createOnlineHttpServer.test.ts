@@ -18,6 +18,7 @@ import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import { OnlineGameSeatCredentialTerminalError } from "../OnlineGameStore";
 import { MemoryOnlineAccountStore } from "../OnlineAccountStore";
 import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
+import { createSingleNodeOnlineRuntimeCoordinator } from "../onlineRuntimeCoordinator";
 import {
   createChallengeAcceptedEvent,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
@@ -7602,7 +7603,7 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(secretQueryBody)).not.toContain("value");
   });
 
-  it("decorates public game summaries with current connected spectator counts", async () => {
+  it("uses the runtime coordinator to decorate public game summaries with current connected spectator counts", async () => {
     const service = new OnlineGameService({
       idFactory: () => "game_watched_presence_http",
       tokenFactory: (seat) => `${seat}-token`,
@@ -7611,9 +7612,12 @@ describe("createOnlineHttpServer", () => {
       publicBaseUrl: "https://castles.example",
     });
     const publicSummary = summaryForGame(created.gameId, "public");
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const countSpectators = vi.spyOn(runtimeCoordinator, "countSpectators");
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       service,
+      runtimeCoordinator,
       now: () => 12_345,
       loadGameSummaries: async () => [
         {
@@ -7666,6 +7670,7 @@ describe("createOnlineHttpServer", () => {
       expect(summaryResponse.status).toBe(200);
       expect(directoryBody.games[0].livePreview.spectatorCount).toBe(1);
       expect(summaryBody.summary.livePreview.spectatorCount).toBe(1);
+      expect(countSpectators).toHaveBeenCalledWith(created.gameId);
       expect(directoryBody.games[0].livePreview.clock.serverNow).toBe(12_345);
       expect(summaryBody.summary.livePreview.clock.serverNow).toBe(12_345);
     } finally {
