@@ -17,6 +17,7 @@ import {
   hashOnlineToken,
   verifyOnlineToken,
 } from "../src/online/server/onlineTokenCredentials";
+import { runOnlineStartupMaintenance } from "./startupMaintenance";
 
 function resolveOnce<T>(settle: (resolve: (value: T) => void, reject: (error: unknown) => void) => void): Promise<T> {
   let settled = false;
@@ -85,9 +86,13 @@ function isLoopbackAddress(address: string | undefined): boolean {
 async function main() {
   const config = parseServerRuntimeConfig(process.env, process.cwd());
   assertServerRuntimeFiles(config);
-  const { backend: storeBackend, healthStorePath, store, accountStore } = createOnlineGameStoreFromEnv(
-    process.env
-  );
+  const {
+    backend: storeBackend,
+    healthStorePath,
+    store,
+    accountStore,
+    startupMaintenanceStore,
+  } = createOnlineGameStoreFromEnv(process.env);
 
   let startupComplete = false;
   let runtimeCoordinator: OnlineRuntimeCoordinator | undefined;
@@ -97,18 +102,18 @@ async function main() {
         console.error(`Invalid online event store entry ${line}`, error);
       },
     });
-    await store.rebuildSummaries({
-      onEventError: (line, error) => {
+    runtimeCoordinator = createConfiguredRuntimeCoordinator(config, { startupMaintenanceStore });
+    await runOnlineStartupMaintenance({
+      config,
+      runtimeCoordinator,
+      store,
+      onGameEventError: (line, error) => {
         console.error(`Invalid online event store entry ${line}`, error);
       },
-    });
-    await store.rebuildChallengeSummaries({
-      onEventError: (line, error) => {
+      onChallengeEventError: (line, error) => {
         console.error(`Invalid online challenge event store entry ${line}`, error);
       },
-    });
-    await store.rebuildOpenSeekSummaries({
-      onEventError: (line, error) => {
+      onOpenSeekEventError: (line, error) => {
         console.error(`Invalid online seek event store entry ${line}`, error);
       },
     });
@@ -116,7 +121,6 @@ async function main() {
       credentialFactory: hashOnlineToken,
       verifyToken: verifyOnlineToken,
     });
-    runtimeCoordinator = createConfiguredRuntimeCoordinator(config);
     const { app, server, wss } = createOnlineHttpServer({
       publicBaseUrl: config.publicBaseUrl,
       service,
@@ -228,6 +232,12 @@ async function main() {
         console.error("Failed to close online account store", error);
         process.exitCode = 1;
       }
+      try {
+        await startupMaintenanceStore.close();
+      } catch (error) {
+        console.error("Failed to close online startup maintenance store", error);
+        process.exitCode = 1;
+      }
     };
 
     if (config.localShutdownEnabled && config.localShutdownToken) {
@@ -298,6 +308,14 @@ async function main() {
         await accountStore.close?.();
       } catch (closeError) {
         console.error("Failed to close online account store after startup failure", closeError);
+      }
+      try {
+        await startupMaintenanceStore.close();
+      } catch (closeError) {
+        console.error(
+          "Failed to close online startup maintenance store after startup failure",
+          closeError
+        );
       }
       try {
         await runtimeCoordinator?.close();

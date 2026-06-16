@@ -50,6 +50,7 @@ export interface OnlineRuntimeCoordinatorCapabilities {
   websocketFanout: "process-local";
   spectatorPresence: "process-local" | "postgres-live-presence";
   operationGates: "process-local" | "postgres-selected-shared-gates";
+  startupMaintenance: "process-local" | "postgres-once-per-run";
 }
 
 export type OnlineRuntimeOperationGateScope =
@@ -61,6 +62,17 @@ export interface OnlineRuntimeOperationGateStore {
     input: { scope: OnlineRuntimeOperationGateScope; key: string },
     operation: () => Promise<T>
   ): Promise<T>;
+}
+
+export type OnlineRuntimeStartupMaintenanceResult<T> =
+  | { status: "completed"; value: T }
+  | { status: "already_completed" };
+
+export interface OnlineRuntimeStartupMaintenanceStore {
+  runStartupMaintenance<T>(
+    input: { taskKey: string; runKey: string; nodeId: string },
+    operation: () => Promise<T>
+  ): Promise<OnlineRuntimeStartupMaintenanceResult<T>>;
 }
 
 export interface OnlineRuntimeSpectatorPresenceStore {
@@ -111,6 +123,10 @@ export interface OnlineRuntimeCoordinator {
   withGameOperationGate<T>(gameId: string, operation: () => Promise<T>): Promise<T>;
   withQuickMatchSessionGate<T>(sessionKey: string, operation: () => Promise<T>): Promise<T>;
   withAccountChallengePairGate<T>(pairKey: string, operation: () => Promise<T>): Promise<T>;
+  runStartupMaintenance<T>(
+    input: { taskKey: string; runKey: string },
+    operation: () => Promise<T>
+  ): Promise<OnlineRuntimeStartupMaintenanceResult<T>>;
   close(): Promise<void>;
 }
 
@@ -165,6 +181,7 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
   const gameGates = new Map<string, Promise<void>>();
   const quickMatchSessionGates = new Map<string, Promise<void>>();
   const accountChallengePairGates = new Map<string, Promise<void>>();
+  const startupMaintenanceGates = new Map<string, Promise<void>>();
   let drainState: OnlineRuntimeDrainState = { draining: false };
 
   const runQueuedOperation = async <T>(
@@ -202,6 +219,7 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "process-local",
+      startupMaintenance: "process-local",
     },
     async publishGameSnapshotChanged(event) {
       for (const handler of Array.from(handlers)) {
@@ -268,12 +286,21 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
         operation
       );
     },
+    async runStartupMaintenance({ taskKey, runKey }, operation) {
+      const gateKey = `${validateGateKey(taskKey, "Startup maintenance task")}\u0000${validateGateKey(
+        runKey,
+        "Startup maintenance run"
+      )}`;
+      const value = await runQueuedOperation(startupMaintenanceGates, gateKey, operation);
+      return { status: "completed", value };
+    },
     async close() {
       handlers.clear();
       spectatorConnections.clear();
       gameGates.clear();
       quickMatchSessionGates.clear();
       accountChallengePairGates.clear();
+      startupMaintenanceGates.clear();
     },
   };
 }
@@ -380,6 +407,31 @@ export function createPostgresOperationGateRuntimeCoordinator(options: {
     async withAccountChallengePairGate(pairKey, operation) {
       return options.operationGateStore.withOperationGate(
         { scope: "account_challenge_pair", key: pairKey },
+        operation
+      );
+    },
+  };
+}
+
+export function createPostgresStartupMaintenanceRuntimeCoordinator(options: {
+  nodeId: string;
+  startupMaintenanceStore: OnlineRuntimeStartupMaintenanceStore;
+}): OnlineRuntimeCoordinator {
+  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+
+  return {
+    ...local,
+    capabilities: {
+      ...local.capabilities,
+      startupMaintenance: "postgres-once-per-run",
+    },
+    async runStartupMaintenance(input, operation) {
+      return options.startupMaintenanceStore.runStartupMaintenance(
+        {
+          taskKey: input.taskKey,
+          runKey: input.runKey,
+          nodeId: local.nodeId,
+        },
         operation
       );
     },

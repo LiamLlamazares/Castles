@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   createPostgresOperationGateRuntimeCoordinator,
   createPostgresRuntimeEventCoordinator,
+  createPostgresStartupMaintenanceRuntimeCoordinator,
   createPostgresSpectatorPresenceRuntimeCoordinator,
   createSingleNodeOnlineRuntimeCoordinator,
   normalizeRuntimeNodeId,
   type OnlineRuntimeOperationGateScope,
   type OnlineRuntimeSnapshotReason,
+  type OnlineRuntimeStartupMaintenanceResult,
 } from "../onlineRuntimeCoordinator";
 
 const HASHED_ACCOUNT_CHALLENGE_PAIR_KEY =
@@ -150,6 +152,26 @@ class FakeOperationGateStore {
   }
 }
 
+class FakeStartupMaintenanceStore {
+  readonly calls: Array<{
+    taskKey: string;
+    runKey: string;
+    nodeId: string;
+  }> = [];
+  nextResult: OnlineRuntimeStartupMaintenanceResult<unknown> | null = null;
+
+  async runStartupMaintenance<T>(
+    input: { taskKey: string; runKey: string; nodeId: string },
+    operation: () => Promise<T>
+  ): Promise<OnlineRuntimeStartupMaintenanceResult<T>> {
+    this.calls.push(input);
+    if (this.nextResult) {
+      return this.nextResult as OnlineRuntimeStartupMaintenanceResult<T>;
+    }
+    return { status: "completed", value: await operation() };
+  }
+}
+
 describe("normalizeRuntimeNodeId", () => {
   it("accepts short visible operator node ids", () => {
     expect(normalizeRuntimeNodeId(" node-a_01 ")).toBe("node-a_01");
@@ -173,6 +195,7 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "process-local",
+      startupMaintenance: "process-local",
     });
   });
 
@@ -357,6 +380,49 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
     await expect(Promise.all([first, second])).resolves.toEqual(["first", "second"]);
     expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
   });
+
+  it("serializes same startup maintenance task locally while still executing each local call", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstStarted!: () => void;
+    const firstHasStarted = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+
+    const first = coordinator.runStartupMaintenance(
+      { taskKey: "startup_summary_rebuilds", runKey: "commit:one" },
+      async () => {
+        order.push("first-start");
+        firstStarted();
+        await firstMayFinish;
+        order.push("first-end");
+        return "first";
+      }
+    );
+    await firstHasStarted;
+
+    const second = coordinator.runStartupMaintenance(
+      { taskKey: "startup_summary_rebuilds", runKey: "commit:one" },
+      async () => {
+        order.push("second-start");
+        order.push("second-end");
+        return "second";
+      }
+    );
+    await Promise.resolve();
+
+    expect(order).toEqual(["first-start"]);
+    releaseFirst();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { status: "completed", value: "first" },
+      { status: "completed", value: "second" },
+    ]);
+    expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
+  });
 });
 
 describe("createPostgresOperationGateRuntimeCoordinator", () => {
@@ -396,7 +462,68 @@ describe("createPostgresOperationGateRuntimeCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "postgres-selected-shared-gates",
+      startupMaintenance: "process-local",
     });
+  });
+});
+
+describe("createPostgresStartupMaintenanceRuntimeCoordinator", () => {
+  it("delegates startup maintenance ownership to a PostgreSQL-backed store", async () => {
+    const startupMaintenanceStore = new FakeStartupMaintenanceStore();
+    const coordinator = createPostgresStartupMaintenanceRuntimeCoordinator({
+      nodeId: "node-a",
+      startupMaintenanceStore,
+    });
+
+    await expect(
+      coordinator.runStartupMaintenance(
+        {
+          taskKey: "startup_summary_rebuilds",
+          runKey: "commit:0123456789abcdef0123456789abcdef01234567",
+        },
+        async () => "rebuilt"
+      )
+    ).resolves.toEqual({ status: "completed", value: "rebuilt" });
+
+    expect(startupMaintenanceStore.calls).toEqual([
+      {
+        taskKey: "startup_summary_rebuilds",
+        runKey: "commit:0123456789abcdef0123456789abcdef01234567",
+        nodeId: "node-a",
+      },
+    ]);
+    expect(coordinator.capabilities).toEqual({
+      mode: "single-node",
+      websocketFanout: "process-local",
+      spectatorPresence: "process-local",
+      operationGates: "process-local",
+      startupMaintenance: "postgres-once-per-run",
+    });
+  });
+
+  it("does not run the local operation when startup maintenance is already complete", async () => {
+    const startupMaintenanceStore = new FakeStartupMaintenanceStore();
+    startupMaintenanceStore.nextResult = { status: "already_completed" };
+    const coordinator = createPostgresStartupMaintenanceRuntimeCoordinator({
+      nodeId: "node-a",
+      startupMaintenanceStore,
+    });
+    const operations: string[] = [];
+
+    await expect(
+      coordinator.runStartupMaintenance(
+        {
+          taskKey: "startup_summary_rebuilds",
+          runKey: "commit:0123456789abcdef0123456789abcdef01234567",
+        },
+        async () => {
+          operations.push("should-not-run");
+          return "rebuilt";
+        }
+      )
+    ).resolves.toEqual({ status: "already_completed" });
+
+    expect(operations).toEqual([]);
   });
 });
 
@@ -420,6 +547,7 @@ describe("createPostgresSpectatorPresenceRuntimeCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "postgres-live-presence",
       operationGates: "process-local",
+      startupMaintenance: "process-local",
     });
     expect(await nodeA.countSpectators("game_123")).toBe(2);
     await nodeA.removeSpectator({ gameId: "game_123", connectionId: first.connectionId });
@@ -527,6 +655,7 @@ describe("createPostgresRuntimeEventCoordinator", () => {
       websocketFanout: "process-local",
       spectatorPresence: "process-local",
       operationGates: "process-local",
+      startupMaintenance: "process-local",
     });
   });
 

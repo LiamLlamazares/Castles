@@ -11,8 +11,25 @@ describe("server runtime coordinator wiring", () => {
     const source = readServerIndex();
 
     expect(source).toContain("createConfiguredRuntimeCoordinator");
-    expect(source).toMatch(/runtimeCoordinator\s*=\s*createConfiguredRuntimeCoordinator\(config\)/);
+    expect(source).toMatch(
+      /runtimeCoordinator\s*=\s*createConfiguredRuntimeCoordinator\(config,\s*\{\s*startupMaintenanceStore\s*,?\s*\}\)/
+    );
     expect(source).toMatch(/createOnlineHttpServer\(\{[\s\S]*runtimeCoordinator,/);
+  });
+
+  it("runs startup maintenance through the configured runtime coordinator before service creation", () => {
+    const source = readServerIndex();
+    const coordinatorIndex = source.indexOf(
+      "runtimeCoordinator = createConfiguredRuntimeCoordinator(config, { startupMaintenanceStore })"
+    );
+    const maintenanceIndex = source.indexOf("runOnlineStartupMaintenance({");
+    const serviceIndex = source.indexOf("OnlineGameService.fromRecords(records");
+    const directSummaryRebuildIndex = source.indexOf("await store.rebuildSummaries({");
+
+    expect(coordinatorIndex).toBeGreaterThan(-1);
+    expect(maintenanceIndex).toBeGreaterThan(coordinatorIndex);
+    expect(maintenanceIndex).toBeLessThan(serviceIndex);
+    expect(directSummaryRebuildIndex).toBe(-1);
   });
 
   it("marks the runtime coordinator draining before closing network listeners", () => {

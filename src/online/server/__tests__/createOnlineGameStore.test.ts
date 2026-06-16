@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PostgresOnlineAccountStore } from "../PostgresOnlineAccountStore";
 import { PostgresOnlineGameStore } from "../PostgresOnlineGameStore";
+import { PostgresOnlineStartupMaintenanceStore } from "../PostgresOnlineStartupMaintenanceStore";
 import { createOnlineGameStoreFromEnv } from "../createOnlineGameStore";
 
 const postgresPoolOptions = vi.hoisted(() => [] as Array<Record<string, unknown>>);
@@ -32,6 +33,7 @@ describe("createOnlineGameStoreFromEnv", () => {
     expect(configured.postgresPoolMaxPerStore).toBe(5);
     expect(configured.store).toBeInstanceOf(PostgresOnlineGameStore);
     expect(configured.accountStore).toBeInstanceOf(PostgresOnlineAccountStore);
+    expect(configured.startupMaintenanceStore).toBeInstanceOf(PostgresOnlineStartupMaintenanceStore);
   });
 
   it("uses the bounded default pool max when PostgreSQL stores are constructed directly", () => {
@@ -39,11 +41,13 @@ describe("createOnlineGameStoreFromEnv", () => {
 
     const gameStore = new PostgresOnlineGameStore({ connectionString });
     const accountStore = new PostgresOnlineAccountStore({ connectionString });
+    const startupMaintenanceStore = new PostgresOnlineStartupMaintenanceStore({ connectionString });
 
     expect(gameStore).toBeInstanceOf(PostgresOnlineGameStore);
     expect(accountStore).toBeInstanceOf(PostgresOnlineAccountStore);
-    expect(postgresPoolOptions).toHaveLength(2);
-    expect(postgresPoolOptions.map((options) => options.max)).toEqual([5, 5]);
+    expect(startupMaintenanceStore).toBeInstanceOf(PostgresOnlineStartupMaintenanceStore);
+    expect(postgresPoolOptions).toHaveLength(3);
+    expect(postgresPoolOptions.map((options) => options.max)).toEqual([5, 5, 5]);
   });
 
   it("rejects unsafe direct PostgreSQL store pool max values", () => {
@@ -56,6 +60,9 @@ describe("createOnlineGameStoreFromEnv", () => {
       expect(() => new PostgresOnlineAccountStore({ connectionString, poolMaxPerStore })).toThrow(
         /poolMaxPerStore/
       );
+      expect(() =>
+        new PostgresOnlineStartupMaintenanceStore({ connectionString, poolMaxPerStore })
+      ).toThrow(/poolMaxPerStore/);
     }
   });
 
@@ -67,6 +74,7 @@ describe("createOnlineGameStoreFromEnv", () => {
     });
 
     expect(configured.postgresPoolMaxPerStore).toBe(7);
+    expect(postgresPoolOptions.map((options) => options.max)).toEqual([7, 7, 7]);
   });
 
   it("rejects unsafe PostgreSQL pool max values before creating stores", () => {
