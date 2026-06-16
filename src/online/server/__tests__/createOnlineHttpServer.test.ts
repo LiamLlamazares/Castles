@@ -7673,6 +7673,52 @@ describe("createOnlineHttpServer", () => {
       expect(countSpectators).toHaveBeenCalledWith(created.gameId);
       expect(directoryBody.games[0].livePreview.clock.serverNow).toBe(12_345);
       expect(summaryBody.summary.livePreview.clock.serverNow).toBe(12_345);
+
+      const repeatedSpectating = nextSocketMessage(socket, "repeat spectator presence join");
+      socket.send(
+        JSON.stringify(versionedMessage({ type: "spectate", gameId: created.gameId }))
+      );
+      await expect(repeatedSpectating).resolves.toMatchObject({ type: "spectating" });
+
+      const repeatedSummaryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}/summary`
+      );
+      const repeatedSummaryBody = await repeatedSummaryResponse.json();
+
+      expect(repeatedSummaryResponse.status).toBe(200);
+      expect(repeatedSummaryBody.summary.livePreview.spectatorCount).toBe(1);
+
+      const joined = nextSocketMessage(socket, "spectator role change to player join");
+      socket.send(
+        JSON.stringify(
+          versionedMessage({
+            type: "join",
+            gameId: created.gameId,
+            token: created.white.token,
+          })
+        )
+      );
+      await expect(joined).resolves.toMatchObject({ type: "joined", color: "w" });
+
+      const joinedSummaryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}/summary`
+      );
+      const joinedSummaryBody = await joinedSummaryResponse.json();
+
+      expect(joinedSummaryResponse.status).toBe(200);
+      expect(joinedSummaryBody.summary.livePreview.spectatorCount).toBeUndefined();
+
+      const closed = waitForSocketClose(socket);
+      socket.close();
+      await closed;
+
+      const closedSummaryResponse = await fetch(
+        `http://127.0.0.1:${port}/api/online/games/${created.gameId}/summary`
+      );
+      const closedSummaryBody = await closedSummaryResponse.json();
+
+      expect(closedSummaryResponse.status).toBe(200);
+      expect(closedSummaryBody.summary.livePreview.spectatorCount).toBeUndefined();
     } finally {
       socket.close();
     }

@@ -6,10 +6,12 @@ import type { WebSocketServer } from "ws";
 import { createOnlineHttpServer } from "../src/online/server/createOnlineHttpServer";
 import { createOnlineGameStoreFromEnv } from "../src/online/server/createOnlineGameStore";
 import { formatOnlineServerLogEvent } from "../src/online/server/onlineServerLogging";
+import type { OnlineRuntimeCoordinator } from "../src/online/server/onlineRuntimeCoordinator";
 import {
   assertServerRuntimeFiles,
   parseServerRuntimeConfig,
 } from "../src/online/server/serverRuntimeConfig";
+import { createConfiguredRuntimeCoordinator } from "./runtimeCoordinator";
 import { OnlineGameService } from "../src/online/OnlineGameService";
 import {
   hashOnlineToken,
@@ -88,6 +90,7 @@ async function main() {
   );
 
   let startupComplete = false;
+  let runtimeCoordinator: OnlineRuntimeCoordinator | undefined;
   try {
     const records = await store.load({
       onEventError: (line, error) => {
@@ -113,9 +116,11 @@ async function main() {
       credentialFactory: hashOnlineToken,
       verifyToken: verifyOnlineToken,
     });
+    runtimeCoordinator = createConfiguredRuntimeCoordinator(config);
     const { app, server, wss } = createOnlineHttpServer({
       publicBaseUrl: config.publicBaseUrl,
       service,
+      runtimeCoordinator,
       onGameCreated: (event, credentials) => store.appendGameCreated(event, credentials),
       onGameEvent: (event) => {
         if (event.type === "game_created") {
@@ -198,6 +203,12 @@ async function main() {
       }
 
       try {
+        await runtimeCoordinator?.close();
+      } catch (error) {
+        console.error("Failed to close online runtime coordinator", error);
+        process.exitCode = 1;
+      }
+      try {
         await store.close();
       } catch (error) {
         console.error("Failed to close online game store", error);
@@ -279,6 +290,11 @@ async function main() {
         await accountStore.close?.();
       } catch (closeError) {
         console.error("Failed to close online account store after startup failure", closeError);
+      }
+      try {
+        await runtimeCoordinator?.close();
+      } catch (closeError) {
+        console.error("Failed to close online runtime coordinator after startup failure", closeError);
       }
     }
     throw error;

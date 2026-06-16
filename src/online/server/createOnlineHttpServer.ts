@@ -2254,6 +2254,22 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   };
 
+  const releaseSpectatorPresence = (connection: OnlineConnection | undefined): void => {
+    if (connection?.role === "spectator" && connection.spectatorConnectionId) {
+      runtimeCoordinator
+        .removeSpectator({
+          gameId: connection.gameId,
+          connectionId: connection.spectatorConnectionId,
+        })
+        .catch(() => undefined);
+    }
+  };
+
+  const setSocketConnection = (socket: WebSocket, connection: OnlineConnection): void => {
+    releaseSpectatorPresence(connections.get(socket));
+    connections.set(socket, connection);
+  };
+
   const logSocketDisconnect = (socket: WebSocket, reason?: string): void => {
     if (disconnectedSockets.has(socket)) return;
     disconnectedSockets.add(socket);
@@ -2266,14 +2282,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       reason,
     });
     connections.delete(socket);
-    if (connection?.role === "spectator" && connection.spectatorConnectionId) {
-      runtimeCoordinator
-        .removeSpectator({
-          gameId: connection.gameId,
-          connectionId: connection.spectatorConnectionId,
-        })
-        .catch(() => undefined);
-    }
+    releaseSpectatorPresence(connection);
   };
 
   const closeStalePlayerSocket = (socket: WebSocket, connection: Extract<OnlineConnection, { role: "player" }>): void => {
@@ -7002,7 +7011,11 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
           return;
         }
 
-        connections.set(socket, { role: "player", gameId: message.gameId, token: message.token });
+        setSocketConnection(socket, {
+          role: "player",
+          gameId: message.gameId,
+          token: message.token,
+        });
         log({
           event: "online.socket.join",
           gameId: message.gameId,
@@ -7071,7 +7084,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         const spectatorPresence = await runtimeCoordinator.registerSpectator({
           gameId: message.gameId,
         });
-        connections.set(socket, {
+        setSocketConnection(socket, {
           role: "spectator",
           gameId: message.gameId,
           spectatorConnectionId: spectatorPresence.connectionId,
