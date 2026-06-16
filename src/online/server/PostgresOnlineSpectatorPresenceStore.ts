@@ -9,7 +9,6 @@ interface PostgresQueryable {
 export interface PostgresOnlineSpectatorPresenceStoreOptions {
   nodeId: string;
   queryable: PostgresQueryable;
-  now?: () => number;
   presenceTtlMs?: number;
   connectionIdFactory?: () => string;
 }
@@ -62,7 +61,6 @@ function rowToRegistration(row: any): PostgresSpectatorPresenceRegistration {
 export class PostgresOnlineSpectatorPresenceStore {
   private readonly nodeId: string;
   private readonly queryable: PostgresQueryable;
-  private readonly now: () => number;
   private readonly presenceTtlMs: number;
   private readonly connectionIdFactory: () => string;
   private schemaReady?: Promise<void>;
@@ -70,7 +68,6 @@ export class PostgresOnlineSpectatorPresenceStore {
   constructor(options: PostgresOnlineSpectatorPresenceStoreOptions) {
     this.nodeId = normalizeRuntimeNodeId(options.nodeId);
     this.queryable = options.queryable;
-    this.now = options.now ?? Date.now;
     this.presenceTtlMs = options.presenceTtlMs ?? DEFAULT_SPECTATOR_PRESENCE_TTL_MS;
     this.connectionIdFactory =
       options.connectionIdFactory ??
@@ -91,7 +88,6 @@ export class PostgresOnlineSpectatorPresenceStore {
   async registerSpectator(input: { gameId: string }): Promise<PostgresSpectatorPresenceRegistration> {
     await this.ensureSchema();
     const connectionId = normalizeSpectatorConnectionId(this.connectionIdFactory());
-    const expiresAt = this.nextExpiryIso();
     const result = await this.queryable.query(
       `
         INSERT INTO online_spectator_presence (
@@ -101,7 +97,7 @@ export class PostgresOnlineSpectatorPresenceStore {
           expires_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, now())
+        VALUES ($1, $2, $3, now() + ($4::int * interval '1 millisecond'), now())
         ON CONFLICT (node_id, connection_id) DO UPDATE
         SET
           game_id = EXCLUDED.game_id,
@@ -109,7 +105,7 @@ export class PostgresOnlineSpectatorPresenceStore {
           updated_at = now()
         RETURNING node_id, connection_id, game_id, expires_at
       `,
-      [this.nodeId, connectionId, input.gameId, expiresAt]
+      [this.nodeId, connectionId, input.gameId, this.presenceTtlMs]
     );
     return rowToRegistration(result.rows[0]);
   }
@@ -120,19 +116,18 @@ export class PostgresOnlineSpectatorPresenceStore {
   }): Promise<PostgresSpectatorPresenceRegistration | null> {
     await this.ensureSchema();
     const connectionId = normalizeSpectatorConnectionId(input.connectionId);
-    const expiresAt = this.nextExpiryIso();
     const result = await this.queryable.query(
       `
         UPDATE online_spectator_presence
         SET
-          expires_at = $1,
+          expires_at = now() + ($1::int * interval '1 millisecond'),
           updated_at = now()
         WHERE node_id = $2
           AND connection_id = $3
           AND game_id = $4
         RETURNING node_id, connection_id, game_id, expires_at
       `,
-      [expiresAt, this.nodeId, connectionId, input.gameId]
+      [this.presenceTtlMs, this.nodeId, connectionId, input.gameId]
     );
     return result.rows[0] ? rowToRegistration(result.rows[0]) : null;
   }
@@ -158,9 +153,9 @@ export class PostgresOnlineSpectatorPresenceStore {
         SELECT COUNT(*)::int AS count
         FROM online_spectator_presence
         WHERE game_id = $1
-          AND expires_at > $2::timestamptz
+          AND expires_at > now()
       `,
-      [gameId, this.nowIso()]
+      [gameId]
     );
     const count = result.rows[0]?.count;
     if (!Number.isSafeInteger(count) || count < 0) {
@@ -174,19 +169,11 @@ export class PostgresOnlineSpectatorPresenceStore {
     const result = await this.queryable.query(
       `
         DELETE FROM online_spectator_presence
-        WHERE expires_at <= $1::timestamptz
+        WHERE expires_at <= now()
       `,
-      [this.nowIso()]
+      []
     );
     return result.rowCount ?? 0;
-  }
-
-  private nextExpiryIso(): string {
-    return new Date(this.now() + this.presenceTtlMs).toISOString();
-  }
-
-  private nowIso(): string {
-    return new Date(this.now()).toISOString();
   }
 
   private async createSchema(): Promise<void> {

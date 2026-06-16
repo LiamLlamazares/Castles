@@ -7614,6 +7614,7 @@ describe("createOnlineHttpServer", () => {
     const publicSummary = summaryForGame(created.gameId, "public");
     const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
     const countSpectators = vi.spyOn(runtimeCoordinator, "countSpectators");
+    const refreshSpectator = vi.spyOn(runtimeCoordinator, "refreshSpectator");
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       service,
@@ -7687,6 +7688,17 @@ describe("createOnlineHttpServer", () => {
 
       expect(repeatedSummaryResponse.status).toBe(200);
       expect(repeatedSummaryBody.summary.livePreview.spectatorCount).toBe(1);
+
+      const heartbeat = nextSocketMessage(socket, "spectator heartbeat refresh");
+      socket.send(JSON.stringify(versionedMessage({ type: "ping", clientTime: 456 })));
+      await expect(heartbeat).resolves.toMatchObject({
+        type: "pong",
+        clientTime: 456,
+      });
+      expect(refreshSpectator).toHaveBeenCalledWith({
+        gameId: created.gameId,
+        connectionId: expect.stringMatching(/^spectator_/),
+      });
 
       const joined = nextSocketMessage(socket, "spectator role change to player join");
       socket.send(

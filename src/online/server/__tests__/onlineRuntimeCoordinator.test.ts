@@ -1,8 +1,51 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPostgresSpectatorPresenceRuntimeCoordinator,
   createSingleNodeOnlineRuntimeCoordinator,
   normalizeRuntimeNodeId,
 } from "../onlineRuntimeCoordinator";
+
+class FakeRuntimeSpectatorPresenceStore {
+  private readonly presence = new Map<string, { nodeId: string; connectionId: string; gameId: string }>();
+  private nextConnectionId = 0;
+
+  forNode(nodeId: string) {
+    return {
+      registerSpectator: async ({ gameId }: { gameId: string }) => {
+        this.nextConnectionId += 1;
+        const connectionId = `spectator_${nodeId}_${String(this.nextConnectionId).padStart(12, "0")}`;
+        this.presence.set(`${nodeId}\u0000${connectionId}`, { nodeId, connectionId, gameId });
+        return { connectionId };
+      },
+      refreshSpectator: async ({
+        connectionId,
+        gameId,
+      }: {
+        gameId: string;
+        connectionId: string;
+      }) => {
+        const row = this.presence.get(`${nodeId}\u0000${connectionId}`);
+        return row?.gameId === gameId ? { connectionId } : null;
+      },
+      removeSpectator: async ({
+        connectionId,
+        gameId,
+      }: {
+        gameId: string;
+        connectionId: string;
+      }) => {
+        const key = `${nodeId}\u0000${connectionId}`;
+        const row = this.presence.get(key);
+        if (row?.gameId === gameId) {
+          this.presence.delete(key);
+        }
+      },
+      countSpectators: async (gameId: string) =>
+        Array.from(this.presence.values()).filter((row) => row.gameId === gameId).length,
+      cleanupExpiredSpectators: async () => 0,
+    };
+  }
+}
 
 describe("normalizeRuntimeNodeId", () => {
   it("accepts short visible operator node ids", () => {
@@ -105,5 +148,83 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
     ]);
 
     expect(order).toEqual(["first-start", "first-end", "second-start", "second-end"]);
+  });
+});
+
+describe("createPostgresSpectatorPresenceRuntimeCoordinator", () => {
+  it("delegates spectator presence to a shared PostgreSQL presence store", async () => {
+    const presenceStore = new FakeRuntimeSpectatorPresenceStore();
+    const nodeA = createPostgresSpectatorPresenceRuntimeCoordinator({
+      nodeId: "node-a",
+      spectatorPresenceStore: presenceStore.forNode("node-a"),
+    });
+    const nodeB = createPostgresSpectatorPresenceRuntimeCoordinator({
+      nodeId: "node-b",
+      spectatorPresenceStore: presenceStore.forNode("node-b"),
+    });
+
+    const first = await nodeA.registerSpectator({ gameId: "game_123" });
+    const second = await nodeB.registerSpectator({ gameId: "game_123" });
+
+    expect(nodeA.capabilities).toMatchObject({
+      mode: "single-node",
+      websocketFanout: "process-local",
+      spectatorPresence: "postgres-live-presence",
+      operationGates: "process-local",
+    });
+    expect(await nodeA.countSpectators("game_123")).toBe(2);
+    await nodeA.removeSpectator({ gameId: "game_123", connectionId: first.connectionId });
+    expect(await nodeB.countSpectators("game_123")).toBe(1);
+    await nodeB.removeSpectator({ gameId: "game_123", connectionId: second.connectionId });
+    expect(await nodeA.countSpectators("game_123")).toBe(0);
+  });
+
+  it("keeps snapshot fanout local when only spectator presence is PostgreSQL-backed", async () => {
+    const presenceStore = new FakeRuntimeSpectatorPresenceStore();
+    const nodeA = createPostgresSpectatorPresenceRuntimeCoordinator({
+      nodeId: "node-a",
+      spectatorPresenceStore: presenceStore.forNode("node-a"),
+    });
+    const nodeB = createPostgresSpectatorPresenceRuntimeCoordinator({
+      nodeId: "node-b",
+      spectatorPresenceStore: presenceStore.forNode("node-b"),
+    });
+    const seenByB: unknown[] = [];
+    nodeB.subscribeGameSnapshotChanged((event) => {
+      seenByB.push(event);
+    });
+
+    await nodeA.publishGameSnapshotChanged({
+      type: "game_snapshot_changed",
+      gameId: "game_123",
+      roomVersion: 2,
+      reason: "action",
+      nodeId: "node-a",
+      createdAt: "2026-06-16T00:00:00.000Z",
+    });
+
+    expect(seenByB).toEqual([]);
+  });
+
+  it("refreshes spectator presence through the shared PostgreSQL presence store", async () => {
+    const presenceStore = new FakeRuntimeSpectatorPresenceStore();
+    const nodeA = createPostgresSpectatorPresenceRuntimeCoordinator({
+      nodeId: "node-a",
+      spectatorPresenceStore: presenceStore.forNode("node-a"),
+    });
+    const registration = await nodeA.registerSpectator({ gameId: "game_123" });
+
+    await expect(
+      nodeA.refreshSpectator({
+        gameId: "game_123",
+        connectionId: registration.connectionId,
+      })
+    ).resolves.toEqual({ connectionId: registration.connectionId });
+    await expect(
+      nodeA.refreshSpectator({
+        gameId: "game_456",
+        connectionId: registration.connectionId,
+      })
+    ).resolves.toBeNull();
   });
 });

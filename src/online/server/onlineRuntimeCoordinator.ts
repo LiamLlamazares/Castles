@@ -27,8 +27,19 @@ export interface OnlineRuntimeSpectatorRegistration {
 export interface OnlineRuntimeCoordinatorCapabilities {
   mode: OnlineRuntimeMode;
   websocketFanout: "process-local";
-  spectatorPresence: "process-local";
+  spectatorPresence: "process-local" | "postgres-live-presence";
   operationGates: "process-local";
+}
+
+export interface OnlineRuntimeSpectatorPresenceStore {
+  registerSpectator(input: { gameId: string }): Promise<OnlineRuntimeSpectatorRegistration>;
+  refreshSpectator(input: {
+    gameId: string;
+    connectionId: string;
+  }): Promise<OnlineRuntimeSpectatorRegistration | null>;
+  removeSpectator(input: { gameId: string; connectionId: string }): Promise<void>;
+  countSpectators(gameId: string): Promise<number>;
+  cleanupExpiredSpectators?(): Promise<number>;
 }
 
 export interface OnlineRuntimeCoordinator {
@@ -39,6 +50,10 @@ export interface OnlineRuntimeCoordinator {
     handler: (event: OnlineRuntimeGameSnapshotChangedEvent) => void | Promise<void>
   ): () => void;
   registerSpectator(input: { gameId: string }): Promise<OnlineRuntimeSpectatorRegistration>;
+  refreshSpectator(input: {
+    gameId: string;
+    connectionId: string;
+  }): Promise<OnlineRuntimeSpectatorRegistration | null>;
   removeSpectator(input: { gameId: string; connectionId: string }): Promise<void>;
   countSpectators(gameId: string): Promise<number>;
   withGameOperationGate<T>(gameId: string, operation: () => Promise<T>): Promise<T>;
@@ -103,6 +118,9 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       spectatorConnections.set(gameId, connections);
       return { connectionId };
     },
+    async refreshSpectator({ gameId, connectionId }) {
+      return spectatorConnections.get(gameId)?.has(connectionId) ? { connectionId } : null;
+    },
     async removeSpectator({ gameId, connectionId }) {
       const connections = spectatorConnections.get(gameId);
       if (!connections) return;
@@ -129,6 +147,37 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
       handlers.clear();
       spectatorConnections.clear();
       gates.clear();
+    },
+  };
+}
+
+export function createPostgresSpectatorPresenceRuntimeCoordinator(options: {
+  nodeId: string;
+  spectatorPresenceStore: OnlineRuntimeSpectatorPresenceStore;
+}): OnlineRuntimeCoordinator {
+  const local = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+
+  return {
+    ...local,
+    capabilities: {
+      ...local.capabilities,
+      spectatorPresence: "postgres-live-presence",
+    },
+    async registerSpectator(input) {
+      return options.spectatorPresenceStore.registerSpectator(input);
+    },
+    async refreshSpectator(input) {
+      return options.spectatorPresenceStore.refreshSpectator(input);
+    },
+    async removeSpectator(input) {
+      await options.spectatorPresenceStore.removeSpectator(input);
+    },
+    async countSpectators(gameId) {
+      return options.spectatorPresenceStore.countSpectators(gameId);
+    },
+    async close() {
+      await local.close();
+      await options.spectatorPresenceStore.cleanupExpiredSpectators?.();
     },
   };
 }

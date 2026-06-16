@@ -2322,6 +2322,26 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return runtimeCoordinator.countSpectators(gameId);
   };
 
+  const refreshSpectatorPresence = async (
+    socket: WebSocket,
+    connection: Extract<OnlineConnection, { role: "spectator" }>
+  ): Promise<void> => {
+    if (!connection.spectatorConnectionId) return;
+    const refreshed = await runtimeCoordinator.refreshSpectator({
+      gameId: connection.gameId,
+      connectionId: connection.spectatorConnectionId,
+    });
+    if (refreshed) return;
+
+    const spectatorPresence = await runtimeCoordinator.registerSpectator({
+      gameId: connection.gameId,
+    });
+    setSocketConnection(socket, {
+      ...connection,
+      spectatorConnectionId: spectatorPresence.connectionId,
+    });
+  };
+
   const stripLiveResponseFields = (summary: OnlineGameSummary): OnlineGameSummary => {
     const hasSpectatorCount = summary.livePreview.spectatorCount !== undefined;
     const hasClockServerNow = summary.livePreview.clock?.serverNow !== undefined;
@@ -6950,6 +6970,9 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
         }
         if (timeout.timeout) {
           broadcastSnapshot(connection.gameId);
+        }
+        if (connection.role === "spectator") {
+          await refreshSpectatorPresence(socket, connection);
         }
         sendJson(socket, {
           type: "pong",

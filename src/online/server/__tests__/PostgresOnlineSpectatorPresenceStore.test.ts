@@ -13,9 +13,24 @@ class FakePostgresSpectatorPresenceQueryable {
   readonly queries: Array<{ text: string; values: unknown[] }> = [];
   readonly presence = new Map<string, PresenceRow>();
   failNextSchemaQuery = false;
+  databaseNowMs = Date.parse("2026-06-16T00:00:00.000Z");
 
   seed(row: PresenceRow): void {
     this.presence.set(`${row.node_id}\u0000${row.connection_id}`, row);
+  }
+
+  private databaseNowIso(): string {
+    return new Date(this.databaseNowMs).toISOString();
+  }
+
+  private expiryFromValue(value: unknown): string {
+    if (typeof value === "number") {
+      return new Date(this.databaseNowMs + value).toISOString();
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    throw new Error(`Unexpected expiry value: ${String(value)}`);
   }
 
   async query(text: string, values: unknown[] = []): Promise<{ rows: any[]; rowCount: number }> {
@@ -31,8 +46,9 @@ class FakePostgresSpectatorPresenceQueryable {
     }
 
     if (/^INSERT INTO online_spectator_presence/i.test(normalized)) {
-      const [nodeId, connectionId, gameId, expiresAt] = values as string[];
-      const updatedAt = new Date("2026-06-16T00:00:00.000Z").toISOString();
+      const [nodeId, connectionId, gameId, expiryValue] = values as string[];
+      const expiresAt = this.expiryFromValue(expiryValue);
+      const updatedAt = this.databaseNowIso();
       const row: PresenceRow = {
         node_id: nodeId,
         connection_id: connectionId,
@@ -45,14 +61,15 @@ class FakePostgresSpectatorPresenceQueryable {
     }
 
     if (/^UPDATE online_spectator_presence/i.test(normalized)) {
-      const [expiresAt, nodeId, connectionId, gameId] = values as string[];
+      const [expiryValue, nodeId, connectionId, gameId] = values as string[];
       const key = `${nodeId}\u0000${connectionId}`;
       const row = this.presence.get(key);
       if (!row || row.game_id !== gameId) return { rows: [], rowCount: 0 };
+      const expiresAt = this.expiryFromValue(expiryValue);
       const updated: PresenceRow = {
         ...row,
         expires_at: expiresAt,
-        updated_at: new Date("2026-06-16T00:00:00.000Z").toISOString(),
+        updated_at: this.databaseNowIso(),
       };
       this.seed(updated);
       return { rows: [updated], rowCount: 1 };
@@ -68,7 +85,8 @@ class FakePostgresSpectatorPresenceQueryable {
     }
 
     if (/^DELETE FROM online_spectator_presence/i.test(normalized)) {
-      const [now] = values as string[];
+      const [nowValue] = values as string[];
+      const now = nowValue ?? this.databaseNowIso();
       let removed = 0;
       for (const [key, row] of Array.from(this.presence.entries())) {
         if (Date.parse(row.expires_at) <= Date.parse(now)) {
@@ -80,7 +98,8 @@ class FakePostgresSpectatorPresenceQueryable {
     }
 
     if (/^SELECT COUNT\(\*\)::int AS count FROM online_spectator_presence/i.test(normalized)) {
-      const [gameId, now] = values as string[];
+      const [gameId, nowValue] = values as string[];
+      const now = nowValue ?? this.databaseNowIso();
       const count = Array.from(this.presence.values()).filter(
         (row) => row.game_id === gameId && Date.parse(row.expires_at) > Date.parse(now)
       ).length;
@@ -133,7 +152,6 @@ describe("PostgresOnlineSpectatorPresenceStore", () => {
     const store = new PostgresOnlineSpectatorPresenceStore({
       nodeId: "node-a",
       queryable,
-      now: () => Date.parse("2026-06-16T00:00:00.000Z"),
       presenceTtlMs: 45_000,
       connectionIdFactory: () => "spectator_abcdefghijkl",
     });
@@ -157,12 +175,31 @@ describe("PostgresOnlineSpectatorPresenceStore", () => {
     expect(await store.countSpectators("game_456")).toBe(0);
   });
 
-  it("refreshes only this node connection and extends expiry", async () => {
+  it("uses database time instead of app time for expiry and live cutoffs", async () => {
     const queryable = new FakePostgresSpectatorPresenceQueryable();
+    queryable.databaseNowMs = Date.parse("2026-06-16T00:10:00.000Z");
     const store = new PostgresOnlineSpectatorPresenceStore({
       nodeId: "node-a",
       queryable,
-      now: () => Date.parse("2026-06-16T00:01:00.000Z"),
+      presenceTtlMs: 10_000,
+      connectionIdFactory: () => "spectator_dbclock123456",
+    });
+
+    const registered = await store.registerSpectator({ gameId: "game_123" });
+    expect(registered.expiresAt).toBe("2026-06-16T00:10:10.000Z");
+    expect(await store.countSpectators("game_123")).toBe(1);
+
+    queryable.databaseNowMs = Date.parse("2026-06-16T00:10:11.000Z");
+    expect(await store.countSpectators("game_123")).toBe(0);
+    expect(await store.cleanupExpiredSpectators()).toBe(1);
+  });
+
+  it("refreshes only this node connection and extends expiry", async () => {
+    const queryable = new FakePostgresSpectatorPresenceQueryable();
+    queryable.databaseNowMs = Date.parse("2026-06-16T00:01:00.000Z");
+    const store = new PostgresOnlineSpectatorPresenceStore({
+      nodeId: "node-a",
+      queryable,
       presenceTtlMs: 30_000,
     });
     queryable.seed({
@@ -228,10 +265,10 @@ describe("PostgresOnlineSpectatorPresenceStore", () => {
 
   it("cleans expired spectator rows", async () => {
     const queryable = new FakePostgresSpectatorPresenceQueryable();
+    queryable.databaseNowMs = Date.parse("2026-06-16T00:02:00.000Z");
     const store = new PostgresOnlineSpectatorPresenceStore({
       nodeId: "node-a",
       queryable,
-      now: () => Date.parse("2026-06-16T00:02:00.000Z"),
     });
     queryable.seed({
       node_id: "node-a",
