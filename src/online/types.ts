@@ -184,7 +184,6 @@ export interface OnlinePlayerClientSession extends BaseOnlineClientSession {
   role: "player";
   playerColor: Color;
   isActionPending?: boolean;
-  opponentInviteUrl?: string;
   submitAction: (action: OnlineActionDTO) => void;
   updateVisibility?: (
     visibility: OnlinePlayerSettableGameVisibility

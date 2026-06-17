@@ -27,7 +27,6 @@ interface ControlPanelProps {
   onResign: () => void;
   onNewGame: () => void;
   onShare?: () => void;
-  onCopyOpponentInvite?: () => void;
   onCopySpectator?: () => void;
   onlineVisibility?: OnlineGameVisibility;
   onUpdateOnlineVisibility?: (visibility: OnlinePlayerSettableGameVisibility) => void;
@@ -247,7 +246,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   onResign,
   onNewGame,
   onShare,
-  onCopyOpponentInvite,
   onCopySpectator,
   onlineVisibility,
   onUpdateOnlineVisibility,
@@ -437,7 +435,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                 Analysis
               </button>
             )}
-            {!onCopyOpponentInvite && !onCopySpectator && !onUpdateOnlineVisibility && (
+            {onShare && !onCopySpectator && !onUpdateOnlineVisibility && (
               <button className="control-button share" onClick={onShare} title={shareTitle}>
                 {shareLabel}
               </button>
@@ -445,20 +443,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           </div>
         </section>
 
-        {(onCopyOpponentInvite || onCopySpectator || onUpdateOnlineVisibility) && (
+        {(onCopySpectator || onUpdateOnlineVisibility) && (
           <section className="control-section online-link-controls" role="group" aria-label="Online links">
             <div className="control-section-label">Online links</div>
             <div className="control-button-row">
-              {onCopyOpponentInvite && (
-                <button
-                  className="control-button share"
-                  onClick={onCopyOpponentInvite}
-                  aria-label="Copy Opponent Invite"
-                  title="Copy move-enabled opponent invite link"
-                >
-                  Invite
-                </button>
-              )}
               {onCopySpectator && (
                 <button
                   className="control-button share"

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   LONG_ONLINE_STATUS_AUDIT_MESSAGE,
@@ -14,6 +16,18 @@ function scenarioSteps(name) {
 }
 
 describe("local UI layout audit script", () => {
+  it("uses a bounded graceful shutdown timeout without extending forced-kill waits", () => {
+    const script = readFileSync(
+      resolve(process.cwd(), "scripts/deploy/check-local-ui-layout-audit.mjs"),
+      "utf8"
+    );
+
+    expect(script).toContain("const shutdownTimeoutMs = 40_000");
+    expect(script).toContain("const forcedKillTimeoutMs = 7_000");
+    expect(script).toContain("sleep(shutdownTimeoutMs)");
+    expect(script).toContain("sleep(forcedKillTimeoutMs)");
+  });
+
   it("drives first-run tutorial and setup actions through the real scenario definitions", () => {
     expect(scenarioSteps("first-run-start-tutorial")).toEqual([
       { action: "clickButton", text: "Start Tutorial" },

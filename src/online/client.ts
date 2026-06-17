@@ -279,10 +279,6 @@ function storageKey(gameId: string, seat: "w" | "b"): string {
   return `castles_online_join:${gameId}:${seat}`;
 }
 
-function opponentInviteStorageKey(gameId: string): string {
-  return `castles_online_opponent_invite:${gameId}`;
-}
-
 function challengeStorageKey(challengeId: string, role: "challenger" | "challenged"): string {
   return `castles_online_challenge:${challengeId}:${role}`;
 }
@@ -378,21 +374,6 @@ export function forgetOnlineJoinParams(
   storage?.removeItem(storageKey(join.gameId, join.seat));
 }
 
-export function rememberOnlineOpponentInviteUrl(
-  gameId: string,
-  inviteUrl: string,
-  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
-): void {
-  storage?.setItem(opponentInviteStorageKey(gameId), inviteUrl);
-}
-
-export function forgetOnlineOpponentInviteUrl(
-  gameId: string,
-  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
-): void {
-  storage?.removeItem(opponentInviteStorageKey(gameId));
-}
-
 export function rememberOnlineChallengeParams(
   challenge: OnlineChallengeParams,
   storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
@@ -484,13 +465,6 @@ export function forgetOpenSeekCreatorParams(
   } else {
     storage.removeItem(OPEN_SEEK_CREATOR_INDEX_STORAGE_KEY);
   }
-}
-
-export function resolveOnlineOpponentInviteUrl(
-  gameId: string,
-  storage: OnlineJoinStorage | null = typeof window === "undefined" ? null : window.sessionStorage
-): string | null {
-  return storage?.getItem(opponentInviteStorageKey(gameId)) ?? null;
 }
 
 export function resolveOnlineAnonymousSessionId(

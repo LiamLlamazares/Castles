@@ -38,4 +38,15 @@ describe("production online browser smoke script", () => {
       /await rememberDirectCreateJoinToken\(black,\s*gameId,\s*"b",\s*blackToken\)/
     );
   });
+
+  it("checks both direct-created player screens for legacy opponent invites", () => {
+    const script = readScript();
+
+    expect(script).toMatch(
+      /assert\(\s*!\(await white\.hasButton\("Copy Opponent Invite"\)\)[\s\S]*White player should not see/
+    );
+    expect(script).toMatch(
+      /assert\(\s*!\(await black\.hasButton\("Copy Opponent Invite"\)\)[\s\S]*Black player should not see/
+    );
+  });
 });

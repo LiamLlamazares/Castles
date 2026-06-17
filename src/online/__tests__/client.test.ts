@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildOnlineWebSocketUrl,
@@ -46,7 +48,6 @@ import {
   rememberOnlineChallengeParams,
   rememberOnlineChallengeShareUrl,
   rememberOnlineAccountSession,
-  rememberOnlineOpponentInviteUrl,
   rememberOnlineJoinParams,
   reportOnlineAccount,
   rejoinOnlineAccountGame,
@@ -57,7 +58,6 @@ import {
   removeOnlineTokenFromUrl,
   resolveOnlineAnonymousSessionId,
   resolveOnlineAccountSession,
-  resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   resolveStoredOnlineJoinParams,
   shouldApplyOnlineSnapshot,
@@ -68,7 +68,6 @@ import {
   forgetOnlineChallengeParams,
   forgetOnlineChallengeShareUrl,
   forgetOnlineJoinParams,
-  forgetOnlineOpponentInviteUrl,
   forgetOpenSeekCreatorParams,
   listOpenSeekCreatorParams,
   rememberOpenSeekCreatorParams,
@@ -155,6 +154,16 @@ function publicSummary(overrides: Record<string, unknown> = {}) {
 }
 
 describe("online client helpers", () => {
+  it("does not keep legacy opponent invite storage helpers", () => {
+    const source = readFileSync(resolve(process.cwd(), "src/online/client.ts"), "utf8");
+
+    expect(source).not.toContain("castles_online_opponent_invite");
+    expect(source).not.toContain("opponentInviteStorageKey");
+    expect(source).not.toContain("rememberOnlineOpponentInviteUrl");
+    expect(source).not.toContain("resolveOnlineOpponentInviteUrl");
+    expect(source).not.toContain("forgetOnlineOpponentInviteUrl");
+  });
+
   it("parses private online invite URLs", () => {
     expect(
       parseOnlineJoinParams(
@@ -238,7 +247,7 @@ describe("online client helpers", () => {
     expect(resolveStoredOnlineJoinParams("game_123", "w", storageAdapter)).toBeNull();
   });
 
-  it("forgets stored private invite and opponent invite credentials", () => {
+  it("forgets stored private invite credentials", () => {
     const storage = new Map<string, string>();
     const storageAdapter = {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -248,19 +257,12 @@ describe("online client helpers", () => {
     const join = { gameId: "game_123", seat: "w" as const, token: "secret" };
 
     rememberOnlineJoinParams(join, storageAdapter);
-    rememberOnlineOpponentInviteUrl(
-      "game_123",
-      "https://castles.example/?onlineGame=game_123&seat=b&token=black-secret",
-      storageAdapter
-    );
 
     forgetOnlineJoinParams(join, storageAdapter);
-    forgetOnlineOpponentInviteUrl("game_123", storageAdapter);
 
     expect(
       resolveOnlineJoinParams("https://castles.example/?onlineGame=game_123&seat=w", storageAdapter)
     ).toBeNull();
-    expect(resolveOnlineOpponentInviteUrl("game_123", storageAdapter)).toBeNull();
   });
 
   it("stores challenge fragment tokens outside the URL and resolves tokenless reload URLs", () => {
@@ -553,26 +555,6 @@ describe("online client helpers", () => {
       "https://castles.example/?onlineChallenge=challenge_123&challengeRole=challenger",
       storageAdapter
     )).toBeNull();
-  });
-
-  it("stores creator opponent invites for same-session reloads", () => {
-    const storage = new Map<string, string>();
-    const storageAdapter = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
-    };
-
-    rememberOnlineOpponentInviteUrl(
-      "game_123",
-      "https://castles.example/?onlineGame=game_123&seat=b&token=black-secret",
-      storageAdapter
-    );
-
-    expect(resolveOnlineOpponentInviteUrl("game_123", storageAdapter)).toBe(
-      "https://castles.example/?onlineGame=game_123&seat=b&token=black-secret"
-    );
-    expect(resolveOnlineOpponentInviteUrl("game_other", storageAdapter)).toBeNull();
   });
 
   it("stores a stable anonymous session id outside URLs", () => {

@@ -353,7 +353,7 @@ describe("Game ability integration", () => {
     expect(alert).toHaveBeenCalledWith("Failed to load PGN. Check console for details.");
   });
 
-  test("online player screens expose separate opponent invite and spectator copy actions", async () => {
+  test("online player screens ignore legacy opponent invite surfaces and expose spectator copy", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -373,19 +373,12 @@ describe("Game ability integration", () => {
             opponentInviteUrl: "https://castles.example/?onlineGame=game_share_split&seat=b&token=black-token",
             spectatorUrl: "https://castles.example/?onlineGame=game_share_split&view=spectator",
             submitAction: vi.fn(),
-          }}
+          } as any}
         />
       </ThemeProvider>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy Opponent Invite" }));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(
-        "https://castles.example/?onlineGame=game_share_split&seat=b&token=black-token"
-      );
-    });
-    expect(await screen.findByText("Opponent invite link copied.")).toBeInTheDocument();
-    expect(alert).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Copy Opponent Invite" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy Spectator Link" }));
     await waitFor(() => {
@@ -393,6 +386,7 @@ describe("Game ability integration", () => {
         "https://castles.example/?onlineGame=game_share_split&view=spectator"
       );
     });
+    expect(writeText).toHaveBeenCalledTimes(1);
     expect(await screen.findByText("Spectator link copied.")).toBeInTheDocument();
     expect(alert).not.toHaveBeenCalled();
   }, INTEGRATION_TIMEOUT_MS);

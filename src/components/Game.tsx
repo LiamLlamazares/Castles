@@ -330,10 +330,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const handleShare = React.useCallback(() => {
     shareGame();
   }, [shareGame]);
-  const handleCopyOpponentInvite = React.useCallback(() => {
-    if (onlineSession?.role !== "player" || !onlineSession.opponentInviteUrl) return;
-    copyOnlineLink(onlineSession.opponentInviteUrl, "Opponent invite link copied.");
-  }, [copyOnlineLink, onlineSession]);
   const handleCopySpectator = React.useCallback(() => {
     if (!onlineSession?.spectatorUrl) return;
     copyOnlineLink(onlineSession.spectatorUrl, "Spectator link copied.");
@@ -1013,11 +1009,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
           }}
           onNewGame={handleNewGame}
           onShare={onlineSession ? undefined : handleShare}
-          onCopyOpponentInvite={
-            onlineSession?.role === "player" && onlineSession.opponentInviteUrl
-              ? handleCopyOpponentInvite
-              : undefined
-          }
           onCopySpectator={onlineSession?.spectatorUrl ? handleCopySpectator : undefined}
           onlineVisibility={currentOnlineVisibility}
           onUpdateOnlineVisibility={

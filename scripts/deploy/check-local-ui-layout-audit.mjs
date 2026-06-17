@@ -26,6 +26,8 @@ const requestTimeoutMs = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS ?? 15_000);
 const startupTimeoutMs = Number(process.env.SMOKE_STARTUP_TIMEOUT_MS ?? 20_000);
 const browserTimeoutMs = Number(process.env.SMOKE_BROWSER_TIMEOUT_MS ?? 20_000);
 const socketTimeoutMs = Number(process.env.SMOKE_SOCKET_TIMEOUT_MS ?? 10_000);
+const shutdownTimeoutMs = 40_000;
+const forcedKillTimeoutMs = 7_000;
 const TUTORIAL_PROGRESS_KEY = "castles_tutorial_progress_v2";
 const LONG_ONLINE_STATUS_AUDIT_MESSAGE =
   "Access denied: This trusted local layout-audit message is intentionally long so the online recovery panel has to wrap across several lines while keeping the primary recovery action reachable on narrow screens without exposing any private invite credential or URL.";
@@ -639,14 +641,20 @@ async function stopServer(serverProcess) {
     );
   } catch (error) {
     child.kill("SIGKILL");
-    const killed = await Promise.race([exitPromise, sleep(7_000).then(() => false)]);
+    const killed = await Promise.race([
+      exitPromise,
+      sleep(forcedKillTimeoutMs).then(() => false),
+    ]);
     if (killed === false) {
       throw new Error(`Server did not exit after failed shutdown request.\n${getLogs()}`);
     }
     throw error;
   }
 
-  const exited = await Promise.race([exitPromise, sleep(7_000).then(() => false)]);
+  const exited = await Promise.race([
+    exitPromise,
+    sleep(shutdownTimeoutMs).then(() => false),
+  ]);
   if (exited === false && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGKILL");
     await exitPromise;

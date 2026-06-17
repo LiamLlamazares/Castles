@@ -68,7 +68,6 @@ import {
   forgetOnlineChallengeParams,
   forgetOnlineChallengeShareUrl,
   forgetOnlineJoinParams,
-  forgetOnlineOpponentInviteUrl,
   forgetOpenSeekCreatorParams,
   ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
   listOpenSeekCreatorParams,
@@ -76,7 +75,6 @@ import {
   rememberOnlineChallengeParams,
   rememberOnlineChallengeShareUrl,
   rememberOnlineJoinParams,
-  rememberOnlineOpponentInviteUrl,
   rememberOpenSeekCreatorParams,
   reportOnlineAccount,
   rejoinOnlineAccountGame,
@@ -88,7 +86,6 @@ import {
   resolveOnlineChallengeParams,
   resolveOnlineChallengeShareUrl,
   parseOnlineSpectatorParams,
-  resolveOnlineOpponentInviteUrl,
   resolveOnlineJoinParams,
   resolveStoredOnlineJoinParams,
   signInOnlineAccount,
@@ -244,7 +241,6 @@ type AnalysisReturnState =
       onlineJoin: OnlineJoinParams | null;
       onlineSpectator: OnlineSpectatorParams | null;
       onlineSnapshot: OnlineGameSnapshotDTO;
-      opponentInviteUrl: string | null;
     }
   | {
       kind: "online-browser";
@@ -445,9 +441,6 @@ function App() {
   const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
   const [recentOnlineGames, setRecentOnlineGames] = useState<RecentOnlineGameRecord[]>(() =>
     loadRecentOnlineGames()
-  );
-  const [onlineOpponentInviteUrl, setOnlineOpponentInviteUrl] = useState<string | null>(() =>
-    onlineJoin?.seat === "w" ? resolveOnlineOpponentInviteUrl(onlineJoin.gameId) : null
   );
   const [onlineVisibilityByGameId, setOnlineVisibilityByGameId] = useState<Record<string, OnlineGameVisibility>>({});
   const [onlineChallenge, setOnlineChallenge] = useState<OnlineChallengeParams | null>(initialOnlineChallenge);
@@ -1023,10 +1016,6 @@ function App() {
     forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
-      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
-    }
-    if (onlineSnapshot) {
-      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
     clearOpenSeekState();
     setOnlineJoin(null);
@@ -1035,7 +1024,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     const backTarget = view === 'game' || view === 'setup' ? 'game' : view;
     enterSetupView(backTarget);
   };
@@ -1201,10 +1189,6 @@ function App() {
     forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
-      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
-    }
-    if (onlineSnapshot) {
-      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
     clearOpenSeekState();
     setOnlineJoin(null);
@@ -1213,7 +1197,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl, sanctuarySettings, gameRules, initialPoolTypes, pieceTheme, ratingMode, isAnalysisMode: false, opponentConfig });
     setGameKey(prev => prev + 1);
     enterGameView();
@@ -1253,7 +1236,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     setOnlineVisibilityByGameId(prev => ({
       ...prev,
       [join.gameId]: knownVisibility ?? prev[join.gameId] ?? "unlisted",
@@ -1288,7 +1270,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     enterGameView();
   };
 
@@ -1303,7 +1284,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
 
     try {
       const snapshot = await fetchOnlineSpectatorSnapshot(gameId);
@@ -1677,7 +1657,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     setProfileDisplayName(targetDisplayName);
     setOnlineAccountDialogOpen(false);
     setViewStack((previous) => (view === "profile" ? previous : [...previous, view]));
@@ -1781,7 +1760,6 @@ function App() {
       setOnlineJoin(null);
       setOnlineSpectator(null);
       setOnlineSnapshot(null);
-      setOnlineOpponentInviteUrl(null);
       setOnlineChallenge(challenge);
       setOnlineChallengeResponse({
         role: "challenger",
@@ -1924,10 +1902,6 @@ function App() {
       forgetOnlineChallengeStorage(onlineChallenge);
       if (onlineJoin) {
         forgetOnlineJoinParams(onlineJoin);
-        forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
-      }
-      if (onlineSnapshot) {
-        forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
       }
       clearOpenSeekState();
       const created = await createOpenSeek(setup, {
@@ -1944,7 +1918,6 @@ function App() {
       setOnlineJoin(null);
       setOnlineSpectator(null);
       setOnlineSnapshot(null);
-      setOnlineOpponentInviteUrl(null);
       setOnlineChallenge(null);
       setOnlineChallengeResponse(null);
       setOnlineChallengeShareUrl(null);
@@ -2036,10 +2009,6 @@ function App() {
     forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
-      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
-    }
-    if (onlineSnapshot) {
-      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
     clearOpenSeekState();
     const creator = {
@@ -2050,7 +2019,6 @@ function App() {
     setOnlineJoin(null);
     setOnlineSpectator(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     setOnlineChallenge(null);
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
@@ -2287,7 +2255,6 @@ function App() {
         onlineJoin,
         onlineSpectator: onlineJoin ? null : onlineSpectator,
         onlineSnapshot,
-        opponentInviteUrl: onlineOpponentInviteUrl,
       });
     } else if (options.source === "analysis" && !gameConfig.isAnalysisMode) {
       setAnalysisReturn({
@@ -2304,10 +2271,6 @@ function App() {
     forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
-      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
-    }
-    if (onlineSnapshot) {
-      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
     setOnlineJoin(null);
     setOnlineSpectator(null);
@@ -2315,7 +2278,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     setGameConfig(nextAnalysisConfig);
     setGameKey(prev => prev + 1); // Force remount
     enterGameView();
@@ -2330,7 +2292,6 @@ function App() {
       setOnlineJoin(null);
       setOnlineSpectator(null);
       setOnlineSnapshot(null);
-      setOnlineOpponentInviteUrl(null);
       setGameConfig(analysisReturn.config);
       clearAnalysisReturn();
       setGameKey(prev => prev + 1);
@@ -2341,12 +2302,6 @@ function App() {
     if (analysisReturn.kind === "online-game") {
       if (analysisReturn.onlineJoin) {
         rememberOnlineJoinParams(analysisReturn.onlineJoin);
-        if (analysisReturn.opponentInviteUrl) {
-          rememberOnlineOpponentInviteUrl(
-            analysisReturn.onlineJoin.gameId,
-            analysisReturn.opponentInviteUrl
-          );
-        }
         const url = new URL(window.location.href);
         url.searchParams.set("onlineGame", analysisReturn.onlineJoin.gameId);
         url.searchParams.set("seat", analysisReturn.onlineJoin.seat);
@@ -2367,7 +2322,6 @@ function App() {
       setOnlineJoin(analysisReturn.onlineJoin);
       setOnlineSpectator(analysisReturn.onlineSpectator);
       setOnlineSnapshot(analysisReturn.onlineSnapshot);
-      setOnlineOpponentInviteUrl(analysisReturn.opponentInviteUrl);
       setGameConfig(createGameConfigFromOnlineSnapshot(analysisReturn.onlineSnapshot, false));
       clearAnalysisReturn();
       setGameKey(prev => prev + 1);
@@ -2573,7 +2527,6 @@ function App() {
         clock: onlineSnapshot.clock,
         result: onlineSnapshot.result,
         visibility,
-        opponentInviteUrl: onlineJoin.seat === "w" ? onlineOpponentInviteUrl ?? undefined : undefined,
         spectatorUrl: isPrivate ? undefined : buildSpectatorUrl(window.location.href, onlineJoin.gameId),
         submitAction: onlineConnection.submitAction,
         updateVisibility: isPrivate ? undefined : handleUpdateOnlineVisibility,
@@ -2598,7 +2551,6 @@ function App() {
     onlineJoin,
     activeOnlineSpectator,
     onlineSnapshot,
-    onlineOpponentInviteUrl,
     onlineVisibilityByGameId,
     onlineConnection,
     onlineSpectatorConnection,
@@ -2642,10 +2594,6 @@ function App() {
     forgetOnlineChallengeStorage(onlineChallenge);
     if (onlineJoin) {
       forgetOnlineJoinParams(onlineJoin);
-      forgetOnlineOpponentInviteUrl(onlineJoin.gameId);
-    }
-    if (onlineSnapshot) {
-      forgetOnlineOpponentInviteUrl(onlineSnapshot.gameId);
     }
     if (openSeekCreator) {
       forgetOpenSeekCreatorParams(openSeekCreator);
@@ -2656,7 +2604,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     setOpenSeekCreator(null);
     setOpenSeekResponse(null);
   }, [
@@ -2752,7 +2699,6 @@ function App() {
     setOnlineChallengeResponse(null);
     setOnlineChallengeShareUrl(null);
     setOnlineSnapshot(null);
-    setOnlineOpponentInviteUrl(null);
     setGameConfig({ board, pieces, layout, sanctuaries, timeControl: undefined, isAnalysisMode: false });
     setGameKey(prev => prev + 1);
     enterGameView();

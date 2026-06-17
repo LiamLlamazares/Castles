@@ -871,8 +871,12 @@ async function createOnlineGameFromApi(white) {
   await white.waitForText("Online White");
   await assertNoQueryToken(white, "White player");
   await white.waitForButton("Copy Spectator Link");
+  assert(
+    !(await white.hasButton("Copy Opponent Invite")),
+    "White player should not see the move-enabled opponent invite"
+  );
   const blackToken = created.black.token;
-  const opponentInvite = created.black.url;
+  const blackPlayerUrl = created.black.url;
   await white.clickButton("Copy Spectator Link");
   const spectatorUrl = await waitUntil("spectator URL clipboard", async () => {
     const text = await white.getClipboard();
@@ -886,7 +890,7 @@ async function createOnlineGameFromApi(white) {
   );
   const gameId = new URL(await white.url()).searchParams.get("onlineGame");
   assert(gameId, "White URL did not include onlineGame after create");
-  return { gameId, opponentInvite, blackToken, spectatorUrl };
+  return { gameId, blackPlayerUrl, blackToken, spectatorUrl };
 }
 
 async function openSetupFromBase(page) {
@@ -1154,14 +1158,14 @@ async function runFlow(driver) {
   const black = await driver.newPage();
   const spectator = await driver.newPage();
 
-  const { gameId, opponentInvite, blackToken, spectatorUrl } = await createOnlineGameFromApi(white);
+  const { gameId, blackPlayerUrl, blackToken, spectatorUrl } = await createOnlineGameFromApi(white);
   await verifyBoardAccountGoogleOAuthUi(white);
   const initialSnapshot = await fetchSpectatorSnapshot(gameId, 0);
   await verifyAccessDeniedRecovery(driver, gameId);
   await verifyStaleActionContract(initialSnapshot.setup);
 
   await rememberDirectCreateJoinToken(black, gameId, "b", blackToken);
-  await black.goto(opponentInvite);
+  await black.goto(blackPlayerUrl);
   await black.waitForText("Online Black");
   await assertNoQueryToken(black, "Black player");
   await black.waitForButton("Copy Spectator Link");

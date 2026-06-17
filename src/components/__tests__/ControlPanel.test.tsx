@@ -281,7 +281,7 @@ describe("ControlPanel", () => {
 
     expect(screen.getByRole("button", { name: "Pass" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Resign" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Share" })).not.toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New Game" })).not.toBeDisabled();
   });
 
@@ -318,13 +318,24 @@ describe("ControlPanel", () => {
     expect(onShare).toHaveBeenCalledOnce();
   });
 
-  it("separates move-enabled opponent invites from read-only spectator links", () => {
+  it("does not render an inert share control without a share handler", () => {
+    render(
+      <ControlPanel
+        {...baseProps}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+  });
+
+  it("ignores legacy opponent invite callbacks while keeping spectator links", () => {
+    const LegacyControlPanel = ControlPanel as React.ComponentType<any>;
     const onCopyOpponentInvite = vi.fn();
     const onCopySpectator = vi.fn();
     const onShare = vi.fn();
 
     render(
-      <ControlPanel
+      <LegacyControlPanel
         {...baseProps}
         onShare={onShare}
         onCopyOpponentInvite={onCopyOpponentInvite}
@@ -334,17 +345,14 @@ describe("ControlPanel", () => {
 
     expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
 
-    const opponentButton = screen.getByRole("button", { name: "Copy Opponent Invite" });
     const spectatorButton = screen.getByRole("button", { name: "Copy Spectator Link" });
-    expect(opponentButton).toHaveTextContent("Invite");
+    expect(screen.queryByRole("button", { name: "Copy Opponent Invite" })).not.toBeInTheDocument();
     expect(spectatorButton).toHaveTextContent("Spectator Link");
-    expect(opponentButton).toHaveAttribute("title", "Copy move-enabled opponent invite link");
     expect(spectatorButton).toHaveAttribute("title", "Copy read-only spectator link");
 
-    fireEvent.click(opponentButton);
     fireEvent.click(spectatorButton);
 
-    expect(onCopyOpponentInvite).toHaveBeenCalledOnce();
+    expect(onCopyOpponentInvite).not.toHaveBeenCalled();
     expect(onCopySpectator).toHaveBeenCalledOnce();
     expect(onShare).not.toHaveBeenCalled();
   });

@@ -2239,10 +2239,6 @@ describe("App game setup lifecycle", () => {
     });
     localStorage.setItem("castles_autosave", "stale autosave");
     sessionStorage.setItem("castles_online_join:game_denied:w", "bad-token");
-    sessionStorage.setItem(
-      "castles_online_opponent_invite:game_denied",
-      "https://castles.example/?onlineGame=game_denied&seat=b&token=black-token"
-    );
 
     render(<App />);
 
@@ -2262,7 +2258,6 @@ describe("App game setup lifecycle", () => {
     expect(window.location.search).not.toContain("token=");
     expect(localStorage.getItem("castles_autosave")).toBeNull();
     expect(sessionStorage.getItem("castles_online_join:game_denied:w")).toBeNull();
-    expect(sessionStorage.getItem("castles_online_opponent_invite:game_denied")).toBeNull();
   });
 
   it("wraps long pre-snapshot online errors in the online state layout", () => {
