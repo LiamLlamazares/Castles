@@ -108,6 +108,13 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         peerNodeId: "local-runtime-smoke-b",
         visibility: "unlisted",
       },
+      timeoutFanout: {
+        gameId: "game_runtime_timeout_1",
+        adjudicatingNodeId: "local-runtime-smoke-a",
+        spectatorNodeId: "local-runtime-smoke-b",
+        result: "timeout",
+        version: 1,
+      },
     });
 
     expect(summary).toEqual({
@@ -137,6 +144,13 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         peerNodeId: "local-runtime-smoke-b",
         visibility: "unlisted",
       },
+      timeoutFanout: {
+        gameId: "game_runtime_timeout_1",
+        adjudicatingNodeId: "local-runtime-smoke-a",
+        spectatorNodeId: "local-runtime-smoke-b",
+        result: "timeout",
+        version: 1,
+      },
     });
 
     const formatted = formatLocalPostgresRuntimeNodesSmokeMetrics(summary);
@@ -147,6 +161,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     expect(formatted).toContain("rollingContinuation=local-runtime-smoke-a->local-runtime-smoke-b@v2");
     expect(formatted).toContain("spectatorFanout=local-runtime-smoke-a->local-runtime-smoke-b@v1");
     expect(formatted).toContain("visibilityPropagation=local-runtime-smoke-a->local-runtime-smoke-b@unlisted");
+    expect(formatted).toContain("timeoutFanout=local-runtime-smoke-a->local-runtime-smoke-b@timeout");
     expect(formatted).not.toMatch(/postgresql:\/\/|DATABASE_URL|Bearer|token|secret/i);
   });
 
@@ -263,6 +278,25 @@ describe("local PostgreSQL runtime-nodes smoke script", () => {
     expect(visibilityIndex).toBeGreaterThan(0);
     expect(visibilityIndex).toBeGreaterThan(fanoutIndex);
     expect(drainGameIndex).toBeGreaterThan(visibilityIndex);
+  });
+
+  it("proves cross-node timeout adjudication fanout before the drain rehearsal", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+    const timeoutIndex = script.indexOf("const timeoutFanout = await verifyCrossNodeTimeoutFanout(");
+    const visibilityIndex = script.indexOf("const visibilityPropagation = await verifyCrossNodeVisibilityPropagation(");
+    const drainGameIndex = script.indexOf("createRollingDrainSmokeGame(servers[0]");
+
+    expect(script).toContain("verifyCrossNodeTimeoutFanout");
+    expect(script).toContain("timeoutFanout");
+    expect(script).toContain("agePersistedCreationClockForTimeout");
+    expect(script).toContain("online_game_events");
+    expect(script).toContain("result?.reason === \"timeout\"");
+    expect(timeoutIndex).toBeGreaterThan(0);
+    expect(timeoutIndex).toBeGreaterThan(visibilityIndex);
+    expect(drainGameIndex).toBeGreaterThan(timeoutIndex);
   });
 
   it("fails instead of swallowing rolling-drain cleanup errors", async () => {

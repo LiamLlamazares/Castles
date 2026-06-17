@@ -89,6 +89,7 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   nodeStatuses,
   rollingContinuation,
   spectatorFanout,
+  timeoutFanout,
   visibilityPropagation,
 }) {
   const summary = {
@@ -109,6 +110,9 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   }
   if (visibilityPropagation) {
     summary.visibilityPropagation = visibilityPropagation;
+  }
+  if (timeoutFanout) {
+    summary.timeoutFanout = timeoutFanout;
   }
   return summary;
 }
@@ -137,6 +141,11 @@ export function formatLocalPostgresRuntimeNodesSmokeMetrics(summary) {
   if (summary.visibilityPropagation) {
     metrics.push(
       `visibilityPropagation=${summary.visibilityPropagation.playerNodeId}->${summary.visibilityPropagation.peerNodeId}@${summary.visibilityPropagation.visibility}`
+    );
+  }
+  if (summary.timeoutFanout) {
+    metrics.push(
+      `timeoutFanout=${summary.timeoutFanout.adjudicatingNodeId}->${summary.timeoutFanout.spectatorNodeId}@${summary.timeoutFanout.result}`
     );
   }
   return metrics.join(" ");

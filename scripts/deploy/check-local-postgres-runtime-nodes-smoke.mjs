@@ -408,6 +408,72 @@ async function fetchSpectatorSnapshot(serverProcess, { expectedVersion, fetchWit
   return body.snapshot;
 }
 
+async function fetchPlayerSnapshot(serverProcess, { expectedVersion, fetchWithTimeout, gameId, token }) {
+  const response = await fetchWithTimeout(
+    `${serverProcess.baseUrl}/api/online/games/${encodeURIComponent(gameId)}`,
+    {
+      headers: { authorization: `Bearer ${token}` },
+    }
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `Player snapshot fetch failed with ${response.status}.`);
+  assertProtocolVersionedBody(body, "Player snapshot response");
+  assert(body.color === "w" || body.color === "b", "Player snapshot response did not include a player color.");
+  assert(
+    body.snapshot?.version === expectedVersion,
+    `Player snapshot returned version ${body.snapshot?.version}, expected ${expectedVersion}.`
+  );
+  assertDefaultOnlineClock(body.snapshot, "Player snapshot");
+  return body.snapshot;
+}
+
+async function agePersistedCreationClockForTimeout(gameId) {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  try {
+    await client.connect();
+    const result = await client.query(
+      `
+        SELECT payload
+        FROM online_game_events
+        WHERE game_id = $1 AND event_type = 'game_created'
+      `,
+      [gameId]
+    );
+    assert(result.rows.length === 1, `Expected one creation event for timeout smoke game ${gameId}.`);
+    const payload = result.rows[0].payload;
+    const activeColor = payload?.clock?.activeColor;
+    assert(activeColor === "w" || activeColor === "b", "Timeout smoke creation event has no active clock color.");
+    const remainingMs = payload?.clock?.remainingMs?.[activeColor];
+    assert(
+      Number.isSafeInteger(remainingMs) && remainingMs > 0,
+      `Timeout smoke creation event has invalid ${activeColor} remaining time.`
+    );
+
+    const agedPayload = {
+      ...payload,
+      clock: {
+        ...payload.clock,
+        runningSince: Date.now() - remainingMs - 1_000,
+      },
+    };
+    const updated = await client.query(
+      `
+        UPDATE online_game_events
+        SET payload = $2::jsonb
+        WHERE game_id = $1 AND event_type = 'game_created'
+      `,
+      [gameId, agedPayload]
+    );
+    assert(updated.rowCount === 1, `Failed to age creation clock for timeout smoke game ${gameId}.`);
+    return {
+      activeColor,
+      remainingMs,
+    };
+  } finally {
+    await client.end();
+  }
+}
+
 async function spectateThroughNode(serverProcess, { gameId, nextSocketMessage, waitForSocketOpen, WebSocket }) {
   const socket = new WebSocket(buildWebSocketUrl(serverProcess.baseUrl));
   const spectating = nextSocketMessage(socket, `${serverProcess.nodeId} spectator join response`);
@@ -549,6 +615,69 @@ async function verifyCrossNodeVisibilityPropagation(playerServer, peerServer, he
     peerNodeId: peerServer.nodeId,
     visibility: "unlisted",
   };
+}
+
+async function verifyCrossNodeTimeoutFanout(adjudicatingServer, spectatorServer, helpers) {
+  const created = await createSmokeGameOnNode(
+    adjudicatingServer,
+    helpers,
+    "Cross-node timeout fanout"
+  );
+  await makeGamePublic(adjudicatingServer, {
+    fetchWithTimeout: helpers.fetchWithTimeout,
+    gameId: created.gameId,
+    token: created.white.token,
+  });
+
+  const spectatorSocket = await spectateThroughNode(spectatorServer, {
+    ...helpers,
+    gameId: created.gameId,
+  });
+  try {
+    await agePersistedCreationClockForTimeout(created.gameId);
+    const spectatorBroadcast = helpers.nextSocketMessage(
+      spectatorSocket,
+      "cross-node timeout fanout snapshot"
+    );
+    const playerSnapshot = await fetchPlayerSnapshot(adjudicatingServer, {
+      expectedVersion: 1,
+      fetchWithTimeout: helpers.fetchWithTimeout,
+      gameId: created.gameId,
+      token: created.white.token,
+    });
+    assert(
+      playerSnapshot?.result?.reason === "timeout",
+      `Timeout fanout player snapshot did not end by timeout: ${JSON.stringify(playerSnapshot?.result ?? null)}`
+    );
+    const broadcast = await spectatorBroadcast;
+    assertProtocolVersionedBody(broadcast, "Cross-node timeout fanout broadcast");
+    assert(
+      broadcast.type === "snapshot",
+      `Cross-node timeout fanout delivered ${broadcast.type ?? "<missing>"}.`
+    );
+    assert(
+      broadcast.snapshot?.gameId === created.gameId,
+      "Cross-node timeout fanout broadcast used a different game id."
+    );
+    assert(
+      broadcast.snapshot?.version === 1,
+      `Cross-node timeout fanout broadcast returned version ${broadcast.snapshot?.version}.`
+    );
+    assert(
+      broadcast.snapshot?.result?.reason === "timeout",
+      `Cross-node timeout fanout broadcast did not end by timeout: ${JSON.stringify(broadcast.snapshot?.result ?? null)}`
+    );
+    assertDefaultOnlineClock(broadcast.snapshot, "Cross-node timeout fanout broadcast");
+    return {
+      gameId: created.gameId,
+      adjudicatingNodeId: adjudicatingServer.nodeId,
+      spectatorNodeId: spectatorServer.nodeId,
+      result: "timeout",
+      version: broadcast.snapshot.version,
+    };
+  } finally {
+    await closeSmokeSocket(spectatorSocket);
+  }
 }
 
 async function createRollingDrainSmokeGame(serverProcess, helpers) {
@@ -701,6 +830,7 @@ async function main() {
       servers[1],
       smokeHelpers
     );
+    const timeoutFanout = await verifyCrossNodeTimeoutFanout(servers[0], servers[1], smokeHelpers);
     const rollingGame = await createRollingDrainSmokeGame(servers[0], smokeHelpers);
 
     const drainedRuntime = await startDrain(servers[0], {
@@ -754,6 +884,7 @@ async function main() {
           healthyNodeIds: [options.nodeIds[1]],
           rollingContinuation,
           spectatorFanout,
+          timeoutFanout,
           visibilityPropagation,
         })
       )
