@@ -102,6 +102,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         spectatorNodeId: "local-runtime-smoke-b",
         version: 1,
       },
+      visibilityPropagation: {
+        gameId: "game_runtime_visibility_1",
+        playerNodeId: "local-runtime-smoke-a",
+        peerNodeId: "local-runtime-smoke-b",
+        visibility: "unlisted",
+      },
     });
 
     expect(summary).toEqual({
@@ -125,6 +131,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         spectatorNodeId: "local-runtime-smoke-b",
         version: 1,
       },
+      visibilityPropagation: {
+        gameId: "game_runtime_visibility_1",
+        playerNodeId: "local-runtime-smoke-a",
+        peerNodeId: "local-runtime-smoke-b",
+        visibility: "unlisted",
+      },
     });
 
     const formatted = formatLocalPostgresRuntimeNodesSmokeMetrics(summary);
@@ -134,6 +146,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     expect(formatted).toContain("heartbeatReady=2");
     expect(formatted).toContain("rollingContinuation=local-runtime-smoke-a->local-runtime-smoke-b@v2");
     expect(formatted).toContain("spectatorFanout=local-runtime-smoke-a->local-runtime-smoke-b@v1");
+    expect(formatted).toContain("visibilityPropagation=local-runtime-smoke-a->local-runtime-smoke-b@unlisted");
     expect(formatted).not.toMatch(/postgresql:\/\/|DATABASE_URL|Bearer|token|secret/i);
   });
 
@@ -230,6 +243,26 @@ describe("local PostgreSQL runtime-nodes smoke script", () => {
 
     expect(script).toContain("{ type: \"RESIGN\", baseVersion: 1 }");
     expect(script).toContain("spectator-fanout-cleanup-resign");
+  });
+
+  it("proves cross-node public-to-unlisted visibility propagation", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+    const visibilityIndex = script.indexOf("const visibilityPropagation = await verifyCrossNodeVisibilityPropagation(");
+    const fanoutIndex = script.indexOf("const spectatorFanout = await verifyCrossNodeSpectatorFanout(");
+    const drainGameIndex = script.indexOf("createRollingDrainSmokeGame(servers[0]");
+
+    expect(script).toContain("verifyCrossNodeVisibilityPropagation");
+    expect(script).toContain("visibilityPropagation");
+    expect(script).toContain("visibility: \"unlisted\"");
+    expect(script).toContain("expectPublicSummaryStatus");
+    expect(script).toContain("fetchSpectatorSnapshot");
+    expect(script).toContain("visibility-propagation-cleanup-resign");
+    expect(visibilityIndex).toBeGreaterThan(0);
+    expect(visibilityIndex).toBeGreaterThan(fanoutIndex);
+    expect(drainGameIndex).toBeGreaterThan(visibilityIndex);
   });
 
   it("fails instead of swallowing rolling-drain cleanup errors", async () => {

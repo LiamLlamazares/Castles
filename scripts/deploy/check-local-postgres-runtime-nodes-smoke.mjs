@@ -329,7 +329,7 @@ async function createSmokeGameOnNode(serverProcess, helpers, description) {
   return created;
 }
 
-async function makeGamePublic(serverProcess, { fetchWithTimeout, gameId, token }) {
+async function setGameVisibility(serverProcess, { fetchWithTimeout, gameId, token, visibility }) {
   const visibilityResponse = await fetchWithTimeout(
     `${serverProcess.baseUrl}/api/online/games/${encodeURIComponent(gameId)}/visibility`,
     {
@@ -338,24 +338,74 @@ async function makeGamePublic(serverProcess, { fetchWithTimeout, gameId, token }
         "content-type": "application/json",
         authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ visibility: "public" }),
+      body: JSON.stringify({ visibility }),
     }
   );
   const visibilityBody = await readJson(visibilityResponse);
   assert(
     visibilityResponse.status === 200,
-    `Making spectator fanout game public failed with ${visibilityResponse.status}.`
+    `Setting game visibility to ${visibility} failed with ${visibilityResponse.status}.`
   );
-  assertProtocolVersionedBody(visibilityBody, "Spectator fanout visibility response");
+  assertProtocolVersionedBody(visibilityBody, "Game visibility response");
+  assert(
+    visibilityBody.summary?.visibility === visibility,
+    `Visibility response returned ${visibilityBody.summary?.visibility}, expected ${visibility}.`
+  );
+  return visibilityBody.summary;
 }
 
-async function fetchPublicSummary(serverProcess, { fetchWithTimeout, gameId }) {
+async function makeGamePublic(serverProcess, { fetchWithTimeout, gameId, token }) {
+  return setGameVisibility(serverProcess, {
+    fetchWithTimeout,
+    gameId,
+    token,
+    visibility: "public",
+  });
+}
+
+async function expectPublicSummaryStatus(
+  serverProcess,
+  { description, expectedStatus, fetchWithTimeout, gameId }
+) {
   const response = await fetchWithTimeout(
     `${serverProcess.baseUrl}/api/online/games/${encodeURIComponent(gameId)}/summary`
   );
   const body = await readJson(response);
-  assert(response.status === 200, `Public game summary failed with ${response.status}.`);
+  assert(
+    response.status === expectedStatus,
+    `${description} returned ${response.status}, expected ${expectedStatus}.`
+  );
+  if (expectedStatus !== 200) return null;
+  assert(
+    body.summary?.gameId === gameId,
+    `${description} returned summary for ${body.summary?.gameId ?? "<missing>"}.`
+  );
   return body.summary;
+}
+
+async function fetchPublicSummary(serverProcess, { fetchWithTimeout, gameId }) {
+  return expectPublicSummaryStatus(serverProcess, {
+    description: "Public game summary",
+    expectedStatus: 200,
+    fetchWithTimeout,
+    gameId,
+  });
+}
+
+async function fetchSpectatorSnapshot(serverProcess, { expectedVersion, fetchWithTimeout, gameId }) {
+  const response = await fetchWithTimeout(
+    `${serverProcess.baseUrl}/api/online/games/${encodeURIComponent(gameId)}/spectator`
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `Spectator snapshot fetch failed with ${response.status}.`);
+  assertProtocolVersionedBody(body, "Spectator snapshot response");
+  assert(body.role === "spectator", "Spectator snapshot response did not report spectator role.");
+  assert(
+    body.snapshot?.version === expectedVersion,
+    `Spectator snapshot returned version ${body.snapshot?.version}, expected ${expectedVersion}.`
+  );
+  assertDefaultOnlineClock(body.snapshot, "Spectator snapshot");
+  return body.snapshot;
 }
 
 async function spectateThroughNode(serverProcess, { gameId, nextSocketMessage, waitForSocketOpen, WebSocket }) {
@@ -448,6 +498,57 @@ async function verifyCrossNodeSpectatorFanout(playerServer, spectatorServer, hel
   } finally {
     await closeSmokeSocket(spectatorSocket);
   }
+}
+
+async function verifyCrossNodeVisibilityPropagation(playerServer, peerServer, helpers) {
+  const created = await createSmokeGameOnNode(
+    playerServer,
+    helpers,
+    "Cross-node visibility propagation"
+  );
+  await makeGamePublic(playerServer, {
+    fetchWithTimeout: helpers.fetchWithTimeout,
+    gameId: created.gameId,
+    token: created.white.token,
+  });
+  await expectPublicSummaryStatus(peerServer, {
+    description: "Peer public summary before unlisting",
+    expectedStatus: 200,
+    fetchWithTimeout: helpers.fetchWithTimeout,
+    gameId: created.gameId,
+  });
+
+  await setGameVisibility(playerServer, {
+    fetchWithTimeout: helpers.fetchWithTimeout,
+    gameId: created.gameId,
+    token: created.white.token,
+    visibility: "unlisted",
+  });
+  await expectPublicSummaryStatus(peerServer, {
+    description: "Peer public summary after unlisting",
+    expectedStatus: 404,
+    fetchWithTimeout: helpers.fetchWithTimeout,
+    gameId: created.gameId,
+  });
+  await fetchSpectatorSnapshot(peerServer, {
+    expectedVersion: 0,
+    fetchWithTimeout: helpers.fetchWithTimeout,
+    gameId: created.gameId,
+  });
+  await submitActionThroughNode(playerServer, {
+    ...helpers,
+    action: { type: "RESIGN", baseVersion: 0 },
+    clientActionId: `visibility-propagation-cleanup-resign-${Date.now().toString(36)}`,
+    gameId: created.gameId,
+    token: created.black.token,
+  });
+
+  return {
+    gameId: created.gameId,
+    playerNodeId: playerServer.nodeId,
+    peerNodeId: peerServer.nodeId,
+    visibility: "unlisted",
+  };
 }
 
 async function createRollingDrainSmokeGame(serverProcess, helpers) {
@@ -595,6 +696,11 @@ async function main() {
     );
 
     const spectatorFanout = await verifyCrossNodeSpectatorFanout(servers[0], servers[1], smokeHelpers);
+    const visibilityPropagation = await verifyCrossNodeVisibilityPropagation(
+      servers[0],
+      servers[1],
+      smokeHelpers
+    );
     const rollingGame = await createRollingDrainSmokeGame(servers[0], smokeHelpers);
 
     const drainedRuntime = await startDrain(servers[0], {
@@ -648,6 +754,7 @@ async function main() {
           healthyNodeIds: [options.nodeIds[1]],
           rollingContinuation,
           spectatorFanout,
+          visibilityPropagation,
         })
       )
     );

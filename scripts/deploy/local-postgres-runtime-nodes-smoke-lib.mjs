@@ -89,6 +89,7 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   nodeStatuses,
   rollingContinuation,
   spectatorFanout,
+  visibilityPropagation,
 }) {
   const summary = {
     schemaVersion: 1,
@@ -105,6 +106,9 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   }
   if (spectatorFanout) {
     summary.spectatorFanout = spectatorFanout;
+  }
+  if (visibilityPropagation) {
+    summary.visibilityPropagation = visibilityPropagation;
   }
   return summary;
 }
@@ -128,6 +132,11 @@ export function formatLocalPostgresRuntimeNodesSmokeMetrics(summary) {
   if (summary.spectatorFanout) {
     metrics.push(
       `spectatorFanout=${summary.spectatorFanout.playerNodeId}->${summary.spectatorFanout.spectatorNodeId}@v${summary.spectatorFanout.version}`
+    );
+  }
+  if (summary.visibilityPropagation) {
+    metrics.push(
+      `visibilityPropagation=${summary.visibilityPropagation.playerNodeId}->${summary.visibilityPropagation.peerNodeId}@${summary.visibilityPropagation.visibility}`
     );
   }
   return metrics.join(" ");
