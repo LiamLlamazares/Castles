@@ -9,9 +9,14 @@ import { fileURLToPath } from "node:url";
 import { checkLocalPostgresPrereqs } from "./local-postgres-prereqs.mjs";
 import {
   assert,
+  assertDefaultOnlineClock,
   assertProtocolVersionedBody,
+  buildWebSocketUrl,
   createFetchWithTimeout,
+  createWebSocketWaiters,
+  makeSmokeSetup,
   readJson,
+  versionedSocketMessage,
 } from "./online-smoke-lib.mjs";
 import {
   buildRuntimeNodeServerEnv,
@@ -244,6 +249,129 @@ async function startDrain(serverProcess, { adminBearerToken, fetchWithTimeout })
   return body.runtime;
 }
 
+async function submitActionThroughNode(
+  serverProcess,
+  { action, clientActionId, gameId, nextSocketMessage, token, waitForSocketOpen, WebSocket }
+) {
+  const socket = new WebSocket(buildWebSocketUrl(serverProcess.baseUrl));
+  try {
+    const joined = nextSocketMessage(socket, `${serverProcess.nodeId} ${clientActionId} join response`);
+    await waitForSocketOpen(socket);
+    socket.send(
+      JSON.stringify(versionedSocketMessage({
+        type: "join",
+        gameId,
+        token,
+      }))
+    );
+    const joinedMessage = await joined;
+    assertProtocolVersionedBody(joinedMessage, `${serverProcess.nodeId} join response`);
+    assert(joinedMessage.type === "joined", `${serverProcess.nodeId} did not join game ${gameId}.`);
+
+    const actionResponse = nextSocketMessage(
+      socket,
+      `${serverProcess.nodeId} ${clientActionId} action response`
+    );
+    socket.send(
+      JSON.stringify(versionedSocketMessage({
+        type: "action",
+        clientActionId,
+        action,
+      }))
+    );
+    const actionMessage = await actionResponse;
+    assertProtocolVersionedBody(actionMessage, `${serverProcess.nodeId} action response`);
+    assert(
+      actionMessage.type === "snapshot",
+      `${serverProcess.nodeId} action was not accepted: ${JSON.stringify(actionMessage.error ?? actionMessage)}`
+    );
+    return actionMessage.snapshot;
+  } finally {
+    socket.close();
+  }
+}
+
+async function createRollingDrainSmokeGame(serverProcess, helpers) {
+  const createResponse = await helpers.fetchWithTimeout(`${serverProcess.baseUrl}/api/online/games`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ setup: makeSmokeSetup() }),
+  });
+  const created = await readJson(createResponse);
+  assert(createResponse.status === 201, `Rolling-drain game create failed with ${createResponse.status}.`);
+  assert(
+    createResponse.headers.get("cache-control")?.includes("no-store"),
+    "Rolling-drain create response was not no-store."
+  );
+  assert(created.gameId, "Rolling-drain create did not return a game id.");
+  assert(created.white?.token, "Rolling-drain create did not return a white token.");
+  assert(created.black?.token, "Rolling-drain create did not return a black token.");
+
+  const snapshot = await submitActionThroughNode(serverProcess, {
+    ...helpers,
+    action: { type: "PASS", baseVersion: 0 },
+    clientActionId: `rolling-drain-node-a-pass-${Date.now().toString(36)}`,
+    gameId: created.gameId,
+    token: created.white.token,
+  });
+  assert(snapshot?.version === 1, `Node A rolling-drain action returned version ${snapshot?.version}.`);
+  assertDefaultOnlineClock(snapshot, "Node A rolling-drain snapshot");
+
+  return {
+    gameId: created.gameId,
+    createdNodeId: serverProcess.nodeId,
+    whiteToken: created.white.token,
+    blackToken: created.black.token,
+    version: snapshot.version,
+  };
+}
+
+async function continueRollingDrainSmokeGame(serverProcess, rollingGame, helpers) {
+  const readResponse = await helpers.fetchWithTimeout(
+    `${serverProcess.baseUrl}/api/online/games/${encodeURIComponent(rollingGame.gameId)}`,
+    {
+      headers: { authorization: `Bearer ${rollingGame.blackToken}` },
+    }
+  );
+  const readBody = await readJson(readResponse);
+  assert(
+    readResponse.status === 200,
+    `Peer node rolling-drain game fetch failed with ${readResponse.status}.`
+  );
+  assertProtocolVersionedBody(readBody, "Peer node rolling-drain game fetch");
+  assert(readBody.color === "b", "Peer node rolling-drain fetch did not return black seat.");
+  assert(
+    readBody.snapshot?.version === rollingGame.version,
+    `Peer node rolling-drain fetch returned version ${readBody.snapshot?.version}, expected ${rollingGame.version}.`
+  );
+  assertDefaultOnlineClock(readBody.snapshot, "Peer node rolling-drain fetch snapshot");
+
+  const snapshot = await submitActionThroughNode(serverProcess, {
+    ...helpers,
+    action: { type: "PASS", baseVersion: 1 },
+    clientActionId: `rolling-drain-node-b-pass-${Date.now().toString(36)}`,
+    gameId: rollingGame.gameId,
+    token: rollingGame.blackToken,
+  });
+  assert(snapshot?.version === 2, `Node B rolling-drain action returned version ${snapshot?.version}.`);
+  assertDefaultOnlineClock(snapshot, "Node B rolling-drain snapshot");
+
+  await submitActionThroughNode(serverProcess, {
+    ...helpers,
+    action: { type: "RESIGN", baseVersion: 2 },
+    clientActionId: `rolling-drain-cleanup-resign-${Date.now().toString(36)}`,
+    gameId: rollingGame.gameId,
+    token: rollingGame.whiteToken,
+  });
+
+  return {
+    gameId: rollingGame.gameId,
+    createdNodeId: rollingGame.createdNodeId,
+    continuedNodeId: serverProcess.nodeId,
+    version: snapshot.version,
+  };
+}
+
 async function loadRuntimeNodeRows(nodeIds) {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   try {
@@ -270,6 +398,14 @@ async function main() {
   await requireLocalInputs();
   const options = parseLocalPostgresRuntimeNodesSmokeOptions();
   const fetchWithTimeout = createFetchWithTimeout(options.requestTimeoutMs);
+  const { waitForSocketOpen, nextSocketMessage } = createWebSocketWaiters(options.requestTimeoutMs);
+  const { WebSocket } = require("ws");
+  const smokeHelpers = {
+    fetchWithTimeout,
+    nextSocketMessage,
+    waitForSocketOpen,
+    WebSocket,
+  };
   const ports = await findFreePorts(options.nodeIds.length);
   const servers = options.nodeIds.map((nodeId, index) =>
     startServer({
@@ -312,6 +448,8 @@ async function main() {
       `Expected ${options.nodeIds.length} online_runtime_nodes rows, got ${firstRows.length}.`
     );
 
+    const rollingGame = await createRollingDrainSmokeGame(servers[0], smokeHelpers);
+
     const drainedRuntime = await startDrain(servers[0], {
       adminBearerToken: options.adminBearerToken,
       fetchWithTimeout,
@@ -352,6 +490,8 @@ async function main() {
       "Database runtime node row did not preserve the peer node as healthy."
     );
 
+    const rollingContinuation = await continueRollingDrainSmokeGame(servers[1], rollingGame, smokeHelpers);
+
     console.log(
       formatLocalPostgresRuntimeNodesSmokeMetrics(
         summarizeLocalPostgresRuntimeNodesSmoke({
@@ -359,6 +499,7 @@ async function main() {
           databaseRows,
           drainedNodeId: options.nodeIds[0],
           healthyNodeIds: [options.nodeIds[1]],
+          rollingContinuation,
         })
       )
     );

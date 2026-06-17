@@ -90,6 +90,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
           persistedNodePresent: true,
         },
       ],
+      rollingContinuation: {
+        gameId: "game_runtime_roll_1",
+        createdNodeId: "local-runtime-smoke-a",
+        continuedNodeId: "local-runtime-smoke-b",
+        version: 2,
+      },
     });
 
     expect(summary).toEqual({
@@ -101,6 +107,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
       persistedNodeCount: 2,
       drainedNodeId: "local-runtime-smoke-a",
       healthyNodeIds: ["local-runtime-smoke-b"],
+      rollingContinuation: {
+        gameId: "game_runtime_roll_1",
+        createdNodeId: "local-runtime-smoke-a",
+        continuedNodeId: "local-runtime-smoke-b",
+        version: 2,
+      },
     });
 
     const formatted = formatLocalPostgresRuntimeNodesSmokeMetrics(summary);
@@ -108,6 +120,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     expect(formatted).toContain("dbRows=2");
     expect(formatted).toContain("draining=1");
     expect(formatted).toContain("heartbeatReady=2");
+    expect(formatted).toContain("rollingContinuation=local-runtime-smoke-a->local-runtime-smoke-b@v2");
     expect(formatted).not.toMatch(/postgresql:\/\/|DATABASE_URL|Bearer|token|secret/i);
   });
 
@@ -154,5 +167,36 @@ describe("local PostgreSQL runtime-nodes smoke script", () => {
     expect(script).toContain("/__local/shutdown");
     expect(script).toContain("checkLocalPostgresPrereqs");
     expect(script).not.toMatch(/CASTLES_DEPLOYMENT_MODE\s*[:=]\s*["']multi-instance["']/);
+  });
+
+  it("continues a pre-drain game through the healthy peer node", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+    const createIndex = script.indexOf("createRollingDrainSmokeGame(servers[0]");
+    const drainIndex = script.indexOf("startDrain(servers[0]");
+    const continueIndex = script.indexOf("continueRollingDrainSmokeGame(servers[1]");
+
+    expect(script).toContain("makeSmokeSetup");
+    expect(script).toContain("buildWebSocketUrl");
+    expect(script).toContain("versionedSocketMessage");
+    expect(script).toContain("createRollingDrainSmokeGame");
+    expect(script).toContain("continueRollingDrainSmokeGame");
+    expect(createIndex).toBeGreaterThan(0);
+    expect(drainIndex).toBeGreaterThan(createIndex);
+    expect(continueIndex).toBeGreaterThan(drainIndex);
+    expect(script).toContain("{ type: \"PASS\", baseVersion: 0 }");
+    expect(script).toContain("{ type: \"PASS\", baseVersion: 1 }");
+  });
+
+  it("fails instead of swallowing rolling-drain cleanup errors", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+
+    expect(script).toContain("{ type: \"RESIGN\", baseVersion: 2 }");
+    expect(script).not.toContain("Rolling-drain cleanup resignation failed");
   });
 });

@@ -87,8 +87,9 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   drainedNodeId,
   healthyNodeIds,
   nodeStatuses,
+  rollingContinuation,
 }) {
-  return {
+  const summary = {
     schemaVersion: 1,
     nodeCount: nodeStatuses.length,
     databaseNodeCount: databaseRows.length,
@@ -98,10 +99,14 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
     drainedNodeId,
     healthyNodeIds,
   };
+  if (rollingContinuation) {
+    summary.rollingContinuation = rollingContinuation;
+  }
+  return summary;
 }
 
 export function formatLocalPostgresRuntimeNodesSmokeMetrics(summary) {
-  return [
+  const metrics = [
     "Local PostgreSQL runtime nodes smoke passed:",
     `nodes=${summary.nodeCount}`,
     `dbRows=${summary.databaseNodeCount}`,
@@ -110,7 +115,13 @@ export function formatLocalPostgresRuntimeNodesSmokeMetrics(summary) {
     `persistedNodes=${summary.persistedNodeCount}`,
     `drainedNode=${summary.drainedNodeId}`,
     `healthyNodes=${summary.healthyNodeIds.join(",")}`,
-  ].join(" ");
+  ];
+  if (summary.rollingContinuation) {
+    metrics.push(
+      `rollingContinuation=${summary.rollingContinuation.createdNodeId}->${summary.rollingContinuation.continuedNodeId}@v${summary.rollingContinuation.version}`
+    );
+  }
+  return metrics.join(" ");
 }
 
 export function selectRuntimeNodesSmokeFailure(operationError, shutdownResults) {
