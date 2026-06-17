@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { AddressInfo } from "node:net";
 import { WebSocket } from "ws";
 import { getStartingBoard, getStartingPieces } from "../../../ConstantImports";
@@ -10,23 +11,45 @@ import {
   type OnlineGameCredentials,
   type OnlineGameEvent,
 } from "../../events";
+import {
+  projectOnlineChallengeSummaries,
+  type OnlineChallengeEvent,
+  type OnlineChallengeSummary,
+} from "../../challenges";
 import { ONLINE_PROTOCOL_VERSION } from "../../protocolVersion";
 import {
   ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
   projectOnlineGameSummaries,
+  type OnlineIdentity,
   type OnlineGameSummary,
 } from "../../readModel";
 import { serializeOnlineGameSetup } from "../../serialization";
+import {
+  canIdentityAcceptOpenSeek,
+  createOpenSeekAcceptedEvent,
+  isSameOnlineIdentity as isSameOpenSeekIdentity,
+  projectOpenSeekSummaries,
+  type OpenSeekEvent,
+  type OpenSeekSummary,
+} from "../../seeks";
 import type { OnlineActionDTO } from "../../types";
 import { createOnlineHttpServer } from "../createOnlineHttpServer";
 import { hashOnlineToken, verifyOnlineToken } from "../onlineTokenCredentials";
+import { MemoryOnlineAccountStore } from "../OnlineAccountStore";
 import type {
+  OnlineChallengeCredentials,
+  OpenSeekAcceptInput,
+  OpenSeekAcceptResult,
+  OpenSeekCredentials,
   OnlineGameStoreActionInput,
   OnlineGameStoreActionResult,
+  ResolvedOpenSeekCredential,
 } from "../OnlineGameStore";
 import {
   createPostgresCompositeRuntimeCoordinator,
   type OnlineRuntimeEventStore,
+  type OnlineRuntimeOperationGateScope,
+  type OnlineRuntimeOperationGateStore,
   type OnlineRuntimeSpectatorPresenceStore,
   type OnlineRuntimeSpectatorRegistration,
   type OnlineRuntimeStoredGameSnapshotChangedEvent,
@@ -40,8 +63,33 @@ export interface TwoInstanceCreatedGame {
   black: { token: string };
 }
 
+export interface TwoInstanceHttpResult {
+  status: number;
+  body: any;
+}
+
 export interface TwoInstanceRuntimeHarness {
   createGameOnNodeA(): Promise<TwoInstanceCreatedGame>;
+  createOpenSeekOnNodeA(creatorSessionId: string): Promise<{ seekId: string; body: any }>;
+  acceptOpenSeekOnNodeA(seekId: string, acceptorSessionId: string): Promise<TwoInstanceHttpResult>;
+  acceptOpenSeekOnNodeB(seekId: string, acceptorSessionId: string): Promise<TwoInstanceHttpResult>;
+  quickMatchOnNodeA(sessionId: string): Promise<TwoInstanceHttpResult>;
+  quickMatchOnNodeB(sessionId: string): Promise<TwoInstanceHttpResult>;
+  createChallengeAccounts(): Promise<{ challenger: any; challenged: any; challengePairGateKey: string }>;
+  createTargetedChallengeOnNodeA(
+    challengerToken: string,
+    challengedDisplayName: string
+  ): Promise<TwoInstanceHttpResult>;
+  createTargetedChallengeOnNodeB(
+    challengerToken: string,
+    challengedDisplayName: string
+  ): Promise<TwoInstanceHttpResult>;
+  countOpenSeeks(): Promise<number>;
+  countChallenges(): Promise<number>;
+  countGames(): Promise<number>;
+  expectSharedGateContention(gateKey: string, expectedEntrants?: number): void;
+  sharedGateCallCount(gateKey: string): number;
+  sharedGateCalls(): string[];
   spectateOnNodeB(gameId: string): Promise<WebSocket>;
   joinWhiteOnNodeA(game: TwoInstanceCreatedGame): Promise<WebSocket>;
   sendWhiteAction(
@@ -61,6 +109,10 @@ interface SharedRuntimeState {
   nextEventId: number;
   spectatorConnections: Map<string, Map<string, { gameId: string; nodeId: string }>>;
   nextSpectatorId: number;
+  openSeekEvents: OpenSeekEvent[];
+  openSeekCredentials: Map<string, OpenSeekCredentials>;
+  challengeEvents: OnlineChallengeEvent[];
+  challengeCredentials: Map<string, OnlineChallengeCredentials>;
 }
 
 function createSetup() {
@@ -82,6 +134,24 @@ function createSetup() {
     timeControl: { initial: 20, increment: 20 },
     ratingMode: "casual",
   });
+}
+
+function publicPlayerIdentityQueueKey(identity: OnlineIdentity): string {
+  return `${identity.kind}:${identity.id}`;
+}
+
+function accountChallengePairOperationGateKey(
+  challengerIdentity: OnlineIdentity,
+  challengedIdentity: OnlineIdentity
+): string {
+  const pairKeyPayload = JSON.stringify([
+    publicPlayerIdentityQueueKey(challengerIdentity),
+    publicPlayerIdentityQueueKey(challengedIdentity),
+  ]);
+  const pairKey = `account_challenge_pair:${createHash("sha256")
+    .update(pairKeyPayload, "utf8")
+    .digest("base64url")}`;
+  return `account_challenge_pair:${pairKey}`;
 }
 
 function versionedMessage<T extends Record<string, unknown>>(
@@ -267,6 +337,88 @@ class InMemorySpectatorPresenceStore implements OnlineRuntimeSpectatorPresenceSt
   }
 }
 
+class InMemoryOperationGateStore implements OnlineRuntimeOperationGateStore {
+  readonly calls: string[] = [];
+  private readonly gates = new Map<string, Promise<void>>();
+  private readonly contentionBarriers = new Map<
+    string,
+    {
+      expectedEntrants: number;
+      arrived: number;
+      promise: Promise<void>;
+      resolve: () => void;
+      reject: (error: Error) => void;
+      timeoutId: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  expectContention(gateKey: string, expectedEntrants = 2): void {
+    if (!Number.isInteger(expectedEntrants) || expectedEntrants < 2) {
+      throw new Error("Expected shared gate contention requires at least two entrants.");
+    }
+    if (this.contentionBarriers.has(gateKey)) {
+      throw new Error(`Shared gate contention is already armed for ${gateKey}.`);
+    }
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<void>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve;
+      reject = promiseReject;
+    });
+    promise.catch(() => undefined);
+    const timeoutId = setTimeout(() => {
+      this.contentionBarriers.delete(gateKey);
+      reject(new Error(`Timed out waiting for ${expectedEntrants} entrants at ${gateKey}.`));
+    }, 2_000);
+    this.contentionBarriers.set(gateKey, {
+      expectedEntrants,
+      arrived: 0,
+      promise,
+      resolve,
+      reject,
+      timeoutId,
+    });
+  }
+
+  callCount(gateKey: string): number {
+    return this.calls.filter((call) => call === gateKey).length;
+  }
+
+  async withOperationGate<T>(
+    input: { scope: OnlineRuntimeOperationGateScope; key: string },
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const gateKey = `${input.scope}:${input.key}`;
+    this.calls.push(gateKey);
+    const barrier = this.contentionBarriers.get(gateKey);
+    if (barrier) {
+      barrier.arrived += 1;
+      if (barrier.arrived >= barrier.expectedEntrants) {
+        clearTimeout(barrier.timeoutId);
+        this.contentionBarriers.delete(gateKey);
+        barrier.resolve();
+      }
+      await barrier.promise;
+    }
+    const previous = this.gates.get(gateKey) ?? Promise.resolve();
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const next = previous.then(() => blocker, () => blocker);
+    this.gates.set(gateKey, next);
+    await previous.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.gates.get(gateKey) === next) {
+        this.gates.delete(gateKey);
+      }
+    }
+  }
+}
+
 export async function createTwoInstanceRuntimeHarness(input: {
   gameId: string;
 }): Promise<TwoInstanceRuntimeHarness> {
@@ -275,10 +427,16 @@ export async function createTwoInstanceRuntimeHarness(input: {
     nextEventId: 0,
     spectatorConnections: new Map(),
     nextSpectatorId: 0,
+    openSeekEvents: [],
+    openSeekCredentials: new Map(),
+    challengeEvents: [],
+    challengeCredentials: new Map(),
   };
+  const operationGateStore = new InMemoryOperationGateStore();
   const durableEvents: OnlineGameEvent[] = [];
   const durableRooms = new Map<string, OnlineGameRoomRecord>();
   const sockets = new Set<WebSocket>();
+  const accountStore = new MemoryOnlineAccountStore();
   const nodeAService = new OnlineGameService({
     idFactory: () => input.gameId,
     tokenFactory: (seat) => `node-a-${seat}-token`,
@@ -292,11 +450,13 @@ export async function createTwoInstanceRuntimeHarness(input: {
     nodeId: "node-a",
     runtimeEventStore: new InMemoryRuntimeEventStore(sharedRuntime, "node-a"),
     spectatorPresenceStore: new InMemorySpectatorPresenceStore(sharedRuntime, "node-a"),
+    operationGateStore,
   });
   const nodeBCoordinator = createPostgresCompositeRuntimeCoordinator({
     nodeId: "node-b",
     runtimeEventStore: new InMemoryRuntimeEventStore(sharedRuntime, "node-b"),
     spectatorPresenceStore: new InMemorySpectatorPresenceStore(sharedRuntime, "node-b"),
+    operationGateStore,
   });
 
   const loadGameRoomRecord = async (gameId: string) => durableRooms.get(gameId) ?? null;
@@ -360,10 +520,148 @@ export async function createTwoInstanceRuntimeHarness(input: {
     };
   };
 
+  const loadOpenSeekSummaries = async (): Promise<OpenSeekSummary[]> =>
+    projectOpenSeekSummaries(sharedRuntime.openSeekEvents);
+
+  const appendOpenSeekCreated = async (
+    event: Extract<OpenSeekEvent, { type: "seek_created" }>,
+    credentials: OpenSeekCredentials
+  ): Promise<OpenSeekSummary> => {
+    sharedRuntime.openSeekEvents.push(event);
+    sharedRuntime.openSeekCredentials.set(event.seekId, credentials);
+    const summary = projectOpenSeekSummaries(sharedRuntime.openSeekEvents).find(
+      (candidate) => candidate.seekId === event.seekId
+    );
+    if (!summary) {
+      throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
+    }
+    return summary;
+  };
+
+  const appendOpenSeekEvent = async (
+    event: Exclude<OpenSeekEvent, { type: "seek_created" } | { type: "seek_accepted" }>
+  ): Promise<OpenSeekSummary> => {
+    sharedRuntime.openSeekEvents.push(event);
+    const summary = projectOpenSeekSummaries(sharedRuntime.openSeekEvents).find(
+      (candidate) => candidate.seekId === event.seekId
+    );
+    if (!summary) {
+      throw new Error(`Open seek summary was not refreshed for ${event.seekId}.`);
+    }
+    return summary;
+  };
+
+  const resolveOpenSeekCredential = async (
+    seekId: string,
+    token: string
+  ): Promise<ResolvedOpenSeekCredential | null> => {
+    const credentials = sharedRuntime.openSeekCredentials.get(seekId);
+    if (!credentials || !verifyOnlineToken(token, credentials.creatorCredential)) return null;
+    return {
+      seekId,
+      role: "creator" as const,
+      identity: credentials.creatorIdentity as ResolvedOpenSeekCredential["identity"],
+    };
+  };
+
+  const acceptOpenSeekAndCreateGame = async (
+    input: OpenSeekAcceptInput
+  ): Promise<OpenSeekAcceptResult> => {
+    const summary = projectOpenSeekSummaries(sharedRuntime.openSeekEvents).find(
+      (candidate) => candidate.seekId === input.seekId
+    );
+    if (!summary) throw new Error(`Open seek ${input.seekId} was not found.`);
+    if (summary.status !== "open") throw new Error(`Open seek ${input.seekId} is already terminal.`);
+    if (!canIdentityAcceptOpenSeek(summary, input.acceptedBy, input.acceptedAt)) {
+      throw new Error(`A creator cannot accept their own open seek ${input.seekId}.`);
+    }
+    const credentials = sharedRuntime.openSeekCredentials.get(input.seekId);
+    if (!credentials) throw new Error(`Missing open seek credentials for ${input.seekId}.`);
+    const creatorSeat = isSameOpenSeekIdentity(input.whiteIdentity, summary.creatorIdentity)
+      ? "w"
+      : "b";
+    const acceptorSeat = creatorSeat === "w" ? "b" : "w";
+    const gameCredentials: OnlineGameCredentials =
+      creatorSeat === "w"
+        ? {
+            whiteCredential: credentials.creatorCredential,
+            blackCredential: input.acceptorCredential,
+          }
+        : {
+            whiteCredential: input.acceptorCredential,
+            blackCredential: credentials.creatorCredential,
+          };
+    const seekEvent = createOpenSeekAcceptedEvent(
+      {
+        type: "seek_accepted",
+        seekId: input.seekId,
+        acceptedBy: input.acceptedBy,
+        acceptedAt: input.acceptedAt,
+        gameId: input.gameCreatedEvent.gameId,
+        whiteIdentity: input.whiteIdentity,
+        blackIdentity: input.blackIdentity,
+      },
+      { createdAt: input.acceptedAt }
+    );
+    const gameCreatedEvent = {
+      ...input.gameCreatedEvent,
+      whiteIdentity: input.whiteIdentity,
+      blackIdentity: input.blackIdentity,
+    };
+    sharedRuntime.openSeekEvents.push(seekEvent);
+    durableEvents.push(gameCreatedEvent);
+    const seekSummary = projectOpenSeekSummaries(sharedRuntime.openSeekEvents).find(
+      (candidate) => candidate.seekId === input.seekId
+    );
+    if (!seekSummary) {
+      throw new Error(`Open seek summary was not refreshed for ${input.seekId}.`);
+    }
+    const [gameSummary] = projectOnlineGameSummaries([gameCreatedEvent]);
+    if (!gameSummary) {
+      throw new Error(`Online game summary was not refreshed for ${gameCreatedEvent.gameId}.`);
+    }
+    const gameRecord: OnlineGameRoomRecord = {
+      gameId: gameCreatedEvent.gameId,
+      setup: gameCreatedEvent.setup,
+      whiteCredential: gameCredentials.whiteCredential,
+      blackCredential: gameCredentials.blackCredential,
+      clock: gameCreatedEvent.clock,
+      acceptedActions: [],
+    };
+    durableRooms.set(gameCreatedEvent.gameId, gameRecord);
+    return {
+      seekEvent,
+      seekSummary,
+      gameSummary,
+      gameCredentials,
+      gameRecord,
+      gameSeats: { creator: creatorSeat, acceptor: acceptorSeat },
+    };
+  };
+
+  const loadChallengeSummaries = async (): Promise<OnlineChallengeSummary[]> =>
+    projectOnlineChallengeSummaries(sharedRuntime.challengeEvents);
+
+  const appendChallengeCreated = async (
+    event: Extract<OnlineChallengeEvent, { type: "challenge_created" }>,
+    credentials: OnlineChallengeCredentials
+  ): Promise<OnlineChallengeSummary> => {
+    sharedRuntime.challengeEvents.push(event);
+    sharedRuntime.challengeCredentials.set(event.challengeId, credentials);
+    const summary = projectOnlineChallengeSummaries(sharedRuntime.challengeEvents).find(
+      (candidate) => candidate.challengeId === event.challengeId
+    );
+    if (!summary) {
+      throw new Error(`Challenge summary was not refreshed for ${event.challengeId}.`);
+    }
+    return summary;
+  };
+
   const nodeA = createOnlineHttpServer({
     publicBaseUrl: "https://castles.example",
     service: nodeAService,
     runtimeCoordinator: nodeACoordinator,
+    accountStore,
     onGameCreated: async (event, credentials: OnlineGameCredentials) => {
       durableEvents.push(event);
       const room = OnlineGameRoom.create({
@@ -379,13 +677,28 @@ export async function createTwoInstanceRuntimeHarness(input: {
     applyGameAction,
     loadGameRoomRecord,
     loadGameSummary,
+    appendOpenSeekCreated,
+    appendOpenSeekEvent,
+    loadOpenSeekSummaries,
+    resolveOpenSeekCredential,
+    acceptOpenSeekAndCreateGame,
+    appendChallengeCreated,
+    loadChallengeSummaries,
   });
   const nodeB = createOnlineHttpServer({
     publicBaseUrl: "https://castles.example",
     service: nodeBService,
     runtimeCoordinator: nodeBCoordinator,
+    accountStore,
     loadGameRoomRecord,
     loadGameSummary,
+    appendOpenSeekCreated,
+    appendOpenSeekEvent,
+    loadOpenSeekSummaries,
+    resolveOpenSeekCredential,
+    acceptOpenSeekAndCreateGame,
+    appendChallengeCreated,
+    loadChallengeSummaries,
   });
   const nodeAPort = await listen(nodeA.server);
   const nodeBPort = await listen(nodeB.server);
@@ -438,9 +751,141 @@ export async function createTwoInstanceRuntimeHarness(input: {
     return game;
   };
 
+  const postJson = async (
+    port: number,
+    path: string,
+    body: unknown,
+    headers: HeadersInit = {}
+  ): Promise<TwoInstanceHttpResult> => {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, body: await response.json() };
+  };
+
+  const putJson = async (
+    port: number,
+    path: string,
+    headers: HeadersInit = {}
+  ): Promise<TwoInstanceHttpResult> => {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: "PUT",
+      headers,
+    });
+    return { status: response.status, body: await response.json() };
+  };
+
+  const createAccount = async (port: number, displayName: string): Promise<any> => {
+    const result = await postJson(port, "/api/online/accounts", {
+      displayName,
+      password: "account-password",
+    });
+    if (result.status !== 201) {
+      throw new Error(`Create account ${displayName} failed with ${result.status}`);
+    }
+    return result.body;
+  };
+
+  const quickMatch = (port: number, sessionId: string) =>
+    postJson(port, "/api/online/matchmaking/quick", {
+      setup: createSetup(),
+      sessionId,
+    });
+
+  const acceptOpenSeek = (port: number, seekId: string, acceptorSessionId: string) =>
+    postJson(port, `/api/online/seeks/${seekId}/accept`, {
+      acceptorSessionId,
+    });
+
+  const createTargetedChallenge = (
+    port: number,
+    challengerToken: string,
+    challengedDisplayName: string
+  ) =>
+    postJson(
+      port,
+      "/api/online/challenges",
+      {
+        setup: createSetup(),
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName,
+      },
+      bearer(challengerToken)
+    );
+
   return {
     async createGameOnNodeA() {
       return createGameOnNodeA();
+    },
+    async createOpenSeekOnNodeA(creatorSessionId) {
+      const result = await postJson(nodeAPort, "/api/online/seeks", {
+        setup: createSetup(),
+        creatorSessionId,
+        creatorSeat: "w",
+      });
+      if (result.status !== 201) {
+        throw new Error(`Create open seek failed with ${result.status}`);
+      }
+      return { seekId: result.body.seekId as string, body: result.body };
+    },
+    acceptOpenSeekOnNodeA(seekId, acceptorSessionId) {
+      return acceptOpenSeek(nodeAPort, seekId, acceptorSessionId);
+    },
+    acceptOpenSeekOnNodeB(seekId, acceptorSessionId) {
+      return acceptOpenSeek(nodeBPort, seekId, acceptorSessionId);
+    },
+    quickMatchOnNodeA(sessionId) {
+      return quickMatch(nodeAPort, sessionId);
+    },
+    quickMatchOnNodeB(sessionId) {
+      return quickMatch(nodeBPort, sessionId);
+    },
+    async createChallengeAccounts() {
+      const challenger = await createAccount(nodeAPort, "RaceLiam");
+      const challenged = await createAccount(nodeBPort, "RaceSamir");
+      const follow = await putJson(
+        nodeAPort,
+        "/api/online/account/follows/RaceLiam",
+        bearer(challenged.session.token)
+      );
+      if (follow.status !== 200) {
+        throw new Error(`Follow setup failed with ${follow.status}`);
+      }
+      return {
+        challenger,
+        challenged,
+        challengePairGateKey: accountChallengePairOperationGateKey(
+          challenger.account.identity,
+          challenged.account.identity
+        ),
+      };
+    },
+    createTargetedChallengeOnNodeA(challengerToken, challengedDisplayName) {
+      return createTargetedChallenge(nodeAPort, challengerToken, challengedDisplayName);
+    },
+    createTargetedChallengeOnNodeB(challengerToken, challengedDisplayName) {
+      return createTargetedChallenge(nodeBPort, challengerToken, challengedDisplayName);
+    },
+    async countOpenSeeks() {
+      return (await loadOpenSeekSummaries()).length;
+    },
+    async countChallenges() {
+      return (await loadChallengeSummaries()).length;
+    },
+    async countGames() {
+      return durableRooms.size;
+    },
+    expectSharedGateContention(gateKey, expectedEntrants = 2) {
+      operationGateStore.expectContention(gateKey, expectedEntrants);
+    },
+    sharedGateCallCount(gateKey) {
+      return operationGateStore.callCount(gateKey);
+    },
+    sharedGateCalls() {
+      return [...operationGateStore.calls];
     },
     async spectateOnNodeB(gameId) {
       const socket = await trackSocket(new WebSocket(`ws://127.0.0.1:${nodeBPort}/ws`));
