@@ -34,7 +34,7 @@ Status:
 - [x] Focused and live smoke verification complete.
 - [x] Review complete.
 - [x] Roadmap updated.
-- [ ] Commit and push complete.
+- [x] Commit and push complete.
 
 Evidence:
 - RED: `npx vitest run scripts/deploy/__tests__/local-postgres-runtime-nodes-smoke.test.mjs -t "action race|runtime-node"` failed because `actionRace` was missing from the summary/metrics output and `verifyCrossNodeActionRace` was missing from `scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs`.
@@ -42,6 +42,7 @@ Evidence:
 - Focused file: `npx vitest run scripts/deploy/__tests__/local-postgres-runtime-nodes-smoke.test.mjs` passed 16 tests.
 - Live smoke: `$env:DATABASE_URL='postgresql://castles_local:castles_local_dev@localhost:5432/castles_local'; npm run online:smoke:local:runtime-nodes` passed and printed `actionRace=local-runtime-smoke-a+local-runtime-smoke-b@accepted1-rejected1` with no token-bearing fields.
 - Full verification: `npx vitest run` passed 140 files / 1690 tests with 3 skipped and a post-success worker-termination warning for `OnlineProfileDashboard.test.tsx`; `npm run build` passed with the existing Vite large-chunk warning; `npm run server:build` passed; `npm run audit` found 0 vulnerabilities; `git diff --check` passed with CRLF conversion warnings for touched `.mjs` files.
+- Commit/push: committed and pushed to `origin/master` as `Add local runtime action race smoke`.
 
 Review disposition:
 - Scope reviewed: action-race smoke helpers, runtime-nodes smoke metrics, script ordering, cleanup path, and deployment-mode guardrails.
