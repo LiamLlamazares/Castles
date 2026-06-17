@@ -115,6 +115,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         result: "timeout",
         version: 1,
       },
+      accountRejoin: {
+        gameId: "game_runtime_account_1",
+        createdNodeId: "local-runtime-smoke-a",
+        rejoinNodeId: "local-runtime-smoke-b",
+        version: 1,
+      },
     });
 
     expect(summary).toEqual({
@@ -151,6 +157,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         result: "timeout",
         version: 1,
       },
+      accountRejoin: {
+        gameId: "game_runtime_account_1",
+        createdNodeId: "local-runtime-smoke-a",
+        rejoinNodeId: "local-runtime-smoke-b",
+        version: 1,
+      },
     });
 
     const formatted = formatLocalPostgresRuntimeNodesSmokeMetrics(summary);
@@ -162,7 +174,8 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     expect(formatted).toContain("spectatorFanout=local-runtime-smoke-a->local-runtime-smoke-b@v1");
     expect(formatted).toContain("visibilityPropagation=local-runtime-smoke-a->local-runtime-smoke-b@unlisted");
     expect(formatted).toContain("timeoutFanout=local-runtime-smoke-a->local-runtime-smoke-b@timeout");
-    expect(formatted).not.toMatch(/postgresql:\/\/|DATABASE_URL|Bearer|token|secret/i);
+    expect(formatted).toContain("accountRejoin=local-runtime-smoke-a->local-runtime-smoke-b@v1");
+    expect(formatted).not.toMatch(/postgresql:\/\/|DATABASE_URL|Bearer|token|secret|account_session/i);
   });
 
   it("preserves the operation error when shutdown also fails", () => {
@@ -297,6 +310,28 @@ describe("local PostgreSQL runtime-nodes smoke script", () => {
     expect(timeoutIndex).toBeGreaterThan(0);
     expect(timeoutIndex).toBeGreaterThan(visibilityIndex);
     expect(drainGameIndex).toBeGreaterThan(timeoutIndex);
+  });
+
+  it("proves cross-node account snapshot and rejoin recovery before the drain rehearsal", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+    const accountIndex = script.indexOf("const accountRejoin = await verifyCrossNodeAccountRejoin(");
+    const timeoutIndex = script.indexOf("const timeoutFanout = await verifyCrossNodeTimeoutFanout(");
+    const drainGameIndex = script.indexOf("createRollingDrainSmokeGame(servers[0]");
+
+    expect(script).toContain("verifyCrossNodeAccountRejoin");
+    expect(script).toContain("createSmokeAccount");
+    expect(script).toContain("deleteSmokeAccount");
+    expect(script).toContain("/api/online/account/games/");
+    expect(script).toContain("/snapshot");
+    expect(script).toContain("/rejoin");
+    expect(script).toContain("account-rejoin-node-b-pass");
+    expect(script).toContain("account-rejoin-cleanup-resign");
+    expect(accountIndex).toBeGreaterThan(0);
+    expect(accountIndex).toBeGreaterThan(timeoutIndex);
+    expect(drainGameIndex).toBeGreaterThan(accountIndex);
   });
 
   it("fails instead of swallowing rolling-drain cleanup errors", async () => {

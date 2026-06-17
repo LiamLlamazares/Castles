@@ -33,6 +33,25 @@ const repoRoot = path.resolve(scriptDir, "../..");
 const serverEntry = path.join(repoRoot, "server-build", "server", "index.js");
 const localShutdownToken = `local-runtime-nodes-${randomBytes(12).toString("base64url")}`;
 
+function bearer(token) {
+  return { authorization: `Bearer ${token}` };
+}
+
+function jsonHeaders(token) {
+  return { "content-type": "application/json", ...bearer(token) };
+}
+
+function uniqueDisplayName(prefix) {
+  return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function accountChallengeSetup() {
+  return {
+    ...makeSmokeSetup(),
+    timeControl: { initial: 20, increment: 20 },
+  };
+}
+
 async function requireLocalInputs() {
   await checkLocalPostgresPrereqs({
     repoRoot,
@@ -327,6 +346,71 @@ async function createSmokeGameOnNode(serverProcess, helpers, description) {
   assert(created.white?.token, `${description} create did not return a white token.`);
   assert(created.black?.token, `${description} create did not return a black token.`);
   return created;
+}
+
+async function createSmokeAccount(serverProcess, helpers, displayName) {
+  const response = await helpers.fetchWithTimeout(`${serverProcess.baseUrl}/api/online/accounts`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      displayName,
+      password: `local-runtime-smoke-password-${displayName}`,
+    }),
+  });
+  const body = await readJson(response);
+  assert(response.status === 201, `Account ${displayName} create failed with ${response.status}.`);
+  assertProtocolVersionedBody(body, `Account ${displayName} create`);
+  assert(body.account?.displayName === displayName, `Account ${displayName} create returned the wrong display name.`);
+  assert(body.session?.token, `Account ${displayName} create did not return a session token.`);
+  assert(!JSON.stringify(body.account).includes(body.session.token), `Account ${displayName} leaked its session token.`);
+  return body;
+}
+
+async function deleteSmokeAccount(serverProcess, helpers, token) {
+  const response = await helpers.fetchWithTimeout(`${serverProcess.baseUrl}/api/online/account`, {
+    method: "DELETE",
+    headers: bearer(token),
+  });
+  if (response.status === 401 || response.status === 404) return;
+  const body = await readJson(response);
+  assert(response.status === 200, `Account cleanup failed with ${response.status}.`);
+  assertProtocolVersionedBody(body, "Account cleanup");
+}
+
+async function fetchAccountGameSnapshot(serverProcess, helpers, { gameId, token }) {
+  const response = await helpers.fetchWithTimeout(
+    `${serverProcess.baseUrl}/api/online/account/games/${encodeURIComponent(gameId)}/snapshot`,
+    { headers: bearer(token) }
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `Account game snapshot failed with ${response.status}.`);
+  assertProtocolVersionedBody(body, "Account game snapshot");
+  assert(body.role === "account", "Account game snapshot did not report account role.");
+  assert(body.snapshot?.gameId === gameId, "Account game snapshot returned a different game id.");
+  assert(body.snapshot?.version === 0, `Account game snapshot returned version ${body.snapshot?.version}.`);
+  assertDefaultOnlineClock(body.snapshot, "Account game snapshot");
+  assert(!JSON.stringify(body).includes(token), "Account game snapshot leaked its bearer token.");
+  return body.snapshot;
+}
+
+async function rejoinAccountGame(serverProcess, helpers, { expectedSeat, gameId, token }) {
+  const response = await helpers.fetchWithTimeout(
+    `${serverProcess.baseUrl}/api/online/account/games/${encodeURIComponent(gameId)}/rejoin`,
+    {
+      method: "POST",
+      headers: bearer(token),
+    }
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `Account game rejoin failed with ${response.status}.`);
+  assertProtocolVersionedBody(body, "Account game rejoin");
+  assert(body.gameInvite?.gameId === gameId, "Account game rejoin returned a different game id.");
+  assert(body.gameInvite?.seat === expectedSeat, `Account game rejoin returned seat ${body.gameInvite?.seat}.`);
+  assert(body.gameInvite?.token, "Account game rejoin did not return a fresh player token.");
+  assert(typeof body.gameInvite?.url === "string", "Account game rejoin did not return a game URL.");
+  assert(!body.gameInvite.url.includes("token="), "Account game rejoin URL leaked a token query parameter.");
+  assert(!JSON.stringify(body).includes(token), "Account game rejoin leaked its bearer token.");
+  return body.gameInvite;
 }
 
 async function setGameVisibility(serverProcess, { fetchWithTimeout, gameId, token, visibility }) {
@@ -680,6 +764,136 @@ async function verifyCrossNodeTimeoutFanout(adjudicatingServer, spectatorServer,
   }
 }
 
+async function verifyCrossNodeAccountRejoin(createdServer, rejoinServer, helpers) {
+  const cleanupTokens = [];
+  let cleanupGame = null;
+  let cleanupGameEnded = false;
+  const challenger = await createSmokeAccount(
+    createdServer,
+    helpers,
+    uniqueDisplayName("RtA")
+  );
+  cleanupTokens.push(challenger.session.token);
+  const challenged = await createSmokeAccount(
+    createdServer,
+    helpers,
+    uniqueDisplayName("RtB")
+  );
+  cleanupTokens.push(challenged.session.token);
+
+  try {
+    const followResponse = await helpers.fetchWithTimeout(
+      `${createdServer.baseUrl}/api/online/account/follows/${encodeURIComponent(challenger.account.displayName)}`,
+      { method: "PUT", headers: bearer(challenged.session.token) }
+    );
+    const follow = await readJson(followResponse);
+    assert(followResponse.status === 200, `Account rejoin follow failed with ${followResponse.status}.`);
+    assertProtocolVersionedBody(follow, "Account rejoin follow");
+
+    const createResponse = await helpers.fetchWithTimeout(`${createdServer.baseUrl}/api/online/challenges`, {
+      method: "POST",
+      headers: jsonHeaders(challenger.session.token),
+      body: JSON.stringify({
+        setup: accountChallengeSetup(),
+        challengerSeat: "w",
+        visibility: "unlisted",
+        challengedDisplayName: challenged.account.displayName,
+      }),
+    });
+    const created = await readJson(createResponse);
+    assert(createResponse.status === 201, `Account rejoin challenge create failed with ${createResponse.status}.`);
+    assert(created.challengeId, "Account rejoin challenge create did not return a challenge id.");
+    assert(created.summary?.status === "pending", "Account rejoin challenge was not pending.");
+    assert(!JSON.stringify(created).includes(challenger.session.token), "Account rejoin challenge leaked challenger token.");
+    assert(!JSON.stringify(created).includes(challenged.session.token), "Account rejoin challenge leaked challenged token.");
+
+    const acceptResponse = await helpers.fetchWithTimeout(
+      `${createdServer.baseUrl}/api/online/account/challenges/${encodeURIComponent(created.challengeId)}/accept`,
+      {
+        method: "POST",
+        headers: bearer(challenged.session.token),
+      }
+    );
+    const accepted = await readJson(acceptResponse);
+    assert(acceptResponse.status === 200, `Account rejoin challenge accept failed with ${acceptResponse.status}.`);
+    assertProtocolVersionedBody(accepted, "Account rejoin challenge accept");
+    assert(accepted.gameInvite?.gameId, "Account rejoin accept did not return a game id.");
+    assert(accepted.gameInvite?.seat === "b", "Account rejoin accept did not return black invite.");
+    assert(accepted.gameInvite?.token, "Account rejoin accept did not return a black player token.");
+    assert(!JSON.stringify(accepted).includes(challenged.session.token), "Account rejoin accept leaked challenged token.");
+    cleanupGame = {
+      gameId: accepted.gameInvite.gameId,
+      token: accepted.gameInvite.token,
+      baseVersion: 0,
+    };
+
+    await fetchAccountGameSnapshot(rejoinServer, helpers, {
+      gameId: accepted.gameInvite.gameId,
+      token: challenger.session.token,
+    });
+    const rejoined = await rejoinAccountGame(rejoinServer, helpers, {
+      expectedSeat: "w",
+      gameId: accepted.gameInvite.gameId,
+      token: challenger.session.token,
+    });
+    assert(
+      rejoined.token !== accepted.gameInvite.token,
+      "Account rejoin returned the challenged player's accepted token."
+    );
+
+    const played = await submitActionThroughNode(rejoinServer, {
+      ...helpers,
+      action: { type: "PASS", baseVersion: 0 },
+      clientActionId: `account-rejoin-node-b-pass-${Date.now().toString(36)}`,
+      gameId: accepted.gameInvite.gameId,
+      token: rejoined.token,
+    });
+    assert(played?.version === 1, `Account rejoin action returned version ${played?.version}.`);
+    cleanupGame.baseVersion = 1;
+
+    const resigned = await submitActionThroughNode(rejoinServer, {
+      ...helpers,
+      action: { type: "RESIGN", baseVersion: 1 },
+      clientActionId: `account-rejoin-cleanup-resign-${Date.now().toString(36)}`,
+      gameId: accepted.gameInvite.gameId,
+      token: accepted.gameInvite.token,
+    });
+    cleanupGameEnded = true;
+    assert(
+      resigned.result?.winner === "w" && resigned.result?.reason === "resignation",
+      "Account rejoin cleanup resignation did not end the game."
+    );
+
+    return {
+      gameId: accepted.gameInvite.gameId,
+      createdNodeId: createdServer.nodeId,
+      rejoinNodeId: rejoinServer.nodeId,
+      version: played.version,
+    };
+  } finally {
+    const cleanupErrors = [];
+    if (cleanupGame && !cleanupGameEnded) {
+      await submitActionThroughNode(rejoinServer, {
+        ...helpers,
+        action: { type: "RESIGN", baseVersion: cleanupGame.baseVersion },
+        clientActionId: `account-rejoin-cleanup-resign-${Date.now().toString(36)}`,
+        gameId: cleanupGame.gameId,
+        token: cleanupGame.token,
+      }).catch((error) => cleanupErrors.push(error));
+    }
+    for (const token of cleanupTokens.reverse()) {
+      await deleteSmokeAccount(createdServer, helpers, token).catch((error) => cleanupErrors.push(error));
+    }
+    if (cleanupErrors.length > 0) {
+      throw new Error(
+        cleanupErrors
+          .map((error) => error?.stack ?? error?.message ?? String(error))
+          .join("\n")
+      );
+    }
+  }
+}
+
 async function createRollingDrainSmokeGame(serverProcess, helpers) {
   const created = await createSmokeGameOnNode(serverProcess, helpers, "Rolling-drain");
 
@@ -831,6 +1045,7 @@ async function main() {
       smokeHelpers
     );
     const timeoutFanout = await verifyCrossNodeTimeoutFanout(servers[0], servers[1], smokeHelpers);
+    const accountRejoin = await verifyCrossNodeAccountRejoin(servers[0], servers[1], smokeHelpers);
     const rollingGame = await createRollingDrainSmokeGame(servers[0], smokeHelpers);
 
     const drainedRuntime = await startDrain(servers[0], {
@@ -880,6 +1095,7 @@ async function main() {
         summarizeLocalPostgresRuntimeNodesSmoke({
           nodeStatuses,
           databaseRows,
+          accountRejoin,
           drainedNodeId: options.nodeIds[0],
           healthyNodeIds: [options.nodeIds[1]],
           rollingContinuation,

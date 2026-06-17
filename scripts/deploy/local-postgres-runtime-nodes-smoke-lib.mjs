@@ -83,6 +83,7 @@ export function buildRuntimeNodeServerEnv({
 }
 
 export function summarizeLocalPostgresRuntimeNodesSmoke({
+  accountRejoin,
   databaseRows,
   drainedNodeId,
   healthyNodeIds,
@@ -102,6 +103,9 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
     drainedNodeId,
     healthyNodeIds,
   };
+  if (accountRejoin) {
+    summary.accountRejoin = accountRejoin;
+  }
   if (rollingContinuation) {
     summary.rollingContinuation = rollingContinuation;
   }
@@ -131,6 +135,11 @@ export function formatLocalPostgresRuntimeNodesSmokeMetrics(summary) {
   if (summary.rollingContinuation) {
     metrics.push(
       `rollingContinuation=${summary.rollingContinuation.createdNodeId}->${summary.rollingContinuation.continuedNodeId}@v${summary.rollingContinuation.version}`
+    );
+  }
+  if (summary.accountRejoin) {
+    metrics.push(
+      `accountRejoin=${summary.accountRejoin.createdNodeId}->${summary.accountRejoin.rejoinNodeId}@v${summary.accountRejoin.version}`
     );
   }
   if (summary.spectatorFanout) {
