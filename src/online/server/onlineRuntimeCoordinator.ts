@@ -36,6 +36,15 @@ export interface OnlineRuntimeDrainState {
   reason?: string;
 }
 
+export interface OnlineRuntimeNodeState {
+  nodeId: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  draining: boolean;
+  drainStartedAt?: string;
+  updatedAt: string;
+}
+
 export interface OnlineRuntimeStartDrainInput {
   startedAt?: string;
   reason?: string;
@@ -135,6 +144,7 @@ export interface OnlineRuntimeEventStore {
 export interface OnlineRuntimeNodeStore {
   recordNodeStarted?(): Promise<unknown>;
   recordNodeHeartbeat?(): Promise<unknown>;
+  getNodeState?(): Promise<OnlineRuntimeNodeState | null>;
   getDrainState(): Promise<OnlineRuntimeDrainState>;
   startDrain(input?: OnlineRuntimeStartDrainInput): Promise<OnlineRuntimeDrainState>;
 }
@@ -144,6 +154,7 @@ export interface OnlineRuntimeCoordinator {
   readonly capabilities: OnlineRuntimeCoordinatorCapabilities;
   publishGameSnapshotChanged(event: OnlineRuntimeGameSnapshotChangedEvent): Promise<void>;
   pollRemoteGameSnapshotChangedEvents(input?: { limit?: number }): Promise<OnlineRuntimeEventPollResult>;
+  getRuntimeNodeState(): Promise<OnlineRuntimeNodeState | null>;
   getDrainState(): Promise<OnlineRuntimeDrainState>;
   startDrain(input?: OnlineRuntimeStartDrainInput): Promise<OnlineRuntimeDrainState>;
   subscribeGameSnapshotChanged(
@@ -288,6 +299,9 @@ export function createSingleNodeOnlineRuntimeCoordinator(options: {
     },
     async pollRemoteGameSnapshotChangedEvents() {
       return { afterId: 0, published: 0 };
+    },
+    async getRuntimeNodeState() {
+      return null;
     },
     async getDrainState() {
       return { ...drainState };
@@ -481,6 +495,9 @@ function withPostgresRuntimeNodeCoordinator(
 ): OnlineRuntimeCoordinator {
   return {
     ...base,
+    async getRuntimeNodeState() {
+      return runtimeNodeStore.getNodeState?.() ?? null;
+    },
     async getDrainState() {
       return runtimeNodeStore.getDrainState();
     },

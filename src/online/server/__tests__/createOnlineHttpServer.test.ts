@@ -1619,6 +1619,29 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("keeps the operator runtime status route hidden unless an admin bearer token is configured", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/status`, {
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("vary")).toContain("Authorization");
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "No online admin resource was found.",
+      },
+    });
+  });
+
   it("lets the operator runtime drain route start drain and readiness failure without exposing the reason", async () => {
     const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
     const startDrain = vi.spyOn(runtimeCoordinator, "startDrain");
@@ -1678,6 +1701,101 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(healthBody)).not.toContain("operator");
   });
 
+  it("lets the operator runtime status route inspect sanitized node diagnostics", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    vi.spyOn(runtimeCoordinator, "getDrainState").mockResolvedValue({
+      draining: true,
+      startedAt: "2026-06-17T10:05:00.000Z",
+      reason: "operator",
+    });
+    vi.spyOn(runtimeCoordinator, "getRuntimeNodeState").mockResolvedValue({
+      nodeId: "node-a",
+      firstSeenAt: "2026-06-17T09:00:00.000Z",
+      lastSeenAt: "2026-06-17T10:00:00.000Z",
+      draining: true,
+      drainStartedAt: "2026-06-17T10:05:00.000Z",
+      updatedAt: "2026-06-17T10:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+      adminBearerToken: "admin-token-with-enough-length",
+      health: {
+        getRuntimeEventPollingStatus: () => ({
+          running: true,
+          ready: true,
+          consecutiveFailures: 0,
+          lastPollAt: "2026-06-17T10:00:01.000Z",
+          lastSuccessAt: "2026-06-17T10:00:01.000Z",
+          lastError: "relation online_runtime_nodes token account_session_secret failed",
+          lastResult: { afterId: 42, published: 3 },
+        }),
+        getRuntimeNodeHeartbeatStatus: () => ({
+          running: true,
+          ready: true,
+          consecutiveFailures: 0,
+          lastHeartbeatAt: "2026-06-17T10:00:02.000Z",
+          lastSuccessAt: "2026-06-17T10:00:02.000Z",
+          lastError: "postgresql://castles:secret@db.example/castles online_runtime_nodes failed",
+        }),
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/status`);
+    const wrongAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/status`, {
+      headers: bearer("wrong-token-with-enough-length"),
+    });
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/status`, {
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const body = await response.json();
+
+    expect(missingAuthResponse.status).toBe(404);
+    expect(wrongAuthResponse.status).toBe(404);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("vary")).toContain("Authorization");
+    expect(body).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      runtime: {
+        nodeId: "node-a",
+        capabilities: runtimeCoordinator.capabilities,
+        draining: true,
+        drainStartedAt: "2026-06-17T10:05:00.000Z",
+        node: {
+          nodeId: "node-a",
+          firstSeenAt: "2026-06-17T09:00:00.000Z",
+          lastSeenAt: "2026-06-17T10:00:00.000Z",
+          draining: true,
+          drainStartedAt: "2026-06-17T10:05:00.000Z",
+          updatedAt: "2026-06-17T10:00:00.000Z",
+        },
+        eventPolling: {
+          running: true,
+          ready: true,
+          consecutiveFailures: 0,
+          lastPollAt: "2026-06-17T10:00:01.000Z",
+          lastSuccessAt: "2026-06-17T10:00:01.000Z",
+          lastResult: { afterId: 42, published: 3 },
+        },
+        nodeHeartbeat: {
+          running: true,
+          ready: true,
+          consecutiveFailures: 0,
+          lastHeartbeatAt: "2026-06-17T10:00:02.000Z",
+          lastSuccessAt: "2026-06-17T10:00:02.000Z",
+        },
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain("operator");
+    expect(JSON.stringify(body)).not.toContain("lastError");
+    expect(JSON.stringify(body)).not.toContain("online_runtime_nodes");
+    expect(JSON.stringify(body)).not.toContain("account_session_secret");
+    expect(JSON.stringify(body)).not.toContain("postgresql://");
+  });
+
   it("returns a sanitized failure when the operator runtime drain cannot start", async () => {
     const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
     vi.spyOn(runtimeCoordinator, "startDrain").mockRejectedValue(
@@ -1704,6 +1822,34 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("secret");
     expect(JSON.stringify(body)).not.toContain("online_runtime_nodes");
     expect(JSON.stringify(body)).not.toContain("postgresql://");
+  });
+
+  it("returns a sanitized failure when the operator runtime status cannot be loaded", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    vi.spyOn(runtimeCoordinator, "getRuntimeNodeState").mockRejectedValue(
+      new Error("postgresql://castles:secret@db.example/castles failed to read online_runtime_nodes token")
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+      adminBearerToken: "admin-token-with-enough-length",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/status`, {
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      error: { code: "persistence_failed", message: "Runtime status could not be loaded." },
+    });
+    expect(JSON.stringify(body)).not.toContain("secret");
+    expect(JSON.stringify(body)).not.toContain("online_runtime_nodes");
+    expect(JSON.stringify(body)).not.toContain("postgresql://");
+    expect(JSON.stringify(body)).not.toContain("token");
   });
 
   it("keeps the operator runtime drain route hidden when rate-limit storage fails before auth", async () => {

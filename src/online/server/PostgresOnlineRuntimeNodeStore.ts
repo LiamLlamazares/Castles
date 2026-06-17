@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import {
   normalizeRuntimeNodeId,
   type OnlineRuntimeDrainState,
+  type OnlineRuntimeNodeState,
   type OnlineRuntimeStartDrainInput,
 } from "./onlineRuntimeCoordinator";
 import { resolvePostgresPoolMaxPerStore } from "./postgresPoolConfig";
@@ -18,14 +19,7 @@ export interface PostgresOnlineRuntimeNodeStoreOptions {
   close?: () => Promise<void>;
 }
 
-export interface PostgresOnlineRuntimeNodeState {
-  nodeId: string;
-  firstSeenAt: string;
-  lastSeenAt: string;
-  draining: boolean;
-  drainStartedAt?: string;
-  updatedAt: string;
-}
+export interface PostgresOnlineRuntimeNodeState extends OnlineRuntimeNodeState {}
 
 const DEFAULT_POSTGRES_TIMEOUT_MS = 5_000;
 
@@ -58,9 +52,8 @@ function rowToNodeState(row: any): PostgresOnlineRuntimeNodeState {
   };
 }
 
-function drainStateFromNode(row: any | undefined): OnlineRuntimeDrainState {
-  if (!row) return { draining: false };
-  const state = rowToNodeState(row);
+function drainStateFromNode(state: PostgresOnlineRuntimeNodeState | null): OnlineRuntimeDrainState {
+  if (!state) return { draining: false };
   return state.draining
     ? { draining: true, startedAt: state.drainStartedAt }
     : { draining: false };
@@ -151,7 +144,7 @@ export class PostgresOnlineRuntimeNodeStore {
     return rowToNodeState(result.rows[0]);
   }
 
-  async getDrainState(): Promise<OnlineRuntimeDrainState> {
+  async getNodeState(): Promise<PostgresOnlineRuntimeNodeState | null> {
     await this.ensureSchema();
     const result = await this.queryable.query(
       `
@@ -161,7 +154,11 @@ export class PostgresOnlineRuntimeNodeStore {
       `,
       [this.nodeId]
     );
-    return drainStateFromNode(result.rows[0]);
+    return result.rows[0] ? rowToNodeState(result.rows[0]) : null;
+  }
+
+  async getDrainState(): Promise<OnlineRuntimeDrainState> {
+    return drainStateFromNode(await this.getNodeState());
   }
 
   async startDrain(_input: OnlineRuntimeStartDrainInput = {}): Promise<OnlineRuntimeDrainState> {
@@ -190,7 +187,7 @@ export class PostgresOnlineRuntimeNodeStore {
       `,
       [this.nodeId]
     );
-    return drainStateFromNode(result.rows[0]);
+    return drainStateFromNode(rowToNodeState(result.rows[0]));
   }
 
   async close(): Promise<void> {

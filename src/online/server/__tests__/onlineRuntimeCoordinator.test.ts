@@ -9,6 +9,7 @@ import {
   createSingleNodeOnlineRuntimeCoordinator,
   normalizeRuntimeNodeId,
   type OnlineRuntimeDrainState,
+  type OnlineRuntimeNodeState,
   type OnlineRuntimeNodeStore,
   type OnlineRuntimeOperationGateScope,
   type OnlineRuntimeRateLimitInput,
@@ -189,12 +190,18 @@ class FakeRateLimitStore {
 }
 
 class FakeRuntimeNodeStore implements OnlineRuntimeNodeStore {
-  readonly calls: Array<["getDrainState"] | ["startDrain", unknown]> = [];
+  readonly calls: Array<["getDrainState"] | ["getNodeState"] | ["startDrain", unknown]> = [];
   drainState: OnlineRuntimeDrainState = { draining: false };
+  nodeState: OnlineRuntimeNodeState | null = null;
 
   async getDrainState(): Promise<OnlineRuntimeDrainState> {
     this.calls.push(["getDrainState"]);
     return { ...this.drainState };
+  }
+
+  async getNodeState(): Promise<OnlineRuntimeNodeState | null> {
+    this.calls.push(["getNodeState"]);
+    return this.nodeState ? { ...this.nodeState } : null;
   }
 
   async startDrain(input = {}): Promise<OnlineRuntimeDrainState> {
@@ -238,6 +245,32 @@ describe("createPostgresRuntimeNodeCoordinator", () => {
       ["startDrain", { reason: "operator" }],
     ]);
   });
+
+  it("delegates runtime node diagnostics to a PostgreSQL runtime node store", async () => {
+    const runtimeNodeStore = new FakeRuntimeNodeStore();
+    runtimeNodeStore.nodeState = {
+      nodeId: "node-a",
+      firstSeenAt: "2026-06-17T09:00:00.000Z",
+      lastSeenAt: "2026-06-17T10:00:00.000Z",
+      draining: true,
+      drainStartedAt: "2026-06-17T09:55:00.000Z",
+      updatedAt: "2026-06-17T10:00:00.000Z",
+    };
+    const coordinator = createPostgresRuntimeNodeCoordinator({
+      nodeId: "node-a",
+      runtimeNodeStore,
+    });
+
+    await expect(coordinator.getRuntimeNodeState()).resolves.toEqual({
+      nodeId: "node-a",
+      firstSeenAt: "2026-06-17T09:00:00.000Z",
+      lastSeenAt: "2026-06-17T10:00:00.000Z",
+      draining: true,
+      drainStartedAt: "2026-06-17T09:55:00.000Z",
+      updatedAt: "2026-06-17T10:00:00.000Z",
+    });
+    expect(runtimeNodeStore.calls).toEqual([["getNodeState"]]);
+  });
 });
 
 describe("createSingleNodeOnlineRuntimeCoordinator", () => {
@@ -259,6 +292,12 @@ describe("createSingleNodeOnlineRuntimeCoordinator", () => {
     const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
 
     await expect(coordinator.getDrainState()).resolves.toEqual({ draining: false });
+  });
+
+  it("does not expose persistent runtime node diagnostics without a runtime node store", async () => {
+    const coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+
+    await expect(coordinator.getRuntimeNodeState()).resolves.toBeNull();
   });
 
   it("starts process-local drain once and preserves the original start time", async () => {

@@ -214,6 +214,39 @@ describe("PostgresOnlineRuntimeNodeStore", () => {
     });
   });
 
+  it("loads the current runtime node state without changing heartbeat or drain fields", async () => {
+    const queryable = new FakePostgresRuntimeNodeQueryable();
+    queryable.seed({
+      node_id: "node-a",
+      first_seen_at: "2026-06-17T09:00:00.000Z",
+      last_seen_at: "2026-06-17T09:45:00.000Z",
+      draining: true,
+      drain_started_at: "2026-06-17T09:50:00.000Z",
+      updated_at: "2026-06-17T09:45:00.000Z",
+    });
+    const store = new PostgresOnlineRuntimeNodeStore({ nodeId: "node-a", queryable });
+
+    await expect(store.getNodeState()).resolves.toEqual({
+      nodeId: "node-a",
+      firstSeenAt: "2026-06-17T09:00:00.000Z",
+      lastSeenAt: "2026-06-17T09:45:00.000Z",
+      draining: true,
+      drainStartedAt: "2026-06-17T09:50:00.000Z",
+      updatedAt: "2026-06-17T09:45:00.000Z",
+    });
+    expect(queryable.nodes.get("node-a")).toMatchObject({
+      last_seen_at: "2026-06-17T09:45:00.000Z",
+      draining: true,
+    });
+  });
+
+  it("returns null node state for missing runtime node rows", async () => {
+    const queryable = new FakePostgresRuntimeNodeQueryable();
+    const store = new PostgresOnlineRuntimeNodeStore({ nodeId: "node-a", queryable });
+
+    await expect(store.getNodeState()).resolves.toBeNull();
+  });
+
   it("starts drain idempotently with database time and does not persist the reason", async () => {
     const queryable = new FakePostgresRuntimeNodeQueryable();
     queryable.databaseNowMs = Date.parse("2026-06-17T10:05:00.000Z");
