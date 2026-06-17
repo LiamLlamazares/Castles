@@ -36,6 +36,16 @@ function okHealth(commit = "expected-sha") {
   };
 }
 
+function okHealthWithRuntime(runtime) {
+  return {
+    ...okHealth("expected-sha"),
+    online: {
+      ...okHealth("expected-sha").online,
+      runtime,
+    },
+  };
+}
+
 describe("production freshness diagnostics", () => {
   it("normalizes production base URLs without trailing slashes", () => {
     expect(normalizeProductionBaseUrl("https://castles.ls314.xyz/")).toBe("https://castles.ls314.xyz");
@@ -208,6 +218,89 @@ describe("production freshness diagnostics", () => {
 
     expect(classifyProductionFreshnessAlerts(result)).toEqual([]);
     expect(formatProductionFreshnessResult(result)).toContain("Alerts: none");
+  });
+
+  it("projects runtime scheduler health without leaking scheduler error text", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () =>
+        okHealthWithRuntime({
+          readiness: { ok: true, error: "safe readiness detail" },
+          eventPolling: {
+            running: true,
+            ready: true,
+            consecutiveFailures: 0,
+            lastPollAt: "2026-06-17T12:00:00.000Z",
+            lastSuccessAt: "2026-06-17T12:00:01.000Z",
+            lastResult: { scanned: 3, applied: 2 },
+            lastError:
+              "select * from account_sessions where token='secret' using postgresql://user:pass@db/castles",
+          },
+          nodeHeartbeat: {
+            running: true,
+            ready: true,
+            consecutiveFailures: 0,
+            lastHeartbeatAt: "2026-06-17T12:00:02.000Z",
+            lastSuccessAt: "2026-06-17T12:00:03.000Z",
+            lastError: "online_runtime_nodes failed for bearer token",
+          },
+        }),
+    });
+
+    expect(result.health.runtime).toEqual({
+      readiness: { ok: true, error: "safe readiness detail" },
+      eventPolling: {
+        running: true,
+        ready: true,
+        consecutiveFailures: 0,
+        lastPollAt: "2026-06-17T12:00:00.000Z",
+        lastSuccessAt: "2026-06-17T12:00:01.000Z",
+        lastResult: { scanned: 3, applied: 2 },
+      },
+      nodeHeartbeat: {
+        running: true,
+        ready: true,
+        consecutiveFailures: 0,
+        lastHeartbeatAt: "2026-06-17T12:00:02.000Z",
+        lastSuccessAt: "2026-06-17T12:00:03.000Z",
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(/account_sessions|postgresql:\/\/|bearer token|secret/i);
+  });
+
+  it("classifies runtime scheduler degradation and not-ready states", async () => {
+    const degraded = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () =>
+        okHealthWithRuntime({
+          readiness: { ok: true },
+          eventPolling: { running: true, ready: true, consecutiveFailures: 1 },
+          nodeHeartbeat: { running: true, ready: true, consecutiveFailures: 2 },
+        }),
+    });
+    const notReady = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () =>
+        okHealthWithRuntime({
+          readiness: { ok: false, error: "Runtime readiness check failed." },
+          eventPolling: { running: true, ready: false, consecutiveFailures: 3 },
+          nodeHeartbeat: { running: true, ready: false, consecutiveFailures: 4 },
+        }),
+    });
+
+    expect(classifyProductionFreshnessAlerts(degraded)).toEqual([
+      expect.objectContaining({ code: "runtime_event_polling_degraded", severity: "warning" }),
+      expect.objectContaining({ code: "runtime_node_heartbeat_degraded", severity: "warning" }),
+    ]);
+    expect(classifyProductionFreshnessAlerts(notReady)).toEqual([
+      expect.objectContaining({ code: "runtime_event_polling_not_ready", severity: "critical" }),
+      expect.objectContaining({ code: "runtime_node_heartbeat_not_ready", severity: "critical" }),
+    ]);
+    expect(createProductionMonitoringSnapshot(degraded).severity).toBe("warning");
+    expect(createProductionMonitoringSnapshot(notReady).severity).toBe("critical");
   });
 
   it("classifies missing or unsafe deployment metadata as a production readiness alert", async () => {
@@ -408,6 +501,77 @@ describe("production freshness diagnostics", () => {
       alerts: [],
     });
     expect(productionMonitoringExitCode(snapshot)).toBe(0);
+  });
+
+  it("includes sanitized runtime checks in monitoring snapshots", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      fetchHealth: async () =>
+        okHealthWithRuntime({
+          readiness: { ok: true },
+          eventPolling: {
+            running: true,
+            ready: true,
+            consecutiveFailures: 1,
+            lastFailureAt: "2026-06-17T12:05:00.000Z",
+            lastError: "database token secret in online_runtime_events",
+          },
+          nodeHeartbeat: {
+            running: true,
+            ready: true,
+            consecutiveFailures: 0,
+            lastSuccessAt: "2026-06-17T12:05:01.000Z",
+          },
+        }),
+    });
+
+    const snapshot = createProductionMonitoringSnapshot(result, {
+      generatedAt: "2026-06-17T12:06:00.000Z",
+    });
+
+    expect(snapshot.checks.health.runtime).toEqual({
+      readiness: { ok: true },
+      eventPolling: {
+        running: true,
+        ready: true,
+        consecutiveFailures: 1,
+        lastFailureAt: "2026-06-17T12:05:00.000Z",
+      },
+      nodeHeartbeat: {
+        running: true,
+        ready: true,
+        consecutiveFailures: 0,
+        lastSuccessAt: "2026-06-17T12:05:01.000Z",
+      },
+    });
+    expect(JSON.stringify(snapshot)).not.toMatch(/lastError|online_runtime_events|token secret/i);
+  });
+
+  it("drops malformed raw runtime objects from monitoring snapshots", () => {
+    const snapshot = createProductionMonitoringSnapshot({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      health: {
+        ok: true,
+        buildId: "20260605-120000",
+        commit: "expected-sha",
+        eventSchemaVersion: 2,
+        deployment: SINGLE_NODE_DEPLOYMENT,
+        storeBackend: "postgres",
+        runtime: {
+          eventPolling: {
+            lastError: "account_sessions token in postgresql://user:pass@db/castles",
+          },
+        },
+      },
+      commit: { status: "match" },
+      ssh: { status: "not_checked" },
+      ok: true,
+    });
+
+    expect(snapshot.checks.health.runtime).toBeUndefined();
+    expect(JSON.stringify(snapshot)).not.toMatch(/lastError|account_sessions|postgresql:\/\//i);
   });
 
   it("creates a critical monitoring snapshot for pre-result health failures", () => {

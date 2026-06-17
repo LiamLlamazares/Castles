@@ -69,6 +69,65 @@ describe("production monitoring script", () => {
     });
   });
 
+  it("prints sanitized runtime scheduler alerts in the monitoring snapshot", async () => {
+    let stdout = "";
+    const exitCode = await runProductionMonitoringCommand({
+      argv: ["https://castles.ls314.xyz", "expected-sha", "contabo.ls314.xyz"],
+      now: () => new Date("2026-06-17T12:30:00.000Z"),
+      resolveOptions: async () => ({ baseUrl: "https://castles.ls314.xyz", expectedCommit: "expected-sha" }),
+      checkFreshness: async () => ({
+        ...okResult(),
+        health: {
+          ...okResult().health,
+          runtime: {
+            readiness: { ok: true },
+            eventPolling: {
+              running: true,
+              ready: true,
+              consecutiveFailures: 1,
+              lastFailureAt: "2026-06-17T12:29:00.000Z",
+              lastError: "account_sessions leaked token in postgresql://user:pass@db/castles",
+            },
+            nodeHeartbeat: {
+              running: true,
+              ready: false,
+              consecutiveFailures: 3,
+              lastFailureAt: "2026-06-17T12:29:30.000Z",
+              lastError: "online_runtime_nodes bearer secret",
+            },
+          },
+        },
+        ok: true,
+      }),
+      writeStdout: (text) => {
+        stdout += text;
+      },
+    });
+
+    const snapshot = JSON.parse(stdout);
+    expect(exitCode).toBe(2);
+    expect(snapshot.alerts.map((alert) => alert.code)).toEqual([
+      "runtime_event_polling_degraded",
+      "runtime_node_heartbeat_not_ready",
+    ]);
+    expect(snapshot.checks.health.runtime).toEqual({
+      readiness: { ok: true },
+      eventPolling: {
+        running: true,
+        ready: true,
+        consecutiveFailures: 1,
+        lastFailureAt: "2026-06-17T12:29:00.000Z",
+      },
+      nodeHeartbeat: {
+        running: true,
+        ready: false,
+        consecutiveFailures: 3,
+        lastFailureAt: "2026-06-17T12:29:30.000Z",
+      },
+    });
+    expect(stdout).not.toMatch(/lastError|account_sessions|postgresql:\/\/|bearer secret|leaked token/i);
+  });
+
   it("prints a JSON monitoring snapshot and exits critical for stale production", async () => {
     let stdout = "";
     const exitCode = await runProductionMonitoringCommand({

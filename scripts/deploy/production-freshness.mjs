@@ -185,6 +185,7 @@ export async function checkProductionFreshness(options) {
   const baseUrl = normalizeProductionBaseUrl(options.baseUrl);
   const expectedCommit = options.expectedCommit;
   const healthBody = await (options.fetchHealth ?? fetchProductionHealth)(baseUrl);
+  const runtime = projectProductionRuntimeHealth(healthBody?.online?.runtime);
   const health = {
     ok: healthBody?.ok === true,
     buildId: healthBody?.build?.buildId,
@@ -192,6 +193,7 @@ export async function checkProductionFreshness(options) {
     eventSchemaVersion: healthBody?.online?.eventSchemaVersion,
     deployment: healthBody?.online?.deployment,
     storeBackend: healthBody?.online?.store?.backend,
+    ...(runtime ? { runtime } : {}),
   };
   const commit = expectedCommit
     ? health.commit === expectedCommit
@@ -249,6 +251,84 @@ function isSingleNodeDeploymentHealth(deployment) {
   );
 }
 
+function projectBoolean(value) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function projectNonNegativeInteger(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+function projectString(value) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function projectRuntimeReadiness(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const projected = {};
+  const ok = projectBoolean(value.ok);
+  const error = projectString(value.error);
+  if (ok !== undefined) projected.ok = ok;
+  if (error !== undefined) projected.error = error;
+  return Object.keys(projected).length > 0 ? projected : undefined;
+}
+
+function projectRuntimeLastResult(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const afterId = projectNonNegativeInteger(value.afterId);
+  const published = projectNonNegativeInteger(value.published);
+  const scanned = projectNonNegativeInteger(value.scanned);
+  const applied = projectNonNegativeInteger(value.applied);
+  const projected = {};
+  if (afterId !== undefined) projected.afterId = afterId;
+  if (published !== undefined) projected.published = published;
+  if (scanned !== undefined) projected.scanned = scanned;
+  if (applied !== undefined) projected.applied = applied;
+  return Object.keys(projected).length > 0 ? projected : undefined;
+}
+
+function projectRuntimeSchedulerStatus(value, timestampFields) {
+  if (!value || typeof value !== "object") return undefined;
+  const projected = {};
+  const running = projectBoolean(value.running);
+  const ready = projectBoolean(value.ready);
+  const consecutiveFailures = projectNonNegativeInteger(value.consecutiveFailures);
+  if (running !== undefined) projected.running = running;
+  if (ready !== undefined) projected.ready = ready;
+  if (consecutiveFailures !== undefined) projected.consecutiveFailures = consecutiveFailures;
+  for (const field of timestampFields) {
+    const timestamp = projectString(value[field]);
+    if (timestamp !== undefined) projected[field] = timestamp;
+  }
+  const lastResult = projectRuntimeLastResult(value.lastResult);
+  if (lastResult) projected.lastResult = lastResult;
+  return Object.keys(projected).length > 0 ? projected : undefined;
+}
+
+function projectProductionRuntimeHealth(runtime) {
+  if (!runtime || typeof runtime !== "object") return undefined;
+  const readiness = projectRuntimeReadiness(runtime.readiness);
+  const eventPolling = projectRuntimeSchedulerStatus(runtime.eventPolling, [
+    "lastPollAt",
+    "lastSuccessAt",
+    "lastFailureAt",
+  ]);
+  const nodeHeartbeat = projectRuntimeSchedulerStatus(runtime.nodeHeartbeat, [
+    "lastHeartbeatAt",
+    "lastSuccessAt",
+    "lastFailureAt",
+  ]);
+  const projected = {};
+  if (readiness) projected.readiness = readiness;
+  if (eventPolling) projected.eventPolling = eventPolling;
+  if (nodeHeartbeat) projected.nodeHeartbeat = nodeHeartbeat;
+  return Object.keys(projected).length > 0 ? projected : undefined;
+}
+
+function runtimeConsecutiveFailures(status) {
+  return Number.isSafeInteger(status?.consecutiveFailures) ? status.consecutiveFailures : 0;
+}
+
 export function classifyProductionFreshnessAlerts(result) {
   const alerts = [];
   if (result.health?.ok !== true) {
@@ -292,6 +372,43 @@ export function classifyProductionFreshnessAlerts(result) {
       action: "Confirm the deploy SSH host, DNS, firewall, and server availability before treating app health alone as sufficient.",
     });
   }
+  const runtime = projectProductionRuntimeHealth(result.health?.runtime);
+  if (runtime?.eventPolling?.ready === false) {
+    alerts.push({
+      code: "runtime_event_polling_not_ready",
+      severity: "critical",
+      message: "Production runtime event polling is not ready.",
+      action: "Check runtime event polling logs, PostgreSQL connectivity, and runtime-event table health before accepting the deploy.",
+    });
+  } else if (
+    runtime?.eventPolling?.ready === true &&
+    runtimeConsecutiveFailures(runtime.eventPolling) > 0
+  ) {
+    alerts.push({
+      code: "runtime_event_polling_degraded",
+      severity: "warning",
+      message: `Production runtime event polling has ${runtime.eventPolling.consecutiveFailures} consecutive failure(s).`,
+      action: "Inspect recent runtime poll logs and rerun monitoring before public load increases.",
+    });
+  }
+  if (runtime?.nodeHeartbeat?.ready === false) {
+    alerts.push({
+      code: "runtime_node_heartbeat_not_ready",
+      severity: "critical",
+      message: "Production runtime-node heartbeat is not ready.",
+      action: "Check runtime-node heartbeat logs, PostgreSQL connectivity, and online_runtime_nodes writes before accepting the deploy.",
+    });
+  } else if (
+    runtime?.nodeHeartbeat?.ready === true &&
+    runtimeConsecutiveFailures(runtime.nodeHeartbeat) > 0
+  ) {
+    alerts.push({
+      code: "runtime_node_heartbeat_degraded",
+      severity: "warning",
+      message: `Production runtime-node heartbeat has ${runtime.nodeHeartbeat.consecutiveFailures} consecutive failure(s).`,
+      action: "Inspect heartbeat logs and verify the current node row is updating before public load increases.",
+    });
+  }
   return alerts;
 }
 
@@ -320,6 +437,12 @@ function monitoringSummary(alerts) {
 export function createProductionMonitoringSnapshot(result, options = {}) {
   const alerts = classifyProductionFreshnessAlerts(result);
   const severity = highestAlertSeverity(alerts);
+  const runtime = projectProductionRuntimeHealth(result.health?.runtime);
+  const { runtime: _rawRuntime, ...healthWithoutRuntime } = result.health ?? {};
+  const health = {
+    ...healthWithoutRuntime,
+    ...(runtime ? { runtime } : {}),
+  };
   return {
     schemaVersion: 1,
     service: options.service ?? "castles-online",
@@ -335,7 +458,7 @@ export function createProductionMonitoringSnapshot(result, options = {}) {
     },
     alerts,
     checks: {
-      health: result.health,
+      health,
       commit: result.commit,
       ssh: result.ssh,
       ...(result.git ? { git: result.git } : {}),
@@ -402,6 +525,18 @@ export function formatProductionFreshnessResult(result) {
       result.health.deployment?.mode ?? "unknown"
     } schema=${result.health.eventSchemaVersion ?? "unknown"}`,
   ];
+  const runtime = projectProductionRuntimeHealth(result.health.runtime);
+  if (runtime) {
+    const eventPolling = runtime.eventPolling;
+    const nodeHeartbeat = runtime.nodeHeartbeat;
+    lines.push(
+      `Runtime: readiness=${runtime.readiness?.ok ?? "unknown"} eventPollingReady=${
+        eventPolling?.ready ?? "unknown"
+      } eventPollingFailures=${eventPolling?.consecutiveFailures ?? "unknown"} nodeHeartbeatReady=${
+        nodeHeartbeat?.ready ?? "unknown"
+      } nodeHeartbeatFailures=${nodeHeartbeat?.consecutiveFailures ?? "unknown"}`,
+    );
+  }
   if (result.commit.status === "match") {
     lines.push(`Commit: match ${result.expectedCommit}`);
   } else if (result.commit.status === "mismatch") {
