@@ -49,7 +49,7 @@ function eventCredentials(gameId: string) {
 }
 
 describe("OnlineGameService", () => {
-  it("creates private invite URLs and stores reconnectable rooms", () => {
+  it("creates tokenless private invite URLs and stores reconnectable rooms", () => {
     const service = new OnlineGameService();
 
     const created = service.createGame(createSetup(), {
@@ -57,9 +57,16 @@ describe("OnlineGameService", () => {
     });
 
     expect(created.gameId).toMatch(/^game_/);
-    expect(created.white.url).toContain("onlineGame=");
-    expect(created.white.url).toContain("seat=w");
-    expect(created.black.url).toContain("seat=b");
+    const whiteUrl = new URL(created.white.url);
+    const blackUrl = new URL(created.black.url);
+    expect(whiteUrl.searchParams.get("onlineGame")).toBe(created.gameId);
+    expect(whiteUrl.searchParams.get("seat")).toBe("w");
+    expect(whiteUrl.searchParams.has("token")).toBe(false);
+    expect(created.white.url).not.toContain(created.white.token);
+    expect(blackUrl.searchParams.get("onlineGame")).toBe(created.gameId);
+    expect(blackUrl.searchParams.get("seat")).toBe("b");
+    expect(blackUrl.searchParams.has("token")).toBe(false);
+    expect(created.black.url).not.toContain(created.black.token);
 
     const whiteRoom = service.getRoomForToken(created.gameId, created.white.token);
     const blackRoom = service.getRoomForToken(created.gameId, created.black.token);

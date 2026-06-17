@@ -24,4 +24,18 @@ describe("production online browser smoke script", () => {
     expect(script).toContain("Stale-action cleanup");
     expect(script).toMatch(/RESIGN[\s\S]*baseVersion:\s*1/);
   });
+
+  it("stores direct-create response tokens before tokenless browser navigation", () => {
+    const script = readScript();
+
+    expect(script).toContain("rememberDirectCreateJoinToken");
+    expect(script).toContain('created.white.url.includes("token=")');
+    expect(script).toContain('created.black.url.includes("token=")');
+    expect(script).toMatch(
+      /await rememberDirectCreateJoinToken\(white,\s*created\.gameId,\s*"w",\s*created\.white\.token\)/
+    );
+    expect(script).toMatch(
+      /await rememberDirectCreateJoinToken\(black,\s*gameId,\s*"b",\s*blackToken\)/
+    );
+  });
 });

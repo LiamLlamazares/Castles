@@ -58,6 +58,14 @@ async function assertNoQueryToken(page, context) {
   );
 }
 
+async function rememberDirectCreateJoinToken(page, gameId, seat, token) {
+  assert(token, `Browser smoke direct-create ${seat} response did not include a token`);
+  await page.goto(baseUrl);
+  const storageKey = JSON.stringify(`castles_online_join:${gameId}:${seat}`);
+  const storageValue = JSON.stringify(token);
+  await page.evaluate(`sessionStorage.setItem(${storageKey}, ${storageValue})`);
+}
+
 function isLocalBaseUrl() {
   const hostname = new URL(baseUrl).hostname.toLowerCase();
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
@@ -839,11 +847,31 @@ async function createOnlineGameFromApi(white) {
   assert(created.gameId, "Browser smoke create did not return a game id");
   assert(created.white?.url, "Browser smoke create did not return a white URL");
   assert(created.black?.url, "Browser smoke create did not return a black URL");
+  assert(created.white?.token, "Browser smoke create did not return a white token");
+  assert(created.black?.token, "Browser smoke create did not return a black token");
+  assert(
+    !created.white.url.includes("token="),
+    `White direct-create URL leaked a query token: ${created.white.url}`
+  );
+  assert(
+    !created.black.url.includes("token="),
+    `Black direct-create URL leaked a query token: ${created.black.url}`
+  );
+  assert(
+    !created.white.url.includes(created.white.token),
+    "White direct-create URL contained its response-body token"
+  );
+  assert(
+    !created.black.url.includes(created.black.token),
+    "Black direct-create URL contained its response-body token"
+  );
 
+  await rememberDirectCreateJoinToken(white, created.gameId, "w", created.white.token);
   await white.goto(created.white.url);
   await white.waitForText("Online White");
   await assertNoQueryToken(white, "White player");
   await white.waitForButton("Copy Spectator Link");
+  const blackToken = created.black.token;
   const opponentInvite = created.black.url;
   await white.clickButton("Copy Spectator Link");
   const spectatorUrl = await waitUntil("spectator URL clipboard", async () => {
@@ -858,7 +886,7 @@ async function createOnlineGameFromApi(white) {
   );
   const gameId = new URL(await white.url()).searchParams.get("onlineGame");
   assert(gameId, "White URL did not include onlineGame after create");
-  return { gameId, opponentInvite, spectatorUrl };
+  return { gameId, opponentInvite, blackToken, spectatorUrl };
 }
 
 async function openSetupFromBase(page) {
@@ -1126,12 +1154,13 @@ async function runFlow(driver) {
   const black = await driver.newPage();
   const spectator = await driver.newPage();
 
-  const { gameId, opponentInvite, spectatorUrl } = await createOnlineGameFromApi(white);
+  const { gameId, opponentInvite, blackToken, spectatorUrl } = await createOnlineGameFromApi(white);
   await verifyBoardAccountGoogleOAuthUi(white);
   const initialSnapshot = await fetchSpectatorSnapshot(gameId, 0);
   await verifyAccessDeniedRecovery(driver, gameId);
   await verifyStaleActionContract(initialSnapshot.setup);
 
+  await rememberDirectCreateJoinToken(black, gameId, "b", blackToken);
   await black.goto(opponentInvite);
   await black.waitForText("Online Black");
   await assertNoQueryToken(black, "Black player");

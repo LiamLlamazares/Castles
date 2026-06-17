@@ -2286,11 +2286,11 @@ describe("online client helpers", () => {
           gameId: "game_direct_account",
           white: {
             token: "white-token",
-            url: "https://castles.example/?onlineGame=game_direct_account&seat=w&token=white-token",
+            url: "https://castles.example/?onlineGame=game_direct_account&seat=w",
           },
           black: {
             token: "black-token",
-            url: "https://castles.example/?onlineGame=game_direct_account&seat=b&token=black-token",
+            url: "https://castles.example/?onlineGame=game_direct_account&seat=b",
           },
         }),
       })

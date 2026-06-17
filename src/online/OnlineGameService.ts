@@ -37,16 +37,10 @@ function defaultTokenFactory(): string {
   return randomBytes(18).toString("base64url");
 }
 
-function buildInviteUrl(
-  publicBaseUrl: string,
-  gameId: string,
-  seat: "w" | "b",
-  token: string
-): string {
+function buildInviteUrl(publicBaseUrl: string, gameId: string, seat: "w" | "b"): string {
   const url = new URL(publicBaseUrl);
   url.searchParams.set("onlineGame", gameId);
   url.searchParams.set("seat", seat);
-  url.searchParams.set("token", token);
   return url.toString();
 }
 
@@ -106,11 +100,11 @@ export class OnlineGameService {
       gameId,
       white: {
         token: whiteToken,
-        url: buildInviteUrl(options.publicBaseUrl, gameId, "w", whiteToken),
+        url: buildInviteUrl(options.publicBaseUrl, gameId, "w"),
       },
       black: {
         token: blackToken,
-        url: buildInviteUrl(options.publicBaseUrl, gameId, "b", blackToken),
+        url: buildInviteUrl(options.publicBaseUrl, gameId, "b"),
       },
     };
   }

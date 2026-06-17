@@ -8632,8 +8632,18 @@ describe("createOnlineHttpServer", () => {
     expect(response.status).toBe(201);
     const body = await response.json();
     expect(body.gameId).toMatch(/^game_/);
-    expect(body.white.url).toContain("seat=w");
-    expect(body.black.url).toContain("seat=b");
+    const whiteUrl = new URL(body.white.url);
+    const blackUrl = new URL(body.black.url);
+    expect(body.white.token).toEqual(expect.any(String));
+    expect(body.black.token).toEqual(expect.any(String));
+    expect(whiteUrl.searchParams.get("onlineGame")).toBe(body.gameId);
+    expect(whiteUrl.searchParams.get("seat")).toBe("w");
+    expect(whiteUrl.searchParams.has("token")).toBe(false);
+    expect(body.white.url).not.toContain(body.white.token);
+    expect(blackUrl.searchParams.get("onlineGame")).toBe(body.gameId);
+    expect(blackUrl.searchParams.get("seat")).toBe("b");
+    expect(blackUrl.searchParams.has("token")).toBe(false);
+    expect(body.black.url).not.toContain(body.black.token);
   });
 
   it("lists only public token-free online game summaries through the directory contract", async () => {

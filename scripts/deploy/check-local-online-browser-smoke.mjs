@@ -13,6 +13,8 @@ const serverEntry = path.join(repoRoot, "server-build", "server", "index.js");
 const browserSmokeEntry = path.join(scriptDir, "check-online-browser-smoke.mjs");
 const requestTimeoutMs = Number(process.env.SMOKE_REQUEST_TIMEOUT_MS ?? 15_000);
 const startupTimeoutMs = Number(process.env.SMOKE_STARTUP_TIMEOUT_MS ?? 20_000);
+const shutdownTimeoutMs = 40_000;
+const forcedKillTimeoutMs = 7_000;
 const localShutdownToken = `local-browser-smoke-${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2)}`;
@@ -158,7 +160,7 @@ async function stopServer(serverProcess) {
     child.kill("SIGKILL");
     const killed = await Promise.race([
       exitPromise,
-      sleep(7_000).then(() => false),
+      sleep(forcedKillTimeoutMs).then(() => false),
     ]);
     if (killed === false) {
       throw new Error(`Server did not exit after failed shutdown request.\n${getLogs()}`);
@@ -168,7 +170,7 @@ async function stopServer(serverProcess) {
 
   const exited = await Promise.race([
     exitPromise,
-    sleep(7_000).then(() => false),
+    sleep(shutdownTimeoutMs).then(() => false),
   ]);
   if (exited === false && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGKILL");
