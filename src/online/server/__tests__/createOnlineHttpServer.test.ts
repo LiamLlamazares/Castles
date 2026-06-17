@@ -8352,7 +8352,7 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
-  it("reports runtime event polling readiness in health checks", async () => {
+  it("reports runtime event polling and node heartbeat readiness in health checks", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
       health: {
@@ -8367,6 +8367,14 @@ describe("createOnlineHttpServer", () => {
           lastPollAt: "2026-06-16T12:00:00.000Z",
           lastFailureAt: "2026-06-16T12:00:01.000Z",
           lastError: "temporary outbox failure",
+        }),
+        getRuntimeNodeHeartbeatStatus: () => ({
+          running: true,
+          ready: false,
+          consecutiveFailures: 2,
+          lastHeartbeatAt: "2026-06-17T11:00:00.000Z",
+          lastFailureAt: "2026-06-17T11:00:01.000Z",
+          lastError: "temporary node heartbeat failure",
         }),
       },
     });
@@ -8389,6 +8397,14 @@ describe("createOnlineHttpServer", () => {
             lastPollAt: "2026-06-16T12:00:00.000Z",
             lastFailureAt: "2026-06-16T12:00:01.000Z",
             lastError: "temporary outbox failure",
+          },
+          nodeHeartbeat: {
+            running: true,
+            ready: false,
+            consecutiveFailures: 2,
+            lastHeartbeatAt: "2026-06-17T11:00:00.000Z",
+            lastFailureAt: "2026-06-17T11:00:01.000Z",
+            lastError: "temporary node heartbeat failure",
           },
         },
         store: {

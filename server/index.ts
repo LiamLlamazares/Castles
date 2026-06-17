@@ -23,12 +23,19 @@ import {
   startRuntimeEventPolling,
   type RuntimeEventPoller,
 } from "./runtimeEventPolling";
+import {
+  startRuntimeNodeHeartbeat,
+  type RuntimeNodeHeartbeat,
+} from "./runtimeNodeHeartbeat";
 import { closeHttpServer, closeWebSocketServerAfterDrain } from "./socketDrain";
 
 const RUNTIME_EVENT_POLL_INTERVAL_MS = 1_000;
 const RUNTIME_EVENT_POLL_MAX_BACKOFF_MS = 15_000;
 const RUNTIME_EVENT_POLL_LIMIT = 100;
 const RUNTIME_EVENT_POLL_FAILURE_READINESS_THRESHOLD = 3;
+const RUNTIME_NODE_HEARTBEAT_INTERVAL_MS = 5_000;
+const RUNTIME_NODE_HEARTBEAT_MAX_BACKOFF_MS = 30_000;
+const RUNTIME_NODE_HEARTBEAT_FAILURE_READINESS_THRESHOLD = 3;
 const HTTP_SHUTDOWN_TIMEOUT_MS = 5_000;
 const WEBSOCKET_DRAIN_GRACE_MS = 30_000;
 const WEBSOCKET_CLOSE_TIMEOUT_MS = 5_000;
@@ -56,6 +63,7 @@ async function main() {
   let startupComplete = false;
   let runtimeCoordinator: OnlineRuntimeCoordinator | undefined;
   let runtimeEventPoller: RuntimeEventPoller | undefined;
+  let runtimeNodeHeartbeat: RuntimeNodeHeartbeat | undefined;
   try {
     const records = await store.load({
       onEventError: (line, error) => {
@@ -158,8 +166,13 @@ async function main() {
         deployment: config.deployment,
         storePath: healthStorePath,
         storeBackend,
-        checkRuntimeReady: async () => runtimeEventPoller?.getStatus().ready ?? true,
+        checkRuntimeReady: async () => {
+          const eventPollingReady = runtimeEventPoller?.getStatus().ready ?? true;
+          const nodeHeartbeatReady = runtimeNodeHeartbeat?.getStatus().ready ?? true;
+          return eventPollingReady && nodeHeartbeatReady;
+        },
         getRuntimeEventPollingStatus: () => runtimeEventPoller?.getStatus(),
+        getRuntimeNodeHeartbeatStatus: () => runtimeNodeHeartbeat?.getStatus(),
         checkStoreReady: async () => {
           const gameStoreReady = await store.checkReady();
           const accountStoreReady = accountStore.checkReady
@@ -167,6 +180,22 @@ async function main() {
             : true;
           return gameStoreReady && accountStoreReady;
         },
+      },
+    });
+
+    runtimeNodeHeartbeat = startRuntimeNodeHeartbeat({
+      runtimeNodeStore,
+      intervalMs: RUNTIME_NODE_HEARTBEAT_INTERVAL_MS,
+      maxBackoffMs: RUNTIME_NODE_HEARTBEAT_MAX_BACKOFF_MS,
+      failureReadinessThreshold: RUNTIME_NODE_HEARTBEAT_FAILURE_READINESS_THRESHOLD,
+      onError: (_error, status) => {
+        console.log(
+          formatOnlineServerLogEvent({
+            event: "online.runtime.node_heartbeat",
+            status: "failed",
+            reason: status.lastError ?? "Runtime node heartbeat failed.",
+          })
+        );
       },
     });
 
@@ -211,6 +240,7 @@ async function main() {
         }),
       ]);
       await runtimeEventPoller?.stop();
+      await runtimeNodeHeartbeat?.stop();
       const failedClose = results.find((result) => result.status === "rejected");
       if (failedClose?.status === "rejected") {
         console.error("Failed while closing network listeners", failedClose.reason);
@@ -333,6 +363,7 @@ async function main() {
   } catch (error) {
     if (!startupComplete) {
       await runtimeEventPoller?.stop();
+      await runtimeNodeHeartbeat?.stop();
       try {
         await runtimeCoordinator?.close();
       } catch (closeError) {

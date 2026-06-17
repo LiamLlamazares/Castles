@@ -127,6 +127,30 @@ export class PostgresOnlineRuntimeNodeStore {
     return rowToNodeState(result.rows[0]);
   }
 
+  async recordNodeHeartbeat(): Promise<PostgresOnlineRuntimeNodeState> {
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        INSERT INTO online_runtime_nodes (
+          node_id,
+          first_seen_at,
+          last_seen_at,
+          draining,
+          drain_started_at,
+          updated_at
+        )
+        VALUES ($1, now(), now(), false, NULL, now())
+        ON CONFLICT (node_id) DO UPDATE
+        SET
+          last_seen_at = now(),
+          updated_at = now()
+        RETURNING node_id, first_seen_at, last_seen_at, draining, drain_started_at, updated_at
+      `,
+      [this.nodeId]
+    );
+    return rowToNodeState(result.rows[0]);
+  }
+
   async getDrainState(): Promise<OnlineRuntimeDrainState> {
     await this.ensureSchema();
     const result = await this.queryable.query(

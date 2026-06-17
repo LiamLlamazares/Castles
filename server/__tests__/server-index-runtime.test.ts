@@ -11,6 +11,7 @@ describe("server runtime coordinator wiring", () => {
     const source = readServerIndex();
 
     expect(source).toContain("startRuntimeEventPolling");
+    expect(source).toContain("startRuntimeNodeHeartbeat");
     expect(source).toContain("createConfiguredRuntimeCoordinator");
     expect(source).toMatch(
       /runtimeCoordinator\s*=\s*createConfiguredRuntimeCoordinator\(config,\s*\{\s*runtimeNodeStore,\s*spectatorPresenceStore,\s*runtimeEventStore,\s*operationGateStore,\s*rateLimitStore,\s*startupMaintenanceStore,\s*\}\)/
@@ -108,10 +109,38 @@ describe("server runtime coordinator wiring", () => {
     expect(startPollingIndex).toBeLessThan(listenIndex);
   });
 
+  it("starts runtime node heartbeat after startup is recorded and before listening", () => {
+    const source = readServerIndex();
+    const recordNodeIndex = source.indexOf("await runtimeNodeStore.recordNodeStarted()");
+    const httpServerIndex = source.indexOf("const { app, server, wss } = createOnlineHttpServer({");
+    const startHeartbeatIndex = source.indexOf("runtimeNodeHeartbeat = startRuntimeNodeHeartbeat({");
+    const listenIndex = source.indexOf("server.listen(config.port");
+
+    expect(source).toContain("const RUNTIME_NODE_HEARTBEAT_INTERVAL_MS = 5_000;");
+    expect(source).toContain("const RUNTIME_NODE_HEARTBEAT_MAX_BACKOFF_MS = 30_000;");
+    expect(source).toContain("const RUNTIME_NODE_HEARTBEAT_FAILURE_READINESS_THRESHOLD = 3;");
+    expect(recordNodeIndex).toBeGreaterThan(-1);
+    expect(httpServerIndex).toBeGreaterThan(recordNodeIndex);
+    expect(startHeartbeatIndex).toBeGreaterThan(httpServerIndex);
+    expect(startHeartbeatIndex).toBeLessThan(listenIndex);
+  });
+
+  it("combines runtime event polling and node heartbeat readiness in health", () => {
+    const source = readServerIndex();
+
+    expect(source).toMatch(
+      /checkRuntimeReady:\s*async \(\) => \{\s*const eventPollingReady = runtimeEventPoller\?\.getStatus\(\)\.ready \?\? true;\s*const nodeHeartbeatReady = runtimeNodeHeartbeat\?\.getStatus\(\)\.ready \?\? true;\s*return eventPollingReady && nodeHeartbeatReady;\s*\}/
+    );
+    expect(source).toContain(
+      "getRuntimeNodeHeartbeatStatus: () => runtimeNodeHeartbeat?.getStatus(),"
+    );
+  });
+
   it("closes the runtime coordinator before backing stores after startup failure", () => {
     const source = readServerIndex();
     const startupFailureIndex = source.indexOf("if (!startupComplete)");
     const stopPollingIndex = source.indexOf("runtimeEventPoller?.stop()", startupFailureIndex);
+    const stopHeartbeatIndex = source.indexOf("runtimeNodeHeartbeat?.stop()", startupFailureIndex);
     const closeRuntimeIndex = source.indexOf("await runtimeCoordinator?.close();", startupFailureIndex);
     const closeGameStoreIndex = source.indexOf("await store.close();", startupFailureIndex);
     const closeRuntimeNodeStoreIndex = source.indexOf("await runtimeNodeStore.close();", startupFailureIndex);
@@ -119,6 +148,8 @@ describe("server runtime coordinator wiring", () => {
     expect(startupFailureIndex).toBeGreaterThan(-1);
     expect(stopPollingIndex).toBeGreaterThan(startupFailureIndex);
     expect(stopPollingIndex).toBeLessThan(closeRuntimeIndex);
+    expect(stopHeartbeatIndex).toBeGreaterThan(startupFailureIndex);
+    expect(stopHeartbeatIndex).toBeLessThan(closeRuntimeIndex);
     expect(closeRuntimeIndex).toBeGreaterThan(startupFailureIndex);
     expect(closeRuntimeIndex).toBeLessThan(closeGameStoreIndex);
     expect(closeRuntimeNodeStoreIndex).toBeGreaterThan(closeRuntimeIndex);
@@ -127,11 +158,14 @@ describe("server runtime coordinator wiring", () => {
   it("closes the runtime node store during normal shutdown", () => {
     const source = readServerIndex();
     const shutdownIndex = source.indexOf("const shutdown = async (reason: string) => {");
+    const stopHeartbeatIndex = source.indexOf("runtimeNodeHeartbeat?.stop()", shutdownIndex);
     const closeRuntimeIndex = source.indexOf("await runtimeCoordinator?.close();", shutdownIndex);
     const closeRuntimeNodeStoreIndex = source.indexOf("await runtimeNodeStore.close();", shutdownIndex);
     const closeGameStoreIndex = source.indexOf("await store.close();", shutdownIndex);
 
     expect(shutdownIndex).toBeGreaterThan(-1);
+    expect(stopHeartbeatIndex).toBeGreaterThan(shutdownIndex);
+    expect(stopHeartbeatIndex).toBeLessThan(closeRuntimeIndex);
     expect(closeRuntimeNodeStoreIndex).toBeGreaterThan(closeRuntimeIndex);
     expect(closeRuntimeNodeStoreIndex).toBeLessThan(closeGameStoreIndex);
   });

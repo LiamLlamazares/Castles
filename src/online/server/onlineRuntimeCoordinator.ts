@@ -134,6 +134,7 @@ export interface OnlineRuntimeEventStore {
 
 export interface OnlineRuntimeNodeStore {
   recordNodeStarted?(): Promise<unknown>;
+  recordNodeHeartbeat?(): Promise<unknown>;
   getDrainState(): Promise<OnlineRuntimeDrainState>;
   startDrain(input?: OnlineRuntimeStartDrainInput): Promise<OnlineRuntimeDrainState>;
 }

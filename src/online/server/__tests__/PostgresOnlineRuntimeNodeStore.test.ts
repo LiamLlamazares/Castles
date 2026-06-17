@@ -36,7 +36,8 @@ class FakePostgresRuntimeNodeQueryable {
     }
     if (
       /^INSERT INTO online_runtime_nodes/i.test(compact) &&
-      /VALUES \(\$1, now\(\), now\(\), false, NULL, now\(\)\)/i.test(compact)
+      /VALUES \(\$1, now\(\), now\(\), false, NULL, now\(\)\)/i.test(compact) &&
+      /drain_started_at = NULL/i.test(compact)
     ) {
       const [nodeId] = values as [string];
       const now = new Date(this.databaseNowMs).toISOString();
@@ -47,6 +48,31 @@ class FakePostgresRuntimeNodeQueryable {
             last_seen_at: now,
             draining: false,
             drain_started_at: null,
+            updated_at: now,
+          }
+        : {
+            node_id: nodeId,
+            first_seen_at: now,
+            last_seen_at: now,
+            draining: false,
+            drain_started_at: null,
+            updated_at: now,
+          };
+      this.nodes.set(nodeId, row);
+      return { rows: [row], rowCount: 1 };
+    }
+    if (
+      /^INSERT INTO online_runtime_nodes/i.test(compact) &&
+      /VALUES \(\$1, now\(\), now\(\), false, NULL, now\(\)\)/i.test(compact) &&
+      !/drain_started_at = NULL/i.test(compact)
+    ) {
+      const [nodeId] = values as [string];
+      const now = new Date(this.databaseNowMs).toISOString();
+      const existing = this.nodes.get(nodeId);
+      const row: RuntimeNodeRow = existing
+        ? {
+            ...existing,
+            last_seen_at: now,
             updated_at: now,
           }
         : {
@@ -145,6 +171,47 @@ describe("PostgresOnlineRuntimeNodeStore", () => {
       updatedAt: "2026-06-17T10:00:00.000Z",
     });
     expect(JSON.stringify(queryable.nodes.get("node-a"))).not.toContain("token");
+  });
+
+  it("records heartbeats with database time without clearing drain state", async () => {
+    const queryable = new FakePostgresRuntimeNodeQueryable();
+    queryable.seed({
+      node_id: "node-a",
+      first_seen_at: "2026-06-17T09:00:00.000Z",
+      last_seen_at: "2026-06-17T09:05:00.000Z",
+      draining: true,
+      drain_started_at: "2026-06-17T09:10:00.000Z",
+      updated_at: "2026-06-17T09:05:00.000Z",
+    });
+    queryable.databaseNowMs = Date.parse("2026-06-17T10:15:00.000Z");
+    const store = new PostgresOnlineRuntimeNodeStore({ nodeId: "node-a", queryable });
+
+    const state = await store.recordNodeHeartbeat();
+
+    expect(state).toEqual({
+      nodeId: "node-a",
+      firstSeenAt: "2026-06-17T09:00:00.000Z",
+      lastSeenAt: "2026-06-17T10:15:00.000Z",
+      draining: true,
+      drainStartedAt: "2026-06-17T09:10:00.000Z",
+      updatedAt: "2026-06-17T10:15:00.000Z",
+    });
+  });
+
+  it("records heartbeats for missing node rows as non-draining", async () => {
+    const queryable = new FakePostgresRuntimeNodeQueryable();
+    queryable.databaseNowMs = Date.parse("2026-06-17T10:20:00.000Z");
+    const store = new PostgresOnlineRuntimeNodeStore({ nodeId: "node-a", queryable });
+
+    const state = await store.recordNodeHeartbeat();
+
+    expect(state).toEqual({
+      nodeId: "node-a",
+      firstSeenAt: "2026-06-17T10:20:00.000Z",
+      lastSeenAt: "2026-06-17T10:20:00.000Z",
+      draining: false,
+      updatedAt: "2026-06-17T10:20:00.000Z",
+    });
   });
 
   it("starts drain idempotently with database time and does not persist the reason", async () => {

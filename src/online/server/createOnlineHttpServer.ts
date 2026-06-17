@@ -243,6 +243,16 @@ export interface OnlineRuntimeEventPollingHealth {
   lastError?: string;
 }
 
+export interface OnlineRuntimeNodeHeartbeatHealth {
+  running: boolean;
+  ready: boolean;
+  consecutiveFailures: number;
+  lastHeartbeatAt?: string;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+  lastError?: string;
+}
+
 const DEFAULT_ONLINE_TIME_CONTROL = { initial: 20, increment: 20 } as const;
 const DEFAULT_HEALTH_READINESS_TIMEOUT_MS = 1_500;
 const DEFAULT_CHALLENGE_EXPIRES_IN_MS = 24 * 60 * 60 * 1000;
@@ -399,6 +409,7 @@ export interface CreateOnlineHttpServerOptions {
     checkStoreReady?: () => boolean | Promise<boolean>;
     checkRuntimeReady?: () => boolean | Promise<boolean>;
     getRuntimeEventPollingStatus?: () => OnlineRuntimeEventPollingHealth | undefined;
+    getRuntimeNodeHeartbeatStatus?: () => OnlineRuntimeNodeHeartbeatHealth | undefined;
   };
 }
 
@@ -3783,6 +3794,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
 
     const drainState = await runtimeCoordinator.getDrainState();
     const runtimeEventPolling = options.health?.getRuntimeEventPollingStatus?.();
+    const runtimeNodeHeartbeat = options.health?.getRuntimeNodeHeartbeatStatus?.();
     const ready = storeOk && runtimeOk && !drainState.draining;
     const deployment = {
       ...(options.health?.deployment ?? createSingleNodeDeploymentConfig()),
@@ -3807,6 +3819,7 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
             error: runtimeError,
           },
           eventPolling: runtimeEventPolling,
+          nodeHeartbeat: runtimeNodeHeartbeat,
         },
         store: {
           ok: storeOk,
