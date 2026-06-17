@@ -65,13 +65,13 @@ export function buildRuntimeNodeServerEnv({
   port,
   repoRoot,
 }) {
-  const { CASTLES_DEPLOYMENT_MODE: _deploymentMode, ...inheritedEnv } = baseEnv;
   return {
-    ...inheritedEnv,
+    ...baseEnv,
     NODE_ENV: "test",
     PORT: String(port),
     PUBLIC_BASE_URL: baseUrl,
     ONLINE_STORE_BACKEND: "postgres",
+    CASTLES_DEPLOYMENT_MODE: "multi-instance",
     CASTLES_STATIC_DIR: path.join(repoRoot, "build"),
     CASTLES_ENABLE_LOCAL_SHUTDOWN: "1",
     CASTLES_LOCAL_SHUTDOWN_TOKEN: localShutdownToken,
@@ -86,6 +86,7 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   accountRejoin,
   actionRace,
   databaseRows,
+  deploymentMode,
   drainedNodeId,
   healthyNodeIds,
   nodeStatuses,
@@ -104,6 +105,9 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
     drainedNodeId,
     healthyNodeIds,
   };
+  if (deploymentMode) {
+    summary.deploymentMode = deploymentMode;
+  }
   if (accountRejoin) {
     summary.accountRejoin = accountRejoin;
   }
@@ -131,6 +135,7 @@ export function formatLocalPostgresRuntimeNodesSmokeMetrics(summary) {
     `nodes=${summary.nodeCount}`,
     `dbRows=${summary.databaseNodeCount}`,
     `draining=${summary.drainingNodeCount}`,
+    ...(summary.deploymentMode ? [`deployment=${summary.deploymentMode}`] : []),
     `heartbeatReady=${summary.heartbeatReadyCount}`,
     `persistedNodes=${summary.persistedNodeCount}`,
     `drainedNode=${summary.drainedNodeId}`,

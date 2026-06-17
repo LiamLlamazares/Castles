@@ -40,7 +40,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     }
   });
 
-  it("builds per-node server env without enabling multi-instance deployment mode", () => {
+  it("builds per-node server env with guarded multi-instance deployment mode", () => {
     const repoRoot = path.resolve("test-repo");
     const env = buildRuntimeNodeServerEnv({
       adminBearerToken: "local-runtime-nodes-admin-token",
@@ -57,6 +57,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
 
     expect(env).toMatchObject({
       CASTLES_ADMIN_BEARER_TOKEN: "local-runtime-nodes-admin-token",
+      CASTLES_DEPLOYMENT_MODE: "multi-instance",
       CASTLES_ENABLE_LOCAL_SHUTDOWN: "1",
       CASTLES_LOCAL_SHUTDOWN_TOKEN: "local-shutdown-token",
       CASTLES_NODE_ID: "local-runtime-smoke-a",
@@ -67,7 +68,6 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
       PORT: "4100",
       PUBLIC_BASE_URL: "http://127.0.0.1:4100",
     });
-    expect(env.CASTLES_DEPLOYMENT_MODE).toBeUndefined();
   });
 
   it("summarizes and formats runtime-node metrics without secrets", () => {
@@ -78,6 +78,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
       ],
       drainedNodeId: "local-runtime-smoke-a",
       healthyNodeIds: ["local-runtime-smoke-b"],
+      deploymentMode: "multi-instance",
       nodeStatuses: [
         {
           nodeId: "local-runtime-smoke-a",
@@ -139,6 +140,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
       persistedNodeCount: 2,
       drainedNodeId: "local-runtime-smoke-a",
       healthyNodeIds: ["local-runtime-smoke-b"],
+      deploymentMode: "multi-instance",
       rollingContinuation: {
         gameId: "game_runtime_roll_1",
         createdNodeId: "local-runtime-smoke-a",
@@ -183,6 +185,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     expect(formatted).toContain("nodes=2");
     expect(formatted).toContain("dbRows=2");
     expect(formatted).toContain("draining=1");
+    expect(formatted).toContain("deployment=multi-instance");
     expect(formatted).toContain("heartbeatReady=2");
     expect(formatted).toContain("rollingContinuation=local-runtime-smoke-a->local-runtime-smoke-b@v2");
     expect(formatted).toContain("spectatorFanout=local-runtime-smoke-a->local-runtime-smoke-b@v1");
@@ -223,19 +226,23 @@ describe("local PostgreSQL runtime-nodes smoke script", () => {
     );
   });
 
-  it("exercises built-server runtime-node status, drain, and PostgreSQL rows", async () => {
+  it("exercises built-server multi-instance health, runtime-node status, drain, and PostgreSQL rows", async () => {
     const script = await readFile(
       path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
       "utf8"
     );
 
     expect(script).toContain("CASTLES_NODE_ID");
+    expect(script).toContain("CASTLES_DEPLOYMENT_MODE");
+    expect(script).toContain("multi-instance");
+    expect(script).toContain("postgres-runtime-events");
+    expect(script).toContain("store-authoritative-warm-cache");
+    expect(script).toContain("postgres-locks-and-store-transactions");
     expect(script).toContain("/api/online/admin/runtime/status");
     expect(script).toContain("/api/online/admin/runtime/drain");
     expect(script).toContain("online_runtime_nodes");
     expect(script).toContain("/__local/shutdown");
     expect(script).toContain("checkLocalPostgresPrereqs");
-    expect(script).not.toMatch(/CASTLES_DEPLOYMENT_MODE\s*[:=]\s*["']multi-instance["']/);
   });
 
   it("continues a pre-drain game through the healthy peer node", async () => {

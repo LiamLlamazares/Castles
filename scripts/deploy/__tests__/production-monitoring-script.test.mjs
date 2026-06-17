@@ -14,6 +14,17 @@ const SINGLE_NODE_DEPLOYMENT = {
   routing: "single-node",
 };
 
+const MULTI_INSTANCE_DEPLOYMENT = {
+  mode: "multi-instance",
+  multiInstanceReady: true,
+  websocketFanout: "postgres-runtime-events",
+  spectatorPresence: "postgres-live-presence",
+  accountPresence: "session-store",
+  roomState: "store-authoritative-warm-cache",
+  queueGuards: "postgres-locks-and-store-transactions",
+  routing: "multi-node",
+};
+
 function okResult() {
   return {
     baseUrl: "https://castles.ls314.xyz",
@@ -66,6 +77,37 @@ describe("production monitoring script", () => {
       severity: "none",
       pager: { route: "none" },
       alerts: [],
+    });
+  });
+
+  it("prints a healthy monitoring snapshot for supported multi-instance production", async () => {
+    let stdout = "";
+    const exitCode = await runProductionMonitoringCommand({
+      argv: ["https://castles.ls314.xyz", "expected-sha", "contabo.ls314.xyz"],
+      now: () => new Date("2026-06-17T18:20:00.000Z"),
+      resolveOptions: async () => ({ baseUrl: "https://castles.ls314.xyz", expectedCommit: "expected-sha" }),
+      checkFreshness: async () => ({
+        ...okResult(),
+        health: {
+          ...okResult().health,
+          deployment: MULTI_INSTANCE_DEPLOYMENT,
+        },
+      }),
+      writeStdout: (text) => {
+        stdout += text;
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({
+      ok: true,
+      severity: "none",
+      alerts: [],
+      checks: {
+        health: {
+          deployment: MULTI_INSTANCE_DEPLOYMENT,
+        },
+      },
     });
   });
 

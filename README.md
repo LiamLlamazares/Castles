@@ -38,7 +38,7 @@ The canonical rules source is the in-app rules content in `src/rules/rulesConten
 
 ## Online Server
 
-Online multiplayer uses the Node server in `server/` with PostgreSQL persistence. Production should set `ONLINE_STORE_BACKEND=postgres`, `CASTLES_DEPLOYMENT_MODE=single-node`, and a secret `DATABASE_URL` in the server environment; do not commit database credentials. Multi-instance mode is intentionally rejected until shared presence/fanout exists. The production runbook is [docs/deployment/castles-server.md](docs/deployment/castles-server.md).
+Online multiplayer uses the Node server in `server/` with PostgreSQL persistence. Production should set `ONLINE_STORE_BACKEND=postgres`, `CASTLES_DEPLOYMENT_MODE=single-node` by default, and a secret `DATABASE_URL` in the server environment; do not commit database credentials. Guarded `CASTLES_DEPLOYMENT_MODE=multi-instance` requires the full PostgreSQL runtime stack and the two-node smoke rehearsal; it is not a public capacity or autoscaling claim. The production runbook is [docs/deployment/castles-server.md](docs/deployment/castles-server.md).
 
 ## Documentation
 

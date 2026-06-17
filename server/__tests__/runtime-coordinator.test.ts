@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConfiguredRuntimeCoordinator } from "../runtimeCoordinator";
+import { createMultiInstanceDeploymentConfig } from "../../src/online/server/serverRuntimeConfig";
 import type {
   OnlineRuntimeDrainState,
   OnlineRuntimeGameSnapshotChangedEvent,
@@ -116,6 +117,17 @@ class FakeRuntimeNodeStore implements OnlineRuntimeNodeStore {
     this.calls.push(["startDrain", input]);
     return { ...this.drainState };
   }
+}
+
+function createFullPostgresRuntimeOptions() {
+  return {
+    spectatorPresenceStore: new FakeSpectatorPresenceStore(),
+    runtimeEventStore: new FakeRuntimeEventStore(),
+    operationGateStore: new FakeOperationGateStore(),
+    rateLimitStore: new FakeRateLimitStore(),
+    startupMaintenanceStore: new FakeStartupMaintenanceStore(),
+    runtimeNodeStore: new FakeRuntimeNodeStore(),
+  };
 }
 
 describe("createConfiguredRuntimeCoordinator", () => {
@@ -325,5 +337,52 @@ describe("createConfiguredRuntimeCoordinator", () => {
       ["getDrainState"],
       ["startDrain", { reason: "operator" }],
     ]);
+  });
+
+  it("enables multi-instance capabilities only with the full PostgreSQL runtime stack", async () => {
+    const options = createFullPostgresRuntimeOptions();
+    const coordinator = createConfiguredRuntimeCoordinator(
+      {
+        runtimeNodeId: "prod-node-a",
+        deployment: createMultiInstanceDeploymentConfig(),
+      },
+      options
+    );
+
+    expect(coordinator.capabilities).toEqual({
+      mode: "multi-instance",
+      websocketFanout: "postgres-runtime-events",
+      spectatorPresence: "postgres-live-presence",
+      operationGates: "postgres-selected-shared-gates",
+      rateLimits: "postgres-shared-fixed-window",
+      startupMaintenance: "postgres-once-per-run",
+    });
+
+    await expect(coordinator.registerSpectator({ gameId: "game_1" })).resolves.toEqual({
+      connectionId: "spectator_shared_1",
+    });
+    await expect(
+      coordinator.consumeRateLimit({
+        scope: "quick_match",
+        key: "client:127.0.0.1",
+        limit: 2,
+        windowMs: 1_000,
+      })
+    ).resolves.toBe(false);
+  });
+
+  it("rejects multi-instance mode when any required PostgreSQL runtime store is missing", () => {
+    const { runtimeEventStore: _runtimeEventStore, ...partialOptions } =
+      createFullPostgresRuntimeOptions();
+
+    expect(() =>
+      createConfiguredRuntimeCoordinator(
+        {
+          runtimeNodeId: "prod-node-a",
+          deployment: createMultiInstanceDeploymentConfig(),
+        },
+        partialOptions
+      )
+    ).toThrow(/multi-instance requires the full PostgreSQL online runtime stack/i);
   });
 });

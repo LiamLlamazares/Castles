@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-export type OnlineRuntimeMode = "single-node";
+export type OnlineRuntimeMode = "single-node" | "multi-instance";
 
 export type OnlineRuntimeSnapshotReason =
   | "action"
@@ -56,7 +56,7 @@ export interface OnlineRuntimeSpectatorRegistration {
 
 export interface OnlineRuntimeCoordinatorCapabilities {
   mode: OnlineRuntimeMode;
-  websocketFanout: "process-local";
+  websocketFanout: "process-local" | "postgres-runtime-events";
   spectatorPresence: "process-local" | "postgres-live-presence";
   operationGates: "process-local" | "postgres-selected-shared-gates";
   rateLimits: "process-local" | "postgres-shared-fixed-window";
@@ -681,4 +681,17 @@ export function createPostgresCompositeRuntimeCoordinator(options: {
     );
   }
   return coordinator;
+}
+
+export function markRuntimeCoordinatorMultiInstanceReady(
+  base: OnlineRuntimeCoordinator
+): OnlineRuntimeCoordinator {
+  return {
+    ...base,
+    capabilities: {
+      ...base.capabilities,
+      mode: "multi-instance",
+      websocketFanout: "postgres-runtime-events",
+    },
+  };
 }

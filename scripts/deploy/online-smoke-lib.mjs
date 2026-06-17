@@ -55,8 +55,43 @@ function assertNoInternalRuntimeNodeHealth(value, path = "health") {
   }
 }
 
+function isSupportedSingleNodeDeployment(deployment) {
+  return (
+    deployment?.mode === "single-node" &&
+    deployment?.multiInstanceReady === false &&
+    deployment?.websocketFanout === "process-local" &&
+    deployment?.spectatorPresence === "postgres-live-presence" &&
+    deployment?.accountPresence === "session-store" &&
+    deployment?.roomState === "process-local" &&
+    deployment?.queueGuards === "process-local" &&
+    deployment?.routing === "single-node"
+  );
+}
+
+function isSupportedMultiInstanceDeployment(deployment) {
+  return (
+    deployment?.mode === "multi-instance" &&
+    deployment?.multiInstanceReady === true &&
+    deployment?.websocketFanout === "postgres-runtime-events" &&
+    deployment?.spectatorPresence === "postgres-live-presence" &&
+    deployment?.accountPresence === "session-store" &&
+    deployment?.roomState === "store-authoritative-warm-cache" &&
+    deployment?.queueGuards === "postgres-locks-and-store-transactions" &&
+    deployment?.routing === "multi-node"
+  );
+}
+
+function assertSupportedProductionDeployment(healthBody) {
+  const deployment = healthBody?.online?.deployment;
+  assert(
+    isSupportedSingleNodeDeployment(deployment) || isSupportedMultiInstanceDeployment(deployment),
+    "Production health deployment metadata was missing or unsupported"
+  );
+}
+
 export function assertProductionRuntimeHealthReady(healthBody) {
   assertNoInternalRuntimeNodeHealth(healthBody);
+  assertSupportedProductionDeployment(healthBody);
 
   const runtime = healthBody?.online?.runtime;
   assert(runtime && typeof runtime === "object", "Production health runtime health was missing");

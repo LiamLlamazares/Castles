@@ -21,6 +21,17 @@ const SINGLE_NODE_DEPLOYMENT = {
   routing: "single-node",
 };
 
+const MULTI_INSTANCE_DEPLOYMENT = {
+  mode: "multi-instance",
+  multiInstanceReady: true,
+  websocketFanout: "postgres-runtime-events",
+  spectatorPresence: "postgres-live-presence",
+  accountPresence: "session-store",
+  roomState: "store-authoritative-warm-cache",
+  queueGuards: "postgres-locks-and-store-transactions",
+  routing: "multi-node",
+};
+
 function okHealth(commit = "expected-sha") {
   return {
     ok: true,
@@ -220,6 +231,28 @@ describe("production freshness diagnostics", () => {
     expect(formatProductionFreshnessResult(result)).toContain("Alerts: none");
   });
 
+  it("classifies a supported multi-instance deployment with no deployment alert", async () => {
+    const result = await checkProductionFreshness({
+      baseUrl: "https://castles.ls314.xyz",
+      expectedCommit: "expected-sha",
+      sshHost: "ls314.xyz",
+      fetchHealth: async () => ({
+        ...okHealth("expected-sha"),
+        online: {
+          ...okHealth("expected-sha").online,
+          deployment: MULTI_INSTANCE_DEPLOYMENT,
+        },
+      }),
+      checkTcpPort: async () => ({ ok: true }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.health.deployment).toEqual(MULTI_INSTANCE_DEPLOYMENT);
+    expect(classifyProductionFreshnessAlerts(result)).toEqual([]);
+    expect(formatProductionFreshnessResult(result)).toContain("deployment=multi-instance");
+    expect(formatProductionFreshnessResult(result)).toContain("Alerts: none");
+  });
+
   it("projects runtime scheduler health without leaking scheduler error text", async () => {
     const result = await checkProductionFreshness({
       baseUrl: "https://castles.ls314.xyz",
@@ -335,13 +368,13 @@ describe("production freshness diagnostics", () => {
     expect(missingMetadata.ok).toBe(false);
     expect(unsafeMode.ok).toBe(false);
     expect(classifyProductionFreshnessAlerts(missingMetadata)).toEqual([
-      expect.objectContaining({ code: "deployment_not_single_node", severity: "critical" }),
+      expect.objectContaining({ code: "deployment_not_supported", severity: "critical" }),
     ]);
     expect(classifyProductionFreshnessAlerts(unsafeMode)).toEqual([
-      expect.objectContaining({ code: "deployment_not_single_node", severity: "critical" }),
+      expect.objectContaining({ code: "deployment_not_supported", severity: "critical" }),
     ]);
     expect(formatProductionFreshnessResult(missingMetadata)).toContain(
-      "Alert: deployment_not_single_node severity=critical"
+      "Alert: deployment_not_supported severity=critical"
     );
   });
 

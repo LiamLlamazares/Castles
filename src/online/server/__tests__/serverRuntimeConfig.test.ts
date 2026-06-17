@@ -82,25 +82,25 @@ describe("parseServerRuntimeConfig", () => {
     ).toThrow(/CASTLES_NODE_ID/);
   });
 
-  it("rejects multi-instance deployment mode until remaining runtime readiness exists", () => {
-    expect(() =>
-      parseServerRuntimeConfig(
-        {
-          CASTLES_DEPLOYMENT_MODE: "multi-instance",
-          PUBLIC_BASE_URL: "http://127.0.0.1:3000",
-        },
-        "/srv/castles"
-      )
-    ).toThrow(/multi-instance.*not supported/i);
-    expect(() =>
-      parseServerRuntimeConfig(
-        {
-          CASTLES_DEPLOYMENT_MODE: "multi-instance",
-          PUBLIC_BASE_URL: "http://127.0.0.1:3000",
-        },
-        "/srv/castles"
-      )
-    ).not.toThrow(/runtime event polling readiness/i);
+  it("accepts guarded multi-instance deployment metadata after readiness is proven", () => {
+    const config = parseServerRuntimeConfig(
+      {
+        CASTLES_DEPLOYMENT_MODE: "multi-instance",
+        PUBLIC_BASE_URL: "http://127.0.0.1:3000",
+      },
+      "/srv/castles"
+    );
+
+    expect(config.deployment).toEqual({
+      mode: "multi-instance",
+      multiInstanceReady: true,
+      websocketFanout: "postgres-runtime-events",
+      spectatorPresence: "postgres-live-presence",
+      accountPresence: "session-store",
+      roomState: "store-authoritative-warm-cache",
+      queueGuards: "postgres-locks-and-store-transactions",
+      routing: "multi-node",
+    });
   });
 
   it("rejects unknown deployment modes before startup", () => {

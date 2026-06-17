@@ -6,6 +6,8 @@ Make the Castles online runtime safe to run behind more than one Node process or
 
 The v1 target is a conservative two-instance private-beta deployment. It must prove that players, spectators, challenges, open seeks, Quick Match, presence, health checks, and rolling deploy behavior work across instances before `CASTLES_DEPLOYMENT_MODE=multi-instance` can be accepted.
 
+Status update, 2026-06-17: the v1 implementation gate is complete. `CASTLES_DEPLOYMENT_MODE=multi-instance` is now accepted only when the complete PostgreSQL runtime stack is configured, and the built-server local two-node PostgreSQL smoke proves the required cross-node behavior. This spec remains useful as the design history; the living roadmap records the final verification evidence.
+
 ## Current Baseline
 
 The current service is deliberately single-node:
@@ -16,7 +18,7 @@ The current service is deliberately single-node:
 - `OnlineGameService` keeps warm rooms in a local `Map`.
 - `enqueueGameAction` serializes only inside one process.
 - PostgreSQL store transactions protect durable game, challenge, open-seek, summary, rating, and account writes.
-- Production health reports `multiInstanceReady: false`, and `CASTLES_DEPLOYMENT_MODE=multi-instance` is rejected.
+- The original baseline reported `multiInstanceReady: false` and rejected `CASTLES_DEPLOYMENT_MODE=multi-instance`; the current guarded mode reports readiness only when all required PostgreSQL runtime components are configured.
 
 The important distinction is that PostgreSQL already protects mutation correctness, but it does not deliver WebSocket fanout, global live presence, cross-process room invalidation, or process-local queue serialization.
 
@@ -143,13 +145,13 @@ No client protocol version change is required if the existing `error` frame can 
 
 ### Deployment Mode
 
-`CASTLES_DEPLOYMENT_MODE=multi-instance` remains rejected until all required tests pass.
+`CASTLES_DEPLOYMENT_MODE=multi-instance` is accepted only after the required runtime components and tests are present.
 
 When enabled, health must report:
 
 - `mode: "multi-instance"`
 - `multiInstanceReady: true`
-- `websocketFanout: "postgres-notify"` or the actual selected mechanism
+- `websocketFanout: "postgres-runtime-events"`
 - `spectatorPresence: "postgres-live-presence"`
 - `accountPresence: "session-store"` unless changed by a separate reviewed design
 - `roomState: "store-authoritative-warm-cache"`

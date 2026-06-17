@@ -25,10 +25,10 @@ export interface ServerRuntimeConfig {
   commit?: string;
 }
 
-export type ServerDeploymentMode = "single-node";
+export type ServerDeploymentMode = "single-node" | "multi-instance";
 
-export interface ServerDeploymentConfig {
-  mode: ServerDeploymentMode;
+export interface SingleNodeDeploymentConfig {
+  mode: "single-node";
   multiInstanceReady: false;
   websocketFanout: "process-local";
   spectatorPresence: "process-local" | "postgres-live-presence";
@@ -37,6 +37,19 @@ export interface ServerDeploymentConfig {
   queueGuards: "process-local";
   routing: "single-node";
 }
+
+export interface MultiInstanceDeploymentConfig {
+  mode: "multi-instance";
+  multiInstanceReady: true;
+  websocketFanout: "postgres-runtime-events";
+  spectatorPresence: "postgres-live-presence";
+  accountPresence: "session-store";
+  roomState: "store-authoritative-warm-cache";
+  queueGuards: "postgres-locks-and-store-transactions";
+  routing: "multi-node";
+}
+
+export type ServerDeploymentConfig = SingleNodeDeploymentConfig | MultiInstanceDeploymentConfig;
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const PLACEHOLDER_BUILD_IDS = new Set(["manual", "development", "replace-with-build-id"]);
@@ -57,6 +70,19 @@ export function createSingleNodeDeploymentConfig(): ServerDeploymentConfig {
     roomState: "process-local",
     queueGuards: "process-local",
     routing: "single-node",
+  };
+}
+
+export function createMultiInstanceDeploymentConfig(): ServerDeploymentConfig {
+  return {
+    mode: "multi-instance",
+    multiInstanceReady: true,
+    websocketFanout: "postgres-runtime-events",
+    spectatorPresence: "postgres-live-presence",
+    accountPresence: "session-store",
+    roomState: "store-authoritative-warm-cache",
+    queueGuards: "postgres-locks-and-store-transactions",
+    routing: "multi-node",
   };
 }
 
@@ -193,11 +219,9 @@ function parseDeploymentConfig(env: NodeJS.ProcessEnv): ServerDeploymentConfig {
   const raw = env.CASTLES_DEPLOYMENT_MODE?.trim();
   if (!raw || raw === "single-node") return createSingleNodeDeploymentConfig();
   if (raw === "multi-instance") {
-    throw new Error(
-      "CASTLES_DEPLOYMENT_MODE=multi-instance is not supported yet; WebSocket fanout, warm room cache invalidation/readiness, full queue coverage, rolling drain, and two-instance validation are incomplete."
-    );
+    return createMultiInstanceDeploymentConfig();
   }
-  throw new Error("CASTLES_DEPLOYMENT_MODE must be single-node or unset.");
+  throw new Error("CASTLES_DEPLOYMENT_MODE must be single-node, multi-instance, or unset.");
 }
 
 function parseRuntimeNodeId(env: NodeJS.ProcessEnv): string {

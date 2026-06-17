@@ -95,8 +95,8 @@ function startServer({ adminBearerToken, nodeId, port }) {
   });
   assert(env.CASTLES_NODE_ID === nodeId, `CASTLES_NODE_ID was not set for ${nodeId}.`);
   assert(
-    env.CASTLES_DEPLOYMENT_MODE === undefined,
-    "Local runtime-node smoke must not enable CASTLES_DEPLOYMENT_MODE=multi-instance."
+    env.CASTLES_DEPLOYMENT_MODE === "multi-instance",
+    "Local runtime-node smoke must enable CASTLES_DEPLOYMENT_MODE=multi-instance."
   );
 
   const child = spawn(process.execPath, [serverEntry], {
@@ -185,6 +185,42 @@ async function waitForHealth(serverProcess, { expectOk = true, fetchWithTimeout,
           : response.status === 503 && body.ok === false;
       if (matches) {
         assert(body.online?.eventSchemaVersion === 2, "Health did not report event schema v2.");
+        assert(
+          body.online?.deployment?.mode === "multi-instance",
+          `Expected multi-instance health deployment, got ${body.online?.deployment?.mode ?? "<missing>"}.`
+        );
+        assert(
+          body.online?.deployment?.multiInstanceReady === true,
+          "Health did not report multiInstanceReady=true."
+        );
+        assert(
+          body.online?.deployment?.websocketFanout === "postgres-runtime-events",
+          `Expected postgres runtime-event fanout, got ${
+            body.online?.deployment?.websocketFanout ?? "<missing>"
+          }.`
+        );
+        assert(
+          body.online?.deployment?.spectatorPresence === "postgres-live-presence",
+          `Expected PostgreSQL spectator presence, got ${
+            body.online?.deployment?.spectatorPresence ?? "<missing>"
+          }.`
+        );
+        assert(
+          body.online?.deployment?.roomState === "store-authoritative-warm-cache",
+          `Expected store-authoritative room state, got ${
+            body.online?.deployment?.roomState ?? "<missing>"
+          }.`
+        );
+        assert(
+          body.online?.deployment?.queueGuards === "postgres-locks-and-store-transactions",
+          `Expected PostgreSQL queue guards, got ${
+            body.online?.deployment?.queueGuards ?? "<missing>"
+          }.`
+        );
+        assert(
+          body.online?.deployment?.routing === "multi-node",
+          `Expected multi-node routing, got ${body.online?.deployment?.routing ?? "<missing>"}.`
+        );
         assert(
           body.online?.store?.backend === "postgres",
           `Expected postgres health backend, got ${body.online?.store?.backend}.`
@@ -1295,6 +1331,7 @@ async function main() {
           accountRejoin,
           actionRace,
           drainedNodeId: options.nodeIds[0],
+          deploymentMode: "multi-instance",
           healthyNodeIds: [options.nodeIds[1]],
           rollingContinuation,
           spectatorFanout,

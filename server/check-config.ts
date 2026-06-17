@@ -41,6 +41,10 @@ function parseArgs(argv: string[]): { envFile?: string } {
   return { envFile };
 }
 
+export function isCheckConfigEntrypoint(argv: string[]): boolean {
+  return argv.some((arg) => /server[\\/]check-config\.(?:ts|js)$/.test(arg));
+}
+
 export async function checkServerConfiguration(
   env: NodeJS.ProcessEnv,
   cwd: string,
@@ -112,7 +116,7 @@ async function main() {
   console.log(JSON.stringify(await checkServerConfiguration(env, process.cwd()), null, 2));
 }
 
-if (process.argv.some((arg) => /server[\\/]check-config\.ts$/.test(arg))) {
+if (isCheckConfigEntrypoint(process.argv)) {
   main().catch((error) => {
     console.error("Castles server configuration check failed");
     console.error(error instanceof Error ? error.message : error);

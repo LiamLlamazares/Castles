@@ -95,6 +95,7 @@ $env:SMOKE_LOAD_GAMES="4"
 npm run online:smoke:local:load
 Remove-Item Env:\SMOKE_LOAD_GAMES
 npm run online:smoke:local:challenges
+npm run online:smoke:local:runtime-nodes
 npm run online:smoke:local:browser
 ```
 
@@ -126,6 +127,7 @@ Local restart smoke passed on http://127.0.0.1:<port> using game <game-id>
 Local PostgreSQL concurrency smoke passed using game <game-id>
 Local PostgreSQL load smoke passed: games=4 completed=4 acceptedActions=8 staleRejections=4 aggregateGameDurationMs=<duration> maxGameDurationMs=<duration>
 Local PostgreSQL challenge HTTP smoke passed using challenge <challenge-id> and game <game-id>
+Local PostgreSQL runtime nodes smoke passed: nodes=2 dbRows=2 draining=1 deployment=multi-instance heartbeatReady=2 persistedNodes=2 ...
 Local built-server browser smoke passed on http://127.0.0.1:<port>
 PostgreSQL restore drill restored <row-count> rows from 24 tables.
 Restore drill target: postgresql://<user>@localhost:5432/castles_restore
@@ -134,7 +136,8 @@ Restore drill target: postgresql://<user>@localhost:5432/castles_restore
 What this checks:
 
 - the preflight confirms the built client/server artifacts exist, `DATABASE_URL` is local or explicitly marked disposable, `psql` is installed or configured with `PSQL_PATH` or `PGCLIENT_BIN`, and the database identity is safe for local smoke;
-- `server:check-config` reports `onlineDeployment.mode` as `single-node`, `multiInstanceReady` as `false`, process-local WebSocket fanout/room-state/queue-guard metadata, PostgreSQL live spectator presence, and account presence as session-store-backed before the local server starts;
+- `server:check-config` reports `onlineDeployment.mode` as `single-node`, `multiInstanceReady` as `false`, process-local WebSocket fanout/room-state/queue-guard metadata, PostgreSQL live spectator presence, and account presence as session-store-backed before the local single-node smoke starts;
+- `online:smoke:local:runtime-nodes` starts two built server processes with `CASTLES_DEPLOYMENT_MODE=multi-instance`, verifies supported multi-instance health metadata, proves cross-node spectator fanout, visibility propagation, timeout fanout, account rejoin, action-race serialization, and rolling-drain continuation, and prints only token-free metrics;
 - starts the built Node server on a private local port,
 - confirms `/api/health` reports PostgreSQL,
 - creates an online game,

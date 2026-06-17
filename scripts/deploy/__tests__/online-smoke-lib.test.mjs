@@ -3,6 +3,28 @@ import * as smokeLib from "../online-smoke-lib.mjs";
 
 const { assertGoogleOAuthSmoke, resolveOnlineSmokeCliOptions } = smokeLib;
 
+const SINGLE_NODE_DEPLOYMENT = {
+  mode: "single-node",
+  multiInstanceReady: false,
+  websocketFanout: "process-local",
+  spectatorPresence: "postgres-live-presence",
+  accountPresence: "session-store",
+  roomState: "process-local",
+  queueGuards: "process-local",
+  routing: "single-node",
+};
+
+const MULTI_INSTANCE_DEPLOYMENT = {
+  mode: "multi-instance",
+  multiInstanceReady: true,
+  websocketFanout: "postgres-runtime-events",
+  spectatorPresence: "postgres-live-presence",
+  accountPresence: "session-store",
+  roomState: "store-authoritative-warm-cache",
+  queueGuards: "postgres-locks-and-store-transactions",
+  routing: "multi-node",
+};
+
 function jsonResponse(url, body, init = {}) {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -25,6 +47,7 @@ function healthWithRuntime(runtime = {}) {
   return {
     ok: true,
     online: {
+      deployment: SINGLE_NODE_DEPLOYMENT,
       eventSchemaVersion: 2,
       runtime: {
         readiness: { ok: true },
@@ -84,11 +107,48 @@ describe("online smoke helpers", () => {
     }).not.toThrow();
   });
 
+  it("accepts supported multi-instance deployment metadata for production smoke", () => {
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady({
+        ...healthWithRuntime(),
+        online: {
+          ...healthWithRuntime().online,
+          deployment: MULTI_INSTANCE_DEPLOYMENT,
+        },
+      });
+    }).not.toThrow();
+  });
+
+  it("rejects missing or unsafe deployment metadata before production smoke mutates state", () => {
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady({
+        ...healthWithRuntime(),
+        online: {
+          ...healthWithRuntime().online,
+          deployment: undefined,
+        },
+      });
+    }).toThrow(/deployment metadata/i);
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady({
+        ...healthWithRuntime(),
+        online: {
+          ...healthWithRuntime().online,
+          deployment: {
+            ...SINGLE_NODE_DEPLOYMENT,
+            mode: "multi-instance",
+            multiInstanceReady: true,
+          },
+        },
+      });
+    }).toThrow(/deployment metadata/i);
+  });
+
   it("rejects production health without runtime scheduler status", () => {
     expect(() => {
       smokeLib.assertProductionRuntimeHealthReady?.({
         ok: true,
-        online: { eventSchemaVersion: 2 },
+        online: { deployment: SINGLE_NODE_DEPLOYMENT, eventSchemaVersion: 2 },
       });
     }).toThrow(/runtime health/i);
   });

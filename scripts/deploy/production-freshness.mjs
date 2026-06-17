@@ -229,7 +229,7 @@ export async function checkProductionFreshness(options) {
     ssh,
     ok:
       health.ok === true &&
-      isSingleNodeDeploymentHealth(health.deployment) &&
+      isSupportedDeploymentHealth(health.deployment) &&
       health.storeBackend === "postgres" &&
       commit.status !== "mismatch" &&
       ssh.status !== "unreachable",
@@ -249,6 +249,23 @@ function isSingleNodeDeploymentHealth(deployment) {
     deployment?.queueGuards === "process-local" &&
     deployment?.routing === "single-node"
   );
+}
+
+function isMultiInstanceDeploymentHealth(deployment) {
+  return (
+    deployment?.mode === "multi-instance" &&
+    deployment?.multiInstanceReady === true &&
+    deployment?.websocketFanout === "postgres-runtime-events" &&
+    deployment?.spectatorPresence === "postgres-live-presence" &&
+    deployment?.accountPresence === "session-store" &&
+    deployment?.roomState === "store-authoritative-warm-cache" &&
+    deployment?.queueGuards === "postgres-locks-and-store-transactions" &&
+    deployment?.routing === "multi-node"
+  );
+}
+
+function isSupportedDeploymentHealth(deployment) {
+  return isSingleNodeDeploymentHealth(deployment) || isMultiInstanceDeploymentHealth(deployment);
 }
 
 function projectBoolean(value) {
@@ -355,13 +372,13 @@ export function classifyProductionFreshnessAlerts(result) {
       action: "Fix ONLINE_STORE_BACKEND/DATABASE_URL and rerun server:check-config before accepting the deploy.",
     });
   }
-  if (!isSingleNodeDeploymentHealth(result.health?.deployment)) {
+  if (!isSupportedDeploymentHealth(result.health?.deployment)) {
     alerts.push({
-      code: "deployment_not_single_node",
+      code: "deployment_not_supported",
       severity: "critical",
-      message: "Production health did not report the supported single-node deployment guardrails.",
+      message: "Production health did not report supported deployment metadata.",
       action:
-        "Keep CASTLES_DEPLOYMENT_MODE=single-node and one Node app instance until WebSocket fanout, cache invalidation, runtime-event polling readiness, and full queue coverage are implemented.",
+        "Use single-node guardrails or CASTLES_DEPLOYMENT_MODE=multi-instance with the full PostgreSQL runtime stack before accepting the deploy.",
     });
   }
   if (result.ssh?.status === "unreachable") {

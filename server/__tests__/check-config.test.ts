@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkServerConfiguration } from "../check-config";
+import { checkServerConfiguration, isCheckConfigEntrypoint } from "../check-config";
 
 const scriptPath = "server/check-config.ts";
 const tempDir = path.join(process.cwd(), ".tmp-check-config-tests");
@@ -29,6 +29,12 @@ function runCheckConfig(extraEnv: NodeJS.ProcessEnv) {
 }
 
 describe("server/check-config", () => {
+  it("recognizes both source and compiled check-config entrypoints", () => {
+    expect(isCheckConfigEntrypoint(["tsx", "server/check-config.ts"])).toBe(true);
+    expect(isCheckConfigEntrypoint(["node", "server-build/server/check-config.js"])).toBe(true);
+    expect(isCheckConfigEntrypoint(["node", "server-build/server/index.js"])).toBe(false);
+  });
+
   it("passes the runtime node id and closes every configured store after successful checks", async () => {
     const closed: string[] = [];
     let runtimeNodeId: string | undefined;
@@ -119,6 +125,54 @@ describe("server/check-config", () => {
     ]);
   });
 
+  it("reports guarded multi-instance deployment metadata with a full PostgreSQL runtime stack", async () => {
+    const report = await checkServerConfiguration(
+      {
+        ONLINE_STORE_BACKEND: "postgres",
+        DATABASE_URL: "postgresql://castles:secret@localhost:5432/castles",
+        PUBLIC_BASE_URL: "http://127.0.0.1:3000",
+        CASTLES_STATIC_DIR: process.cwd(),
+        CASTLES_REQUIRE_STATIC_DIR: "0",
+        CASTLES_DEPLOYMENT_MODE: "multi-instance",
+        CASTLES_NODE_ID: "node-a",
+      },
+      process.cwd(),
+      {
+        createStore: () => ({
+          backend: "postgres",
+          healthStorePath: "postgres",
+          postgresPoolMaxPerStore: 5,
+          store: {
+            checkReady: async () => true,
+            load: async () => [],
+            close: async () => undefined,
+          },
+          accountStore: {
+            checkReady: async () => true,
+            close: async () => undefined,
+          },
+          spectatorPresenceStore: { close: async () => undefined },
+          runtimeEventStore: { close: async () => undefined },
+          operationGateStore: { close: async () => undefined },
+          rateLimitStore: { close: async () => undefined },
+          startupMaintenanceStore: { close: async () => undefined },
+          runtimeNodeStore: { close: async () => undefined },
+        }),
+      }
+    );
+
+    expect(report.onlineDeployment).toEqual({
+      mode: "multi-instance",
+      multiInstanceReady: true,
+      websocketFanout: "postgres-runtime-events",
+      spectatorPresence: "postgres-live-presence",
+      accountPresence: "session-store",
+      roomState: "store-authoritative-warm-cache",
+      queueGuards: "postgres-locks-and-store-transactions",
+      routing: "multi-node",
+    });
+  });
+
   it("fails when the store readiness check fails", () => {
     const result = runCheckConfig({
       DATABASE_URL: "postgresql://castles:secret@127.0.0.1:1/castles",
@@ -184,7 +238,7 @@ describe("server/check-config", () => {
     expect(result.stderr).not.toContain("short-secret");
   }, spawnTestTimeoutMs);
 
-  it("rejects multi-instance deployment mode before store readiness checks", () => {
+  it("allows multi-instance parsing to reach store readiness checks without legacy rejection", () => {
     const result = runCheckConfig({
       CASTLES_DEPLOYMENT_MODE: "multi-instance",
       DATABASE_URL: "postgresql://castles:secret@127.0.0.1:1/castles",
@@ -193,8 +247,8 @@ describe("server/check-config", () => {
     });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("CASTLES_DEPLOYMENT_MODE=multi-instance is not supported");
-    expect(result.stderr).not.toContain("ECONNREFUSED");
+    expect(result.stderr).not.toContain("CASTLES_DEPLOYMENT_MODE=multi-instance is not supported");
+    expect(result.stderr).toContain("ECONNREFUSED");
     expect(result.stdout).not.toContain("\"ok\": true");
   }, spawnTestTimeoutMs);
 });

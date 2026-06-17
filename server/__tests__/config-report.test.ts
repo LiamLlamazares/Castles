@@ -57,4 +57,47 @@ describe("createServerConfigurationReport", () => {
       },
     });
   });
+
+  it("includes supported multi-instance deployment metadata in check-config output", () => {
+    const report = createServerConfigurationReport({
+      config: {
+        port: 3000,
+        bindHost: "127.0.0.1",
+        publicBaseUrl: "https://castles.example",
+        staticDir: "/srv/castles/build",
+        requireStaticDir: true,
+        localShutdownEnabled: false,
+        runtimeNodeId: "prod-node-a",
+        deployment: {
+          mode: "multi-instance",
+          multiInstanceReady: true,
+          websocketFanout: "postgres-runtime-events",
+          spectatorPresence: "postgres-live-presence",
+          accountPresence: "session-store",
+          roomState: "store-authoritative-warm-cache",
+          queueGuards: "postgres-locks-and-store-transactions",
+          routing: "multi-node",
+        },
+        buildId: "20260617-120000",
+        commit: "0123456789abcdef0123456789abcdef01234567",
+      },
+      onlineStore: {
+        backend: "postgres",
+        path: "postgres",
+        postgresPoolMaxPerStore: 5,
+      },
+      replayedRooms: 0,
+    });
+
+    expect(report.onlineDeployment).toEqual({
+      mode: "multi-instance",
+      multiInstanceReady: true,
+      websocketFanout: "postgres-runtime-events",
+      spectatorPresence: "postgres-live-presence",
+      accountPresence: "session-store",
+      roomState: "store-authoritative-warm-cache",
+      queueGuards: "postgres-locks-and-store-transactions",
+      routing: "multi-node",
+    });
+  });
 });
