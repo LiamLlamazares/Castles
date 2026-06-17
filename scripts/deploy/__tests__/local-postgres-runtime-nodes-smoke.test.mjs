@@ -96,6 +96,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         continuedNodeId: "local-runtime-smoke-b",
         version: 2,
       },
+      spectatorFanout: {
+        gameId: "game_runtime_watch_1",
+        playerNodeId: "local-runtime-smoke-a",
+        spectatorNodeId: "local-runtime-smoke-b",
+        version: 1,
+      },
     });
 
     expect(summary).toEqual({
@@ -113,6 +119,12 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         continuedNodeId: "local-runtime-smoke-b",
         version: 2,
       },
+      spectatorFanout: {
+        gameId: "game_runtime_watch_1",
+        playerNodeId: "local-runtime-smoke-a",
+        spectatorNodeId: "local-runtime-smoke-b",
+        version: 1,
+      },
     });
 
     const formatted = formatLocalPostgresRuntimeNodesSmokeMetrics(summary);
@@ -121,6 +133,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     expect(formatted).toContain("draining=1");
     expect(formatted).toContain("heartbeatReady=2");
     expect(formatted).toContain("rollingContinuation=local-runtime-smoke-a->local-runtime-smoke-b@v2");
+    expect(formatted).toContain("spectatorFanout=local-runtime-smoke-a->local-runtime-smoke-b@v1");
     expect(formatted).not.toMatch(/postgresql:\/\/|DATABASE_URL|Bearer|token|secret/i);
   });
 
@@ -188,6 +201,35 @@ describe("local PostgreSQL runtime-nodes smoke script", () => {
     expect(continueIndex).toBeGreaterThan(drainIndex);
     expect(script).toContain("{ type: \"PASS\", baseVersion: 0 }");
     expect(script).toContain("{ type: \"PASS\", baseVersion: 1 }");
+  });
+
+  it("proves live cross-node spectator fanout before the drain rehearsal", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+    const spectatorIndex = script.indexOf("verifyCrossNodeSpectatorFanout(servers[0], servers[1]");
+    const drainGameIndex = script.indexOf("createRollingDrainSmokeGame(servers[0]");
+    const drainIndex = script.indexOf("startDrain(servers[0]");
+
+    expect(script).toContain("verifyCrossNodeSpectatorFanout");
+    expect(script).toContain("spectatorFanout");
+    expect(script).toMatch(/type:\s*"spectate"/);
+    expect(script).toContain("/visibility");
+    expect(script).toContain("/summary");
+    expect(spectatorIndex).toBeGreaterThan(0);
+    expect(drainGameIndex).toBeGreaterThan(spectatorIndex);
+    expect(drainIndex).toBeGreaterThan(drainGameIndex);
+  });
+
+  it("terminal-cleans the spectator fanout smoke game", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+
+    expect(script).toContain("{ type: \"RESIGN\", baseVersion: 1 }");
+    expect(script).toContain("spectator-fanout-cleanup-resign");
   });
 
   it("fails instead of swallowing rolling-drain cleanup errors", async () => {

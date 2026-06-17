@@ -88,6 +88,7 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   healthyNodeIds,
   nodeStatuses,
   rollingContinuation,
+  spectatorFanout,
 }) {
   const summary = {
     schemaVersion: 1,
@@ -101,6 +102,9 @@ export function summarizeLocalPostgresRuntimeNodesSmoke({
   };
   if (rollingContinuation) {
     summary.rollingContinuation = rollingContinuation;
+  }
+  if (spectatorFanout) {
+    summary.spectatorFanout = spectatorFanout;
   }
   return summary;
 }
@@ -119,6 +123,11 @@ export function formatLocalPostgresRuntimeNodesSmokeMetrics(summary) {
   if (summary.rollingContinuation) {
     metrics.push(
       `rollingContinuation=${summary.rollingContinuation.createdNodeId}->${summary.rollingContinuation.continuedNodeId}@v${summary.rollingContinuation.version}`
+    );
+  }
+  if (summary.spectatorFanout) {
+    metrics.push(
+      `spectatorFanout=${summary.spectatorFanout.playerNodeId}->${summary.spectatorFanout.spectatorNodeId}@v${summary.spectatorFanout.version}`
     );
   }
   return metrics.join(" ");

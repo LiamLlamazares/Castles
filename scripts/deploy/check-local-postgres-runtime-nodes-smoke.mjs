@@ -291,21 +291,167 @@ async function submitActionThroughNode(
   }
 }
 
-async function createRollingDrainSmokeGame(serverProcess, helpers) {
+function closeSmokeSocket(socket) {
+  if (!socket || socket.readyState === 3) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(() => {
+      if (socket.readyState !== 3 && typeof socket.terminate === "function") {
+        socket.terminate();
+      }
+      resolve();
+    }, 1_000);
+    socket.once("close", () => {
+      clearTimeout(timeoutId);
+      resolve();
+    });
+    socket.close();
+  });
+}
+
+async function createSmokeGameOnNode(serverProcess, helpers, description) {
   const createResponse = await helpers.fetchWithTimeout(`${serverProcess.baseUrl}/api/online/games`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ setup: makeSmokeSetup() }),
   });
   const created = await readJson(createResponse);
-  assert(createResponse.status === 201, `Rolling-drain game create failed with ${createResponse.status}.`);
+  assert(
+    createResponse.status === 201,
+    `${description} game create failed with ${createResponse.status}.`
+  );
   assert(
     createResponse.headers.get("cache-control")?.includes("no-store"),
-    "Rolling-drain create response was not no-store."
+    `${description} create response was not no-store.`
   );
-  assert(created.gameId, "Rolling-drain create did not return a game id.");
-  assert(created.white?.token, "Rolling-drain create did not return a white token.");
-  assert(created.black?.token, "Rolling-drain create did not return a black token.");
+  assert(created.gameId, `${description} create did not return a game id.`);
+  assert(created.white?.token, `${description} create did not return a white token.`);
+  assert(created.black?.token, `${description} create did not return a black token.`);
+  return created;
+}
+
+async function makeGamePublic(serverProcess, { fetchWithTimeout, gameId, token }) {
+  const visibilityResponse = await fetchWithTimeout(
+    `${serverProcess.baseUrl}/api/online/games/${encodeURIComponent(gameId)}/visibility`,
+    {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ visibility: "public" }),
+    }
+  );
+  const visibilityBody = await readJson(visibilityResponse);
+  assert(
+    visibilityResponse.status === 200,
+    `Making spectator fanout game public failed with ${visibilityResponse.status}.`
+  );
+  assertProtocolVersionedBody(visibilityBody, "Spectator fanout visibility response");
+}
+
+async function fetchPublicSummary(serverProcess, { fetchWithTimeout, gameId }) {
+  const response = await fetchWithTimeout(
+    `${serverProcess.baseUrl}/api/online/games/${encodeURIComponent(gameId)}/summary`
+  );
+  const body = await readJson(response);
+  assert(response.status === 200, `Public game summary failed with ${response.status}.`);
+  return body.summary;
+}
+
+async function spectateThroughNode(serverProcess, { gameId, nextSocketMessage, waitForSocketOpen, WebSocket }) {
+  const socket = new WebSocket(buildWebSocketUrl(serverProcess.baseUrl));
+  const spectating = nextSocketMessage(socket, `${serverProcess.nodeId} spectator join response`);
+  await waitForSocketOpen(socket);
+  socket.send(
+    JSON.stringify(versionedSocketMessage({
+      type: "spectate",
+      gameId,
+    }))
+  );
+  const message = await spectating;
+  assertProtocolVersionedBody(message, `${serverProcess.nodeId} spectator join response`);
+  assert(message.type === "spectating", `${serverProcess.nodeId} did not enter spectator mode.`);
+  assert(message.snapshot?.version === 0, `${serverProcess.nodeId} spectator joined at version ${message.snapshot?.version}.`);
+  assertDefaultOnlineClock(message.snapshot, `${serverProcess.nodeId} spectator join snapshot`);
+  return socket;
+}
+
+async function verifyCrossNodeSpectatorFanout(playerServer, spectatorServer, helpers) {
+  const created = await createSmokeGameOnNode(
+    playerServer,
+    helpers,
+    "Cross-node spectator fanout"
+  );
+  await makeGamePublic(playerServer, {
+    fetchWithTimeout: helpers.fetchWithTimeout,
+    gameId: created.gameId,
+    token: created.white.token,
+  });
+
+  const spectatorSocket = await spectateThroughNode(spectatorServer, {
+    ...helpers,
+    gameId: created.gameId,
+  });
+  try {
+    const publicSummary = await fetchPublicSummary(playerServer, {
+      fetchWithTimeout: helpers.fetchWithTimeout,
+      gameId: created.gameId,
+    });
+    assert(
+      publicSummary?.livePreview?.spectatorCount === 1,
+      `Node A summary did not see the node B spectator count; got ${publicSummary?.livePreview?.spectatorCount}.`
+    );
+
+    const spectatorBroadcast = helpers.nextSocketMessage(
+      spectatorSocket,
+      "cross-node spectator fanout snapshot"
+    );
+    const playerSnapshot = await submitActionThroughNode(playerServer, {
+      ...helpers,
+      action: { type: "PASS", baseVersion: 0 },
+      clientActionId: `spectator-fanout-node-a-pass-${Date.now().toString(36)}`,
+      gameId: created.gameId,
+      token: created.white.token,
+    });
+    assert(
+      playerSnapshot?.version === 1,
+      `Node A spectator fanout action returned version ${playerSnapshot?.version}.`
+    );
+    const broadcast = await spectatorBroadcast;
+    assertProtocolVersionedBody(broadcast, "Cross-node spectator fanout broadcast");
+    assert(
+      broadcast.type === "snapshot",
+      `Cross-node spectator fanout delivered ${broadcast.type ?? "<missing>"}.`
+    );
+    assert(
+      broadcast.snapshot?.gameId === created.gameId,
+      "Cross-node spectator fanout broadcast used a different game id."
+    );
+    assert(
+      broadcast.snapshot?.version === 1,
+      `Cross-node spectator fanout broadcast returned version ${broadcast.snapshot?.version}.`
+    );
+    assertDefaultOnlineClock(broadcast.snapshot, "Cross-node spectator fanout broadcast");
+    await submitActionThroughNode(playerServer, {
+      ...helpers,
+      action: { type: "RESIGN", baseVersion: 1 },
+      clientActionId: `spectator-fanout-cleanup-resign-${Date.now().toString(36)}`,
+      gameId: created.gameId,
+      token: created.black.token,
+    });
+    return {
+      gameId: created.gameId,
+      playerNodeId: playerServer.nodeId,
+      spectatorNodeId: spectatorServer.nodeId,
+      version: broadcast.snapshot.version,
+    };
+  } finally {
+    await closeSmokeSocket(spectatorSocket);
+  }
+}
+
+async function createRollingDrainSmokeGame(serverProcess, helpers) {
+  const created = await createSmokeGameOnNode(serverProcess, helpers, "Rolling-drain");
 
   const snapshot = await submitActionThroughNode(serverProcess, {
     ...helpers,
@@ -448,6 +594,7 @@ async function main() {
       `Expected ${options.nodeIds.length} online_runtime_nodes rows, got ${firstRows.length}.`
     );
 
+    const spectatorFanout = await verifyCrossNodeSpectatorFanout(servers[0], servers[1], smokeHelpers);
     const rollingGame = await createRollingDrainSmokeGame(servers[0], smokeHelpers);
 
     const drainedRuntime = await startDrain(servers[0], {
@@ -500,6 +647,7 @@ async function main() {
           drainedNodeId: options.nodeIds[0],
           healthyNodeIds: [options.nodeIds[1]],
           rollingContinuation,
+          spectatorFanout,
         })
       )
     );
