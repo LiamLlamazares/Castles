@@ -310,6 +310,107 @@ async function submitActionThroughNode(
   }
 }
 
+async function joinPlayerSocketThroughNode(
+  serverProcess,
+  { gameId, label, nextSocketMessage, token, waitForSocketOpen, WebSocket }
+) {
+  const socket = new WebSocket(buildWebSocketUrl(serverProcess.baseUrl));
+  const joined = nextSocketMessage(socket, `${serverProcess.nodeId} ${label} join response`);
+  await waitForSocketOpen(socket);
+  socket.send(
+    JSON.stringify(versionedSocketMessage({
+      type: "join",
+      gameId,
+      token,
+    }))
+  );
+  const joinedMessage = await joined;
+  assertProtocolVersionedBody(joinedMessage, `${serverProcess.nodeId} ${label} join response`);
+  assert(
+    joinedMessage.type === "joined",
+    `${serverProcess.nodeId} ${label} did not join game ${gameId}.`
+  );
+  assert(
+    joinedMessage.snapshot?.version === 0,
+    `${serverProcess.nodeId} ${label} joined at version ${joinedMessage.snapshot?.version}.`
+  );
+  assertDefaultOnlineClock(joinedMessage.snapshot, `${serverProcess.nodeId} ${label} join snapshot`);
+  return socket;
+}
+
+function sendActionOnJoinedSocket(
+  socket,
+  serverProcess,
+  { action, clientActionId, requestTimeoutMs = 15_000 }
+) {
+  return new Promise((resolve, reject) => {
+    const messages = [];
+    let completed = false;
+    let settleTimer = null;
+
+    const timeout = setTimeout(() => {
+      finish(
+        undefined,
+        new Error(
+          `Timed out waiting for ${serverProcess.nodeId} ${clientActionId} action response after ${requestTimeoutMs}ms`
+        )
+      );
+    }, requestTimeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      if (settleTimer) clearTimeout(settleTimer);
+      socket.off("message", onMessage);
+      socket.off("error", onError);
+      socket.off("close", onClose);
+    };
+    const finish = (message, error) => {
+      if (completed) return;
+      completed = true;
+      cleanup();
+      if (error) {
+        reject(error);
+      } else {
+        resolve({ clientActionId, message, messages });
+      }
+    };
+    const scheduleAcceptedSnapshot = (message) => {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => finish(message), 100);
+    };
+    const onMessage = (data) => {
+      try {
+        const message = JSON.parse(data.toString("utf8"));
+        assertProtocolVersionedBody(message, `${serverProcess.nodeId} ${clientActionId} action response`);
+        messages.push(message);
+        if (message.type === "rejected" && message.clientActionId === clientActionId) {
+          finish(message);
+          return;
+        }
+        if (message.type === "snapshot" && message.snapshot?.version > action.baseVersion) {
+          scheduleAcceptedSnapshot(message);
+        }
+      } catch (error) {
+        finish(undefined, error);
+      }
+    };
+    const onError = (error) => finish(undefined, error);
+    const onClose = () =>
+      finish(undefined, new Error(`${serverProcess.nodeId} socket closed before ${clientActionId} action response`));
+
+    socket.on("message", onMessage);
+    socket.once("error", onError);
+    socket.once("close", onClose);
+    socket.send(
+      JSON.stringify(versionedSocketMessage({
+        type: "action",
+        clientActionId,
+        action,
+      }))
+    );
+  });
+}
+
 function closeSmokeSocket(socket) {
   if (!socket || socket.readyState === 3) return Promise.resolve();
   return new Promise((resolve) => {
@@ -894,6 +995,100 @@ async function verifyCrossNodeAccountRejoin(createdServer, rejoinServer, helpers
   }
 }
 
+async function verifyCrossNodeActionRace(nodeA, nodeB, helpers) {
+  const created = await createSmokeGameOnNode(nodeA, helpers, "Cross-node action race");
+  const sockets = [];
+  try {
+    const nodeASocket = await joinPlayerSocketThroughNode(nodeA, {
+      ...helpers,
+      gameId: created.gameId,
+      label: "action-race-node-a",
+      token: created.white.token,
+    });
+    sockets.push(nodeASocket);
+    const nodeBSocket = await joinPlayerSocketThroughNode(nodeB, {
+      ...helpers,
+      gameId: created.gameId,
+      label: "action-race-node-b",
+      token: created.white.token,
+    });
+    sockets.push(nodeBSocket);
+
+    const [nodeAResult, nodeBResult] = await Promise.all([
+      sendActionOnJoinedSocket(nodeASocket, nodeA, {
+        action: { type: "PASS", baseVersion: 0 },
+        clientActionId: `action-race-node-a-pass-${Date.now().toString(36)}`,
+        requestTimeoutMs: helpers.requestTimeoutMs,
+      }),
+      sendActionOnJoinedSocket(nodeBSocket, nodeB, {
+        action: { type: "PASS", baseVersion: 0 },
+        clientActionId: `action-race-node-b-pass-${Date.now().toString(36)}`,
+        requestTimeoutMs: helpers.requestTimeoutMs,
+      }),
+    ]);
+    const results = [nodeAResult, nodeBResult];
+    const finalMessages = results.map((result) => result.message);
+    const allMessages = results.flatMap((result) => result.messages);
+    const accepted = finalMessages.filter(
+      (message) => message?.type === "snapshot" && message.snapshot?.version === 1
+    );
+    const rejected = finalMessages.filter(
+      (message) =>
+        message?.type === "rejected" &&
+        message.error?.code === "stale_action" &&
+        message.snapshot?.version === 1
+    );
+    const staleActionIds = new Set(rejected.map((message) => message.clientActionId));
+    const snapshotVersions = allMessages
+      .filter((message) => message?.type === "snapshot")
+      .map((message) => message.snapshot?.version);
+    assert(
+      accepted.length === 1,
+      `Cross-node action race accepted ${accepted.length} actions: ${JSON.stringify(finalMessages)}`
+    );
+    assert(
+      rejected.length === 1,
+      `Cross-node action race rejected ${rejected.length} stale actions: ${JSON.stringify(finalMessages)}`
+    );
+    assert(
+      staleActionIds.size === 1,
+      `Cross-node action race stale rejection did not use one client action id: ${JSON.stringify(rejected)}`
+    );
+    assert(
+      snapshotVersions.length >= 1 && snapshotVersions.every((version) => version === 1),
+      `Cross-node action race observed unexpected snapshot versions: ${JSON.stringify(snapshotVersions)}`
+    );
+
+    await fetchPlayerSnapshot(nodeA, {
+      expectedVersion: 1,
+      fetchWithTimeout: helpers.fetchWithTimeout,
+      gameId: created.gameId,
+      token: created.white.token,
+    });
+    const cleanup = await submitActionThroughNode(nodeB, {
+      ...helpers,
+      action: { type: "RESIGN", baseVersion: 1 },
+      clientActionId: `action-race-cleanup-resign-${Date.now().toString(36)}`,
+      gameId: created.gameId,
+      token: created.black.token,
+    });
+    assert(
+      cleanup.result?.winner === "w" && cleanup.result?.reason === "resignation",
+      "Cross-node action race cleanup resignation did not end the game."
+    );
+
+    return {
+      gameId: created.gameId,
+      nodeIds: [nodeA.nodeId, nodeB.nodeId],
+      acceptedCount: accepted.length,
+      rejectedCount: rejected.length,
+      version: 1,
+    };
+  } finally {
+    await Promise.allSettled(sockets.map(closeSmokeSocket));
+  }
+}
+
 async function createRollingDrainSmokeGame(serverProcess, helpers) {
   const created = await createSmokeGameOnNode(serverProcess, helpers, "Rolling-drain");
 
@@ -993,6 +1188,7 @@ async function main() {
   const smokeHelpers = {
     fetchWithTimeout,
     nextSocketMessage,
+    requestTimeoutMs: options.requestTimeoutMs,
     waitForSocketOpen,
     WebSocket,
   };
@@ -1046,6 +1242,7 @@ async function main() {
     );
     const timeoutFanout = await verifyCrossNodeTimeoutFanout(servers[0], servers[1], smokeHelpers);
     const accountRejoin = await verifyCrossNodeAccountRejoin(servers[0], servers[1], smokeHelpers);
+    const actionRace = await verifyCrossNodeActionRace(servers[0], servers[1], smokeHelpers);
     const rollingGame = await createRollingDrainSmokeGame(servers[0], smokeHelpers);
 
     const drainedRuntime = await startDrain(servers[0], {
@@ -1096,6 +1293,7 @@ async function main() {
           nodeStatuses,
           databaseRows,
           accountRejoin,
+          actionRace,
           drainedNodeId: options.nodeIds[0],
           healthyNodeIds: [options.nodeIds[1]],
           rollingContinuation,

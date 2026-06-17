@@ -121,6 +121,13 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         rejoinNodeId: "local-runtime-smoke-b",
         version: 1,
       },
+      actionRace: {
+        gameId: "game_runtime_race_1",
+        nodeIds: ["local-runtime-smoke-a", "local-runtime-smoke-b"],
+        acceptedCount: 1,
+        rejectedCount: 1,
+        version: 1,
+      },
     });
 
     expect(summary).toEqual({
@@ -163,6 +170,13 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
         rejoinNodeId: "local-runtime-smoke-b",
         version: 1,
       },
+      actionRace: {
+        gameId: "game_runtime_race_1",
+        nodeIds: ["local-runtime-smoke-a", "local-runtime-smoke-b"],
+        acceptedCount: 1,
+        rejectedCount: 1,
+        version: 1,
+      },
     });
 
     const formatted = formatLocalPostgresRuntimeNodesSmokeMetrics(summary);
@@ -175,6 +189,7 @@ describe("local PostgreSQL runtime-nodes smoke helpers", () => {
     expect(formatted).toContain("visibilityPropagation=local-runtime-smoke-a->local-runtime-smoke-b@unlisted");
     expect(formatted).toContain("timeoutFanout=local-runtime-smoke-a->local-runtime-smoke-b@timeout");
     expect(formatted).toContain("accountRejoin=local-runtime-smoke-a->local-runtime-smoke-b@v1");
+    expect(formatted).toContain("actionRace=local-runtime-smoke-a+local-runtime-smoke-b@accepted1-rejected1");
     expect(formatted).not.toMatch(/postgresql:\/\/|DATABASE_URL|Bearer|token|secret|account_session/i);
   });
 
@@ -332,6 +347,27 @@ describe("local PostgreSQL runtime-nodes smoke script", () => {
     expect(accountIndex).toBeGreaterThan(0);
     expect(accountIndex).toBeGreaterThan(timeoutIndex);
     expect(drainGameIndex).toBeGreaterThan(accountIndex);
+  });
+
+  it("proves cross-node same-game action race serialization before the drain rehearsal", async () => {
+    const script = await readFile(
+      path.resolve(process.cwd(), "scripts/deploy/check-local-postgres-runtime-nodes-smoke.mjs"),
+      "utf8"
+    );
+    const raceIndex = script.indexOf("const actionRace = await verifyCrossNodeActionRace(");
+    const accountIndex = script.indexOf("const accountRejoin = await verifyCrossNodeAccountRejoin(");
+    const drainGameIndex = script.indexOf("createRollingDrainSmokeGame(servers[0]");
+
+    expect(script).toContain("verifyCrossNodeActionRace");
+    expect(script).toContain("joinPlayerSocketThroughNode");
+    expect(script).toContain("sendActionOnJoinedSocket");
+    expect(script).toContain("action-race-node-a-pass");
+    expect(script).toContain("action-race-node-b-pass");
+    expect(script).toContain("stale_action");
+    expect(script).toContain("action-race-cleanup-resign");
+    expect(raceIndex).toBeGreaterThan(0);
+    expect(raceIndex).toBeGreaterThan(accountIndex);
+    expect(drainGameIndex).toBeGreaterThan(raceIndex);
   });
 
   it("fails instead of swallowing rolling-drain cleanup errors", async () => {
