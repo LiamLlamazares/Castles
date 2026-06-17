@@ -3,10 +3,13 @@ import {
   createPostgresOperationGateRuntimeCoordinator,
   createPostgresRateLimitRuntimeCoordinator,
   createPostgresRuntimeEventCoordinator,
+  createPostgresRuntimeNodeCoordinator,
   createPostgresStartupMaintenanceRuntimeCoordinator,
   createPostgresSpectatorPresenceRuntimeCoordinator,
   createSingleNodeOnlineRuntimeCoordinator,
   normalizeRuntimeNodeId,
+  type OnlineRuntimeDrainState,
+  type OnlineRuntimeNodeStore,
   type OnlineRuntimeOperationGateScope,
   type OnlineRuntimeRateLimitInput,
   type OnlineRuntimeRateLimitScope,
@@ -185,6 +188,21 @@ class FakeRateLimitStore {
   }
 }
 
+class FakeRuntimeNodeStore implements OnlineRuntimeNodeStore {
+  readonly calls: Array<["getDrainState"] | ["startDrain", unknown]> = [];
+  drainState: OnlineRuntimeDrainState = { draining: false };
+
+  async getDrainState(): Promise<OnlineRuntimeDrainState> {
+    this.calls.push(["getDrainState"]);
+    return { ...this.drainState };
+  }
+
+  async startDrain(input = {}): Promise<OnlineRuntimeDrainState> {
+    this.calls.push(["startDrain", input]);
+    return { ...this.drainState };
+  }
+}
+
 describe("normalizeRuntimeNodeId", () => {
   it("accepts short visible operator node ids", () => {
     expect(normalizeRuntimeNodeId(" node-a_01 ")).toBe("node-a_01");
@@ -195,6 +213,30 @@ describe("normalizeRuntimeNodeId", () => {
     expect(() => normalizeRuntimeNodeId("node id")).toThrow(/CASTLES_NODE_ID/);
     expect(() => normalizeRuntimeNodeId("https://node-a")).toThrow(/CASTLES_NODE_ID/);
     expect(() => normalizeRuntimeNodeId("x".repeat(65))).toThrow(/CASTLES_NODE_ID/);
+  });
+});
+
+describe("createPostgresRuntimeNodeCoordinator", () => {
+  it("delegates drain state to a PostgreSQL runtime node store", async () => {
+    const runtimeNodeStore = new FakeRuntimeNodeStore();
+    runtimeNodeStore.drainState = { draining: true, startedAt: "2026-06-17T10:05:00.000Z" };
+    const coordinator = createPostgresRuntimeNodeCoordinator({
+      nodeId: "node-a",
+      runtimeNodeStore,
+    });
+
+    await expect(coordinator.getDrainState()).resolves.toEqual({
+      draining: true,
+      startedAt: "2026-06-17T10:05:00.000Z",
+    });
+    await expect(coordinator.startDrain({ reason: "operator" })).resolves.toEqual({
+      draining: true,
+      startedAt: "2026-06-17T10:05:00.000Z",
+    });
+    expect(runtimeNodeStore.calls).toEqual([
+      ["getDrainState"],
+      ["startDrain", { reason: "operator" }],
+    ]);
   });
 });
 

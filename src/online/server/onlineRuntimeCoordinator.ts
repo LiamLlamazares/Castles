@@ -132,6 +132,12 @@ export interface OnlineRuntimeEventStore {
   }>;
 }
 
+export interface OnlineRuntimeNodeStore {
+  recordNodeStarted?(): Promise<unknown>;
+  getDrainState(): Promise<OnlineRuntimeDrainState>;
+  startDrain(input?: OnlineRuntimeStartDrainInput): Promise<OnlineRuntimeDrainState>;
+}
+
 export interface OnlineRuntimeCoordinator {
   readonly nodeId: string;
   readonly capabilities: OnlineRuntimeCoordinatorCapabilities;
@@ -468,6 +474,21 @@ function withPostgresRuntimeEventCoordinator(
   };
 }
 
+function withPostgresRuntimeNodeCoordinator(
+  base: OnlineRuntimeCoordinator,
+  runtimeNodeStore: OnlineRuntimeNodeStore
+): OnlineRuntimeCoordinator {
+  return {
+    ...base,
+    async getDrainState() {
+      return runtimeNodeStore.getDrainState();
+    },
+    async startDrain(input = {}) {
+      return runtimeNodeStore.startDrain(input);
+    },
+  };
+}
+
 function withPostgresOperationGateRuntimeCoordinator(
   base: OnlineRuntimeCoordinator,
   operationGateStore: OnlineRuntimeOperationGateStore
@@ -561,6 +582,16 @@ export function createPostgresRuntimeEventCoordinator(options: {
   return withPostgresRuntimeEventCoordinator(
     createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId }),
     options.runtimeEventStore
+  );
+}
+
+export function createPostgresRuntimeNodeCoordinator(options: {
+  nodeId: string;
+  runtimeNodeStore: OnlineRuntimeNodeStore;
+}): OnlineRuntimeCoordinator {
+  return withPostgresRuntimeNodeCoordinator(
+    createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId }),
+    options.runtimeNodeStore
   );
 }
 
