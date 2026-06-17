@@ -35,6 +35,42 @@ export function assertProtocolVersionedBody(body, description = "Response body")
   );
 }
 
+const INTERNAL_RUNTIME_NODE_HEALTH_KEYS = new Set([
+  "nodeId",
+  "runtimeNodeId",
+  "runtimeNode",
+  "nodeState",
+  "persistedNode",
+  "online_runtime_nodes",
+]);
+
+function assertNoInternalRuntimeNodeHealth(value, path = "health") {
+  if (!value || typeof value !== "object") return;
+  for (const [key, nested] of Object.entries(value)) {
+    const isRuntimeStatusPath = path.startsWith("health.online.runtime");
+    if (INTERNAL_RUNTIME_NODE_HEALTH_KEYS.has(key) || (isRuntimeStatusPath && key === "node")) {
+      throw new Error(`Public health exposed internal runtime-node state at ${path}.${key}`);
+    }
+    assertNoInternalRuntimeNodeHealth(nested, `${path}.${key}`);
+  }
+}
+
+export function assertProductionRuntimeHealthReady(healthBody) {
+  assertNoInternalRuntimeNodeHealth(healthBody);
+
+  const runtime = healthBody?.online?.runtime;
+  assert(runtime && typeof runtime === "object", "Production health runtime health was missing");
+  assert(runtime.readiness?.ok === true, "Production runtime readiness was not ok");
+  assert(
+    runtime.eventPolling?.ready === true,
+    "Production runtime event polling was not ready"
+  );
+  assert(
+    runtime.nodeHeartbeat?.ready === true,
+    "Production runtime-node heartbeat was not ready"
+  );
+}
+
 export function versionedSocketMessage(message) {
   return {
     protocolVersion: ONLINE_PROTOCOL_VERSION,

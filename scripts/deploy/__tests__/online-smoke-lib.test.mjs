@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { assertGoogleOAuthSmoke, resolveOnlineSmokeCliOptions } from "../online-smoke-lib.mjs";
+import * as smokeLib from "../online-smoke-lib.mjs";
+
+const { assertGoogleOAuthSmoke, resolveOnlineSmokeCliOptions } = smokeLib;
 
 function jsonResponse(url, body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -17,6 +19,21 @@ function stateWithReturnTo(returnTo = "/?onlineGame=game_return&seat=w&view=spec
       exp: 1_800_000_000,
     })
   ).toString("base64url")}.signature`;
+}
+
+function healthWithRuntime(runtime = {}) {
+  return {
+    ok: true,
+    online: {
+      eventSchemaVersion: 2,
+      runtime: {
+        readiness: { ok: true },
+        eventPolling: { ready: true, running: true, consecutiveFailures: 0 },
+        nodeHeartbeat: { ready: true, running: true, consecutiveFailures: 0 },
+        ...runtime,
+      },
+    },
+  };
 }
 
 describe("online smoke helpers", () => {
@@ -57,6 +74,68 @@ describe("online smoke helpers", () => {
       baseUrl: "https://env.example",
       expectedCommit: "abcdef",
     });
+  });
+
+  it("accepts ready runtime health for production smoke", () => {
+    expect(smokeLib.assertProductionRuntimeHealthReady).toEqual(expect.any(Function));
+
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady(healthWithRuntime());
+    }).not.toThrow();
+  });
+
+  it("rejects production health without runtime scheduler status", () => {
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady?.({
+        ok: true,
+        online: { eventSchemaVersion: 2 },
+      });
+    }).toThrow(/runtime health/i);
+  });
+
+  it("rejects production health when runtime event polling is not ready", () => {
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady?.(
+        healthWithRuntime({
+          eventPolling: { ready: false, running: true, consecutiveFailures: 3 },
+        })
+      );
+    }).toThrow(/runtime event polling.*not ready/i);
+  });
+
+  it("rejects production health when runtime-node heartbeat is not ready", () => {
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady?.(
+        healthWithRuntime({
+          nodeHeartbeat: { ready: false, running: true, consecutiveFailures: 2 },
+        })
+      );
+    }).toThrow(/runtime-node heartbeat.*not ready/i);
+  });
+
+  it("rejects public health that exposes runtime-node identity or persisted node rows", () => {
+    for (const leakedRuntime of [
+      { nodeId: "prod-node-a" },
+      { runtimeNodeId: "prod-node-a" },
+      { node: { nodeId: "prod-node-a" } },
+      { runtimeNode: { nodeId: "prod-node-a" } },
+      { nodeState: { nodeId: "prod-node-a" } },
+      { persistedNode: { nodeId: "prod-node-a" } },
+      { online_runtime_nodes: [{ node_id: "prod-node-a" }] },
+    ]) {
+      expect(() => {
+        smokeLib.assertProductionRuntimeHealthReady?.(healthWithRuntime(leakedRuntime));
+      }).toThrow(/public health exposed internal runtime-node state/i);
+    }
+  });
+
+  it("allows unrelated public health node metadata outside runtime status", () => {
+    expect(() => {
+      smokeLib.assertProductionRuntimeHealthReady({
+        ...healthWithRuntime(),
+        build: { node: "v22.0.0", commit: "abc123" },
+      });
+    }).not.toThrow();
   });
 
   it("accepts a configured Google OAuth provider and production callback redirect", async () => {

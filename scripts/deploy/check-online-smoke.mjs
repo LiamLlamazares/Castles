@@ -4,6 +4,7 @@ import {
   assert,
   assertDefaultOnlineClock,
   assertGoogleOAuthSmoke,
+  assertProductionRuntimeHealthReady,
   assertProtocolVersionedBody,
   assertSpectatorSnapshot,
   buildWebSocketUrl,
@@ -333,6 +334,7 @@ async function main() {
       `Expected commit ${expectedCommit}, health reported ${healthBody.build?.commit}`
     );
   }
+  assertProductionRuntimeHealthReady(healthBody);
   await assertGoogleOAuthSmoke(fetchWithTimeout, baseUrl);
 
   const createResponse = await fetchWithTimeout(`${baseUrl}/api/online/games`, {

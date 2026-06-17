@@ -31,4 +31,18 @@ describe("production online API smoke script", () => {
     expect(script).toContain("Direct smoke cleanup");
     expect(script).toMatch(/RESIGN[\s\S]*baseVersion:\s*1/);
   });
+
+  it("checks production runtime health before mutable smoke operations", () => {
+    const script = readScript();
+    const runtimeHealthIndex = script.indexOf("assertProductionRuntimeHealthReady(healthBody)");
+    const createGameIndex = script.indexOf(
+      "const createResponse = await fetchWithTimeout(`${baseUrl}/api/online/games`"
+    );
+
+    expect(script).toContain("assertProductionRuntimeHealthReady");
+    expect(createGameIndex).toBeGreaterThan(0);
+    expect(runtimeHealthIndex).toBeGreaterThan(script.indexOf("Health did not report event schema v2"));
+    expect(runtimeHealthIndex).toBeLessThan(script.indexOf("await assertGoogleOAuthSmoke"));
+    expect(runtimeHealthIndex).toBeLessThan(createGameIndex);
+  });
 });
