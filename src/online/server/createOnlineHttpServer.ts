@@ -4582,6 +4582,64 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     }
   });
 
+  app.post("/api/online/admin/runtime/drain", async (req, res) => {
+    setOnlineNoStoreHeaders(res);
+    const authorized = resolveAdminBearer(req);
+    let rateLimitAllowed: boolean | "failed";
+    try {
+      rateLimitAllowed = await consumeRequestRateLimit("admin_read", req);
+    } catch {
+      rateLimitAllowed = "failed";
+    }
+    if (!authorized) {
+      log({
+        event: "online.admin.runtime.drain",
+        status: "rejected",
+        reason:
+          rateLimitAllowed === "failed"
+            ? "rate_limit_failed_not_found"
+            : rateLimitAllowed
+              ? "not_found"
+              : "rate_limited_not_found",
+      });
+      res.status(404).json({ error: adminNotFoundError() });
+      return;
+    }
+    if (rateLimitAllowed === "failed") {
+      console.error("Failed to check online admin runtime drain rate limit.");
+      log({ event: "online.admin.runtime.drain", status: "failed", reason: "rate_limit_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Admin rate limit could not be checked." },
+      });
+      return;
+    }
+    if (!rateLimitAllowed) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many admin requests were sent too quickly." },
+      });
+      return;
+    }
+    try {
+      const drainState = await runtimeCoordinator.startDrain({ reason: "operator" });
+      log({ event: "online.admin.runtime.drain", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        runtime: {
+          draining: drainState.draining,
+          drainStartedAt: drainState.startedAt,
+          nodeId: runtimeCoordinator.nodeId,
+          capabilities: runtimeCoordinator.capabilities,
+        },
+      });
+    } catch {
+      console.error("Failed to start online runtime drain.");
+      log({ event: "online.admin.runtime.drain", status: "failed", reason: "runtime_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Runtime drain could not be started." },
+      });
+    }
+  });
+
   app.patch("/api/online/admin/reports/:reportId", async (req, res) => {
     setOnlineNoStoreHeaders(res);
     const authorized = resolveAdminBearer(req);

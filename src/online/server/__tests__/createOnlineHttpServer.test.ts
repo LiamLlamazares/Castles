@@ -1595,6 +1595,163 @@ describe("createOnlineHttpServer", () => {
     });
   });
 
+  it("keeps the operator runtime drain route hidden unless an admin bearer token is configured", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("vary")).toContain("Authorization");
+    expect(body).toEqual({
+      error: {
+        code: "not_found",
+        message: "No online admin resource was found.",
+      },
+    });
+  });
+
+  it("lets the operator runtime drain route start drain and readiness failure without exposing the reason", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const startDrain = vi.spyOn(runtimeCoordinator, "startDrain");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+      adminBearerToken: "admin-token-with-enough-length",
+      health: {
+        checkStoreReady: async () => true,
+        storeBackend: "postgres",
+      },
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+    });
+    const wrongAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+      headers: bearer("wrong-token-with-enough-length"),
+    });
+    const drainResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const drainBody = await drainResponse.json();
+    const healthResponse = await fetch(`http://127.0.0.1:${port}/api/health`);
+    const healthBody = await healthResponse.json();
+
+    expect(missingAuthResponse.status).toBe(404);
+    expect(wrongAuthResponse.status).toBe(404);
+    expect(drainResponse.status).toBe(200);
+    expect(drainResponse.headers.get("cache-control")).toBe("no-store");
+    expect(drainResponse.headers.get("vary")).toContain("Authorization");
+    expect(startDrain).toHaveBeenCalledWith({ reason: "operator" });
+    expect(drainBody).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      runtime: {
+        draining: true,
+        drainStartedAt: expect.any(String),
+        nodeId: "node-a",
+        capabilities: runtimeCoordinator.capabilities,
+      },
+    });
+    expect(JSON.stringify(drainBody)).not.toContain("operator");
+    expect(healthResponse.status).toBe(503);
+    expect(healthBody).toMatchObject({
+      ok: false,
+      online: {
+        runtime: {
+          draining: true,
+          drainStartedAt: drainBody.runtime.drainStartedAt,
+        },
+      },
+    });
+    expect(JSON.stringify(healthBody)).not.toContain("operator");
+  });
+
+  it("returns a sanitized failure when the operator runtime drain cannot start", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    vi.spyOn(runtimeCoordinator, "startDrain").mockRejectedValue(
+      new Error("postgresql://castles:secret@db.example/castles failed to update online_runtime_nodes")
+    );
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+      adminBearerToken: "admin-token-with-enough-length",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      error: { code: "persistence_failed", message: "Runtime drain could not be started." },
+    });
+    expect(JSON.stringify(body)).not.toContain("secret");
+    expect(JSON.stringify(body)).not.toContain("online_runtime_nodes");
+    expect(JSON.stringify(body)).not.toContain("postgresql://");
+  });
+
+  it("keeps the operator runtime drain route hidden when rate-limit storage fails before auth", async () => {
+    const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
+    const consumeRateLimit = vi.spyOn(runtimeCoordinator, "consumeRateLimit").mockRejectedValue(
+      new Error("postgresql://castles:secret@db.example/castles failed to update online_rate_limits")
+    );
+    const startDrain = vi.spyOn(runtimeCoordinator, "startDrain");
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      runtimeCoordinator,
+      adminBearerToken: "admin-token-with-enough-length",
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const missingAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+    });
+    const missingAuthBody = await missingAuthResponse.json();
+    const wrongAuthResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+      headers: bearer("wrong-token-with-enough-length"),
+    });
+    const wrongAuthBody = await wrongAuthResponse.json();
+    const authorizedResponse = await fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+      method: "POST",
+      headers: bearer("admin-token-with-enough-length"),
+    });
+    const authorizedBody = await authorizedResponse.json();
+
+    expect(missingAuthResponse.status).toBe(404);
+    expect(wrongAuthResponse.status).toBe(404);
+    expect(missingAuthBody).toEqual({ error: { code: "not_found", message: "No online admin resource was found." } });
+    expect(wrongAuthBody).toEqual({ error: { code: "not_found", message: "No online admin resource was found." } });
+    expect(authorizedResponse.status).toBe(503);
+    expect(authorizedBody).toEqual({
+      error: { code: "persistence_failed", message: "Admin rate limit could not be checked." },
+    });
+    expect(startDrain).not.toHaveBeenCalled();
+    expect(consumeRateLimit).toHaveBeenCalledTimes(3);
+    for (const body of [missingAuthBody, wrongAuthBody, authorizedBody]) {
+      expect(JSON.stringify(body)).not.toContain("secret");
+      expect(JSON.stringify(body)).not.toContain("online_rate_limits");
+      expect(JSON.stringify(body)).not.toContain("postgresql://");
+    }
+  });
+
   it("protects the admin report queue and returns sanitized open reports", async () => {
     const queryable = new FakePostgresAccountQueryable();
     const accountStore = createPostgresAccountStore(queryable);
@@ -5352,6 +5509,10 @@ describe("createOnlineHttpServer", () => {
       fetch(`http://127.0.0.1:${port}/api/online/admin/reports`, {
         headers: { ...headers, ...bearer("admin-token") },
       }),
+      fetch(`http://127.0.0.1:${port}/api/online/admin/runtime/drain`, {
+        method: "POST",
+        headers: { ...headers, ...bearer("admin-token") },
+      }),
       fetch(`http://127.0.0.1:${port}/api/online/challenges/challenge_shared_rate/decline`, {
         method: "POST",
         headers,
@@ -5389,7 +5550,7 @@ describe("createOnlineHttpServer", () => {
 
     const responses = await Promise.all(requests);
 
-    expect(responses.map((response) => response.status)).toEqual(Array(12).fill(429));
+    expect(responses.map((response) => response.status)).toEqual(Array(13).fill(429));
     expect(new Set(consumeRateLimit.mock.calls.map(([input]) => input.scope))).toEqual(
       deniedScopes
     );
