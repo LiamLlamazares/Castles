@@ -108,6 +108,7 @@ async function main() {
     operationGateStore,
     rateLimitStore,
     startupMaintenanceStore,
+    runtimeNodeStore,
   } = createOnlineGameStoreFromEnv(process.env, { runtimeNodeId: config.runtimeNodeId });
 
   let startupComplete = false;
@@ -119,7 +120,9 @@ async function main() {
         console.error(`Invalid online event store entry ${line}`, error);
       },
     });
+    await runtimeNodeStore.recordNodeStarted();
     runtimeCoordinator = createConfiguredRuntimeCoordinator(config, {
+      runtimeNodeStore,
       spectatorPresenceStore,
       runtimeEventStore,
       operationGateStore,
@@ -274,6 +277,12 @@ async function main() {
         process.exitCode = 1;
       }
       try {
+        await runtimeNodeStore.close();
+      } catch (error) {
+        console.error("Failed to close online runtime node store", error);
+        process.exitCode = 1;
+      }
+      try {
         await store.close();
       } catch (error) {
         console.error("Failed to close online game store", error);
@@ -381,6 +390,11 @@ async function main() {
         await runtimeCoordinator?.close();
       } catch (closeError) {
         console.error("Failed to close online runtime coordinator after startup failure", closeError);
+      }
+      try {
+        await runtimeNodeStore.close();
+      } catch (closeError) {
+        console.error("Failed to close online runtime node store after startup failure", closeError);
       }
       try {
         await store.close();

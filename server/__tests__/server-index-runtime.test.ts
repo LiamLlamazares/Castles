@@ -13,9 +13,22 @@ describe("server runtime coordinator wiring", () => {
     expect(source).toContain("startRuntimeEventPolling");
     expect(source).toContain("createConfiguredRuntimeCoordinator");
     expect(source).toMatch(
-      /runtimeCoordinator\s*=\s*createConfiguredRuntimeCoordinator\(config,\s*\{\s*spectatorPresenceStore,\s*runtimeEventStore,\s*operationGateStore,\s*rateLimitStore,\s*startupMaintenanceStore,\s*\}\)/
+      /runtimeCoordinator\s*=\s*createConfiguredRuntimeCoordinator\(config,\s*\{\s*runtimeNodeStore,\s*spectatorPresenceStore,\s*runtimeEventStore,\s*operationGateStore,\s*rateLimitStore,\s*startupMaintenanceStore,\s*\}\)/
     );
     expect(source).toMatch(/createOnlineHttpServer\(\{[\s\S]*runtimeCoordinator,/);
+  });
+
+  it("records runtime node startup before configuring the runtime coordinator and service", () => {
+    const source = readServerIndex();
+    const recordNodeIndex = source.indexOf("await runtimeNodeStore.recordNodeStarted()");
+    const coordinatorIndex = source.indexOf(
+      "runtimeCoordinator = createConfiguredRuntimeCoordinator(config, {"
+    );
+    const serviceIndex = source.indexOf("OnlineGameService.fromRecords(records");
+
+    expect(recordNodeIndex).toBeGreaterThan(-1);
+    expect(recordNodeIndex).toBeLessThan(coordinatorIndex);
+    expect(recordNodeIndex).toBeLessThan(serviceIndex);
   });
 
   it("runs startup maintenance through the configured runtime coordinator before service creation", () => {
@@ -23,6 +36,7 @@ describe("server runtime coordinator wiring", () => {
     const coordinatorIndex = source.indexOf(
       "runtimeCoordinator = createConfiguredRuntimeCoordinator(config, {"
     );
+    const runtimeNodeStoreIndex = source.indexOf("runtimeNodeStore,", coordinatorIndex);
     const spectatorStoreIndex = source.indexOf("spectatorPresenceStore,", coordinatorIndex);
     const runtimeEventStoreIndex = source.indexOf("runtimeEventStore,", coordinatorIndex);
     const operationGateStoreIndex = source.indexOf("operationGateStore,", coordinatorIndex);
@@ -35,6 +49,7 @@ describe("server runtime coordinator wiring", () => {
 
     expect(source).toContain("runOnlineRuntimeTableCleanup");
     expect(coordinatorIndex).toBeGreaterThan(-1);
+    expect(runtimeNodeStoreIndex).toBeGreaterThan(coordinatorIndex);
     expect(spectatorStoreIndex).toBeGreaterThan(coordinatorIndex);
     expect(runtimeEventStoreIndex).toBeGreaterThan(coordinatorIndex);
     expect(operationGateStoreIndex).toBeGreaterThan(coordinatorIndex);
@@ -81,11 +96,25 @@ describe("server runtime coordinator wiring", () => {
     const stopPollingIndex = source.indexOf("runtimeEventPoller?.stop()", startupFailureIndex);
     const closeRuntimeIndex = source.indexOf("await runtimeCoordinator?.close();", startupFailureIndex);
     const closeGameStoreIndex = source.indexOf("await store.close();", startupFailureIndex);
+    const closeRuntimeNodeStoreIndex = source.indexOf("await runtimeNodeStore.close();", startupFailureIndex);
 
     expect(startupFailureIndex).toBeGreaterThan(-1);
     expect(stopPollingIndex).toBeGreaterThan(startupFailureIndex);
     expect(stopPollingIndex).toBeLessThan(closeRuntimeIndex);
     expect(closeRuntimeIndex).toBeGreaterThan(startupFailureIndex);
     expect(closeRuntimeIndex).toBeLessThan(closeGameStoreIndex);
+    expect(closeRuntimeNodeStoreIndex).toBeGreaterThan(closeRuntimeIndex);
+  });
+
+  it("closes the runtime node store during normal shutdown", () => {
+    const source = readServerIndex();
+    const shutdownIndex = source.indexOf("const shutdown = async (reason: string) => {");
+    const closeRuntimeIndex = source.indexOf("await runtimeCoordinator?.close();", shutdownIndex);
+    const closeRuntimeNodeStoreIndex = source.indexOf("await runtimeNodeStore.close();", shutdownIndex);
+    const closeGameStoreIndex = source.indexOf("await store.close();", shutdownIndex);
+
+    expect(shutdownIndex).toBeGreaterThan(-1);
+    expect(closeRuntimeNodeStoreIndex).toBeGreaterThan(closeRuntimeIndex);
+    expect(closeRuntimeNodeStoreIndex).toBeLessThan(closeGameStoreIndex);
   });
 });

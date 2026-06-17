@@ -87,6 +87,11 @@ describe("server/check-config", () => {
                 closed.push("startup");
               },
             },
+            runtimeNodeStore: {
+              close: async () => {
+                closed.push("runtime-node");
+              },
+            },
           };
         },
       }
@@ -110,6 +115,7 @@ describe("server/check-config", () => {
       "operation-gate",
       "rate-limit",
       "startup",
+      "runtime-node",
     ]);
   });
 

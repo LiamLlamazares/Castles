@@ -5,6 +5,7 @@ import { PostgresOnlineGameStore } from "./PostgresOnlineGameStore";
 import { PostgresOnlineOperationGateStore } from "./PostgresOnlineOperationGateStore";
 import { PostgresOnlineRateLimitStore } from "./PostgresOnlineRateLimitStore";
 import { PostgresOnlineRuntimeEventStore } from "./PostgresOnlineRuntimeEventStore";
+import { PostgresOnlineRuntimeNodeStore } from "./PostgresOnlineRuntimeNodeStore";
 import { PostgresOnlineSpectatorPresenceStore } from "./PostgresOnlineSpectatorPresenceStore";
 import { PostgresOnlineStartupMaintenanceStore } from "./PostgresOnlineStartupMaintenanceStore";
 import { normalizeRuntimeNodeId } from "./onlineRuntimeCoordinator";
@@ -25,6 +26,7 @@ export interface ConfiguredOnlineGameStore {
   operationGateStore: PostgresOnlineOperationGateStore;
   rateLimitStore: PostgresOnlineRateLimitStore;
   startupMaintenanceStore: PostgresOnlineStartupMaintenanceStore;
+  runtimeNodeStore: PostgresOnlineRuntimeNodeStore;
 }
 
 export interface CreateOnlineGameStoreOptions {
@@ -104,6 +106,11 @@ export function createOnlineGameStoreFromEnv(
       }),
       startupMaintenanceStore: new PostgresOnlineStartupMaintenanceStore({
         connectionString,
+        poolMaxPerStore: postgresPoolMaxPerStore,
+      }),
+      runtimeNodeStore: new PostgresOnlineRuntimeNodeStore({
+        connectionString,
+        nodeId: runtimeNodeId,
         poolMaxPerStore: postgresPoolMaxPerStore,
       }),
     };

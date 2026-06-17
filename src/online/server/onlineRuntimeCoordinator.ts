@@ -627,6 +627,7 @@ export function createPostgresStartupMaintenanceRuntimeCoordinator(options: {
 
 export function createPostgresCompositeRuntimeCoordinator(options: {
   nodeId: string;
+  runtimeNodeStore?: OnlineRuntimeNodeStore;
   spectatorPresenceStore?: OnlineRuntimeSpectatorPresenceStore;
   runtimeEventStore?: OnlineRuntimeEventStore;
   operationGateStore?: OnlineRuntimeOperationGateStore;
@@ -634,6 +635,9 @@ export function createPostgresCompositeRuntimeCoordinator(options: {
   startupMaintenanceStore?: OnlineRuntimeStartupMaintenanceStore;
 }): OnlineRuntimeCoordinator {
   let coordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: options.nodeId });
+  if (options.runtimeNodeStore) {
+    coordinator = withPostgresRuntimeNodeCoordinator(coordinator, options.runtimeNodeStore);
+  }
   if (options.runtimeEventStore) {
     coordinator = withPostgresRuntimeEventCoordinator(coordinator, options.runtimeEventStore);
   }

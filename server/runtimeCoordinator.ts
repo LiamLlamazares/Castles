@@ -3,6 +3,7 @@ import {
   createSingleNodeOnlineRuntimeCoordinator,
   type OnlineRuntimeCoordinator,
   type OnlineRuntimeEventStore,
+  type OnlineRuntimeNodeStore,
   type OnlineRuntimeOperationGateStore,
   type OnlineRuntimeRateLimitStore,
   type OnlineRuntimeSpectatorPresenceStore,
@@ -13,6 +14,7 @@ import type { ServerRuntimeConfig } from "../src/online/server/serverRuntimeConf
 export function createConfiguredRuntimeCoordinator(
   config: Pick<ServerRuntimeConfig, "runtimeNodeId">,
   options: {
+    runtimeNodeStore?: OnlineRuntimeNodeStore;
     spectatorPresenceStore?: OnlineRuntimeSpectatorPresenceStore;
     runtimeEventStore?: OnlineRuntimeEventStore;
     operationGateStore?: OnlineRuntimeOperationGateStore;
@@ -21,6 +23,7 @@ export function createConfiguredRuntimeCoordinator(
   } = {}
 ): OnlineRuntimeCoordinator {
   if (
+    options.runtimeNodeStore ||
     options.spectatorPresenceStore ||
     options.runtimeEventStore ||
     options.operationGateStore ||

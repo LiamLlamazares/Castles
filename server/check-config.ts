@@ -61,6 +61,7 @@ export async function checkServerConfiguration(
     operationGateStore,
     rateLimitStore,
     startupMaintenanceStore,
+    runtimeNodeStore,
   } = createStore(env, { runtimeNodeId: config.runtimeNodeId });
   let replayedRooms = 0;
   try {
@@ -82,6 +83,7 @@ export async function checkServerConfiguration(
       { label: "operation-gate", close: () => operationGateStore.close() },
       { label: "rate-limit", close: () => rateLimitStore.close() },
       { label: "startup-maintenance", close: () => startupMaintenanceStore.close() },
+      { label: "runtime-node", close: () => runtimeNodeStore.close() },
     ]);
   }
 

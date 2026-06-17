@@ -583,6 +583,19 @@ function mergeAccountChallengeShortcutItems(
   return [...next.values()];
 }
 
+function mergeAccountChallengeRowsWithShortcuts(
+  rows: OnlineAccountChallengeListItem[],
+  shortcuts: OnlineAccountChallengeListItem[]
+): OnlineAccountChallengeListItem[] {
+  const next = new Map(rows.map((item) => [item.summary.challengeId, item]));
+  for (const item of shortcuts) {
+    if (!next.has(item.summary.challengeId)) {
+      next.set(item.summary.challengeId, item);
+    }
+  }
+  return [...next.values()];
+}
+
 function updateAccountChallengeShortcutItem(
   current: OnlineAccountChallengeListItem[],
   item: OnlineAccountChallengeListItem
@@ -1421,20 +1434,33 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     try {
       const response = await loadAccountChallenges({ state: requestedFilter });
       if (requestId !== accountChallengesRequestIdRef.current) return;
-      const filteredChallenges = response.challenges.filter((item) =>
-        item.summary.status !== "pending" ||
-        !completedAccountChallengeIdsRef.current.has(item.summary.challengeId)
-      );
+      const staleCompletedPendingChallengeIds = new Set<string>();
+      const filteredChallenges = response.challenges.filter((item) => {
+        const isStaleCompletedPending =
+          item.summary.status === "pending" &&
+          completedAccountChallengeIdsRef.current.has(item.summary.challengeId);
+        if (isStaleCompletedPending) {
+          staleCompletedPendingChallengeIds.add(item.summary.challengeId);
+          return false;
+        }
+        return true;
+      });
       if (requestedFilter === "all") {
         reconcileAccountChallengeActivity(filteredChallenges);
       }
-      setAccountChallenges(visibleAccountChallengesForFilter(filteredChallenges, accountChallengeFilter));
-      commitAccountChallengeShortcutItems(
-        requestedFilter === "all"
-          ? filteredChallenges.filter(isAccountChallengeShortcutItem)
-          : mergeAccountChallengeShortcutItems(accountChallengeShortcutItemsRef.current, filteredChallenges),
-        { notifyNavigation: requestedFilter === "all" }
+      const preservedStaleShortcutItems = accountChallengeShortcutItemsRef.current.filter((item) =>
+        staleCompletedPendingChallengeIds.has(item.summary.challengeId)
       );
+      const nextShortcutItems =
+        requestedFilter === "all"
+          ? mergeAccountChallengeShortcutItems(preservedStaleShortcutItems, filteredChallenges)
+          : mergeAccountChallengeShortcutItems(accountChallengeShortcutItemsRef.current, filteredChallenges);
+      const nextChallenges =
+        requestedFilter === "all"
+          ? mergeAccountChallengeRowsWithShortcuts(filteredChallenges, preservedStaleShortcutItems)
+          : filteredChallenges;
+      setAccountChallenges(visibleAccountChallengesForFilter(nextChallenges, accountChallengeFilter));
+      commitAccountChallengeShortcutItems(nextShortcutItems, { notifyNavigation: requestedFilter === "all" });
       setAccountChallengesStatus("ready");
     } catch (error) {
       if (requestId !== accountChallengesRequestIdRef.current) return;

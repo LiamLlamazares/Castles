@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createConfiguredRuntimeCoordinator } from "../runtimeCoordinator";
 import type {
+  OnlineRuntimeDrainState,
   OnlineRuntimeGameSnapshotChangedEvent,
+  OnlineRuntimeNodeStore,
   OnlineRuntimeOperationGateScope,
   OnlineRuntimeRateLimitInput,
   OnlineRuntimeStoredGameSnapshotChangedEvent,
@@ -101,6 +103,21 @@ class FakeStartupMaintenanceStore {
   }
 }
 
+class FakeRuntimeNodeStore implements OnlineRuntimeNodeStore {
+  readonly calls: Array<["getDrainState"] | ["startDrain", unknown]> = [];
+  drainState: OnlineRuntimeDrainState = { draining: false };
+
+  async getDrainState(): Promise<OnlineRuntimeDrainState> {
+    this.calls.push(["getDrainState"]);
+    return { ...this.drainState };
+  }
+
+  async startDrain(input = {}): Promise<OnlineRuntimeDrainState> {
+    this.calls.push(["startDrain", input]);
+    return { ...this.drainState };
+  }
+}
+
 describe("createConfiguredRuntimeCoordinator", () => {
   it("uses the parsed runtime node id for the server runtime coordinator", () => {
     const coordinator = createConfiguredRuntimeCoordinator({ runtimeNodeId: "prod-node-a" });
@@ -157,6 +174,8 @@ describe("createConfiguredRuntimeCoordinator", () => {
     const operationGateStore = new FakeOperationGateStore();
     const rateLimitStore = new FakeRateLimitStore();
     const startupMaintenanceStore = new FakeStartupMaintenanceStore();
+    const runtimeNodeStore = new FakeRuntimeNodeStore();
+    runtimeNodeStore.drainState = { draining: true, startedAt: "2026-06-17T10:05:00.000Z" };
     const coordinator = createConfiguredRuntimeCoordinator(
       { runtimeNodeId: "prod-node-a" },
       {
@@ -165,6 +184,7 @@ describe("createConfiguredRuntimeCoordinator", () => {
         operationGateStore,
         rateLimitStore,
         startupMaintenanceStore,
+        runtimeNodeStore,
       }
     );
     const received: OnlineRuntimeGameSnapshotChangedEvent[] = [];
@@ -242,6 +262,14 @@ describe("createConfiguredRuntimeCoordinator", () => {
         async () => "rebuilt"
       )
     ).resolves.toEqual({ status: "completed", value: "rebuilt" });
+    await expect(coordinator.getDrainState()).resolves.toEqual({
+      draining: true,
+      startedAt: "2026-06-17T10:05:00.000Z",
+    });
+    await expect(coordinator.startDrain({ reason: "operator" })).resolves.toEqual({
+      draining: true,
+      startedAt: "2026-06-17T10:05:00.000Z",
+    });
     await coordinator.close();
 
     expect(coordinator.capabilities).toEqual({
@@ -292,6 +320,10 @@ describe("createConfiguredRuntimeCoordinator", () => {
         runKey: "commit:0123456789abcdef0123456789abcdef01234567",
         nodeId: "prod-node-a",
       },
+    ]);
+    expect(runtimeNodeStore.calls).toEqual([
+      ["getDrainState"],
+      ["startDrain", { reason: "operator" }],
     ]);
   });
 });
