@@ -69,14 +69,32 @@ describe("server runtime coordinator wiring", () => {
     const source = readServerIndex();
     const drainIndex = source.indexOf("runtimeCoordinator?.startDrain({ reason })");
     const stopPollingIndex = source.indexOf("runtimeEventPoller?.stop()");
-    const closeWebSocketIndex = source.indexOf("closeWebSocketServer(wss)");
-    const closeHttpIndex = source.indexOf("closeHttpServer(server)");
+    const closeWebSocketIndex = source.indexOf("closeWebSocketServerAfterDrain(wss, {");
+    const closeHttpIndex = source.indexOf("closeHttpServer(server, {");
 
     expect(drainIndex).toBeGreaterThan(-1);
-    expect(stopPollingIndex).toBeGreaterThan(drainIndex);
-    expect(stopPollingIndex).toBeLessThan(closeWebSocketIndex);
     expect(drainIndex).toBeLessThan(closeWebSocketIndex);
     expect(drainIndex).toBeLessThan(closeHttpIndex);
+    expect(stopPollingIndex).toBeGreaterThan(closeWebSocketIndex);
+    expect(stopPollingIndex).toBeGreaterThan(closeHttpIndex);
+  });
+
+  it("uses bounded rolling-drain socket close helpers during shutdown", () => {
+    const source = readServerIndex();
+
+    expect(source).toContain(
+      'import { closeHttpServer, closeWebSocketServerAfterDrain } from "./socketDrain";'
+    );
+    expect(source).toContain("const HTTP_SHUTDOWN_TIMEOUT_MS = 5_000;");
+    expect(source).toContain("const WEBSOCKET_DRAIN_GRACE_MS = 30_000;");
+    expect(source).toContain("const WEBSOCKET_CLOSE_TIMEOUT_MS = 5_000;");
+    expect(source).toMatch(
+      /closeWebSocketServerAfterDrain\(wss,\s*\{\s*drainGraceMs:\s*WEBSOCKET_DRAIN_GRACE_MS,\s*closeTimeoutMs:\s*WEBSOCKET_CLOSE_TIMEOUT_MS,\s*\}\)/
+    );
+    expect(source).toMatch(
+      /closeHttpServer\(server,\s*\{\s*timeoutMs:\s*HTTP_SHUTDOWN_TIMEOUT_MS,\s*\}\)/
+    );
+    expect(source).not.toContain("function closeWebSocketServer");
   });
 
   it("starts runtime event polling after the HTTP server subscribes to runtime hints", () => {

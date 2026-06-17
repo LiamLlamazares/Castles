@@ -1,8 +1,6 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
-import type { Server as HttpServer } from "node:http";
 import express from "express";
-import type { WebSocketServer } from "ws";
 import { createOnlineHttpServer } from "../src/online/server/createOnlineHttpServer";
 import { createOnlineGameStoreFromEnv } from "../src/online/server/createOnlineGameStore";
 import { formatOnlineServerLogEvent } from "../src/online/server/onlineServerLogging";
@@ -25,71 +23,15 @@ import {
   startRuntimeEventPolling,
   type RuntimeEventPoller,
 } from "./runtimeEventPolling";
+import { closeHttpServer, closeWebSocketServerAfterDrain } from "./socketDrain";
 
 const RUNTIME_EVENT_POLL_INTERVAL_MS = 1_000;
 const RUNTIME_EVENT_POLL_MAX_BACKOFF_MS = 15_000;
 const RUNTIME_EVENT_POLL_LIMIT = 100;
 const RUNTIME_EVENT_POLL_FAILURE_READINESS_THRESHOLD = 3;
-
-function resolveOnce<T>(settle: (resolve: (value: T) => void, reject: (error: unknown) => void) => void): Promise<T> {
-  let settled = false;
-  return new Promise<T>((resolve, reject) => {
-    settle(
-      (value) => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      },
-      (error) => {
-        if (settled) return;
-        settled = true;
-        reject(error);
-      }
-    );
-  });
-}
-
-function closeHttpServer(server: HttpServer): Promise<void> {
-  if (!server.listening) {
-    return Promise.resolve();
-  }
-
-  return resolveOnce<void>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      server.closeAllConnections?.();
-      resolve();
-    }, 5_000);
-
-    server.close((error) => {
-      clearTimeout(timeoutId);
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-function closeWebSocketServer(wss: WebSocketServer): Promise<void> {
-  return resolveOnce<void>((resolve) => {
-    const timeoutId = setTimeout(() => {
-      for (const client of wss.clients) {
-        client.terminate();
-      }
-      resolve();
-    }, 5_000);
-
-    for (const client of wss.clients) {
-      client.close(1001, "Server shutting down");
-    }
-
-    wss.close(() => {
-      clearTimeout(timeoutId);
-      resolve();
-    });
-  });
-}
+const HTTP_SHUTDOWN_TIMEOUT_MS = 5_000;
+const WEBSOCKET_DRAIN_GRACE_MS = 30_000;
+const WEBSOCKET_CLOSE_TIMEOUT_MS = 5_000;
 
 function isLoopbackAddress(address: string | undefined): boolean {
   return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
@@ -258,12 +200,17 @@ async function main() {
         console.error("Failed to mark online runtime coordinator draining", error);
         process.exitCode = 1;
       }
-      await runtimeEventPoller?.stop();
 
       const results = await Promise.allSettled([
-        closeWebSocketServer(wss),
-        closeHttpServer(server),
+        closeWebSocketServerAfterDrain(wss, {
+          drainGraceMs: WEBSOCKET_DRAIN_GRACE_MS,
+          closeTimeoutMs: WEBSOCKET_CLOSE_TIMEOUT_MS,
+        }),
+        closeHttpServer(server, {
+          timeoutMs: HTTP_SHUTDOWN_TIMEOUT_MS,
+        }),
       ]);
+      await runtimeEventPoller?.stop();
       const failedClose = results.find((result) => result.status === "rejected");
       if (failedClose?.status === "rejected") {
         console.error("Failed while closing network listeners", failedClose.reason);
