@@ -73,7 +73,7 @@ if [ ! -d "$repo/.git" ]; then
 fi
 
 cd "$repo"
-sudo -u "$deploy_user" git fetch origin online-action-log
+sudo -u "$deploy_user" git fetch origin master
 sudo -u "$deploy_user" git checkout --detach "$sha"
 test "$(sudo -u "$deploy_user" git rev-parse HEAD)" = "$sha"
 sudo -u "$deploy_user" npm ci
@@ -197,7 +197,7 @@ repo="/home/${deploy_user}/Castles"
 sha="<40-character-reviewed-commit-sha>"
 sudo -u "$deploy_user" git clone https://github.com/LiamLlamazares/Castles.git "$repo"
 cd "$repo"
-sudo -u "$deploy_user" git fetch origin online-action-log
+sudo -u "$deploy_user" git fetch origin master
 sudo -u "$deploy_user" git checkout --detach "$sha"
 test "$(sudo -u "$deploy_user" git rev-parse HEAD)" = "$sha"
 ```
@@ -685,7 +685,7 @@ psql -c "select count(*) from online_game_additional_credentials;"
 `npm run online:deploy:freshness` prints explicit alert lines before the final freshness status. Treat these as the private-beta incident checklist:
 
 - `Alert: health_not_ok severity=critical`: do not run mutating smoke checks yet. Check `sudo systemctl status castles-node.service --no-pager`, `sudo journalctl -u castles-node.service -n 120 --no-pager`, `curl -sS http://127.0.0.1:3000/api/health`, and `sudo /usr/bin/npm run server:check-config -- --env-file /etc/castles/castles.env`. If this started during a deploy and the previous backup exists, prepare rollback before further changes.
-- `Alert: stale_deploy severity=critical`: production is not serving the reviewed commit. Confirm the commit is pushed to `origin/online-action-log`, rerun `npm run online:deploy:freshness -- https://<domain> "$sha" <ssh-host>`, inspect `/etc/castles/castles.env` for `GIT_COMMIT`, and restart `castles-node.service` only after `server:check-config` passes.
+- `Alert: stale_deploy severity=critical`: production is not serving the reviewed commit. Confirm the commit is pushed to `origin/master`, rerun `npm run online:deploy:freshness -- https://<domain> "$sha" <ssh-host>`, inspect `/etc/castles/castles.env` for `GIT_COMMIT`, and restart `castles-node.service` only after `server:check-config` passes.
 - `Alert: store_not_postgres severity=critical`: production health is not reporting the PostgreSQL backend. Check `ONLINE_STORE_BACKEND`, `DATABASE_URL`, database connectivity, and `server:check-config` before accepting the deploy or running player-facing smoke.
 - `Alert: deployment_not_supported severity=critical`: production health is missing supported deployment metadata or is advertising an unsafe partial mode. Check `CASTLES_DEPLOYMENT_MODE`, verify `server:check-config`, and use either the default single-node guardrail or guarded `multi-instance` with the full PostgreSQL runtime stack before accepting the deploy.
 - `Alert: ssh_unreachable severity=warning`: the app may still be healthy, but deploy control is degraded. Confirm the SSH host resolves to the intended server, check firewall/provider status, and do not rely on a remote deploy script until SSH reachability is restored or an alternate console path is available.

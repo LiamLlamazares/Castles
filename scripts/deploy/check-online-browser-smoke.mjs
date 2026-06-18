@@ -262,6 +262,10 @@ async function verifyStaleActionContract(setup) {
       )
     );
 
+    const expectedStaleActionIds = new Set([
+      "browser-smoke-stale-first",
+      "browser-smoke-stale-second",
+    ]);
     let rejected;
     for (let index = 0; index < 4; index += 1) {
       const message = await nextSocketMessage(socket, `stale-action response ${index + 1}`);
@@ -274,8 +278,8 @@ async function verifyStaleActionContract(setup) {
 
     assert(rejected, "Stale-action smoke did not receive a rejected frame");
     assert(
-      rejected.clientActionId === "browser-smoke-stale-second",
-      `Stale-action rejection reported clientActionId ${rejected.clientActionId}`
+      expectedStaleActionIds.has(rejected.clientActionId),
+      `Stale-action rejection reported unexpected clientActionId ${rejected.clientActionId}`
     );
     assert(
       rejected.error?.code === "stale_action",

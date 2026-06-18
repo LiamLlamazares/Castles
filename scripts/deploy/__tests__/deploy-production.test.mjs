@@ -19,7 +19,7 @@ describe("production deploy workflow", () => {
 
     expect(args).toMatchObject({
       baseUrl: "https://castles.ls314.xyz",
-      branch: "online-action-log",
+      branch: "master",
       commit: COMMIT,
       buildId: "20260606-021000",
       envFile: "/etc/castles/castles.env",
@@ -49,7 +49,7 @@ describe("production deploy workflow", () => {
 
   it("builds a remote deploy script that backs up state, updates metadata, restarts, and waits for fresh health", () => {
     const script = buildRemoteProductionDeployScript({
-      branch: "online-action-log",
+      branch: "master",
       buildId: "20260606-021500",
       commit: COMMIT,
       envFile: "/etc/castles/castles.env",
@@ -89,7 +89,7 @@ describe("production deploy workflow", () => {
   it("plans remote deploy, freshness, API smoke, and browser smoke in order", () => {
     const steps = buildProductionDeploySteps({
       baseUrl: "https://castles.ls314.xyz",
-      branch: "online-action-log",
+      branch: "master",
       buildId: "20260606-022000",
       commit: COMMIT,
       envFile: "/etc/castles/castles.env",

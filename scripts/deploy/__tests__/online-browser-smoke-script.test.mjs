@@ -25,6 +25,15 @@ describe("production online browser smoke script", () => {
     expect(script).toMatch(/RESIGN[\s\S]*baseVersion:\s*1/);
   });
 
+  it("allows either raced stale-action id to be the rejected response", () => {
+    const script = readScript();
+
+    expect(script).toContain("expectedStaleActionIds");
+    expect(script).toContain('"browser-smoke-stale-first"');
+    expect(script).toContain('"browser-smoke-stale-second"');
+    expect(script).toMatch(/expectedStaleActionIds\.has\(rejected\.clientActionId\)/);
+  });
+
   it("stores direct-create response tokens before tokenless browser navigation", () => {
     const script = readScript();
 
