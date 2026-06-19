@@ -239,6 +239,55 @@
   font-weight: 850;
 }
 
+.online-profile-rating-strip span.gain,
+.online-profile-rating-strip span.loss {
+  flex: 1 1 0;
+  min-width: 10px;
+  min-height: 8px;
+  padding: 0;
+  border-radius: 2px 2px 0 0;
+}
+
+.online-profile-rating-strip span.gain {
+  background: #6b9f3b;
+}
+
+.online-profile-rating-strip span.loss {
+  background: #b9564a;
+}
+
+.online-profile-panel h3 {
+  margin: 12px 0 6px;
+  color: #d4d4d4;
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.online-profile-rating-history {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.online-profile-rating-history li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  border-top: 1px solid #3d3a34;
+  padding-top: 5px;
+  color: #bababa;
+  font-size: 0.82rem;
+}
+
+.online-profile-rating-history span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .online-profile-settings-form {
   display: grid;
   gap: 10px;
@@ -362,6 +411,7 @@
 
 [data-theme="light"] .online-profile-display-name,
 [data-theme="light"] .online-profile-panel h2,
+[data-theme="light"] .online-profile-panel h3,
 [data-theme="light"] .online-profile-settings-form h3 {
   color: #1f1f1f;
 }
@@ -409,4 +459,9 @@
 [data-theme="light"] .online-profile-search-results button:hover,
 [data-theme="light"] .online-profile-search-results button:focus-visible {
   background: #f5f5f5;
+}
+
+[data-theme="light"] .online-profile-rating-history li {
+  border-top-color: #d9d9d9;
+  color: #555555;
 }

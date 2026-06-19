@@ -18,6 +18,8 @@ import type {
   OnlineAccountPrivacySettings,
   OnlineAccountProfileResponse,
   OnlineAccountPublicProfile,
+  OnlineAccountRatingHistoryEntry,
+  OnlineAccountRatingHistoryResponse,
   OnlineAccountSearchProfile,
   OnlineAccountSearchResponse,
 } from "../online/social";
@@ -49,6 +51,7 @@ interface OnlineProfileDashboardProps {
   loadAccountChallenges?: (
     options?: FetchOnlineAccountChallengesOptions
   ) => Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>;
+  loadAccountRatingHistory?: () => Promise<OnlineAccountRatingHistoryResponse>;
   loadAccountFollowing?: () => Promise<OnlineAccountFollowingResponse>;
   loadAccountPrivacy?: () => Promise<OnlineAccountPrivacyResponse>;
   updateAccountPrivacy?: (patch: OnlineAccountPrivacyPatch) => Promise<OnlineAccountPrivacyResponse>;
@@ -81,6 +84,19 @@ function presenceLabel(profile: OnlineAccountPublicProfile | null): string {
 
 function gameCount(games: OnlineGameSummary[]): string {
   return formatCount(games.length, "game");
+}
+
+function formatRatingDelta(delta: number): string {
+  return delta > 0 ? `+${delta}` : String(delta);
+}
+
+function ratingGraphBarHeight(entry: OnlineAccountRatingHistoryEntry, entries: OnlineAccountRatingHistoryEntry[]): string {
+  const values = entries.flatMap((candidate) => [candidate.ratingBefore, candidate.ratingAfter]);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return "50%";
+  const normalized = (entry.ratingAfter - min) / (max - min);
+  return `${Math.round(30 + normalized * 62)}%`;
 }
 
 function onlineRequestErrorMessage(error: unknown): string | null {
@@ -129,6 +145,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   loadProfile,
   loadAccountGames,
   loadAccountChallenges,
+  loadAccountRatingHistory,
   loadAccountFollowing,
   loadAccountPrivacy,
   updateAccountPrivacy,
@@ -150,6 +167,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const [profileStatus, setProfileStatus] = React.useState<LoadStatus>("loading");
   const [activeGames, setActiveGames] = React.useState<OnlineGameSummary[]>([]);
   const [completedGames, setCompletedGames] = React.useState<OnlineGameSummary[]>([]);
+  const [ratingHistory, setRatingHistory] = React.useState<OnlineAccountRatingHistoryEntry[]>([]);
   const [challengeCount, setChallengeCount] = React.useState(0);
   const [followingCount, setFollowingCount] = React.useState(0);
   const [privacyLabel, setPrivacyLabel] = React.useState("Loading");
@@ -206,6 +224,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     const requestId = ++dashboardRequestRef.current;
     setActiveGames([]);
     setCompletedGames([]);
+    setRatingHistory([]);
     setChallengeCount(0);
     setFollowingCount(0);
     setPrivacyLabel("Loading");
@@ -220,6 +239,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     setDashboardStatus("loading");
     const activeGamesLoad = loadAccountGames?.({ state: "active", limit: 3 }) ?? Promise.resolve(null);
     const completedGamesLoad = loadAccountGames?.({ state: "archived", limit: 5 }) ?? Promise.resolve(null);
+    const ratingHistoryLoad = loadAccountRatingHistory?.() ?? Promise.resolve(null);
     const challengesLoad = loadAccountChallenges?.({ state: "all" }) ?? Promise.resolve(null);
     const followingLoad = loadAccountFollowing?.() ?? Promise.resolve(null);
     const privacyLoad = loadAccountPrivacy?.() ?? Promise.resolve(null);
@@ -228,6 +248,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     Promise.allSettled([
       activeGamesLoad,
       completedGamesLoad,
+      ratingHistoryLoad,
       challengesLoad,
       followingLoad,
       privacyLoad,
@@ -237,6 +258,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
       const [
         activeGamesResult,
         completedGamesResult,
+        ratingHistoryResult,
         challengesResult,
         followingResult,
         privacyResult,
@@ -247,6 +269,9 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
       }
       if (completedGamesResult.status === "fulfilled" && completedGamesResult.value) {
         setCompletedGames(completedGamesResult.value.games);
+      }
+      if (ratingHistoryResult.status === "fulfilled" && ratingHistoryResult.value) {
+        setRatingHistory(ratingHistoryResult.value.entries);
       }
       if (challengesResult.status === "fulfilled" && challengesResult.value) {
         setChallengeCount(challengesResult.value.challenges.length);
@@ -270,6 +295,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     displayName,
     isSelfDashboard,
     loadAccountChallenges,
+    loadAccountRatingHistory,
     loadAccountFollowing,
     loadAccountGames,
     loadAccountPrivacy,
@@ -514,9 +540,34 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <span className="online-profile-kicker">Rating</span>
               <h2>Current Rating</h2>
               <p>{ratedGameText}</p>
-              <div className="online-profile-rating-strip" aria-label="Rating graph preview">
-                <span>{profile?.rating?.display ?? "1500?"}</span>
+              <div className="online-profile-rating-strip" role="img" aria-label="Rating history graph">
+                {ratingHistory.length === 0 ? (
+                  <span>{profile?.rating?.display ?? "1500?"}</span>
+                ) : (
+                  ratingHistory.slice().reverse().map((entry) => (
+                    <span
+                      key={`${entry.gameId}-${entry.side}`}
+                      className={entry.ratingDelta >= 0 ? "gain" : "loss"}
+                      style={{ height: ratingGraphBarHeight(entry, ratingHistory) }}
+                    />
+                  ))
+                )}
               </div>
+              <h3>Rating History</h3>
+              {ratingHistory.length === 0 ? (
+                <p>No rated games yet.</p>
+              ) : (
+                <ol className="online-profile-rating-history">
+                  {ratingHistory.map((entry) => (
+                    <li key={`${entry.gameId}-${entry.side}`}>
+                      <span>{entry.opponentDisplayName}</span>
+                      <span>{entry.result}</span>
+                      <span>{entry.ratingAfter}{entry.provisional ? "?" : ""}</span>
+                      <span>{formatRatingDelta(entry.ratingDelta)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </article>
           )}
 

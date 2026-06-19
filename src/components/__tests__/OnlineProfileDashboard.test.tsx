@@ -97,6 +97,26 @@ describe("OnlineProfileDashboard", () => {
           protocolVersion: ONLINE_PROTOCOL_VERSION,
           sessions: [],
         })}
+        loadAccountRatingHistory={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 1,
+          entries: [
+            {
+              schemaVersion: 1,
+              gameId: "game_rated_1",
+              side: "b",
+              opponentDisplayName: "Samir",
+              result: "win",
+              reason: "resignation",
+              ratingBefore: 1500,
+              ratingAfter: 1620,
+              ratingDelta: 120,
+              games: 4,
+              provisional: true,
+              appliedAt: "2026-06-14T12:00:00.000Z",
+            },
+          ],
+        })}
       />
     );
 
@@ -111,6 +131,10 @@ describe("OnlineProfileDashboard", () => {
     expect(await screen.findByText("No account games yet.")).toBeInTheDocument();
     expect(screen.getByText("0 challenges visible to this account.")).toBeInTheDocument();
     expect(screen.getByText("0 followed players.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Rating history graph" })).toBeInTheDocument();
+    expect(screen.getByText("Rating History")).toBeInTheDocument();
+    expect(screen.getByText("Samir")).toBeInTheDocument();
+    expect(screen.getByText("+120")).toBeInTheDocument();
     expect(screen.queryByText("Who can see me online")).not.toBeInTheDocument();
     expect(screen.queryByText("0 active sessions.")).not.toBeInTheDocument();
     expect(screen.queryByText("account_liam")).not.toBeInTheDocument();

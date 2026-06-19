@@ -30,6 +30,7 @@ import {
   fetchOnlineAccountOAuthProviders,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
+  fetchOnlineAccountRatingHistory,
   searchOnlineAccountProfiles,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
@@ -809,6 +810,85 @@ describe("online client helpers", () => {
       "/api/online/account/session",
       { method: "DELETE", headers: { authorization: "Bearer account-token" } }
     );
+  });
+
+  it("fetches sanitized account rating history without accepting private internals", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 1,
+        entries: [
+          {
+            schemaVersion: 1,
+            gameId: "game_rated_1",
+            side: "b",
+            opponentDisplayName: "Samir",
+            result: "win",
+            reason: "resignation",
+            ratingBefore: 1500,
+            ratingAfter: 1606,
+            ratingDelta: 106,
+            games: 1,
+            provisional: true,
+            appliedAt: "2026-06-19T12:00:00.000Z",
+          },
+        ],
+      }),
+    });
+
+    await expect(
+      fetchOnlineAccountRatingHistory({ token: "account-token" }, { limit: 5 }, fetchImpl as any)
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      entries: [
+        {
+          schemaVersion: 1,
+          gameId: "game_rated_1",
+          side: "b",
+          opponentDisplayName: "Samir",
+          result: "win",
+          reason: "resignation",
+          ratingBefore: 1500,
+          ratingAfter: 1606,
+          ratingDelta: 106,
+          games: 1,
+          provisional: true,
+          appliedAt: "2026-06-19T12:00:00.000Z",
+        },
+      ],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/account/ratings/history?limit=5", {
+      headers: { authorization: "Bearer account-token" },
+    });
+
+    fetchImpl.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 1,
+        entries: [
+          {
+            schemaVersion: 1,
+            gameId: "game_rated_2",
+            side: "w",
+            opponentDisplayName: "Liam",
+            result: "loss",
+            reason: "timeout",
+            ratingBefore: 1606,
+            ratingAfter: 1540,
+            ratingDelta: -66,
+            games: 2,
+            provisional: true,
+            appliedAt: "2026-06-19T12:05:00.000Z",
+            engineId: "glicko2-beta-v1",
+          },
+        ],
+      }),
+    });
+    await expect(fetchOnlineAccountRatingHistory({ token: "account-token" }, {}, fetchImpl as any))
+      .rejects.toThrow(/unsupported field/i);
   });
 
   it("signs in online accounts with a display name and password", async () => {

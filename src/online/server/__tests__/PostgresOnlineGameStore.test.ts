@@ -362,6 +362,34 @@ class FakePostgresClient {
           })),
       };
     }
+    if (/from\s+online_rating_results\s+r/i.test(text)) {
+      const accountId = values?.[0] as string | undefined;
+      const limit = values?.[1] as number | undefined;
+      return {
+        rows: this.ratingResultRows
+          .filter((row) => row.whiteAccountId === accountId || row.blackAccountId === accountId)
+          .sort((left, right) =>
+            right.appliedAt.localeCompare(left.appliedAt) || left.gameId.localeCompare(right.gameId)
+          )
+          .slice(0, limit ?? this.ratingResultRows.length)
+          .map((row) => ({
+            game_id: row.gameId,
+            white_account_id: row.whiteAccountId,
+            black_account_id: row.blackAccountId,
+            winner: row.winner,
+            reason: row.reason,
+            engine_id: row.engineId,
+            applied_at: row.appliedAt,
+            white_before: row.whiteBefore,
+            white_after: row.whiteAfter,
+            black_before: row.blackBefore,
+            black_after: row.blackAfter,
+            summary: this.summaryRows.find((summaryRow) =>
+              (summaryRow.payload as { gameId?: string }).gameId === row.gameId
+            )?.payload,
+          })),
+      };
+    }
     if (/from\s+online_rating_results\s+where\s+game_id/i.test(text)) {
       return {
         rows: this.ratingResultRows
@@ -2175,6 +2203,23 @@ describe("PostgresOnlineGameStore", () => {
       blackAfter: { games: 1 },
     });
     expect(client.ratingResultRows).toHaveLength(1);
+
+    await expect(store.listAccountRatingHistory(ratedBlackIdentity.id, 10)).resolves.toEqual([
+      {
+        schemaVersion: 1,
+        gameId: "game_rated_resignation",
+        side: "b",
+        opponentDisplayName: "Rated White",
+        result: "win",
+        reason: "resignation",
+        ratingBefore: 1500,
+        ratingAfter: Math.round(blackRating?.rating ?? 0),
+        ratingDelta: Math.round((blackRating?.rating ?? 0) - 1500),
+        games: 1,
+        provisional: true,
+        appliedAt: ratedResult?.appliedAt,
+      },
+    ]);
   });
 
   it("does not apply ratings to completed casual account games", async () => {

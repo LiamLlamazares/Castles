@@ -156,6 +156,7 @@ import {
 } from "../accounts";
 import {
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_REASONS,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_STATUSES,
@@ -176,6 +177,7 @@ import {
   type OnlineAccountReportReason,
   type OnlineAccountReportSummary,
   type OnlineAccountReportStatus,
+  type OnlineAccountRatingHistoryEntry,
   type OnlineAccountSearchProfile,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardScope,
@@ -264,10 +266,33 @@ const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 const RATING_LEADERBOARD_DEFAULT_LIMIT = 10;
 const RATING_LEADERBOARD_MAX_LIMIT = 50;
 const RATING_LEADERBOARD_SCOPES = new Set<OnlineRatingLeaderboardScope>(["global", "following"]);
+const ACCOUNT_RATING_HISTORY_DEFAULT_LIMIT = 20;
+const ACCOUNT_RATING_HISTORY_MAX_LIMIT = 50;
 const ACCOUNT_SEARCH_DEFAULT_LIMIT = 8;
 const ACCOUNT_SEARCH_MAX_LIMIT = 20;
 const ACCOUNT_SEARCH_QUERY_MAX_LENGTH = 32;
 const RATING_LEADERBOARD_ENTRY_RESPONSE_KEYS = new Set(["schemaVersion", "displayName", "rating"]);
+const ACCOUNT_RATING_HISTORY_ENTRY_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "gameId",
+  "side",
+  "opponentDisplayName",
+  "result",
+  "reason",
+  "ratingBefore",
+  "ratingAfter",
+  "ratingDelta",
+  "games",
+  "provisional",
+  "appliedAt",
+]);
+const ACCOUNT_RATING_HISTORY_RESULT_REASONS = new Set([
+  "monarch_captured",
+  "castle_control",
+  "victory_points",
+  "resignation",
+  "timeout",
+]);
 const PUBLIC_RATING_RESPONSE_KEYS = new Set([
   "schemaVersion",
   "rating",
@@ -402,6 +427,10 @@ export interface CreateOnlineHttpServerOptions {
   listPersonalGameSummaries?: (
     options: OnlinePersonalGameDirectoryListOptions
   ) => OnlineGameDirectoryResponse | Promise<OnlineGameDirectoryResponse>;
+  listAccountRatingHistory?: (
+    accountId: string,
+    limit?: number
+  ) => OnlineAccountRatingHistoryEntry[] | Promise<OnlineAccountRatingHistoryEntry[]>;
   loadGameSummary?: (gameId: string) => OnlineGameSummary | null | Promise<OnlineGameSummary | null>;
   loadGameRoomRecord?: (gameId: string) => OnlineGameRoomRecord | null | Promise<OnlineGameRoomRecord | null>;
   accountStore?: OnlineAccountStore;
@@ -912,6 +941,34 @@ function parseRatingLeaderboardOptions(
     return { ok: false, message: "Rating leaderboard scope is invalid." };
   }
   return { ok: true, limit, scope: rawScope as OnlineRatingLeaderboardScope };
+}
+
+function parseAccountRatingHistoryOptions(
+  originalUrl: string
+): { ok: true; limit: number } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Account rating history query is invalid." };
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "limit") {
+      return { ok: false, message: "Account rating history query is invalid." };
+    }
+  }
+  if (url.searchParams.getAll("limit").length > 1) {
+    return { ok: false, message: "Account rating history query is invalid." };
+  }
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? ACCOUNT_RATING_HISTORY_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > ACCOUNT_RATING_HISTORY_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Account rating history limit is invalid." };
+  }
+  return { ok: true, limit };
 }
 
 function parseAccountSearchOptions(
@@ -1625,6 +1682,69 @@ function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRati
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: value.displayName,
     rating: validatePublicRatingResponseShape(value.rating),
+  };
+}
+
+function validateAccountRatingHistoryEntryResponseShape(
+  value: unknown
+): OnlineAccountRatingHistoryEntry {
+  if (!isResponseRecord(value)) throw new Error("Account rating history entry must be an object.");
+  assertAllowedResponseKeys(
+    value,
+    ACCOUNT_RATING_HISTORY_ENTRY_RESPONSE_KEYS,
+    "Account rating history entry"
+  );
+  const {
+    schemaVersion,
+    gameId,
+    side,
+    opponentDisplayName,
+    result,
+    reason,
+    ratingBefore,
+    ratingAfter,
+    ratingDelta,
+    games,
+    provisional,
+    appliedAt,
+  } = value;
+  if (
+    schemaVersion !== ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION ||
+    typeof gameId !== "string" ||
+    gameId.length === 0 ||
+    stringContainsDurableSecret(gameId) ||
+    (side !== "w" && side !== "b") ||
+    !isModerationDisplayName(opponentDisplayName) ||
+    (result !== "win" && result !== "loss") ||
+    typeof reason !== "string" ||
+    !ACCOUNT_RATING_HISTORY_RESULT_REASONS.has(reason) ||
+    typeof ratingBefore !== "number" ||
+    !Number.isSafeInteger(ratingBefore) ||
+    typeof ratingAfter !== "number" ||
+    !Number.isSafeInteger(ratingAfter) ||
+    typeof ratingDelta !== "number" ||
+    !Number.isSafeInteger(ratingDelta) ||
+    typeof games !== "number" ||
+    !Number.isSafeInteger(games) ||
+    games < 0 ||
+    typeof provisional !== "boolean" ||
+    !isIsoTimestamp(appliedAt)
+  ) {
+    throw new Error("Account rating history entry is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
+    gameId,
+    side,
+    opponentDisplayName,
+    result,
+    reason,
+    ratingBefore,
+    ratingAfter,
+    ratingDelta,
+    games,
+    provisional,
+    appliedAt,
   };
 }
 
@@ -2731,6 +2851,16 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     return await withLiveServerPresenceDirectory(
       paginatePersonalDirectorySummaries(validated, directoryOptions)
     );
+  };
+
+  const listAccountRatingHistory = async (
+    accountId: string,
+    limit: number
+  ): Promise<OnlineAccountRatingHistoryEntry[]> => {
+    const entries = options.listAccountRatingHistory
+      ? await options.listAccountRatingHistory(accountId, limit)
+      : [];
+    return entries.map(validateAccountRatingHistoryEntryResponseShape);
   };
 
   const seatForGameIdentity = (
@@ -5608,6 +5738,39 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       console.error("Failed to load account game history", error);
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account game history could not be loaded." },
+      });
+    }
+  });
+
+  app.get("/api/online/account/ratings/history", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_read", req)) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const parsed = parseAccountRatingHistoryOptions(req.originalUrl);
+    if (!parsed.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: parsed.message },
+      });
+      return;
+    }
+    try {
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
+        entries: await listAccountRatingHistory(auth.account.accountId, parsed.limit),
+      });
+    } catch (error) {
+      console.error("Failed to load account rating history", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account rating history could not be loaded." },
       });
     }
   });

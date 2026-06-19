@@ -1135,6 +1135,76 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(profile)).not.toContain("deviation");
   });
 
+  it("serves authenticated account rating history without leaking rating internals", async () => {
+    const listAccountRatingHistory = vi.fn().mockResolvedValue([
+      {
+        schemaVersion: 1,
+        gameId: "game_rated_1",
+        side: "b",
+        opponentDisplayName: "Samir",
+        result: "win",
+        reason: "resignation",
+        ratingBefore: 1500,
+        ratingAfter: 1606,
+        ratingDelta: 106,
+        games: 1,
+        provisional: true,
+        appliedAt: "2026-06-19T12:00:00.000Z",
+      },
+    ]);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-19T12:00:00.000Z"),
+      listAccountRatingHistory,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Testing");
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/account/ratings/history?limit=5`, {
+      headers: bearer(account.session.token),
+    });
+    const body = await response.json();
+    const anonymousResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/ratings/history`);
+    const tokenQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/ratings/history?token=secret`,
+      { headers: bearer(account.session.token) }
+    );
+    const duplicateLimitResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/ratings/history?limit=5&limit=6`,
+      { headers: bearer(account.session.token) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      entries: [
+        {
+          schemaVersion: 1,
+          gameId: "game_rated_1",
+          side: "b",
+          opponentDisplayName: "Samir",
+          result: "win",
+          reason: "resignation",
+          ratingBefore: 1500,
+          ratingAfter: 1606,
+          ratingDelta: 106,
+          games: 1,
+          provisional: true,
+          appliedAt: "2026-06-19T12:00:00.000Z",
+        },
+      ],
+    });
+    expect(listAccountRatingHistory).toHaveBeenCalledWith(account.account.accountId, 5);
+    expect(anonymousResponse.status).toBe(401);
+    expect(tokenQueryResponse.status).toBe(400);
+    expect(duplicateLimitResponse.status).toBe(400);
+    expect(JSON.stringify(body)).not.toContain(account.account.accountId);
+    expect(JSON.stringify(body)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(body)).not.toContain("deviation");
+  });
+
   it("searches public account profiles by partial display name without leaking account internals", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

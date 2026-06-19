@@ -111,6 +111,7 @@ export interface OnlineGameStore {
     input: OnlineGameStoreTimeoutInput
   ): Promise<OnlineGameStoreTimeoutResult>;
   loadAccountRating(accountId: string): Promise<OnlineRating | null>;
+  listAccountRatingHistory(accountId: string, limit?: number): Promise<OnlineAccountRatingHistoryEntry[]>;
   loadRatedGameResult(gameId: string): Promise<OnlineRatedGameResultRecord | null>;
   checkReady(): Promise<boolean>;
   close(): Promise<void>;
@@ -128,6 +129,21 @@ export interface OnlineRatedGameResultRecord {
   whiteAfter: OnlineRating;
   blackBefore: OnlineRating;
   blackAfter: OnlineRating;
+}
+
+export interface OnlineAccountRatingHistoryEntry {
+  schemaVersion: 1;
+  gameId: string;
+  side: "w" | "b";
+  opponentDisplayName: string;
+  result: "win" | "loss";
+  reason: OnlineGameResultDTO["reason"];
+  ratingBefore: number;
+  ratingAfter: number;
+  ratingDelta: number;
+  games: number;
+  provisional: boolean;
+  appliedAt: string;
 }
 
 export type OnlineChallengeRole = "challenger" | "challenged";

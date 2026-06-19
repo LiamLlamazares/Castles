@@ -26,11 +26,14 @@ import {
 import {
   ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH,
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_STATUSES,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+  type OnlineAccountRatingHistoryEntry,
+  type OnlineAccountRatingHistoryResponse,
   type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationAuditListResponse,
   type OnlineAccountModerationReport,
@@ -100,6 +103,7 @@ const ONLINE_REJECT_CODE_SET = new Set<OnlineRejectCode>(ONLINE_REJECT_CODES);
 const MAX_ONLINE_ERROR_MESSAGE_LENGTH = 240;
 const ONLINE_ACCOUNT_PROFILE_RESPONSE_KEYS = new Set(["protocolVersion", "profile"]);
 const ONLINE_ACCOUNT_SEARCH_RESPONSE_KEYS = new Set(["protocolVersion", "profiles"]);
+const ONLINE_ACCOUNT_RATING_HISTORY_RESPONSE_KEYS = new Set(["protocolVersion", "schemaVersion", "entries"]);
 const ONLINE_ACCOUNT_FOLLOWING_RESPONSE_KEYS = new Set(["protocolVersion", "following"]);
 const ONLINE_ACCOUNT_PRIVACY_RESPONSE_KEYS = new Set(["protocolVersion", "privacy"]);
 const ONLINE_ACCOUNT_MODERATION_QUEUE_RESPONSE_KEYS = new Set([
@@ -242,6 +246,8 @@ export type {
   OnlineAccountProfileResponse,
   OnlineAccountPublicProfile,
   OnlineAccountPublicRating,
+  OnlineAccountRatingHistoryEntry,
+  OnlineAccountRatingHistoryResponse,
   OnlineAccountReportInput,
   OnlineAccountReportResponse,
   OnlineAccountSearchResponse,
@@ -1023,7 +1029,7 @@ function validateOnlineAccountSearchProfile(value: unknown, label: string): Onli
     allowedSearchProfileKeys,
     `${label} was malformed: search profile contains unsupported data.`
   );
-  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+  if (record.schemaVersion !== ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION) {
     throw new Error(`${label} was malformed: schemaVersion is invalid.`);
   }
   if (typeof record.displayName !== "string" || record.displayName.length === 0) {
@@ -1036,7 +1042,7 @@ function validateOnlineAccountSearchProfile(value: unknown, label: string): Onli
     ? undefined
     : validateOnlineAccountPublicRating(record.rating, `${label} was malformed: rating`);
   return {
-    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    schemaVersion: ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
     displayName: record.displayName,
     ...(rating ? { rating } : {}),
   };
@@ -1056,6 +1062,124 @@ function validateOnlineAccountSearchResponse(body: unknown, label: string): Onli
     protocolVersion: ONLINE_PROTOCOL_VERSION,
     profiles: record.profiles.map((profile, index) =>
       validateOnlineAccountSearchProfile(profile, `${label}.profiles[${index}]`)
+    ),
+  };
+}
+
+const ONLINE_RATING_HISTORY_RESULT_REASONS = new Set([
+  "monarch_captured",
+  "castle_control",
+  "victory_points",
+  "resignation",
+  "timeout",
+]);
+
+function validateOnlineAccountRatingHistoryEntry(
+  value: unknown,
+  label: string
+): OnlineAccountRatingHistoryEntry {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedHistoryEntryKeys = new Set([
+    "schemaVersion",
+    "gameId",
+    "side",
+    "opponentDisplayName",
+    "result",
+    "reason",
+    "ratingBefore",
+    "ratingAfter",
+    "ratingDelta",
+    "games",
+    "provisional",
+    "appliedAt",
+  ]);
+  assertAllowedKeys(
+    record,
+    allowedHistoryEntryKeys,
+    `${label} was malformed: rating history entry contains unsupported field.`
+  );
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label} was malformed: schemaVersion is invalid.`);
+  }
+  if (typeof record.gameId !== "string" || record.gameId.length === 0 || stringContainsDurableSecret(record.gameId)) {
+    throw new Error(`${label} was malformed: gameId is invalid.`);
+  }
+  if (record.side !== "w" && record.side !== "b") {
+    throw new Error(`${label} was malformed: side is invalid.`);
+  }
+  if (
+    typeof record.opponentDisplayName !== "string" ||
+    record.opponentDisplayName.length === 0 ||
+    record.opponentDisplayName.length > 80 ||
+    stringContainsDurableSecret(record.opponentDisplayName) ||
+    stringContainsInternalOnlineIdentifier(record.opponentDisplayName)
+  ) {
+    throw new Error(`${label} was malformed: opponentDisplayName is invalid.`);
+  }
+  if (record.result !== "win" && record.result !== "loss") {
+    throw new Error(`${label} was malformed: result is invalid.`);
+  }
+  if (typeof record.reason !== "string" || !ONLINE_RATING_HISTORY_RESULT_REASONS.has(record.reason)) {
+    throw new Error(`${label} was malformed: reason is invalid.`);
+  }
+  for (const numericKey of ["ratingBefore", "ratingAfter", "ratingDelta", "games"] as const) {
+    if (typeof record[numericKey] !== "number" || !Number.isSafeInteger(record[numericKey])) {
+      throw new Error(`${label} was malformed: ${numericKey} is invalid.`);
+    }
+  }
+  if ((record.games as number) < 0) {
+    throw new Error(`${label} was malformed: games is invalid.`);
+  }
+  if (typeof record.provisional !== "boolean") {
+    throw new Error(`${label} was malformed: provisional is invalid.`);
+  }
+  if (typeof record.appliedAt !== "string" || Number.isNaN(Date.parse(record.appliedAt))) {
+    throw new Error(`${label} was malformed: appliedAt is invalid.`);
+  }
+  const ratingBefore = record.ratingBefore as number;
+  const ratingAfter = record.ratingAfter as number;
+  const ratingDelta = record.ratingDelta as number;
+  const games = record.games as number;
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    gameId: record.gameId,
+    side: record.side,
+    opponentDisplayName: record.opponentDisplayName,
+    result: record.result,
+    reason: record.reason,
+    ratingBefore,
+    ratingAfter,
+    ratingDelta,
+    games,
+    provisional: record.provisional,
+    appliedAt: record.appliedAt,
+  };
+}
+
+function validateOnlineAccountRatingHistoryResponse(
+  body: unknown,
+  label: string
+): OnlineAccountRatingHistoryResponse {
+  const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_RATING_HISTORY_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
+  if (record.schemaVersion !== ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION) {
+    throw new Error(`${label} response was malformed: schemaVersion is invalid.`);
+  }
+  if (!Array.isArray(record.entries)) {
+    throw new Error(`${label} response was malformed: entries is invalid.`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    schemaVersion: ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
+    entries: record.entries.map((entry, index) =>
+      validateOnlineAccountRatingHistoryEntry(entry, `${label}.entries[${index}]`)
     ),
   };
 }
@@ -1171,6 +1295,24 @@ export async function searchOnlineAccountProfiles(
     throw new Error(`Could not search online accounts (${response.status})`);
   }
   return validateOnlineAccountSearchResponse(await response.json(), "Online account search");
+}
+
+export async function fetchOnlineAccountRatingHistory(
+  account: OnlineAccountSessionParams,
+  options: { limit?: number } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountRatingHistoryResponse> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const query = params.toString();
+  const path = query ? `/api/online/account/ratings/history?${query}` : "/api/online/account/ratings/history";
+  const response = await fetchImpl(path, {
+    headers: accountAuthorizationHeader(account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not load online account rating history (${response.status})`);
+  }
+  return validateOnlineAccountRatingHistoryResponse(await response.json(), "Online account rating history");
 }
 
 export async function fetchOnlineAccountFollowing(

@@ -7,6 +7,7 @@ import {
 
 export const ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION = 1;
 export const ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION = 1;
+export const ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION = 1;
 export const ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION = 1;
 export const ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION = 2;
 
@@ -71,6 +72,27 @@ export interface OnlineRatingLeaderboardResponse {
   schemaVersion: typeof ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION;
   scope: OnlineRatingLeaderboardScope;
   entries: OnlineRatingLeaderboardEntry[];
+}
+
+export interface OnlineAccountRatingHistoryEntry {
+  schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
+  gameId: string;
+  side: "w" | "b";
+  opponentDisplayName: string;
+  result: "win" | "loss";
+  reason: string;
+  ratingBefore: number;
+  ratingAfter: number;
+  ratingDelta: number;
+  games: number;
+  provisional: boolean;
+  appliedAt: string;
+}
+
+export interface OnlineAccountRatingHistoryResponse {
+  protocolVersion: number;
+  schemaVersion: typeof ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION;
+  entries: OnlineAccountRatingHistoryEntry[];
 }
 
 export interface OnlineAccountReportInput {

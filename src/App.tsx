@@ -56,6 +56,7 @@ import {
   fetchOnlineAccountOAuthProviders,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
+  fetchOnlineAccountRatingHistory,
   fetchOnlinePublicProfile,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
@@ -1573,6 +1574,13 @@ function App() {
       throw new Error("No online account session is available.");
     }
     return fetchOnlineAccountFollowing({ token: onlineAccountSession.token });
+  }, [onlineAccountSession?.token]);
+
+  const handleLoadOnlineAccountRatingHistory = useCallback(() => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return fetchOnlineAccountRatingHistory({ token: onlineAccountSession.token }, { limit: 12 });
   }, [onlineAccountSession?.token]);
 
   const handleLoadOnlineRatingLeaderboard = useCallback((options: { limit?: number; scope?: "global" | "following" } = {}) => {
@@ -3134,6 +3142,7 @@ function App() {
           loadProfile={handleLoadProfileDashboardProfile}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
           loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
+          loadAccountRatingHistory={onlineAccountSession ? handleLoadOnlineAccountRatingHistory : undefined}
           loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
           loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}
           updateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}

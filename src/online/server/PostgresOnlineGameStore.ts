@@ -26,6 +26,7 @@ import {
 import {
   createDefaultOnlineRating,
   GLICKO2_ONLINE_RATING_ENGINE_ID,
+  isOnlineRatingProvisional,
   updateDefaultOnlineRating,
   validateOnlineRating,
   type OnlineRating,
@@ -75,6 +76,7 @@ import type {
   OnlineRatedGameResultRecord,
   OnlineGameStoreTimeoutInput,
   OnlineGameStoreTimeoutResult,
+  OnlineAccountRatingHistoryEntry,
   ResolvedOpenSeekCredential,
   ResolvedOnlineChallengeCredential,
 } from "./OnlineGameStore";
@@ -1343,6 +1345,40 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
     const row = result.rows[0];
     if (!row) return null;
     return validateOnlineRating(row.payload, `online account rating ${accountId}`);
+  }
+
+  async listAccountRatingHistory(
+    accountId: string,
+    limit = 20
+  ): Promise<OnlineAccountRatingHistoryEntry[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new Error("Rating history limit is invalid.");
+    }
+    await this.ensureSchema();
+    const result = await this.queryable.query(
+      `
+        SELECT
+          r.game_id,
+          r.white_account_id,
+          r.black_account_id,
+          r.winner,
+          r.reason,
+          r.engine_id,
+          r.applied_at,
+          r.white_before,
+          r.white_after,
+          r.black_before,
+          r.black_after,
+          s.payload AS summary
+        FROM online_rating_results r
+        LEFT JOIN online_game_summaries s ON s.game_id = r.game_id
+        WHERE r.white_account_id = $1 OR r.black_account_id = $1
+        ORDER BY r.applied_at DESC, r.game_id ASC
+        LIMIT $2
+      `,
+      [accountId, limit]
+    );
+    return result.rows.map((row) => this.ratingHistoryEntryFromRow(accountId, row));
   }
 
   async loadRatedGameResult(gameId: string): Promise<OnlineRatedGameResultRecord | null> {
@@ -2641,6 +2677,49 @@ export class PostgresOnlineGameStore implements OnlineGameStore {
       blackBefore: validateOnlineRating(row.black_before, "rating result black_before"),
       blackAfter: validateOnlineRating(row.black_after, "rating result black_after"),
     };
+  }
+
+  private ratingHistoryEntryFromRow(
+    accountId: string,
+    row: any
+  ): OnlineAccountRatingHistoryEntry {
+    const result = this.ratedGameResultFromRow(row);
+    const side = result.whiteAccountId === accountId ? "w" : result.blackAccountId === accountId ? "b" : null;
+    if (!side) {
+      throw new Error("Rating history row does not belong to the requested account.");
+    }
+    const before = side === "w" ? result.whiteBefore : result.blackBefore;
+    const after = side === "w" ? result.whiteAfter : result.blackAfter;
+    const opponentAccountId = side === "w" ? result.blackAccountId : result.whiteAccountId;
+    const ratingBefore = Math.round(before.rating);
+    const ratingAfter = Math.round(after.rating);
+    return {
+      schemaVersion: 1,
+      gameId: result.gameId,
+      side,
+      opponentDisplayName: this.ratingHistoryOpponentDisplayName(row.summary, opponentAccountId),
+      result: result.winner === side ? "win" : "loss",
+      reason: result.reason,
+      ratingBefore,
+      ratingAfter,
+      ratingDelta: ratingAfter - ratingBefore,
+      games: after.games,
+      provisional: isOnlineRatingProvisional(after),
+      appliedAt: result.appliedAt,
+    };
+  }
+
+  private ratingHistoryOpponentDisplayName(summary: unknown, opponentAccountId: string): string {
+    const validation = validateOnlineGameSummary(summary);
+    if (!validation.ok) return "Opponent";
+    const opponent = validation.value.participants.find(
+      (participant) =>
+        participant.identity.kind === "registered" &&
+        participant.identity.id === opponentAccountId
+    );
+    return opponent?.identity.kind === "registered" && typeof opponent.identity.displayName === "string"
+      ? opponent.identity.displayName
+      : "Opponent";
   }
 
   private isoStringFromPostgresTimestamp(value: unknown, label: string): string {
