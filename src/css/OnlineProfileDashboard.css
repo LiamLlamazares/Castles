@@ -74,6 +74,113 @@
   gap: 12px;
 }
 
+.online-profile-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.online-profile-tabs button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid #4b4740;
+  border-radius: 4px;
+  background: #262421;
+  color: #d4d4d4;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.online-profile-tabs button[aria-pressed="true"] {
+  border-color: #8d6b2a;
+  background: #3c3934;
+}
+
+.online-profile-tabs button:focus-visible {
+  outline: 2px solid rgba(191, 129, 29, 0.68);
+  outline-offset: 2px;
+}
+
+.online-profile-search {
+  position: relative;
+  width: min(260px, 100%);
+}
+
+.online-profile-search label {
+  display: grid;
+  gap: 5px;
+  color: #8f8f8f;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.online-profile-search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #4b4740;
+  border-radius: 4px;
+  padding: 7px 10px;
+  background: #262421;
+  color: #d4d4d4;
+  font: inherit;
+}
+
+.online-profile-search input:focus-visible {
+  outline: 2px solid rgba(191, 129, 29, 0.68);
+  outline-offset: 2px;
+}
+
+.online-profile-search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  display: grid;
+  gap: 4px;
+  width: min(280px, 88vw);
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #3d3a34;
+  border-radius: 6px;
+  background: #262421;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+}
+
+.online-profile-search-results p {
+  margin: 6px;
+  color: #bababa;
+}
+
+.online-profile-search-results button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 4px;
+  padding: 7px 9px;
+  background: transparent;
+  color: #d4d4d4;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.online-profile-search-results button:hover,
+.online-profile-search-results button:focus-visible {
+  background: #3c3934;
+}
+
 .online-profile-panel {
   min-width: 0;
   padding: 14px;
@@ -99,6 +206,77 @@
   margin: 5px 0 0;
   color: #bababa;
   line-height: 1.38;
+}
+
+.online-profile-rating-strip {
+  display: flex;
+  align-items: end;
+  min-height: 58px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid #3d3a34;
+  border-radius: 4px;
+  background:
+    linear-gradient(to top, rgba(141, 107, 42, 0.28), rgba(141, 107, 42, 0.04)),
+    repeating-linear-gradient(
+      to right,
+      rgba(212, 212, 212, 0.09) 0,
+      rgba(212, 212, 212, 0.09) 1px,
+      transparent 1px,
+      transparent 34px
+    );
+}
+
+.online-profile-rating-strip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #161512;
+  color: #d4d4d4;
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.online-profile-settings-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.online-profile-settings-form h3 {
+  margin: 4px 0 0;
+  color: #d4d4d4;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.online-profile-settings-form label {
+  display: grid;
+  gap: 5px;
+  color: #a6a6a6;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.online-profile-settings-form input,
+.online-profile-settings-form select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #4b4740;
+  border-radius: 4px;
+  padding: 7px 9px;
+  background: #3c3934;
+  color: #d4d4d4;
+  font: inherit;
+}
+
+.online-profile-settings-form input:focus-visible,
+.online-profile-settings-form select:focus-visible {
+  outline: 2px solid rgba(191, 129, 29, 0.68);
+  outline-offset: 2px;
 }
 
 .online-profile-error {
@@ -145,6 +323,16 @@
   .online-profile-button {
     width: 100%;
   }
+
+  .online-profile-search {
+    width: 100%;
+  }
+
+  .online-profile-search-results {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
 }
 
 /* Final light-theme overrides must come after component-specific dark rules. */
@@ -158,25 +346,67 @@
 }
 
 [data-theme="light"] .online-profile-hero,
-[data-theme="light"] .online-profile-panel {
+[data-theme="light"] .online-profile-panel,
+[data-theme="light"] .online-profile-tabs button,
+[data-theme="light"] .online-profile-search input,
+[data-theme="light"] .online-profile-search-results {
   border-color: #d9d9d9;
   background: #ffffff;
   color: #1f1f1f;
 }
 
+[data-theme="light"] .online-profile-tabs button[aria-pressed="true"] {
+  border-color: #c18a2a;
+  background: #f5f5f5;
+}
+
 [data-theme="light"] .online-profile-display-name,
-[data-theme="light"] .online-profile-panel h2 {
+[data-theme="light"] .online-profile-panel h2,
+[data-theme="light"] .online-profile-settings-form h3 {
   color: #1f1f1f;
 }
 
 [data-theme="light"] .online-profile-kicker,
-[data-theme="light"] .online-profile-panel p {
+[data-theme="light"] .online-profile-panel p,
+[data-theme="light"] .online-profile-settings-form label,
+[data-theme="light"] .online-profile-search label,
+[data-theme="light"] .online-profile-search-results p {
   color: #555555;
 }
 
 [data-theme="light"] .online-profile-badges span,
-[data-theme="light"] .online-profile-button {
+[data-theme="light"] .online-profile-button,
+[data-theme="light"] .online-profile-rating-strip span {
   border: 1px solid #d9d9d9;
   background: #ffffff;
   color: #1f1f1f;
+}
+
+[data-theme="light"] .online-profile-rating-strip {
+  border-color: #d9d9d9;
+  background:
+    linear-gradient(to top, rgba(193, 138, 42, 0.18), rgba(193, 138, 42, 0.04)),
+    repeating-linear-gradient(
+      to right,
+      rgba(31, 31, 31, 0.08) 0,
+      rgba(31, 31, 31, 0.08) 1px,
+      transparent 1px,
+      transparent 34px
+    );
+}
+
+[data-theme="light"] .online-profile-settings-form input,
+[data-theme="light"] .online-profile-settings-form select {
+  border-color: #d9d9d9;
+  background: #ffffff;
+  color: #1f1f1f;
+}
+
+[data-theme="light"] .online-profile-search-results button {
+  color: #1f1f1f;
+}
+
+[data-theme="light"] .online-profile-search-results button:hover,
+[data-theme="light"] .online-profile-search-results button:focus-visible {
+  background: #f5f5f5;
 }

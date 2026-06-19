@@ -8,6 +8,7 @@ import {
 import {
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
+  createOnlineAccountPublicRating,
   defaultOnlineAccountPrivacySettings,
   type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationReport,
@@ -22,6 +23,7 @@ import {
   type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
+import { createDefaultOnlineRating } from "../ratings";
 import { hashOnlineToken, isOnlineTokenCredentialHash, verifyOnlineToken } from "./onlineTokenCredentials";
 import {
   isOnlineAccountPasswordCredentialHash,
@@ -139,6 +141,21 @@ export type OnlineAccountReportAuditListResult =
       status: "not_found";
     };
 
+export type OnlineAccountPasswordUpdateResult =
+  | {
+      status: "ok";
+    }
+  | {
+      status: "not_found" | "current_password_required" | "bad_current_password";
+    };
+
+export interface UpdateOnlineAccountPasswordInput {
+  accountId: string;
+  currentPassword?: string;
+  passwordHash: string;
+  updatedAt: string;
+}
+
 interface MemoryOnlineAccountReportRecord {
   reportId: string;
   reporterAccountId: string;
@@ -163,9 +180,11 @@ export interface OnlineAccountStore {
   listSessionsForAccount(accountId: string): Promise<OnlineAccountSessionListItem[]>;
   revokeSessionsForAccount(accountId: string): Promise<number>;
   deleteAccount(accountId: string): Promise<boolean>;
+  updateAccountPassword(input: UpdateOnlineAccountPasswordInput): Promise<OnlineAccountPasswordUpdateResult>;
   listRatingLeaderboard(limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
   listFollowingRatingLeaderboard(accountId: string, limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
   getProfileForDisplayName(viewerAccountId: string | null, displayName: string, viewedAt?: string): Promise<OnlineAccountPublicProfile | null>;
+  searchProfiles(viewerAccountId: string | null, query: string, limit?: number, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
   listFollowingProfiles(accountId: string, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
   followAccount(followerAccountId: string, targetDisplayName: string, createdAt: string): Promise<OnlineAccountSocialActionResult>;
   unfollowAccount(followerAccountId: string, targetDisplayName: string, viewedAt?: string): Promise<OnlineAccountSocialActionResult>;
@@ -434,6 +453,29 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     return true;
   }
 
+  async updateAccountPassword(
+    input: UpdateOnlineAccountPasswordInput
+  ): Promise<OnlineAccountPasswordUpdateResult> {
+    const account = this.accounts.get(input.accountId);
+    if (!account) return { status: "not_found" };
+    if (!isOnlineAccountPasswordCredentialHash(input.passwordHash)) {
+      throw new Error("Account password hash is invalid.");
+    }
+    const currentHash = this.passwordHashesByAccountId.get(account.accountId);
+    if (currentHash) {
+      if (!input.currentPassword) return { status: "current_password_required" };
+      if (!(await verifyOnlineAccountPassword(input.currentPassword, currentHash))) {
+        return { status: "bad_current_password" };
+      }
+    }
+    this.passwordHashesByAccountId.set(account.accountId, input.passwordHash);
+    this.accounts.set(account.accountId, {
+      ...account,
+      updatedAt: input.updatedAt,
+    });
+    return { status: "ok" };
+  }
+
   async listRatingLeaderboard(_limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
     return [];
   }
@@ -453,6 +495,37 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
       return null;
     }
     return this.createProfile(viewerAccountId, target, viewedAt);
+  }
+
+  async searchProfiles(
+    viewerAccountId: string | null,
+    query: string,
+    limit = 10,
+    viewedAt = new Date().toISOString()
+  ): Promise<OnlineAccountPublicProfile[]> {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const queryKey = normalizeOnlineAccountDisplayNameKey(trimmed);
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 20);
+    const matches = Array.from(this.accounts.values())
+      .filter((account) => {
+        const displayKey = normalizeOnlineAccountDisplayNameKey(account.displayName);
+        return displayKey.includes(queryKey);
+      })
+      .filter((account) => {
+        if (viewerAccountId === null || viewerAccountId === account.accountId) return true;
+        return !this.hasBlock(account.accountId, viewerAccountId) && !this.hasBlock(viewerAccountId, account.accountId);
+      })
+      .sort((left, right) => {
+        const leftKey = normalizeOnlineAccountDisplayNameKey(left.displayName);
+        const rightKey = normalizeOnlineAccountDisplayNameKey(right.displayName);
+        const leftPrefix = leftKey.startsWith(queryKey) ? 0 : 1;
+        const rightPrefix = rightKey.startsWith(queryKey) ? 0 : 1;
+        if (leftPrefix !== rightPrefix) return leftPrefix - rightPrefix;
+        return left.displayName.localeCompare(right.displayName);
+      })
+      .slice(0, boundedLimit);
+    return Promise.all(matches.map((account) => this.createProfile(viewerAccountId, account, viewedAt)));
   }
 
   async listFollowingProfiles(accountId: string, viewedAt = new Date().toISOString()): Promise<OnlineAccountPublicProfile[]> {
@@ -782,6 +855,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     return {
       schemaVersion: 1,
       displayName: target.displayName,
+      rating: createOnlineAccountPublicRating(createDefaultOnlineRating(null)),
       presence: await this.createPresence(viewerAccountId, target, viewedAt),
       relationship: {
         self: viewerAccountId !== null && target.accountId === viewerAccountId,

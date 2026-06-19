@@ -17,10 +17,9 @@ import {
   type FetchOpenSeekDirectoryOptions,
   type FetchOnlineGameSummariesOptions,
   type OnlineAccountFollowingResponse,
-  type OnlineAccountPrivacyPatch,
-  type OnlineAccountPrivacyResponse,
   type OnlineAccountProfileResponse,
   type OnlineAccountPublicProfile,
+  type OnlineAccountSearchResponse,
   type OnlineAccountReportInput,
   type OnlineAccountReportResponse,
   type OnlineRatingLeaderboardEntry,
@@ -32,9 +31,7 @@ import {
 import {
   ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH,
   type OnlineAccountReportReason,
-  OnlineAccountChallengePolicy,
-  OnlineAccountFollowPolicy,
-  OnlineAccountPresencePolicy,
+  type OnlineAccountSearchProfile,
   OnlineRatingLeaderboardScope,
 } from "../online/social";
 import type { OnlineAccount, OnlineAccountOAuthProvidersResponse } from "../online/accounts";
@@ -193,6 +190,7 @@ interface OnlineGameBrowserProps {
   onDeclineAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
   onCancelAccountChallenge?: (challengeId: string) => Promise<OnlineChallengeResponse>;
   loadAccountProfile?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
+  searchAccountProfiles?: (query: string) => Promise<OnlineAccountSearchResponse>;
   loadAccountFollowing?: () => Promise<OnlineAccountFollowingResponse>;
   loadRatingLeaderboard?: (options?: { limit?: number; scope?: OnlineRatingLeaderboardScope }) => Promise<OnlineRatingLeaderboardResponse>;
   onFollowAccount?: (displayName: string) => Promise<OnlineAccountProfileResponse>;
@@ -202,8 +200,6 @@ interface OnlineGameBrowserProps {
   onReportAccount?: (displayName: string, input: OnlineAccountReportInput) => Promise<OnlineAccountReportResponse>;
   onChallengeAccount?: (displayName: string, options?: OnlineAccountChallengeActionOptions) => void | Promise<void>;
   onCopyChallengeAccountInvite?: (displayName: string) => void | Promise<void>;
-  loadAccountPrivacy?: () => Promise<OnlineAccountPrivacyResponse>;
-  onUpdateAccountPrivacy?: (patch: OnlineAccountPrivacyPatch) => Promise<OnlineAccountPrivacyResponse>;
   backLabel?: string;
   initialTab?: OnlineBrowserTab;
   activeTab?: OnlineBrowserTab;
@@ -689,36 +685,6 @@ function formatSpectatorCount(count: number | undefined): string | null {
   return `${count} watching`;
 }
 
-function formatFollowPolicy(policy: OnlineAccountFollowPolicy): string {
-  return policy === "everyone" ? "Everyone" : "Nobody";
-}
-
-function formatChallengePolicy(policy: OnlineAccountChallengePolicy): string {
-  switch (policy) {
-    case "everyone":
-      return "Everyone";
-    case "followed":
-      return "Accounts I follow";
-    case "nobody":
-      return "Nobody";
-    default:
-      return policy;
-  }
-}
-
-function formatPresencePolicy(policy: OnlineAccountPresencePolicy): string {
-  switch (policy) {
-    case "everyone":
-      return "Everyone";
-    case "followed":
-      return "Accounts I follow";
-    case "nobody":
-      return "Nobody";
-    default:
-      return policy;
-  }
-}
-
 function formatPresenceLabel(profile: OnlineAccountPublicProfile): string {
   const presence = profile.presence;
   if (presence.visibility === "hidden") return "Presence hidden";
@@ -1113,6 +1079,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onDeclineAccountChallenge,
   onCancelAccountChallenge,
   loadAccountProfile,
+  searchAccountProfiles,
   loadAccountFollowing,
   loadRatingLeaderboard,
   onFollowAccount,
@@ -1122,8 +1089,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onReportAccount,
   onChallengeAccount,
   onCopyChallengeAccountInvite,
-  loadAccountPrivacy,
-  onUpdateAccountPrivacy,
   backLabel = "Back to game",
   initialTab = "lobby",
   activeTab,
@@ -1186,8 +1151,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [socialLookupName, setSocialLookupName] = React.useState("");
   const [socialProfile, setSocialProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
   const [socialLookupStatus, setSocialLookupStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [socialSearchResults, setSocialSearchResults] = React.useState<OnlineAccountSearchProfile[]>([]);
+  const [socialSearchStatus, setSocialSearchStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [socialMessage, setSocialMessage] = React.useState("");
-  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "copy-invite" | "refresh" | "privacy" | "report" | undefined>();
+  const [socialAction, setSocialAction] = React.useState<"follow" | "unfollow" | "block" | "unblock" | "challenge" | "copy-invite" | "refresh" | "report" | undefined>();
   const [reportTargetDisplayName, setReportTargetDisplayName] = React.useState("");
   const [reportReason, setReportReason] = React.useState<OnlineAccountReportReason>("abuse");
   const [reportDetails, setReportDetails] = React.useState("");
@@ -1205,13 +1172,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   );
   const [editingFollowingNoteKey, setEditingFollowingNoteKey] = React.useState<string | null>(null);
   const [followingNoteDraft, setFollowingNoteDraft] = React.useState("");
-  const [followPolicy, setFollowPolicy] = React.useState<OnlineAccountFollowPolicy>("everyone");
-  const [followPolicyDraft, setFollowPolicyDraft] = React.useState<OnlineAccountFollowPolicy>("everyone");
-  const [presencePolicy, setPresencePolicy] = React.useState<OnlineAccountPresencePolicy>("followed");
-  const [presencePolicyDraft, setPresencePolicyDraft] = React.useState<OnlineAccountPresencePolicy>("followed");
-  const [challengePolicy, setChallengePolicy] = React.useState<OnlineAccountChallengePolicy>("followed");
-  const [challengePolicyDraft, setChallengePolicyDraft] = React.useState<OnlineAccountChallengePolicy>("followed");
-  const [privacyStatus, setPrivacyStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [selectedArchiveDetailGame, setSelectedArchiveDetailGame] = React.useState<OnlineGameSummary | null>(null);
   const requestIdRef = React.useRef(0);
   const seekRequestIdRef = React.useRef(0);
@@ -1221,8 +1181,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const accountSessionsRequestIdRef = React.useRef(0);
   const accountFollowingRequestIdRef = React.useRef(0);
   const ratingLeaderboardRequestIdRef = React.useRef(0);
-  const accountPrivacyRequestIdRef = React.useRef(0);
   const socialLookupRequestIdRef = React.useRef(0);
+  const socialSearchRequestIdRef = React.useRef(0);
   const socialMutationRequestIdRef = React.useRef(0);
   const gameLoadInFlightRef = React.useRef(false);
   const seekLoadInFlightRef = React.useRef(false);
@@ -1234,6 +1194,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const followingAutoRefreshPausedUntilRef = React.useRef(0);
   const seekActionByIdRef = React.useRef(seekActionById);
   const accountChallengeActionByIdRef = React.useRef(accountChallengeActionById);
+  const accountChallengesRef = React.useRef<OnlineAccountChallengeListItem[]>([]);
   const accountChallengeShortcutItemsRef = React.useRef<OnlineAccountChallengeListItem[]>([]);
   const completedAccountChallengeIdsRef = React.useRef(new Set<string>());
   const knownAccountChallengeActivityKeysRef = React.useRef(new Set<string>());
@@ -1252,9 +1213,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const deleteAccountConfirmPanelId = React.useId();
   const deleteAccountConfirmHeadingId = React.useId();
   const deleteAccountConfirmDescriptionId = React.useId();
-  const followPolicyHintId = React.useId();
-  const presencePolicyHintId = React.useId();
-  const challengePolicyHintId = React.useId();
   const canUseAccountSocial = Boolean(
     account &&
     loadAccountProfile &&
@@ -1262,9 +1220,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     onFollowAccount &&
     onUnfollowAccount &&
     onBlockAccount &&
-    onUnblockAccount &&
-    loadAccountPrivacy &&
-    onUpdateAccountPrivacy
+    onUnblockAccount
   );
   const canUseAccountChallenges = Boolean(account && loadAccountChallenges);
 
@@ -1308,6 +1264,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   React.useEffect(() => {
     accountChallengeActionByIdRef.current = accountChallengeActionById;
   }, [accountChallengeActionById]);
+
+  React.useEffect(() => {
+    accountChallengesRef.current = accountChallenges;
+  }, [accountChallenges]);
 
   const commitAccountChallengeShortcutItems = React.useCallback((
     nextItems: OnlineAccountChallengeListItem[],
@@ -1451,15 +1411,25 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       const preservedStaleShortcutItems = accountChallengeShortcutItemsRef.current.filter((item) =>
         staleCompletedPendingChallengeIds.has(item.summary.challengeId)
       );
+      const preservedStaleCompletedRows = accountChallengesRef.current.filter((item) =>
+        staleCompletedPendingChallengeIds.has(item.summary.challengeId) &&
+        item.role === "challenger" &&
+        item.summary.status === "cancelled"
+      );
       const nextShortcutItems =
         requestedFilter === "all"
           ? mergeAccountChallengeShortcutItems(preservedStaleShortcutItems, filteredChallenges)
           : mergeAccountChallengeShortcutItems(accountChallengeShortcutItemsRef.current, filteredChallenges);
       const nextChallenges =
         requestedFilter === "all"
-          ? mergeAccountChallengeRowsWithShortcuts(filteredChallenges, preservedStaleShortcutItems)
+          ? mergeAccountChallengeRowsWithShortcuts(
+              filteredChallenges,
+              [...preservedStaleShortcutItems, ...preservedStaleCompletedRows]
+            )
           : filteredChallenges;
-      setAccountChallenges(visibleAccountChallengesForFilter(nextChallenges, accountChallengeFilter));
+      const visibleChallenges = visibleAccountChallengesForFilter(nextChallenges, accountChallengeFilter);
+      accountChallengesRef.current = visibleChallenges;
+      setAccountChallenges(visibleChallenges);
       commitAccountChallengeShortcutItems(nextShortcutItems, { notifyNavigation: requestedFilter === "all" });
       setAccountChallengesStatus("ready");
     } catch (error) {
@@ -1469,6 +1439,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       }
       if (!background) {
         console.error("[OnlineGameBrowser] Failed to load account challenges", error);
+        accountChallengesRef.current = [];
         setAccountChallenges([]);
         updateAccountChallengeShortcutItems(pruneAccountChallengeShortcutItemsAfterLoadError);
         setAccountChallengesStatus("error");
@@ -1507,8 +1478,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         completedAccountChallengeIdsRef.current.add(challengeId);
       }
       markAccountChallengeActivityKnown([{ role: response.role, summary: response.summary }]);
-      setAccountChallenges((current) =>
-        current
+      setAccountChallenges((current) => {
+        const next = current
           .map((candidate) =>
             candidate.summary.challengeId === challengeId
               ? { role: response.role, summary: response.summary }
@@ -1516,8 +1487,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           )
           .filter((candidate) =>
             accountChallengeFilter === "all" || candidate.summary.status === "pending"
-          )
-      );
+          );
+        accountChallengesRef.current = next;
+        return next;
+      });
       updateAccountChallengeShortcutItems(
         (current) =>
           updateAccountChallengeShortcutItem(current, { role: response.role, summary: response.summary }),
@@ -1561,6 +1534,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     if (nextFilter === accountChallengeFilter) return;
     accountChallengesRequestIdRef.current += 1;
     accountChallengeLoadInFlightRef.current = false;
+    accountChallengesRef.current = [];
     setAccountChallenges([]);
     setAccountChallengesStatus(canUseAccountChallenges ? "loading" : "idle");
     setAccountChallengeFilter(nextFilter);
@@ -1669,27 +1643,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     }
   }, [account?.accountId, loadRatingLeaderboard, ratingLeaderboardScope]);
 
-  const refreshAccountPrivacy = React.useCallback(async () => {
-    if (!account || !loadAccountPrivacy) return;
-    const requestId = ++accountPrivacyRequestIdRef.current;
-    setPrivacyStatus("loading");
-    try {
-      const response = await loadAccountPrivacy();
-      if (requestId !== accountPrivacyRequestIdRef.current) return;
-      setFollowPolicy(response.privacy.followPolicy);
-      setFollowPolicyDraft(response.privacy.followPolicy);
-      setPresencePolicy(response.privacy.presencePolicy);
-      setPresencePolicyDraft(response.privacy.presencePolicy);
-      setChallengePolicy(response.privacy.challengePolicy);
-      setChallengePolicyDraft(response.privacy.challengePolicy);
-      setPrivacyStatus("ready");
-    } catch (error) {
-      if (requestId !== accountPrivacyRequestIdRef.current) return;
-      console.error("[OnlineGameBrowser] Failed to load account privacy", error);
-      setPrivacyStatus("error");
-    }
-  }, [account?.accountId, loadAccountPrivacy]);
-
   React.useEffect(() => {
     ratingLeaderboardRequestIdRef.current += 1;
     setRatingLeaderboardEntries([]);
@@ -1700,14 +1653,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
 
   React.useEffect(() => {
     accountFollowingRequestIdRef.current += 1;
-    accountPrivacyRequestIdRef.current += 1;
     socialLookupRequestIdRef.current += 1;
+    socialSearchRequestIdRef.current += 1;
     socialMutationRequestIdRef.current += 1;
     followingLoadInFlightRef.current = false;
     followingAutoRefreshPausedUntilRef.current = 0;
     setSocialLookupName("");
     setSocialProfile(null);
     setSocialLookupStatus("idle");
+    setSocialSearchResults([]);
+    setSocialSearchStatus("idle");
     setSocialMessage("");
     setSocialAction(undefined);
     setReportTargetDisplayName("");
@@ -1715,17 +1670,9 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setReportDetails("");
     setFollowingProfiles([]);
     setFollowingStatus(canUseAccountSocial ? "loading" : "idle");
-    setFollowPolicy("everyone");
-    setFollowPolicyDraft("everyone");
-    setPresencePolicy("followed");
-    setPresencePolicyDraft("followed");
-    setChallengePolicy("followed");
-    setChallengePolicyDraft("followed");
-    setPrivacyStatus(canUseAccountSocial ? "loading" : "idle");
     if (!canUseAccountSocial) return;
     void refreshFollowingProfiles({ quiet: true });
-    void refreshAccountPrivacy();
-  }, [account?.accountId, canUseAccountSocial, refreshAccountPrivacy, refreshFollowingProfiles]);
+  }, [account?.accountId, canUseAccountSocial, refreshFollowingProfiles]);
 
   React.useEffect(() => {
     if (!canUseAccountSocial) return;
@@ -1752,6 +1699,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     completedAccountChallengeIdsRef.current.clear();
     knownAccountChallengeActivityKeysRef.current.clear();
     accountChallengeActivityBaselineReadyRef.current = false;
+    accountChallengesRef.current = [];
     setAccountChallenges([]);
     accountChallengeShortcutItemsRef.current = [];
     setAccountChallengeShortcutItems([]);
@@ -3445,6 +3393,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const requestId = ++socialLookupRequestIdRef.current;
     const accountId = account?.accountId;
     setSocialLookupName(displayName);
+    setSocialSearchResults([]);
+    setSocialSearchStatus("idle");
     if (!options.quiet) {
       setSocialLookupStatus("loading");
       setSocialMessage("");
@@ -3476,6 +3426,42 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const displayName = socialLookupName.trim();
     await handleSocialLookupByName(displayName);
   }, [handleSocialLookupByName, socialLookupName]);
+
+  React.useEffect(() => {
+    const requestId = ++socialSearchRequestIdRef.current;
+    const query = socialLookupName.trim();
+    const loadedProfileMatchesQuery =
+      socialProfile !== null &&
+      normalizeDisplayNameKey(socialProfile.displayName) === normalizeDisplayNameKey(query);
+    if (!canUseAccountSocial || !searchAccountProfiles || query.length < 2 || loadedProfileMatchesQuery) {
+      setSocialSearchResults([]);
+      setSocialSearchStatus("idle");
+      return;
+    }
+    setSocialSearchStatus("loading");
+    const timeout = window.setTimeout(() => {
+      searchAccountProfiles(query)
+        .then((response) => {
+          if (requestId !== socialSearchRequestIdRef.current) return;
+          setSocialSearchResults(response.profiles);
+          setSocialSearchStatus("ready");
+        })
+        .catch((error) => {
+          if (requestId !== socialSearchRequestIdRef.current) return;
+          console.error("[OnlineGameBrowser] Failed to search account profiles", error);
+          setSocialSearchResults([]);
+          setSocialSearchStatus("error");
+        });
+    }, 160);
+    return () => window.clearTimeout(timeout);
+  }, [canUseAccountSocial, searchAccountProfiles, socialLookupName, socialProfile]);
+
+  const handleSocialSearchSelection = React.useCallback((profile: OnlineAccountSearchProfile) => {
+    setSocialLookupName(profile.displayName);
+    setSocialSearchResults([]);
+    setSocialSearchStatus("idle");
+    void handleSocialLookupByName(profile.displayName, { focus: true });
+  }, [handleSocialLookupByName]);
 
   const openSignedInAccountProfile = React.useCallback(() => {
     if (!account) return;
@@ -3672,7 +3658,11 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     const opponentKey = normalizeDisplayNameKey(displayName);
     const keepChallenge = (item: OnlineAccountChallengeListItem) =>
       normalizeDisplayNameKey(challengeOpponentDisplayName(item) ?? "") !== opponentKey;
-    setAccountChallenges((current) => current.filter(keepChallenge));
+    setAccountChallenges((current) => {
+      const next = current.filter(keepChallenge);
+      accountChallengesRef.current = next;
+      return next;
+    });
     updateAccountChallengeShortcutItems((current) => current.filter(keepChallenge), { notifyNavigation: true });
   }, [updateAccountChallengeShortcutItems]);
 
@@ -3842,101 +3832,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     window.setTimeout(() => accountChallengesSectionRef.current?.focus(), 0);
   }, [accountChallengeFilter, clearAccountChallengeUnreadActivity, handleAccountChallengeFilterChange]);
 
-  const handleFollowPolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!onUpdateAccountPrivacy) return;
-    const requestId = ++socialMutationRequestIdRef.current;
-    const accountId = account?.accountId;
-    setSocialAction("privacy");
-    setSocialMessage("");
-    try {
-      const response = await onUpdateAccountPrivacy({ followPolicy: followPolicyDraft });
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      setFollowPolicy(response.privacy.followPolicy);
-      setFollowPolicyDraft(response.privacy.followPolicy);
-      setPrivacyStatus("ready");
-      setSocialMessage(
-        `New follow permission: ${formatFollowPolicy(response.privacy.followPolicy)}. Existing follows are not removed.`
-      );
-    } catch (error) {
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      console.error("[OnlineGameBrowser] Failed to update follow privacy", error);
-      setPrivacyStatus("error");
-      setSocialMessage(onlineRequestErrorMessage(error) ?? "Could not save follow privacy.");
-    } finally {
-      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
-        setSocialAction(undefined);
-      }
-    }
-  }, [account?.accountId, followPolicyDraft, onUpdateAccountPrivacy]);
-
-  const handlePresencePolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!onUpdateAccountPrivacy) return;
-    const requestId = ++socialMutationRequestIdRef.current;
-    const accountId = account?.accountId;
-    setSocialAction("privacy");
-    setSocialMessage("");
-    try {
-      const response = await onUpdateAccountPrivacy({ presencePolicy: presencePolicyDraft });
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      setPresencePolicy(response.privacy.presencePolicy);
-      setPresencePolicyDraft(response.privacy.presencePolicy);
-      setPrivacyStatus("ready");
-      setSocialMessage(
-        `New online status visibility: ${formatPresencePolicy(response.privacy.presencePolicy)}. Exact session activity stays private.`
-      );
-      void refreshFollowingProfiles({ quiet: true });
-      if (socialProfile) {
-        void handleSocialLookupByName(socialProfile.displayName, { quiet: true });
-      }
-    } catch (error) {
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      console.error("[OnlineGameBrowser] Failed to update presence privacy", error);
-      setPrivacyStatus("error");
-      setSocialMessage(onlineRequestErrorMessage(error) ?? "Could not save online status visibility.");
-    } finally {
-      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
-        setSocialAction(undefined);
-      }
-    }
-  }, [
-    account?.accountId,
-    handleSocialLookupByName,
-    onUpdateAccountPrivacy,
-    presencePolicyDraft,
-    refreshFollowingProfiles,
-    socialProfile,
-  ]);
-
-  const handleChallengePolicySubmit = React.useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!onUpdateAccountPrivacy) return;
-    const requestId = ++socialMutationRequestIdRef.current;
-    const accountId = account?.accountId;
-    setSocialAction("privacy");
-    setSocialMessage("");
-    try {
-      const response = await onUpdateAccountPrivacy({ challengePolicy: challengePolicyDraft });
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      setChallengePolicy(response.privacy.challengePolicy);
-      setChallengePolicyDraft(response.privacy.challengePolicy);
-      setPrivacyStatus("ready");
-      setSocialMessage(
-        `New challenge permission: ${formatChallengePolicy(response.privacy.challengePolicy)}. Existing challenge links are not removed.`
-      );
-    } catch (error) {
-      if (requestId !== socialMutationRequestIdRef.current || accountId !== account?.accountId) return;
-      console.error("[OnlineGameBrowser] Failed to update challenge privacy", error);
-      setPrivacyStatus("error");
-      setSocialMessage(onlineRequestErrorMessage(error) ?? "Could not save challenge privacy.");
-    } finally {
-      if (requestId === socialMutationRequestIdRef.current && accountId === account?.accountId) {
-        setSocialAction(undefined);
-      }
-    }
-  }, [account?.accountId, challengePolicyDraft, onUpdateAccountPrivacy]);
-
   const onlineDestinationNotificationCount = Math.max(
     onlineNotificationCount,
     pendingIncomingChallengeCount + accountChallengeUnreadActivity.acceptedReady
@@ -4002,22 +3897,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       ? "error"
       : "",
   ].filter(Boolean).join(" ");
-  const canSaveFollowPolicy =
-    canUseAccountSocial &&
-    privacyStatus === "ready" &&
-    socialAction !== "privacy" &&
-    followPolicyDraft !== followPolicy;
-  const canSavePresencePolicy =
-    canUseAccountSocial &&
-    privacyStatus === "ready" &&
-    socialAction !== "privacy" &&
-    presencePolicyDraft !== presencePolicy;
-  const canSaveChallengePolicy =
-    canUseAccountSocial &&
-    privacyStatus === "ready" &&
-    socialAction !== "privacy" &&
-    challengePolicyDraft !== challengePolicy;
-  const privacyControlDisabled = privacyStatus !== "ready" || socialAction === "privacy";
   const socialProfileKey = socialProfile ? normalizeDisplayNameKey(socialProfile.displayName) : null;
   const socialProfileLiveGame = socialProfileKey ? liveGameByRegisteredDisplayName.get(socialProfileKey) ?? null : null;
   const socialProfileAccountChallenge = socialProfileKey
@@ -4196,7 +4075,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             <div>
               <span className="online-browser-section-kicker">People</span>
               <h2>People</h2>
-              <p>Find exact account names, follow players you trust, and block accounts you do not want to interact with.</p>
+              <p>Search account names, follow players you trust, and block accounts you do not want to interact with.</p>
             </div>
             <button
               type="button"
@@ -4211,9 +4090,10 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
           <div className="online-browser-social-grid">
             <form className="online-browser-social-search" onSubmit={handleSocialLookupSubmit}>
               <label>
-                <span>Exact account name</span>
+                <span>Search account name</span>
                 <input
                   type="text"
+                  aria-label="Search account name"
                   value={socialLookupName}
                   onChange={(event) => setSocialLookupName(event.currentTarget.value)}
                   minLength={2}
@@ -4228,98 +4108,27 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               >
                 {socialLookupStatus === "loading" ? "Finding" : "Find Account"}
               </button>
-            </form>
-
-            <form className="online-browser-follow-policy" onSubmit={handleFollowPolicySubmit}>
-              <label>
-                <span>Who can newly follow me</span>
-                <select
-                  value={followPolicyDraft}
-                  onChange={(event) => setFollowPolicyDraft(event.currentTarget.value as OnlineAccountFollowPolicy)}
-                  disabled={privacyControlDisabled}
-                  aria-describedby={followPolicyHintId}
-                >
-                  <option value="everyone">Everyone can follow</option>
-                  <option value="nobody">Nobody new</option>
-                </select>
-              </label>
-              <span
-                id={followPolicyHintId}
-                className={`online-browser-field-hint ${privacyStatus === "error" ? "error" : ""}`}
-              >
-                {privacyStatus === "error"
-                  ? "Could not load social privacy."
-                  : "Existing follows are not removed."}
-              </span>
-              <button
-                type="submit"
-                className="online-browser-button subtle"
-                disabled={!canSaveFollowPolicy}
-              >
-                {socialAction === "privacy" ? "Saving" : "Save Privacy"}
-              </button>
-            </form>
-
-            <form className="online-browser-follow-policy" onSubmit={handlePresencePolicySubmit}>
-              <label>
-                <span>Who can see me online</span>
-                <select
-                  value={presencePolicyDraft}
-                  onChange={(event) => setPresencePolicyDraft(event.currentTarget.value as OnlineAccountPresencePolicy)}
-                  disabled={privacyControlDisabled}
-                  aria-describedby={presencePolicyHintId}
-                >
-                  <option value="followed">Accounts I follow</option>
-                  <option value="everyone">Everyone</option>
-                  <option value="nobody">Nobody</option>
-                </select>
-              </label>
-              <span
-                id={presencePolicyHintId}
-                className={`online-browser-field-hint ${privacyStatus === "error" ? "error" : ""}`}
-              >
-                {privacyStatus === "error"
-                  ? "Could not load social privacy."
-                  : "Only coarse status is shared."}
-              </span>
-              <button
-                type="submit"
-                className="online-browser-button subtle"
-                disabled={!canSavePresencePolicy}
-              >
-                {socialAction === "privacy" ? "Saving" : "Save Status"}
-              </button>
-            </form>
-
-            <form className="online-browser-follow-policy" onSubmit={handleChallengePolicySubmit}>
-              <label>
-                <span>Who can challenge me</span>
-                <select
-                  value={challengePolicyDraft}
-                  onChange={(event) => setChallengePolicyDraft(event.currentTarget.value as OnlineAccountChallengePolicy)}
-                  disabled={privacyControlDisabled}
-                  aria-describedby={challengePolicyHintId}
-                >
-                  <option value="followed">Accounts I follow</option>
-                  <option value="everyone">Everyone</option>
-                  <option value="nobody">Nobody</option>
-                </select>
-              </label>
-              <span
-                id={challengePolicyHintId}
-                className={`online-browser-field-hint ${privacyStatus === "error" ? "error" : ""}`}
-              >
-                {privacyStatus === "error"
-                  ? "Could not load social privacy."
-                  : "Existing challenge links are not removed."}
-              </span>
-              <button
-                type="submit"
-                className="online-browser-button subtle"
-                disabled={!canSaveChallengePolicy}
-              >
-                {socialAction === "privacy" ? "Saving" : "Save Challenges"}
-              </button>
+              {searchAccountProfiles && (
+                <div className="online-browser-social-search-results" role="listbox" aria-label="Account search suggestions">
+                  {socialSearchStatus === "loading" && <span>Searching...</span>}
+                  {socialSearchStatus === "error" && <span>Search unavailable.</span>}
+                  {socialSearchStatus === "ready" && socialSearchResults.length === 0 && (
+                    <span>No matching accounts.</span>
+                  )}
+                  {socialSearchResults.map((profile) => (
+                    <button
+                      key={profile.displayName}
+                      type="button"
+                      role="option"
+                      onClick={() => handleSocialSearchSelection(profile)}
+                      aria-label={`${profile.displayName} rating ${profile.rating?.display ?? "unrated"}`}
+                    >
+                      <span>{profile.displayName}</span>
+                      <span>{profile.rating?.display ?? "unrated"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </form>
           </div>
 

@@ -22,7 +22,7 @@ import {
   type OnlineRatingLeaderboardEntry,
   type OnlineAccountSocialActionResult,
 } from "../social";
-import { validateOnlineRating } from "../ratings";
+import { createDefaultOnlineRating, validateOnlineRating } from "../ratings";
 import {
   CreateOnlineAccountStoreInput,
   CreateOnlineAccountExternalSessionInput,
@@ -41,7 +41,9 @@ import {
   type OnlineAccountReportSubmissionResult,
   type ResolvedOnlineAccountSession,
   type SubmitOnlineAccountReportStoreInput,
+  type UpdateOnlineAccountPasswordInput,
   type UpdateOnlineAccountReportStatusInput,
+  type OnlineAccountPasswordUpdateResult,
 } from "./OnlineAccountStore";
 import { hashOnlineToken, isOnlineTokenCredentialHash } from "./onlineTokenCredentials";
 import {
@@ -441,6 +443,45 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return result.rows.length > 0;
   }
 
+  async updateAccountPassword(
+    input: UpdateOnlineAccountPasswordInput
+  ): Promise<OnlineAccountPasswordUpdateResult> {
+    await this.ensureSchema();
+    if (!isOnlineAccountPasswordCredentialHash(input.passwordHash)) {
+      throw new Error("Account password hash is invalid.");
+    }
+    return this.withTransaction(async (queryable) => {
+      const result = await queryable.query(
+        `
+          SELECT account_id, password_hash
+          FROM online_accounts
+          WHERE account_id = $1
+          LIMIT 1
+        `,
+        [input.accountId]
+      );
+      if (result.rows.length === 0) return { status: "not_found" };
+      const currentHash = typeof result.rows[0].password_hash === "string"
+        ? String(result.rows[0].password_hash)
+        : null;
+      if (currentHash) {
+        if (!input.currentPassword) return { status: "current_password_required" };
+        if (!(await verifyOnlineAccountPassword(input.currentPassword, currentHash))) {
+          return { status: "bad_current_password" };
+        }
+      }
+      await queryable.query(
+        `
+          UPDATE online_accounts
+          SET password_hash = $2, updated_at = $3
+          WHERE account_id = $1
+        `,
+        [input.accountId, input.passwordHash, input.updatedAt]
+      );
+      return { status: "ok" };
+    });
+  }
+
   async listRatingLeaderboard(limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
     await this.ensureSchema();
     const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
@@ -511,6 +552,50 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       return null;
     }
     return this.createProfile(viewerAccountId, target, this.queryable, viewedAt);
+  }
+
+  async searchProfiles(
+    viewerAccountId: string | null,
+    query: string,
+    limit = 10,
+    viewedAt = new Date().toISOString()
+  ): Promise<OnlineAccountPublicProfile[]> {
+    await this.ensureSchema();
+    const queryKey = normalizeOnlineAccountDisplayNameKey(query.trim());
+    if (!queryKey) return [];
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 20);
+    const result = await this.queryable.query(
+      `
+        SELECT a.account_id, a.display_name, a.created_at, a.updated_at
+        FROM online_accounts a
+        WHERE POSITION($1 IN a.display_name_normalized) > 0
+          AND (
+            $2::text IS NULL
+            OR a.account_id = $2
+            OR (
+              NOT EXISTS (
+                SELECT 1 FROM online_account_blocks b
+                WHERE b.blocker_account_id = a.account_id
+                  AND b.blocked_account_id = $2
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM online_account_blocks b
+                WHERE b.blocker_account_id = $2
+                  AND b.blocked_account_id = a.account_id
+              )
+            )
+          )
+        ORDER BY
+          CASE WHEN LEFT(a.display_name_normalized, LENGTH($1)) = $1 THEN 0 ELSE 1 END ASC,
+          lower(a.display_name) ASC,
+          a.display_name ASC
+        LIMIT $3
+      `,
+      [queryKey, viewerAccountId, boundedLimit]
+    );
+    return Promise.all(
+      result.rows.map((row) => this.createProfile(viewerAccountId, accountFromRow(row), this.queryable, viewedAt))
+    );
   }
 
   async listFollowingProfiles(accountId: string, viewedAt = new Date().toISOString()): Promise<OnlineAccountPublicProfile[]> {
@@ -1446,8 +1531,9 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       "SELECT payload FROM online_account_ratings WHERE account_id = $1",
       [accountId]
     );
-    if (result.rows.length === 0) return {};
-    const rating = validateOnlineRating(result.rows[0].payload, `online account rating ${accountId}`);
+    const rating = result.rows.length === 0
+      ? createDefaultOnlineRating(null)
+      : validateOnlineRating(result.rows[0].payload, `online account rating ${accountId}`);
     return { rating: createOnlineAccountPublicRating(rating) };
   }
 

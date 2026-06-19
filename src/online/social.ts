@@ -158,6 +158,17 @@ export interface OnlineAccountProfileResponse {
   profile: OnlineAccountPublicProfile;
 }
 
+export interface OnlineAccountSearchProfile {
+  schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
+  displayName: string;
+  rating?: OnlineAccountPublicRating;
+}
+
+export interface OnlineAccountSearchResponse {
+  protocolVersion: number;
+  profiles: OnlineAccountSearchProfile[];
+}
+
 export interface OnlineAccountFollowingResponse {
   protocolVersion: number;
   following: OnlineAccountPublicProfile[];

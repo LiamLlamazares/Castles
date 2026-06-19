@@ -176,6 +176,7 @@ import {
   type OnlineAccountReportReason,
   type OnlineAccountReportSummary,
   type OnlineAccountReportStatus,
+  type OnlineAccountSearchProfile,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardScope,
   type OnlineAccountSocialActionResult,
@@ -263,6 +264,9 @@ const ACCOUNT_SESSION_TOKEN_BYTES = 24;
 const RATING_LEADERBOARD_DEFAULT_LIMIT = 10;
 const RATING_LEADERBOARD_MAX_LIMIT = 50;
 const RATING_LEADERBOARD_SCOPES = new Set<OnlineRatingLeaderboardScope>(["global", "following"]);
+const ACCOUNT_SEARCH_DEFAULT_LIMIT = 8;
+const ACCOUNT_SEARCH_MAX_LIMIT = 20;
+const ACCOUNT_SEARCH_QUERY_MAX_LENGTH = 32;
 const RATING_LEADERBOARD_ENTRY_RESPONSE_KEYS = new Set(["schemaVersion", "displayName", "rating"]);
 const PUBLIC_RATING_RESPONSE_KEYS = new Set([
   "schemaVersion",
@@ -908,6 +912,49 @@ function parseRatingLeaderboardOptions(
     return { ok: false, message: "Rating leaderboard scope is invalid." };
   }
   return { ok: true, limit, scope: rawScope as OnlineRatingLeaderboardScope };
+}
+
+function parseAccountSearchOptions(
+  originalUrl: string
+): { ok: true; query: string; limit: number } | { ok: false; message: string } {
+  const url = new URL(originalUrl, "http://localhost");
+  if (hasSensitivePublicDirectoryQuery(url.searchParams)) {
+    return { ok: false, message: "Account search query is invalid." };
+  }
+  for (const name of url.searchParams.keys()) {
+    if (name !== "q" && name !== "limit") {
+      return { ok: false, message: "Account search query is invalid." };
+    }
+  }
+  if (url.searchParams.getAll("q").length !== 1 || url.searchParams.getAll("limit").length > 1) {
+    return { ok: false, message: "Account search query is invalid." };
+  }
+  const rawQuery = getSingleSearchParam(url.searchParams, "q");
+  if (
+    rawQuery === null ||
+    /[\u0000-\u001f\u007f]/.test(rawQuery) ||
+    stringContainsDurableSecret(rawQuery)
+  ) {
+    return { ok: false, message: "Account search query is invalid." };
+  }
+  const query = rawQuery.replace(/\s+/g, " ").trim();
+  if (
+    query.length === 0 ||
+    query.length > ACCOUNT_SEARCH_QUERY_MAX_LENGTH
+  ) {
+    return { ok: false, message: "Account search query is invalid." };
+  }
+  const rawLimit = getSingleSearchParam(url.searchParams, "limit");
+  const limit = rawLimit === null ? ACCOUNT_SEARCH_DEFAULT_LIMIT : Number(rawLimit);
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > ACCOUNT_SEARCH_MAX_LIMIT ||
+    String(limit) !== String(rawLimit ?? limit)
+  ) {
+    return { ok: false, message: "Account search limit is invalid." };
+  }
+  return { ok: true, query, limit };
 }
 
 function parseModerationReportQueueOptions(
@@ -1638,6 +1685,16 @@ function validateAccountPublicProfileResponseShape(value: unknown): OnlineAccoun
     presence: validateAccountPresenceResponseShape(value.presence),
     relationship: validateAccountRelationshipResponseShape(value.relationship),
   };
+}
+
+function validateAccountSearchProfileResponseShape(value: unknown): OnlineAccountSearchProfile {
+  const profile = validateAccountPublicProfileResponseShape(value);
+  const searchProfile: OnlineAccountSearchProfile = {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    displayName: profile.displayName,
+    ...(profile.rating ? { rating: profile.rating } : {}),
+  };
+  return searchProfile;
 }
 
 function validateAccountPrivacySettingsResponseShape(value: unknown): OnlineAccountPrivacySettings {
@@ -4140,6 +4197,71 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
     });
   });
 
+  app.post("/api/online/account/password", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account password requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSessionActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
+    const newPassword = normalizeOnlineAccountPassword(req.body?.newPassword);
+    if (!newPassword.ok) {
+      res.status(400).json({ error: newPassword.error });
+      return;
+    }
+    const rawCurrentPassword = req.body?.currentPassword;
+    let currentPassword: string | undefined;
+    if (rawCurrentPassword !== undefined) {
+      const normalizedCurrentPassword = normalizeOnlineAccountPassword(rawCurrentPassword);
+      if (!normalizedCurrentPassword.ok) {
+        res.status(401).json({
+          error: { code: "unauthorized", message: "Current password is incorrect." },
+        });
+        return;
+      }
+      currentPassword = normalizedCurrentPassword.value;
+    }
+    try {
+      const result = await accountStore.updateAccountPassword({
+        accountId: auth.account.accountId,
+        currentPassword,
+        passwordHash: await hashOnlineAccountPassword(newPassword.value),
+        updatedAt: auth.usedAt,
+      });
+      if (result.status === "not_found") {
+        res.status(404).json({
+          error: { code: "not_found", message: "Account was not found." },
+        });
+        return;
+      }
+      if (result.status === "current_password_required" || result.status === "bad_current_password") {
+        res.status(401).json({
+          error: { code: "unauthorized", message: "Current password is incorrect." },
+        });
+        return;
+      }
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        passwordEnabled: true,
+      });
+    } catch (error) {
+      console.error("Failed to update account password", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account password could not be updated." },
+      });
+    }
+  });
+
   app.get("/api/online/ratings/leaderboard", async (req, res) => {
     if (!await consumeRequestRateLimit("public_directory", req)) {
       res.status(429).json({
@@ -4180,6 +4302,49 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.rating.leaderboard", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Rating leaderboard could not be loaded." },
+      });
+    }
+  });
+
+  app.get("/api/online/accounts/search", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_read", req)) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account search requests were sent too quickly." },
+      });
+      return;
+    }
+    const parsed = parseAccountSearchOptions(req.originalUrl);
+    if (!parsed.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: parsed.message } });
+      return;
+    }
+    const auth =
+      req.headers.authorization === undefined
+        ? { ok: true as const, account: null, usedAt: new Date(options.now?.() ?? Date.now()).toISOString() }
+        : await resolveAccountBearer(req);
+    if (!auth.ok) {
+      log({ event: "online.account.search", status: "rejected", reason: auth.reason });
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    try {
+      const profiles = await accountStore.searchProfiles(
+        auth.account?.accountId ?? null,
+        parsed.query,
+        parsed.limit,
+        auth.usedAt
+      );
+      const responseProfiles = profiles.map(validateAccountSearchProfileResponseShape);
+      log({ event: "online.account.search", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profiles: responseProfiles,
+      });
+    } catch (error) {
+      console.error("Failed to search account profiles", error);
+      log({ event: "online.account.search", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account search could not be loaded." },
       });
     }
   });

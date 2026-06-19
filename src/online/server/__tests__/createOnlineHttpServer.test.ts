@@ -995,6 +995,204 @@ describe("createOnlineHttpServer", () => {
     expect(secondMeResponse.status).toBe(200);
   });
 
+  it("changes password-account passwords only after verifying the current password", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Liam", "correct-horse-battery-staple");
+
+    const missingCurrentResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ newPassword: "new-local-password" }),
+    });
+    const wrongCurrentResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ currentPassword: "wrong-password", newPassword: "new-local-password" }),
+    });
+    const shortPasswordResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ currentPassword: "correct-horse-battery-staple", newPassword: "short" }),
+    });
+    const queryTokenResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/password?token=${account.session.token}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", ...bearer(account.session.token) },
+        body: JSON.stringify({ currentPassword: "correct-horse-battery-staple", newPassword: "new-local-password" }),
+      }
+    );
+    const changedResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ currentPassword: "correct-horse-battery-staple", newPassword: "new-local-password" }),
+    });
+    const changed = await changedResponse.json();
+    const oldPasswordResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "liam", password: "correct-horse-battery-staple" }),
+    });
+    const newPasswordResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "liam", password: "new-local-password" }),
+    });
+
+    expect(missingCurrentResponse.status).toBe(401);
+    expect(wrongCurrentResponse.status).toBe(401);
+    expect(shortPasswordResponse.status).toBe(400);
+    expect(queryTokenResponse.status).toBe(400);
+    expect(changedResponse.status).toBe(200);
+    expect(changed).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      passwordEnabled: true,
+    });
+    expect(oldPasswordResponse.status).toBe(401);
+    expect(newPasswordResponse.status).toBe(200);
+    expect(JSON.stringify(changed)).not.toContain("new-local-password");
+    expect(JSON.stringify(changed)).not.toContain("account_");
+  });
+
+  it("lets externally-created accounts set a local password from their authenticated session", async () => {
+    const accountStore = new MemoryOnlineAccountStore();
+    await accountStore.createSessionWithExternalLogin({
+      provider: "google",
+      providerSubject: "google-subject-123",
+      accountId: "account_google",
+      sessionId: "account_session_google",
+      displayNameCandidates: ["Google Liam"],
+      tokenHash: hashOnlineToken("google-session-token"),
+      createdAt: "2026-06-01T12:00:00.000Z",
+    });
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      accountStore,
+      now: () => Date.parse("2026-06-01T12:05:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+
+    const beforePasswordResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Google Liam", password: "google-local-password" }),
+    });
+    const setPasswordResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...bearer("google-session-token") },
+      body: JSON.stringify({ newPassword: "google-local-password" }),
+    });
+    const signedInResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Google Liam", password: "google-local-password" }),
+    });
+
+    expect(beforePasswordResponse.status).toBe(401);
+    expect(setPasswordResponse.status).toBe(200);
+    expect(await setPasswordResponse.json()).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      passwordEnabled: true,
+    });
+    expect(signedInResponse.status).toBe(200);
+  });
+
+  it("shows newly-created accounts as provisional 1500-rated profiles", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Testing");
+
+    const profileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Testing`, {
+      headers: bearer(account.session.token),
+    });
+    const profile = await profileResponse.json();
+
+    expect(profileResponse.status).toBe(200);
+    expect(profile.profile).toMatchObject({
+      schemaVersion: 1,
+      displayName: "Testing",
+      rating: {
+        schemaVersion: 1,
+        rating: 1500,
+        display: "1500?",
+        provisional: true,
+        games: 0,
+        updatedAt: null,
+      },
+    });
+    expect(JSON.stringify(profile)).not.toContain("account_");
+    expect(JSON.stringify(profile)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(profile)).not.toContain("deviation");
+  });
+
+  it("searches public account profiles by partial display name without leaking account internals", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const liam = await createAccountViaApi(port, "Liam");
+    await createAccountViaApi(port, "Liana");
+    await createAccountViaApi(port, "Samir");
+    await fetch(`http://127.0.0.1:${port}/api/online/account/follows/Liana`, {
+      method: "PUT",
+      headers: bearer(liam.session.token),
+    });
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/accounts/search?q=lia&limit=5`);
+    const body = await response.json();
+    const signedInResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts/search?q=lia&limit=5`, {
+      headers: bearer(liam.session.token),
+    });
+    const signedInBody = await signedInResponse.json();
+    const tokenQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/accounts/search?q=lia&token=secret`
+    );
+    const missingQueryResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts/search`);
+    const duplicateQueryResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts/search?q=li&q=lia`);
+    const badLimitResponse = await fetch(`http://127.0.0.1:${port}/api/online/accounts/search?q=lia&limit=100`);
+    const controlCharacterQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/accounts/search?q=li%0Aam`
+    );
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profiles: [
+        { displayName: "Liam", rating: { display: "1500?", games: 0 } },
+        { displayName: "Liana", rating: { display: "1500?", games: 0 } },
+      ],
+    });
+    expect(body.profiles).toHaveLength(2);
+    expect(signedInResponse.status).toBe(200);
+    expect(signedInBody.profiles).toHaveLength(2);
+    expect(tokenQueryResponse.status).toBe(400);
+    expect(missingQueryResponse.status).toBe(400);
+    expect(duplicateQueryResponse.status).toBe(400);
+    expect(badLimitResponse.status).toBe(400);
+    expect(controlCharacterQueryResponse.status).toBe(400);
+    expect(JSON.stringify(body)).not.toContain("Samir");
+    expect(JSON.stringify(body)).not.toContain("account_");
+    expect(JSON.stringify(body)).not.toContain("token");
+    expect(JSON.stringify(body)).not.toContain("session");
+    expect(JSON.stringify(signedInBody)).not.toContain("relationship");
+    expect(JSON.stringify(signedInBody)).not.toContain("following");
+    expect(JSON.stringify(signedInBody)).not.toContain("followedBy");
+    expect(JSON.stringify(signedInBody)).not.toContain("blocked");
+    expect(JSON.stringify(signedInBody)).not.toContain("presence");
+  });
+
   it("reports Google OAuth provider availability without exposing provider secrets", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example",
@@ -2616,6 +2814,14 @@ describe("createOnlineHttpServer", () => {
       profile: {
         schemaVersion: 1,
         displayName: "Samir",
+        rating: {
+          schemaVersion: 1,
+          rating: 1500,
+          display: "1500?",
+          provisional: true,
+          games: 0,
+          updatedAt: null,
+        },
         presence: { visibility: "hidden", status: null },
         relationship: { self: false, following: false, followedBy: false, blocked: false },
       },
@@ -2628,6 +2834,14 @@ describe("createOnlineHttpServer", () => {
       profile: {
         schemaVersion: 1,
         displayName: "Samir",
+        rating: {
+          schemaVersion: 1,
+          rating: 1500,
+          display: "1500?",
+          provisional: true,
+          games: 0,
+          updatedAt: null,
+        },
         presence: { visibility: "hidden", status: null },
         relationship: { self: false, following: false, followedBy: false, blocked: false },
       },

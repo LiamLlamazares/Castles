@@ -231,16 +231,6 @@ function socialPropsWithFollowing(following: ReturnType<typeof publicProfile>[] 
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       following,
     }),
-    loadAccountPrivacy: vi.fn().mockResolvedValue({
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      privacy: {
-        schemaVersion: 1,
-        followPolicy: "everyone",
-        presencePolicy: "followed",
-        challengePolicy: "followed",
-        updatedAt: null,
-      },
-    }),
     loadAccountProfile: vi.fn(),
     onFollowAccount: vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
@@ -265,16 +255,6 @@ function socialPropsWithFollowing(following: ReturnType<typeof publicProfile>[] 
         targetDisplayName: "Samir",
         reason: "abuse",
         createdAt: "2026-06-05T12:00:00.000Z",
-      },
-    }),
-    onUpdateAccountPrivacy: vi.fn().mockResolvedValue({
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      privacy: {
-        schemaVersion: 1,
-        followPolicy: "everyone",
-        presencePolicy: "followed",
-        challengePolicy: "followed",
-        updatedAt: null,
       },
     }),
   };
@@ -669,7 +649,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByText("Could not sign out everywhere.")).not.toBeInTheDocument();
   });
 
-  it("lets signed-in players find, follow, and manage follow privacy", async () => {
+  it("lets signed-in players find, follow, and block accounts without account settings controls", async () => {
     const account = accountFixture("Liam");
     const visibleProfile = publicProfile("Samir");
     const followedProfile = publicProfile("Samir", { following: true });
@@ -680,16 +660,6 @@ describe("OnlineGameBrowser", () => {
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       following: currentFollowing && !currentBlocked ? [followedProfile] : [],
     }));
-    const loadAccountPrivacy = vi.fn().mockResolvedValue({
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      privacy: {
-        schemaVersion: 1,
-        followPolicy: "everyone",
-        presencePolicy: "followed",
-        challengePolicy: "followed",
-        updatedAt: null,
-      },
-    });
     const loadAccountProfile = vi.fn().mockResolvedValue({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       profile: visibleProfile,
@@ -724,17 +694,6 @@ describe("OnlineGameBrowser", () => {
         profile: visibleProfile,
       });
     });
-    const onUpdateAccountPrivacy = vi.fn().mockImplementation((patch) => Promise.resolve({
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      privacy: {
-        schemaVersion: 1,
-        followPolicy: patch.followPolicy ?? "nobody",
-        presencePolicy: patch.presencePolicy ?? "followed",
-        challengePolicy: patch.challengePolicy ?? "followed",
-        updatedAt: "2026-06-04T12:00:00.000Z",
-      },
-    }));
-
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -746,22 +705,22 @@ describe("OnlineGameBrowser", () => {
         account={account}
         accountStatus="ready"
         loadAccountFollowing={loadAccountFollowing}
-        loadAccountPrivacy={loadAccountPrivacy}
         loadAccountProfile={loadAccountProfile}
         onFollowAccount={onFollowAccount}
         onUnfollowAccount={onUnfollowAccount}
         onBlockAccount={onBlockAccount}
         onUnblockAccount={onUnblockAccount}
-        onUpdateAccountPrivacy={onUpdateAccountPrivacy}
       />
     );
 
     const people = await screen.findByRole("region", { name: "People" });
     expect(await within(people).findByText("No followed players yet.")).toBeInTheDocument();
     expect(loadAccountFollowing).toHaveBeenCalledTimes(1);
-    expect(loadAccountPrivacy).toHaveBeenCalledTimes(1);
+    expect(within(people).queryByRole("combobox", { name: "Who can newly follow me" })).not.toBeInTheDocument();
+    expect(within(people).queryByRole("combobox", { name: "Who can see me online" })).not.toBeInTheDocument();
+    expect(within(people).queryByRole("combobox", { name: "Who can challenge me" })).not.toBeInTheDocument();
 
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Samir" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -788,30 +747,45 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onUnblockAccount).toHaveBeenCalledWith("Samir"));
     expect(await within(people).findByRole("button", { name: "Follow Samir" })).toBeInTheDocument();
     expect(within(people).getByRole("article", { name: "Profile Samir" })).toHaveTextContent("Not followed");
+  });
 
-    fireEvent.change(within(people).getByRole("combobox", { name: "Who can newly follow me" }), {
-      target: { value: "nobody" },
+  it("suggests account search matches in the Online People panel", async () => {
+    const loadAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: publicProfile("Samir"),
     });
-    fireEvent.click(within(people).getByRole("button", { name: "Save Privacy" }));
-
-    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ followPolicy: "nobody" }));
-    expect(await within(people).findByText("New follow permission: Nobody. Existing follows are not removed.")).toBeInTheDocument();
-
-    fireEvent.change(within(people).getByRole("combobox", { name: "Who can see me online" }), {
-      target: { value: "everyone" },
+    const searchAccountProfiles = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profiles: [{ schemaVersion: 1, displayName: "Samir", rating: publicRating() }],
     });
-    fireEvent.click(within(people).getByRole("button", { name: "Save Status" }));
 
-    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ presencePolicy: "everyone" }));
-    expect(await within(people).findByText("New online status visibility: Everyone. Exact session activity stays private.")).toBeInTheDocument();
+    render(
+      <OnlineGameBrowser
+        initialTab="lobby"
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
+        onBack={vi.fn()}
+        onSpectate={vi.fn()}
+        onReplay={vi.fn()}
+        account={accountFixture("Liam")}
+        accountStatus="ready"
+        {...socialPropsWithFollowing()}
+        loadAccountProfile={loadAccountProfile}
+        searchAccountProfiles={searchAccountProfiles}
+      />
+    );
 
-    fireEvent.change(within(people).getByRole("combobox", { name: "Who can challenge me" }), {
-      target: { value: "everyone" },
+    const people = await screen.findByRole("region", { name: "People" });
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
+      target: { value: "sam" },
     });
-    fireEvent.click(within(people).getByRole("button", { name: "Save Challenges" }));
 
-    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ challengePolicy: "everyone" }));
-    expect(await within(people).findByText("New challenge permission: Everyone. Existing challenge links are not removed.")).toBeInTheDocument();
+    await waitFor(() => expect(searchAccountProfiles).toHaveBeenCalledWith("sam"));
+    const suggestion = await within(people).findByRole("option", { name: "Samir rating 1500?" });
+    fireEvent.click(suggestion);
+
+    await waitFor(() => expect(loadAccountProfile).toHaveBeenCalledWith("Samir"));
+    expect(await within(people).findByRole("article", { name: "Profile Samir" })).toBeInTheDocument();
   });
 
   it("preserves trusted follow rejection messages", async () => {
@@ -840,7 +814,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const people = await screen.findByRole("region", { name: "People" });
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Samir" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -851,37 +825,6 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onFollowAccount).toHaveBeenCalledWith("Samir"));
     expect(await within(people).findByText("Follow changes are temporarily rate limited.")).toBeInTheDocument();
     expect(within(people).queryByText("Could not follow that account.")).not.toBeInTheDocument();
-  });
-
-  it("preserves trusted privacy-save rejection messages", async () => {
-    const onUpdateAccountPrivacy = vi.fn().mockRejectedValue(
-      new OnlineRequestError(403, "not_allowed", "Privacy settings cannot be changed right now.")
-    );
-
-    render(
-      <OnlineGameBrowser
-        initialTab="lobby"
-        loadGames={vi.fn().mockResolvedValue(directory([]))}
-        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
-        onBack={vi.fn()}
-        onSpectate={vi.fn()}
-        onReplay={vi.fn()}
-        account={accountFixture("Liam")}
-        accountStatus="ready"
-        {...socialPropsWithFollowing()}
-        onUpdateAccountPrivacy={onUpdateAccountPrivacy}
-      />
-    );
-
-    const people = await screen.findByRole("region", { name: "People" });
-    fireEvent.change(await within(people).findByRole("combobox", { name: "Who can newly follow me" }), {
-      target: { value: "nobody" },
-    });
-    fireEvent.click(within(people).getByRole("button", { name: "Save Privacy" }));
-
-    await waitFor(() => expect(onUpdateAccountPrivacy).toHaveBeenCalledWith({ followPolicy: "nobody" }));
-    expect(await within(people).findByText("Privacy settings cannot be changed right now.")).toBeInTheDocument();
-    expect(within(people).queryByText("Could not save follow privacy.")).not.toBeInTheDocument();
   });
 
   it("lets signed-in players challenge and copy invites for visible and followed accounts", async () => {
@@ -918,7 +861,7 @@ describe("OnlineGameBrowser", () => {
     await waitFor(() => expect(onCopyChallengeAccountInvite).toHaveBeenCalledWith("Samir"));
     expect(await within(people).findByText("Challenge invite copied for Samir.")).toBeInTheDocument();
 
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Ada" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -972,7 +915,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const people = await screen.findByRole("region", { name: "People" });
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Ada" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -1030,7 +973,7 @@ describe("OnlineGameBrowser", () => {
     expect(samirRow).not.toBeNull();
     expect(within(samirRow as HTMLElement).getByTitle("0 rated games")).toHaveTextContent("1500?");
 
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Ada" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -1177,7 +1120,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const people = await screen.findByRole("region", { name: "People" });
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Ada" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -1539,7 +1482,7 @@ describe("OnlineGameBrowser", () => {
     expect(adaRow as HTMLElement).not.toHaveTextContent("Mutual friend");
 
     const people = await screen.findByRole("region", { name: "People" });
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Mira" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -3279,22 +3222,11 @@ describe("OnlineGameBrowser", () => {
         protocolVersion: ONLINE_PROTOCOL_VERSION,
         following: [],
       }),
-      loadAccountPrivacy: vi.fn().mockResolvedValue({
-        protocolVersion: ONLINE_PROTOCOL_VERSION,
-        privacy: {
-          schemaVersion: 1,
-          followPolicy: "everyone",
-          presencePolicy: "followed",
-          challengePolicy: "followed",
-          updatedAt: null,
-        },
-      }),
       loadAccountProfile,
       onFollowAccount: vi.fn(),
       onUnfollowAccount: vi.fn(),
       onBlockAccount: vi.fn(),
       onUnblockAccount: vi.fn(),
-      onUpdateAccountPrivacy: vi.fn(),
     };
     const { rerender } = render(
       <OnlineGameBrowser
@@ -3311,7 +3243,7 @@ describe("OnlineGameBrowser", () => {
     );
 
     const people = await screen.findByRole("region", { name: "People" });
-    fireEvent.change(within(people).getByRole("textbox", { name: "Exact account name" }), {
+    fireEvent.change(within(people).getByRole("textbox", { name: "Search account name" }), {
       target: { value: "Samir" },
     });
     fireEvent.click(within(people).getByRole("button", { name: "Find Account" }));
@@ -3341,7 +3273,7 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByRole("article", { name: "Profile Samir" })).not.toBeInTheDocument();
   });
 
-  it("shows a visible error when follow privacy cannot load", async () => {
+  it("keeps account privacy controls out of the Online People panel", async () => {
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -3356,23 +3288,20 @@ describe("OnlineGameBrowser", () => {
           protocolVersion: ONLINE_PROTOCOL_VERSION,
           following: [],
         })}
-        loadAccountPrivacy={vi.fn().mockRejectedValue(new Error("privacy unavailable"))}
         loadAccountProfile={vi.fn()}
         onFollowAccount={vi.fn()}
         onUnfollowAccount={vi.fn()}
         onBlockAccount={vi.fn()}
         onUnblockAccount={vi.fn()}
-        onUpdateAccountPrivacy={vi.fn()}
       />
     );
 
     const people = await screen.findByRole("region", { name: "People" });
-    await waitFor(() =>
-      expect(within(people).getAllByText("Could not load social privacy.")).toHaveLength(3)
-    );
-    expect(within(people).getByRole("combobox", { name: "Who can newly follow me" })).toBeDisabled();
-    expect(within(people).getByRole("combobox", { name: "Who can see me online" })).toBeDisabled();
-    expect(within(people).getByRole("combobox", { name: "Who can challenge me" })).toBeDisabled();
+    expect(await within(people).findByText("No followed players yet.")).toBeInTheDocument();
+    expect(within(people).queryByRole("combobox", { name: "Who can newly follow me" })).not.toBeInTheDocument();
+    expect(within(people).queryByRole("combobox", { name: "Who can see me online" })).not.toBeInTheDocument();
+    expect(within(people).queryByRole("combobox", { name: "Who can challenge me" })).not.toBeInTheDocument();
+    expect(within(people).queryByText("Could not load social privacy.")).not.toBeInTheDocument();
   });
 
   it("filters loaded Lobby listings and current games by followed registered players", async () => {
@@ -3669,7 +3598,7 @@ describe("OnlineGameBrowser", () => {
 
     await waitFor(() => expect(loadAccountProfile).toHaveBeenCalledWith("Samir"));
     const people = screen.getByRole("region", { name: "People" });
-    expect(within(people).getByRole("textbox", { name: "Exact account name" })).toHaveValue("Samir");
+    expect(within(people).getByRole("textbox", { name: "Search account name" })).toHaveValue("Samir");
     const profileCard = await within(people).findByRole("article", { name: "Profile Samir" });
     expect(profileCard).toHaveTextContent("Follows you");
     await waitFor(() => expect(profileCard).toHaveFocus());

@@ -30,6 +30,7 @@ import {
   fetchOnlineAccountOAuthProviders,
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
+  searchOnlineAccountProfiles,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
   fetchOpenSeek,
@@ -77,6 +78,7 @@ import {
   unfollowOnlineAccount,
   unblockOnlineAccount,
   updateOnlineAccountPrivacy,
+  updateOnlineAccountPassword,
   updateOnlineAccountModerationReportStatus,
   OnlineRequestError,
 } from "../client";
@@ -1406,6 +1408,94 @@ describe("online client helpers", () => {
       status: 403,
       code: "not_allowed",
       message: "Privacy settings cannot be changed right now.",
+    });
+  });
+
+  it("searches online account profiles with sanitized discovery validation", async () => {
+    const profile = {
+      schemaVersion: 1,
+      displayName: "Liana",
+      rating: {
+        schemaVersion: 1,
+        rating: 1500,
+        display: "1500?",
+        provisional: true,
+        games: 0,
+        updatedAt: null,
+      },
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profiles: [profile] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profiles: [
+            {
+              ...profile,
+              relationship: { self: false, following: true, followedBy: false, blocked: false },
+            },
+          ],
+        }),
+      });
+
+    await expect(
+      searchOnlineAccountProfiles("lia", { limit: 5, account: { token: "account-token" } }, fetchImpl as any)
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profiles: [profile],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/accounts/search?q=lia&limit=5", {
+      headers: { authorization: "Bearer account-token" },
+    });
+    await expect(
+      searchOnlineAccountProfiles("lia", { limit: 5 }, fetchImpl as any)
+    ).rejects.toThrow(/search profile contains unsupported data/);
+  });
+
+  it("updates online account passwords through the account session boundary", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, passwordEnabled: true }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({
+          error: { code: "unauthorized", message: "Current password is incorrect." },
+        }),
+      });
+
+    await expect(
+      updateOnlineAccountPassword(
+        { token: "account-token" },
+        { currentPassword: "old-password", newPassword: "new-password" },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      passwordEnabled: true,
+    });
+    await expect(
+      updateOnlineAccountPassword(
+        { token: "account-token" },
+        { currentPassword: "bad-password", newPassword: "new-password" },
+        fetchImpl as any
+      )
+    ).rejects.toMatchObject({
+      name: "OnlineRequestError",
+      status: 401,
+      code: "unauthorized",
+      message: "Current password is incorrect.",
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/api/online/account/password", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer account-token" },
+      body: JSON.stringify({ currentPassword: "old-password", newPassword: "new-password" }),
     });
   });
 

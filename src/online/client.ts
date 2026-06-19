@@ -48,6 +48,7 @@ import {
   type OnlineAccountReportReason,
   type OnlineAccountReportResponse,
   type OnlineAccountReportStatus,
+  type OnlineAccountSearchResponse,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardResponse,
   type OnlineRatingLeaderboardScope,
@@ -98,6 +99,7 @@ export class OnlineRequestError extends Error {
 const ONLINE_REJECT_CODE_SET = new Set<OnlineRejectCode>(ONLINE_REJECT_CODES);
 const MAX_ONLINE_ERROR_MESSAGE_LENGTH = 240;
 const ONLINE_ACCOUNT_PROFILE_RESPONSE_KEYS = new Set(["protocolVersion", "profile"]);
+const ONLINE_ACCOUNT_SEARCH_RESPONSE_KEYS = new Set(["protocolVersion", "profiles"]);
 const ONLINE_ACCOUNT_FOLLOWING_RESPONSE_KEYS = new Set(["protocolVersion", "following"]);
 const ONLINE_ACCOUNT_PRIVACY_RESPONSE_KEYS = new Set(["protocolVersion", "privacy"]);
 const ONLINE_ACCOUNT_MODERATION_QUEUE_RESPONSE_KEYS = new Set([
@@ -242,6 +244,7 @@ export type {
   OnlineAccountPublicRating,
   OnlineAccountReportInput,
   OnlineAccountReportResponse,
+  OnlineAccountSearchResponse,
   OnlineRatingLeaderboardEntry,
   OnlineRatingLeaderboardResponse,
   OnlineAccountChallengeDirectoryResponse,
@@ -1009,6 +1012,54 @@ function validateProfileResponse(body: unknown, label: string): OnlineAccountPro
   };
 }
 
+function validateOnlineAccountSearchProfile(value: unknown, label: string): OnlineAccountSearchResponse["profiles"][number] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedSearchProfileKeys = new Set(["schemaVersion", "displayName", "rating"]);
+  assertAllowedKeys(
+    record,
+    allowedSearchProfileKeys,
+    `${label} was malformed: search profile contains unsupported data.`
+  );
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label} was malformed: schemaVersion is invalid.`);
+  }
+  if (typeof record.displayName !== "string" || record.displayName.length === 0) {
+    throw new Error(`${label} was malformed: displayName is invalid.`);
+  }
+  if (stringContainsDurableSecret(record.displayName)) {
+    throw new Error(`${label} was malformed: displayName must not contain secrets.`);
+  }
+  const rating = record.rating === undefined
+    ? undefined
+    : validateOnlineAccountPublicRating(record.rating, `${label} was malformed: rating`);
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    displayName: record.displayName,
+    ...(rating ? { rating } : {}),
+  };
+}
+
+function validateOnlineAccountSearchResponse(body: unknown, label: string): OnlineAccountSearchResponse {
+  const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_SEARCH_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
+  if (!Array.isArray(record.profiles)) {
+    throw new Error(`${label} response was malformed: profiles is invalid.`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    profiles: record.profiles.map((profile, index) =>
+      validateOnlineAccountSearchProfile(profile, `${label}.profiles[${index}]`)
+    ),
+  };
+}
+
 function validateOnlineAccountPrivacyResponse(
   body: unknown,
   label: string
@@ -1103,6 +1154,23 @@ export async function fetchOnlinePublicProfile(
     throw new Error(`Could not load online profile (${response.status})`);
   }
   return validateProfileResponse(await response.json(), "Online public profile");
+}
+
+export async function searchOnlineAccountProfiles(
+  query: string,
+  options: { limit?: number; account?: OnlineAccountSessionParams } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountSearchResponse> {
+  const params = new URLSearchParams();
+  params.set("q", query);
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const response = await fetchImpl(`/api/online/accounts/search?${params.toString()}`, {
+    headers: accountAuthorizationHeader(options.account),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not search online accounts (${response.status})`);
+  }
+  return validateOnlineAccountSearchResponse(await response.json(), "Online account search");
 }
 
 export async function fetchOnlineAccountFollowing(
@@ -1644,6 +1712,42 @@ export async function updateOnlineAccountPrivacy(
     );
   }
   return validateOnlineAccountPrivacyResponse(await response.json(), "Online account privacy update");
+}
+
+export interface OnlineAccountPasswordUpdateResponse {
+  protocolVersion: typeof ONLINE_PROTOCOL_VERSION;
+  passwordEnabled: true;
+}
+
+export async function updateOnlineAccountPassword(
+  account: OnlineAccountSessionParams,
+  input: { currentPassword?: string; newPassword: string },
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountPasswordUpdateResponse> {
+  const response = await fetchImpl("/api/online/account/password", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await createOnlineRequestError(
+      response,
+      `Could not update online account password (${response.status})`
+    );
+  }
+  const record = validateVersionedObject(await response.json(), "Online account password update");
+  assertAllowedKeys(
+    record,
+    new Set(["protocolVersion", "passwordEnabled"]),
+    "Online account password update response was malformed: response contains unsupported data."
+  );
+  if (record.passwordEnabled !== true) {
+    throw new Error("Online account password update response was malformed: passwordEnabled is invalid.");
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    passwordEnabled: true,
+  };
 }
 
 export interface FetchOnlineAccountChallengesOptions {

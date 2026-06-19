@@ -227,6 +227,23 @@
   font: inherit;
 }
 
+.online-account-password-rules {
+  margin-top: -2px;
+  color: #8f8f8f;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.online-account-password-rules span {
+  display: block;
+  font-weight: 800;
+}
+
+.online-account-password-rules ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
 .online-account-dialog-form input:focus-visible,
 .online-account-dialog-button:focus-visible,
 .online-account-dialog-close:focus-visible,
@@ -331,6 +348,7 @@
 [data-theme="light"] .online-account-dialog-description,
 [data-theme="light"] .online-account-dialog-signed-in p,
 [data-theme="light"] .online-account-dialog-form label,
+[data-theme="light"] .online-account-password-rules,
 [data-theme="light"] .online-account-dialog-oauth-message,
 [data-theme="light"] .online-account-dialog-message {
   color: #555555;

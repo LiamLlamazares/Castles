@@ -389,6 +389,13 @@ export function OnlineAccountDialog({
                   autoComplete="current-password"
                 />
               </label>
+              <div className="online-account-password-rules" aria-live="polite">
+                <span>Password requirements</span>
+                <ul>
+                  <li>8-128 characters</li>
+                  <li>No control characters</li>
+                </ul>
+              </div>
               <div className="online-account-dialog-actions">
                 <button
                   type="submit"

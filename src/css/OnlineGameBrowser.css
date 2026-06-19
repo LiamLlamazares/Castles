@@ -244,8 +244,7 @@
   align-items: end;
 }
 
-.online-browser-social-search,
-.online-browser-follow-policy {
+.online-browser-social-search {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
@@ -253,8 +252,7 @@
   min-width: 0;
 }
 
-.online-browser-social-search label,
-.online-browser-follow-policy label {
+.online-browser-social-search label {
   display: grid;
   gap: 6px;
   color: #bababa;
@@ -262,14 +260,49 @@
   min-width: 0;
 }
 
-.online-browser-social-search input,
-.online-browser-follow-policy select {
+.online-browser-social-search input {
   min-height: 42px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 9px 12px;
   font: inherit;
   min-width: 0;
+}
+
+.online-browser-social-search-results {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  min-height: 0;
+}
+
+.online-browser-social-search-results:empty {
+  display: none;
+}
+
+.online-browser-social-search-results > span,
+.online-browser-social-search-results button {
+  min-height: 38px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.045);
+  color: #f1eee7;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.online-browser-social-search-results button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.online-browser-social-search-results button:hover {
+  border-color: #b98522;
+  background: rgba(185, 133, 34, 0.18);
 }
 
 .online-browser-field-hint {
@@ -282,11 +315,6 @@
 
 .online-browser-field-hint.error {
   color: #ffb7a8;
-}
-
-.online-browser-follow-policy .online-browser-button {
-  grid-column: 2;
-  grid-row: 1;
 }
 
 .online-browser-social-message {
@@ -719,7 +747,6 @@
 .online-browser-account-form input:focus-visible,
 .online-browser-social-search input:focus-visible,
 .online-browser-invite-field input:focus-visible,
-.online-browser-follow-policy select:focus-visible,
 .online-browser-select select:focus-visible,
 .online-seek-owner-panel:focus-visible,
 .online-browser-closed-listing:focus-visible {
@@ -1572,7 +1599,6 @@
   .online-browser-quick-match-panel,
   .online-browser-social-grid,
   .online-browser-social-search,
-  .online-browser-follow-policy,
   .online-browser-report-fields,
   .online-browser-profile-card,
   .online-browser-following-row,
@@ -1621,11 +1647,6 @@
 
   .online-browser-account-challenge-side {
     justify-items: stretch;
-  }
-
-  .online-browser-follow-policy .online-browser-button {
-    grid-column: auto;
-    grid-row: auto;
   }
 
   .online-browser-account-actions .online-browser-button {
@@ -1806,7 +1827,6 @@
   .online-browser-account-copy p,
   .online-browser-account-form label,
   .online-browser-social-search label,
-  .online-browser-follow-policy label,
   .online-browser-section-header p,
   .online-browser-control-title,
   .online-browser-section-kicker,

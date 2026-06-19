@@ -89,10 +89,12 @@ import {
   resolveOnlineJoinParams,
   resolveStoredOnlineJoinParams,
   signInOnlineAccount,
+  searchOnlineAccountProfiles,
   startQuickMatch,
   unblockOnlineAccount,
   unfollowOnlineAccount,
   updateOnlineAccountPrivacy,
+  updateOnlineAccountPassword,
   updateOnlineGameVisibility,
   OnlineRequestError,
   OnlineChallengeParams,
@@ -735,8 +737,9 @@ function App() {
 
   const clearProfileUrl = () => {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has("profile") && !url.hash) return;
+    if (!url.searchParams.has("profile") && !url.searchParams.has("section") && !url.hash) return;
     url.searchParams.delete("profile");
+    url.searchParams.delete("section");
     url.hash = "";
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   };
@@ -1630,6 +1633,20 @@ function App() {
       throw new Error("No online account session is available.");
     }
     return updateOnlineAccountPrivacy({ token: onlineAccountSession.token }, patch);
+  }, [onlineAccountSession?.token]);
+
+  const handleUpdateOnlineAccountPassword = useCallback((input: { currentPassword?: string; newPassword: string }) => {
+    if (!onlineAccountSession) {
+      throw new Error("No online account session is available.");
+    }
+    return updateOnlineAccountPassword({ token: onlineAccountSession.token }, input);
+  }, [onlineAccountSession?.token]);
+
+  const handleSearchOnlineAccountProfiles = useCallback((query: string) => {
+    return searchOnlineAccountProfiles(query, {
+      limit: 5,
+      ...(onlineAccountSession ? { account: { token: onlineAccountSession.token } } : {}),
+    });
   }, [onlineAccountSession?.token]);
 
   const handleLoadOnlineAccountSessions = useCallback(() => {
@@ -3097,6 +3114,7 @@ function App() {
           onDeclineAccountChallenge={onlineAccountSession ? handleDeclineOnlineAccountChallenge : undefined}
           onCancelAccountChallenge={onlineAccountSession ? handleCancelOnlineAccountChallenge : undefined}
           loadAccountProfile={onlineAccountSession ? handleLoadOnlineAccountProfile : undefined}
+          searchAccountProfiles={handleSearchOnlineAccountProfiles}
           loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
           loadRatingLeaderboard={onlineAccountSession ? handleLoadOnlineRatingLeaderboard : undefined}
           onFollowAccount={onlineAccountSession ? handleFollowOnlineAccount : undefined}
@@ -3106,8 +3124,6 @@ function App() {
           onReportAccount={onlineAccountSession ? handleReportOnlineAccount : undefined}
           onChallengeAccount={onlineAccountSession ? handleChallengeOnlineAccount : undefined}
           onCopyChallengeAccountInvite={onlineAccountSession ? handleCopyChallengeOnlineAccountInvite : undefined}
-          loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}
-          onUpdateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}
         />
       )}
 
@@ -3120,7 +3136,11 @@ function App() {
           loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
           loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}
           loadAccountPrivacy={onlineAccountSession ? handleLoadOnlineAccountPrivacy : undefined}
+          updateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}
+          updateAccountPassword={onlineAccountSession ? handleUpdateOnlineAccountPassword : undefined}
           loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}
+          searchProfiles={handleSearchOnlineAccountProfiles}
+          onOpenProfile={handleOpenProfile}
           onBack={returnToPreviousView}
           backLabel={currentBackLabel}
           onOpenGame={handleOpenGame}

@@ -328,6 +328,22 @@ class FakeAccountQueryable {
       return { rows: account ? [account] : [] };
     }
 
+    if (normalizedText.startsWith("SELECT account_id, password_hash FROM online_accounts WHERE account_id")) {
+      const [accountId] = values as string[];
+      const account = this.accounts.get(accountId);
+      return { rows: account ? [{ account_id: account.account_id, password_hash: account.password_hash }] : [] };
+    }
+
+    if (normalizedText.startsWith("UPDATE online_accounts SET password_hash")) {
+      const [accountId, passwordHash, updatedAt] = values as string[];
+      const account = this.accounts.get(accountId);
+      if (account) {
+        account.password_hash = passwordHash;
+        account.updated_at = updatedAt;
+      }
+      return { rows: [] };
+    }
+
     if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE display_name_normalized")) {
       const [displayNameNormalized] = values as string[];
       const accountId = this.accountsByDisplayName.get(displayNameNormalized);
@@ -339,6 +355,29 @@ class FakeAccountQueryable {
       const [accountId] = values as string[];
       const account = this.accounts.get(accountId);
       return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT a.account_id, a.display_name, a.created_at, a.updated_at FROM online_accounts a WHERE POSITION")) {
+      const [queryKey, viewerAccountId, limit] = values as [string, string | null, number];
+      const rows = Array.from(this.accounts.values())
+        .filter((account) => String(account.display_name_normalized).includes(queryKey))
+        .filter((account) => {
+          if (viewerAccountId === null || account.account_id === viewerAccountId) return true;
+          return (
+            !this.blocks.has(socialKey(account.account_id, viewerAccountId)) &&
+            !this.blocks.has(socialKey(viewerAccountId, account.account_id))
+          );
+        })
+        .sort((left, right) => {
+          const leftStarts = String(left.display_name_normalized).startsWith(queryKey) ? 0 : 1;
+          const rightStarts = String(right.display_name_normalized).startsWith(queryKey) ? 0 : 1;
+          if (leftStarts !== rightStarts) return leftStarts - rightStarts;
+          const lowerCompare = String(left.display_name).toLowerCase().localeCompare(String(right.display_name).toLowerCase());
+          if (lowerCompare !== 0) return lowerCompare;
+          return String(left.display_name).localeCompare(String(right.display_name));
+        })
+        .slice(0, limit);
+      return { rows };
     }
 
     if (normalizedText.startsWith("SELECT 1 FROM online_account_follows")) {
@@ -706,6 +745,88 @@ describe("PostgresOnlineAccountStore", () => {
     });
     await expect(store.resolveSessionToken("second-device-token", "2026-06-03T12:08:00.000Z")).resolves.toMatchObject({
       sessionId: "account_session_second",
+    });
+  });
+
+  it("updates password-account passwords only after verifying the current password", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      passwordHash: await hashOnlineAccountPassword("old-password"),
+      tokenHash: hashOnlineToken("first-device-token"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    await expect(store.updateAccountPassword({
+      accountId: "account_liam",
+      passwordHash: await hashOnlineAccountPassword("new-password"),
+      updatedAt: "2026-06-03T12:04:00.000Z",
+    })).resolves.toEqual({ status: "current_password_required" });
+    await expect(store.updateAccountPassword({
+      accountId: "account_liam",
+      currentPassword: "wrong-password",
+      passwordHash: await hashOnlineAccountPassword("new-password"),
+      updatedAt: "2026-06-03T12:05:00.000Z",
+    })).resolves.toEqual({ status: "bad_current_password" });
+    await expect(store.updateAccountPassword({
+      accountId: "account_liam",
+      currentPassword: "old-password",
+      passwordHash: await hashOnlineAccountPassword("new-password"),
+      updatedAt: "2026-06-03T12:06:00.000Z",
+    })).resolves.toEqual({ status: "ok" });
+
+    expect(queryable.accounts.get("account_liam").updated_at).toBe("2026-06-03T12:06:00.000Z");
+    await expect(store.createSessionWithPassword({
+      sessionId: "account_session_old_password",
+      displayName: "Liam",
+      password: "old-password",
+      tokenHash: hashOnlineToken("old-password-token"),
+      createdAt: "2026-06-03T12:07:00.000Z",
+    })).resolves.toBeNull();
+    await expect(store.createSessionWithPassword({
+      sessionId: "account_session_new_password",
+      displayName: "Liam",
+      password: "new-password",
+      tokenHash: hashOnlineToken("new-password-token"),
+      createdAt: "2026-06-03T12:08:00.000Z",
+    })).resolves.toMatchObject({
+      sessionId: "account_session_new_password",
+      account: { displayName: "Liam" },
+    });
+  });
+
+  it("lets externally-created accounts set a local password without a current password", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createSessionWithExternalLogin({
+      provider: "google",
+      providerSubject: "google-subject-123",
+      accountId: "account_google",
+      sessionId: "account_session_google_first",
+      displayNameCandidates: ["Google Player"],
+      tokenHash: hashOnlineToken("google-token-one"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    await expect(store.updateAccountPassword({
+      accountId: "account_google",
+      passwordHash: await hashOnlineAccountPassword("new-password"),
+      updatedAt: "2026-06-03T12:05:00.000Z",
+    })).resolves.toEqual({ status: "ok" });
+    await expect(store.createSessionWithPassword({
+      sessionId: "account_session_password",
+      displayName: "Google Player",
+      password: "new-password",
+      tokenHash: hashOnlineToken("password-token"),
+      createdAt: "2026-06-03T12:06:00.000Z",
+    })).resolves.toMatchObject({
+      sessionId: "account_session_password",
+      account: { displayName: "Google Player" },
     });
   });
 
@@ -1216,6 +1337,45 @@ describe("PostgresOnlineAccountStore", () => {
       relationship: { self: false, following: false, followedBy: false, blocked: false },
     });
     expect(queryable.advisoryLocks).toContain("account_liam|account_samir");
+  });
+
+  it("searches profiles with literal PostgreSQL characters while respecting block visibility", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    for (const [accountId, displayName, createdAt] of [
+      ["account_liam", "Liam", "2026-06-03T12:00:00.000Z"],
+      ["account_samir", "Samir", "2026-06-03T12:01:00.000Z"],
+      ["account_sam_wild", "Sam_%Wild", "2026-06-03T12:02:00.000Z"],
+      ["account_alpha_sam", "Alpha_Sam", "2026-06-03T12:03:00.000Z"],
+      ["account_under", "Under_score", "2026-06-03T12:04:00.000Z"],
+    ] as const) {
+      await store.createAccount({
+        accountId,
+        sessionId: `account_session_${accountId}`,
+        displayName,
+        passwordHash: TEST_PASSWORD_HASH,
+        tokenHash: hashOnlineToken(`token-${accountId}`),
+        createdAt,
+      });
+    }
+    queryable.blocks.add(socialKey("account_samir", "account_liam"));
+
+    const percentMatches = await store.searchProfiles("account_liam", "%", 10, "2026-06-03T12:05:00.000Z");
+    expect(percentMatches.map((profile) => profile.displayName)).toEqual(["Sam_%Wild"]);
+    expect(percentMatches[0].rating).toMatchObject({ display: "1500?", games: 0 });
+
+    const underscoreMatches = await store.searchProfiles("account_liam", "_", 10, "2026-06-03T12:05:00.000Z");
+    expect(underscoreMatches.map((profile) => profile.displayName)).toEqual(["Alpha_Sam", "Sam_%Wild", "Under_score"]);
+
+    const samMatches = await store.searchProfiles("account_liam", "sam", 10, "2026-06-03T12:05:00.000Z");
+    expect(samMatches.map((profile) => profile.displayName)).toEqual(["Sam_%Wild", "Alpha_Sam"]);
+
+    const anonymousMatches = await store.searchProfiles(null, "sam", 10, "2026-06-03T12:05:00.000Z");
+    expect(anonymousMatches.map((profile) => profile.displayName)).toEqual(["Sam_%Wild", "Samir", "Alpha_Sam"]);
+    expect(JSON.stringify(samMatches)).not.toContain("account_");
+    expect(JSON.stringify(samMatches)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(samMatches)).not.toContain("deviation");
   });
 
   it("submits account reports without exposing account ids", async () => {
