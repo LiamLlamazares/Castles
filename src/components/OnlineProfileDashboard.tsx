@@ -12,10 +12,16 @@ import {
   type OnlineAccount,
   type OnlineAccountSessionsResponse,
 } from "../online/accounts";
+import {
+  ONLINE_ACCOUNT_AVATAR_IMAGE_DATA_URL_MAX_LENGTH,
+  ONLINE_ACCOUNT_AVATAR_IMAGE_MIME_TYPES,
+  ONLINE_ACCOUNT_AVATAR_UPLOAD_SOURCE_MAX_BYTES,
+} from "../online/social";
 import type {
   OnlineAccountFollowingResponse,
   OnlineAccountAvatar,
   OnlineAccountAvatarColor,
+  OnlineAccountAvatarImageMimeType,
   OnlineAccountAvatarPreset,
   OnlineAccountProfilePatch,
   OnlineAccountPrivacyPatch,
@@ -120,11 +126,25 @@ function isPresencePrivate(profile: OnlineAccountPublicProfile | null): boolean 
   return profile?.presence.visibility === "hidden" || profile?.presence.status === null;
 }
 
+function isUploadedAvatar(avatar: OnlineAccountAvatar): avatar is OnlineAccountAvatar & { imageDataUrl: string } {
+  return "imageDataUrl" in avatar;
+}
+
+function presetAvatarColor(avatar: OnlineAccountAvatar | null): OnlineAccountAvatarColor {
+  return avatar && !isUploadedAvatar(avatar) ? avatar.color : "green";
+}
+
+function presetAvatarPreset(avatar: OnlineAccountAvatar | null): OnlineAccountAvatarPreset {
+  return avatar && !isUploadedAvatar(avatar) ? avatar.preset : "monarch";
+}
+
 function avatarMark(avatar: OnlineAccountAvatar): string {
+  if (isUploadedAvatar(avatar)) return "";
   return AVATAR_PRESET_OPTIONS.find((option) => option.value === avatar.preset)?.mark ?? "C";
 }
 
 function avatarAccessibleName(displayName: string, avatar: OnlineAccountAvatar): string {
+  if (isUploadedAvatar(avatar)) return `${displayName} uploaded profile picture`;
   return `${displayName} profile avatar, ${avatar.preset} on ${avatar.color}`;
 }
 
@@ -137,6 +157,18 @@ function OnlineProfileAvatar({
   avatar: OnlineAccountAvatar;
   decorative?: boolean;
 }) {
+  if (isUploadedAvatar(avatar)) {
+    return (
+      <span
+        className="online-profile-avatar online-profile-avatar-image"
+        role={decorative ? undefined : "img"}
+        aria-label={decorative ? undefined : avatarAccessibleName(displayName, avatar)}
+        aria-hidden={decorative ? "true" : undefined}
+      >
+        <img src={avatar.imageDataUrl} alt="" />
+      </span>
+    );
+  }
   if (decorative) {
     return (
       <span
@@ -178,33 +210,168 @@ function formatRatingDelta(delta: number): string {
   return delta > 0 ? `+${delta}` : String(delta);
 }
 
-function ratingGraphValueHeight(value: number, values: number[]): string {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (min === max) return "50%";
-  const normalized = (value - min) / (max - min);
-  return `${Math.round(30 + normalized * 62)}%`;
+interface RatingLineGraphPoint {
+  id: string;
+  rating: number;
+  label: string;
 }
 
-function ratingGraphBarHeight(entry: OnlineAccountRatingHistoryEntry, entries: OnlineAccountRatingHistoryEntry[]): string {
-  const values = entries.flatMap((candidate) => [candidate.ratingBefore, candidate.ratingAfter]);
-  return ratingGraphValueHeight(entry.ratingAfter, values);
+function ratingGraphDomain(points: RatingLineGraphPoint[]): { min: number; max: number; ticks: number[] } {
+  const ratings = points.map((point) => point.rating);
+  const rawMin = Math.min(...ratings);
+  const rawMax = Math.max(...ratings);
+  const spread = rawMax - rawMin;
+  const padding = spread === 0 ? 50 : Math.max(20, Math.round(spread * 0.32));
+  const min = Math.max(0, rawMin - padding);
+  const max = rawMax + padding;
+  return {
+    min,
+    max,
+    ticks: [max, Math.round((min + max) / 2), min],
+  };
 }
 
-function publicRatingGraphBarHeight(
-  point: OnlineAccountPublicRatingHistoryPoint,
-  points: OnlineAccountPublicRatingHistoryPoint[]
-): string {
-  return ratingGraphValueHeight(point.rating, points.map((candidate) => candidate.rating));
+function ratingGraphCoordinates(points: RatingLineGraphPoint[]): Array<RatingLineGraphPoint & { x: number; y: number }> {
+  const domain = ratingGraphDomain(points);
+  const width = 320;
+  const height = 112;
+  const left = 34;
+  const right = 12;
+  const top = 12;
+  const bottom = 20;
+  const graphWidth = width - left - right;
+  const graphHeight = height - top - bottom;
+  return points.map((point, index) => {
+    const x = points.length === 1
+      ? left + graphWidth / 2
+      : left + (index / (points.length - 1)) * graphWidth;
+    const normalized = (point.rating - domain.min) / Math.max(1, domain.max - domain.min);
+    const y = top + (1 - normalized) * graphHeight;
+    return { ...point, x, y };
+  });
 }
 
-function publicRatingGraphTone(
-  point: OnlineAccountPublicRatingHistoryPoint,
-  index: number,
-  points: OnlineAccountPublicRatingHistoryPoint[]
-): "gain" | "loss" {
-  if (index === 0) return "gain";
-  return point.rating >= points[index - 1].rating ? "gain" : "loss";
+function selfRatingGraphPoints(entries: OnlineAccountRatingHistoryEntry[]): RatingLineGraphPoint[] {
+  const chronological = entries.slice().reverse();
+  if (chronological.length === 0) return [];
+  const first = chronological[0];
+  return [
+    {
+      id: `${first.gameId}-${first.side}-before`,
+      rating: first.ratingBefore,
+      label: `${first.ratingBefore} before first rated game`,
+    },
+    ...chronological.map((entry) => ({
+      id: `${entry.gameId}-${entry.side}-after`,
+      rating: entry.ratingAfter,
+      label: `${entry.ratingAfter}${entry.provisional ? "?" : ""} after ${formatCount(entry.games, "rated game")}`,
+    })),
+  ];
+}
+
+function publicRatingGraphPoints(points: OnlineAccountPublicRatingHistoryPoint[]): RatingLineGraphPoint[] {
+  return points.map((point) => ({
+    id: `${point.appliedAt}-${point.games}-${point.rating}`,
+    rating: point.rating,
+    label: `${point.display} after ${formatCount(point.games, "rated game")}`,
+  }));
+}
+
+function RatingLineGraph({
+  points,
+  fallback,
+  label,
+}: {
+  points: RatingLineGraphPoint[];
+  fallback: string;
+  label: string;
+}) {
+  if (points.length === 0) {
+    return (
+      <div className="online-profile-rating-chart empty" role="img" aria-label={label}>
+        <span>{fallback}</span>
+      </div>
+    );
+  }
+  const domain = ratingGraphDomain(points);
+  const coordinates = ratingGraphCoordinates(points);
+  const path = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+  const latest = coordinates[coordinates.length - 1];
+  return (
+    <div className="online-profile-rating-chart" role="img" aria-label={label}>
+      <svg viewBox="0 0 320 112" focusable="false" aria-hidden="true">
+        {domain.ticks.map((tick, index) => (
+          <g key={`${tick}-${index}`}>
+            <line x1="34" x2="308" y1={12 + index * 40} y2={12 + index * 40} />
+            <text x="4" y={16 + index * 40}>{tick}</text>
+          </g>
+        ))}
+        {coordinates.length > 1 && <polyline points={path} />}
+        {coordinates.map((point) => (
+          <circle key={point.id} cx={point.x} cy={point.y} r={point.id === latest.id ? 4 : 3}>
+            <title>{point.label}</title>
+          </circle>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Could not read image upload."));
+      }
+    };
+    reader.onerror = () => reject(new Error("Could not read image upload."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageFromDataUrl(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not decode image upload."));
+    image.src = dataUrl;
+  });
+}
+
+async function compressAvatarImageDataUrl(dataUrl: string): Promise<string> {
+  if (typeof document === "undefined") return dataUrl;
+  const image = await imageFromDataUrl(dataUrl);
+  const canvas = document.createElement("canvas");
+  const size = 128;
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return dataUrl;
+  const sourceSize = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+  const sourceX = ((image.naturalWidth || image.width) - sourceSize) / 2;
+  const sourceY = ((image.naturalHeight || image.height) - sourceSize) / 2;
+  context.clearRect(0, 0, size, size);
+  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+  return canvas.toDataURL("image/webp", 0.84);
+}
+
+async function prepareAvatarImageDataUrl(file: File): Promise<string> {
+  if (!ONLINE_ACCOUNT_AVATAR_IMAGE_MIME_TYPES.has(file.type as OnlineAccountAvatarImageMimeType)) {
+    throw new Error("Use a PNG, JPEG, or WebP image.");
+  }
+  if (file.size > ONLINE_ACCOUNT_AVATAR_UPLOAD_SOURCE_MAX_BYTES) {
+    throw new Error("Use an image smaller than 2 MB.");
+  }
+  const original = await fileToDataUrl(file);
+  const compressed = await compressAvatarImageDataUrl(original).catch(() => original);
+  const selected = compressed.length <= original.length ? compressed : original;
+  if (selected.length > ONLINE_ACCOUNT_AVATAR_IMAGE_DATA_URL_MAX_LENGTH) {
+    throw new Error("Use a smaller image; the saved avatar must stay under 96 KB.");
+  }
+  return selected;
 }
 
 function onlineRequestErrorMessage(error: unknown): string | null {
@@ -523,6 +690,8 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const ratingText = profile?.rating ? `Rating ${profile.rating.display}` : "Rating unrated";
   const ratedGameText = profile?.rating ? formatCount(profile.rating.games, "rated game") : "0 rated games";
   const publicRatingHistoryChronological = publicRatingHistory.slice().reverse();
+  const selfRatingChartPoints = selfRatingGraphPoints(ratingHistory);
+  const publicRatingChartPoints = publicRatingGraphPoints(publicRatingHistoryChronological);
   const profileSections = isSelfDashboard ? SELF_PROFILE_SECTIONS : PUBLIC_PROFILE_SECTIONS;
   const showsOverviewSection = activeSection === "summary";
   const showsGamesSection = showsOverviewSection || activeSection === "games";
@@ -553,16 +722,39 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     setAvatarDraft((current) => ({
       schemaVersion: 1,
       preset,
-      color: current?.color ?? "green",
+      color: presetAvatarColor(current),
     }));
   };
 
   const handleAvatarColorChange = (color: OnlineAccountAvatarColor) => {
     setAvatarDraft((current) => ({
       schemaVersion: 1,
-      preset: current?.preset ?? "monarch",
+      preset: presetAvatarPreset(current),
       color,
     }));
+  };
+
+  const handleAvatarUploadChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    setAvatarStatus("loading");
+    setSettingsMessage("");
+    setSettingsMessageTone("status");
+    try {
+      const imageDataUrl = await prepareAvatarImageDataUrl(file);
+      setAvatarDraft({
+        schemaVersion: 1,
+        imageDataUrl,
+      });
+      setSettingsMessage("Image ready. Save avatar to publish it.");
+      setSettingsMessageTone("status");
+      setAvatarStatus("ready");
+    } catch (error) {
+      setSettingsMessage(error instanceof Error ? error.message : "Avatar image could not be prepared.");
+      setSettingsMessageTone("error");
+      setAvatarStatus("error");
+    }
   };
 
   const handleSaveAvatar = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -798,19 +990,11 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <span className="online-profile-kicker">Rating</span>
               <h2>Current Rating</h2>
               <p>{ratedGameText}</p>
-              <div className="online-profile-rating-strip" role="img" aria-label="Rating history graph">
-                {ratingHistory.length === 0 ? (
-                  <span>{profile?.rating?.display ?? "1500?"}</span>
-                ) : (
-                  ratingHistory.slice().reverse().map((entry) => (
-                    <span
-                      key={`${entry.gameId}-${entry.side}`}
-                      className={entry.ratingDelta >= 0 ? "gain" : "loss"}
-                      style={{ height: ratingGraphBarHeight(entry, ratingHistory) }}
-                    />
-                  ))
-                )}
-              </div>
+              <RatingLineGraph
+                points={selfRatingChartPoints}
+                fallback={profile?.rating?.display ?? "1500?"}
+                label="Rating history graph"
+              />
               <h3>Rating History</h3>
               {ratingHistory.length === 0 ? (
                 <p>No rated games yet.</p>
@@ -875,15 +1059,27 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                   <h3>Profile Picture</h3>
                   <div className="online-profile-avatar-settings">
                     <OnlineProfileAvatar displayName={displayName} avatar={avatarDraft} decorative />
+                    <fieldset className="online-profile-avatar-upload">
+                      <legend>Upload</legend>
+                      <label>
+                        <span>Upload PNG, JPEG, or WebP</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={handleAvatarUploadChange}
+                        />
+                      </label>
+                      <p>Images are cropped locally and saved as a small profile picture.</p>
+                    </fieldset>
                     <fieldset>
-                      <legend>Avatar</legend>
+                      <legend>Built-in Avatar</legend>
                       <div className="online-profile-choice-grid">
                         {AVATAR_PRESET_OPTIONS.map((option) => (
                           <label key={option.value}>
                             <input
                               type="radio"
                               name="online-profile-avatar-preset"
-                              checked={avatarDraft.preset === option.value}
+                              checked={!isUploadedAvatar(avatarDraft) && avatarDraft.preset === option.value}
                               onChange={() => handleAvatarPresetChange(option.value)}
                             />
                             <span>{option.label} avatar</span>
@@ -899,7 +1095,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                             <input
                               type="radio"
                               name="online-profile-avatar-color"
-                              checked={avatarDraft.color === option.value}
+                              checked={!isUploadedAvatar(avatarDraft) && avatarDraft.color === option.value}
                               onChange={() => handleAvatarColorChange(option.value)}
                             />
                             <span>{option.label} avatar color</span>
@@ -1101,22 +1297,11 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <span className="online-profile-kicker">Rating</span>
               <h2>Current Rating</h2>
               <p>{ratedGameText}</p>
-              <div className="online-profile-rating-strip" role="img" aria-label="Public rating history graph">
-                {publicRatingHistoryStatus === "loading" ? (
-                  <span>Loading</span>
-                ) : publicRatingHistoryChronological.length === 0 ? (
-                  <span>{profile?.rating?.display ?? "1500?"}</span>
-                ) : (
-                  publicRatingHistoryChronological.map((point, index) => (
-                    <span
-                      key={`${point.appliedAt}-${point.games}-${point.rating}`}
-                      className={publicRatingGraphTone(point, index, publicRatingHistoryChronological)}
-                      style={{ height: publicRatingGraphBarHeight(point, publicRatingHistoryChronological) }}
-                      title={`${point.display} after ${formatCount(point.games, "rated game")}`}
-                    />
-                  ))
-                )}
-              </div>
+              <RatingLineGraph
+                points={publicRatingHistoryStatus === "loading" ? [] : publicRatingChartPoints}
+                fallback={publicRatingHistoryStatus === "loading" ? "Loading" : profile?.rating?.display ?? "1500?"}
+                label="Public rating history graph"
+              />
               <h3>Rating History</h3>
               {publicRatingHistoryStatus === "error" ? (
                 <p className="online-profile-error">Public rating history could not be loaded.</p>

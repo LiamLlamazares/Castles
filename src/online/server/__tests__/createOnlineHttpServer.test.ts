@@ -862,6 +862,9 @@ afterEach(async () => {
 });
 
 describe("createOnlineHttpServer", () => {
+  const tinyAvatarDataUrl =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
   it("reports drain health as not ready without exposing the drain reason", async () => {
     const runtimeCoordinator = createSingleNodeOnlineRuntimeCoordinator({ nodeId: "node-a" });
     await runtimeCoordinator.startDrain({
@@ -1161,6 +1164,19 @@ describe("createOnlineHttpServer", () => {
       headers: { "content-type": "application/json", ...bearer(account.session.token) },
       body: JSON.stringify({ avatar: { schemaVersion: 1, preset: "uploaded-url", color: "violet" } }),
     });
+    const remoteImageResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/profile`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ avatar: { schemaVersion: 1, imageDataUrl: "https://example.com/avatar.png" } }),
+    });
+    const uploadedResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/profile`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ avatar: { schemaVersion: 1, imageDataUrl: tinyAvatarDataUrl } }),
+    });
+    const uploadedBody = await uploadedResponse.json();
+    const uploadedPublicProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Testing`);
+    const uploadedPublicProfile = await uploadedPublicProfileResponse.json();
     const tokenQueryResponse = await fetch(
       `http://127.0.0.1:${port}/api/online/account/profile?token=${account.session.token}`,
       {
@@ -1183,9 +1199,24 @@ describe("createOnlineHttpServer", () => {
       relationship: { self: false },
     });
     expect(invalidResponse.status).toBe(400);
+    expect(remoteImageResponse.status).toBe(400);
+    expect(uploadedResponse.status).toBe(200);
+    expect(uploadedBody.profile).toMatchObject({
+      displayName: "Testing",
+      avatar: { schemaVersion: 1, imageDataUrl: tinyAvatarDataUrl },
+      relationship: { self: true },
+    });
+    expect(uploadedPublicProfileResponse.status).toBe(200);
+    expect(uploadedPublicProfile.profile).toMatchObject({
+      displayName: "Testing",
+      avatar: { schemaVersion: 1, imageDataUrl: tinyAvatarDataUrl },
+      relationship: { self: false },
+    });
     expect(tokenQueryResponse.status).toBe(400);
     expect(JSON.stringify(body)).not.toContain(account.account.accountId);
     expect(JSON.stringify(body)).not.toContain(account.session.token);
+    expect(JSON.stringify(uploadedBody)).not.toContain(account.account.accountId);
+    expect(JSON.stringify(uploadedBody)).not.toContain(account.session.token);
   });
 
   it("serves authenticated account rating history without leaking rating internals", async () => {

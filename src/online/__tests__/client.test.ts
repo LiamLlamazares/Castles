@@ -159,6 +159,9 @@ function publicSummary(overrides: Record<string, unknown> = {}) {
 }
 
 describe("online client helpers", () => {
+  const tinyAvatarDataUrl =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
   it("does not keep legacy opponent invite storage helpers", () => {
     const source = readFileSync(resolve(process.cwd(), "src/online/client.ts"), "utf8");
 
@@ -1637,6 +1640,57 @@ describe("online client helpers", () => {
       headers: { "content-type": "application/json", authorization: "Bearer account-token" },
       body: JSON.stringify({ avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } }),
     });
+  });
+
+  it("accepts bounded uploaded profile avatar images through the account session boundary", async () => {
+    const profile = {
+      schemaVersion: 1,
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, imageDataUrl: tinyAvatarDataUrl },
+      rating: {
+        schemaVersion: 1,
+        rating: 1500,
+        display: "1500?",
+        provisional: true,
+        games: 0,
+        updatedAt: null,
+      },
+      presence: { visibility: "visible", status: "online" },
+      relationship: { self: true, following: false, followedBy: false, blocked: false },
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: {
+            ...profile,
+            avatar: { schemaVersion: 1, imageDataUrl: tinyAvatarDataUrl, url: "https://evil.example/avatar.png" },
+          },
+        }),
+      });
+
+    await expect(
+      updateOnlineAccountProfile(
+        { token: "account-token" },
+        { avatar: { schemaVersion: 1, imageDataUrl: tinyAvatarDataUrl } },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile,
+    });
+    await expect(
+      updateOnlineAccountProfile(
+        { token: "account-token" },
+        { avatar: { schemaVersion: 1, imageDataUrl: tinyAvatarDataUrl } },
+        fetchImpl as any
+      )
+    ).rejects.toThrow(/avatar contains unsupported data/);
   });
 
   it("updates online account passwords through the account session boundary", async () => {

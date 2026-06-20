@@ -3,6 +3,9 @@ import { MemoryOnlineAccountStore } from "../OnlineAccountStore";
 import { hashOnlineAccountPassword } from "../onlinePasswordCredentials";
 import { hashOnlineToken } from "../onlineTokenCredentials";
 
+const TINY_AVATAR_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
 describe("MemoryOnlineAccountStore", () => {
   it("creates second-device sessions only after password verification", async () => {
     const store = new MemoryOnlineAccountStore();
@@ -133,6 +136,22 @@ describe("MemoryOnlineAccountStore", () => {
     await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
       displayName: "Liam",
       avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: false },
+    });
+    await expect(
+      store.updateProfileSettings(
+        "account_liam",
+        { avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL } },
+        "2026-06-03T12:06:00.000Z"
+      )
+    ).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
+      relationship: { self: true },
+    });
+    await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
       relationship: { self: false },
     });
   });

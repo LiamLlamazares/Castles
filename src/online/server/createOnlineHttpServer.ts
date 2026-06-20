@@ -163,6 +163,7 @@ import {
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   parseOnlineAccountModerationReportStatusPatch,
+  parseOnlineAccountAvatar,
   parseOnlineAccountProfilePatch,
   parseOnlineAccountReportInput,
   parseOnlineAccountPrivacyPatch,
@@ -275,7 +276,6 @@ const ACCOUNT_SEARCH_DEFAULT_LIMIT = 8;
 const ACCOUNT_SEARCH_MAX_LIMIT = 20;
 const ACCOUNT_SEARCH_QUERY_MAX_LENGTH = 32;
 const RATING_LEADERBOARD_ENTRY_RESPONSE_KEYS = new Set(["schemaVersion", "displayName", "avatar", "rating"]);
-const ACCOUNT_AVATAR_RESPONSE_KEYS = new Set(["schemaVersion", "preset", "color"]);
 const ACCOUNT_RATING_HISTORY_ENTRY_RESPONSE_KEYS = new Set([
   "schemaVersion",
   "gameId",
@@ -1680,32 +1680,9 @@ function validatePublicRatingResponseShape(value: unknown): OnlineAccountPublicR
 
 function validateAccountAvatarResponseShape(value: unknown): OnlineAccountAvatar {
   if (!isResponseRecord(value)) throw new Error("Account avatar must be an object.");
-  assertAllowedResponseKeys(value, ACCOUNT_AVATAR_RESPONSE_KEYS, "Account avatar");
-  const { schemaVersion, preset, color } = value;
-  if (
-    schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION ||
-    (
-      preset !== "monarch" &&
-      preset !== "dragon" &&
-      preset !== "knight" &&
-      preset !== "archer" &&
-      preset !== "eagle" &&
-      preset !== "trebuchet" &&
-      preset !== "swordsman" &&
-      preset !== "assassin"
-    ) ||
-    (
-      color !== "green" &&
-      color !== "amber" &&
-      color !== "blue" &&
-      color !== "violet" &&
-      color !== "red" &&
-      color !== "slate"
-    )
-  ) {
-    throw new Error("Account avatar is malformed.");
-  }
-  return { schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION, preset, color };
+  const parsed = parseOnlineAccountAvatar(value);
+  if (!parsed.ok) throw new Error("Account avatar is malformed.");
+  return parsed.value;
 }
 
 function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRatingLeaderboardEntry {

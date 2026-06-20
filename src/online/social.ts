@@ -29,12 +29,23 @@ export type OnlineAccountAvatarPreset =
   | "swordsman"
   | "assassin";
 export type OnlineAccountAvatarColor = "green" | "amber" | "blue" | "violet" | "red" | "slate";
+export type OnlineAccountAvatarImageMimeType = "image/png" | "image/jpeg" | "image/webp";
 
-export interface OnlineAccountAvatar {
+export interface OnlineAccountPresetAvatar {
   schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
   preset: OnlineAccountAvatarPreset;
   color: OnlineAccountAvatarColor;
 }
+
+export interface OnlineAccountUploadedAvatar {
+  schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
+  imageDataUrl: string;
+}
+
+export type OnlineAccountAvatar = OnlineAccountPresetAvatar | OnlineAccountUploadedAvatar;
+
+export const ONLINE_ACCOUNT_AVATAR_IMAGE_DATA_URL_MAX_LENGTH = 96_000;
+export const ONLINE_ACCOUNT_AVATAR_UPLOAD_SOURCE_MAX_BYTES = 2_000_000;
 
 export interface OnlineAccountPresence {
   visibility: OnlineAccountPresenceVisibility;
@@ -265,6 +276,11 @@ const AVATAR_PRESETS = new Set<OnlineAccountAvatarPreset>([
   "assassin",
 ]);
 const AVATAR_COLORS = new Set<OnlineAccountAvatarColor>(["green", "amber", "blue", "violet", "red", "slate"]);
+export const ONLINE_ACCOUNT_AVATAR_IMAGE_MIME_TYPES = new Set<OnlineAccountAvatarImageMimeType>([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
 export const ONLINE_ACCOUNT_REPORT_REASONS = new Set<OnlineAccountReportReason>([
   "abuse",
   "cheating",
@@ -319,6 +335,25 @@ export function parseOnlineAccountAvatar(value: unknown): ValidationResult<Onlin
   if (value.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
     return bad("avatar.schemaVersion is invalid.");
   }
+
+  if (typeof value.imageDataUrl === "string") {
+    if (!isValidAvatarImageDataUrl(value.imageDataUrl)) {
+      return bad("avatar.imageDataUrl is invalid.");
+    }
+    for (const key of Object.keys(value)) {
+      if (key !== "schemaVersion" && key !== "imageDataUrl") {
+        return bad("Avatar contains an unsupported field.");
+      }
+    }
+    return {
+      ok: true,
+      value: {
+        schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+        imageDataUrl: value.imageDataUrl,
+      },
+    };
+  }
+
   if (typeof value.preset !== "string" || !AVATAR_PRESETS.has(value.preset as OnlineAccountAvatarPreset)) {
     return bad("avatar.preset is invalid.");
   }
@@ -338,6 +373,14 @@ export function parseOnlineAccountAvatar(value: unknown): ValidationResult<Onlin
       color: value.color as OnlineAccountAvatarColor,
     },
   };
+}
+
+export function isValidAvatarImageDataUrl(value: string): boolean {
+  if (value.length === 0 || value.length > ONLINE_ACCOUNT_AVATAR_IMAGE_DATA_URL_MAX_LENGTH) return false;
+  const match = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match) return false;
+  if (!ONLINE_ACCOUNT_AVATAR_IMAGE_MIME_TYPES.has(match[1] as OnlineAccountAvatarImageMimeType)) return false;
+  return match[2].length % 4 === 0;
 }
 
 export function parseOnlineAccountPrivacyPatch(value: unknown): ValidationResult<OnlineAccountPrivacyPatch> {

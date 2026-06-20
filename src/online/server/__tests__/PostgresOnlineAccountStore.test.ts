@@ -10,6 +10,8 @@ import { createDefaultOnlineRating, type OnlineRating } from "../../ratings";
 
 const TEST_PASSWORD_HASH =
   "scrypt:v1:16384:8:1:AAAAAAAAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const TINY_AVATAR_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
 class FakeAccountQueryable {
   readonly accounts = new Map<string, any>();
@@ -1390,6 +1392,22 @@ describe("PostgresOnlineAccountStore", () => {
     await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
       displayName: "Liam",
       avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: false },
+    });
+    await expect(
+      store.updateProfileSettings(
+        "account_liam",
+        { avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL } },
+        "2026-06-03T12:06:00.000Z"
+      )
+    ).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
+      relationship: { self: true },
+    });
+    await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
       relationship: { self: false },
     });
     expect(JSON.stringify(await store.getProfileForDisplayName(null, "Liam"))).not.toContain("account_liam");

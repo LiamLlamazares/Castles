@@ -8,6 +8,9 @@ import type { OnlineAccount } from "../../online/accounts";
 import type { OnlineAccountPublicProfile } from "../../online/social";
 import type { OnlineGameSummary } from "../../online/readModel";
 
+const TINY_AVATAR_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
 function account(displayName = "Liam"): OnlineAccount {
   return {
     schemaVersion: 1,
@@ -89,7 +92,7 @@ describe("OnlineProfileDashboard", () => {
     const onSignOutAllAccountSessions = vi.fn().mockResolvedValue(undefined);
     const onDeleteAccount = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    const { container } = render(
       <OnlineProfileDashboard
         displayName="Liam"
         account={liam}
@@ -174,6 +177,7 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.getByText("0 challenges visible to this account.")).toBeInTheDocument();
     expect(screen.getByText("0 followed players.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Rating history graph" })).toBeInTheDocument();
+    expect(container.querySelector(".online-profile-rating-chart polyline")).toBeInTheDocument();
     expect(screen.getByText("Rating History")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Samir profile from rating history game_rated_1" })).toBeInTheDocument();
     expect(screen.getByText("+120")).toBeInTheDocument();
@@ -259,6 +263,29 @@ describe("OnlineProfileDashboard", () => {
     }));
     expect(await screen.findByText("Avatar saved.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Liam profile avatar, dragon on violet" })).toBeInTheDocument();
+  });
+
+  it("renders uploaded profile pictures and keeps the upload control in Profile Settings", async () => {
+    render(
+      <OnlineProfileDashboard
+        displayName="Liam"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: profile("Liam", {
+            avatar: { schemaVersion: 1, imageDataUrl: TINY_AVATAR_DATA_URL },
+            relationship: { self: true, following: false, followedBy: false, blocked: false },
+          }),
+        })}
+        updateAccountProfile={vi.fn()}
+      />
+    );
+
+    const avatar = await screen.findByRole("img", { name: "Liam uploaded profile picture" });
+    expect(avatar.querySelector("img")).toHaveAttribute("src", TINY_AVATAR_DATA_URL);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByLabelText("Upload PNG, JPEG, or WebP")).toHaveAttribute("type", "file");
+    expect(screen.getByRole("radio", { name: "Monarch avatar" })).not.toBeChecked();
   });
 
   it("signs out all account sessions from Profile Settings", async () => {
@@ -495,7 +522,7 @@ describe("OnlineProfileDashboard", () => {
     const onReplay = vi.fn();
     window.history.replaceState({}, "", "/?profile=Samir&section=settings");
 
-    render(
+    const { container } = render(
       <OnlineProfileDashboard
         displayName="Samir"
         loadProfile={vi.fn().mockResolvedValue({
@@ -526,6 +553,7 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.queryByText("Status hidden")).not.toBeInTheDocument();
     expect(screen.getAllByText("18 rated games").length).toBeGreaterThanOrEqual(2);
     expect(await screen.findByRole("img", { name: "Public rating history graph" })).toBeInTheDocument();
+    expect(container.querySelector(".online-profile-rating-chart polyline")).toBeInTheDocument();
     expect(screen.getByText("Online status is private for this viewer.")).toBeInTheDocument();
     expect(screen.queryByText("Challenge Inbox")).not.toBeInTheDocument();
     expect(screen.queryByText("Account Sessions")).not.toBeInTheDocument();

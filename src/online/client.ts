@@ -26,12 +26,14 @@ import {
 import {
   ONLINE_ACCOUNT_MODERATION_NOTE_MAX_LENGTH,
   ONLINE_ACCOUNT_MODERATION_SCHEMA_VERSION,
+  ONLINE_ACCOUNT_AVATAR_IMAGE_DATA_URL_MAX_LENGTH,
   ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_DETAILS_MAX_LENGTH,
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_REPORT_STATUSES,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
+  isValidAvatarImageDataUrl,
   type OnlineAccountRatingHistoryEntry,
   type OnlineAccountRatingHistoryResponse,
   type OnlineAccountPublicRatingHistoryPoint,
@@ -881,15 +883,33 @@ function validateOnlineAccountAvatar(value: unknown, label: string): OnlineAccou
     throw new Error(`${label} is invalid.`);
   }
   const record = value as Record<string, unknown>;
-  const allowedAvatarKeys = new Set(["schemaVersion", "preset", "color"]);
-  assertAllowedKeys(
-    record,
-    allowedAvatarKeys,
-    `${label} contains unsupported data.`
-  );
   if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
     throw new Error(`${label}.schemaVersion is invalid.`);
   }
+  if (typeof record.imageDataUrl === "string") {
+    const allowedUploadedAvatarKeys = new Set(["schemaVersion", "imageDataUrl"]);
+    assertAllowedKeys(
+      record,
+      allowedUploadedAvatarKeys,
+      `${label} contains unsupported data.`
+    );
+    if (
+      record.imageDataUrl.length > ONLINE_ACCOUNT_AVATAR_IMAGE_DATA_URL_MAX_LENGTH ||
+      !isValidAvatarImageDataUrl(record.imageDataUrl)
+    ) {
+      throw new Error(`${label}.imageDataUrl is invalid.`);
+    }
+    return {
+      schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+      imageDataUrl: record.imageDataUrl,
+    };
+  }
+  const allowedPresetAvatarKeys = new Set(["schemaVersion", "preset", "color"]);
+  assertAllowedKeys(
+    record,
+    allowedPresetAvatarKeys,
+    `${label} contains unsupported data.`
+  );
   if (
     record.preset !== "monarch" &&
     record.preset !== "dragon" &&
