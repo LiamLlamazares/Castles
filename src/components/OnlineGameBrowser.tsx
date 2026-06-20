@@ -24,8 +24,6 @@ import {
   type OnlineAccountReportResponse,
   type OnlineRatingLeaderboardEntry,
   type OnlineRatingLeaderboardResponse,
-  type OnlineAccountSessionsResponse,
-  type OnlineAccountSessionSummary,
   type OpenSeekResponse,
 } from "../online/client";
 import {
@@ -176,10 +174,6 @@ interface OnlineGameBrowserProps {
   onSignInAccount?: (displayName: string, password: string) => void | Promise<void>;
   loadAccountOAuthProviders?: () => Promise<OnlineAccountOAuthProvidersResponse>;
   onSignOutAccount?: () => void | Promise<void>;
-  accountSessionId?: string | null;
-  loadAccountSessions?: () => Promise<OnlineAccountSessionsResponse>;
-  onSignOutAllAccountSessions?: () => void | Promise<void>;
-  onDeleteAccount?: () => void | Promise<void>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   loadAccountHeadToHeadGames?: (
     displayName: string,
@@ -719,10 +713,6 @@ function onlineRequestErrorMessage(error: unknown): string | null {
   return error instanceof OnlineRequestError ? error.message : null;
 }
 
-function isAccountActionErrorMessage(message: string): boolean {
-  return message !== "" && message !== "Online account created." && message !== "Signed in.";
-}
-
 function formatAccountChallengeErrorMessage(
   error: unknown,
   displayName: string,
@@ -1068,10 +1058,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   onSignInAccount,
   loadAccountOAuthProviders,
   onSignOutAccount,
-  accountSessionId = null,
-  loadAccountSessions,
-  onSignOutAllAccountSessions,
-  onDeleteAccount,
   loadAccountGames,
   loadAccountHeadToHeadGames,
   loadAccountChallenges,
@@ -1129,10 +1115,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const [isSeekLoadingMore, setIsSeekLoadingMore] = React.useState(false);
   const [seekNextCursor, setSeekNextCursor] = React.useState<string | undefined>();
   const [isAccountDialogOpen, setIsAccountDialogOpen] = React.useState(false);
-  const [accountActionMessage, setAccountActionMessage] = React.useState("");
-  const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
-  const [accountSessions, setAccountSessions] = React.useState<OnlineAccountSessionSummary[]>([]);
-  const [accountSessionsStatus, setAccountSessionsStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [accountGames, setAccountGames] = React.useState<OnlineGameSummary[]>([]);
   const [accountGamesStatus, setAccountGamesStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const [headToHeadDisplayName, setHeadToHeadDisplayName] = React.useState("");
@@ -1178,7 +1160,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const accountGamesRequestIdRef = React.useRef(0);
   const headToHeadGamesRequestIdRef = React.useRef(0);
   const accountChallengesRequestIdRef = React.useRef(0);
-  const accountSessionsRequestIdRef = React.useRef(0);
   const accountFollowingRequestIdRef = React.useRef(0);
   const ratingLeaderboardRequestIdRef = React.useRef(0);
   const socialLookupRequestIdRef = React.useRef(0);
@@ -1203,16 +1184,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const quickMatchButtonRef = React.useRef<HTMLButtonElement>(null);
   const archiveTabButtonRef = React.useRef<HTMLButtonElement>(null);
   const gameSearchInputRef = React.useRef<HTMLInputElement>(null);
-  const deleteAccountConfirmButtonRef = React.useRef<HTMLButtonElement>(null);
   const socialProfileCardRef = React.useRef<HTMLElement>(null);
   const accountChallengesSectionRef = React.useRef<HTMLElement>(null);
   const ownedSeekPanelRef = React.useRef<HTMLElement>(null);
   const closedOwnedSeekPanelRef = React.useRef<HTMLElement>(null);
   const archiveDetailRef = React.useRef<HTMLElement>(null);
   const [recentClearMessage, setRecentClearMessage] = React.useState("");
-  const deleteAccountConfirmPanelId = React.useId();
-  const deleteAccountConfirmHeadingId = React.useId();
-  const deleteAccountConfirmDescriptionId = React.useId();
   const canUseAccountSocial = Boolean(
     account &&
     loadAccountProfile &&
@@ -1321,21 +1298,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     onClearRecentOnlineGames?.();
     archiveTabButtonRef.current?.focus();
   }, [onClearRecentOnlineGames]);
-
-  const refreshAccountSessions = React.useCallback(async () => {
-    if (!account || !loadAccountSessions) return;
-    const requestId = ++accountSessionsRequestIdRef.current;
-    setAccountSessionsStatus("loading");
-    try {
-      const response = await loadAccountSessions();
-      if (requestId !== accountSessionsRequestIdRef.current) return;
-      setAccountSessions(response.sessions);
-      setAccountSessionsStatus("ready");
-    } catch {
-      if (requestId !== accountSessionsRequestIdRef.current) return;
-      setAccountSessionsStatus("error");
-    }
-  }, [account?.accountId, loadAccountSessions]);
 
   const markAccountChallengeActivityKnown = React.useCallback((items: OnlineAccountChallengeListItem[]) => {
     const nextKeys = new Set(knownAccountChallengeActivityKeysRef.current);
@@ -1540,53 +1502,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setAccountChallengeFilter(nextFilter);
   }, [accountChallengeFilter, canUseAccountChallenges]);
 
-  const handleSignOutAllAccountSessions = React.useCallback(async () => {
-    if (!onSignOutAllAccountSessions) return;
-    setAccountActionMessage("");
-    try {
-      await onSignOutAllAccountSessions();
-      setAccountSessions([]);
-      setAccountSessionsStatus("idle");
-    } catch (error) {
-      setAccountActionMessage(onlineRequestErrorMessage(error) ?? "Could not sign out everywhere.");
-    }
-  }, [onSignOutAllAccountSessions]);
-
-  const handleDeleteAccount = React.useCallback(async () => {
-    if (!onDeleteAccount) return;
-    setAccountActionMessage("");
-    accountSessionsRequestIdRef.current += 1;
-    setAccountSessions([]);
-    setAccountSessionsStatus("idle");
-    try {
-      await onDeleteAccount();
-      setIsDeleteAccountConfirmOpen(false);
-      setAccountSessions([]);
-      setAccountSessionsStatus("idle");
-    } catch (error) {
-      setAccountActionMessage(onlineRequestErrorMessage(error) ?? "Could not delete account.");
-      void refreshAccountSessions();
-    }
-  }, [onDeleteAccount, refreshAccountSessions]);
-
-  React.useEffect(() => {
-    accountSessionsRequestIdRef.current += 1;
-    setAccountSessions([]);
-    setAccountSessionsStatus(account && loadAccountSessions ? "loading" : "idle");
-    if (!account || !loadAccountSessions) return;
-    const requestId = accountSessionsRequestIdRef.current;
-    loadAccountSessions()
-      .then((response) => {
-        if (requestId !== accountSessionsRequestIdRef.current) return;
-        setAccountSessions(response.sessions);
-        setAccountSessionsStatus("ready");
-      })
-      .catch(() => {
-        if (requestId !== accountSessionsRequestIdRef.current) return;
-        setAccountSessionsStatus("error");
-      });
-  }, [account?.accountId, loadAccountSessions]);
-
   const refreshFollowingProfiles = React.useCallback(async (options: { quiet?: boolean; background?: boolean } = {}) => {
     if (!account || !loadAccountFollowing) return;
     if (followingLoadInFlightRef.current) return;
@@ -1729,11 +1644,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   }, [canUseAccountChallenges, refreshAccountChallenges]);
 
   React.useEffect(() => {
-    if (accountStatus !== "error") return;
-    setAccountActionMessage("");
-  }, [accountStatus]);
-
-  React.useEffect(() => {
     if (canUseAccountSocial) return;
     setFriendFilter("all");
   }, [canUseAccountSocial]);
@@ -1741,11 +1651,6 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   React.useEffect(() => {
     setFriendFilter("all");
   }, [account?.accountId]);
-
-  React.useEffect(() => {
-    if (!isDeleteAccountConfirmOpen) return;
-    deleteAccountConfirmButtonRef.current?.focus();
-  }, [isDeleteAccountConfirmOpen]);
 
   React.useEffect(() => {
     if (quickMatchStatus !== "waiting") return;
@@ -3864,25 +3769,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
       case "deleting":
         return "Deleting account...";
       default:
-        return accountError || accountActionMessage;
+        return accountError || "";
     }
   })();
-  const currentAccountSession =
-    accountSessionId
-      ? accountSessions.find((session) => session.sessionId === accountSessionId) ??
-        accountSessions.find((session) => session.current)
-      : accountSessions.find((session) => session.current);
-  const accountSessionCountLabel =
-    accountSessionsStatus === "loading"
-      ? "Loading active sessions..."
-      : accountSessionsStatus === "error"
-        ? "Could not load active sessions."
-        : accountSessionsStatus === "ready"
-          ? `${formatCount(accountSessions.length, "active session")} for this account.`
-          : "";
   const accountStatusMessageClassName = [
     "online-browser-account-message",
-    accountStatus === "error" || Boolean(accountError) || isAccountActionErrorMessage(accountActionMessage)
+    accountStatus === "error" || Boolean(accountError)
       ? "error"
       : "",
   ].filter(Boolean).join(" ");
@@ -3966,18 +3858,12 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
         onSignOutAccount={onSignOutAccount}
       />
 
-      {account && (
-        <section className="online-browser-account-panel" aria-label="Online account">
+      {account && (onOpenProfile || canUseAccountSocial) && (
+        <section className="online-browser-account-panel online-browser-account-handoff" aria-label="Online account">
           <div className="online-browser-account-copy">
             <span className="online-browser-section-kicker">Account</span>
             <strong>{account.displayName}</strong>
-            <p>Your signed-in games appear in your account archive.</p>
-            {accountSessionCountLabel && (
-              <p className="online-browser-account-session-summary">
-                {accountSessionCountLabel}
-                {currentAccountSession ? ` Current session last used ${formatUpdatedAt(currentAccountSession.lastUsedAt)}.` : ""}
-              </p>
-            )}
+            <p>Use Profile for account settings, sessions, privacy, password changes, and dashboard history.</p>
             {accountStatusMessage && (
               <p className={accountStatusMessageClassName} role="status" aria-live="polite">
                 {accountStatusMessage}
@@ -3985,85 +3871,13 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
             )}
           </div>
           <div className="online-browser-account-actions">
-            {(onOpenProfile || canUseAccountSocial) && (
-              <button
-                type="button"
-                className="online-browser-button primary"
-                onClick={openSignedInAccountProfile}
-                disabled={!onOpenProfile && socialLookupStatus === "loading"}
-                aria-label={`Open ${account.displayName} profile`}
-              >
-                {!onOpenProfile && socialLookupStatus === "loading" ? "Opening Profile" : "My Profile"}
-              </button>
-            )}
             <button
               type="button"
-              className="online-browser-button subtle"
-              onClick={refreshAccountSessions}
-              disabled={!loadAccountSessions || accountSessionsStatus === "loading" || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
+              className="online-browser-button primary"
+              onClick={openSignedInAccountProfile}
+              disabled={!onOpenProfile && socialLookupStatus === "loading"}
             >
-              {accountSessionsStatus === "loading" ? "Refreshing" : "Refresh Sessions"}
-            </button>
-            <button
-              type="button"
-              className="online-browser-button subtle"
-              onClick={onSignOutAccount}
-              disabled={!onSignOutAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
-            >
-              {accountStatus === "signing-out" ? "Signing Out" : "Sign Out"}
-            </button>
-            <button
-              type="button"
-              className="online-browser-button subtle online-browser-button-danger"
-              onClick={handleSignOutAllAccountSessions}
-              disabled={!onSignOutAllAccountSessions || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
-            >
-              {accountStatus === "signing-out-all" ? "Signing Out Everywhere" : "Sign Out Everywhere"}
-            </button>
-            <button
-              type="button"
-              className="online-browser-button subtle online-browser-button-danger"
-              onClick={() => setIsDeleteAccountConfirmOpen(true)}
-              disabled={!onDeleteAccount || accountStatus === "signing-out" || accountStatus === "signing-out-all" || accountStatus === "deleting"}
-              aria-expanded={isDeleteAccountConfirmOpen}
-              aria-controls={isDeleteAccountConfirmOpen ? deleteAccountConfirmPanelId : undefined}
-            >
-              Delete Account
-            </button>
-          </div>
-        </section>
-      )}
-      {account && isDeleteAccountConfirmOpen && (
-        <section
-          className="online-browser-account-delete-panel"
-          id={deleteAccountConfirmPanelId}
-          aria-labelledby={deleteAccountConfirmHeadingId}
-          aria-describedby={deleteAccountConfirmDescriptionId}
-        >
-          <div>
-            <span className="online-browser-section-kicker">Delete account</span>
-            <strong id={deleteAccountConfirmHeadingId}>Remove {account.displayName}</strong>
-            <p id={deleteAccountConfirmDescriptionId}>
-              This deletes the sign-in account, signs it out everywhere, and removes ordinary social account state. Game history is retained under its existing visibility: public games may still show this display name in public archives, private and unlisted games stay hidden except to still-authorized credentials or registered participants, and the display name stays reserved. This cannot be undone.
-            </p>
-          </div>
-          <div className="online-browser-account-actions">
-            <button
-              type="button"
-              className="online-browser-button subtle online-browser-button-danger"
-              onClick={handleDeleteAccount}
-              disabled={accountStatus === "deleting"}
-              ref={deleteAccountConfirmButtonRef}
-            >
-              {accountStatus === "deleting" ? "Deleting" : "Confirm Delete"}
-            </button>
-            <button
-              type="button"
-              className="online-browser-button subtle"
-              onClick={() => setIsDeleteAccountConfirmOpen(false)}
-              disabled={accountStatus === "deleting"}
-            >
-              Cancel
+              {!onOpenProfile && socialLookupStatus === "loading" ? "Opening Profile" : "My Profile"}
             </button>
           </div>
         </section>

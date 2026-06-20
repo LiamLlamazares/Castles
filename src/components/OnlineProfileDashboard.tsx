@@ -57,6 +57,8 @@ interface OnlineProfileDashboardProps {
   updateAccountPrivacy?: (patch: OnlineAccountPrivacyPatch) => Promise<OnlineAccountPrivacyResponse>;
   updateAccountPassword?: (input: { currentPassword?: string; newPassword: string }) => Promise<unknown>;
   loadAccountSessions?: () => Promise<OnlineAccountSessionsResponse>;
+  onSignOutAllAccountSessions?: () => void | Promise<void>;
+  onDeleteAccount?: () => void | Promise<void>;
   searchProfiles?: (query: string) => Promise<OnlineAccountSearchResponse>;
   onOpenProfile?: (displayName: string) => void;
   onBack?: () => void;
@@ -151,6 +153,8 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   updateAccountPrivacy,
   updateAccountPassword,
   loadAccountSessions,
+  onSignOutAllAccountSessions,
+  onDeleteAccount,
   searchProfiles,
   onOpenProfile,
   onBack,
@@ -177,7 +181,11 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const [activeSection, setActiveSection] = React.useState<ProfileSectionId>("summary");
   const [privacyStatus, setPrivacyStatus] = React.useState<LoadStatus>("idle");
   const [passwordStatus, setPasswordStatus] = React.useState<LoadStatus>("idle");
+  const [sessionActionStatus, setSessionActionStatus] = React.useState<LoadStatus>("idle");
+  const [deleteAccountStatus, setDeleteAccountStatus] = React.useState<LoadStatus>("idle");
+  const [isDeleteAccountConfirmOpen, setIsDeleteAccountConfirmOpen] = React.useState(false);
   const [settingsMessage, setSettingsMessage] = React.useState("");
+  const [settingsMessageTone, setSettingsMessageTone] = React.useState<"status" | "error">("status");
   const [currentPassword, setCurrentPassword] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -186,6 +194,9 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const profileRequestRef = React.useRef(0);
   const dashboardRequestRef = React.useRef(0);
   const searchRequestRef = React.useRef(0);
+  const deleteAccountConfirmPanelId = React.useId();
+  const deleteAccountConfirmHeadingId = React.useId();
+  const deleteAccountConfirmDescriptionId = React.useId();
   const isSelfDashboard =
     !!account && account.displayName.trim().toLowerCase() === displayName.trim().toLowerCase();
 
@@ -377,6 +388,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     if (!privacySettings || !updateAccountPrivacy) return;
     setPrivacyStatus("loading");
     setSettingsMessage("");
+    setSettingsMessageTone("status");
     try {
       const response = await updateAccountPrivacy({
         followPolicy: privacySettings.followPolicy,
@@ -388,10 +400,12 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
         `Follows ${response.privacy.followPolicy}; status ${response.privacy.presencePolicy}; challenges ${response.privacy.challengePolicy}`
       );
       setSettingsMessage("Privacy settings saved.");
+      setSettingsMessageTone("status");
       setPrivacyStatus("ready");
     } catch (error) {
       console.error("[OnlineProfileDashboard] Failed to update privacy settings", error);
       setSettingsMessage(onlineRequestErrorMessage(error) ?? "Privacy settings could not be saved.");
+      setSettingsMessageTone("error");
       setPrivacyStatus("error");
     }
   };
@@ -401,6 +415,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     if (!canSubmitPassword || !updateAccountPassword) return;
     setPasswordStatus("loading");
     setSettingsMessage("");
+    setSettingsMessageTone("status");
     try {
       await updateAccountPassword({
         ...(currentPassword ? { currentPassword } : {}),
@@ -409,11 +424,50 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
       setCurrentPassword("");
       setNewPassword("");
       setSettingsMessage("Password updated.");
+      setSettingsMessageTone("status");
       setPasswordStatus("ready");
     } catch (error) {
       console.error("[OnlineProfileDashboard] Failed to update password", error);
       setSettingsMessage(onlineRequestErrorMessage(error) ?? "Password could not be updated.");
+      setSettingsMessageTone("error");
       setPasswordStatus("error");
+    }
+  };
+
+  const handleSignOutAllSessions = async () => {
+    if (!onSignOutAllAccountSessions) return;
+    setSessionActionStatus("loading");
+    setSettingsMessage("");
+    setSettingsMessageTone("status");
+    try {
+      await onSignOutAllAccountSessions();
+      setSessionActionStatus("ready");
+      setSettingsMessage("Signed out everywhere.");
+      setSettingsMessageTone("status");
+    } catch (error) {
+      console.error("[OnlineProfileDashboard] Failed to sign out all sessions", error);
+      setSettingsMessage(onlineRequestErrorMessage(error) ?? "Could not sign out everywhere.");
+      setSettingsMessageTone("error");
+      setSessionActionStatus("error");
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!onDeleteAccount) return;
+    setDeleteAccountStatus("loading");
+    setSettingsMessage("");
+    setSettingsMessageTone("status");
+    try {
+      await onDeleteAccount();
+      setIsDeleteAccountConfirmOpen(false);
+      setDeleteAccountStatus("ready");
+      setSettingsMessage("Account deleted.");
+      setSettingsMessageTone("status");
+    } catch (error) {
+      console.error("[OnlineProfileDashboard] Failed to delete account", error);
+      setSettingsMessage(onlineRequestErrorMessage(error) ?? "Could not delete account.");
+      setSettingsMessageTone("error");
+      setDeleteAccountStatus("error");
     }
   };
 
@@ -594,7 +648,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <p>{privacyLabel}</p>
               {settingsMessage && (
                 <p
-                  className={privacyStatus === "error" || passwordStatus === "error" ? "online-profile-error" : ""}
+                  className={settingsMessageTone === "error" ? "online-profile-error" : ""}
                   role="status"
                   aria-live="polite"
                 >
@@ -678,7 +732,69 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <span className="online-profile-kicker">Sessions</span>
               <h2>Account Sessions</h2>
               <p>{formatCount(sessionCount, "active session")}.</p>
-              <p>Session controls stay in the account dialog.</p>
+              <div className="online-profile-security-actions">
+                {onOpenAccountControls && (
+                  <button type="button" className="online-profile-button subtle" onClick={onOpenAccountControls}>
+                    Account Dialog
+                  </button>
+                )}
+                {onSignOutAllAccountSessions && (
+                  <button
+                    type="button"
+                    className="online-profile-button subtle"
+                    onClick={handleSignOutAllSessions}
+                    disabled={sessionActionStatus === "loading" || deleteAccountStatus === "loading"}
+                  >
+                    {sessionActionStatus === "loading" ? "Signing Out Everywhere" : "Sign Out Everywhere"}
+                  </button>
+                )}
+                {onDeleteAccount && (
+                  <button
+                    type="button"
+                    className="online-profile-button danger"
+                    onClick={() => setIsDeleteAccountConfirmOpen(true)}
+                    disabled={deleteAccountStatus === "loading"}
+                    aria-expanded={isDeleteAccountConfirmOpen}
+                    aria-controls={isDeleteAccountConfirmOpen ? deleteAccountConfirmPanelId : undefined}
+                  >
+                    Delete Account
+                  </button>
+                )}
+              </div>
+              {account && onDeleteAccount && isDeleteAccountConfirmOpen && (
+                <section
+                  className="online-profile-delete-panel"
+                  id={deleteAccountConfirmPanelId}
+                  aria-labelledby={deleteAccountConfirmHeadingId}
+                  aria-describedby={deleteAccountConfirmDescriptionId}
+                >
+                  <h3 id={deleteAccountConfirmHeadingId}>Remove {account.displayName}</h3>
+                  <p id={deleteAccountConfirmDescriptionId}>
+                    This deletes the sign-in account, signs it out everywhere, and removes ordinary social account
+                    state. Game history is retained under its existing visibility: public games may still show this
+                    display name in public archives, private and unlisted games stay hidden except to still-authorized
+                    credentials or registered participants, and the display name stays reserved. This cannot be undone.
+                  </p>
+                  <div className="online-profile-security-actions">
+                    <button
+                      type="button"
+                      className="online-profile-button danger"
+                      onClick={handleDeleteAccount}
+                      disabled={deleteAccountStatus === "loading"}
+                    >
+                      {deleteAccountStatus === "loading" ? "Deleting" : "Confirm Delete"}
+                    </button>
+                    <button
+                      type="button"
+                      className="online-profile-button subtle"
+                      onClick={() => setIsDeleteAccountConfirmOpen(false)}
+                      disabled={deleteAccountStatus === "loading"}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </section>
+              )}
             </article>
           )}
         </section>

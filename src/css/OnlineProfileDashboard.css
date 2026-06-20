@@ -328,6 +328,25 @@
   outline-offset: 2px;
 }
 
+.online-profile-security-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.online-profile-delete-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(218, 111, 101, 0.42);
+  border-radius: 6px;
+  background: rgba(94, 32, 28, 0.2);
+}
+
+.online-profile-delete-panel h3 {
+  margin-top: 0;
+}
+
 .online-profile-error {
   color: #ffb7a8 !important;
   font-weight: 800;
@@ -351,6 +370,16 @@
 
 .online-profile-button:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+
+.online-profile-button.subtle {
+  background: #262421;
+}
+
+.online-profile-button.danger {
+  border-color: rgba(218, 111, 101, 0.58);
+  background: #4a2722;
+  color: #ffd8d0;
 }
 
 .online-profile-button:focus-visible {
@@ -430,6 +459,21 @@
   border: 1px solid #d9d9d9;
   background: #ffffff;
   color: #1f1f1f;
+}
+
+[data-theme="light"] .online-profile-button.subtle {
+  background: #f5f5f5;
+}
+
+[data-theme="light"] .online-profile-button.danger {
+  border-color: #d67f75;
+  background: #fff5f2;
+  color: #8c2f24;
+}
+
+[data-theme="light"] .online-profile-delete-panel {
+  border-color: #f0b6ae;
+  background: #fff7f5;
 }
 
 [data-theme="light"] .online-profile-rating-strip {

@@ -3149,10 +3149,6 @@ function App() {
           onSignInAccount={handleSignInOnlineAccount}
           loadAccountOAuthProviders={fetchOnlineAccountOAuthProviders}
           onSignOutAccount={handleSignOutOnlineAccount}
-          accountSessionId={onlineAccountSession?.sessionId ?? null}
-          loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}
-          onSignOutAllAccountSessions={onlineAccountSession ? handleSignOutAllOnlineAccountSessions : undefined}
-          onDeleteAccount={onlineAccountSession ? handleDeleteOnlineAccount : undefined}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
           loadAccountHeadToHeadGames={onlineAccountSession ? handleLoadOnlineAccountHeadToHeadGames : undefined}
           loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
@@ -3186,6 +3182,8 @@ function App() {
           updateAccountPrivacy={onlineAccountSession ? handleUpdateOnlineAccountPrivacy : undefined}
           updateAccountPassword={onlineAccountSession ? handleUpdateOnlineAccountPassword : undefined}
           loadAccountSessions={onlineAccountSession ? handleLoadOnlineAccountSessions : undefined}
+          onSignOutAllAccountSessions={onlineAccountSession ? handleSignOutAllOnlineAccountSessions : undefined}
+          onDeleteAccount={onlineAccountSession ? handleDeleteOnlineAccount : undefined}
           searchProfiles={handleSearchOnlineAccountProfiles}
           onOpenProfile={handleOpenProfile}
           onBack={returnToPreviousView}

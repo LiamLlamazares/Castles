@@ -49,6 +49,8 @@ describe("OnlineProfileDashboard", () => {
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       passwordEnabled: true,
     });
+    const onSignOutAllAccountSessions = vi.fn().mockResolvedValue(undefined);
+    const onDeleteAccount = vi.fn().mockResolvedValue(undefined);
 
     render(
       <OnlineProfileDashboard
@@ -93,6 +95,8 @@ describe("OnlineProfileDashboard", () => {
         })}
         updateAccountPrivacy={updateAccountPrivacy}
         updateAccountPassword={updateAccountPassword}
+        onSignOutAllAccountSessions={onSignOutAllAccountSessions}
+        onDeleteAccount={onDeleteAccount}
         loadAccountSessions={vi.fn().mockResolvedValue({
           protocolVersion: ONLINE_PROTOCOL_VERSION,
           sessions: [],
@@ -144,6 +148,8 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.queryByText("My Games")).not.toBeInTheDocument();
     expect(screen.getByText("Follows everyone; status followed; challenges followed")).toBeInTheDocument();
     expect(screen.getByText("0 active sessions.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign Out Everywhere" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete Account" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Who can see me online"), {
       target: { value: "everyone" },
@@ -177,6 +183,93 @@ describe("OnlineProfileDashboard", () => {
     await waitFor(() => expect(updateAccountPassword).toHaveBeenLastCalledWith({
       newPassword: "first-local-password",
     }));
+  });
+
+  it("signs out all account sessions from Profile Settings", async () => {
+    const onSignOutAllAccountSessions = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <OnlineProfileDashboard
+        displayName="Liam"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: profile("Liam", {
+            relationship: { self: true, following: false, followedBy: false, blocked: false },
+          }),
+        })}
+        loadAccountSessions={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          sessions: [
+            {
+              sessionId: "account_session_current",
+              createdAt: "2026-06-03T12:00:00.000Z",
+              lastUsedAt: "2026-06-03T12:05:00.000Z",
+              current: true,
+            },
+          ],
+        })}
+        onSignOutAllAccountSessions={onSignOutAllAccountSessions}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Liam" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByText("1 active session.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out Everywhere" }));
+
+    await waitFor(() => expect(onSignOutAllAccountSessions).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Signed out everywhere.")).toBeInTheDocument();
+  });
+
+  it("confirms account deletion from Profile Settings and preserves trusted errors", async () => {
+    const onDeleteAccount = vi.fn().mockRejectedValue(
+      new OnlineRequestError(503, "persistence_failed", "Account could not be deleted.")
+    );
+    const onSignOutAllAccountSessions = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <OnlineProfileDashboard
+        displayName="Liam"
+        account={account("Liam")}
+        loadProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: profile("Liam", {
+            relationship: { self: true, following: false, followedBy: false, blocked: false },
+          }),
+        })}
+        loadAccountSessions={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          sessions: [],
+        })}
+        onSignOutAllAccountSessions={onSignOutAllAccountSessions}
+        onDeleteAccount={onDeleteAccount}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Liam" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const deleteButton = screen.getByRole("button", { name: "Delete Account" });
+
+    expect(deleteButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(deleteButton);
+    const confirmation = screen.getByRole("region", { name: "Remove Liam" });
+    expect(deleteButton).toHaveAttribute("aria-expanded", "true");
+    expect(confirmation).toHaveTextContent("public games may still show this display name in public archives");
+    expect(confirmation).toHaveTextContent("private and unlisted games stay hidden");
+    expect(confirmation).toHaveTextContent("display name stays reserved");
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Delete" }));
+
+    await waitFor(() => expect(onDeleteAccount).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("region", { name: "Remove Liam" })).toBeInTheDocument();
+    expect(await screen.findByText("Account could not be deleted.")).toHaveClass("online-profile-error");
+    expect(screen.queryByText("Could not delete account.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out Everywhere" }));
+    await waitFor(() => expect(onSignOutAllAccountSessions).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Signed out everywhere.")).not.toHaveClass("online-profile-error");
   });
 
   it("syncs profile section tabs with the URL and browser navigation", async () => {

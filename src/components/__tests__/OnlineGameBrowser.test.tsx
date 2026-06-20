@@ -547,7 +547,7 @@ describe("OnlineGameBrowser", () => {
     expect(within(dialog).getByText("Google sign-in is unavailable right now.")).toBeInTheDocument();
   });
 
-  it("shows account session status and signs out everywhere", async () => {
+  it("keeps account security controls out of the Online page", async () => {
     const account = {
       schemaVersion: 1 as const,
       accountId: "account_liam",
@@ -556,24 +556,6 @@ describe("OnlineGameBrowser", () => {
       updatedAt: "2026-06-03T12:00:00.000Z",
       identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
     };
-    const loadAccountSessions = vi.fn().mockResolvedValue({
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      sessions: [
-        {
-          sessionId: "account_session_current",
-          createdAt: "2026-06-03T12:00:00.000Z",
-          lastUsedAt: "2026-06-03T12:05:00.000Z",
-          current: true,
-        },
-        {
-          sessionId: "account_session_other",
-          createdAt: "2026-06-03T12:01:00.000Z",
-          lastUsedAt: "2026-06-03T12:04:00.000Z",
-          current: false,
-        },
-      ],
-    });
-    const onSignOutAllAccountSessions = vi.fn().mockResolvedValue(undefined);
     render(
       <OnlineGameBrowser
         initialTab="lobby"
@@ -583,70 +565,16 @@ describe("OnlineGameBrowser", () => {
         onSpectate={vi.fn()}
         onReplay={vi.fn()}
         account={account}
-        accountSessionId="account_session_current"
-        loadAccountSessions={loadAccountSessions}
-        onSignOutAllAccountSessions={onSignOutAllAccountSessions}
         onSignOutAccount={vi.fn()}
+        onOpenProfile={vi.fn()}
       />
     );
 
-    expect(await screen.findByText(/2 active sessions for this account/)).toBeInTheDocument();
-    expect(screen.getByText(/Current session last used/)).toBeInTheDocument();
-    expect(loadAccountSessions).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "Refresh Sessions" }));
-    await waitFor(() => expect(loadAccountSessions).toHaveBeenCalledTimes(2));
-    fireEvent.click(screen.getByRole("button", { name: "Sign Out Everywhere" }));
-
-    await waitFor(() => expect(onSignOutAllAccountSessions).toHaveBeenCalledTimes(1));
-  });
-
-  it("preserves trusted sign-out-everywhere rejection messages", async () => {
-    const account = {
-      schemaVersion: 1 as const,
-      accountId: "account_liam",
-      displayName: "Liam",
-      createdAt: "2026-06-03T12:00:00.000Z",
-      updatedAt: "2026-06-03T12:00:00.000Z",
-      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
-    };
-    const loadAccountSessions = vi.fn().mockResolvedValue({
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      sessions: [
-        {
-          sessionId: "account_session_current",
-          createdAt: "2026-06-03T12:00:00.000Z",
-          lastUsedAt: "2026-06-03T12:05:00.000Z",
-          current: true,
-        },
-      ],
-    });
-    const onSignOutAllAccountSessions = vi.fn().mockRejectedValue(
-      new OnlineRequestError(503, "persistence_failed", "Account sessions could not be revoked.")
-    );
-    render(
-      <OnlineGameBrowser
-        initialTab="lobby"
-        loadGames={vi.fn().mockResolvedValue(directory([]))}
-        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
-        onBack={vi.fn()}
-        onSpectate={vi.fn()}
-        onReplay={vi.fn()}
-        account={account}
-        accountStatus="ready"
-        accountSessionId="account_session_current"
-        loadAccountSessions={loadAccountSessions}
-        onSignOutAllAccountSessions={onSignOutAllAccountSessions}
-        onSignOutAccount={vi.fn()}
-      />
-    );
-
-    await screen.findByText(/1 active session for this account/);
-    fireEvent.click(screen.getByRole("button", { name: "Sign Out Everywhere" }));
-
-    await waitFor(() => expect(onSignOutAllAccountSessions).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Account sessions could not be revoked.")).toHaveClass("error");
-    expect(screen.queryByText("Could not sign out everywhere.")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "My Profile" })).toBeInTheDocument();
+    expect(screen.queryByText(/active session/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh Sessions" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign Out Everywhere" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete Account" })).not.toBeInTheDocument();
   });
 
   it("lets signed-in players find, follow, and block accounts without account settings controls", async () => {
@@ -4148,106 +4076,6 @@ describe("OnlineGameBrowser", () => {
     expect(screen.queryByRole("combobox", { name: "Followed players filter" })).not.toBeInTheDocument();
     expect(screen.getByText("game_followed_after_signout")).toBeInTheDocument();
     expect(screen.getByText("game_other_after_signout")).toBeInTheDocument();
-  });
-
-  it("confirms account deletion and explains retained game history", async () => {
-    const account = {
-      schemaVersion: 1 as const,
-      accountId: "account_liam",
-      displayName: "Liam",
-      createdAt: "2026-06-03T12:00:00.000Z",
-      updatedAt: "2026-06-03T12:00:00.000Z",
-      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
-    };
-    const onDeleteAccount = vi.fn().mockResolvedValue(undefined);
-    render(
-      <OnlineGameBrowser
-        initialTab="lobby"
-        loadGames={vi.fn().mockResolvedValue(directory([]))}
-        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
-        onBack={vi.fn()}
-        onSpectate={vi.fn()}
-        onReplay={vi.fn()}
-        account={account}
-        accountStatus="ready"
-        onDeleteAccount={onDeleteAccount}
-      />
-    );
-
-    await screen.findByText("No lobby listings yet.");
-    const deleteButton = screen.getByRole("button", { name: "Delete Account" });
-    expect(deleteButton).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(deleteButton);
-    const confirmation = screen.getByRole("region", { name: "Remove Liam" });
-
-    expect(deleteButton).toHaveAttribute("aria-expanded", "true");
-    expect(within(confirmation).getByText("Remove Liam")).toBeInTheDocument();
-    expect(confirmation).toHaveTextContent("removes ordinary social account state");
-    expect(confirmation).toHaveTextContent("public games may still show this display name in public archives");
-    expect(confirmation).toHaveTextContent("private and unlisted games stay hidden");
-    expect(confirmation).toHaveTextContent("display name stays reserved");
-    expect(within(confirmation).getByText(/This cannot be undone/)).toBeInTheDocument();
-    expect(within(confirmation).getByRole("button", { name: "Confirm Delete" })).toHaveFocus();
-
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("region", { name: "Remove Liam" })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Remove Liam" })).getByRole("button", { name: "Confirm Delete" }));
-
-    await waitFor(() => expect(onDeleteAccount).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByRole("region", { name: "Remove Liam" })).not.toBeInTheDocument());
-  });
-
-  it("keeps account deletion confirmation open and refreshes sessions after failed deletion", async () => {
-    const account = {
-      schemaVersion: 1 as const,
-      accountId: "account_liam",
-      displayName: "Liam",
-      createdAt: "2026-06-03T12:00:00.000Z",
-      updatedAt: "2026-06-03T12:00:00.000Z",
-      identity: { kind: "registered" as const, id: "account_liam", displayName: "Liam" },
-    };
-    const loadAccountSessions = vi.fn().mockResolvedValue({
-      protocolVersion: ONLINE_PROTOCOL_VERSION,
-      sessions: [
-        {
-          sessionId: "account_session_current",
-          createdAt: "2026-06-03T12:00:00.000Z",
-          lastUsedAt: "2026-06-03T12:05:00.000Z",
-          current: true,
-        },
-      ],
-    });
-    const onDeleteAccount = vi.fn().mockRejectedValue(
-      new OnlineRequestError(503, "persistence_failed", "Account could not be deleted.")
-    );
-    render(
-      <OnlineGameBrowser
-        initialTab="lobby"
-        loadGames={vi.fn().mockResolvedValue(directory([]))}
-        loadOpenSeeks={vi.fn().mockResolvedValue(seekDirectory([]))}
-        onBack={vi.fn()}
-        onSpectate={vi.fn()}
-        onReplay={vi.fn()}
-        account={account}
-        accountStatus="ready"
-        accountSessionId="account_session_current"
-        loadAccountSessions={loadAccountSessions}
-        onDeleteAccount={onDeleteAccount}
-      />
-    );
-
-    await waitFor(() => expect(loadAccountSessions).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: "Delete Account" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Remove Liam" })).getByRole("button", { name: "Confirm Delete" }));
-
-    await waitFor(() => expect(onDeleteAccount).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole("region", { name: "Remove Liam" })).toBeInTheDocument();
-    expect(screen.getByText("Account could not be deleted.")).toHaveClass("error");
-    expect(screen.queryByText("Could not delete account.")).not.toBeInTheDocument();
-    await waitFor(() => expect(loadAccountSessions).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("button", { name: "Confirm Delete" })).toBeEnabled();
   });
 
   it("shows signed-in account archive games without duplicating public archive rows", async () => {
