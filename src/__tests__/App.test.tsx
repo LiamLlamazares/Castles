@@ -108,6 +108,9 @@ vi.mock("../components/Game", () => ({
         Game online notifications: {props.onlineNotificationCount ?? 0} {props.onlineNotificationLabel ?? "none"}
       </div>
       <div>
+        Initial pieces: {props.initialPieces?.length ?? "none"}
+      </div>
+      <div>
         Initial castle owners: {
           props.initialCastles
             ?.map((castle) => {
@@ -1960,6 +1963,63 @@ describe("App game setup lifecycle", () => {
 
     expect(screen.getByText("Online Browser Ready")).toBeInTheDocument();
     expect(screen.getByText("Active tab: archive")).toBeInTheDocument();
+  });
+
+  it("falls back to setup pieces for archived replay analysis when the snapshot state is sparse", async () => {
+    vi.spyOn(PGNLoadService, "loadPGNText").mockReturnValue(null);
+    const board = getStartingBoard(6);
+    const pieces = getStartingPieces(6);
+    const setup = serializeOnlineGameSetup({
+      board,
+      pieces,
+      sanctuaries: [],
+      gameRules: { vpModeEnabled: true },
+      initialPoolTypes: [SanctuaryType.WolfCovenant],
+    });
+    const { state } = createInitialStateFromSetupDTO(setup);
+    const sparseSnapshot: OnlineGameSnapshotDTO = {
+      gameId: "game_archive_sparse_state",
+      version: 5,
+      setup,
+      state: {
+        ...serializeGameState(state),
+        pieces: [],
+        castles: [],
+        sanctuaries: [],
+        sanctuaryPool: [],
+      },
+      moveHistory: [
+        { notation: "Pass", turnNumber: 1, color: "w", phase: "Movement" },
+      ],
+      playerToMove: "b",
+      turnPhase: "Movement",
+      result: { winner: "w", reason: "resignation" },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            protocolVersion: 1,
+            snapshot: sparseSnapshot,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Online" }));
+    fireEvent.click(screen.getByRole("button", { name: "Analyze archived game" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Analysis mode: yes")).toBeInTheDocument();
+      expect(screen.getByText(`Initial pieces: ${pieces.length}`)).toBeInTheDocument();
+      expect(screen.getByText(/Initial castle owners: (?!none)/)).toBeInTheDocument();
+      expect(screen.getByText("Pool types: WolfCovenant")).toBeInTheDocument();
+      expect(screen.getByText("Move history: 1")).toBeInTheDocument();
+    });
   });
 
   it("clears stale return paths after Online spectate, replay, Play, and restart entries", async () => {

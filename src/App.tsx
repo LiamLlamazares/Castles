@@ -359,6 +359,42 @@ function createReplayMoveTreeFromOnlineSnapshot(snapshot: OnlineGameSnapshotDTO)
   return state.moveTree;
 }
 
+function onlineSnapshotHasRenderableState(snapshot: OnlineGameSnapshotDTO): boolean {
+  return snapshot.state.pieces.length > 0 || snapshot.state.castles.length > 0;
+}
+
+function createSetupBackedReplayGameConfigFromOnlineSnapshot(
+  snapshot: OnlineGameSnapshotDTO
+): GameConfig {
+  const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
+  const { state } = createInitialStateFromSetupDTO(snapshot.setup);
+  const moveTree = createReplayMoveTreeFromOnlineSnapshot(snapshot);
+  const turnCounter = snapshot.state.turnCounter > 0
+    ? snapshot.state.turnCounter
+    : snapshot.moveHistory.length;
+
+  return {
+    board: setup.board,
+    pieces: state.pieces,
+    castles: state.castles,
+    layout: getStartingLayout(setup.board),
+    moveTree,
+    turnCounter,
+    sanctuaries: state.sanctuaries,
+    sanctuarySettings: setup.sanctuarySettings,
+    initialPoolTypes: state.sanctuaryPool,
+    graveyard: state.graveyard,
+    phoenixRecords: state.phoenixRecords,
+    promotionPending: state.promotionPending,
+    gameRules: setup.gameRules,
+    pieceTheme: setup.pieceTheme,
+    timeControl: setup.timeControl,
+    ratingMode: setup.ratingMode,
+    victoryPoints: snapshot.state.victoryPoints,
+    isAnalysisMode: true,
+  };
+}
+
 function createReplayGameConfigFromOnlineSnapshot(snapshot: OnlineGameSnapshotDTO): GameConfig {
   const setup = hydrateOnlineGameSetupDTO(snapshot.setup);
   const hydratedConfig = createGameConfigFromOnlineSnapshot(snapshot, true);
@@ -399,7 +435,9 @@ function createReplayGameConfigFromOnlineSnapshot(snapshot: OnlineGameSnapshotDT
     }
   }
 
-  return hydratedConfig;
+  return onlineSnapshotHasRenderableState(snapshot)
+    ? hydratedConfig
+    : createSetupBackedReplayGameConfigFromOnlineSnapshot(snapshot);
 }
 
 function parseProfileDisplayNameFromUrl(href: string): string | null {
