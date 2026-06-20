@@ -145,7 +145,7 @@ interface OnlineGameBrowserProps {
   onConfigureSetup?: () => void;
   onTutorial?: () => void;
   onOpenLibrary?: () => void;
-  onOpenProfile?: () => void;
+  onOpenProfile?: (displayName?: string) => void;
   onCreateSeek?: (
     visibility?: OpenSeekVisibility,
     options?: { invitedDisplayNames?: string[] }
@@ -2468,12 +2468,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     displayName: string,
     profileName: string | null
   ) => {
-    if (!canUseAccountSocial || !profileName) return displayName;
+    if (!profileName || (!onOpenProfile && !canUseAccountSocial)) return displayName;
     return (
       <button
         type="button"
         className="online-game-player-link"
-        onClick={() => void handleSocialLookupByName(profileName, { focus: true })}
+        onClick={() => {
+          if (onOpenProfile) {
+            onOpenProfile(profileName);
+            return;
+          }
+          void handleSocialLookupByName(profileName, { focus: true });
+        }}
         aria-label={`Open ${profileName} profile from ${game.gameId}`}
       >
         {displayName}
@@ -3365,14 +3371,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
     setSocialLookupName(profile.displayName);
     setSocialSearchResults([]);
     setSocialSearchStatus("idle");
+    if (onOpenProfile) {
+      onOpenProfile(profile.displayName);
+      return;
+    }
     void handleSocialLookupByName(profile.displayName, { focus: true });
-  }, [handleSocialLookupByName]);
+  }, [handleSocialLookupByName, onOpenProfile]);
 
   const openSignedInAccountProfile = React.useCallback(() => {
     if (!account) return;
     setIsAccountDialogOpen(false);
     if (onOpenProfile) {
-      onOpenProfile();
+      onOpenProfile(account.displayName);
       return;
     }
     if (!canUseAccountSocial) return;
@@ -4091,7 +4101,18 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                         <div>
                           <strong>
                             <span className="online-browser-rating-rank">{index + 1}</span>
-                            {entry.displayName}
+                            {onOpenProfile ? (
+                              <button
+                                type="button"
+                                className="online-game-player-link"
+                                onClick={() => onOpenProfile(entry.displayName)}
+                                aria-label={`Open ${entry.displayName} profile from rating leaders`}
+                              >
+                                {entry.displayName}
+                              </button>
+                            ) : (
+                              entry.displayName
+                            )}
                           </strong>
                           <div className="online-browser-social-badges">
                             <span className="online-browser-rating-badge" title={`${entry.rating.games} ${suffix}`}>
@@ -4137,7 +4158,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   return (
                     <article key={profile.displayName} className="online-browser-online-now-card">
                       <div className="online-browser-online-now-main">
-                        <strong>{profile.displayName}</strong>
+                        <strong>
+                          {onOpenProfile ? (
+                            <button
+                              type="button"
+                              className="online-game-player-link"
+                              onClick={() => onOpenProfile(profile.displayName)}
+                              aria-label={`Open ${profile.displayName} profile from online now`}
+                            >
+                              {profile.displayName}
+                            </button>
+                          ) : (
+                            profile.displayName
+                          )}
+                        </strong>
                         <div className="online-browser-social-badges">
                           {profile.rating && (
                             <span className="online-browser-rating-badge" title={profileRatingTitle(profile)}>
@@ -4313,7 +4347,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     return (
                       <article key={challengeId} className="online-browser-following-row">
                         <div>
-                          <strong>{opponentName}</strong>
+                          <strong>
+                            {opponentDisplayName && onOpenProfile ? (
+                              <button
+                                type="button"
+                                className="online-game-player-link"
+                                onClick={() => onOpenProfile(opponentDisplayName)}
+                                aria-label={`Open ${opponentDisplayName} profile from account challenge ${challengeId}`}
+                              >
+                                {opponentName}
+                              </button>
+                            ) : (
+                              opponentName
+                            )}
+                          </strong>
                           <div className="online-browser-social-badges">
                             <span>{formatAccountChallengeRole(item.role)}</span>
                             {item.summary.intent === "rematch" && <span>Rematch</span>}
@@ -4420,7 +4467,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
               tabIndex={-1}
             >
               <div className="online-browser-profile-main">
-                <strong>{socialProfile.displayName}</strong>
+                <strong>
+                  {onOpenProfile ? (
+                    <button
+                      type="button"
+                      className="online-game-player-link"
+                      onClick={() => onOpenProfile(socialProfile.displayName)}
+                      aria-label={`Open ${socialProfile.displayName} public profile`}
+                    >
+                      {socialProfile.displayName}
+                    </button>
+                  ) : (
+                    socialProfile.displayName
+                  )}
+                </strong>
                 <div className="online-browser-social-badges">
                   {socialProfile.rating && (
                     <span className="online-browser-rating-badge" title={profileRatingTitle(socialProfile)}>
@@ -4654,7 +4714,20 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                   return (
                     <article key={profile.displayName} className="online-browser-following-row">
                       <div>
-                        <strong>{profile.displayName}</strong>
+                        <strong>
+                          {onOpenProfile ? (
+                            <button
+                              type="button"
+                              className="online-game-player-link"
+                              onClick={() => onOpenProfile(profile.displayName)}
+                              aria-label={`Open ${profile.displayName} profile from following`}
+                            >
+                              {profile.displayName}
+                            </button>
+                          ) : (
+                            profile.displayName
+                          )}
+                        </strong>
                         <div className="online-browser-social-badges">
                           {profile.rating && (
                             <span className="online-browser-rating-badge" title={profileRatingTitle(profile)}>

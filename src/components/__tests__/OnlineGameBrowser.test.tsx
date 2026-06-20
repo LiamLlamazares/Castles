@@ -184,6 +184,7 @@ function publicProfile(
   return {
     schemaVersion: 1 as const,
     displayName,
+    avatar: { schemaVersion: 1 as const, preset: "monarch" as const, color: "green" as const },
     ...(rating ? { rating } : {}),
     presence: {
       visibility: presence.visibility ?? "hidden",
@@ -967,6 +968,40 @@ describe("OnlineGameBrowser", () => {
     expect(within(rows[1]).getByTitle("3 rated games")).toHaveTextContent("1590?");
     expect(people).not.toHaveTextContent("account_cleo");
     expect(loadRatingLeaderboard).toHaveBeenCalledWith({ limit: 10, scope: "global" });
+  });
+
+  it("opens public profiles directly from rating leader rows", async () => {
+    const onOpenProfile = vi.fn();
+    render(
+      <OnlineGameBrowser
+        loadGames={vi.fn().mockResolvedValue(directory([]))}
+        onReplay={vi.fn()}
+        onSpectate={vi.fn()}
+        onBack={vi.fn()}
+        account={accountFixture("Liam")}
+        {...socialPropsWithFollowing([])}
+        loadRatingLeaderboard={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          schemaVersion: 1,
+          scope: "global",
+          entries: [
+            {
+              schemaVersion: 1,
+              displayName: "Cleo",
+              avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+              rating: publicRating({ rating: 1620, display: "1620", provisional: false, games: 8 }),
+            },
+          ],
+        })}
+        onOpenProfile={onOpenProfile}
+      />
+    );
+
+    const people = await screen.findByRole("region", { name: "People" });
+    const leaders = await within(people).findByRole("region", { name: "Rating leaders" });
+    fireEvent.click(await within(leaders).findByRole("button", { name: "Open Cleo profile from rating leaders" }));
+
+    expect(onOpenProfile).toHaveBeenCalledWith("Cleo");
   });
 
   it("switches rating leaders between global and followed-player scopes", async () => {

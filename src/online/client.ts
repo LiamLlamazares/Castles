@@ -41,6 +41,8 @@ import {
   type OnlineAccountModerationReportStatusPatch,
   type OnlineAccountModerationReportStatusResponse,
   type OnlineAccountFollowingResponse,
+  type OnlineAccountAvatar,
+  type OnlineAccountProfilePatch,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacyResponse,
   type OnlineAccountPrivacySettings,
@@ -241,6 +243,7 @@ export type {
   OnlineAccountSessionsRevokeResponse,
   OnlineAccountDeleteResponse,
   OnlineAccountFollowingResponse,
+  OnlineAccountProfilePatch,
   OnlineAccountPrivacyPatch,
   OnlineAccountPrivacyResponse,
   OnlineAccountProfileResponse,
@@ -868,6 +871,49 @@ function assertAllowedKeys(
   }
 }
 
+function validateOnlineAccountAvatar(value: unknown, label: string): OnlineAccountAvatar {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} is invalid.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedAvatarKeys = new Set(["schemaVersion", "preset", "color"]);
+  assertAllowedKeys(
+    record,
+    allowedAvatarKeys,
+    `${label} contains unsupported data.`
+  );
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label}.schemaVersion is invalid.`);
+  }
+  if (
+    record.preset !== "monarch" &&
+    record.preset !== "dragon" &&
+    record.preset !== "knight" &&
+    record.preset !== "archer" &&
+    record.preset !== "eagle" &&
+    record.preset !== "trebuchet" &&
+    record.preset !== "swordsman" &&
+    record.preset !== "assassin"
+  ) {
+    throw new Error(`${label}.preset is invalid.`);
+  }
+  if (
+    record.color !== "green" &&
+    record.color !== "amber" &&
+    record.color !== "blue" &&
+    record.color !== "violet" &&
+    record.color !== "red" &&
+    record.color !== "slate"
+  ) {
+    throw new Error(`${label}.color is invalid.`);
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    preset: record.preset,
+    color: record.color,
+  };
+}
+
 function validateOnlineAccountPublicProfile(
   value: unknown,
   label: string
@@ -876,7 +922,7 @@ function validateOnlineAccountPublicProfile(
     throw new Error(`${label} was malformed.`);
   }
   const record = value as Record<string, unknown>;
-  const allowedProfileKeys = new Set(["schemaVersion", "displayName", "rating", "presence", "relationship"]);
+  const allowedProfileKeys = new Set(["schemaVersion", "displayName", "avatar", "rating", "presence", "relationship"]);
   for (const key of Object.keys(record)) {
     if (!allowedProfileKeys.has(key)) {
       throw new Error(`${label} was malformed: profile contains unsupported data.`);
@@ -891,6 +937,7 @@ function validateOnlineAccountPublicProfile(
   if (stringContainsDurableSecret(record.displayName)) {
     throw new Error(`${label} was malformed: displayName must not contain secrets.`);
   }
+  const avatar = validateOnlineAccountAvatar(record.avatar, `${label} was malformed: avatar`);
   let rating: OnlineAccountPublicProfile["rating"];
   if (record.rating !== undefined) {
     rating = validateOnlineAccountPublicRating(record.rating, `${label} was malformed: rating`);
@@ -946,6 +993,7 @@ function validateOnlineAccountPublicProfile(
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: record.displayName,
+    avatar,
     ...(rating ? { rating } : {}),
     presence: {
       visibility: presenceRecord.visibility,
@@ -1023,7 +1071,7 @@ function validateOnlineAccountSearchProfile(value: unknown, label: string): Onli
     throw new Error(`${label} was malformed.`);
   }
   const record = value as Record<string, unknown>;
-  const allowedSearchProfileKeys = new Set(["schemaVersion", "displayName", "rating"]);
+  const allowedSearchProfileKeys = new Set(["schemaVersion", "displayName", "avatar", "rating"]);
   assertAllowedKeys(
     record,
     allowedSearchProfileKeys,
@@ -1038,12 +1086,14 @@ function validateOnlineAccountSearchProfile(value: unknown, label: string): Onli
   if (stringContainsDurableSecret(record.displayName)) {
     throw new Error(`${label} was malformed: displayName must not contain secrets.`);
   }
+  const avatar = validateOnlineAccountAvatar(record.avatar, `${label} was malformed: avatar`);
   const rating = record.rating === undefined
     ? undefined
     : validateOnlineAccountPublicRating(record.rating, `${label} was malformed: rating`);
   return {
     schemaVersion: ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
     displayName: record.displayName,
+    avatar,
     ...(rating ? { rating } : {}),
   };
 }
@@ -1350,7 +1400,7 @@ function validateOnlineRatingLeaderboardEntry(
     throw new Error(`${label} was malformed.`);
   }
   const record = value as Record<string, unknown>;
-  const allowedEntryKeys = new Set(["schemaVersion", "displayName", "rating"]);
+  const allowedEntryKeys = new Set(["schemaVersion", "displayName", "avatar", "rating"]);
   for (const key of Object.keys(record)) {
     if (!allowedEntryKeys.has(key)) {
       throw new Error(`${label} was malformed: entry contains unsupported data.`);
@@ -1368,6 +1418,7 @@ function validateOnlineRatingLeaderboardEntry(
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: record.displayName,
+    avatar: validateOnlineAccountAvatar(record.avatar, `${label} was malformed: avatar`),
     rating: validateOnlineAccountPublicRating(record.rating, `${label} was malformed: rating`),
   };
 }
@@ -1854,6 +1905,25 @@ export async function updateOnlineAccountPrivacy(
     );
   }
   return validateOnlineAccountPrivacyResponse(await response.json(), "Online account privacy update");
+}
+
+export async function updateOnlineAccountProfile(
+  account: OnlineAccountSessionParams,
+  patch: OnlineAccountProfilePatch,
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountProfileResponse> {
+  const response = await fetchImpl("/api/online/account/profile", {
+    method: "PATCH",
+    headers: { "content-type": "application/json", ...accountAuthorizationHeader(account) },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw await createOnlineRequestError(
+      response,
+      `Could not update online account profile (${response.status})`
+    );
+  }
+  return validateProfileResponse(await response.json(), "Online account profile update");
 }
 
 export interface OnlineAccountPasswordUpdateResponse {

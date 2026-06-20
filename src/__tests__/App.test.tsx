@@ -31,6 +31,8 @@ import {
   resolveOnlineChallengeShareUrl,
 } from "../online/client";
 
+const APP_TEST_PROFILE_AVATAR = { schemaVersion: 1, preset: "monarch", color: "green" };
+
 const onlineHookMocks = vi.hoisted(() => ({
   submitAction: vi.fn(),
   useOnlineGameConnection: vi.fn(),
@@ -909,6 +911,7 @@ function appProfileDashboardResponse(
         profile: {
           schemaVersion: 1,
           displayName: account.displayName,
+          avatar: APP_TEST_PROFILE_AVATAR,
           rating: {
             schemaVersion: 1,
             rating: 1500,
@@ -3628,6 +3631,7 @@ describe("App game setup lifecycle", () => {
               profile: {
                 schemaVersion: 1,
                 displayName: "Liam",
+                avatar: APP_TEST_PROFILE_AVATAR,
                 rating: {
                   schemaVersion: 1,
                   rating: 1620,
@@ -3782,6 +3786,7 @@ describe("App game setup lifecycle", () => {
               profile: {
                 schemaVersion: 1,
                 displayName: "Samir",
+                avatar: APP_TEST_PROFILE_AVATAR,
                 rating: {
                   schemaVersion: 1,
                   rating: 1510,
@@ -4145,6 +4150,7 @@ describe("App game setup lifecycle", () => {
               profile: {
                 schemaVersion: 1,
                 displayName: "Samir",
+                avatar: APP_TEST_PROFILE_AVATAR,
                 relationship: { following: false, followedBy: false, blocked: true, self: false },
                 presence: { visibility: "hidden", status: null },
               },

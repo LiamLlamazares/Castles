@@ -333,12 +333,12 @@ class FakePostgresAccountQueryable {
       return { rows: rating ? [{ payload: rating }] : [] };
     }
 
-    if (normalizedText.startsWith("SELECT a.display_name, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
+    if (normalizedText.startsWith("SELECT a.display_name, a.profile_payload, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
       const [limit] = values as number[];
       const rows = Array.from(this.ratingRows.entries())
         .flatMap(([accountId, rating]) => {
           const account = this.accounts.get(accountId);
-          return account ? [{ display_name: account.display_name, payload: rating }] : [];
+          return account ? [{ display_name: account.display_name, profile_payload: account.profile_payload ?? {}, payload: rating }] : [];
         })
         .sort((left, right) => {
           if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
@@ -366,7 +366,9 @@ class FakePostgresAccountQueryable {
         .flatMap((accountId) => {
           const account = this.accounts.get(accountId);
           const rating = this.ratingRows.get(accountId);
-          return account && rating ? [{ display_name: account.display_name, payload: rating }] : [];
+          return account && rating
+            ? [{ display_name: account.display_name, profile_payload: account.profile_payload ?? {}, payload: rating }]
+            : [];
         })
         .sort((left, right) => {
           if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
@@ -412,6 +414,7 @@ class FakePostgresAccountQueryable {
         display_name: displayName,
         display_name_normalized: displayNameNormalized,
         password_hash: passwordHash,
+        profile_payload: {},
         created_at: createdAt,
         updated_at: createdAt,
       };
@@ -1121,6 +1124,7 @@ describe("createOnlineHttpServer", () => {
     expect(profile.profile).toMatchObject({
       schemaVersion: 1,
       displayName: "Testing",
+      avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
       rating: {
         schemaVersion: 1,
         rating: 1500,
@@ -1133,6 +1137,55 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(profile)).not.toContain("account_");
     expect(JSON.stringify(profile)).not.toContain("glicko2-beta-v1");
     expect(JSON.stringify(profile)).not.toContain("deviation");
+  });
+
+  it("updates account profile avatar settings without exposing account internals", async () => {
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-01T12:00:00.000Z"),
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Testing");
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/account/profile`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } }),
+    });
+    const body = await response.json();
+    const publicProfileResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Testing`);
+    const publicProfile = await publicProfileResponse.json();
+    const invalidResponse = await fetch(`http://127.0.0.1:${port}/api/online/account/profile`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...bearer(account.session.token) },
+      body: JSON.stringify({ avatar: { schemaVersion: 1, preset: "uploaded-url", color: "violet" } }),
+    });
+    const tokenQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/account/profile?token=${account.session.token}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json", ...bearer(account.session.token) },
+        body: JSON.stringify({ avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(body.profile).toMatchObject({
+      displayName: "Testing",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: true },
+    });
+    expect(publicProfileResponse.status).toBe(200);
+    expect(publicProfile.profile).toMatchObject({
+      displayName: "Testing",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: false },
+    });
+    expect(invalidResponse.status).toBe(400);
+    expect(tokenQueryResponse.status).toBe(400);
+    expect(JSON.stringify(body)).not.toContain(account.account.accountId);
+    expect(JSON.stringify(body)).not.toContain(account.session.token);
   });
 
   it("serves authenticated account rating history without leaking rating internals", async () => {
@@ -1240,8 +1293,8 @@ describe("createOnlineHttpServer", () => {
     expect(body).toMatchObject({
       protocolVersion: ONLINE_PROTOCOL_VERSION,
       profiles: [
-        { displayName: "Liam", rating: { display: "1500?", games: 0 } },
-        { displayName: "Liana", rating: { display: "1500?", games: 0 } },
+        { displayName: "Liam", avatar: { preset: "monarch", color: "green" }, rating: { display: "1500?", games: 0 } },
+        { displayName: "Liana", avatar: { preset: "monarch", color: "green" }, rating: { display: "1500?", games: 0 } },
       ],
     });
     expect(body.profiles).toHaveLength(2);
@@ -1546,6 +1599,7 @@ describe("createOnlineHttpServer", () => {
         {
           schemaVersion: 1,
           displayName: "Cleo",
+          avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
           rating: {
             schemaVersion: 1,
             rating: 1620,
@@ -1558,6 +1612,7 @@ describe("createOnlineHttpServer", () => {
         {
           schemaVersion: 1,
           displayName: "Ben",
+          avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
           rating: {
             schemaVersion: 1,
             rating: 1620,
@@ -1637,6 +1692,7 @@ describe("createOnlineHttpServer", () => {
         {
           schemaVersion: 1,
           displayName: "Ada",
+          avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
           rating: {
             schemaVersion: 1,
             rating: 1620,
@@ -1649,6 +1705,7 @@ describe("createOnlineHttpServer", () => {
         {
           schemaVersion: 1,
           displayName: "Liam",
+          avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
           rating: {
             schemaVersion: 1,
             rating: 1550,
@@ -2884,6 +2941,7 @@ describe("createOnlineHttpServer", () => {
       profile: {
         schemaVersion: 1,
         displayName: "Samir",
+        avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
         rating: {
           schemaVersion: 1,
           rating: 1500,
@@ -2904,6 +2962,7 @@ describe("createOnlineHttpServer", () => {
       profile: {
         schemaVersion: 1,
         displayName: "Samir",
+        avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
         rating: {
           schemaVersion: 1,
           rating: 1500,

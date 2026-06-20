@@ -78,6 +78,7 @@ import {
   followOnlineAccount,
   unfollowOnlineAccount,
   unblockOnlineAccount,
+  updateOnlineAccountProfile,
   updateOnlineAccountPrivacy,
   updateOnlineAccountPassword,
   updateOnlineAccountModerationReportStatus,
@@ -1288,6 +1289,7 @@ describe("online client helpers", () => {
     const profile = {
       schemaVersion: 1,
       displayName: "Samir",
+      avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
       rating,
       presence: { visibility: "visible", status: "online" },
       relationship: { self: false, following: false, blocked: false },
@@ -1303,6 +1305,7 @@ describe("online client helpers", () => {
     const blockedProfile = {
       schemaVersion: 1,
       displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "knight", color: "blue" },
       presence: { visibility: "hidden", status: null },
       relationship: { self: false, following: false, followedBy: false, blocked: true },
     };
@@ -1495,6 +1498,7 @@ describe("online client helpers", () => {
     const profile = {
       schemaVersion: 1,
       displayName: "Liana",
+      avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
       rating: {
         schemaVersion: 1,
         rating: 1500,
@@ -1534,6 +1538,45 @@ describe("online client helpers", () => {
     await expect(
       searchOnlineAccountProfiles("lia", { limit: 5 }, fetchImpl as any)
     ).rejects.toThrow(/search profile contains unsupported data/);
+  });
+
+  it("updates account profile avatar settings through the account session boundary", async () => {
+    const profile = {
+      schemaVersion: 1,
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      rating: {
+        schemaVersion: 1,
+        rating: 1500,
+        display: "1500?",
+        provisional: true,
+        games: 0,
+        updatedAt: null,
+      },
+      presence: { visibility: "visible", status: "online" },
+      relationship: { self: true, following: false, followedBy: false, blocked: false },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ protocolVersion: ONLINE_PROTOCOL_VERSION, profile }),
+    });
+
+    await expect(
+      updateOnlineAccountProfile(
+        { token: "account-token" },
+        { avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } },
+        fetchImpl as any
+      )
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/account/profile", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", authorization: "Bearer account-token" },
+      body: JSON.stringify({ avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } }),
+    });
   });
 
   it("updates online account passwords through the account session boundary", async () => {
@@ -1896,6 +1939,7 @@ describe("online client helpers", () => {
     const entry = {
       schemaVersion: 1,
       displayName: "Cleo",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
       rating: {
         schemaVersion: 1,
         rating: 1620,
@@ -2046,6 +2090,7 @@ describe("online client helpers", () => {
             profile: {
               schemaVersion: 1,
               displayName: "Samir",
+              avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
               rating: {
                 schemaVersion: 1,
                 engineId: "glicko2-beta-v1",

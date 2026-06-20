@@ -10,8 +10,10 @@ import {
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   createOnlineAccountPublicRating,
   defaultOnlineAccountPrivacySettings,
+  defaultOnlineAccountAvatar,
   type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationReport,
+  type OnlineAccountProfilePatch,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
@@ -197,6 +199,7 @@ export interface OnlineAccountStore {
   resolveChallengeTarget(challengerAccountId: string, targetDisplayName: string): Promise<OnlineAccountChallengeTargetResult>;
   getPrivacySettings(accountId: string): Promise<OnlineAccountPrivacySettings>;
   updatePrivacySettings(accountId: string, patch: OnlineAccountPrivacyPatch, updatedAt: string): Promise<OnlineAccountPrivacySettings | null>;
+  updateProfileSettings(accountId: string, patch: OnlineAccountProfilePatch, updatedAt: string): Promise<OnlineAccountPublicProfile | null>;
   checkReady?(): Promise<boolean> | boolean;
   close?(): Promise<void> | void;
 }
@@ -245,6 +248,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
   private readonly following = new Map<string, Set<string>>();
   private readonly blocks = new Map<string, Set<string>>();
   private readonly privacySettings = new Map<string, OnlineAccountPrivacySettings>();
+  private readonly profileSettings = new Map<string, OnlineAccountProfilePatch>();
   private readonly reports: MemoryOnlineAccountReportRecord[] = [];
   private readonly reportAudits: OnlineAccountModerationAuditEntry[] = [];
 
@@ -756,6 +760,25 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     return updated;
   }
 
+  async updateProfileSettings(
+    accountId: string,
+    patch: OnlineAccountProfilePatch,
+    updatedAt: string
+  ): Promise<OnlineAccountPublicProfile | null> {
+    const account = this.accounts.get(accountId);
+    if (!account) return null;
+    const current = this.profileSettings.get(accountId) ?? {};
+    this.profileSettings.set(accountId, {
+      ...current,
+      ...patch,
+    });
+    this.accounts.set(accountId, {
+      ...account,
+      updatedAt,
+    });
+    return this.createProfile(accountId, this.accounts.get(accountId) ?? account, updatedAt);
+  }
+
   async checkReady(): Promise<boolean> {
     return true;
   }
@@ -855,6 +878,7 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
     return {
       schemaVersion: 1,
       displayName: target.displayName,
+      avatar: this.profileSettings.get(target.accountId)?.avatar ?? defaultOnlineAccountAvatar(),
       rating: createOnlineAccountPublicRating(createDefaultOnlineRating(null)),
       presence: await this.createPresence(viewerAccountId, target, viewedAt),
       relationship: {

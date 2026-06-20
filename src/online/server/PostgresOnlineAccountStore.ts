@@ -11,9 +11,13 @@ import {
   ONLINE_ACCOUNT_REPORT_SCHEMA_VERSION,
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   createOnlineAccountPublicRating,
+  defaultOnlineAccountAvatar,
   defaultOnlineAccountPrivacySettings,
+  parseOnlineAccountAvatar,
+  type OnlineAccountAvatar,
   type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationReport,
+  type OnlineAccountProfilePatch,
   type OnlineAccountPrivacyPatch,
   type OnlineAccountPrivacySettings,
   type OnlineAccountPresenceStatus,
@@ -487,7 +491,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
     const result = await this.queryable.query(
       `
-        SELECT a.display_name, r.payload
+        SELECT a.display_name, a.profile_payload, r.payload
         FROM online_account_ratings r
         INNER JOIN online_accounts a ON a.account_id = r.account_id
         ORDER BY
@@ -524,7 +528,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
                 AND b.blocked_account_id = f.followed_account_id
             )
         )
-        SELECT a.display_name, r.payload
+        SELECT a.display_name, a.profile_payload, r.payload
         FROM visible_accounts v
         INNER JOIN online_accounts a ON a.account_id = v.account_id
         INNER JOIN online_account_ratings r ON r.account_id = v.account_id
@@ -1075,6 +1079,30 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return privacyFromRow(result.rows[0]);
   }
 
+  async updateProfileSettings(
+    accountId: string,
+    patch: OnlineAccountProfilePatch,
+    updatedAt: string
+  ): Promise<OnlineAccountPublicProfile | null> {
+    await this.ensureSchema();
+    const account = await this.loadAccountById(accountId);
+    if (!account) return null;
+    const currentPayload = await this.loadProfilePayload(accountId);
+    const nextPayload = {
+      ...currentPayload,
+      ...(patch.avatar ? { avatar: patch.avatar } : {}),
+    };
+    await this.queryable.query(
+      `
+        UPDATE online_accounts
+        SET profile_payload = $2::jsonb, updated_at = $3
+        WHERE account_id = $1
+      `,
+      [accountId, JSON.stringify(nextPayload), updatedAt]
+    );
+    return this.createProfile(accountId, { ...account, updatedAt }, this.queryable, updatedAt);
+  }
+
   async checkReady(): Promise<boolean> {
     await this.ensureSchema();
     await this.queryable.query("SELECT 1");
@@ -1107,6 +1135,10 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     await this.queryable.query(`
       ALTER TABLE online_accounts
         ADD COLUMN IF NOT EXISTS password_hash TEXT
+    `);
+    await this.queryable.query(`
+      ALTER TABLE online_accounts
+        ADD COLUMN IF NOT EXISTS profile_payload JSONB NOT NULL DEFAULT '{}'::jsonb
     `);
     await this.queryable.query(`
       CREATE TABLE IF NOT EXISTS online_account_display_names (
@@ -1400,12 +1432,15 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return result.rows.length > 0 ? accountFromRow(result.rows[0]) : null;
   }
 
-  private ratingLeaderboardRows(rows: Array<{ display_name: unknown; payload: unknown }>): OnlineRatingLeaderboardEntry[] {
+  private ratingLeaderboardRows(
+    rows: Array<{ display_name: unknown; profile_payload?: unknown; payload: unknown }>
+  ): OnlineRatingLeaderboardEntry[] {
     return rows.map((row) => {
       const rating = validateOnlineRating(row.payload, `online account leaderboard rating ${row.display_name}`);
       return {
         schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
         displayName: String(row.display_name),
+        avatar: this.avatarFromProfilePayload(row.profile_payload),
         rating: createOnlineAccountPublicRating(rating),
       };
     });
@@ -1509,6 +1544,7 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return {
       schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
       displayName: target.displayName,
+      avatar: await this.loadAccountAvatar(target.accountId, queryable),
       ...(await this.createPublicRating(target.accountId, queryable)),
       presence: await this.createPresence(viewerAccountId, target, queryable, viewedAt),
       relationship: {
@@ -1535,6 +1571,38 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
       ? createDefaultOnlineRating(null)
       : validateOnlineRating(result.rows[0].payload, `online account rating ${accountId}`);
     return { rating: createOnlineAccountPublicRating(rating) };
+  }
+
+  private async loadProfilePayload(
+    accountId: string,
+    queryable: PostgresQueryable = this.queryable
+  ): Promise<Record<string, unknown>> {
+    const result = await queryable.query(
+      "SELECT profile_payload FROM online_accounts WHERE account_id = $1 LIMIT 1",
+      [accountId]
+    );
+    const payload = result.rows[0]?.profile_payload;
+    return payload && typeof payload === "object" && !Array.isArray(payload)
+      ? { ...(payload as Record<string, unknown>) }
+      : {};
+  }
+
+  private async loadAccountAvatar(
+    accountId: string,
+    queryable: PostgresQueryable
+  ): Promise<OnlineAccountAvatar> {
+    return this.avatarFromProfilePayload(await this.loadProfilePayload(accountId, queryable));
+  }
+
+  private avatarFromProfilePayload(value: unknown): OnlineAccountAvatar {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return defaultOnlineAccountAvatar();
+    const avatar = (value as Record<string, unknown>).avatar;
+    if (avatar === undefined) return defaultOnlineAccountAvatar();
+    const parsed = parseOnlineAccountAvatar(avatar);
+    if (!parsed.ok) {
+      throw new Error(parsed.error.message);
+    }
+    return parsed.value;
   }
 
   private async createPresence(

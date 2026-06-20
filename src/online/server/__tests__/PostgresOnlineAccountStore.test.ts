@@ -118,12 +118,12 @@ class FakeAccountQueryable {
       return { rows: rating ? [{ payload: rating }] : [] };
     }
 
-    if (normalizedText.startsWith("SELECT a.display_name, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
+    if (normalizedText.startsWith("SELECT a.display_name, a.profile_payload, r.payload FROM online_account_ratings r INNER JOIN online_accounts a")) {
       const [limit] = values as number[];
       const rows = Array.from(this.ratingRows.entries())
         .flatMap(([accountId, rating]) => {
           const account = this.accounts.get(accountId);
-          return account ? [{ display_name: account.display_name, payload: rating }] : [];
+          return account ? [{ display_name: account.display_name, profile_payload: account.profile_payload, payload: rating }] : [];
         })
         .sort((left, right) => {
           if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
@@ -151,7 +151,7 @@ class FakeAccountQueryable {
         .flatMap((accountId) => {
           const account = this.accounts.get(accountId);
           const rating = this.ratingRows.get(accountId);
-          return account && rating ? [{ display_name: account.display_name, payload: rating }] : [];
+          return account && rating ? [{ display_name: account.display_name, profile_payload: account.profile_payload, payload: rating }] : [];
         })
         .sort((left, right) => {
           if (left.payload.rating !== right.payload.rating) return right.payload.rating - left.payload.rating;
@@ -202,6 +202,7 @@ class FakeAccountQueryable {
         display_name: displayName,
         display_name_normalized: displayNameNormalized,
         password_hash: passwordHash,
+        profile_payload: {},
         created_at: createdAt,
         updated_at: createdAt,
       };
@@ -344,11 +345,27 @@ class FakeAccountQueryable {
       return { rows: [] };
     }
 
+    if (normalizedText.startsWith("UPDATE online_accounts SET profile_payload")) {
+      const [accountId, payload, updatedAt] = values as string[];
+      const account = this.accounts.get(accountId);
+      if (account) {
+        account.profile_payload = typeof payload === "string" ? JSON.parse(payload) : payload;
+        account.updated_at = updatedAt;
+      }
+      return { rows: [] };
+    }
+
     if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE display_name_normalized")) {
       const [displayNameNormalized] = values as string[];
       const accountId = this.accountsByDisplayName.get(displayNameNormalized);
       const account = accountId ? this.accounts.get(accountId) : undefined;
       return { rows: account ? [account] : [] };
+    }
+
+    if (normalizedText.startsWith("SELECT profile_payload FROM online_accounts WHERE account_id")) {
+      const [accountId] = values as string[];
+      const account = this.accounts.get(accountId);
+      return { rows: account ? [{ profile_payload: account.profile_payload ?? {} }] : [] };
     }
 
     if (normalizedText.startsWith("SELECT account_id, display_name, created_at, updated_at FROM online_accounts WHERE account_id")) {
@@ -1339,6 +1356,42 @@ describe("PostgresOnlineAccountStore", () => {
     expect(queryable.advisoryLocks).toContain("account_liam|account_samir");
   });
 
+  it("persists built-in avatar profile settings across public profile reads", async () => {
+    const queryable = new FakeAccountQueryable();
+    const store = createStore(queryable);
+
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      passwordHash: TEST_PASSWORD_HASH,
+      tokenHash: hashOnlineToken("token-liam"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
+    });
+    await expect(
+      store.updateProfileSettings(
+        "account_liam",
+        { avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } },
+        "2026-06-03T12:05:00.000Z"
+      )
+    ).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: true },
+    });
+    await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: false },
+    });
+    expect(JSON.stringify(await store.getProfileForDisplayName(null, "Liam"))).not.toContain("account_liam");
+  });
+
   it("searches profiles with literal PostgreSQL characters while respecting block visibility", async () => {
     const queryable = new FakeAccountQueryable();
     const store = createStore(queryable);
@@ -1685,6 +1738,7 @@ describe("PostgresOnlineAccountStore", () => {
       {
         schemaVersion: 1,
         displayName: "Ben",
+        avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
         rating: {
           schemaVersion: 1,
           rating: 1612,
@@ -1697,6 +1751,7 @@ describe("PostgresOnlineAccountStore", () => {
       {
         schemaVersion: 1,
         displayName: "Cleo",
+        avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
         rating: {
           schemaVersion: 1,
           rating: 1611,
@@ -1768,6 +1823,7 @@ describe("PostgresOnlineAccountStore", () => {
       {
         schemaVersion: 1,
         displayName: "Ada",
+        avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
         rating: {
           schemaVersion: 1,
           rating: 1620,
@@ -1780,6 +1836,7 @@ describe("PostgresOnlineAccountStore", () => {
       {
         schemaVersion: 1,
         displayName: "Liam",
+        avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
         rating: {
           schemaVersion: 1,
           rating: 1550,

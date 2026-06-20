@@ -144,6 +144,7 @@ export function OnlineAccountDialog({
   const [displayName, setDisplayName] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [actionMessage, setActionMessage] = React.useState("");
+  const [isRecoveryOpen, setIsRecoveryOpen] = React.useState(false);
   const [oauthProviders, setOAuthProviders] = React.useState<OnlineAccountOAuthProvidersResponse["providers"]>([]);
   const [oauthStatus, setOAuthStatus] = React.useState<"idle" | "loading" | "ready" | "error">("idle");
   const titleId = React.useId();
@@ -193,6 +194,7 @@ export function OnlineAccountDialog({
     if (!account) return;
     setDisplayName("");
     setPassword("");
+    setIsRecoveryOpen(false);
   }, [account?.accountId]);
 
   if (!isOpen) return null;
@@ -395,6 +397,43 @@ export function OnlineAccountDialog({
                   <li>8-128 characters</li>
                   <li>No control characters</li>
                 </ul>
+              </div>
+              <div className="online-account-recovery">
+                <button
+                  type="button"
+                  className="online-account-recovery-toggle"
+                  onClick={() => setIsRecoveryOpen((current) => !current)}
+                  aria-expanded={isRecoveryOpen}
+                >
+                  Forgot password?
+                </button>
+                {isRecoveryOpen && (
+                  <section
+                    className="online-account-recovery-panel"
+                    role="region"
+                    aria-label="Password recovery options"
+                  >
+                    <p>
+                      If this account uses Google sign-in, continue with Google, then open Profile Settings to set a
+                      new local password.
+                    </p>
+                    {googleProvider?.startUrl ? (
+                      <a
+                        className="online-account-google-link online-account-oauth-button"
+                        href={accountOAuthStartUrl(googleProvider.startUrl)}
+                        aria-label="Recover with Google"
+                      >
+                        Recover with Google
+                      </a>
+                    ) : (
+                      <p>Google recovery is unavailable right now.</p>
+                    )}
+                    <p>
+                      Password-only accounts do not yet have a verified recovery email, so Castles cannot safely reset
+                      them without an existing sign-in method.
+                    </p>
+                  </section>
+                )}
               </div>
               <div className="online-account-dialog-actions">
                 <button

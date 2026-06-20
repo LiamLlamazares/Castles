@@ -163,8 +163,10 @@ import {
   ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   parseOnlineAccountModerationReportStatusPatch,
+  parseOnlineAccountProfilePatch,
   parseOnlineAccountReportInput,
   parseOnlineAccountPrivacyPatch,
+  type OnlineAccountAvatar,
   type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationAuditListResponse,
   type OnlineAccountModerationReport,
@@ -271,7 +273,8 @@ const ACCOUNT_RATING_HISTORY_MAX_LIMIT = 50;
 const ACCOUNT_SEARCH_DEFAULT_LIMIT = 8;
 const ACCOUNT_SEARCH_MAX_LIMIT = 20;
 const ACCOUNT_SEARCH_QUERY_MAX_LENGTH = 32;
-const RATING_LEADERBOARD_ENTRY_RESPONSE_KEYS = new Set(["schemaVersion", "displayName", "rating"]);
+const RATING_LEADERBOARD_ENTRY_RESPONSE_KEYS = new Set(["schemaVersion", "displayName", "avatar", "rating"]);
+const ACCOUNT_AVATAR_RESPONSE_KEYS = new Set(["schemaVersion", "preset", "color"]);
 const ACCOUNT_RATING_HISTORY_ENTRY_RESPONSE_KEYS = new Set([
   "schemaVersion",
   "gameId",
@@ -304,6 +307,7 @@ const PUBLIC_RATING_RESPONSE_KEYS = new Set([
 const ACCOUNT_PUBLIC_PROFILE_RESPONSE_KEYS = new Set([
   "schemaVersion",
   "displayName",
+  "avatar",
   "rating",
   "presence",
   "relationship",
@@ -1665,6 +1669,36 @@ function validatePublicRatingResponseShape(value: unknown): OnlineAccountPublicR
   };
 }
 
+function validateAccountAvatarResponseShape(value: unknown): OnlineAccountAvatar {
+  if (!isResponseRecord(value)) throw new Error("Account avatar must be an object.");
+  assertAllowedResponseKeys(value, ACCOUNT_AVATAR_RESPONSE_KEYS, "Account avatar");
+  const { schemaVersion, preset, color } = value;
+  if (
+    schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION ||
+    (
+      preset !== "monarch" &&
+      preset !== "dragon" &&
+      preset !== "knight" &&
+      preset !== "archer" &&
+      preset !== "eagle" &&
+      preset !== "trebuchet" &&
+      preset !== "swordsman" &&
+      preset !== "assassin"
+    ) ||
+    (
+      color !== "green" &&
+      color !== "amber" &&
+      color !== "blue" &&
+      color !== "violet" &&
+      color !== "red" &&
+      color !== "slate"
+    )
+  ) {
+    throw new Error("Account avatar is malformed.");
+  }
+  return { schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION, preset, color };
+}
+
 function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRatingLeaderboardEntry {
   if (!isResponseRecord(value)) throw new Error("Rating leaderboard entry must be an object.");
   assertAllowedResponseKeys(
@@ -1681,6 +1715,7 @@ function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRati
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: value.displayName,
+    avatar: validateAccountAvatarResponseShape(value.avatar),
     rating: validatePublicRatingResponseShape(value.rating),
   };
 }
@@ -1801,6 +1836,7 @@ function validateAccountPublicProfileResponseShape(value: unknown): OnlineAccoun
   return {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: value.displayName,
+    avatar: validateAccountAvatarResponseShape(value.avatar),
     ...(rating ? { rating } : {}),
     presence: validateAccountPresenceResponseShape(value.presence),
     relationship: validateAccountRelationshipResponseShape(value.relationship),
@@ -1812,6 +1848,7 @@ function validateAccountSearchProfileResponseShape(value: unknown): OnlineAccoun
   const searchProfile: OnlineAccountSearchProfile = {
     schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
     displayName: profile.displayName,
+    avatar: profile.avatar,
     ...(profile.rating ? { rating: profile.rating } : {}),
   };
   return searchProfile;
@@ -4388,6 +4425,48 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       console.error("Failed to update account password", error);
       res.status(503).json({
         error: { code: "persistence_failed", message: "Account password could not be updated." },
+      });
+    }
+  });
+
+  app.patch("/api/online/account/profile", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_auth", req)) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account profile requests were sent too quickly." },
+      });
+      return;
+    }
+    const auth = await resolveAccountBearer(req);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+    const query = validateAccountSessionActionQuery(req.originalUrl);
+    if (!query.ok) {
+      res.status(400).json({ error: { code: "bad_request", message: query.message } });
+      return;
+    }
+    const patch = parseOnlineAccountProfilePatch(req.body);
+    if (!patch.ok) {
+      res.status(400).json({ error: patch.error });
+      return;
+    }
+    try {
+      const profile = await accountStore.updateProfileSettings(auth.account.accountId, patch.value, auth.usedAt);
+      if (!profile) {
+        res.status(404).json({
+          error: { code: "not_found", message: "Account was not found." },
+        });
+        return;
+      }
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        profile: validateAccountPublicProfileResponseShape(profile),
+      });
+    } catch (error) {
+      console.error("Failed to update account profile", error);
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Account profile could not be updated." },
       });
     }
   });

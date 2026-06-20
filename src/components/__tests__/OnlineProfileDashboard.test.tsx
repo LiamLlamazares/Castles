@@ -2,10 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import OnlineProfileDashboard from "../OnlineProfileDashboard";
 import { OnlineRequestError } from "../../online/client";
 import { ONLINE_PROTOCOL_VERSION } from "../../online/protocolVersion";
-import { ONLINE_GAME_DIRECTORY_SCHEMA_VERSION } from "../../online/readModel";
+import { ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../../online/readModel";
 import { ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION } from "../../online/challenges";
 import type { OnlineAccount } from "../../online/accounts";
 import type { OnlineAccountPublicProfile } from "../../online/social";
+import type { OnlineGameSummary } from "../../online/readModel";
 
 function account(displayName = "Liam"): OnlineAccount {
   return {
@@ -22,9 +23,45 @@ function profile(displayName: string, options: Partial<OnlineAccountPublicProfil
   return {
     schemaVersion: 1,
     displayName,
+    avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
     presence: { visibility: "hidden", status: null },
     relationship: { self: false, following: false, followedBy: false, blocked: false },
     ...options,
+  };
+}
+
+function publicGame(overrides: Partial<OnlineGameSummary> = {}): OnlineGameSummary {
+  return {
+    schemaVersion: ONLINE_GAME_SUMMARY_SCHEMA_VERSION,
+    gameId: "game_public_samir_liam",
+    rulesetVersion: "castles-beta-v1",
+    createdAt: "2026-06-14T12:00:00.000Z",
+    updatedAt: "2026-06-14T12:08:00.000Z",
+    endedAt: "2026-06-14T12:08:00.000Z",
+    version: 4,
+    status: "complete",
+    visibility: "public",
+    archiveState: "archived",
+    hasTimeControl: false,
+    ratingMode: "rated",
+    participants: [
+      { seat: "w", role: "white", identity: { kind: "registered", id: "account_samir", displayName: "Samir" } },
+      { seat: "b", role: "black", identity: { kind: "registered", id: "account_liam", displayName: "Liam" } },
+    ],
+    result: { winner: "w", reason: "resignation" },
+    livePreview: {
+      sideToMove: "b",
+      turnPhase: "Movement",
+      moveCount: 4,
+      lastMove: { notation: "G13G12", turnNumber: 2, color: "w", phase: "Movement" },
+      boardPreview: {
+        radius: 6,
+        pieces: [],
+        castles: [],
+      },
+    },
+    lastEventId: "evt_public_samir_liam",
+    ...overrides,
   };
 }
 
@@ -121,6 +158,7 @@ describe("OnlineProfileDashboard", () => {
             },
           ],
         })}
+        onOpenProfile={vi.fn()}
       />
     );
 
@@ -137,7 +175,7 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.getByText("0 followed players.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Rating history graph" })).toBeInTheDocument();
     expect(screen.getByText("Rating History")).toBeInTheDocument();
-    expect(screen.getByText("Samir")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Samir profile from rating history game_rated_1" })).toBeInTheDocument();
     expect(screen.getByText("+120")).toBeInTheDocument();
     expect(screen.queryByText("Who can see me online")).not.toBeInTheDocument();
     expect(screen.queryByText("0 active sessions.")).not.toBeInTheDocument();
@@ -183,6 +221,44 @@ describe("OnlineProfileDashboard", () => {
     await waitFor(() => expect(updateAccountPassword).toHaveBeenLastCalledWith({
       newPassword: "first-local-password",
     }));
+  });
+
+  it("lets signed-in players choose a built-in avatar from Profile Settings", async () => {
+    const liam = account("Liam");
+    const updateAccountProfile = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      profile: profile("Liam", {
+        avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+        relationship: { self: true, following: false, followedBy: false, blocked: false },
+      }),
+    });
+
+    render(
+      <OnlineProfileDashboard
+        displayName="Liam"
+        account={liam}
+        loadProfile={vi.fn().mockResolvedValue({
+          protocolVersion: ONLINE_PROTOCOL_VERSION,
+          profile: profile("Liam", {
+            avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
+            relationship: { self: true, following: false, followedBy: false, blocked: false },
+          }),
+        })}
+        updateAccountProfile={updateAccountProfile}
+      />
+    );
+
+    expect(await screen.findByRole("img", { name: "Liam profile avatar, monarch on green" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Dragon avatar" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Violet avatar color" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Avatar" }));
+
+    await waitFor(() => expect(updateAccountProfile).toHaveBeenCalledWith({
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+    }));
+    expect(await screen.findByText("Avatar saved.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Liam profile avatar, dragon on violet" })).toBeInTheDocument();
   });
 
   it("signs out all account sessions from Profile Settings", async () => {
@@ -390,6 +466,11 @@ describe("OnlineProfileDashboard", () => {
 
   it("keeps public profiles shareable without private dashboard sections", async () => {
     const loadAccountGames = vi.fn();
+    const loadPublicProfileGames = vi.fn().mockResolvedValue({
+      schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+      games: [publicGame()],
+    });
+    const onReplay = vi.fn();
     window.history.replaceState({}, "", "/?profile=Samir&section=settings");
 
     render(
@@ -409,6 +490,9 @@ describe("OnlineProfileDashboard", () => {
           }),
         })}
         loadAccountGames={loadAccountGames}
+        loadPublicProfileGames={loadPublicProfileGames}
+        onReplay={onReplay}
+        onOpenProfile={vi.fn()}
       />
     );
 
@@ -418,9 +502,14 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.getByText("18 rated games")).toBeInTheDocument();
     expect(screen.queryByText("Challenge Inbox")).not.toBeInTheDocument();
     expect(screen.queryByText("Account Sessions")).not.toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Public games for Samir" })).toHaveTextContent("Samir vs Liam");
+    expect(screen.getByText("White wins by resignation")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Analyze replay game_public_samir_liam from Samir public profile" }));
+    expect(onReplay).toHaveBeenCalledWith("game_public_samir_liam");
     expect(screen.getByRole("button", { name: "Summary" })).toHaveAttribute("aria-pressed", "true");
     expect(new URL(window.location.href).searchParams.has("section")).toBe(false);
     expect(loadAccountGames).not.toHaveBeenCalled();
+    expect(loadPublicProfileGames).toHaveBeenCalledWith("Samir");
   });
 
   it("searches players with suggestions and opens a selected public profile", async () => {

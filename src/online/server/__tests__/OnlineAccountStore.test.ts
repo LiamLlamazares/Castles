@@ -102,4 +102,38 @@ describe("MemoryOnlineAccountStore", () => {
       sessionId: "account_session_google_second",
     });
   });
+
+  it("updates built-in avatar settings on public profiles", async () => {
+    const store = new MemoryOnlineAccountStore();
+    await store.createAccount({
+      accountId: "account_liam",
+      sessionId: "account_session_liam",
+      displayName: "Liam",
+      passwordHash: await hashOnlineAccountPassword("correct-horse-battery-staple"),
+      tokenHash: hashOnlineToken("liam-token"),
+      createdAt: "2026-06-03T12:00:00.000Z",
+    });
+
+    await expect(store.getProfileForDisplayName("account_liam", "Liam")).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "monarch", color: "green" },
+    });
+
+    await expect(
+      store.updateProfileSettings(
+        "account_liam",
+        { avatar: { schemaVersion: 1, preset: "dragon", color: "violet" } },
+        "2026-06-03T12:05:00.000Z"
+      )
+    ).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: true },
+    });
+    await expect(store.getProfileForDisplayName(null, "Liam")).resolves.toMatchObject({
+      displayName: "Liam",
+      avatar: { schemaVersion: 1, preset: "dragon", color: "violet" },
+      relationship: { self: false },
+    });
+  });
 });

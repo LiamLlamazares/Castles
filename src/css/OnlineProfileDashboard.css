@@ -25,6 +25,45 @@
   background: #262421;
 }
 
+.online-profile-avatar {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
+  color: #101815;
+  font-size: 1.35rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.online-profile-avatar-green {
+  background: #74c797;
+}
+
+.online-profile-avatar-amber {
+  background: #d7b765;
+}
+
+.online-profile-avatar-blue {
+  background: #8bd1ff;
+}
+
+.online-profile-avatar-violet {
+  background: #b89cff;
+}
+
+.online-profile-avatar-red {
+  background: #ef887d;
+}
+
+.online-profile-avatar-slate {
+  background: #a7b0bb;
+}
+
 .online-profile-kicker {
   display: block;
   color: #8f8f8f;
@@ -288,10 +327,108 @@
   overflow-wrap: anywhere;
 }
 
+.online-profile-inline-link {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #d4d4d4;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.online-profile-inline-link:hover {
+  color: #d8ffe7;
+}
+
+.online-profile-inline-link:focus-visible {
+  outline: 2px solid rgba(191, 129, 29, 0.68);
+  outline-offset: 2px;
+}
+
 .online-profile-settings-form {
   display: grid;
   gap: 10px;
   margin-top: 12px;
+}
+
+.online-profile-avatar-settings {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.online-profile-avatar-settings fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #3d3a34;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.online-profile-avatar-settings legend {
+  padding: 0 4px;
+  color: #d4d4d4;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.online-profile-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 7px;
+}
+
+.online-profile-choice-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
+.online-profile-choice-grid label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.online-profile-choice-grid input {
+  width: auto;
+  min-height: auto;
+}
+
+.online-profile-public-games {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.online-profile-public-games li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid #3d3a34;
+}
+
+.online-profile-public-games strong,
+.online-profile-public-games span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.online-profile-public-games span {
+  margin-top: 2px;
+  color: #bababa;
+  font-size: 0.82rem;
 }
 
 .online-profile-settings-form h3 {
@@ -411,6 +548,11 @@
     right: auto;
     width: 100%;
   }
+
+  .online-profile-avatar-settings,
+  .online-profile-public-games li {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Final light-theme overrides must come after component-specific dark rules. */
@@ -461,6 +603,11 @@
   color: #1f1f1f;
 }
 
+[data-theme="light"] .online-profile-avatar-settings fieldset,
+[data-theme="light"] .online-profile-public-games li {
+  border-color: #d9d9d9;
+}
+
 [data-theme="light"] .online-profile-button.subtle {
   background: #f5f5f5;
 }
@@ -507,5 +654,10 @@
 
 [data-theme="light"] .online-profile-rating-history li {
   border-top-color: #d9d9d9;
+  color: #555555;
+}
+
+[data-theme="light"] .online-profile-inline-link,
+[data-theme="light"] .online-profile-public-games span {
   color: #555555;
 }

@@ -244,10 +244,47 @@
   padding-left: 18px;
 }
 
+.online-account-recovery {
+  display: grid;
+  gap: 8px;
+}
+
+.online-account-recovery-toggle {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: #d7b765;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.online-account-recovery-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(215, 183, 101, 0.28);
+  border-radius: 6px;
+  background: rgba(70, 51, 20, 0.22);
+}
+
+.online-account-recovery-panel p {
+  margin: 0;
+  color: #bababa;
+  font-size: 0.82rem;
+  line-height: 1.38;
+}
+
 .online-account-dialog-form input:focus-visible,
 .online-account-dialog-button:focus-visible,
 .online-account-dialog-close:focus-visible,
-.online-account-google-link:focus-visible {
+.online-account-google-link:focus-visible,
+.online-account-recovery-toggle:focus-visible {
   outline: 2px solid rgba(191, 129, 29, 0.68);
   outline-offset: 2px;
 }
@@ -349,9 +386,19 @@
 [data-theme="light"] .online-account-dialog-signed-in p,
 [data-theme="light"] .online-account-dialog-form label,
 [data-theme="light"] .online-account-password-rules,
+[data-theme="light"] .online-account-recovery-panel p,
 [data-theme="light"] .online-account-dialog-oauth-message,
 [data-theme="light"] .online-account-dialog-message {
   color: #555555;
+}
+
+[data-theme="light"] .online-account-recovery-toggle {
+  color: #8d6b2a;
+}
+
+[data-theme="light"] .online-account-recovery-panel {
+  border-color: #e7d4a6;
+  background: #fff8e6;
 }
 
 [data-theme="light"] .online-account-dialog-close,

@@ -1,6 +1,7 @@
 import React from "react";
 import AppShellNav, { type AppShellDestination } from "./AppShellNav";
 import {
+  formatOnlineGameResult,
   OnlineRequestError,
   type FetchOnlineAccountChallengesOptions,
   type FetchOnlineAccountGamesOptions,
@@ -13,6 +14,10 @@ import {
 } from "../online/accounts";
 import type {
   OnlineAccountFollowingResponse,
+  OnlineAccountAvatar,
+  OnlineAccountAvatarColor,
+  OnlineAccountAvatarPreset,
+  OnlineAccountProfilePatch,
   OnlineAccountPrivacyPatch,
   OnlineAccountPrivacyResponse,
   OnlineAccountPrivacySettings,
@@ -39,8 +44,29 @@ const SELF_PROFILE_SECTIONS: Array<{ id: ProfileSectionId; label: string }> = [
 ];
 const PUBLIC_PROFILE_SECTIONS: Array<{ id: ProfileSectionId; label: string }> = [
   { id: "summary", label: "Summary" },
+  { id: "games", label: "Games" },
   { id: "rating", label: "Rating" },
   { id: "people", label: "People" },
+];
+
+const AVATAR_PRESET_OPTIONS: Array<{ value: OnlineAccountAvatarPreset; label: string; mark: string }> = [
+  { value: "monarch", label: "Monarch", mark: "M" },
+  { value: "dragon", label: "Dragon", mark: "D" },
+  { value: "knight", label: "Knight", mark: "K" },
+  { value: "archer", label: "Archer", mark: "A" },
+  { value: "eagle", label: "Eagle", mark: "E" },
+  { value: "trebuchet", label: "Trebuchet", mark: "T" },
+  { value: "swordsman", label: "Swordsman", mark: "S" },
+  { value: "assassin", label: "Assassin", mark: "N" },
+];
+
+const AVATAR_COLOR_OPTIONS: Array<{ value: OnlineAccountAvatarColor; label: string }> = [
+  { value: "green", label: "Green" },
+  { value: "amber", label: "Amber" },
+  { value: "blue", label: "Blue" },
+  { value: "violet", label: "Violet" },
+  { value: "red", label: "Red" },
+  { value: "slate", label: "Slate" },
 ];
 
 interface OnlineProfileDashboardProps {
@@ -48,12 +74,14 @@ interface OnlineProfileDashboardProps {
   account?: OnlineAccount | null;
   loadProfile: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
+  loadPublicProfileGames?: (displayName: string) => Promise<OnlineGameDirectoryResponse>;
   loadAccountChallenges?: (
     options?: FetchOnlineAccountChallengesOptions
   ) => Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>;
   loadAccountRatingHistory?: () => Promise<OnlineAccountRatingHistoryResponse>;
   loadAccountFollowing?: () => Promise<OnlineAccountFollowingResponse>;
   loadAccountPrivacy?: () => Promise<OnlineAccountPrivacyResponse>;
+  updateAccountProfile?: (patch: OnlineAccountProfilePatch) => Promise<OnlineAccountProfileResponse>;
   updateAccountPrivacy?: (patch: OnlineAccountPrivacyPatch) => Promise<OnlineAccountPrivacyResponse>;
   updateAccountPassword?: (input: { currentPassword?: string; newPassword: string }) => Promise<unknown>;
   loadAccountSessions?: () => Promise<OnlineAccountSessionsResponse>;
@@ -61,6 +89,7 @@ interface OnlineProfileDashboardProps {
   onDeleteAccount?: () => void | Promise<void>;
   searchProfiles?: (query: string) => Promise<OnlineAccountSearchResponse>;
   onOpenProfile?: (displayName: string) => void;
+  onReplay?: (gameId: string) => void;
   onBack?: () => void;
   backLabel?: string;
   onOpenGame?: () => void;
@@ -82,6 +111,56 @@ function presenceLabel(profile: OnlineAccountPublicProfile | null): string {
     return "Status hidden";
   }
   return profile.presence.status[0].toUpperCase() + profile.presence.status.slice(1);
+}
+
+function avatarMark(avatar: OnlineAccountAvatar): string {
+  return AVATAR_PRESET_OPTIONS.find((option) => option.value === avatar.preset)?.mark ?? "C";
+}
+
+function avatarAccessibleName(displayName: string, avatar: OnlineAccountAvatar): string {
+  return `${displayName} profile avatar, ${avatar.preset} on ${avatar.color}`;
+}
+
+function OnlineProfileAvatar({
+  displayName,
+  avatar,
+  decorative = false,
+}: {
+  displayName: string;
+  avatar: OnlineAccountAvatar;
+  decorative?: boolean;
+}) {
+  if (decorative) {
+    return (
+      <span
+        className={`online-profile-avatar online-profile-avatar-${avatar.color}`}
+        aria-hidden="true"
+      >
+        <span>{avatarMark(avatar)}</span>
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`online-profile-avatar online-profile-avatar-${avatar.color}`}
+      role="img"
+      aria-label={avatarAccessibleName(displayName, avatar)}
+    >
+      <span aria-hidden="true">{avatarMark(avatar)}</span>
+    </span>
+  );
+}
+
+function participantDisplayName(game: OnlineGameSummary, seat: "w" | "b"): string {
+  const participant = game.participants.find((candidate) => candidate.seat === seat);
+  if (participant?.identity.kind === "registered" && participant.identity.displayName) {
+    return participant.identity.displayName;
+  }
+  return seat === "w" ? "White" : "Black";
+}
+
+function publicGameTitle(game: OnlineGameSummary): string {
+  return `${participantDisplayName(game, "w")} vs ${participantDisplayName(game, "b")}`;
 }
 
 function gameCount(games: OnlineGameSummary[]): string {
@@ -115,7 +194,7 @@ function isProfileSectionAllowed(section: string | null, isSelfDashboard: boolea
   ) {
     return false;
   }
-  return isSelfDashboard || (section !== "games" && section !== "settings");
+  return isSelfDashboard || section !== "settings";
 }
 
 function readProfileSectionFromUrl(isSelfDashboard: boolean): ProfileSectionId {
@@ -146,10 +225,12 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   account,
   loadProfile,
   loadAccountGames,
+  loadPublicProfileGames,
   loadAccountChallenges,
   loadAccountRatingHistory,
   loadAccountFollowing,
   loadAccountPrivacy,
+  updateAccountProfile,
   updateAccountPrivacy,
   updateAccountPassword,
   loadAccountSessions,
@@ -157,6 +238,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   onDeleteAccount,
   searchProfiles,
   onOpenProfile,
+  onReplay,
   onBack,
   backLabel = "Back",
   onOpenGame,
@@ -168,9 +250,12 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   onlineNotificationLabel = "challenge activities",
 }) => {
   const [profile, setProfile] = React.useState<OnlineAccountPublicProfile | null>(null);
+  const [avatarDraft, setAvatarDraft] = React.useState<OnlineAccountAvatar | null>(null);
   const [profileStatus, setProfileStatus] = React.useState<LoadStatus>("loading");
   const [activeGames, setActiveGames] = React.useState<OnlineGameSummary[]>([]);
   const [completedGames, setCompletedGames] = React.useState<OnlineGameSummary[]>([]);
+  const [publicGames, setPublicGames] = React.useState<OnlineGameSummary[]>([]);
+  const [publicGamesStatus, setPublicGamesStatus] = React.useState<LoadStatus>("idle");
   const [ratingHistory, setRatingHistory] = React.useState<OnlineAccountRatingHistoryEntry[]>([]);
   const [challengeCount, setChallengeCount] = React.useState(0);
   const [followingCount, setFollowingCount] = React.useState(0);
@@ -179,6 +264,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const [sessionCount, setSessionCount] = React.useState(0);
   const [dashboardStatus, setDashboardStatus] = React.useState<LoadStatus>("idle");
   const [activeSection, setActiveSection] = React.useState<ProfileSectionId>("summary");
+  const [avatarStatus, setAvatarStatus] = React.useState<LoadStatus>("idle");
   const [privacyStatus, setPrivacyStatus] = React.useState<LoadStatus>("idle");
   const [passwordStatus, setPasswordStatus] = React.useState<LoadStatus>("idle");
   const [sessionActionStatus, setSessionActionStatus] = React.useState<LoadStatus>("idle");
@@ -193,6 +279,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const [searchStatus, setSearchStatus] = React.useState<LoadStatus>("idle");
   const profileRequestRef = React.useRef(0);
   const dashboardRequestRef = React.useRef(0);
+  const publicGamesRequestRef = React.useRef(0);
   const searchRequestRef = React.useRef(0);
   const deleteAccountConfirmPanelId = React.useId();
   const deleteAccountConfirmHeadingId = React.useId();
@@ -203,11 +290,13 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   React.useEffect(() => {
     const requestId = ++profileRequestRef.current;
     setProfile(null);
+    setAvatarDraft(null);
     setProfileStatus("loading");
     loadProfile(displayName)
       .then((response) => {
         if (requestId !== profileRequestRef.current) return;
         setProfile(response.profile);
+        setAvatarDraft(response.profile.avatar);
         setProfileStatus("ready");
       })
       .catch((error) => {
@@ -314,6 +403,28 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   ]);
 
   React.useEffect(() => {
+    const requestId = ++publicGamesRequestRef.current;
+    setPublicGames([]);
+    if (isSelfDashboard || !loadPublicProfileGames) {
+      setPublicGamesStatus("idle");
+      return;
+    }
+    setPublicGamesStatus("loading");
+    loadPublicProfileGames(displayName)
+      .then((response) => {
+        if (requestId !== publicGamesRequestRef.current) return;
+        setPublicGames(response.games);
+        setPublicGamesStatus("ready");
+      })
+      .catch((error) => {
+        if (requestId !== publicGamesRequestRef.current) return;
+        console.error("[OnlineProfileDashboard] Failed to load public profile games", error);
+        setPublicGames([]);
+        setPublicGamesStatus("error");
+      });
+  }, [displayName, isSelfDashboard, loadPublicProfileGames]);
+
+  React.useEffect(() => {
     const requestId = ++searchRequestRef.current;
     const query = searchQuery.trim();
     if (!searchProfiles || query.length < 2) {
@@ -369,6 +480,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
     newPassword.length >= ONLINE_ACCOUNT_PASSWORD_MIN_LENGTH &&
     newPassword.length <= ONLINE_ACCOUNT_PASSWORD_MAX_LENGTH &&
     passwordStatus !== "loading";
+  const canSubmitAvatar = !!updateAccountProfile && !!avatarDraft && avatarStatus !== "loading";
 
   const handleSectionChange = (section: ProfileSectionId) => {
     setActiveSection(section);
@@ -381,6 +493,43 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
       ...privacySettings,
       [field]: value,
     });
+  };
+
+  const handleAvatarPresetChange = (preset: OnlineAccountAvatarPreset) => {
+    setAvatarDraft((current) => ({
+      schemaVersion: 1,
+      preset,
+      color: current?.color ?? "green",
+    }));
+  };
+
+  const handleAvatarColorChange = (color: OnlineAccountAvatarColor) => {
+    setAvatarDraft((current) => ({
+      schemaVersion: 1,
+      preset: current?.preset ?? "monarch",
+      color,
+    }));
+  };
+
+  const handleSaveAvatar = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canSubmitAvatar || !updateAccountProfile || !avatarDraft) return;
+    setAvatarStatus("loading");
+    setSettingsMessage("");
+    setSettingsMessageTone("status");
+    try {
+      const response = await updateAccountProfile({ avatar: avatarDraft });
+      setProfile(response.profile);
+      setAvatarDraft(response.profile.avatar);
+      setSettingsMessage("Avatar saved.");
+      setSettingsMessageTone("status");
+      setAvatarStatus("ready");
+    } catch (error) {
+      console.error("[OnlineProfileDashboard] Failed to update profile avatar", error);
+      setSettingsMessage(onlineRequestErrorMessage(error) ?? "Avatar could not be saved.");
+      setSettingsMessageTone("error");
+      setAvatarStatus("error");
+    }
   };
 
   const handleSavePrivacy = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -528,6 +677,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
       />
 
       <section className="online-profile-hero" aria-label={`${displayName} profile summary`}>
+        {profile && <OnlineProfileAvatar displayName={displayName} avatar={profile.avatar} />}
         <div>
           <span className="online-profile-kicker">
             {isSelfDashboard ? "Account summary" : "Shareable profile"}
@@ -614,7 +764,18 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                 <ol className="online-profile-rating-history">
                   {ratingHistory.map((entry) => (
                     <li key={`${entry.gameId}-${entry.side}`}>
-                      <span>{entry.opponentDisplayName}</span>
+                      {onOpenProfile ? (
+                        <button
+                          type="button"
+                          className="online-profile-inline-link"
+                          onClick={() => onOpenProfile(entry.opponentDisplayName)}
+                          aria-label={`Open ${entry.opponentDisplayName} profile from rating history ${entry.gameId}`}
+                        >
+                          {entry.opponentDisplayName}
+                        </button>
+                      ) : (
+                        <span>{entry.opponentDisplayName}</span>
+                      )}
                       <span>{entry.result}</span>
                       <span>{entry.ratingAfter}{entry.provisional ? "?" : ""}</span>
                       <span>{formatRatingDelta(entry.ratingDelta)}</span>
@@ -654,6 +815,49 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
                 >
                   {settingsMessage}
                 </p>
+              )}
+              {avatarDraft && updateAccountProfile && (
+                <form className="online-profile-settings-form" onSubmit={handleSaveAvatar}>
+                  <h3>Profile Picture</h3>
+                  <div className="online-profile-avatar-settings">
+                    <OnlineProfileAvatar displayName={displayName} avatar={avatarDraft} decorative />
+                    <fieldset>
+                      <legend>Avatar</legend>
+                      <div className="online-profile-choice-grid">
+                        {AVATAR_PRESET_OPTIONS.map((option) => (
+                          <label key={option.value}>
+                            <input
+                              type="radio"
+                              name="online-profile-avatar-preset"
+                              checked={avatarDraft.preset === option.value}
+                              onChange={() => handleAvatarPresetChange(option.value)}
+                            />
+                            <span>{option.label} avatar</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <fieldset>
+                      <legend>Color</legend>
+                      <div className="online-profile-choice-grid compact">
+                        {AVATAR_COLOR_OPTIONS.map((option) => (
+                          <label key={option.value}>
+                            <input
+                              type="radio"
+                              name="online-profile-avatar-color"
+                              checked={avatarDraft.color === option.value}
+                              onChange={() => handleAvatarColorChange(option.value)}
+                            />
+                            <span>{option.label} avatar color</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </div>
+                  <button type="submit" className="online-profile-button" disabled={!canSubmitAvatar}>
+                    {avatarStatus === "loading" ? "Saving" : "Save Avatar"}
+                  </button>
+                </form>
               )}
               {privacySettings && updateAccountPrivacy && (
                 <form className="online-profile-settings-form" onSubmit={handleSavePrivacy}>
@@ -800,6 +1004,44 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
         </section>
       ) : (
         <section className="online-profile-dashboard-grid" aria-label="Public profile sections">
+          {showsGamesSection && (
+            <article
+              className="online-profile-panel"
+              role="region"
+              aria-label={`Public games for ${displayName}`}
+            >
+              <span className="online-profile-kicker">Games</span>
+              <h2>Public Games</h2>
+              {publicGamesStatus === "loading" ? (
+                <p role="status">Loading public games...</p>
+              ) : publicGamesStatus === "error" ? (
+                <p className="online-profile-error">Public games could not be loaded.</p>
+              ) : publicGames.length === 0 ? (
+                <p>No public completed games yet.</p>
+              ) : (
+                <ol className="online-profile-public-games">
+                  {publicGames.map((game) => (
+                    <li key={game.gameId}>
+                      <div>
+                        <strong>{publicGameTitle(game)}</strong>
+                        <span>{game.result ? formatOnlineGameResult(game.result) : game.status}</span>
+                      </div>
+                      {onReplay && (
+                        <button
+                          type="button"
+                          className="online-profile-button subtle"
+                          onClick={() => onReplay(game.gameId)}
+                          aria-label={`Analyze replay ${game.gameId} from ${displayName} public profile`}
+                        >
+                          Analyze Replay
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </article>
+          )}
           {showsRatingSection && (
             <article className="online-profile-panel">
               <span className="online-profile-kicker">Rating</span>

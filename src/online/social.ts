@@ -19,6 +19,22 @@ export type OnlineAccountPresencePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountChallengePolicy = "followed" | "everyone" | "nobody";
 export type OnlineAccountPresenceVisibility = "visible" | "hidden";
 export type OnlineAccountPresenceStatus = "online" | "recent" | "away" | "offline";
+export type OnlineAccountAvatarPreset =
+  | "monarch"
+  | "dragon"
+  | "knight"
+  | "archer"
+  | "eagle"
+  | "trebuchet"
+  | "swordsman"
+  | "assassin";
+export type OnlineAccountAvatarColor = "green" | "amber" | "blue" | "violet" | "red" | "slate";
+
+export interface OnlineAccountAvatar {
+  schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
+  preset: OnlineAccountAvatarPreset;
+  color: OnlineAccountAvatarColor;
+}
 
 export interface OnlineAccountPresence {
   visibility: OnlineAccountPresenceVisibility;
@@ -48,9 +64,14 @@ export interface OnlineAccountPrivacyPatch {
   challengePolicy?: OnlineAccountChallengePolicy;
 }
 
+export interface OnlineAccountProfilePatch {
+  avatar?: OnlineAccountAvatar;
+}
+
 export interface OnlineAccountPublicProfile {
   schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
   displayName: string;
+  avatar: OnlineAccountAvatar;
   rating?: OnlineAccountPublicRating;
   presence: OnlineAccountPresence;
   relationship: {
@@ -64,6 +85,7 @@ export interface OnlineAccountPublicProfile {
 export interface OnlineRatingLeaderboardEntry {
   schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
   displayName: string;
+  avatar: OnlineAccountAvatar;
   rating: OnlineAccountPublicRating;
 }
 
@@ -183,6 +205,7 @@ export interface OnlineAccountProfileResponse {
 export interface OnlineAccountSearchProfile {
   schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
   displayName: string;
+  avatar: OnlineAccountAvatar;
   rating?: OnlineAccountPublicRating;
 }
 
@@ -216,6 +239,17 @@ export interface OnlineAccountSocialActionResult {
 const FOLLOW_POLICIES = new Set<OnlineAccountFollowPolicy>(["everyone", "nobody"]);
 const PRESENCE_POLICIES = new Set<OnlineAccountPresencePolicy>(["followed", "everyone", "nobody"]);
 const CHALLENGE_POLICIES = new Set<OnlineAccountChallengePolicy>(["followed", "everyone", "nobody"]);
+const AVATAR_PRESETS = new Set<OnlineAccountAvatarPreset>([
+  "monarch",
+  "dragon",
+  "knight",
+  "archer",
+  "eagle",
+  "trebuchet",
+  "swordsman",
+  "assassin",
+]);
+const AVATAR_COLORS = new Set<OnlineAccountAvatarColor>(["green", "amber", "blue", "violet", "red", "slate"]);
 export const ONLINE_ACCOUNT_REPORT_REASONS = new Set<OnlineAccountReportReason>([
   "abuse",
   "cheating",
@@ -257,6 +291,40 @@ export function defaultOnlineAccountPrivacySettings(
   };
 }
 
+export function defaultOnlineAccountAvatar(): OnlineAccountAvatar {
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    preset: "monarch",
+    color: "green",
+  };
+}
+
+export function parseOnlineAccountAvatar(value: unknown): ValidationResult<OnlineAccountAvatar> {
+  if (!isRecord(value)) return bad("Avatar must be an object.");
+  if (value.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    return bad("avatar.schemaVersion is invalid.");
+  }
+  if (typeof value.preset !== "string" || !AVATAR_PRESETS.has(value.preset as OnlineAccountAvatarPreset)) {
+    return bad("avatar.preset is invalid.");
+  }
+  if (typeof value.color !== "string" || !AVATAR_COLORS.has(value.color as OnlineAccountAvatarColor)) {
+    return bad("avatar.color is invalid.");
+  }
+  for (const key of Object.keys(value)) {
+    if (key !== "schemaVersion" && key !== "preset" && key !== "color") {
+      return bad("Avatar contains an unsupported field.");
+    }
+  }
+  return {
+    ok: true,
+    value: {
+      schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+      preset: value.preset as OnlineAccountAvatarPreset,
+      color: value.color as OnlineAccountAvatarColor,
+    },
+  };
+}
+
 export function parseOnlineAccountPrivacyPatch(value: unknown): ValidationResult<OnlineAccountPrivacyPatch> {
   if (!isRecord(value)) return bad("Privacy settings must be an object.");
   const patch: OnlineAccountPrivacyPatch = {};
@@ -291,6 +359,25 @@ export function parseOnlineAccountPrivacyPatch(value: unknown): ValidationResult
   for (const key of Object.keys(value)) {
     if (key !== "followPolicy" && key !== "presencePolicy" && key !== "challengePolicy") {
       return bad("Privacy settings contain an unsupported field.");
+    }
+  }
+
+  return { ok: true, value: patch };
+}
+
+export function parseOnlineAccountProfilePatch(value: unknown): ValidationResult<OnlineAccountProfilePatch> {
+  if (!isRecord(value)) return bad("Profile settings must be an object.");
+  const patch: OnlineAccountProfilePatch = {};
+
+  if (value.avatar !== undefined) {
+    const avatar = parseOnlineAccountAvatar(value.avatar);
+    if (!avatar.ok) return avatar;
+    patch.avatar = avatar.value;
+  }
+
+  for (const key of Object.keys(value)) {
+    if (key !== "avatar") {
+      return bad("Profile settings contain an unsupported field.");
     }
   }
 
