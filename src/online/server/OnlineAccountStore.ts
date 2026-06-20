@@ -185,6 +185,7 @@ export interface OnlineAccountStore {
   updateAccountPassword(input: UpdateOnlineAccountPasswordInput): Promise<OnlineAccountPasswordUpdateResult>;
   listRatingLeaderboard(limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
   listFollowingRatingLeaderboard(accountId: string, limit?: number): Promise<OnlineRatingLeaderboardEntry[]>;
+  resolveAccountIdForDisplayName(displayName: string): Promise<string | null>;
   getProfileForDisplayName(viewerAccountId: string | null, displayName: string, viewedAt?: string): Promise<OnlineAccountPublicProfile | null>;
   searchProfiles(viewerAccountId: string | null, query: string, limit?: number, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
   listFollowingProfiles(accountId: string, viewedAt?: string): Promise<OnlineAccountPublicProfile[]>;
@@ -486,6 +487,10 @@ export class MemoryOnlineAccountStore implements OnlineAccountStore {
 
   async listFollowingRatingLeaderboard(_accountId: string, _limit = 20): Promise<OnlineRatingLeaderboardEntry[]> {
     return [];
+  }
+
+  async resolveAccountIdForDisplayName(displayName: string): Promise<string | null> {
+    return this.getAccountByDisplayName(displayName)?.accountId ?? null;
   }
 
   async getProfileForDisplayName(

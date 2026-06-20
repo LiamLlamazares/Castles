@@ -558,6 +558,11 @@ export class PostgresOnlineAccountStore implements OnlineAccountStore {
     return this.createProfile(viewerAccountId, target, this.queryable, viewedAt);
   }
 
+  async resolveAccountIdForDisplayName(displayName: string): Promise<string | null> {
+    await this.ensureSchema();
+    return (await this.loadAccountByDisplayName(displayName))?.accountId ?? null;
+  }
+
   async searchProfiles(
     viewerAccountId: string | null,
     query: string,

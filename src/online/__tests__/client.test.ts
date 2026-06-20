@@ -31,6 +31,7 @@ import {
   fetchOnlineAccountPrivacy,
   fetchOnlineAccountProfile,
   fetchOnlineAccountRatingHistory,
+  fetchOnlinePublicProfileRatingHistory,
   searchOnlineAccountProfiles,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
@@ -889,6 +890,65 @@ describe("online client helpers", () => {
       }),
     });
     await expect(fetchOnlineAccountRatingHistory({ token: "account-token" }, {}, fetchImpl as any))
+      .rejects.toThrow(/unsupported field/i);
+  });
+
+  it("fetches public profile rating history as point-only data", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 1,
+        points: [
+          {
+            schemaVersion: 1,
+            rating: 1606,
+            display: "1606?",
+            provisional: true,
+            games: 1,
+            appliedAt: "2026-06-19T12:00:00.000Z",
+          },
+        ],
+      }),
+    });
+
+    await expect(
+      fetchOnlinePublicProfileRatingHistory("Samir", { limit: 5 }, fetchImpl as any)
+    ).resolves.toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      points: [
+        {
+          schemaVersion: 1,
+          rating: 1606,
+          display: "1606?",
+          provisional: true,
+          games: 1,
+          appliedAt: "2026-06-19T12:00:00.000Z",
+        },
+      ],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/api/online/profiles/Samir/ratings/history?limit=5");
+
+    fetchImpl.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: 1,
+        points: [
+          {
+            schemaVersion: 1,
+            rating: 1540,
+            display: "1540?",
+            provisional: true,
+            games: 2,
+            appliedAt: "2026-06-19T12:05:00.000Z",
+            gameId: "game_rated_2",
+          },
+        ],
+      }),
+    });
+    await expect(fetchOnlinePublicProfileRatingHistory("Samir", {}, fetchImpl as any))
       .rejects.toThrow(/unsupported field/i);
   });
 

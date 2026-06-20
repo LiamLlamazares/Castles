@@ -19,7 +19,7 @@ import {
   ONLINE_ACCOUNT_CHALLENGE_DIRECTORY_SCHEMA_VERSION,
   ONLINE_CHALLENGE_SUMMARY_SCHEMA_VERSION,
 } from "../online/challenges";
-import { ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../online/readModel";
+import { ONLINE_GAME_DIRECTORY_SCHEMA_VERSION, ONLINE_GAME_SUMMARY_SCHEMA_VERSION } from "../online/readModel";
 import { ONLINE_PROTOCOL_VERSION } from "../online/protocolVersion";
 import {
   ONLINE_ACCOUNT_SESSION_STORAGE_KEY,
@@ -3803,6 +3803,38 @@ describe("App game setup lifecycle", () => {
           )
         );
       }
+      if (path === "/api/online/profiles/Samir/ratings/history?limit=20") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              protocolVersion: ONLINE_PROTOCOL_VERSION,
+              schemaVersion: 1,
+              points: [
+                {
+                  schemaVersion: 1,
+                  rating: 1510,
+                  display: "1510",
+                  provisional: false,
+                  games: 18,
+                  appliedAt: "2026-06-14T12:00:00.000Z",
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
+      if (path === "/api/online/games?state=archived&limit=8&q=Samir") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
+              games: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          )
+        );
+      }
       return Promise.resolve(new Response("not found", { status: 404 }));
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -3812,6 +3844,8 @@ describe("App game setup lifecycle", () => {
     expect(await screen.findByRole("heading", { name: "Samir" })).toBeInTheDocument();
     expect(screen.getByText("Public Profile")).toBeInTheDocument();
     expect(screen.getByText("Rating 1510")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Public rating history graph" })).toBeInTheDocument();
+    expect(screen.getAllByText("Presence private")).toHaveLength(2);
     expect(screen.queryByText("Private note")).not.toBeInTheDocument();
     expect(screen.queryByText("Sign Out Everywhere")).not.toBeInTheDocument();
     expect(screen.queryByText("account_samir")).not.toBeInTheDocument();

@@ -1258,6 +1258,68 @@ describe("createOnlineHttpServer", () => {
     expect(JSON.stringify(body)).not.toContain("deviation");
   });
 
+  it("serves public profile rating history as graph points without leaking detailed account history", async () => {
+    const listAccountRatingHistory = vi.fn().mockResolvedValue([
+      {
+        schemaVersion: 1,
+        gameId: "game_rated_1",
+        side: "b",
+        opponentDisplayName: "Samir",
+        result: "win",
+        reason: "resignation",
+        ratingBefore: 1500,
+        ratingAfter: 1606,
+        ratingDelta: 106,
+        games: 1,
+        provisional: true,
+        appliedAt: "2026-06-19T12:00:00.000Z",
+      },
+    ]);
+    const { server } = createOnlineHttpServer({
+      publicBaseUrl: "https://castles.example/play",
+      now: () => Date.parse("2026-06-19T12:00:00.000Z"),
+      listAccountRatingHistory,
+    });
+    servers.push(server);
+    const port = await listen(server);
+    const account = await createAccountViaApi(port, "Testing");
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Testing/ratings/history?limit=5`);
+    const body = await response.json();
+    const missingResponse = await fetch(`http://127.0.0.1:${port}/api/online/profiles/Missing/ratings/history`);
+    const tokenQueryResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Testing/ratings/history?token=secret`
+    );
+    const duplicateLimitResponse = await fetch(
+      `http://127.0.0.1:${port}/api/online/profiles/Testing/ratings/history?limit=5&limit=6`
+    );
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      points: [
+        {
+          schemaVersion: 1,
+          rating: 1606,
+          display: "1606?",
+          provisional: true,
+          games: 1,
+          appliedAt: "2026-06-19T12:00:00.000Z",
+        },
+      ],
+    });
+    expect(listAccountRatingHistory).toHaveBeenCalledWith(account.account.accountId, 5);
+    expect(missingResponse.status).toBe(404);
+    expect(tokenQueryResponse.status).toBe(400);
+    expect(duplicateLimitResponse.status).toBe(400);
+    expect(JSON.stringify(body)).not.toContain(account.account.accountId);
+    expect(JSON.stringify(body)).not.toContain("game_rated_1");
+    expect(JSON.stringify(body)).not.toContain("Samir");
+    expect(JSON.stringify(body)).not.toContain("glicko2-beta-v1");
+    expect(JSON.stringify(body)).not.toContain("deviation");
+  });
+
   it("searches public account profiles by partial display name without leaking account internals", async () => {
     const { server } = createOnlineHttpServer({
       publicBaseUrl: "https://castles.example/play",

@@ -117,6 +117,21 @@ export interface OnlineAccountRatingHistoryResponse {
   entries: OnlineAccountRatingHistoryEntry[];
 }
 
+export interface OnlineAccountPublicRatingHistoryPoint {
+  schemaVersion: typeof ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION;
+  rating: number;
+  display: string;
+  provisional: boolean;
+  games: number;
+  appliedAt: string;
+}
+
+export interface OnlineAccountPublicRatingHistoryResponse {
+  protocolVersion: number;
+  schemaVersion: typeof ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION;
+  points: OnlineAccountPublicRatingHistoryPoint[];
+}
+
 export interface OnlineAccountReportInput {
   reason: OnlineAccountReportReason;
   details: string;

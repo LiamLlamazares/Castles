@@ -322,6 +322,10 @@
   font-size: 0.82rem;
 }
 
+.online-profile-rating-history.public li {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 .online-profile-rating-history span {
   min-width: 0;
   overflow-wrap: anywhere;

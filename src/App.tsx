@@ -58,6 +58,7 @@ import {
   fetchOnlineAccountProfile,
   fetchOnlineAccountRatingHistory,
   fetchOnlinePublicProfile,
+  fetchOnlinePublicProfileRatingHistory,
   fetchOnlineRatingLeaderboard,
   fetchOnlineAccountSessions,
   fetchOnlineGameDirectory,
@@ -1616,6 +1617,10 @@ function App() {
       limit: 8,
       query: displayName,
     });
+  }, []);
+
+  const handleLoadPublicProfileRatingHistory = useCallback((displayName: string) => {
+    return fetchOnlinePublicProfileRatingHistory(displayName, { limit: 20 });
   }, []);
 
   const handleLoadOnlineAccountFollowing = useCallback(() => {
@@ -3194,6 +3199,7 @@ function App() {
           loadProfile={handleLoadProfileDashboardProfile}
           loadAccountGames={onlineAccountSession ? handleLoadOnlineAccountGames : undefined}
           loadPublicProfileGames={handleLoadPublicProfileGames}
+          loadPublicProfileRatingHistory={handleLoadPublicProfileRatingHistory}
           loadAccountChallenges={onlineAccountSession ? handleLoadOnlineAccountChallenges : undefined}
           loadAccountRatingHistory={onlineAccountSession ? handleLoadOnlineAccountRatingHistory : undefined}
           loadAccountFollowing={onlineAccountSession ? handleLoadOnlineAccountFollowing : undefined}

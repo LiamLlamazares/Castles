@@ -34,6 +34,8 @@ import {
   ONLINE_RATING_LEADERBOARD_SCHEMA_VERSION,
   type OnlineAccountRatingHistoryEntry,
   type OnlineAccountRatingHistoryResponse,
+  type OnlineAccountPublicRatingHistoryPoint,
+  type OnlineAccountPublicRatingHistoryResponse,
   type OnlineAccountModerationAuditEntry,
   type OnlineAccountModerationAuditListResponse,
   type OnlineAccountModerationReport,
@@ -106,6 +108,7 @@ const MAX_ONLINE_ERROR_MESSAGE_LENGTH = 240;
 const ONLINE_ACCOUNT_PROFILE_RESPONSE_KEYS = new Set(["protocolVersion", "profile"]);
 const ONLINE_ACCOUNT_SEARCH_RESPONSE_KEYS = new Set(["protocolVersion", "profiles"]);
 const ONLINE_ACCOUNT_RATING_HISTORY_RESPONSE_KEYS = new Set(["protocolVersion", "schemaVersion", "entries"]);
+const ONLINE_ACCOUNT_PUBLIC_RATING_HISTORY_RESPONSE_KEYS = new Set(["protocolVersion", "schemaVersion", "points"]);
 const ONLINE_ACCOUNT_FOLLOWING_RESPONSE_KEYS = new Set(["protocolVersion", "following"]);
 const ONLINE_ACCOUNT_PRIVACY_RESPONSE_KEYS = new Set(["protocolVersion", "privacy"]);
 const ONLINE_ACCOUNT_MODERATION_QUEUE_RESPONSE_KEYS = new Set([
@@ -249,6 +252,8 @@ export type {
   OnlineAccountProfileResponse,
   OnlineAccountPublicProfile,
   OnlineAccountPublicRating,
+  OnlineAccountPublicRatingHistoryPoint,
+  OnlineAccountPublicRatingHistoryResponse,
   OnlineAccountRatingHistoryEntry,
   OnlineAccountRatingHistoryResponse,
   OnlineAccountReportInput,
@@ -1234,6 +1239,78 @@ function validateOnlineAccountRatingHistoryResponse(
   };
 }
 
+function validateOnlineAccountPublicRatingHistoryPoint(
+  value: unknown,
+  label: string
+): OnlineAccountPublicRatingHistoryPoint {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} was malformed.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedPointKeys = new Set(["schemaVersion", "rating", "display", "provisional", "games", "appliedAt"]);
+  assertAllowedKeys(
+    record,
+    allowedPointKeys,
+    `${label} was malformed: public rating history point contains unsupported field.`
+  );
+  if (record.schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION) {
+    throw new Error(`${label} was malformed: schemaVersion is invalid.`);
+  }
+  if (typeof record.rating !== "number" || !Number.isSafeInteger(record.rating)) {
+    throw new Error(`${label} was malformed: rating is invalid.`);
+  }
+  if (
+    typeof record.display !== "string" ||
+    record.display.length === 0 ||
+    record.display.length > 16 ||
+    stringContainsDurableSecret(record.display)
+  ) {
+    throw new Error(`${label} was malformed: display is invalid.`);
+  }
+  if (typeof record.provisional !== "boolean") {
+    throw new Error(`${label} was malformed: provisional is invalid.`);
+  }
+  if (typeof record.games !== "number" || !Number.isSafeInteger(record.games) || record.games < 0) {
+    throw new Error(`${label} was malformed: games is invalid.`);
+  }
+  if (typeof record.appliedAt !== "string" || Number.isNaN(Date.parse(record.appliedAt))) {
+    throw new Error(`${label} was malformed: appliedAt is invalid.`);
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    rating: record.rating,
+    display: record.display,
+    provisional: record.provisional,
+    games: record.games,
+    appliedAt: record.appliedAt,
+  };
+}
+
+function validateOnlineAccountPublicRatingHistoryResponse(
+  body: unknown,
+  label: string
+): OnlineAccountPublicRatingHistoryResponse {
+  const record = validateVersionedObject(body, label);
+  assertAllowedKeys(
+    record,
+    ONLINE_ACCOUNT_PUBLIC_RATING_HISTORY_RESPONSE_KEYS,
+    `${label} response was malformed: response contains unsupported data.`
+  );
+  if (record.schemaVersion !== ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION) {
+    throw new Error(`${label} response was malformed: schemaVersion is invalid.`);
+  }
+  if (!Array.isArray(record.points)) {
+    throw new Error(`${label} response was malformed: points is invalid.`);
+  }
+  return {
+    protocolVersion: ONLINE_PROTOCOL_VERSION,
+    schemaVersion: ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
+    points: record.points.map((point, index) =>
+      validateOnlineAccountPublicRatingHistoryPoint(point, `${label}.points[${index}]`)
+    ),
+  };
+}
+
 function validateOnlineAccountPrivacyResponse(
   body: unknown,
   label: string
@@ -1363,6 +1440,26 @@ export async function fetchOnlineAccountRatingHistory(
     throw new Error(`Could not load online account rating history (${response.status})`);
   }
   return validateOnlineAccountRatingHistoryResponse(await response.json(), "Online account rating history");
+}
+
+export async function fetchOnlinePublicProfileRatingHistory(
+  displayName: string,
+  options: { limit?: number } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<OnlineAccountPublicRatingHistoryResponse> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const query = params.toString();
+  const path =
+    `/api/online/profiles/${encodeURIComponent(displayName)}/ratings/history${query ? `?${query}` : ""}`;
+  const response = await fetchImpl(path);
+  if (!response.ok) {
+    throw new Error(`Could not load online public rating history (${response.status})`);
+  }
+  return validateOnlineAccountPublicRatingHistoryResponse(
+    await response.json(),
+    "Online public profile rating history"
+  );
 }
 
 export async function fetchOnlineAccountFollowing(

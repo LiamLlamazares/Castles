@@ -1228,6 +1228,9 @@ describe("PostgresOnlineAccountStore", () => {
     });
     queryable.ratingRows.set("account_samir", createDefaultOnlineRating("2026-06-03T12:03:00.000Z"));
 
+    await expect(store.resolveAccountIdForDisplayName("samir")).resolves.toBe("account_samir");
+    await expect(store.resolveAccountIdForDisplayName("Missing")).resolves.toBeNull();
+
     await expect(store.getPrivacySettings("account_samir")).resolves.toMatchObject({
       followPolicy: "everyone",
       presencePolicy: "followed",

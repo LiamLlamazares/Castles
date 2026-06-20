@@ -173,6 +173,7 @@ import {
   type OnlineAccountModerationReportQueueResponse,
   type OnlineAccountModerationReportStatusResponse,
   type OnlineAccountPresence,
+  type OnlineAccountPublicRatingHistoryPoint,
   type OnlineAccountPublicRating,
   type OnlineAccountPublicProfile,
   type OnlineAccountPrivacySettings,
@@ -287,6 +288,14 @@ const ACCOUNT_RATING_HISTORY_ENTRY_RESPONSE_KEYS = new Set([
   "ratingDelta",
   "games",
   "provisional",
+  "appliedAt",
+]);
+const PUBLIC_RATING_HISTORY_POINT_RESPONSE_KEYS = new Set([
+  "schemaVersion",
+  "rating",
+  "display",
+  "provisional",
+  "games",
   "appliedAt",
 ]);
 const ACCOUNT_RATING_HISTORY_RESULT_REASONS = new Set([
@@ -1720,6 +1729,55 @@ function validateRatingLeaderboardEntryResponseShape(value: unknown): OnlineRati
   };
 }
 
+function validatePublicRatingHistoryPointResponseShape(
+  value: unknown
+): OnlineAccountPublicRatingHistoryPoint {
+  if (!isResponseRecord(value)) throw new Error("Public rating history point must be an object.");
+  assertAllowedResponseKeys(
+    value,
+    PUBLIC_RATING_HISTORY_POINT_RESPONSE_KEYS,
+    "Public rating history point"
+  );
+  const { schemaVersion, rating, display, provisional, games, appliedAt } = value;
+  if (
+    schemaVersion !== ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION ||
+    typeof rating !== "number" ||
+    !Number.isSafeInteger(rating) ||
+    typeof display !== "string" ||
+    display.length === 0 ||
+    display.length > 16 ||
+    stringContainsDurableSecret(display) ||
+    typeof provisional !== "boolean" ||
+    typeof games !== "number" ||
+    !Number.isSafeInteger(games) ||
+    games < 0 ||
+    !isIsoTimestamp(appliedAt)
+  ) {
+    throw new Error("Public rating history point is malformed.");
+  }
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    rating,
+    display,
+    provisional,
+    games,
+    appliedAt,
+  };
+}
+
+function publicRatingHistoryPointFromEntry(
+  entry: OnlineAccountRatingHistoryEntry
+): OnlineAccountPublicRatingHistoryPoint {
+  return {
+    schemaVersion: ONLINE_ACCOUNT_SOCIAL_SCHEMA_VERSION,
+    rating: entry.ratingAfter,
+    display: `${entry.ratingAfter}${entry.provisional ? "?" : ""}`,
+    provisional: entry.provisional,
+    games: entry.games,
+    appliedAt: entry.appliedAt,
+  };
+}
+
 function validateAccountRatingHistoryEntryResponseShape(
   value: unknown
 ): OnlineAccountRatingHistoryEntry {
@@ -2898,6 +2956,18 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       ? await options.listAccountRatingHistory(accountId, limit)
       : [];
     return entries.map(validateAccountRatingHistoryEntryResponseShape);
+  };
+
+  const listPublicProfileRatingHistory = async (
+    displayName: string,
+    limit: number
+  ): Promise<OnlineAccountPublicRatingHistoryPoint[] | null> => {
+    const accountId = await accountStore.resolveAccountIdForDisplayName(displayName);
+    if (!accountId) return null;
+    const entries = await listAccountRatingHistory(accountId, limit);
+    return entries
+      .map(publicRatingHistoryPointFromEntry)
+      .map(validatePublicRatingHistoryPointResponseShape);
   };
 
   const seatForGameIdentity = (
@@ -4607,6 +4677,51 @@ export function createOnlineHttpServer(options: CreateOnlineHttpServerOptions) {
       log({ event: "online.account.profile.lookup", status: "failed", reason: "persistence_failed" });
       res.status(503).json({
         error: { code: "persistence_failed", message: "Online profile could not be loaded." },
+      });
+    }
+  });
+
+  app.get("/api/online/profiles/:displayName/ratings/history", async (req, res) => {
+    if (!await consumeRequestRateLimit("account_read", req)) {
+      res.status(429).json({
+        error: { code: "rate_limited", message: "Too many account requests were sent too quickly." },
+      });
+      return;
+    }
+    const displayName = parseProfileDisplayNameParam(req.params.displayName);
+    if (!displayName) {
+      res.status(400).json({
+        error: { code: "bad_request", message: "Profile display name is invalid." },
+      });
+      return;
+    }
+    const parsed = parseAccountRatingHistoryOptions(req.originalUrl);
+    if (!parsed.ok) {
+      res.status(400).json({
+        error: { code: "bad_request", message: parsed.message },
+      });
+      return;
+    }
+    try {
+      const points = await listPublicProfileRatingHistory(displayName, parsed.limit);
+      if (!points) {
+        log({ event: "online.account.profile.rating_history", status: "rejected", reason: "not_found" });
+        res.status(404).json({
+          error: { code: "not_found", message: "No online account was found for that profile." },
+        });
+        return;
+      }
+      log({ event: "online.account.profile.rating_history", status: "accepted" });
+      res.json({
+        protocolVersion: ONLINE_PROTOCOL_VERSION,
+        schemaVersion: ONLINE_ACCOUNT_RATING_HISTORY_SCHEMA_VERSION,
+        points,
+      });
+    } catch (error) {
+      console.error("Failed to load public account rating history", error);
+      log({ event: "online.account.profile.rating_history", status: "failed", reason: "persistence_failed" });
+      res.status(503).json({
+        error: { code: "persistence_failed", message: "Public rating history could not be loaded." },
       });
     }
   });

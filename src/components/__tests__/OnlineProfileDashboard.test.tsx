@@ -470,6 +470,28 @@ describe("OnlineProfileDashboard", () => {
       schemaVersion: ONLINE_GAME_DIRECTORY_SCHEMA_VERSION,
       games: [publicGame()],
     });
+    const loadPublicProfileRatingHistory = vi.fn().mockResolvedValue({
+      protocolVersion: ONLINE_PROTOCOL_VERSION,
+      schemaVersion: 1,
+      points: [
+        {
+          schemaVersion: 1,
+          rating: 1510,
+          display: "1510",
+          provisional: false,
+          games: 18,
+          appliedAt: "2026-06-14T12:00:00.000Z",
+        },
+        {
+          schemaVersion: 1,
+          rating: 1502,
+          display: "1502",
+          provisional: false,
+          games: 17,
+          appliedAt: "2026-06-13T12:00:00.000Z",
+        },
+      ],
+    });
     const onReplay = vi.fn();
     window.history.replaceState({}, "", "/?profile=Samir&section=settings");
 
@@ -491,6 +513,7 @@ describe("OnlineProfileDashboard", () => {
         })}
         loadAccountGames={loadAccountGames}
         loadPublicProfileGames={loadPublicProfileGames}
+        loadPublicProfileRatingHistory={loadPublicProfileRatingHistory}
         onReplay={onReplay}
         onOpenProfile={vi.fn()}
       />
@@ -499,7 +522,11 @@ describe("OnlineProfileDashboard", () => {
     expect(await screen.findByRole("heading", { name: "Samir" })).toBeInTheDocument();
     expect(screen.getByText("Public Profile")).toBeInTheDocument();
     expect(screen.getByText("Rating 1510")).toBeInTheDocument();
-    expect(screen.getByText("18 rated games")).toBeInTheDocument();
+    expect(screen.getAllByText("Presence private")).toHaveLength(2);
+    expect(screen.queryByText("Status hidden")).not.toBeInTheDocument();
+    expect(screen.getAllByText("18 rated games").length).toBeGreaterThanOrEqual(2);
+    expect(await screen.findByRole("img", { name: "Public rating history graph" })).toBeInTheDocument();
+    expect(screen.getByText("Online status is private for this viewer.")).toBeInTheDocument();
     expect(screen.queryByText("Challenge Inbox")).not.toBeInTheDocument();
     expect(screen.queryByText("Account Sessions")).not.toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "Public games for Samir" })).toHaveTextContent("Samir vs Liam");
@@ -510,6 +537,7 @@ describe("OnlineProfileDashboard", () => {
     expect(new URL(window.location.href).searchParams.has("section")).toBe(false);
     expect(loadAccountGames).not.toHaveBeenCalled();
     expect(loadPublicProfileGames).toHaveBeenCalledWith("Samir");
+    expect(loadPublicProfileRatingHistory).toHaveBeenCalledWith("Samir");
   });
 
   it("searches players with suggestions and opens a selected public profile", async () => {

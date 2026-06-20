@@ -23,6 +23,8 @@ import type {
   OnlineAccountPrivacySettings,
   OnlineAccountProfileResponse,
   OnlineAccountPublicProfile,
+  OnlineAccountPublicRatingHistoryPoint,
+  OnlineAccountPublicRatingHistoryResponse,
   OnlineAccountRatingHistoryEntry,
   OnlineAccountRatingHistoryResponse,
   OnlineAccountSearchProfile,
@@ -75,6 +77,7 @@ interface OnlineProfileDashboardProps {
   loadProfile: (displayName: string) => Promise<OnlineAccountProfileResponse>;
   loadAccountGames?: (options?: FetchOnlineAccountGamesOptions) => Promise<OnlineGameDirectoryResponse>;
   loadPublicProfileGames?: (displayName: string) => Promise<OnlineGameDirectoryResponse>;
+  loadPublicProfileRatingHistory?: (displayName: string) => Promise<OnlineAccountPublicRatingHistoryResponse>;
   loadAccountChallenges?: (
     options?: FetchOnlineAccountChallengesOptions
   ) => Promise<OnlineAccountChallengeDirectoryResponse & { protocolVersion: number }>;
@@ -108,9 +111,13 @@ function formatCount(count: number, singular: string): string {
 function presenceLabel(profile: OnlineAccountPublicProfile | null): string {
   if (!profile) return "Loading";
   if (profile.presence.visibility === "hidden" || profile.presence.status === null) {
-    return "Status hidden";
+    return "Presence private";
   }
   return profile.presence.status[0].toUpperCase() + profile.presence.status.slice(1);
+}
+
+function isPresencePrivate(profile: OnlineAccountPublicProfile | null): boolean {
+  return profile?.presence.visibility === "hidden" || profile?.presence.status === null;
 }
 
 function avatarMark(avatar: OnlineAccountAvatar): string {
@@ -171,13 +178,33 @@ function formatRatingDelta(delta: number): string {
   return delta > 0 ? `+${delta}` : String(delta);
 }
 
-function ratingGraphBarHeight(entry: OnlineAccountRatingHistoryEntry, entries: OnlineAccountRatingHistoryEntry[]): string {
-  const values = entries.flatMap((candidate) => [candidate.ratingBefore, candidate.ratingAfter]);
+function ratingGraphValueHeight(value: number, values: number[]): string {
   const min = Math.min(...values);
   const max = Math.max(...values);
   if (min === max) return "50%";
-  const normalized = (entry.ratingAfter - min) / (max - min);
+  const normalized = (value - min) / (max - min);
   return `${Math.round(30 + normalized * 62)}%`;
+}
+
+function ratingGraphBarHeight(entry: OnlineAccountRatingHistoryEntry, entries: OnlineAccountRatingHistoryEntry[]): string {
+  const values = entries.flatMap((candidate) => [candidate.ratingBefore, candidate.ratingAfter]);
+  return ratingGraphValueHeight(entry.ratingAfter, values);
+}
+
+function publicRatingGraphBarHeight(
+  point: OnlineAccountPublicRatingHistoryPoint,
+  points: OnlineAccountPublicRatingHistoryPoint[]
+): string {
+  return ratingGraphValueHeight(point.rating, points.map((candidate) => candidate.rating));
+}
+
+function publicRatingGraphTone(
+  point: OnlineAccountPublicRatingHistoryPoint,
+  index: number,
+  points: OnlineAccountPublicRatingHistoryPoint[]
+): "gain" | "loss" {
+  if (index === 0) return "gain";
+  return point.rating >= points[index - 1].rating ? "gain" : "loss";
 }
 
 function onlineRequestErrorMessage(error: unknown): string | null {
@@ -226,6 +253,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   loadProfile,
   loadAccountGames,
   loadPublicProfileGames,
+  loadPublicProfileRatingHistory,
   loadAccountChallenges,
   loadAccountRatingHistory,
   loadAccountFollowing,
@@ -256,6 +284,8 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const [completedGames, setCompletedGames] = React.useState<OnlineGameSummary[]>([]);
   const [publicGames, setPublicGames] = React.useState<OnlineGameSummary[]>([]);
   const [publicGamesStatus, setPublicGamesStatus] = React.useState<LoadStatus>("idle");
+  const [publicRatingHistory, setPublicRatingHistory] = React.useState<OnlineAccountPublicRatingHistoryPoint[]>([]);
+  const [publicRatingHistoryStatus, setPublicRatingHistoryStatus] = React.useState<LoadStatus>("idle");
   const [ratingHistory, setRatingHistory] = React.useState<OnlineAccountRatingHistoryEntry[]>([]);
   const [challengeCount, setChallengeCount] = React.useState(0);
   const [followingCount, setFollowingCount] = React.useState(0);
@@ -280,6 +310,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   const profileRequestRef = React.useRef(0);
   const dashboardRequestRef = React.useRef(0);
   const publicGamesRequestRef = React.useRef(0);
+  const publicRatingHistoryRequestRef = React.useRef(0);
   const searchRequestRef = React.useRef(0);
   const deleteAccountConfirmPanelId = React.useId();
   const deleteAccountConfirmHeadingId = React.useId();
@@ -425,6 +456,28 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
   }, [displayName, isSelfDashboard, loadPublicProfileGames]);
 
   React.useEffect(() => {
+    const requestId = ++publicRatingHistoryRequestRef.current;
+    setPublicRatingHistory([]);
+    if (isSelfDashboard || !loadPublicProfileRatingHistory) {
+      setPublicRatingHistoryStatus("idle");
+      return;
+    }
+    setPublicRatingHistoryStatus("loading");
+    loadPublicProfileRatingHistory(displayName)
+      .then((response) => {
+        if (requestId !== publicRatingHistoryRequestRef.current) return;
+        setPublicRatingHistory(response.points);
+        setPublicRatingHistoryStatus("ready");
+      })
+      .catch((error) => {
+        if (requestId !== publicRatingHistoryRequestRef.current) return;
+        console.error("[OnlineProfileDashboard] Failed to load public rating history", error);
+        setPublicRatingHistory([]);
+        setPublicRatingHistoryStatus("error");
+      });
+  }, [displayName, isSelfDashboard, loadPublicProfileRatingHistory]);
+
+  React.useEffect(() => {
     const requestId = ++searchRequestRef.current;
     const query = searchQuery.trim();
     if (!searchProfiles || query.length < 2) {
@@ -469,6 +522,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
 
   const ratingText = profile?.rating ? `Rating ${profile.rating.display}` : "Rating unrated";
   const ratedGameText = profile?.rating ? formatCount(profile.rating.games, "rated game") : "0 rated games";
+  const publicRatingHistoryChronological = publicRatingHistory.slice().reverse();
   const profileSections = isSelfDashboard ? SELF_PROFILE_SECTIONS : PUBLIC_PROFILE_SECTIONS;
   const showsOverviewSection = activeSection === "summary";
   const showsGamesSection = showsOverviewSection || activeSection === "games";
@@ -1047,6 +1101,38 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <span className="online-profile-kicker">Rating</span>
               <h2>Current Rating</h2>
               <p>{ratedGameText}</p>
+              <div className="online-profile-rating-strip" role="img" aria-label="Public rating history graph">
+                {publicRatingHistoryStatus === "loading" ? (
+                  <span>Loading</span>
+                ) : publicRatingHistoryChronological.length === 0 ? (
+                  <span>{profile?.rating?.display ?? "1500?"}</span>
+                ) : (
+                  publicRatingHistoryChronological.map((point, index) => (
+                    <span
+                      key={`${point.appliedAt}-${point.games}-${point.rating}`}
+                      className={publicRatingGraphTone(point, index, publicRatingHistoryChronological)}
+                      style={{ height: publicRatingGraphBarHeight(point, publicRatingHistoryChronological) }}
+                      title={`${point.display} after ${formatCount(point.games, "rated game")}`}
+                    />
+                  ))
+                )}
+              </div>
+              <h3>Rating History</h3>
+              {publicRatingHistoryStatus === "error" ? (
+                <p className="online-profile-error">Public rating history could not be loaded.</p>
+              ) : publicRatingHistoryChronological.length === 0 ? (
+                <p>No public rating history yet.</p>
+              ) : (
+                <ol className="online-profile-rating-history public">
+                  {publicRatingHistory.map((point) => (
+                    <li key={`${point.appliedAt}-${point.games}-${point.rating}`}>
+                      <span>{point.display}</span>
+                      <span>{formatCount(point.games, "rated game")}</span>
+                      <span>{new Date(point.appliedAt).toLocaleDateString()}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </article>
           )}
           {showsPeopleSection && (
@@ -1054,6 +1140,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               <span className="online-profile-kicker">Presence</span>
               <h2>Status</h2>
               <p>{presenceLabel(profile)}</p>
+              {isPresencePrivate(profile) && <p>Online status is private for this viewer.</p>}
             </article>
           )}
         </section>
