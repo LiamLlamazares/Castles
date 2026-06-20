@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 const script = readFileSync("scripts/deploy/create-rated-demo-games.mjs", "utf8");
 
 describe("rated demo script", () => {
-  it("creates public rated games and records inspectable profile evidence", () => {
+  it("creates rated games, publishes them, and records inspectable profile evidence", () => {
     expect(script).toContain('ratingMode: "rated"');
+    expect(script).toContain('visibility: "unlisted"');
+    expect(script).toContain("/visibility");
     expect(script).toContain('visibility: "public"');
     expect(script).toContain("/api/online/account/ratings/history");
     expect(script).toContain("/api/online/profiles/");

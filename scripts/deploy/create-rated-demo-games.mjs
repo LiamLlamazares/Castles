@@ -95,15 +95,18 @@ async function createChallenge(challengerToken, challengedDisplayName, challenge
     body: JSON.stringify({
       setup: ratedDemoSetup(),
       challengerSeat,
-      visibility: "public",
+      visibility: "unlisted",
       challengedDisplayName,
     }),
   });
   const body = await readJson(response);
-  assert(response.status === 201, `Rated demo challenge create failed with ${response.status}`);
+  assert(
+    response.status === 201,
+    `Rated demo challenge create failed with ${response.status}: ${JSON.stringify(body).slice(0, 500)}`
+  );
   assert(body.summary?.status === "pending", "Rated demo challenge was not pending");
   assert(body.summary?.setup?.ratingMode === "rated", "Rated demo challenge was not rated");
-  assert(body.summary?.visibility === "public", "Rated demo challenge was not public");
+  assert(body.summary?.visibility === "unlisted", "Rated demo challenge was not unlisted");
   return body;
 }
 
@@ -132,6 +135,25 @@ async function rejoinAccountGame(token, gameId, seat) {
   assert(body.gameInvite?.seat === seat, `Rated demo rejoin expected ${seat}, got ${body.gameInvite?.seat}`);
   assert(body.gameInvite?.token, "Rated demo rejoin did not return a token");
   return body.gameInvite;
+}
+
+async function publishGame(gameId, token) {
+  const response = await fetchWithTimeout(
+    `${baseUrl}/api/online/games/${encodeURIComponent(gameId)}/visibility`,
+    {
+      method: "PATCH",
+      headers: jsonHeaders(token),
+      body: JSON.stringify({ visibility: "public" }),
+    }
+  );
+  const body = await readJson(response);
+  assert(
+    response.status === 200,
+    `Rated demo game publish failed for ${gameId}: ${response.status}: ${JSON.stringify(body).slice(0, 500)}`
+  );
+  assertProtocolVersionedBody(body, "Rated demo game publish");
+  assert(body.summary?.visibility === "public", `Rated demo game ${gameId} did not become public`);
+  return body.summary;
 }
 
 async function submitOnlineAction(WebSocket, gameId, token, clientActionId, action) {
@@ -230,6 +252,7 @@ async function main() {
 
     const firstChallenge = await createChallenge(alpha.session.token, beta.account.displayName, "w");
     const firstAccepted = await acceptChallenge(beta.session.token, firstChallenge.challengeId);
+    await publishGame(firstAccepted.gameInvite.gameId, firstAccepted.gameInvite.token);
     const firstSnapshot = await resignGame(
       WebSocket,
       firstAccepted.gameInvite.gameId,
@@ -246,6 +269,7 @@ async function main() {
     const secondChallenge = await createChallenge(beta.session.token, alpha.account.displayName, "w");
     const secondAccepted = await acceptChallenge(alpha.session.token, secondChallenge.challengeId);
     const betaWhiteInvite = await rejoinAccountGame(beta.session.token, secondAccepted.gameInvite.gameId, "w");
+    await publishGame(secondAccepted.gameInvite.gameId, betaWhiteInvite.token);
     const secondSnapshot = await resignGame(
       WebSocket,
       secondAccepted.gameInvite.gameId,
