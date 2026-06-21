@@ -35,6 +35,23 @@ describe("GameLibrary", () => {
     expect(screen.getByRole("button", { name: "Back to game" })).toBeInTheDocument();
   });
 
+  it("does not show saved-game item actions while the library is empty", async () => {
+    render(
+      <GameLibrary
+        repository={createRepository()}
+        onBack={vi.fn()}
+        onLoadGame={vi.fn()}
+        onImportPGN={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText(/No named saves yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Analysis" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export PGN" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
   it("keeps primary destinations in the shared Play Tutorial Online Profile Library order", async () => {
     render(
       <GameLibrary

@@ -86,6 +86,7 @@ vi.mock("../components/Game", () => ({
     onOpenProfile?: () => void;
     onlineNotificationCount?: number;
     onlineNotificationLabel?: string;
+    showTooltipHint?: boolean;
     onSaveGameToLibrary?: (pgn: string, status: "ongoing" | "complete" | "analysis") => Promise<unknown> | unknown;
     onLoadGame: (data: {
       board: unknown;
@@ -123,6 +124,7 @@ vi.mock("../components/Game", () => ({
         }
       </div>
       <div>Analysis mode: {props.isAnalysisMode ? "yes" : "no"}</div>
+      <div>Tooltip hint: {props.showTooltipHint === false ? "hidden" : "shown"}</div>
       <div>
         Victory points: {props.initialVictoryPoints
           ? `${props.initialVictoryPoints.w}-${props.initialVictoryPoints.b}`
@@ -1032,13 +1034,16 @@ describe("App game setup lifecycle", () => {
 
   it("shows first-time players a Tutorial recommendation", async () => {
     localStorage.removeItem("castles_first_run_intro_seen");
+    window.history.replaceState({}, "", "/");
     render(<App />);
 
     const dialog = await screen.findByRole("dialog", { name: "Welcome to Castles" });
 
     expect(dialog).toHaveTextContent("guided tutorial");
     expect(screen.getByRole("button", { name: "Start Tutorial" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Play Anyway" })).not.toBeInTheDocument();
     expect(screen.getByText("Game Ready").closest("[inert]")).not.toBeNull();
+    expect(screen.getByText("Tooltip hint: hidden")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Start Tutorial" }));
 
@@ -1049,6 +1054,7 @@ describe("App game setup lifecycle", () => {
 
   it("opens setup after the player chooses to set up a game", async () => {
     localStorage.removeItem("castles_first_run_intro_seen");
+    window.history.replaceState({}, "", "/");
     const { unmount } = render(<App />);
 
     expect(await screen.findByRole("dialog", { name: "Welcome to Castles" })).toBeInTheDocument();
@@ -1057,7 +1063,6 @@ describe("App game setup lifecycle", () => {
     expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
     expect(screen.getByText("Setup Ready")).toBeInTheDocument();
     expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
-    expect(localStorage.getItem("hasSeenQuickStart")).toBe("true");
     await waitFor(() => {
       expect(document.activeElement).toHaveClass("App");
     });
@@ -1098,6 +1103,7 @@ describe("App game setup lifecycle", () => {
 
   it("supports keyboard dismissal and focus wrapping in the first-run introduction", async () => {
     localStorage.removeItem("castles_first_run_intro_seen");
+    window.history.replaceState({}, "", "/");
     render(<App />);
 
     const dialog = await screen.findByRole("dialog", { name: "Welcome to Castles" });
@@ -1114,7 +1120,6 @@ describe("App game setup lifecycle", () => {
       expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
     });
     expect(localStorage.getItem("castles_first_run_intro_seen")).toBe("true");
-    expect(localStorage.getItem("hasSeenQuickStart")).toBe("true");
   });
 
   it("does not interrupt direct online or challenge links with the first-run introduction", () => {
@@ -1137,6 +1142,35 @@ describe("App game setup lifecycle", () => {
 
     expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
     expect(screen.getByText("Online Challenge")).toBeInTheDocument();
+  });
+
+  it("does not interrupt shared replay links with the first-run introduction", () => {
+    for (const query of ["?game=shared-pgn-record", "?pgn=shared-pgn-record"]) {
+      localStorage.removeItem("castles_first_run_intro_seen");
+      window.history.replaceState({}, "", `/${query}`);
+
+      const { unmount } = render(<App />);
+
+      expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+      expect(screen.getByText("Game Ready")).toBeInTheDocument();
+
+      unmount();
+    }
+  });
+
+  it("allows the first-run introduction after a shared replay user starts normal local play", async () => {
+    localStorage.removeItem("castles_first_run_intro_seen");
+    window.history.replaceState({}, "", "/?pgn=shared-pgn-record");
+
+    render(<App />);
+
+    expect(screen.queryByRole("dialog", { name: "Welcome to Castles" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Configure New Game" }));
+    expect(window.location.search).not.toContain("pgn=");
+    fireEvent.click(screen.getByRole("button", { name: "Start Rich Local Game" }));
+
+    expect(await screen.findByRole("dialog", { name: "Welcome to Castles" })).toBeInTheDocument();
   });
 
   it("does not interrupt direct public profile links with the first-run introduction", async () => {

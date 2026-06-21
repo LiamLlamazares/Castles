@@ -328,7 +328,9 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
         <section className="game-library-panel">
           <h2>Saved games</h2>
           {games.length === 0 ? (
-            <p className="game-library-muted">No named saves yet. Use Menu &rarr; Save Game during play.</p>
+            <p className="game-library-muted">
+              No named saves yet. During a game, open Menu and choose Save Game to keep a local review copy here.
+            </p>
           ) : (
             <div className="saved-game-list">
               {games.map(game => (
@@ -349,23 +351,25 @@ const GameLibrary: React.FC<GameLibraryProps> = ({
             </div>
           )}
 
-          <div className="library-actions">
-            <button
-              className="library-button success"
-              disabled={!selected}
-              onClick={handleLoad}
-              aria-describedby={selected ? "library-open-analysis-help" : undefined}
-              title="Open this save on a review board; clocks and online seats are not resumed."
-            >
-              {openAnalysisLabel}
-            </button>
-            <span id="library-open-analysis-help" className="visually-hidden">
-              Saved games open on a review board; clocks and online seats are not resumed.
-            </span>
-            <button className="library-button neutral" disabled={!selected} onClick={handleRename}>Rename</button>
-            <button className="library-button info" disabled={!selected} onClick={handleExport}>Export PGN</button>
-            <button className="library-button danger" disabled={!selected} onClick={handleDelete}>Delete</button>
-          </div>
+          {games.length > 0 && (
+            <div className="library-actions">
+              <button
+                className="library-button success"
+                disabled={!selected}
+                onClick={handleLoad}
+                aria-describedby={selected ? "library-open-analysis-help" : undefined}
+                title="Open this save on a review board; clocks and online seats are not resumed."
+              >
+                {openAnalysisLabel}
+              </button>
+              <span id="library-open-analysis-help" className="visually-hidden">
+                Saved games open on a review board; clocks and online seats are not resumed.
+              </span>
+              <button className="library-button neutral" disabled={!selected} onClick={handleRename}>Rename</button>
+              <button className="library-button info" disabled={!selected} onClick={handleExport}>Export PGN</button>
+              <button className="library-button danger" disabled={!selected} onClick={handleDelete}>Delete</button>
+            </div>
+          )}
         </section>
 
         <details className="game-library-panel game-library-import">

@@ -76,7 +76,7 @@ describe("local UI layout audit script", () => {
     expect(context.addInitScript).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem(TUTORIAL_PROGRESS_KEY)).toBeNull();
     expect(localStorage.getItem("castles_first_run_intro_seen")).toBeNull();
-    expect(localStorage.getItem("hasSeenQuickStart")).toBe("true");
+    expect(localStorage.getItem("hasSeenQuickStart")).toBeNull();
     expect(localStorage.getItem("hasSeenTooltipHint")).toBe("true");
   });
 

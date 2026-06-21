@@ -1257,7 +1257,6 @@ async function installTutorialAuditDefaults(context, options = {}) {
     if (!auditOptions.showFirstRunIntro) {
       window.localStorage.setItem("castles_first_run_intro_seen", "true");
     }
-    window.localStorage.setItem("hasSeenQuickStart", "true");
     window.localStorage.setItem("hasSeenTooltipHint", "true");
   }, {
     showFirstRunIntro: options.showFirstRunIntro === true,

@@ -2856,6 +2856,13 @@ body {
     max-height: none;
   }
 
+  .tutorial-container-course .tutorial-course-progress-card .tutorial-course-actions,
+  .tutorial-container-course .tutorial-course-progress-card .tutorial-progress-saved-chip,
+  .tutorial-course-hero .tutorial-course-primary-action,
+  .tutorial-course-kicker {
+    display: none;
+  }
+
   .tutorial-course-section-map {
     display: none;
   }
@@ -2869,7 +2876,7 @@ body {
   .tutorial-course-hero {
     align-items: stretch;
     flex-direction: column;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
   }
 
   .tutorial-course-current-panel {

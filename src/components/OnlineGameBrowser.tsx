@@ -2110,6 +2110,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
   const lobbyLiveGames = React.useMemo(() => {
     return filteredPublicActiveGames.slice(0, 5);
   }, [filteredPublicActiveGames]);
+  const shouldShowLobbyLiveSection =
+    status === "loading" || status === "error" || lobbyLiveGames.length > 0;
 
   const watchFeaturedGame = React.useMemo(() => {
     if (tab !== "watch" || visibleGames.length === 0) return null;
@@ -5475,8 +5477,8 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       : hasActiveSeekFilters
                       ? "Try a different creator side, clock, scoring, or search setting."
                       : hasCurrentSetupActions
-                        ? "Use Quick Match or Create Lobby Listing above, or change setup from Play."
-                        : "Configure setup, then return here to find or create a lobby listing."}
+                        ? "Create a lobby listing from this setup or use Quick Match. Public listings appear only while players are waiting."
+                        : "Choose a setup from Play, then return here to create or join a lobby listing."}
                   </p>
                 </div>
               ) : (
@@ -5573,54 +5575,47 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                 </button>
               )}
             </section>
-            <section className="online-browser-live-section" aria-label="Current public games">
-              <div className="online-browser-section-header">
-                <div>
-                  <span className="online-browser-section-kicker">Watch</span>
-                  <h2>Current games</h2>
-                  <p>
-                    {status === "loading"
-                      ? "Loading public games..."
-                      : status === "error"
-                        ? "Could not load live games."
-                        : copyMessage || `${filteredPublicActiveGames.length} public games in progress`}
-                  </p>
+            {shouldShowLobbyLiveSection && (
+              <section className="online-browser-live-section" aria-label="Current public games">
+                <div className="online-browser-section-header">
+                  <div>
+                    <span className="online-browser-section-kicker">Watch</span>
+                    <h2>Current games</h2>
+                    <p>
+                      {status === "loading"
+                        ? "Loading public games..."
+                        : status === "error"
+                          ? "Could not load live games."
+                          : copyMessage || `${filteredPublicActiveGames.length} public games in progress`}
+                    </p>
+                  </div>
+                  <div className="online-browser-section-actions">
+                    <button
+                      type="button"
+                      className="online-browser-button subtle"
+                      onClick={openWatchFromLobby}
+                      aria-label="Open Watch tab"
+                    >
+                      Open Watch
+                    </button>
+                  </div>
                 </div>
-                <div className="online-browser-section-actions">
-                  <button
-                    type="button"
-                    className="online-browser-button subtle"
-                    onClick={openWatchFromLobby}
-                    aria-label="Open Watch tab"
-                  >
-                    Open Watch
-                  </button>
-                </div>
-              </div>
-              {renderLiveOverview(filteredPublicActiveGames.length, lobbyLiveGames[0] ?? null, "Lobby live games overview")}
-              {status === "error" ? (
-                <div className="online-browser-empty online-browser-empty-compact">
-                  <h2>Live games are unavailable.</h2>
-                  <p>Refresh live games to try again.</p>
-                </div>
-              ) : lobbyLiveGames.length === 0 && status === "ready" ? (
-                <div className="online-browser-empty online-browser-empty-compact">
-                  <h2>{friendFilterActive ? "No loaded public games include followed players." : "No public games in progress."}</h2>
-                  <p>
-                    {friendFilterActive
-                      ? "Refresh live games or follow players from People."
-                      : "Accepted lobby games appear here automatically."}
-                  </p>
-                </div>
-              ) : (
-                <div className="online-browser-live-list">
-                  {lobbyLiveGames[0] && renderPublicGameRow(lobbyLiveGames[0], { featured: true, context: "watch" })}
-                  {lobbyLiveGames.slice(1).map((game) =>
-                    renderPublicGameRow(game, { compact: true, context: "watch" })
-                  )}
-                </div>
-              )}
-            </section>
+                {renderLiveOverview(filteredPublicActiveGames.length, lobbyLiveGames[0] ?? null, "Lobby live games overview")}
+                {status === "error" ? (
+                  <div className="online-browser-empty online-browser-empty-compact">
+                    <h2>Live games are unavailable.</h2>
+                    <p>Refresh live games to try again.</p>
+                  </div>
+                ) : (
+                  <div className="online-browser-live-list">
+                    {lobbyLiveGames[0] && renderPublicGameRow(lobbyLiveGames[0], { featured: true, context: "watch" })}
+                    {lobbyLiveGames.slice(1).map((game) =>
+                      renderPublicGameRow(game, { compact: true, context: "watch" })
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
           </main>
         )
       ) : status === "error" ? (
@@ -5862,16 +5857,16 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                     <h2>
                       {friendFilterActive
                         ? "No loaded account games include followed players."
-                        : hasActiveFilters && accountGames.length > 0
-                          ? "No account games match these filters."
-                          : "No account games yet."}
+                      : hasActiveFilters && accountGames.length > 0
+                        ? "No account games match these filters."
+                        : "No account games yet."}
                     </h2>
                     <p>
                       {friendFilterActive
                         ? "Refresh your account archive or follow players from People."
                         : hasActiveFilters && accountGames.length > 0
                         ? "Try a different search, clock, or result setting."
-                        : "Active games and finished replays will appear here after you play while signed in."}
+                        : "Signed-in games appear here after you play. Public Archive remains separate from this private account history."}
                     </p>
                   </div>
                 ) : (
@@ -5951,7 +5946,7 @@ const OnlineGameBrowser: React.FC<OnlineGameBrowserProps> = ({
                       ? "Refresh the public archive, load more when available, or follow players from People."
                       : hasActiveFilters
                       ? "Try a different search, clock, or result setting. Account and public replays use full server details; device-only replays appear only when their local game id can match."
-                      : "Private and unlisted games stay out of the public archive. Shared spectator links still work for people who already have them."}
+                      : "Public replays appear after public games finish. Private and unlisted games stay out of the archive."}
                   </p>
                 </section>
               ) : visibleGames.map((game) => renderPublicGameRow(game, { context: "archive" }))}

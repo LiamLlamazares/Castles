@@ -44,6 +44,7 @@ describe("Tutorial mobile layout CSS", () => {
     expect(css).toMatch(/\.tutorial-container\.tutorial-container-course\s*\{[^}]*grid-template-columns:\s*360px minmax\(0,\s*1fr\);[^}]*background:\s*var\(--tutorial-course-bg\);/s);
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-container-course\s*\{[^}]*display:\s*block;[^}]*height:\s*100dvh;[^}]*overflow-y:\s*auto;/s);
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-course-section-map\s*\{[^}]*display:\s*none;/s);
+    expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-container-course \.tutorial-course-progress-card \.tutorial-course-actions,[\s\S]*\.tutorial-course-hero \.tutorial-course-primary-action,[\s\S]*\.tutorial-course-kicker\s*\{[^}]*display:\s*none;/s);
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-course-main\s*\{[^}]*height:\s*auto;[^}]*overflow:\s*visible;/s);
     expect(css).toMatch(/\.tutorial-control-strip\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/s);
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{[\s\S]*\.tutorial-reset-full\s*\{[^}]*display:\s*none;/s);

@@ -183,7 +183,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const [isOverlayDismissed, setOverlayDismissed] = React.useState(false);
   const [showRulesModal, setShowRulesModal] = React.useState(false);
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
-  const [showQuickStart, setShowQuickStart] = React.useState(false);
   const [showTooltipHint, setShowTooltipHint] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [lastLibrarySavedPgn, setLastLibrarySavedPgn] = React.useState<string | null>(null);
@@ -303,21 +302,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
   const isOnlineActionPaused =
     onlineSession?.role === "player" &&
     (onlineSession.status !== "connected" || onlineSession.isActionPending === true);
-
-  React.useEffect(() => {
-    if (isTutorialMode || onlineSession || isAnalysisMode) {
-      return;
-    }
-
-    try {
-      if (!localStorage.getItem("hasSeenQuickStart")) {
-        setShowQuickStart(true);
-      }
-    } catch (error) {
-      console.error("Failed to read quick-start preference", error);
-      setShowQuickStart(true);
-    }
-  }, [isAnalysisMode, isTutorialMode, onlineSession]);
 
   const copyOnlineLink = React.useCallback((url: string, successMessage: string) => {
     copyOnlineInviteUrl(url)
@@ -811,18 +795,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
     }
   }, [getPGN, isAnalysisMode, onSaveGameToLibrary, displayedWinner, showStatusMessage]);
 
-  const dismissQuickStart = React.useCallback(() => {
-    try {
-      localStorage.setItem("hasSeenQuickStart", "true");
-    } catch (error) {
-      console.error("Failed to save quick-start preference", error);
-    }
-    setShowQuickStart(false);
-  }, []);
-  const openQuickStartTutorial = React.useCallback(() => {
-    dismissQuickStart();
-    onTutorial?.();
-  }, [dismissQuickStart, onTutorial]);
   const dismissTooltipHint = () => setShowTooltipHint(false);
 
   React.useEffect(() => {
@@ -987,9 +959,6 @@ const InnerGame: React.FC<GameBoardProps> = ({
         rematchLabel={rematchLabel}
         onEnableAnalysis={handleEnterAnalysis}
         canRestart={!onlineSession}
-        showQuickStart={showQuickStart}
-        onCloseQuickStart={dismissQuickStart}
-        onOpenTutorial={onTutorial ? openQuickStartTutorial : undefined}
         showTooltipHint={showTooltipHint}
         onDismissTooltipHint={dismissTooltipHint}
         isAnalysisMode={isAnalysisMode}
@@ -1135,7 +1104,7 @@ const InnerGame: React.FC<GameBoardProps> = ({
         activeAbility={activeAbility}
         onAbilitySelect={setActiveAbility}
         sanctuarySettings={sanctuarySettings}
-        showDiscoveryHint={shouldShowTooltipHint && !isTutorialMode && !isNavigationMenuOpen && !onlineSession}
+        showDiscoveryHint={shouldShowTooltipHint && !isTutorialMode && !isAnalysisMode && !isNavigationMenuOpen && !onlineSession}
       />
     </div>
   );

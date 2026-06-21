@@ -184,7 +184,7 @@ describe("OnlineProfileDashboard", () => {
     expect(screen.getByRole("button", { name: "Rating" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "People" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-    expect(await screen.findByText("No account games yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No account games yet. Signed-in games will appear here for review.")).toBeInTheDocument();
     expect(screen.getByText("0 challenges visible to this account.")).toBeInTheDocument();
     expect(screen.getByText("0 followed players.")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Rating history graph" })).toBeInTheDocument();

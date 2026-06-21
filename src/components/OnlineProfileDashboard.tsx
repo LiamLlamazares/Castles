@@ -1192,7 +1192,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               {dashboardStatus === "loading" && <p role="status">Loading dashboard data...</p>}
               {dashboardStatus === "error" && <p className="online-profile-error">Some dashboard data is unavailable.</p>}
               {activeGames.length === 0 && completedGames.length === 0 && dashboardStatus === "ready" && (
-                <p>No account games yet.</p>
+                <p>No account games yet. Signed-in games will appear here for review.</p>
               )}
             </article>
           )}
@@ -1209,7 +1209,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               />
               <h3>Rating History</h3>
               {ratingHistory.length === 0 ? (
-                <p>No rated games yet.</p>
+                <p>No rated games yet. Rated games will add graph points here.</p>
               ) : (
                 <ol className="online-profile-rating-history">
                   {ratingHistory.map((entry) => (
@@ -1479,7 +1479,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               ) : publicGamesStatus === "error" ? (
                 <p className="online-profile-error">Public games could not be loaded.</p>
               ) : profilePublicGames.length === 0 ? (
-                <p>No public completed games yet.</p>
+                <p>No public completed games with this player yet. Private and unlisted games stay hidden.</p>
               ) : (
                 <ol className="online-profile-public-games">
                   {profilePublicGames.map((game) => (
@@ -1518,7 +1518,7 @@ const OnlineProfileDashboard: React.FC<OnlineProfileDashboardProps> = ({
               {publicRatingHistoryStatus === "error" ? (
                 <p className="online-profile-error">Public rating history could not be loaded.</p>
               ) : publicRatingHistoryChronological.length === 0 ? (
-                <p>No public rating history yet.</p>
+                <p>No public rating history yet. Rated games will add graph points here.</p>
               ) : (
                 <ol className="online-profile-rating-history public">
                   {publicRatingHistoryRecent.map((point) => (

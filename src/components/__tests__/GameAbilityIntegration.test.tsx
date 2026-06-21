@@ -142,7 +142,6 @@ describe("Game ability integration", () => {
   beforeEach(() => {
     originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     localStorage.clear();
-    localStorage.setItem("hasSeenQuickStart", "true");
     localStorage.setItem("hasSeenTooltipHint", "true");
     vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue();
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -450,6 +449,18 @@ describe("Game ability integration", () => {
     expect(screen.getByText(/Right-click any piece or hex/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.queryByText(/Right-click any piece or hex/i)).not.toBeInTheDocument();
+  });
+
+  test("analysis and replay mode suppresses the tooltip hint", () => {
+    localStorage.removeItem("hasSeenTooltipHint");
+
+    render(
+      <ThemeProvider>
+        <GameBoard isAnalysisMode />
+      </ThemeProvider>
+    );
 
     expect(screen.queryByText(/Right-click any piece or hex/i)).not.toBeInTheDocument();
   });

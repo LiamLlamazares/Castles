@@ -184,7 +184,6 @@ const DEFAULT_QUICK_MATCH_TIME_CONTROL = { initial: 20, increment: 20 } as const
 const QUICK_MATCH_MATCHED_NAVIGATION_DELAY_MS = 600;
 const ONLINE_CHALLENGE_NAV_REFRESH_MS = 30_000;
 const FIRST_RUN_INTRO_STORAGE_KEY = "castles_first_run_intro_seen";
-const QUICK_START_STORAGE_KEY = "hasSeenQuickStart";
 const ONLINE_CHALLENGE_REPORT_REASON_OPTIONS: Array<{ value: OnlineAccountReportReason; label: string }> = [
   { value: "abuse", label: "Abuse" },
   { value: "cheating", label: "Cheating" },
@@ -461,6 +460,11 @@ function buildSanitizedProfilePath(href: string, displayName: string): string {
   return `${url.pathname}${search ? `?${search}` : ""}`;
 }
 
+function hasDirectGameReplayParams(href: string): boolean {
+  const params = new URL(href).searchParams;
+  return params.has("pgn") || params.has("game");
+}
+
 function App() {
   const isRulesPage = window.location.pathname === '/rules';
   const initialProfileDisplayName = parseProfileDisplayNameFromUrl(window.location.href);
@@ -482,6 +486,7 @@ function App() {
   const activeSaveDialogRequestRef = useRef<SaveGameDialogState | null>(null);
   const firstRunIntroDialogRef = useRef<HTMLElement>(null);
   const firstRunIntroPrimaryButtonRef = useRef<HTMLButtonElement>(null);
+  const suppressFirstRunForInitialReplayRef = useRef(hasDirectGameReplayParams(window.location.href));
   const [onlineJoin, setOnlineJoin] = useState<OnlineJoinParams | null>(initialOnlineJoin);
   const [onlineSpectator, setOnlineSpectator] = useState<OnlineSpectatorParams | null>(initialOnlineSpectator);
   const [onlineSnapshot, setOnlineSnapshot] = useState<OnlineGameSnapshotDTO | null>(null);
@@ -708,14 +713,25 @@ function App() {
   }, [loadOnlineChallengeNavigationActivityCount, onlineAccountAuth, onlineAccountStatus]);
 
   useEffect(() => {
-    if (isRulesPage || view === "profile" || onlineJoin || onlineSpectator || onlineChallenge) return;
+    if (
+      isRulesPage ||
+      view !== "game" ||
+      gameConfig.isAnalysisMode ||
+      onlineJoin ||
+      onlineSpectator ||
+      onlineChallenge ||
+      suppressFirstRunForInitialReplayRef.current ||
+      hasDirectGameReplayParams(window.location.href)
+    ) {
+      return;
+    }
     try {
       if (localStorage.getItem(FIRST_RUN_INTRO_STORAGE_KEY) === "true") return;
     } catch {
       // If storage is unavailable, still show the one-session introduction.
     }
     setIsFirstRunIntroOpen(true);
-  }, [isRulesPage, view, onlineJoin, onlineSpectator, onlineChallenge]);
+  }, [gameConfig.isAnalysisMode, isRulesPage, view, onlineJoin, onlineSpectator, onlineChallenge]);
 
   useEffect(() => {
     const root = appRootRef.current;
@@ -1055,8 +1071,13 @@ function App() {
     setView('setup');
   };
 
+  const clearInitialReplayFirstRunSuppression = () => {
+    suppressFirstRunForInitialReplayRef.current = false;
+  };
+
   const handleNewGameClick = () => {
     cancelPendingReplay();
+    clearInitialReplayFirstRunSuppression();
     clearAnalysisReturn();
     clearAutosave();
     clearOnlineUrl();
@@ -1106,7 +1127,6 @@ function App() {
   const markFirstRunIntroSeen = () => {
     try {
       localStorage.setItem(FIRST_RUN_INTRO_STORAGE_KEY, "true");
-      localStorage.setItem(QUICK_START_STORAGE_KEY, "true");
     } catch {
       // Storage failures should not trap the player behind onboarding.
     }
@@ -1228,6 +1248,7 @@ function App() {
     ratingMode?: OnlineRatingMode
   ) => {
     cancelPendingReplay();
+    clearInitialReplayFirstRunSuppression();
     clearAnalysisReturn();
     const layout = getStartingLayout(board);
 
@@ -3095,6 +3116,7 @@ function App() {
               onlineNotificationCount={onlineChallengeNavigationActivityCount}
               onlineNotificationLabel={onlineNavigationNotificationLabel}
               initialPoolTypes={gameConfig.initialPoolTypes}
+              showTooltipHint={!isFirstRunIntroVisible}
             />
         </div>
       )}

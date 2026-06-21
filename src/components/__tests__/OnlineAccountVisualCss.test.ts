@@ -51,6 +51,7 @@ describe("Online account visual CSS", () => {
     expect(css).toMatch(/\.online-profile-panel\s*\{[^}]*background:\s*#262421;/s);
     expect(css).toMatch(/\.online-profile-display-name\s*\{[^}]*color:\s*#d4d4d4;/s);
     expect(css).toMatch(/\.online-profile-button:focus-visible\s*\{[^}]*outline:\s*2px solid rgba\(191,\s*129,\s*29,\s*0\.68\);/s);
+    expect(css).toMatch(/\.online-profile-badges span\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*white-space:\s*normal;/s);
     expect(css).not.toContain("#f7f1d6");
     expect(css).not.toContain("#d9d0b8");
     expect(css).not.toContain("#9ed0c2");
@@ -92,7 +93,6 @@ describe("Online account visual CSS", () => {
       "../../css/OnlineProfileDashboard.css",
       "../../css/OnlineAccountControls.css",
       "../../css/Board.css",
-      "../../css/QuickStartModal.css",
       "../../css/RulesModal.css",
       "../../css/RulesManualPage.css",
     ];
@@ -103,20 +103,6 @@ describe("Online account visual CSS", () => {
         expect(css, `${file} should not use ${color}`).not.toContain(color);
       }
     }
-  });
-
-  it("keeps first-run quickstart chrome on neutral lichess-like colors", () => {
-    const css = readFileSync(resolve(testDir, "../../css/QuickStartModal.css"), "utf8");
-
-    expect(css).toMatch(/\.quickstart-modal\s*\{[^}]*background:\s*#262421;/s);
-    expect(css).toMatch(/\.quickstart-header\s*\{[^}]*background:\s*#1f1e1b;[^}]*border-bottom:\s*1px solid #3d3a34;/s);
-    expect(css).toMatch(/\.quickstart-goal\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.055\);[^}]*border:\s*1px solid #4b4740;/s);
-    expect(css).toMatch(/\.quickstart-learn-btn\s*\{[^}]*background:\s*#629924;[^}]*color:\s*#102018;/s);
-    expect(css).toMatch(/\.quickstart-play-btn\s*\{[^}]*background:\s*#3c3934;[^}]*color:\s*#d4d4d4;/s);
-    expect(css).not.toContain("rgba(255, 215, 0");
-    expect(css).not.toContain("rgba(255, 165, 0");
-    expect(css).not.toContain("#667eea");
-    expect(css).not.toContain("#764ba2");
   });
 
   it("keeps rules/help modal chrome out of the old fantasy gold treatment", () => {
@@ -163,7 +149,6 @@ describe("Online account visual CSS", () => {
       ["../../css/OnlineGameBrowser.css", /\.online-browser-account-topbar-button\.primary,[\s\S]*\.online-browser-account-topbar-oauth\s*\{[^}]*background:\s*#629924;[^}]*color:\s*#102018;/s],
       ["../../css/OnlineAccountControls.css", /\.online-account-dialog-button\.primary\s*\{[^}]*background:\s*#629924;[^}]*color:\s*#102018;/s],
       ["../../css/Board.css", /\.confirm-dialog-button\.primary\s*\{[^}]*background:\s*#629924;[^}]*color:\s*#102018;/s],
-      ["../../css/QuickStartModal.css", /\.quickstart-learn-btn\s*\{[^}]*background:\s*#629924;[^}]*color:\s*#102018;/s],
     ] as const;
 
     for (const [file, pattern] of expectations) {

@@ -1,7 +1,6 @@
 import React from 'react';
 import RulesModal from "../RulesModal";
 import VictoryOverlay from "../VictoryOverlay";
-import QuickStartModal from "../QuickStartModal";
 import PromotionModal from "../PromotionModal";
 import { useGameState, useGameActions } from "../../contexts/GameContext";
 import { Color } from "../../Constants";
@@ -19,9 +18,6 @@ interface GameOverlaysProps {
   rematchLabel?: string;
   onEnableAnalysis: () => void;
   canRestart?: boolean;
-  showQuickStart: boolean;
-  onCloseQuickStart: () => void;
-  onOpenTutorial?: () => void;
   showTooltipHint: boolean;
   onDismissTooltipHint: () => void;
   isAnalysisMode?: boolean;
@@ -40,9 +36,6 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
   rematchLabel,
   onEnableAnalysis,
   canRestart = true,
-  showQuickStart,
-  onCloseQuickStart,
-  onOpenTutorial,
   isAnalysisMode = false
 }) => {
   const gameState = useGameState();
@@ -67,10 +60,6 @@ export const GameOverlays: React.FC<GameOverlaysProps> = ({
             onEnableAnalysis={onEnableAnalysis}
             canRestart={canRestart}
           />
-      )}
-
-      {showQuickStart && (
-        <QuickStartModal onClose={onCloseQuickStart} onOpenTutorial={onOpenTutorial} />
       )}
 
       {gameState.promotionPending && (

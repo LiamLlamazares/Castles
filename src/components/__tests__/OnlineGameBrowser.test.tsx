@@ -5357,7 +5357,7 @@ describe("OnlineGameBrowser", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(screen.getByText("No public games in progress.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Current public games" })).not.toBeInTheDocument();
 
     await act(async () => {
       vi.advanceTimersByTime(30_000);
@@ -6830,7 +6830,8 @@ describe("OnlineGameBrowser", () => {
 
     expect(screen.getByRole("region", { name: "Set up lobby play" })).toBeInTheDocument();
     expect(screen.getByText("Choose a Play setup before lobby play")).toBeInTheDocument();
-    expect(screen.getByText("Configure setup, then return here to find or create a lobby listing.")).toBeInTheDocument();
+    expect(screen.getByText("Choose a setup from Play, then return here to create or join a lobby listing.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Current public games" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", {
       name: "Quick Match: try open lobby listings or list yours",
     })).not.toBeInTheDocument();
